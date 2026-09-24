@@ -154,8 +154,8 @@ class EsqueletoDeMovimientosTest {
         val yEsqueleto = composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO, useUnmergedTree = true)
             .onFirst().getUnclippedBoundsInRoot().top
 
-        // RECONCILED y no el default (UNCONFIRMED): un evento sin confirmar dispara el aviso
-        // «N por confirmar» ARRIBA de la lista (ver `avisoDePorConfirmar`), que es una fila
+        // RECONCILED y no el default (UNCONFIRMED): un evento sin confirmar dispara el renglón
+        // «N por revisar» ARRIBA de la lista (ver `RenglonPorRevisar`), que es una fila
         // más entre el encabezado y el primer día — real, pero ajena a lo que esta prueba
         // mide (el padding del primer grupo). Con RECONCILED no hay nada que confirmar y el
         // único cambio entre las dos capturas es el esqueleto convirtiéndose en la fila real.

@@ -3,7 +3,7 @@ package com.jvillada.movi.ui.sms
 import androidx.compose.runtime.Composable
 
 /**
- * Sección «Captura de SMS» de la pantalla Mensajes del banco — SOLO existe en Android,
+ * Sección «Captura de SMS» de la pantalla «Captura del banco» (Ajustes) — SOLO existe en Android,
  * que es donde la app puede leer SMS. Reúne lo que era la pantalla del APK sensor
  * (menos su login, redundante con el de la app): estado de los permisos RECEIVE/READ
  * con su ruta a ajustes (incluidos los ajustes restringidos de Android 15 para
@@ -11,7 +11,7 @@ import androidx.compose.runtime.Composable
  * app, y la sincronización manual del historial del período actual y el anterior.
  *
  * En iOS y la web el actual no pinta nada: ahí los SMS "los lee tu teléfono", como ya
- * dice la tarjeta de arriba en [SMSInboxScreen].
+ * dice la tarjeta de arriba en [CapturaDelBancoScreen].
  *
  * [onSynced] se invoca tras un backfill subido con éxito, para que la bandeja se refresque.
  */
@@ -21,7 +21,7 @@ expect fun SmsSensorSetupSection(onSynced: () -> Unit)
 /**
  * ¿Está concedido, AHORA y en este dispositivo, el permiso que la captura necesita? Solo
  * Android puede decir que sí (releído al volver de ajustes); iOS/web devuelven false siempre,
- * y ahí [SMSInboxScreen] ni lo consulta.
+ * y ahí [CapturaDelBancoScreen] ni lo consulta.
  *
  * **Un `true` no significa que la captura funcione**, y por eso la pantalla solo usa el `false`:
  * para nombrar lo que falta. El dueño estuvo semanas con el permiso concedido y sin que llegara

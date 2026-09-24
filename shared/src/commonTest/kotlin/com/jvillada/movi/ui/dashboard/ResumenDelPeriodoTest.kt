@@ -251,6 +251,19 @@ class ResumenDelPeriodoTest {
     }
 
     /**
+     * Ola C, tarea 5: los mensajes del banco por confirmar y los pagos de tarjeta sin marcar se
+     * revisan en la misma bandeja, «Por revisar».
+     */
+    @Test
+    fun `los mensajes y los pagos de tarjeta llevan a Por revisar`() {
+        val revisar = cosasParaRevisar(
+            checklist = emptyList(), categorias = emptyList(), flujoDelPeriodo = 500_000,
+            smsPorConfirmar = 2, candidatosAPagoDeTarjeta = 1, gastoSinCategoria = 0,
+        )
+        assertEquals(listOf(DestinoDeRevision.POR_REVISAR, DestinoDeRevision.POR_REVISAR), revisar.map { it.destino })
+    }
+
+    /**
      * El renglón que él pidió sin nombrarlo: *«tres de cinco movimientos quedaron en Otro»*. La
      * sugerencia no es un reproche —«no categorizaste»— sino un trato: ponerle categoría a uno le
      * enseña a Movi el destinatario entero (ver `MemoriaDeCategorias` en `:core`).

@@ -227,15 +227,8 @@ class ColorYEntreCuentasTest {
 
     // ── El vacío ─────────────────────────────────────────────────────────────────
 
-    @Test
-    fun `por confirmar vacio dice que todo lo registro el dueno y no ofrece registrar`() {
-        val vacio = vacioDeMovimientos(CHIP_POR_CONFIRMAR, hayMovimientos = true)
-        assertEquals("Nada por confirmar", vacio.titulo)
-        assertTrue(vacio.detalle!!.contains("lo registraste tú"))
-        assertFalse(vacio.ofreceRegistrar)
-        // Y también con la lista vacía del todo: registrar no tiene nada que ver con confirmar.
-        assertFalse(vacioDeMovimientos(CHIP_POR_CONFIRMAR, hayMovimientos = false).ofreceRegistrar)
-    }
+    // Ola C, tarea 5: «Por confirmar» ya no es un modo de Movimientos — su vacío vive en la
+    // bandeja «Por revisar» (ver `PorRevisarEnPantallaTest`).
 
     @Test
     fun `solo la cuenta nueva ofrece registrar el primero`() {

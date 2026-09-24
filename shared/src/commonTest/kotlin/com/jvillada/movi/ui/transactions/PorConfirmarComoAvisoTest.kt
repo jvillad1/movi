@@ -1,6 +1,5 @@
 package com.jvillada.movi.ui.transactions
 
-import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
@@ -17,8 +16,8 @@ import kotlin.test.assertTrue
  * saltar en otro lugar no acá en esta misma vista»*.
  *
  * No es un filtro: es una **bandeja de entrada**, y su estado normal —el de quien anota todo a
- * mano— es vacío. Ahora es un aviso que aparece solo cuando hay algo, y el filtro sigue existiendo
- * detrás.
+ * mano— es vacío. Fue un aviso arriba de la lista y, desde la ola C, es parte de la bandeja «Por
+ * revisar»; el filtro sigue existiendo detrás.
  */
 class PorConfirmarComoAvisoTest {
 
@@ -35,9 +34,6 @@ class PorConfirmarComoAvisoTest {
         reconciliationStatus = estado,
     )
 
-    private fun dia(vararg eventos: FinancialEvent) =
-        EventDay(date = "2026-09-09", total = 0L, items = eventos.toList())
-
     @Test
     fun `el chip ya no se dibuja, pero la constante sigue valiendo lo mismo`() {
         assertFalse(CHIP_POR_CONFIRMAR in CHIPS_VISIBLES, "salió de la fila de filtros")
@@ -51,7 +47,7 @@ class PorConfirmarComoAvisoTest {
     }
 
     @Test
-    fun `sigue siendo un filtro de verdad detras del aviso`() {
+    fun `sigue siendo un filtro de verdad`() {
         val sinConfirmar = evento(ReconciliationStatus.UNCONFIRMED)
         val confirmado = evento(ReconciliationStatus.RECONCILED)
 
@@ -59,39 +55,7 @@ class PorConfirmarComoAvisoTest {
         assertFalse(matchesChip(confirmado, CHIP_POR_CONFIRMAR))
     }
 
-    @Test
-    fun `el aviso no existe cuando no hay nada que confirmar, que es el caso normal`() {
-        val dias = listOf(dia(evento(ReconciliationStatus.RECONCILED), evento(ReconciliationStatus.RECONCILED)))
-
-        assertEquals(0, cuantosPorConfirmar(dias))
-        assertFalse(avisoDePorConfirmar(CHIP_TODO, cuantosPorConfirmar(dias)))
-    }
-
-    @Test
-    fun `se cuentan todos los dias, no solo el visible`() {
-        val dias = listOf(
-            dia(evento(ReconciliationStatus.UNCONFIRMED), evento(ReconciliationStatus.RECONCILED)),
-            dia(evento(ReconciliationStatus.UNCONFIRMED)),
-        )
-        assertEquals(2, cuantosPorConfirmar(dias))
-    }
-
-    @Test
-    fun `el aviso se ve con cualquier chip, salvo adentro de la propia bandeja`() {
-        // Estar mirando «Gastos» no hace que deje de haber algo por confirmar; el aviso tiene que
-        // decir la verdad esté donde esté parado el dueño.
-        assertTrue(avisoDePorConfirmar(CHIP_TODO, 3))
-        assertTrue(avisoDePorConfirmar(CHIP_GASTOS, 3))
-        assertTrue(avisoDePorConfirmar(CHIP_INGRESOS, 3))
-        // Adentro sería un botón que lleva a donde uno ya está.
-        assertFalse(avisoDePorConfirmar(CHIP_POR_CONFIRMAR, 3))
-    }
-
-    @Test
-    fun `el aviso nombra el hecho, no la etiqueta`() {
-        // El chip viejo dejaba sin contestar la pregunta que el dueño hizo con todas las letras:
-        // «¿Qué es Por confirmar?». «Entraron solos» la contesta.
-        assertEquals("1 movimiento entró solo y falta confirmarlo", textoDelAvisoPorConfirmar(1))
-        assertEquals("3 movimientos entraron solos y faltan confirmar", textoDelAvisoPorConfirmar(3))
-    }
+    // Ola C, tarea 5: el aviso «N entraron solos» se juntó con los mensajes del banco y los pagos
+    // de tarjeta en un solo renglón «N por revisar» — ver `PorRevisarLogicaTest` y
+    // `PorConfirmarEnMovimientosTest`.
 }

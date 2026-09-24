@@ -531,18 +531,20 @@ fun dashboardAlerts(
         1 -> add(DashboardAlert("Presupuesto de ${overBudget[0]} superado", Screen.Plan(SEGMENTO_PRESUPUESTOS)))
         else -> add(DashboardAlert("${overBudget.size} presupuestos superados", Screen.Plan(SEGMENTO_PRESUPUESTOS)))
     }
+    // Ola C: las dos llevan a la misma bandeja, «Por revisar», que junta lo que entró solo. Antes
+    // cada una abría un lugar distinto (Movimientos, Mensajes del banco) y ninguno tenía lo otro.
     if (cardCandidates > 0) {
-        add(DashboardAlert(plural(cardCandidates, "pago de tarjeta", "pagos de tarjeta") + " por confirmar", Screen.Transactions()))
+        add(DashboardAlert(plural(cardCandidates, "pago de tarjeta", "pagos de tarjeta") + " por confirmar", Screen.PorRevisar))
     }
     if (pendingSms > 0) {
-        add(DashboardAlert(plural(pendingSms, "mensaje del banco", "mensajes del banco") + " por confirmar", Screen.SMSInbox))
+        add(DashboardAlert(plural(pendingSms, "mensaje del banco", "mensajes del banco") + " por confirmar", Screen.PorRevisar))
     }
     // Va última y nunca convive con la de arriba: si hay algo por confirmar, es que llegó algo.
     // El dueño pasó semanas anotando a mano creyendo que la captura corría, y no se enteró
     // porque el único indicador vivía en una pantalla a la que no tenía motivo para entrar. La
-    // fila es el motivo.
+    // fila es el motivo. Lleva a «Captura del banco», donde se arregla y donde se silencia.
     captura?.let { c ->
-        alertaDeCapturaEnInicio(c, capturaSilenciada)?.let { add(DashboardAlert(it, Screen.SMSInbox)) }
+        alertaDeCapturaEnInicio(c, capturaSilenciada)?.let { add(DashboardAlert(it, Screen.CapturaDelBanco)) }
     }
 }
 

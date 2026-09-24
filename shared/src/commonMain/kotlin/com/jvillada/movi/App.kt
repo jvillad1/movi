@@ -66,7 +66,8 @@ import com.jvillada.movi.ui.quickadd.QuickAddScreen
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.RecurringOfferBar
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
-import com.jvillada.movi.ui.sms.SMSInboxScreen
+import com.jvillada.movi.ui.sms.CapturaDelBancoScreen
+import com.jvillada.movi.ui.porrevisar.PorRevisarScreen
 import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.TransactionsScreen
 import com.jvillada.movi.ui.accounts.AccountsScreen
@@ -325,7 +326,8 @@ fun App() {
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.OCRCapture        -> OCRCaptureScreen(navigate)
                 Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
-                Screen.SMSInbox          -> SMSInboxScreen(navigate)
+                Screen.PorRevisar        -> PorRevisarScreen(navigate)
+                Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
                 is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)
                 Screen.Mas               -> MasScreen(navigate)
                 Screen.Extractos         -> ExtractosScreen(navigate)

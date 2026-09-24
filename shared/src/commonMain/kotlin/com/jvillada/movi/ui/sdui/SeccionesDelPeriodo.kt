@@ -412,7 +412,7 @@ private fun pantallaDe(destino: DestinoDeRevision): Screen = when (destino) {
     DestinoDeRevision.RECURRENTES -> Screen.Plan(SEGMENTO_PAGOS)
     DestinoDeRevision.PRESUPUESTOS -> Screen.Plan(SEGMENTO_PRESUPUESTOS)
     DestinoDeRevision.CREDITOS -> Screen.Credits
-    DestinoDeRevision.SMS -> Screen.SMSInbox
+    DestinoDeRevision.POR_REVISAR -> Screen.PorRevisar
     DestinoDeRevision.SUSCRIPCIONES -> Screen.Plan(SEGMENTO_PAGOS)
     DestinoDeRevision.CUADRE -> Screen.CuadreDeSaldos
 }

@@ -60,7 +60,7 @@ fun leadingFor(screen: Screen, onNavigate: (Screen) -> Unit, fallback: Screen): 
  * dueño lo notó. Un solo componente: leading a la izquierda, título con el MISMO rótulo que
  * el menú, acción propia a la derecha si la hay, y una Hairline debajo.
  *
- * @param subtitle línea secundaria opcional (p.ej. «3 por confirmar» en Mensajes del banco).
+ * @param subtitle línea secundaria opcional (p.ej. «3 nuevas · 2 coincidencias» al revisar un extracto).
  * @param action   slot a la derecha (NewItemButton, lupa, campana…); null si la pantalla no
  *                 tiene acción propia.
  */

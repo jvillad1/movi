@@ -494,8 +494,13 @@ data class CosaParaRevisar(
     val urgente: Boolean = false,
 )
 
-/** A dónde lleva tocar una sugerencia. Un enum y no una `Screen` para que esto siga siendo puro. */
-enum class DestinoDeRevision { MOVIMIENTOS, RECURRENTES, PRESUPUESTOS, CREDITOS, SMS, SUSCRIPCIONES, CUADRE }
+/**
+ * A dónde lleva tocar una sugerencia. Un enum y no una `Screen` para que esto siga siendo puro.
+ *
+ * Ola C: [POR_REVISAR] reemplaza a `SMS` — los mensajes del banco por confirmar y los candidatos a
+ * pago de tarjeta se revisan en la misma bandeja. No viaja ni se guarda: vive solo en la UI.
+ */
+enum class DestinoDeRevision { MOVIMIENTOS, RECURRENTES, PRESUPUESTOS, CREDITOS, POR_REVISAR, SUSCRIPCIONES, CUADRE }
 
 /**
  * **Lo que el Inicio recomienda mirar hoy**, de lo más urgente a lo más opcional.
@@ -543,7 +548,7 @@ fun cosasParaRevisar(
                 CosaParaRevisar(
                     texto = "$smsPorConfirmar ${if (smsPorConfirmar == 1) "mensaje" else "mensajes"} del banco sin confirmar",
                     detalle = "Hasta confirmarlos no cuentan en el gasto del período.",
-                    destino = DestinoDeRevision.SMS,
+                    destino = DestinoDeRevision.POR_REVISAR,
                     urgente = smsPorConfirmar >= 10,
                 ),
             )
@@ -564,7 +569,7 @@ fun cosasParaRevisar(
                 CosaParaRevisar(
                     texto = "$candidatosAPagoDeTarjeta ${if (candidatosAPagoDeTarjeta == 1) "movimiento parece" else "movimientos parecen"} pago de tarjeta",
                     detalle = "Marcarlos evita contarlos dos veces: como gasto y como menos deuda.",
-                    destino = DestinoDeRevision.MOVIMIENTOS,
+                    destino = DestinoDeRevision.POR_REVISAR,
                 ),
             )
         }

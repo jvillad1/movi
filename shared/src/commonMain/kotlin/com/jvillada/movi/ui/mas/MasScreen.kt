@@ -28,6 +28,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
+import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
 
 private data class MasItem(
     val label: String,
@@ -58,8 +59,10 @@ private val items = listOf(
     // ícono en el encabezado del Hoy. El rótulo es el título de la pantalla, como en toda ficha.
     MasItem("Compartir",    Icons.Rounded.Share,            Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Compartir),
     MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat()),
-    // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú).
-    MasItem("Mensajes del banco", Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
+    // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú). Ola C: lo
+    // pendiente se mudó a «Por revisar» (Movimientos) y acá quedó la configuración de la captura y
+    // el historial — «Captura del banco» en Android, «Mensajes del banco» donde no hay captura.
+    MasItem(tituloDeCapturaDelBanco, Icons.Rounded.Sms,           Color(0xFF81D4FA), Color(0x2481D4FA), Screen.CapturaDelBanco),
     // Ola 14: la guía de arranque, que se apaga sola en el Inicio y hasta acá no tenía forma de
     // volver a abrirse. Solo se ofrece mientras le quede algo por tildar (ver [MasScreen]).
     MasItem("Primeros pasos", Icons.Rounded.Checklist,      Color(0xFFFFD479), Color(0x24FFD479), Screen.PrimerosPasos),

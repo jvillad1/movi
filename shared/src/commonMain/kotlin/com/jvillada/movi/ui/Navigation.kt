@@ -5,6 +5,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.transactions.CHIP_POR_CONFIRMAR
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 
 sealed class Screen {
@@ -161,7 +162,30 @@ sealed class Screen {
 
     data object OCRCapture : Screen()
     data object OCRConfirm : Screen()
-    data object SMSInbox : Screen()
+    /**
+     * **«Por revisar»** (ola C): la única bandeja de lo que entró solo y espera una decisión — los
+     * mensajes del banco por confirmar, los movimientos que entraron solos y los candidatos a pago
+     * de tarjeta. Antes eran dos lugares (la pantalla de Mensajes del banco y un aviso de
+     * Movimientos) y el dueño tenía que saber cuál mirar.
+     *
+     * Se llega desde el renglón «N por revisar» de Movimientos y desde las alertas del Hoy, así
+     * que marca la pestaña Movimientos (ver [navTabFor]). `Transactions(CHIP_POR_CONFIRMAR)` —el
+     * modo viejo— cae acá (ver [destinoVigente]).
+     */
+    data object PorRevisar : Screen()
+    /**
+     * **«Captura del banco»** (ola C) — en la web y en iOS se llama «Mensajes del banco», ver
+     * `tituloDeCapturaDelBanco`. Lo que quedó de la vieja bandeja de SMS cuando lo pendiente se
+     * mudó a [PorRevisar]: cómo está la captura (el permiso de SMS, el acceso a notificaciones, la
+     * hibernación y el barrido del historial en Android) y el **historial** de todos los mensajes
+     * que llegaron, para consultar. Es una ficha de Ajustes: se configura de vez en cuando, no se
+     * mira todos los días.
+     */
+    data object CapturaDelBanco : Screen()
+    /**
+     * Un mensaje del banco por confirmar. Se abre desde [PorRevisar] (y desde el historial de
+     * [CapturaDelBanco]), así que marca Movimientos y su flecha, sin historial, cae en la bandeja.
+     */
     data class SMSReconcile(val smsId: String) : Screen()
     data object Mas : Screen()
     data object Extractos : Screen()
@@ -192,13 +216,15 @@ sealed class Screen {
  * cuenta son Patrimonio.
  *
  * «Más» dejó de ser pestaña: Ajustes y lo que se abre desde ahí (Perfil, Categorías, Documentos,
- * Compartir, Movi AI, los mensajes del banco…) se alcanzan tocando el avatar, así que no marcan
+ * Compartir, Movi AI, la captura del banco…) se alcanzan tocando el avatar, así que no marcan
  * ninguna — pero **la barra sigue pintada** (ver [muestraLaNavegacion]): ninguna pestaña marcada
  * no es lo mismo que sin navegación.
  */
 fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Dashboard -> NavTab.HOY
-    is Screen.Transactions -> NavTab.MOVIMIENTOS
+    // «Por revisar» y el detalle de un mensaje se abren desde Movimientos (su renglón «N por
+    // revisar»): marcan esa pestaña, no Ajustes.
+    is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile -> NavTab.MOVIMIENTOS
     is Screen.Plan, Screen.Budgets -> NavTab.PLAN
     Screen.Accounts, Screen.Credits, Screen.CuadreDeSaldos, Screen.Destinos -> NavTab.PATRIMONIO
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
@@ -216,7 +242,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
  */
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
     Screen.Mas, Screen.Profile, Screen.Goals, Screen.Extractos, is Screen.AIChat,
-    Screen.SMSInbox, is Screen.SMSReconcile, Screen.Categorias, Screen.PrimerosPasos,
+    Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos,
     Screen.Documentos, Screen.Compartir -> true
     else -> false
 }
@@ -274,9 +300,14 @@ fun screenForTab(tab: NavTab): Screen = when (tab) {
  * vive ahora lo que ese chip mostraba. Se resuelve acá, una vez, y no en cada llamador: [NavStack.navegar]
  * pasa todo destino por esta función antes de apilarlo.
  */
-fun destinoVigente(screen: Screen): Screen =
-    if (screen is Screen.Transactions && screen.chipInicial == CHIP_RECURRENTES) Screen.Plan(SEGMENTO_PAGOS)
-    else screen
+fun destinoVigente(screen: Screen): Screen = when {
+    screen is Screen.Transactions && screen.chipInicial == CHIP_RECURRENTES -> Screen.Plan(SEGMENTO_PAGOS)
+    // Ola C, tarea 5: el modo «Por confirmar» de Movimientos se juntó con los mensajes del banco
+    // y los pagos de tarjeta en una sola bandeja. El índice sigue valiendo 3 (no se renumera) y
+    // quien lo pida llega a donde ahora vive lo que mostraba.
+    screen is Screen.Transactions && screen.chipInicial == CHIP_POR_CONFIRMAR -> Screen.PorRevisar
+    else -> screen
+}
 
 /**
  * Reglas puras de la pila de navegación (sin Compose), extraídas para poder

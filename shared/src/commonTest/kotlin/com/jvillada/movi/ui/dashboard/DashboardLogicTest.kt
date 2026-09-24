@@ -145,8 +145,9 @@ class DashboardLogicTest {
         assertEquals(
             listOf(
                 "Presupuesto de Mercado superado" to Screen.Plan(SEGMENTO_PRESUPUESTOS),
-                "2 pagos de tarjeta por confirmar" to Screen.Transactions(),
-                "1 mensaje del banco por confirmar" to Screen.SMSInbox,
+                // Ola C: las dos llevan a la misma bandeja.
+                "2 pagos de tarjeta por confirmar" to Screen.PorRevisar,
+                "1 mensaje del banco por confirmar" to Screen.PorRevisar,
             ),
             alerts.map { it.text to it.target },
         )
@@ -168,7 +169,8 @@ class DashboardLogicTest {
             captura = CapturaDeSms(),
         )
         assertEquals(
-            listOf("Movi nunca ha recibido un mensaje de tu banco" to Screen.SMSInbox),
+            // A «Captura del banco»: donde se arregla, y donde se silencia.
+            listOf("Movi nunca ha recibido un mensaje de tu banco" to Screen.CapturaDelBanco),
             alerts.map { it.text to it.target },
         )
     }
@@ -888,8 +890,8 @@ class DashboardLogicTest {
                 "Pago Visa · Vence hoy" to Screen.Credits,            // synthetic de tarjeta -> Créditos
                 "Colegio · Vence en 2 días" to Screen.Plan(SEGMENTO_PAGOS), // regla real -> Plan · Pagos del mes
                 "Presupuesto de Mercado superado" to Screen.Plan(SEGMENTO_PRESUPUESTOS),
-                "1 pago de tarjeta por confirmar" to Screen.Transactions(),
-                "2 mensajes del banco por confirmar" to Screen.SMSInbox,
+                "1 pago de tarjeta por confirmar" to Screen.PorRevisar,
+                "2 mensajes del banco por confirmar" to Screen.PorRevisar,
             ),
             rows.map { it.text to it.target },
         )

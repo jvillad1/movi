@@ -18,6 +18,13 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
+import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.porrevisar.TAG_RENGLON_POR_REVISAR
+import org.junit.Assert.assertEquals
+import androidx.compose.ui.test.onNodeWithTag
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
 import kotlinx.datetime.Clock
@@ -29,16 +36,16 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * # «Por confirmar» sale de la fila de filtros, montado de verdad
+ * # Un solo renglón «N por revisar» arriba de la lista, montado de verdad
  *
- * El dueño: *«Por confirmar debería saltar en otro lugar no acá en esta misma vista»*. Ahora es un
- * aviso arriba de la lista que **solo existe cuando hay algo que confirmar**.
+ * El dueño: *«Por confirmar debería saltar en otro lugar no acá en esta misma vista»*. Primero fue
+ * un aviso arriba de la lista; en la ola C (tarea 5) ese aviso, el de los pagos de tarjeta sin
+ * marcar y los mensajes del banco por confirmar se juntaron en **una sola bandeja**, «Por
+ * revisar», y acá queda un solo renglón con la suma que la abre.
  *
- * Se monta la pantalla dos veces con repositorios distintos —uno con un SMS sin confirmar y otro
- * sin nada pendiente— porque el punto entero del cambio es que en el segundo caso **no ocupe
- * espacio**, y eso no se puede afirmar con un solo montaje.
- *
- * Fecha vieja y de otro año para que el encabezado no dependa del reloj.
+ * Se monta la pantalla con repositorios distintos —con pendientes en las tres fuentes y sin
+ * ninguno— porque el punto del renglón es que en el segundo caso **no ocupe espacio**, y eso no se
+ * puede afirmar con un solo montaje.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = AVD_POR_CONFIRMAR)
@@ -64,24 +71,39 @@ class PorConfirmarEnMovimientosTest {
 
     private val aMano = evento("e-mano", "Carnes y Legumbres Santa Elena", ReconciliationStatus.RECONCILED, EventSource.MANUAL)
     private val porSms = evento("e-sms", "Compra Exito", ReconciliationStatus.UNCONFIRMED, EventSource.SMS)
+    private val pagoDeTarjeta = evento("e-pago", "Pago Nu", ReconciliationStatus.RECONCILED, EventSource.MANUAL)
 
-    private fun montar(items: List<FinancialEvent>, esperar: String, chipInicial: Int? = null) {
+    private fun sms(id: String, estado: String) = SmsMessage(
+        id = id, time = "2026-09-03 07:15", bank = "Bancolombia",
+        text = "Compra aprobada \$28.500 en Uber BV.", state = estado, det = "Uber",
+    )
+
+    private val navegaciones = mutableListOf<Screen>()
+
+    private fun montar(
+        items: List<FinancialEvent>,
+        esperar: String,
+        mensajes: List<SmsMessage> = emptyList(),
+        candidatos: List<FinancialEvent> = emptyList(),
+    ) {
         DiasPlegadosStore.clear()
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(banco)
             override suspend fun getEventsByDay(): List<EventDay> =
                 listOf(EventDay(date = HOY_ISO, total = -18_500L, items = items))
-            override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
+            override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = candidatos
+            override suspend fun getSmsMessages(): List<SmsMessage> = mensajes
         }
         composeRule.setContent {
             MoviTheme {
-                Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}, chipInicial = chipInicial) }
+                Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = { navegaciones += it }) }
             }
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(esperar, substring = true, useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.waitForIdle()
     }
 
     @After
@@ -98,69 +120,70 @@ class PorConfirmarEnMovimientosTest {
         composeRule.onNodeWithText("Todo", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Gastos", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Ingresos", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Por confirmar", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
-    fun `sin nada pendiente el aviso no ocupa espacio`() {
-        // El caso normal de quien anota todo a mano, y el punto entero del cambio.
-        montar(listOf(aMano), esperar = "Carnes y Legumbres")
+    fun `sin nada pendiente en ninguna fuente el renglon no ocupa espacio`() {
+        // El caso normal de quien anota todo a mano, y el punto entero del renglón.
+        montar(listOf(aMano), esperar = "Carnes y Legumbres", mensajes = listOf(sms("s1", SMS_STATE_CONFIRMED)))
 
-        composeRule.onNodeWithText("entró solo", substring = true, useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("faltan confirmar", substring = true, useUnmergedTree = true).assertDoesNotExist()
-    }
-
-    @Test
-    fun `con algo pendiente el aviso lo dice, y al tocarlo se entra a la bandeja`() {
-        montar(listOf(aMano, porSms), esperar = "entró solo")
-
-        composeRule.onNodeWithText("1 movimiento entró solo y falta confirmarlo", useUnmergedTree = true)
-            .assertIsDisplayed()
-
-        composeRule.onNodeWithText("1 movimiento entró solo y falta confirmarlo", useUnmergedTree = true)
-            .performClick()
-        composeRule.waitForIdle()
-
-        // Adentro: solo lo pendiente, el encabezado que dice dónde está, y la salida.
-        composeRule.onNodeWithText("Compra Exito", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Carnes y Legumbres Santa Elena", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Por confirmar", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Ver todos", useUnmergedTree = true).assertIsDisplayed()
-        // Y el aviso ya no: sería un botón que lleva a donde uno ya está.
-        composeRule.onNodeWithText("entró solo", substring = true, useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag(TAG_RENGLON_POR_REVISAR, useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("por revisar", substring = true, useUnmergedTree = true).assertDoesNotExist()
     }
 
     /**
-     * **El vacío de la bandeja sigue existiendo y sigue importando**, aunque ya no se llegue por un
-     * chip: confirmando el último pendiente la lista se queda vacía justo debajo de los dedos, y
-     * ahí «Sin movimientos aún · + Registrar el primero» mentiría dos veces (sí hay movimientos, y
-     * registrar uno nuevo no tiene nada que ver con confirmar los que entraron solos). El dueño lo
-     * leyó exactamente así: *«¿Qué es Por confirmar?»*.
-     *
-     * Se entra por `chipInicial`, que es la misma puerta que abre el aviso.
+     * Un movimiento que entró solo, dos mensajes del banco por confirmar y un pago de tarjeta sin
+     * marcar son **un** renglón con la suma, no tres avisos. Y los avisos viejos ya no están.
      */
     @Test
-    fun `la bandeja vacia lo dice, y no ofrece registrar`() {
-        montar(listOf(aMano), esperar = "Nada por confirmar", chipInicial = CHIP_POR_CONFIRMAR)
+    fun `el renglon suma las tres fuentes y abre la bandeja`() {
+        montar(
+            listOf(aMano, porSms),
+            esperar = "por revisar",
+            mensajes = listOf(sms("s1", SMS_STATE_PENDING), sms("s2", SMS_STATE_PENDING), sms("s3", SMS_STATE_CONFIRMED)),
+            candidatos = listOf(pagoDeTarjeta),
+        )
 
-        composeRule.onNodeWithText("Nada por confirmar", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("lo registraste tú", substring = true, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("+ Registrar el primero", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Sin movimientos aún", useUnmergedTree = true).assertDoesNotExist()
-        // Y el movimiento anotado a mano tampoco está: el filtro lo dejó afuera.
-        composeRule.onNodeWithText("Carnes y Legumbres Santa Elena", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("4 por revisar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("entró solo", substring = true, useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("sin marcar", substring = true, useUnmergedTree = true).assertDoesNotExist()
+
+        composeRule.onNodeWithText("4 por revisar", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf<Screen>(Screen.PorRevisar), navegaciones)
     }
 
+    /** Si solo hay mensajes del banco, el renglón igual está: la bandeja es una sola. */
     @Test
-    fun `Ver todos devuelve la lista completa`() {
-        montar(listOf(aMano, porSms), esperar = "entró solo")
-        composeRule.onNodeWithText("1 movimiento entró solo y falta confirmarlo", useUnmergedTree = true).performClick()
-        composeRule.waitForIdle()
+    fun `con solo mensajes del banco el renglon tambien aparece`() {
+        montar(listOf(aMano), esperar = "por revisar", mensajes = listOf(sms("s1", SMS_STATE_PENDING)))
 
-        composeRule.onNodeWithText("Ver todos", useUnmergedTree = true).performClick()
-        composeRule.waitForIdle()
+        composeRule.onNodeWithText("1 por revisar", useUnmergedTree = true).assertIsDisplayed()
+    }
 
-        composeRule.onNodeWithText("Carnes y Legumbres Santa Elena", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Compra Exito", useUnmergedTree = true).assertIsDisplayed()
+    /**
+     * Una fuente que no contestó no cuenta, y no se inventa: con los mensajes del banco caídos, el
+     * renglón dice lo que sí se leyó.
+     */
+    @Test
+    fun `una fuente caida no suma ni tapa a las otras`() {
+        DiasPlegadosStore.clear()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = listOf(banco)
+            override suspend fun getEventsByDay(): List<EventDay> =
+                listOf(EventDay(date = HOY_ISO, total = -18_500L, items = listOf(aMano, porSms)))
+            override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
+            override suspend fun getSmsMessages(): List<SmsMessage> = error("sin señal")
+        }
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("por revisar", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("1 por revisar", useUnmergedTree = true).assertIsDisplayed()
     }
 }
 

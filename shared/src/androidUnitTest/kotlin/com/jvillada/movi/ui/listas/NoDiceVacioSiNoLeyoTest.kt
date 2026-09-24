@@ -25,7 +25,7 @@ import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.goals.MetasScreen
 import com.jvillada.movi.shared.model.Documento
-import com.jvillada.movi.ui.sms.SMSInboxScreen
+import com.jvillada.movi.ui.sms.CapturaDelBancoScreen
 import com.jvillada.movi.ui.documentos.DocumentosScreen
 import com.jvillada.movi.ui.categorias.CategoriasScreen
 import com.jvillada.movi.ui.transactions.PERIODO_NO_LEIDO
@@ -160,7 +160,7 @@ class NoDiceVacioSiNoLeyoTest {
 
     @Test
     fun `la bandeja de SMS sin respuesta no dice cero por confirmar`() {
-        montar(object : RepositorioDePrueba() {}) { SMSInboxScreen(onNavigate = {}) }
+        montar(object : RepositorioDePrueba() {}) { CapturaDelBancoScreen(onNavigate = {}) }
         esperar("No pudimos cargar tus mensajes")
         assertTrue(!hay("0 por confirmar"))
     }

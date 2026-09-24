@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
+import com.jvillada.movi.ui.transactions.CHIP_ENTRE_CUENTAS
 import com.jvillada.movi.ui.transactions.CHIP_POR_CONFIRMAR
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 import kotlin.test.Test
@@ -131,6 +132,9 @@ class NavStackTest {
         Screen.Dashboard to NavTab.HOY,
         Screen.Transactions() to NavTab.MOVIMIENTOS,
         Screen.Transactions(CHIP_POR_CONFIRMAR) to NavTab.MOVIMIENTOS,
+        // Ola C, tarea 5: la bandeja y el detalle de un mensaje se abren desde Movimientos.
+        Screen.PorRevisar to NavTab.MOVIMIENTOS,
+        Screen.SMSReconcile("s1") to NavTab.MOVIMIENTOS,
         Screen.Plan() to NavTab.PLAN,
         Screen.Plan(SEGMENTO_PRESUPUESTOS) to NavTab.PLAN,
         Screen.Budgets to NavTab.PLAN,
@@ -148,8 +152,7 @@ class NavStackTest {
         Screen.Documentos to null,
         Screen.Compartir to null,
         Screen.AIChat() to null,
-        Screen.SMSInbox to null,
-        Screen.SMSReconcile("s1") to null,
+        Screen.CapturaDelBanco to null,
         Screen.PrimerosPasos to null,
         Screen.Goals to null,
         Screen.Extractos to null,
@@ -184,7 +187,7 @@ class NavStackTest {
     @Test
     fun `Ajustes no marca pestana pero sigue con la barra abajo`() {
         listOf(Screen.Mas, Screen.Profile, Screen.Categorias, Screen.Documentos, Screen.Compartir,
-            Screen.AIChat(), Screen.SMSInbox, Screen.PrimerosPasos)
+            Screen.AIChat(), Screen.CapturaDelBanco, Screen.PrimerosPasos)
             .forEach {
                 assertNull(navTabFor(it), "$it")
                 assertTrue(esDeAjustes(it), "$it")
@@ -228,8 +231,21 @@ class NavStackTest {
         assertEquals(Screen.Plan(SEGMENTO_PAGOS), destinoVigente(Screen.Transactions(CHIP_RECURRENTES)))
         // El resto de Movimientos no se toca.
         assertEquals(Screen.Transactions(), destinoVigente(Screen.Transactions()))
-        assertEquals(Screen.Transactions(CHIP_POR_CONFIRMAR), destinoVigente(Screen.Transactions(CHIP_POR_CONFIRMAR)))
+        assertEquals(Screen.Transactions(CHIP_ENTRE_CUENTAS), destinoVigente(Screen.Transactions(CHIP_ENTRE_CUENTAS)))
         assertEquals(Screen.Mas, destinoVigente(Screen.Mas))
+    }
+
+    /**
+     * Ola C, tarea 5: el modo «Por confirmar» de Movimientos se juntó con los mensajes del banco en
+     * la bandeja «Por revisar». El índice no se renumera; quien lo pida llega a la bandeja.
+     */
+    @Test
+    fun `pedir Movimientos con el chip Por confirmar lleva a Por revisar`() {
+        assertEquals(Screen.PorRevisar, destinoVigente(Screen.Transactions(CHIP_POR_CONFIRMAR)))
+        val pila = mutableListOf<Screen>(Screen.Dashboard)
+        NavStack.navegar(pila, Screen.Transactions(CHIP_POR_CONFIRMAR))
+        assertEquals(listOf(Screen.Dashboard, Screen.PorRevisar), pila)
+        assertTrue(muestraLaNavegacion(Screen.PorRevisar))
     }
 
     @Test

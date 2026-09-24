@@ -652,7 +652,7 @@ internal fun PrimerosPasosCard(
             // Ola B, tarea 7: era «Extractos» → Screen.Extractos; esa pantalla salió de la
             // navegación y «Importar movimientos» vive ahora en Documentos.
             AccesoLink("Documentos") { onNavigate(Screen.Documentos) }
-            if (isAndroid) AccesoLink("SMS del banco") { onNavigate(Screen.SMSInbox) }
+            if (isAndroid) AccesoLink("SMS del banco") { onNavigate(Screen.CapturaDelBanco) }
         }
     }
 }

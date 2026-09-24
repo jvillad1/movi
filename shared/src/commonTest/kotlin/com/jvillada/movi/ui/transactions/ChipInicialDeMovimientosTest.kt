@@ -25,8 +25,12 @@ class ChipInicialDeMovimientosTest {
 
     @Test fun `el chip pedido es el que arranca`() {
         assertEquals(CHIP_GASTOS, chipInicialDeMovimientos(CHIP_GASTOS))
-        assertEquals(CHIP_POR_CONFIRMAR, chipInicialDeMovimientos(CHIP_POR_CONFIRMAR))
         assertEquals(CHIP_ENTRE_CUENTAS, chipInicialDeMovimientos(CHIP_ENTRE_CUENTAS))
+    }
+
+    /** Ola C, tarea 5: «Por confirmar» se mudó a «Por revisar»; si aun así llegara acá, «Todo». */
+    @Test fun `Por confirmar ya no es un modo de Movimientos y cae en Todo`() {
+        assertEquals(CHIP_TODO, chipInicialDeMovimientos(CHIP_POR_CONFIRMAR))
     }
 
     /** Ola C: el filtro «Recurrentes» ya no existe en Movimientos — «Todo» es la caída honesta. */
@@ -69,7 +73,7 @@ class ChipInicialDeMovimientosTest {
      */
     @Test fun `ir de Movimientos sin filtro a Movimientos con un chip puesto se apila`() {
         val pila = listOf<Screen>(Screen.Dashboard, Screen.Transactions())
-        assertTrue(NavStack.shouldPush(pila, Screen.Transactions(CHIP_POR_CONFIRMAR)))
+        assertTrue(NavStack.shouldPush(pila, Screen.Transactions(CHIP_ENTRE_CUENTAS)))
         // Y volver a pedir exactamente lo mismo que ya está arriba, no.
         assertTrue(!NavStack.shouldPush(pila, Screen.Transactions()))
     }

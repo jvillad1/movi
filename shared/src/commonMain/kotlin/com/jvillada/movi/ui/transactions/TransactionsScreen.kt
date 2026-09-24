@@ -75,6 +75,9 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
+import com.jvillada.movi.ui.porrevisar.RenglonPorRevisar
+import com.jvillada.movi.ui.porrevisar.cuantosPorRevisar
+import com.jvillada.movi.ui.porrevisar.rememberLecturasPorRevisar
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.plan.rememberMarcasDeRecurrentes
@@ -456,16 +459,18 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
  * tarea pendiente, y su estado normal —el de quien anota todo a mano— es *vacío*. Un chip que la
  * enorme mayoría de los días no lleva a ningún lado ocupa el mismo espacio que los que sí.
  *
- * Así que sale de la fila y entra como aviso arriba de la lista, que aparece **solo cuando hay
- * algo que confirmar** (ver [avisoDePorConfirmar]). Es el mismo camino que ya tenían los
- * candidatos a pago de tarjeta, por el mismo motivo.
+ * Así que salió de la fila y pasó a ser un aviso arriba de la lista. Ola C, tarea 5: ese aviso y el
+ * de los candidatos a pago de tarjeta se juntaron con los mensajes del banco en **una sola bandeja,
+ * «Por revisar»** (`ui/porrevisar/PorRevisarScreen.kt`), y acá queda un solo renglón «N por
+ * revisar» que la abre.
  *
  * ### Por qué la constante sigue existiendo y valiendo 3
  *
- * [CHIP_POR_CONFIRMAR] no se borra: sigue siendo un filtro de verdad —el aviso lo activa— y
- * [matchesChip] lo sigue contestando. Y sobre todo, **los índices no se renumeran**: el número
- * viaja adentro de `Screen.Transactions` y puede volver desde una pila de navegación restaurada.
- * Correr «Recurrentes» del 5 al 3 haría que un 3 viejo signifique otra cosa, en silencio.
+ * [CHIP_POR_CONFIRMAR] no se borra aunque Movimientos ya no tenga ese modo: [matchesChip] lo sigue
+ * contestando, y sobre todo **los índices no se renumeran** — el número viaja adentro de
+ * `Screen.Transactions` y puede volver desde una pila de navegación restaurada. Quien lo pida llega
+ * a «Por revisar» (ver `destinoVigente` en Navigation.kt). Correr «Recurrentes» del 5 al 3 haría
+ * que un 3 viejo signifique otra cosa, en silencio.
  *
  * ### «Entre cuentas» salió por otro motivo
  *
@@ -483,18 +488,6 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
 val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS)
 
 /**
- * **Cuántos movimientos entraron solos y esperan confirmación** — los que llegaron por SMS, por
- * un extracto o por OCR, y de los que el dueño todavía no dijo si el monto y la categoría están
- * bien.
- *
- * Se cuenta sobre los días completos (`allDays`) y no sobre los visibles: el aviso tiene que
- * decir la verdad esté donde esté parado el dueño, y con el chip «Gastos» activo los que están
- * por confirmar ni siquiera aparecen en la lista (ver [matchesChip]).
- */
-fun cuantosPorConfirmar(days: List<EventDay>): Int =
-    days.sumOf { dia -> dia.items.count { it.reconciliationStatus == ReconciliationStatus.UNCONFIRMED } }
-
-/**
  * **El aviso de lo que no subió**, o `null` si todo subió. Lo que el server rechaza (la cuenta se
  * borró desde la web, una categoría que no se puede anotar) se queda solo en este teléfono: se ve en
  * Movimientos pero no llega al Inicio ni a la web. Antes el SyncEngine lo reintentaba en silencio
@@ -508,40 +501,14 @@ fun textoDeRechazados(rechazados: List<MovimientoRechazado>): String? {
 }
 
 /**
- * ¿Se pinta el aviso de «por confirmar» arriba de la lista?
- *
- * Solo si hay algo que confirmar **y** no se está mirando ya esa bandeja: adentro de ella el
- * aviso sería un botón que lleva a donde uno ya está. Ahí lo que corresponde es el encabezado que
- * dice en qué modo está y cómo salir (ver [MODO_POR_CONFIRMAR_TITULO]).
- */
-fun avisoDePorConfirmar(chip: Int, cuantos: Int): Boolean =
-    cuantos > 0 && chip != CHIP_POR_CONFIRMAR
-
-/**
- * Lo que dice el aviso. **Nombra el hecho, no la etiqueta**: «entraron solos» explica por qué hay
- * algo que revisar, que es justo la pregunta que el chip viejo dejaba sin contestar — el dueño la
- * hizo con todas las letras, *«¿Qué es Por confirmar?»*.
- */
-fun textoDelAvisoPorConfirmar(cuantos: Int): String =
-    if (cuantos == 1) "1 movimiento entró solo y falta confirmarlo"
-    else "$cuantos movimientos entraron solos y faltan confirmar"
-
-/**
- * El encabezado que reemplaza al chip cuando se está adentro de la bandeja. Hace falta porque, al
- * no haber chip, **ningún chip queda marcado**: sin esto la lista se vería filtrada sin nada que
- * dijera por qué ni cómo volver.
- */
-const val MODO_POR_CONFIRMAR_TITULO = "Por confirmar"
-
-/**
  * El rótulo del encabezado cuando se está adentro de un filtro que **no tiene chip**, o `null` si
  * el filtro activo sí es uno de los que se dibujan.
  *
- * Los dos que salieron de la fila necesitan lo mismo y por lo mismo: sin chip marcado, la lista se
- * vería filtrada sin nada que dijera por qué ni cómo volver. Ver [CHIPS_VISIBLES].
+ * Sin chip marcado, la lista se vería filtrada sin nada que dijera por qué ni cómo volver. Ver
+ * [CHIPS_VISIBLES]. Hoy es solo «Entre cuentas»: «Por confirmar» dejó de ser un modo de esta
+ * pantalla en la ola C (ver [CHIP_POR_CONFIRMAR]).
  */
 fun tituloDelModoSinChip(chip: Int): String? = when (chip) {
-    CHIP_POR_CONFIRMAR -> MODO_POR_CONFIRMAR_TITULO
     CHIP_ENTRE_CUENTAS -> CHIPS_DE_MOVIMIENTOS[CHIP_ENTRE_CUENTAS]
     else -> null
 }
@@ -581,18 +548,18 @@ fun puedeAvanzarDePeriodo(visible: PeriodoFinanciero, actual: PeriodoFinanciero)
 
 /**
  * PR 3 del rediseño de Recurrentes (2026-09): **con qué chip arranca Movimientos** cuando alguien
- * la abrió pidiendo uno — hoy, los modos sin chip («Por confirmar» desde su aviso, «Entre cuentas»
- * desde Cuentas).
+ * la abrió pidiendo uno — hoy, el modo sin chip «Entre cuentas», desde Patrimonio.
  *
  * `null` —el caso normal, entrar por la pestaña— es «Todo». Un índice fuera de rango también cae
  * en «Todo» y no explota: el valor viaja adentro de [com.jvillada.movi.ui.Screen.Transactions], y
  * una pila restaurada o una definición SDUI vieja podrían traer un número que hoy no existe.
  * Arrancar en «Todo» ahí es la caída correcta — es la pantalla completa, no un filtro que esconde
- * cosas sin decirlo. [CHIP_RECURRENTES] cae igual: ese filtro ya no existe acá (ola C, se mudó a
- * Plan) y la navegación lo desvía antes de llegar; si aun así llegara, «Todo» es lo honesto.
+ * cosas sin decirlo. [CHIP_RECURRENTES] y [CHIP_POR_CONFIRMAR] caen igual: esos modos ya no
+ * existen acá (ola C: uno se mudó a Plan, el otro a «Por revisar») y la navegación los desvía antes
+ * de llegar; si aun así llegaran, «Todo» es lo honesto.
  */
 fun chipInicialDeMovimientos(pedido: Int?): Int =
-    if (pedido != null && pedido in CHIPS_DE_MOVIMIENTOS.indices && pedido != CHIP_RECURRENTES) pedido
+    if (pedido != null && pedido in CHIPS_DE_MOVIMIENTOS.indices && pedido != CHIP_RECURRENTES && pedido != CHIP_POR_CONFIRMAR) pedido
     else CHIP_TODO
 
 /**
@@ -645,7 +612,8 @@ const val PERIODO_NO_LEIDO: String =
  * una cuenta recién abierta. Con el chip «Por confirmar» activo y nada por confirmar —que es el
  * caso normal de quien anota todo a mano— ese texto mentía dos veces: sí hay movimientos, y
  * registrar uno nuevo no tiene nada que ver con confirmar los que entraron solos. El dueño lo
- * leyó exactamente así: *«¿Qué es Por confirmar?»*.
+ * leyó exactamente así: *«¿Qué es Por confirmar?»*. Ola C: ese modo se mudó a la bandeja «Por
+ * revisar», que tiene su propio vacío; acá quedan los de los chips.
  *
  * [ofreceRegistrar] solo cuando de verdad no hay nada anotado: es la única situación en la que
  * el botón contesta la pregunta que el vacío plantea.
@@ -657,12 +625,6 @@ data class VacioDeMovimientos(
 )
 
 fun vacioDeMovimientos(chip: Int, hayMovimientos: Boolean): VacioDeMovimientos = when {
-    chip == CHIP_POR_CONFIRMAR -> VacioDeMovimientos(
-        titulo = "Nada por confirmar",
-        detalle = "Todo lo que hay lo registraste tú. Aquí caen los movimientos que entran solos, " +
-            "por SMS o por extracto, hasta que los confirmes.",
-        ofreceRegistrar = false,
-    )
     !hayMovimientos -> VacioDeMovimientos("Sin movimientos aún", null, ofreceRegistrar = true)
     chip == CHIP_GASTOS -> VacioDeMovimientos(
         titulo = "Sin gastos",
@@ -943,19 +905,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // Se calcula una vez por composición y no dentro del bucle de días.
     val hoyIso = remember { todayIsoInAppZone() }
 
-    // Candidatos a pago de tarjeta sin marcar (Task 2 del plan): entrada opcional, así que un
-    // fallo al traerlos no debe tapar Movimientos con un snackbar.
-    var candidates by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
-    // Los que el dueño ya resolvió en esta pantalla — confirmados con "Marcar" o descartados con
-    // "No es", mismo tratamiento para los dos. Se descuentan de `candidates` porque el refetch
-    // puede fallar y dejar la lista vieja: sin esto, un pago recién resuelto volvía a aparecer
-    // con sus botones activos y el contador seguía diciendo el número de antes — o sea, la app le
-    // decía que su acción no se había guardado, cuando sí se guardó. Para "No es" en particular,
-    // sin este descuento el falso positivo revivía en cuanto el refetch fallaba.
-    var resolvedIds by remember { mutableStateOf(emptySet<String>()) }
-    val pendingCandidates = candidates.filterNot { it.id in resolvedIds }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
-    var showCandidatesSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(refreshKey, refreshTick) {
         loading = true
@@ -984,10 +934,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         runCatching { Repositories.wallets.getMovimientosRechazados() }.onSuccess { rechazados = it }
     }
 
-    LaunchedEffect(refreshKey, refreshTick) {
-        runCatching { Repositories.wallets.getCardPaymentCandidates() }
-            .onSuccess { candidates = it }
-    }
+    // Ola C, tarea 5: los mensajes del banco y los candidatos a pago de tarjeta, solo para contar
+    // lo que hay en «Por revisar» (ver [RenglonPorRevisar]). Se revisan allá, no acá.
+    val porRevisar = rememberLecturasPorRevisar(recarga = refreshKey)
 
     // Lo que hace falta para el ícono de repetición de cada fila. Ola C: el tablero de Recurrentes
     // se mudó a Plan y esta pantalla ya no lo pinta; de él solo lee estas dos listas (ver
@@ -1222,9 +1171,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             }
         }
 
-        // «Por confirmar» dejó de ser un chip y es esto: un aviso que **solo existe cuando hay
-        // algo que confirmar**. Ver [CHIPS_VISIBLES] para el porqué, y [avisoDePorConfirmar] para
-        // cuándo se pinta. Mismo camino que los candidatos de pago de tarjeta, acá abajo.
         textoDeRechazados(rechazados)?.let { texto ->
             MinCard(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
@@ -1234,32 +1180,29 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 Text(text = texto, style = Movi.textos.cuerpo, color = Movi.colores.aviso)
             }
         }
-        val porConfirmar = cuantosPorConfirmar(allDays)
-        if (avisoDePorConfirmar(activeFilter, porConfirmar)) {
-            MinCard(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
-                variant = MinCardVariant.Default,
-                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                onClick = { activeFilter = CHIP_POR_CONFIRMAR },
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = textoDelAvisoPorConfirmar(porConfirmar),
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                    )
-                    ChevronRight()
-                }
+        // Ola C, tarea 5: **un solo renglón** por todo lo que entró solo y espera una decisión —los
+        // movimientos por confirmar, los mensajes del banco y los pagos de tarjeta sin marcar— en
+        // vez de un aviso por fuente. Abre la bandeja «Por revisar», donde se resuelve cada uno.
+        //
+        // Espera a que las tres lecturas terminen: pintarlo con la primera que llega y corregir el
+        // número con la segunda sería una cifra que baila, y con las tres en cero no ocupa lugar.
+        if (!loading && porRevisar.terminaron) {
+            val cuantos = cuantosPorRevisar(
+                mensajes = porRevisar.mensajes,
+                dias = if (diasLeidos) allDays else null,
+                candidatos = porRevisar.candidatos,
+            )
+            if (cuantos > 0) {
+                RenglonPorRevisar(
+                    cuantos = cuantos,
+                    onClick = { onNavigate(Screen.PorRevisar) },
+                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
+                )
             }
         }
-        // Y adentro de la bandeja, el encabezado que dice dónde está y cómo salir. Hace falta
-        // porque sin chip **ningún chip queda marcado**: la lista se vería filtrada sin nada que
-        // explicara por qué.
+        // Adentro de un modo sin chip («Entre cuentas»), el encabezado que dice dónde está y cómo
+        // salir. Hace falta porque sin chip **ningún chip queda marcado**: la lista se vería
+        // filtrada sin nada que explicara por qué.
         val tituloDelModo = tituloDelModoSinChip(activeFilter)
         if (tituloDelModo != null) {
             Row(
@@ -1283,33 +1226,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     color = Movi.colores.marca,
                     modifier = Modifier.clickable { activeFilter = CHIP_TODO },
                 )
-            }
-        }
-
-        // Entrada discreta a los candidatos de pago de tarjeta: solo aparece si hay algo que
-        // proponer, y abre una lista donde cada uno se confirma por separado (ver
-        // CardPaymentCandidatesSheet) — nunca se marcan todos de una.
-        if (pendingCandidates.isNotEmpty()) {
-            MinCard(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
-                variant = MinCardVariant.Default,
-                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                onClick = { showCandidatesSheet = true },
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = if (pendingCandidates.size == 1) "1 pago de tarjeta sin marcar"
-                               else "${pendingCandidates.size} pagos de tarjeta sin marcar",
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                    )
-                    ChevronRight()
-                }
             }
         }
 
@@ -1607,15 +1523,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         )
     }
 
-    if (showCandidatesSheet) {
-        CardPaymentCandidatesSheet(
-            candidates = pendingCandidates,
-            onDismiss = { showCandidatesSheet = false },
-            onConfirmed = { id -> resolvedIds = resolvedIds + id; refreshKey++ },
-            onDismissedCandidate = { id -> resolvedIds = resolvedIds + id; refreshKey++ },
-        )
-    }
-
     if (showCreateSheet) {
         CreateAccountSheet(
             onDismiss = { showCreateSheet = false },
@@ -1672,9 +1579,12 @@ fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color = when (tono
  * Los dos pares se siguen viendo igual que antes —el azul de «entre cuentas», sin signo— y el
  * título los distingue («Cuota de crédito» / «Pago de tarjeta», ver [transferRowTitle]), que es lo
  * que hace falta: uno cuenta en el mes y el otro no.
+ *
+ * `internal` desde la ola C: la bandeja «Por revisar» pinta con este mismo renglón lo que entró
+ * solo, para que un movimiento se vea igual allá y acá.
  */
 @Composable
-private fun TransferRow(
+internal fun TransferRow(
     row: MovementRow.Transfer,
     accountNames: Map<String, String>,
     accountTypes: Map<String, AccountType>,
@@ -1801,9 +1711,12 @@ private fun RenglonDeAjustes(
  * en el rail y en Más ([Icons.Rounded.Repeat]), chico y sin color propio —el mismo `Movi.colores.textoMedio`
  * del subtítulo— junto a la categoría. No es un botón: solo informa: para editar el recurrente
  * hay que abrir el movimiento y usar «¿Se repite todos los meses?» (ver `SeccionEstoSeRepite`).
+ *
+ * `internal` desde la ola C: la bandeja «Por revisar» pinta con este mismo renglón lo que entró
+ * solo, para que un movimiento se vea igual allá y acá.
  */
 @Composable
-private fun MovementSingleRow(
+internal fun MovementSingleRow(
     tx: FinancialEvent,
     accountNames: Map<String, String>,
     esRecurrente: Boolean = false,

@@ -67,7 +67,7 @@ class CapturaDeSmsEnLaBandejaTest {
     private fun montar() {
         Repositories.sustitutoDePrueba = Repo()
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { SMSInboxScreen(onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { CapturaDelBancoScreen(onNavigate = {}) } }
         }
     }
 
@@ -129,7 +129,7 @@ class CapturaDeSmsEnLaBandejaTest {
             )
         }
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { SMSInboxScreen(onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { CapturaDelBancoScreen(onNavigate = {}) } }
         }
 
         // Con la sección de captura ya pintada (el rótulo va en mayúsculas), la pantalla
@@ -158,6 +158,29 @@ class CapturaDeSmsEnLaBandejaTest {
         // Y no se ofrece callar un aviso que no existe.
         composeRule.onNodeWithText("No me avises de esto en Inicio", useUnmergedTree = true)
             .assertDoesNotExist()
+    }
+
+    // ── Ola C: la pantalla es «Captura del banco» y lo que lista es el historial ──
+
+    /**
+     * Lo pendiente se revisa en «Por revisar»; acá quedan la configuración de la captura y el
+     * historial de TODOS los mensajes — confirmados, ignorados y los que esperan.
+     */
+    @Test
+    fun `es Captura del banco, con la configuracion y el historial entero`() {
+        mensajes = listOf(
+            sms("s1", "2026-08-01 10:00", SMS_STATE_CONFIRMED),
+            sms("s2", "2026-09-03 07:15"),
+        )
+        montar()
+
+        esperarTexto("HISTORIAL")
+        composeRule.onNodeWithText("Captura del banco", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("CAPTURA EN ESTE TELÉFONO", substring = true, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("CONFIRMADO", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("PENDIENTE", useUnmergedTree = true).assertExists()
+        // Ya no cuenta pendientes en el encabezado: eso lo dice «Por revisar».
+        composeRule.onNodeWithText("por confirmar", substring = true, useUnmergedTree = true).assertDoesNotExist()
     }
 
     // ── El freno al ruido crónico ──────────────────────────────────────────────

@@ -38,7 +38,7 @@ class MasScreenTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val lasDeAjustes = listOf("Perfil", "Categorías", "Documentos", "Compartir", "Movi AI", "Mensajes del banco")
+    private val lasDeAjustes = listOf("Perfil", "Categorías", "Documentos", "Compartir", "Movi AI", "Captura del banco")
     private val lasQueSonPestana = listOf(
         "Cuentas", "Cuadre de saldos", "Presupuestos", "Créditos", "Cuentas de otros", "Recurrentes",
     )
@@ -89,6 +89,24 @@ class MasScreenTest {
         composeRule.onNodeWithText("Perfil", useUnmergedTree = true).performClick()
 
         assertEquals(Screen.Profile, navegoA)
+    }
+
+    /**
+     * Ola C, tarea 5: la configuración de la captura (permisos, notificaciones, hibernación) y el
+     * historial de mensajes salieron de la bandeja y viven en Ajustes. En Android —donde corren
+     * estas pruebas— la ficha se llama «Captura del banco».
+     */
+    @Test
+    fun `la captura del banco vive en Ajustes`() {
+        var navegoA: Screen? = null
+        composeRule.setContent {
+            MoviTheme { MasScreen(onNavigate = { navegoA = it }) }
+        }
+
+        composeRule.onNodeWithText("Captura del banco", useUnmergedTree = true).performClick()
+
+        assertEquals(Screen.CapturaDelBanco, navegoA)
+        composeRule.onNodeWithText("Mensajes del banco", useUnmergedTree = true).assertDoesNotExist()
     }
 
     // ── Ola B, tarea 7: Metas y Extractos salieron; Primeros pasos es condicional ──────

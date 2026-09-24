@@ -54,9 +54,10 @@ class EntreCuentasFueraDeLosChipsTest {
     @Test
     fun `adentro, el encabezado dice donde esta uno`() {
         // Sin chip marcado, la lista se vería filtrada sin nada que explicara por qué ni cómo
-        // volver. Los dos filtros sin chip necesitan lo mismo.
+        // volver. Ola C: «Por confirmar» dejó de ser un modo de Movimientos (se mudó a «Por
+        // revisar»), así que ya no lleva encabezado acá.
         assertEquals("Entre cuentas", tituloDelModoSinChip(CHIP_ENTRE_CUENTAS))
-        assertEquals("Por confirmar", tituloDelModoSinChip(CHIP_POR_CONFIRMAR))
+        assertNull(tituloDelModoSinChip(CHIP_POR_CONFIRMAR))
         // Y los que sí tienen chip no lo llevan: ahí el chip marcado ya lo dice.
         assertNull(tituloDelModoSinChip(CHIP_TODO))
         assertNull(tituloDelModoSinChip(CHIP_GASTOS))
