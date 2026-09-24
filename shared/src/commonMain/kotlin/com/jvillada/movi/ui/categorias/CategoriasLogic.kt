@@ -218,16 +218,24 @@ fun colisionAlRenombrar(
  */
 fun avisoDeUnificacion(origen: CategoryUsage, destino: CategoryUsage): String {
     val partes = mutableListOf<String>()
+    // Ola B, tarea 2: el verbo concuerda con lo que de verdad se está moviendo — «1 movimiento
+    // … pasa», no «pasan». Plural cuando hay más de una cosa en juego (varias partes, o una sola
+    // parte con cantidad mayor a 1); «su presupuesto» nunca pluraliza por sí sola.
+    var esPlural = false
     val movimientos = origen.movements + origen.otherCurrencyMovements
     if (movimientos > 0) {
         partes += if (movimientos == 1) "1 movimiento" else "$movimientos movimientos"
+        if (movimientos > 1) esPlural = true
     }
     if (origen.budgets > 0) partes += "su presupuesto"
     if (origen.recurringRules > 0) {
         partes += if (origen.recurringRules == 1) "1 recurrente" else "${origen.recurringRules} recurrentes"
+        if (origen.recurringRules > 1) esPlural = true
     }
+    if (partes.size > 1) esPlural = true
+    val verbo = if (esPlural) "pasan" else "pasa"
     val que = if (partes.isEmpty()) "Nada cambia de nombre: «${origen.name}» no tiene movimientos."
-    else "${partes.joinToString(", ")} de «${origen.name}» pasan a decir «${destino.name}»."
+    else "${partes.joinToString(", ")} de «${origen.name}» $verbo a decir «${destino.name}»."
     val base = "$que No se borra nada: los movimientos siguen ahí, con el nombre nuevo."
     // Lo único de toda la operación que NO es «el mismo dato con otro nombre»: si las dos tienen
     // presupuesto, los dos límites se suman en uno y los originales dejan de existir. Es
