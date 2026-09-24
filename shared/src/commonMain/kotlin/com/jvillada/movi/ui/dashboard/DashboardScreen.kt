@@ -26,10 +26,7 @@ import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.isAndroid
-import com.jvillada.movi.shared.model.CapturaDeSms
 import com.jvillada.movi.shared.model.Scope
-import com.jvillada.movi.shared.model.periodoDe
-import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
@@ -359,36 +356,10 @@ fun DashboardScreen(
             launch {
                 runCatching { Repositories.wallets.getDashboardSummary(scope) }
                     .onSuccess { s ->
-                        data = data.copy(
-                            spentByCategory = s.spentByCategory,
-                            cardCandidates = s.cardPaymentCandidates,
-                            pendingSms = s.pendingSms,
-                            // Lo que se sabe de la captura de SMS. Viene en esta MISMA respuesta
-                            // —no es una llamada nueva— y es lo que le permite al Inicio decir
-                            // «Movi nunca ha recibido un mensaje de tu banco». Ver CapturaDeSms
-                            // en :core: la captura estuvo muda semanas y el único lugar que
-                            // podía delatarlo era una pantalla de Android que el dueño no abre.
-                            captura = CapturaDeSms(total = s.smsTotal, ultimo = s.smsLastAt),
-                            capturaSilenciada = s.smsAlertMuted,
-                            // La tarjeta «Disponible». Misma respuesta, ninguna llamada nueva.
-                            gastoVariablePorDia = s.gastoVariablePorDia,
-                            // Lo que tenías al empezar el período y lo que entró. Un server viejo
-                            // no lo manda y la tarjeta vuelve a «ingresos menos fijos».
-                            plataDelDisponible = plataDelDisponibleDe(s),
-                            // El patrimonio ya partido (entrega A). La tarjeta lo usa solo si las
-                            // cuentas no llegaron: ver `patrimonioDelInicio`.
-                            patrimonio = s.patrimonio,
-                        )
-                        llegado = llegado.copy(
-                            spentByCategory = data.spentByCategory,
-                            cardCandidates = data.cardCandidates,
-                            pendingSms = data.pendingSms,
-                            captura = data.captura,
-                            capturaSilenciada = data.capturaSilenciada,
-                            gastoVariablePorDia = data.gastoVariablePorDia,
-                            plataDelDisponible = data.plataDelDisponible,
-                            patrimonio = data.patrimonio,
-                        )
+                        // La traducción de la respuesta vive en [conResumenDelInicio]: la pestaña
+                        // Plan lee la misma para su tarjeta «Disponible».
+                        data = data.conResumenDelInicio(s)
+                        llegado = llegado.conResumenDelInicio(s)
                         resumenDelInicioLlego = true
                         // Ola 9 · A2: las categorías propias del dueño quedan disponibles en
                         // «Agregar» aunque entre directo desde acá, sin haber pasado por
@@ -424,12 +395,9 @@ fun DashboardScreen(
             // la app.
             launch {
                 runCatching { Repositories.wallets.getUserProfile() }.onSuccess { perfil ->
-                    val ajustes = PeriodSettings(perfil.periodCutoffDay, perfil.periodStarts)
-                    data = data.copy(
-                        ajustesDePeriodo = ajustes,
-                        periodoActual = periodoDe(Clock.System.now().toEpochMilliseconds(), ajustes),
-                    )
-                    llegado = llegado.copy(ajustesDePeriodo = data.ajustesDePeriodo, periodoActual = data.periodoActual)
+                    val ahora = Clock.System.now().toEpochMilliseconds()
+                    data = data.conElPerfil(perfil, ahora)
+                    llegado = llegado.conElPerfil(perfil, ahora)
                     perfilLlego = true
                 }
             }

@@ -43,7 +43,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.DiasPlegadosStore
-import com.jvillada.movi.data.FormaDeMovimientos
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
@@ -1092,10 +1091,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // período al que el dueño haya navegado.
     LaunchedEffect(perfilOk, periodoDeHoy, ajustesDelPeriodo) {
         if (!perfilOk) return@LaunchedEffect
-        FormaRecordada.delAparato.guardarMovimientos(
-            SessionManager.userId,
-            FormaDeMovimientos(lineaDePeriodo = rangoLegibleDe(periodoDeHoy, ajustesDelPeriodo) != null),
-        )
+        FormaRecordada.delAparato.recordarLineaDePeriodo(SessionManager.userId, periodoDeHoy, ajustesDelPeriodo)
     }
     /**
      * Qué período se está mirando. `remember(periodoDeHoy)` y no `remember { }` a secas: si el

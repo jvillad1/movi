@@ -1,5 +1,8 @@
 package com.jvillada.movi.data
 
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
 import kotlinx.serialization.KSerializer
@@ -85,6 +88,16 @@ class FormaRecordada(
 
     fun guardarMovimientos(userId: String?, forma: FormaDeMovimientos) =
         guardarForma(userId, PANTALLA_MOVIMIENTOS, forma, FormaDeMovimientos.serializer())
+
+    /**
+     * Anota si el período en curso lleva línea de rango, con la misma regla que decide si se pinta
+     * ([rangoLegibleDe]: con corte 1 no hay nada que aclarar). Ola C: la línea es un dato del
+     * CORTE del dueño, no de una pantalla, y la muestran Movimientos y Plan; las dos la anotan
+     * con esto —y solo tras un perfil que contestó bien— y las dos la leen de [movimientos] para
+     * reservarla (o no) antes de que el perfil conteste.
+     */
+    fun recordarLineaDePeriodo(userId: String?, periodoDeHoy: PeriodoFinanciero, ajustes: PeriodSettings) =
+        guardarMovimientos(userId, FormaDeMovimientos(lineaDePeriodo = rangoLegibleDe(periodoDeHoy, ajustes) != null))
 
     /** Al cerrar sesión: todas las formas de [userId]. */
     fun borrar(userId: String?) {
