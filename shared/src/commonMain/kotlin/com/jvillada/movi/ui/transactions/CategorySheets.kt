@@ -147,7 +147,9 @@ private fun CategoryRow(
 }
 
 /**
- * ¿Se dibuja el botón «Usar "…"» del campo libre de [ChangeCategorySheet]?
+ * ¿Se guarda lo que el dueño eligió en el campo de [ChangeCategorySheet]? (Hasta la revisión final
+ * de la Ola B era «¿se dibuja el botón "Usar …"?»: ahora tocar la celda ya elige, y esta es la
+ * guarda que decide si ese toque llega al `PUT`.)
  *
  * Función aparte del `@Composable` para poder testearla, y porque la tercera condición es una
  * **guarda de plata**, no un detalle de dibujo.
@@ -645,40 +647,30 @@ fun ChangeCategorySheet(
             }
 
             Spacer(Modifier.height(16.dp))
-            SheetLabel("O ESCRIBE OTRA")
+            SheetLabel("O BUSCA OTRA")
             Spacer(Modifier.height(8.dp))
-            // Ola 2 #7: campo libre con sugerencias, para categorías propias del dueño (creadas
-            // a mano en QuickAdd/Presupuestos/Recurrentes) que no están en el catálogo de arriba.
+            // Ola 2 #7: para categorías propias del dueño (creadas a mano en QuickAdd/Presupuestos/
+            // Recurrentes) que no están en el catálogo de arriba.
+            //
+            // Revisión final de la Ola B: desde la tarea 4 este campo ya no es texto libre — es la
+            // cuadrícula del selector, y `onValueChange` solo llega cuando el dueño TOCA una celda
+            // (una existente, «Crear "…"» o «Usar "…"»). Esa ya es la decisión: antes la hoja
+            // la guardaba en el campo y pedía un segundo toque en «Usar "…"», dos toques para lo
+            // que en la lista de arriba es uno. La guarda de reservadas se queda igual —el selector
+            // ya no ofrece ninguna, pero esta hoja es la puerta del `PUT` y no confía en eso.
             CategoryField(
                 value = freeText,
-                onValueChange = { freeText = it },
+                onValueChange = { elegida ->
+                    freeText = elegida
+                    if (!saving && ofreceCategoriaEscritaAMano(elegida, event.category)) choose(elegida.trim())
+                },
                 type = event.type,
                 usedCategories = UsedCategoriesCache.used,
                 prefs = UsedCategoriesCache.prefs,
                 usos = UsedCategoriesCache.usosRecientes,
                 label = null,
-                placeholder = "Ej: Colegio",
+                placeholder = "Buscar o crear categoría",
             )
-            val trimmedFreeText = freeText.trim()
-            if (ofreceCategoriaEscritaAMano(freeText, event.category)) {
-                Spacer(Modifier.height(10.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (!saving) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                        .clickable(enabled = !saving) { choose(trimmedFreeText) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "Usar \"$trimmedFreeText\"",
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = if (!saving) Movi.colores.marca else Movi.colores.textoApagado,
-                    )
-                }
-            }
 
             if (saving) {
                 Spacer(Modifier.height(10.dp))

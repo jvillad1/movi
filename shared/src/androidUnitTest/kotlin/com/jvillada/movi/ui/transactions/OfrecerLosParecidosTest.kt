@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -23,6 +24,8 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.TAG_CAMPO_DE_CATEGORIA
+import com.jvillada.movi.ui.components.tagDeCeldaDeCategoria
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -70,12 +73,13 @@ class OfrecerLosParecidosTest {
     /** El repositorio de prueba anota qué lote se pidió, o `null` si no se pidió ninguno. */
     private class RepoConParecidos(private val parecidos: List<FinancialEvent>) : RepositorioDePrueba() {
         var lotePedido: Pair<List<String>, String>? = null
+        val categoriasPedidas = mutableListOf<String>()
         override suspend fun getParecidos(id: String): List<FinancialEvent> = parecidos
         override suspend fun updateEventCategory(id: String, category: String): FinancialEvent =
-            FinancialEvent(
+            categoriasPedidas.add(category).let { _ -> FinancialEvent(
                 id = id, accountId = "acc-banco", type = TransactionType.EXPENSE, amount = 25_000L,
                 category = category, description = "Mora Soccer", timestamp = 1_757_952_000_000L,
-            )
+            ) }
         override suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse {
             lotePedido = ids to category
             return RecategorizarEnLoteResponse(cambiados = ids, omitidos = 0)
@@ -177,5 +181,29 @@ class OfrecerLosParecidosTest {
 
         composeRule.onAllNodesWithText("¿Y LOS PARECIDOS?", useUnmergedTree = true).assertCountEquals(0)
         assertNotNull(cambiado)
+    }
+
+    /**
+     * Revisión final de la Ola B: elegir en la cuadrícula del campo «O busca otra» ES elegir — un
+     * toque, como en la lista de arriba. Antes el toque solo llenaba el campo y había que tocar
+     * además «Usar "…"».
+     */
+    @Test
+    fun tocarUnaCeldaDelCampoEligeEnUnSoloToque() {
+        val repo = RepoConParecidos(emptyList())
+        Repositories.sustitutoDePrueba = repo
+        var cambiado: FinancialEvent? = null
+        montar { cambiado = it }
+
+        composeRule.onNodeWithTag(TAG_CAMPO_DE_CATEGORIA, useUnmergedTree = true).performScrollTo()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Comida"), useUnmergedTree = true).performScrollTo()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("Comida"), repo.categoriasPedidas)
+        assertEquals("Comida", cambiado?.category)
+        composeRule.onAllNodesWithText("Usar \"", substring = true, useUnmergedTree = true).assertCountEquals(0)
     }
 }
