@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.plan.resumenPlegadoDeSuscripciones
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
