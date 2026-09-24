@@ -319,6 +319,18 @@ fun SelectorDeCategoria(
     }
 }
 
+/**
+ * ¿Esta celda es la categoría que ya está puesta? Solo una categoría existente puede serlo: las
+ * especiales son lo escrito, no lo que ya estaba puesto.
+ *
+ * Sin mayúsculas **ni tildes** ([normalizarParaBuscar], la misma vara que usa la búsqueda): un
+ * movimiento viejo que dice «Educacion» tiene que ver marcada la celda «Educación». Comparar solo
+ * sin mayúsculas dejaba la cuadrícula sin ninguna marcada, como si la categoría puesta no
+ * existiera.
+ */
+internal fun esLaCeldaElegida(celda: CeldaDeCategoria, elegida: String): Boolean =
+    celda is CeldaDeCategoria.Existente && normalizarParaBuscar(celda.nombre) == normalizarParaBuscar(elegida)
+
 @Composable
 private fun CuadriculaDeCategorias(
     celdas: List<CeldaDeCategoria>,
@@ -338,10 +350,7 @@ private fun CuadriculaDeCategorias(
                     fila.forEach { celda ->
                         CeldaDeLaCuadricula(
                             celda = celda,
-                            // Solo una categoría existente puede ser «la elegida»: las especiales
-                            // son lo escrito, no lo que ya estaba puesto.
-                            elegida = celda is CeldaDeCategoria.Existente &&
-                                celda.nombre.trim().equals(elegida.trim(), ignoreCase = true),
+                            elegida = esLaCeldaElegida(celda, elegida),
                             prefs = prefs,
                             onClick = { onElegir(celda.nombre) },
                             modifier = Modifier.weight(1f),

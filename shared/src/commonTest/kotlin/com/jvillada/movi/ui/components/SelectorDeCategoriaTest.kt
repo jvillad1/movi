@@ -162,4 +162,21 @@ class SelectorDeCategoriaTest {
         assertEquals(1, columnasDeLaCuadricula(80.dp, espacio))
         assertEquals(1, columnasDeLaCuadricula(10.dp, espacio)) // nunca cero columnas
     }
+
+    // ── La celda marcada (revisión final de la Ola B) ─────────────────────────
+
+    @Test
+    fun `la celda puesta se marca sin importar tildes ni mayusculas`() {
+        val educacion = CeldaDeCategoria.Existente("Educación")
+        assertTrue(esLaCeldaElegida(educacion, "Educación"))
+        assertTrue(esLaCeldaElegida(educacion, "educacion"))
+        assertTrue(esLaCeldaElegida(educacion, "  EDUCACION "))
+        assertFalse(esLaCeldaElegida(educacion, "Educación física"))
+    }
+
+    @Test
+    fun `una celda especial nunca es la marcada, aunque diga lo mismo`() {
+        assertFalse(esLaCeldaElegida(CeldaDeCategoria.Crear("Colegio"), "Colegio"))
+        assertFalse(esLaCeldaElegida(CeldaDeCategoria.Usar("Colegio", porQue = "x"), "Colegio"))
+    }
 }
