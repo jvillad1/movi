@@ -2,6 +2,8 @@ package com.jvillada.movi.ui.accounts
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -17,7 +19,9 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Bien
 import com.jvillada.movi.shared.model.CLASE_DE_BIEN_INMUEBLE
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
@@ -61,17 +65,25 @@ class EsqueletoDeCuentasTest {
         bien = Bien(CLASE_DE_BIEN_INMUEBLE, 1_411_903_920L, valorAl = "2026-08-28", deudaId = "acc-1254"),
     )
 
+    /** El «se guardó algo» de la hoja de Agregar: subirlo recarga la pantalla sin sacarla de la composición. */
+    private val tick = mutableIntStateOf(0)
+
     @After
     fun salir() {
         Repositories.sustitutoDePrueba = null
     }
 
-    private fun montar() {
+    /** Monta la pantalla con [cuentas] como `getAccounts()` — por default, colgada en [puerta]. */
+    private fun montar(cuentas: suspend () -> List<Account> = { puerta.await() }) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
-            override suspend fun getAccounts(): List<Account> = puerta.await()
+            override suspend fun getAccounts(): List<Account> = cuentas()
         }
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { AccountsScreen(onNavigate = {}) } }
+            MoviTheme {
+                CompositionLocalProvider(LocalRefreshTick provides tick.intValue) {
+                    Box(Modifier.fillMaxSize()) { AccountsScreen(onNavigate = {}) }
+                }
+            }
         }
     }
 
@@ -127,5 +139,35 @@ class EsqueletoDeCuentasTest {
         assertTrue(hay("Sin cuentas aún"))
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_PATRIMONIO))
         assertEquals(0, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
+    }
+
+    @Test
+    fun `si la lectura falla, el esqueleto se va y queda el error de siempre`() {
+        montar()
+        composeRule.waitForIdle()
+
+        puerta.completeExceptionally(ApiException(503))
+        composeRule.waitForIdle()
+
+        assertTrue(hay("No pudimos cargar tus cuentas"))
+        assertEquals(0, contarTag(TAG_ESQUELETO_DEL_PATRIMONIO))
+        assertEquals(0, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
+    }
+
+    @Test
+    fun `una recarga con las cuentas ya pintadas no vuelve al esqueleto`() {
+        val recarga = CompletableDeferred<List<Account>>()
+        var lecturas = 0
+        montar { if (lecturas++ == 0) listOf(nu) else recarga.await() }
+        composeRule.waitForIdle()
+        assertTrue(hay("Nu"))
+
+        tick.intValue++
+        composeRule.waitForIdle()
+
+        assertEquals(2, lecturas, "la recarga tiene que estar en vuelo")
+        assertEquals(0, contarTag(TAG_ESQUELETO_DEL_PATRIMONIO))
+        assertEquals(0, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
+        composeRule.onNodeWithText("Nu", useUnmergedTree = true).assertIsDisplayed()
     }
 }

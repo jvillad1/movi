@@ -252,9 +252,15 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
      * El gasto conocido es el del server o, si el server no contestó, el que se calcula con los
      * movimientos (el respaldo de siempre). Sin ninguno de los dos no hay gasto que decir: un «$0»
      * ahí sería inventado, así que la pantalla dice que no pudo leer, igual que sin presupuestos.
+     * **Salvo sin presupuestos**: el vacío de siempre («Nuevo presupuesto») no depende del gasto
+     * —no hay categoría a la que ponerle una cifra—, así que ahí un gasto caído no es un error.
      */
     val gastoConocido = serverSpent != null || eventosLeidos
-    val listo = budgets != null && gastoConocido && gastoYPeriodoContestaron
+    val listo = budgets != null && gastoYPeriodoContestaron && (gastoConocido || budgets.isNullOrEmpty())
+    // Lo que la hoja de crear/editar sabe del gasto: nada (`null`) hasta que el gasto definitivo
+    // contestó. Antes recibía el cálculo sobre `days = emptyList()` y, con «Nuevo» tocado en el
+    // primer cuadro, decía «Todavía no tienes gastos registrados este mes» a quien sí tiene.
+    val gastoParaLaHoja = gastoPorCategoria.takeIf { gastoConocido && gastoYPeriodoContestaron }
     // Ver [NoSePudoLeer]: sin esto una lectura caída pintaba «Gastado $0 de $0» y el botón de
     // crear, a quien ya tiene presupuestos.
     val noSeLeyo = !loading && !listo
@@ -370,7 +376,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
             is Sheet.Edit -> BudgetSheet(
                 error = sheetError,
                 title = "Editar presupuesto",
-                gastoPorCategoria = gastoPorCategoria,
+                gastoPorCategoria = gastoParaLaHoja,
                 dias = days,
                 ventana = ventanaDelPeriodo,
                 onAsociar = ::asociarGasto,
@@ -428,7 +434,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 initialCategory = "",
                 categoryEditable = true,
                 initialAmount = 0,
-                gastoPorCategoria = gastoPorCategoria,
+                gastoPorCategoria = gastoParaLaHoja,
                 dias = days,
                 ventana = ventanaDelPeriodo,
                 onAsociar = ::asociarGasto,
@@ -611,8 +617,12 @@ private fun BudgetSheet(
     initialCategory: String,
     categoryEditable: Boolean,
     initialAmount: Long,
-    /** Gasto del período por categoría, para poder decir la verdad antes de guardar. */
-    gastoPorCategoria: Map<String, Long>,
+    /**
+     * Gasto del período por categoría, para poder decir la verdad antes de guardar. `null` mientras
+     * el gasto no contestó: entonces la hoja no dice nada sobre él (ni el aviso de la categoría ni
+     * el renglón de lo que falta), porque cualquier cosa que dijera sería sobre un cero inventado.
+     */
+    gastoPorCategoria: Map<String, Long>?,
     /** Los días del período, para poder ofrecer los movimientos que se llaman como la categoría. */
     dias: List<EventDay>,
     ventana: LongRange,
@@ -716,7 +726,7 @@ private fun BudgetSheet(
                 // presupuesto en «Mercado» —que es la descripción de su gasto, no su categoría—
                 // y la app lo dejó crear algo que no vigilaba nada, en silencio. Ver
                 // [avisoDeCategoria].
-                avisoDeCategoria(category, gastoPorCategoria, ::formatCOP)?.let { aviso ->
+                gastoPorCategoria?.let { avisoDeCategoria(category, it, ::formatCOP) }?.let { aviso ->
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = aviso.texto,
@@ -821,10 +831,11 @@ private fun BudgetSheet(
             // justamente cuando no hay nada que listar —la barra dice \$2.000.000 y este
             // dispositivo no bajó ni un movimiento— y ahí un bloque vacío sin explicación es
             // peor que el problema que la lista vino a resolver.
-            val faltante = faltanMovimientosPorVer(
-                gastoPorCategoria[category.trim()] ?: 0L,
-                movimientos.sumOf { it.amount },
-            )
+            // Sin el gasto todavía no hay «total de arriba» contra el cual comparar: cero, y ningún
+            // renglón de diferencia.
+            val faltante = gastoPorCategoria?.let { gasto ->
+                faltanMovimientosPorVer(gasto[category.trim()] ?: 0L, movimientos.sumOf { it.amount })
+            } ?: 0L
             if (faltante != 0L && movimientos.isEmpty() && category.isNotBlank()) {
                 Spacer(Modifier.height(18.dp))
                 Hairline()

@@ -283,6 +283,10 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
         if (showLoanSheet) {
             CreditTermsSheet(
                 editing = editingLoan,
+                // «+ Nuevo crédito» se puede tocar desde el primer cuadro, antes de que contesten
+                // los créditos. La hoja lee [candidates] en cada composición, así que la línea
+                // «Ya tienes una deuda cargada como cuenta, ¿es esta?» aparece sola en cuanto
+                // llegan — lo prueba `CreditosNoAfirmanMientrasCarganTest`.
                 candidates = credits.orEmpty().filter { it.terms == null }.map { it.account },
                 onDismiss = { showLoanSheet = false },
                 onSaved = { showLoanSheet = false; reloadKey++ },

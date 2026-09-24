@@ -2,6 +2,8 @@ package com.jvillada.movi.ui.credits
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -9,6 +11,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.height
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -17,7 +20,9 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.LocalRefreshTick
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
@@ -66,17 +71,34 @@ class CreditosNoAfirmanMientrasCarganTest {
         paidPct = 0.5,
     )
 
+    /** Una deuda cargada como cuenta, sin términos: lo que la hoja de un crédito nuevo ofrece adjuntar. */
+    private val sinTerminos = CreditSummary(
+        account = Account("acc_viejo", "Préstamo viejo", AccountType.LOAN, balance = 3_000_000L),
+        terms = null,
+        paidPct = null,
+    )
+
+    /** El «se guardó algo» de la hoja de Agregar: subirlo recarga la pantalla sin sacarla de la composición. */
+    private val tick = mutableIntStateOf(0)
+
     @After
     fun limpiar() {
         Repositories.sustitutoDePrueba = null
     }
 
-    private fun montar() {
+    /** Monta la pantalla con [creditos] como `getCredits()` — por default, colgada en [puerta]. */
+    private fun montar(creditos: suspend () -> List<CreditSummary> = { puerta.await() }) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
-            override suspend fun getCredits(): List<CreditSummary> = puerta.await()
+            override suspend fun getCredits(): List<CreditSummary> = creditos()
             override suspend fun getCards(): List<CardSummary> = emptyList()
         }
-        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { CreditosScreen(onNavigate = {}) } } }
+        composeRule.setContent {
+            MoviTheme {
+                CompositionLocalProvider(LocalRefreshTick provides tick.intValue) {
+                    Box(Modifier.fillMaxSize()) { CreditosScreen(onNavigate = {}) }
+                }
+            }
+        }
         composeRule.waitForIdle()
     }
 
@@ -134,5 +156,54 @@ class CreditosNoAfirmanMientrasCarganTest {
         assertTrue(hay("Sin créditos registrados"))
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA))
         assertEquals(0, contarTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO))
+    }
+
+    @Test
+    fun `si la lectura falla, el esqueleto se va y queda el error de siempre`() {
+        montar()
+
+        puerta.completeExceptionally(ApiException(503))
+        composeRule.waitForIdle()
+
+        assertTrue(hay("No pudimos cargar tus créditos"))
+        assertEquals(0, contarTag(TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA))
+        assertEquals(0, contarTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO))
+        assertTrue(!hay("\$0"))
+    }
+
+    @Test
+    fun `una recarga con los datos ya pintados no vuelve al esqueleto`() {
+        val recarga = CompletableDeferred<List<CreditSummary>>()
+        var lecturas = 0
+        montar { if (lecturas++ == 0) listOf(libreInversion) else recarga.await() }
+        assertTrue(hay("Libre inversión 9695"))
+
+        tick.intValue++
+        composeRule.waitForIdle()
+
+        assertEquals(2, lecturas, "la recarga tiene que estar en vuelo")
+        assertEquals(0, contarTag(TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA))
+        assertEquals(0, contarTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO))
+        assertTrue(hay("Libre inversión 9695"))
+    }
+
+    /**
+     * «+ Nuevo crédito» se puede tocar antes de que contesten los créditos. La hoja no puede quedarse
+     * sin la línea que evita el duplicado: cuando llegan, aparece sola.
+     */
+    @Test
+    fun `la hoja abierta mientras carga ofrece la deuda sin terminos en cuanto llega`() {
+        montar()
+        composeRule.onNodeWithText("Nuevo crédito", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Préstamo", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        assertTrue(!hay("Ya tienes una deuda cargada como cuenta"))
+
+        puerta.complete(listOf(sinTerminos))
+        composeRule.waitForIdle()
+
+        assertTrue(hay("Ya tienes una deuda cargada como cuenta"))
+        assertTrue(hay("Préstamo viejo"))
     }
 }

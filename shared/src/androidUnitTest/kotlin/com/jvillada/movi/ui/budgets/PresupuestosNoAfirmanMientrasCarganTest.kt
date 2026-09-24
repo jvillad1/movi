@@ -2,13 +2,19 @@ package com.jvillada.movi.ui.budgets
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.height
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -16,7 +22,9 @@ import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.LocalRefreshTick
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
@@ -62,19 +70,37 @@ class PresupuestosNoAfirmanMientrasCarganTest {
         spentByCategory = mapOf("Comida" to 1_200_000L, "Hija" to 1_000_000L, "Mercado" to 300_000L),
     )
 
+    /** El «se guardó algo» de la hoja de Agregar: subirlo recarga la pantalla sin sacarla de la composición. */
+    private val tick = mutableIntStateOf(0)
+
+    private val caida = ApiException(503)
+
     @After
     fun limpiar() {
         Repositories.sustitutoDePrueba = null
     }
 
-    private fun montar(budgets: List<Budget> = presupuestos) {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
-            override suspend fun getBudgets(): List<Budget> = budgets
-            override suspend fun getEventsByDay(): List<EventDay> = emptyList()
-            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = puertaDelGasto.await()
+    private fun montar(budgets: List<Budget> = presupuestos) = montarCon(object : RepositorioDePrueba() {
+        override suspend fun getBudgets(): List<Budget> = budgets
+        override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+        override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = puertaDelGasto.await()
+    })
+
+    private fun montarCon(repo: RepositorioDePrueba) {
+        Repositories.sustitutoDePrueba = repo
+        composeRule.setContent {
+            MoviTheme {
+                CompositionLocalProvider(LocalRefreshTick provides tick.intValue) {
+                    Box(Modifier.fillMaxSize()) { PresupuestosScreen(onNavigate = {}) }
+                }
+            }
         }
-        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { PresupuestosScreen(onNavigate = {}) } } }
         composeRule.waitForIdle()
+    }
+
+    private fun sinEsqueletos() {
+        assertEquals(0, contarTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO))
+        assertEquals(0, contarTag(TAG_ESQUELETO_FILA_DE_PRESUPUESTO))
     }
 
     private fun hay(texto: String): Boolean =
@@ -133,5 +159,86 @@ class PresupuestosNoAfirmanMientrasCarganTest {
         assertTrue(hay("Nuevo presupuesto"))
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO))
         assertEquals(0, contarTag(TAG_ESQUELETO_FILA_DE_PRESUPUESTO))
+    }
+
+    @Test
+    fun `si los presupuestos no se pueden leer, el esqueleto se va y queda el error de siempre`() {
+        montarCon(object : RepositorioDePrueba() {
+            override suspend fun getBudgets(): List<Budget> = throw caida
+            override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+        })
+
+        assertTrue(hay("No pudimos cargar tus presupuestos"))
+        sinEsqueletos()
+    }
+
+    /** Presupuestos sí, pero ni el gasto del server ni los movimientos: no hay gasto que decir. */
+    @Test
+    fun `sin ninguna lectura del gasto no inventa un cero, dice que no pudo leer`() {
+        montarCon(object : RepositorioDePrueba() {
+            override suspend fun getBudgets(): List<Budget> = presupuestos
+            override suspend fun getEventsByDay(): List<EventDay> = throw caida
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = throw caida
+        })
+
+        assertTrue(hay("No pudimos cargar tus presupuestos"))
+        assertTrue(!hay("\$0"))
+        assertTrue(!hay("Mercado"))
+        sinEsqueletos()
+    }
+
+    /** El vacío no necesita el gasto: sin presupuestos no hay categoría a la que ponerle una cifra. */
+    @Test
+    fun `sin presupuestos y sin gasto, el vacio de siempre y no el error`() {
+        montarCon(object : RepositorioDePrueba() {
+            override suspend fun getBudgets(): List<Budget> = emptyList()
+            override suspend fun getEventsByDay(): List<EventDay> = throw caida
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = throw caida
+        })
+
+        assertTrue(hay("Nuevo presupuesto"))
+        assertTrue(!hay("No pudimos cargar"))
+        sinEsqueletos()
+    }
+
+    @Test
+    fun `una recarga con los datos ya pintados no vuelve al esqueleto`() {
+        val recarga = CompletableDeferred<List<Budget>>()
+        var lecturas = 0
+        montarCon(object : RepositorioDePrueba() {
+            override suspend fun getBudgets(): List<Budget> = if (lecturas++ == 0) presupuestos else recarga.await()
+            override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = gastoDelServer
+        })
+        assertTrue(hay("Mercado"))
+
+        tick.intValue++
+        composeRule.waitForIdle()
+
+        assertEquals(2, lecturas, "la recarga tiene que estar en vuelo")
+        sinEsqueletos()
+        assertTrue(hay("Mercado"))
+    }
+
+    /**
+     * «Nuevo» se puede tocar desde el primer cuadro. Con el gasto todavía en camino, la hoja no puede
+     * decir «Todavía no tienes gastos» ni «No tienes gastos en …»: sería sobre un cero inventado.
+     */
+    @Test
+    fun `la hoja de crear abierta sin el gasto no dice que no hay gastos, y lo dice bien cuando llega`() {
+        montar()
+        composeRule.onAllNodesWithText("Nuevo", useUnmergedTree = true).onFirst().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasSetTextAction(), useUnmergedTree = true).performTextInput("Comida")
+        composeRule.waitForIdle()
+
+        assertTrue(!hay("No tienes gastos"))
+        assertTrue(!hay("Todavía no tienes gastos"))
+        assertTrue(!hay("que no aparecen en esta lista"))
+
+        puertaDelGasto.complete(gastoDelServer)
+        composeRule.waitForIdle()
+
+        assertTrue(hay("Ya llevas \$1.200.000 gastados en \"Comida\""))
     }
 }
