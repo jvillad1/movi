@@ -324,6 +324,12 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     val coroutine = rememberCoroutineScope()
     var sms by remember { mutableStateOf<SmsMessage?>(null) }
     var parsed by remember { mutableStateOf<ParsedSms?>(null) }
+    /**
+     * Por qué Movi no pudo leer este mensaje, cuando no pudo. Sin esto, un parseo fallido dejaba
+     * «Parseando…» para siempre en la tarjeta de la sugerencia y el motivo abajo, lejos, como si
+     * todavía estuviera trabajando.
+     */
+    var noSePudoLeer by remember { mutableStateOf<String?>(null) }
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     // La cuenta que el dueño eligió con el dedo, si la eligió. Manda sobre lo que resuelva Movi
@@ -356,8 +362,9 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             .onFailure { error = "No pude cargar el SMS" }
         runCatching { Repositories.wallets.parseSms(smsId) }
             .onSuccess { parsed = it; selectedCategory = it.category }
-            // El server explica por qué (un aviso que no es un movimiento, por ejemplo).
-            .onFailure { error = it.toUserMessage() }
+            // El server explica por qué (un aviso que no es un movimiento, por ejemplo), y se
+            // dice donde se estaba esperando la sugerencia.
+            .onFailure { noSePudoLeer = it.toUserMessage() }
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it }
         // Si ya está anotado, se ofrece antes de crear otro: confirmar siempre creaba uno nuevo.
         runCatching { Repositories.wallets.getSmsCoincidencias(smsId) }.onSuccess { coincidencias = it }
@@ -595,7 +602,11 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     padding = PaddingValues(20.dp),
                 ) {
                     if (parsed == null) {
-                        Text("Parseando…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                        Text(
+                            text = noSePudoLeer ?: "Leyendo el mensaje…",
+                            style = Movi.textos.cuerpo,
+                            color = Movi.colores.textoMedio,
+                        )
                     } else {
                         val p = parsed!!
                         Row(

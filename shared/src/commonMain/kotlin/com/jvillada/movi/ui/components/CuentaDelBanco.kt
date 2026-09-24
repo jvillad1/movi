@@ -163,6 +163,23 @@ internal fun tarjetaDeNu(banco: String, texto: String, candidatas: List<Account>
         .singleOrNull()
 }
 
+/**
+ * **La cuenta de Nu, cuando el aviso no habla de la tarjeta.** «Recibiste 300.000,00 en tu cuenta:
+ * Te llegó dinero de …» viene con el rótulo «Notificación · Nu» y sin número, y la cuenta del dueño
+ * se llama «Nu» a secas. El paso por el nombre del banco no la encuentra (compara el rótulo entero,
+ * «Notificación · Nu»), así que caía en la primera cuenta de banco: Bancolombia Ahorros.
+ *
+ * Mismo criterio que [tarjetaDeNu], del otro lado: el mensaje viene de Nu, NO habla de una tarjeta,
+ * y entre las candidatas hay **exactamente una** cuenta que no es tarjeta de crédito y se llama Nu.
+ */
+internal fun cuentaDeNu(banco: String, texto: String, candidatas: List<Account>): Account? {
+    if (!palabraNu.containsMatchIn(banco)) return null
+    if (texto.contains("tarjeta", ignoreCase = true)) return null
+    return candidatas
+        .filter { it.type != AccountType.CREDIT_CARD && palabraNu.containsMatchIn(it.name) }
+        .singleOrNull()
+}
+
 fun resolverCuentaDelBanco(
     accounts: List<Account>,
     uso: UsoDeCuenta,
@@ -189,6 +206,8 @@ fun resolverCuentaDelBanco(
     // («Nu Tarjeta») ya dice por qué está ahí, así que va rotulada como la coincidencia por banco.
     val deNu = tarjetaDeNu(banco, textoDelMensaje, candidatas)
     if (deNu != null) return CuentaDelBanco(deNu, OrigenDeLaCuentaDelBanco.POR_EL_BANCO)
+    val cuentaNu = cuentaDeNu(banco, textoDelMensaje, candidatas)
+    if (cuentaNu != null) return CuentaDelBanco(cuentaNu, OrigenDeLaCuentaDelBanco.POR_EL_BANCO)
 
     val porElBanco = banco.takeIf { it.isNotBlank() }
         ?.let { nombre -> candidatas.firstOrNull { it.name.contains(nombre, ignoreCase = true) } }
