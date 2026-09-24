@@ -2078,8 +2078,13 @@ class LocalRepository(
     }
 
     /** Preferencias puras: no tocan ni un movimiento, así que no hay nada que espejar. */
-    override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?): CategoryUsage =
-        remote.setCategoryPrefs(name, hidden, pinnedType)
+    override suspend fun setCategoryPrefs(
+        name: String,
+        hidden: Boolean,
+        pinnedType: String?,
+        icono: String?,
+        color: String?,
+    ): CategoryUsage = remote.setCategoryPrefs(name, hidden, pinnedType, icono, color)
     /**
      * **Con caché de última respuesta buena.** Ver [leerConCache].
      *

@@ -248,16 +248,30 @@ class CategoryRoutesTest {
             setBody("""{"from":"$from","into":"$into"}""")
         }
 
+    /**
+     * `icono`/`color` en `null` (el default) **no se mandan en el JSON** — a propósito: es
+     * justo lo que hace un APK viejo que todavía no sabe de ícono ni color, y ese es el caso que
+     * `PUT /api/categories/prefs` tiene que distinguir de "el dueño pidió borrarlo" (la cadena
+     * vacía `""`, que si se pasa acá sí viaja como `"icono":""`).
+     */
     private suspend fun ApplicationTestBuilder.prefs(
         name: String,
         hidden: Boolean = false,
         pinnedType: String? = null,
+        icono: String? = null,
+        color: String? = null,
         asToken: String = token,
     ) = client.put("/api/categories/prefs") {
         header(HttpHeaders.Authorization, "Bearer $asToken")
         header(HttpHeaders.ContentType, "application/json")
         val tipo = if (pinnedType == null) "null" else "\"$pinnedType\""
-        setBody("""{"name":"$name","hidden":$hidden,"pinnedType":$tipo}""")
+        val cuerpo = buildString {
+            append("""{"name":"$name","hidden":$hidden,"pinnedType":$tipo""")
+            if (icono != null) append(""","icono":"$icono"""")
+            if (color != null) append(""","color":"$color"""")
+            append("}")
+        }
+        setBody(cuerpo)
     }
 
     // ── La lista, con uso real ────────────────────────────────────────────────
@@ -618,6 +632,94 @@ class CategoryRoutesTest {
         assertFalse(delOtro.flag("hidden"))
     }
 
+    // ── Ola B: ícono y color ─────────────────────────────────────────────────
+
+    @Test
+    fun `guardar un icono y un color queda disponible al leer la lista`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.OK, prefs("Mercado", icono = "restaurante", color = "naranja").status)
+
+        val mercado = categorias().porNombre("Mercado")
+        assertEquals("restaurante", mercado.texto("icono"))
+        assertEquals("naranja", mercado.texto("color"))
+    }
+
+    /**
+     * **El caso que motiva toda la regla.** Un APK viejo no sabe de ícono ni color, así que un
+     * PUT suyo (esconder, fijar el tipo) no los manda — ni siquiera como `null` a propósito, es
+     * que ni conoce el campo. Si ese PUT los borrara, instalar una versión vieja al lado de una
+     * nueva le haría perder al dueño el ícono que acababa de elegir cada vez que la app vieja
+     * tocara «esconder».
+     */
+    @Test
+    fun `un PUT sin los campos nuevos no borra el icono ni el color ya guardados`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.OK, prefs("Mercado", icono = "restaurante", color = "naranja").status)
+
+        // Mismo `prefs()`, sin `icono` ni `color`: es EXACTAMENTE lo que manda un cliente que no
+        // conoce esos campos.
+        assertEquals(HttpStatusCode.OK, prefs("Mercado", hidden = true).status)
+
+        val mercado = categorias().porNombre("Mercado")
+        assertTrue(mercado.flag("hidden"))
+        assertEquals("restaurante", mercado.texto("icono"), "el PUT viejo no debía tocar el ícono")
+        assertEquals("naranja", mercado.texto("color"), "el PUT viejo no debía tocar el color")
+    }
+
+    @Test
+    fun `mandar la cadena vacia vuelve el icono y el color al default de Movi`() = testApplication {
+        wireApp()
+        // Con un movimiento de por medio: sin ícono, sin color y sin ningún otro campo distinto
+        // del default, la fila de preferencia se borra entera (misma regla que ya prueba «volver
+        // a mostrar borra la preferencia en vez de guardar un default») — y una categoría propia
+        // sin preferencia ni movimientos ni desaparecería de la lista, lo que haría que
+        // `porNombre` fallara por un motivo distinto al que este test quiere probar.
+        seedEvent("e1", "Mercado")
+        assertEquals(HttpStatusCode.OK, prefs("Mercado", icono = "restaurante", color = "naranja").status)
+        assertEquals(HttpStatusCode.OK, prefs("Mercado", icono = "", color = "").status)
+
+        val mercado = categorias().porNombre("Mercado")
+        assertNull(mercado.texto("icono"))
+        assertNull(mercado.texto("color"))
+    }
+
+    @Test
+    fun `renombrar conserva el icono y el color`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Carro")
+        assertEquals(HttpStatusCode.OK, prefs("Carro", icono = "carro", color = "azul").status)
+        assertEquals(HttpStatusCode.OK, rename("Carro", "Auto").status)
+
+        val auto = categorias().porNombre("Auto")
+        assertEquals("carro", auto.texto("icono"))
+        assertEquals("azul", auto.texto("color"))
+    }
+
+    @Test
+    fun `unificar hereda el icono y el color del origen cuando el destino no tiene`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Trasnporte")
+        assertEquals(HttpStatusCode.OK, prefs("Trasnporte", icono = "bus", color = "verde").status)
+        assertEquals(HttpStatusCode.OK, merge("Trasnporte", "Transporte").status)
+
+        val transporte = categorias().porNombre("Transporte")
+        assertEquals("bus", transporte.texto("icono"))
+        assertEquals("verde", transporte.texto("color"))
+    }
+
+    @Test
+    fun `unificar respeta el icono y el color del destino si ya tenia uno propio`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Trasnporte")
+        assertEquals(HttpStatusCode.OK, prefs("Trasnporte", icono = "bus", color = "verde").status)
+        assertEquals(HttpStatusCode.OK, prefs("Transporte", icono = "carro", color = "azul").status)
+        assertEquals(HttpStatusCode.OK, merge("Trasnporte", "Transporte").status)
+
+        val transporte = categorias().porNombre("Transporte")
+        assertEquals("carro", transporte.texto("icono"), "el del destino manda, no se pisa con el del origen")
+        assertEquals("azul", transporte.texto("color"))
+    }
+
     // ── Lo que ve el Inicio ───────────────────────────────────────────────────
 
     @Test
@@ -625,6 +727,7 @@ class CategoryRoutesTest {
         wireApp()
         assertEquals(HttpStatusCode.OK, prefs("Otros", pinnedType = "BOTH").status)
         assertEquals(HttpStatusCode.OK, prefs("Ropa", hidden = true).status)
+        assertEquals(HttpStatusCode.OK, prefs("Mercado", icono = "restaurante", color = "naranja").status)
 
         val resumen = Json.parseToJsonElement(
             client.get("/api/dashboard/summary") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText(),
@@ -632,6 +735,8 @@ class CategoryRoutesTest {
         val usadas = resumen["usedCategories"]!!.jsonArray.map { it.jsonObject }
         assertEquals("BOTH", usadas.porNombre("Otros").texto("pinnedType"))
         assertTrue(usadas.porNombre("Ropa").flag("hidden"))
+        assertEquals("restaurante", usadas.porNombre("Mercado").texto("icono"))
+        assertEquals("naranja", usadas.porNombre("Mercado").texto("color"))
     }
 
     // ── Ola A: la memoria de nombres, para el cliente ────────────────────────────

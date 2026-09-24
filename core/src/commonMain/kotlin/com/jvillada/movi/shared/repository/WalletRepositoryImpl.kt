@@ -393,10 +393,16 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
-    override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?): CategoryUsage {
+    override suspend fun setCategoryPrefs(
+        name: String,
+        hidden: Boolean,
+        pinnedType: String?,
+        icono: String?,
+        color: String?,
+    ): CategoryUsage {
         val response = client.put("$baseUrl/api/categories/prefs") {
             contentType(ContentType.Application.Json)
-            setBody(CategoryPrefsRequest(name = name, hidden = hidden, pinnedType = pinnedType))
+            setBody(CategoryPrefsRequest(name = name, hidden = hidden, pinnedType = pinnedType, icono = icono, color = color))
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())

@@ -330,10 +330,20 @@ private fun Transaction.sumasAntesDe(
  * describe "¿la conozco?" sino "¿la sigue usando?", y ahí un movimiento borrado o de hace un año
  * no cuenta.
  */
+/** Una fila de `category_prefs`, ya leída — mismo propósito que `PrefRow` en `CategoryRoutes.kt`. */
+private data class PrefRowDelDashboard(val hidden: Boolean, val pinnedType: String?, val icono: String?, val color: String?)
+
 private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<String>): List<UsedCategory> {
     val prefs = CategoryPrefs.selectAll()
         .where { CategoryPrefs.userId eq uid }
-        .associate { it[CategoryPrefs.name].trim() to (it[CategoryPrefs.hidden] to it[CategoryPrefs.pinnedType]) }
+        .associate {
+            it[CategoryPrefs.name].trim() to PrefRowDelDashboard(
+                hidden = it[CategoryPrefs.hidden],
+                pinnedType = it[CategoryPrefs.pinnedType],
+                icono = it[CategoryPrefs.icono],
+                color = it[CategoryPrefs.color],
+            )
+        }
 
     val porUso = Events.select(Events.category, Events.type)
         .where { Events.userId eq uid }
@@ -363,8 +373,10 @@ private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<
             UsedCategory(
                 name = nombre,
                 types = porUso[nombre].orEmpty(),
-                hidden = pref?.first ?: false,
-                pinnedType = pref?.second,
+                hidden = pref?.hidden ?: false,
+                pinnedType = pref?.pinnedType,
+                icono = pref?.icono,
+                color = pref?.color,
                 usosRecientes = usosRecientesPorCategoria[nombre] ?: 0,
             )
         }

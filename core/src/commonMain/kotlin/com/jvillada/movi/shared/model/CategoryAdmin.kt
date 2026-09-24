@@ -97,6 +97,10 @@ data class CategoryUsage(
     val pinnedType: String? = null,
     /** Escondida: deja de ofrecerse al escribir. **No borra ni toca un solo movimiento.** */
     val hidden: Boolean = false,
+    /** Ícono elegido a mano (ver [CategoryPref.icono]). `null` = el que Movi asigna por defecto. */
+    val icono: String? = null,
+    /** Color elegido a mano (ver [CategoryPref.color]). `null` = el que Movi asigna por defecto. */
+    val color: String? = null,
     /** Movimientos en COP no anulados con esta categoría, en toda la historia. */
     val movements: Int = 0,
     /**
@@ -154,6 +158,14 @@ data class CategoryPref(
     val hidden: Boolean = false,
     /** `"EXPENSE"`, `"INCOME"`, `"BOTH"` o `null` = sin fijar. */
     val pinnedType: String? = null,
+    /**
+     * Ícono elegido a mano (clave de texto, p. ej. `"restaurante"`). `null` = el que Movi le
+     * asigna por defecto — ver `PUT /api/categories/prefs`: mandar la cadena vacía `""` vuelve a
+     * este default; `null` en el request de ida **no** borra lo que ya había guardado.
+     */
+    val icono: String? = null,
+    /** Color elegido a mano (clave de texto, p. ej. `"naranja"`). Misma regla que [icono]. */
+    val color: String? = null,
 )
 
 /**
@@ -195,12 +207,23 @@ data class RenameCategoryRequest(val from: String, val to: String)
 @Serializable
 data class MergeCategoryRequest(val from: String, val into: String)
 
-/** Fijar tipo y/o esconder. `pinnedType = null` = sin fijar (vuelve a mandar catálogo/uso). */
+/**
+ * Fijar tipo y/o esconder. `pinnedType = null` = sin fijar (vuelve a mandar catálogo/uso).
+ *
+ * **`icono`/`color`, semántica distinta a `hidden`/`pinnedType`.** Este request manda el estado
+ * COMPLETO de `hidden` y `pinnedType` — el PUT los reemplaza tal cual vengan. `icono` y `color`
+ * no: `null` significa "este cliente no sabe de ícono/color" y el server **conserva** lo que ya
+ * había guardado (un APK viejo que solo manda `hidden`/`pinnedType` no puede borrarle el ícono al
+ * dueño). Para volver al default de Movi hay que mandar la cadena vacía `""`, que el server guarda
+ * como `NULL`.
+ */
 @Serializable
 data class CategoryPrefsRequest(
     val name: String,
     val hidden: Boolean = false,
     val pinnedType: String? = null,
+    val icono: String? = null,
+    val color: String? = null,
 )
 
 /**

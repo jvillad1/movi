@@ -70,6 +70,12 @@ class SchemaDeArranqueTest {
         // cuentas del dueño adentro, y `toAccount()` —o sea TODA lectura de cuentas— nombra esta
         // columna: sin el ALTER, la app no muestra una sola cuenta.
         "accounts" to "last_edited_at",
+        // Ola B — el ícono y el color de una categoría. `category_prefs` existe en producción
+        // desde Ola 10, y tanto el PUT como el GET de categorías nombran las dos columnas: sin el
+        // ALTER, «Más → Categorías» entera cae con «column does not exist» apenas alguien tocara
+        // esconder o fijar el tipo (el INSERT de esta tabla siempre escribe las cinco columnas).
+        "category_prefs" to "icono",
+        "category_prefs" to "color",
     )
 
     /**

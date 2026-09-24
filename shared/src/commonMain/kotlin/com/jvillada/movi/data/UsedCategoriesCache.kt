@@ -217,8 +217,15 @@ object UsedCategoriesCache {
             .mapNotNull { entry ->
                 val nombre = entry.name.trim()
                 if (nombre.isEmpty()) return@mapNotNull null
-                if (!entry.hidden && entry.pinnedType == null) return@mapNotNull null
-                nombre to CategoryPref(hidden = entry.hidden, pinnedType = entry.pinnedType)
+                if (!entry.hidden && entry.pinnedType == null && entry.icono == null && entry.color == null) {
+                    return@mapNotNull null
+                }
+                nombre to CategoryPref(
+                    hidden = entry.hidden,
+                    pinnedType = entry.pinnedType,
+                    icono = entry.icono,
+                    color = entry.color,
+                )
             }
             .toMap()
         // Ola A: reemplazada entera, igual que [prefs] y por el mismo motivo — esta lista es la
@@ -241,7 +248,8 @@ object UsedCategoriesCache {
     fun applyPref(name: String, pref: CategoryPref) {
         val nombre = name.trim()
         if (nombre.isEmpty()) return
-        prefs = if (!pref.hidden && pref.pinnedType == null) prefs - nombre else prefs + (nombre to pref)
+        val esDefault = !pref.hidden && pref.pinnedType == null && pref.icono == null && pref.color == null
+        prefs = if (esDefault) prefs - nombre else prefs + (nombre to pref)
     }
 
     /**
@@ -261,6 +269,8 @@ object UsedCategoriesCache {
         //
         // 1. El destino acaba de recibir movimientos, así que **no puede quedar escondido**.
         // 2. Si el destino no tenía tipo fijado, **hereda el del origen** (el server hace eso).
+        //    Ola B: ícono y color siguen la MISMA regla — el destino gana y, si no tiene nada
+        //    propio, hereda lo del origen.
         // 3. Si el origen era del catálogo, el server lo **esconde** para que deje de sugerirse —
         //    y esto es lo que faltaba. Borrar su preferencia en vez de marcarla escondida
         //    deshacía la operación insignia de la rama: unificar «Otros ingresos» en «Otros»
@@ -273,9 +283,16 @@ object UsedCategoriesCache {
         val prefOrigen = prefs[viejo]
         val prefDestino = prefs[nuevo]
         val tipoFijadoDestino = prefDestino?.pinnedType ?: prefOrigen?.pinnedType
+        val iconoDestino = prefDestino?.icono ?: prefOrigen?.icono
+        val colorDestino = prefDestino?.color ?: prefOrigen?.color
         var siguiente = prefs - viejo - nuevo
-        if (tipoFijadoDestino != null) {
-            siguiente = siguiente + (nuevo to CategoryPref(hidden = false, pinnedType = tipoFijadoDestino))
+        if (tipoFijadoDestino != null || iconoDestino != null || colorDestino != null) {
+            siguiente = siguiente + (nuevo to CategoryPref(
+                hidden = false,
+                pinnedType = tipoFijadoDestino,
+                icono = iconoDestino,
+                color = colorDestino,
+            ))
         }
         if (escondeElOrigen && PREDEFINED_CATEGORIES.any { it.name == viejo }) {
             siguiente = siguiente + (viejo to CategoryPref(hidden = true))

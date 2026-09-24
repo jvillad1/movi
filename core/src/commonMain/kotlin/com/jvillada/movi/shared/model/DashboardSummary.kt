@@ -151,6 +151,10 @@ data class UsedCategory(
     val hidden: Boolean = false,
     /** Tipo fijado a mano: `"EXPENSE"`, `"INCOME"` o `"BOTH"`. Manda sobre catálogo y uso. */
     val pinnedType: String? = null,
+    /** Ícono elegido a mano (ver [CategoryPref.icono]). `null` = el que Movi asigna por defecto. */
+    val icono: String? = null,
+    /** Color elegido a mano (ver [CategoryPref.color]). `null` = el que Movi asigna por defecto. */
+    val color: String? = null,
     /**
      * Ola A: movimientos **no anulados** con esta categoría en los últimos 60 días, de
      * cualquier tipo. Una fila que existe solo por una preferencia ([hidden]/[pinnedType], sin

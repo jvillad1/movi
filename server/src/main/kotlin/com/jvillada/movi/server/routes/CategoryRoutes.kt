@@ -190,12 +190,21 @@ fun Route.categoryRoutes() {
     }
 
     /**
-     * Esconder y fijar el tipo. Las dos son **preferencias**, no datos: no tocan ni un movimiento,
-     * y por eso viven en su propia tabla y no en una reescritura.
+     * Esconder, fijar el tipo, y (Ola B) ponerle ícono y color. Todas son **preferencias**, no
+     * datos: no tocan ni un movimiento, y por eso viven en su propia tabla y no en una
+     * reescritura.
      *
      * Esconder es lo contrario de borrar: la categoría deja de ofrecerse al escribir, pero los
      * movimientos viejos la siguen diciendo y siguen contando donde contaban. Borrar habría
      * dejado huérfana media historia.
+     *
+     * **`icono`/`color` no siguen la regla de `hidden`/`pinnedType`.** Este PUT manda el estado
+     * COMPLETO de esas dos — se reemplazan tal cual vengan, incluso a `false`/`null`. Pero un APK
+     * viejo que todavía no sabe de ícono ni color solo manda `hidden`/`pinnedType`, y con la misma
+     * regla le borraría el ícono al dueño en cuanto tocara «esconder». Por eso acá `icono`/`color`
+     * en `null` significa "este cliente no dice nada" y **conserva** lo que ya había guardado; la
+     * cadena vacía `""` es el pedido explícito de "volver al default de Movi" y se guarda como
+     * `NULL`. Ver [CategoryPrefsRequest].
      */
     put("/api/categories/prefs") {
         val uid = call.userId()
@@ -216,25 +225,53 @@ fun Route.categoryRoutes() {
             return@put call.respond(HttpStatusCode.BadRequest, "Tipo desconocido: ${body.pinnedType}")
         }
 
-        dbQuery {
+        val (iconoGuardado, colorGuardado) = dbQuery {
+            val existente = CategoryPrefs.selectAll()
+                .where { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq name) }
+                .firstOrNull()
+            // Ver el KDoc de la ruta: `null` conserva, `""` vuelve al default (NULL), cualquier
+            // otra cosa reemplaza. Copiados a variables locales porque el smart-cast de un `val`
+            // de otro módulo (el request viene de `:core`) no se confía solo con el `== null` del
+            // `when`.
+            val iconoPedido = body.icono
+            val colorPedido = body.color
+            val iconoNuevo = when {
+                iconoPedido == null -> existente?.get(CategoryPrefs.icono)
+                iconoPedido.isEmpty() -> null
+                else -> iconoPedido.trim()
+            }
+            val colorNuevo = when {
+                colorPedido == null -> existente?.get(CategoryPrefs.color)
+                colorPedido.isEmpty() -> null
+                else -> colorPedido.trim()
+            }
             CategoryPrefs.deleteWhere { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq name) }
             // Una fila que no dice nada distinto del default no se guarda: así esta tabla solo
             // tiene lo que el dueño cambió de verdad, y "volver al default" es borrar, no marcar.
-            if (body.hidden || pinned != null) {
+            if (body.hidden || pinned != null || iconoNuevo != null || colorNuevo != null) {
                 CategoryPrefs.insert {
                     it[userId]     = uid
                     it[CategoryPrefs.name] = name
                     it[hidden]     = body.hidden
                     it[pinnedType] = pinned
+                    it[icono]      = iconoNuevo
+                    it[color]      = colorNuevo
                 }
             }
+            iconoNuevo to colorNuevo
         }
         // La ventana del PERÍODO del usuario (ver PeriodSettings en :core), no el mes de
         // calendario. Con corte 1 —el default— da exactamente lo mismo que antes.
         val (monthStart, monthEnd) = currentPeriodWindow(ajustesDePeriodoDe(uid))
         val actualizada = dbQuery { categoryUsage(uid, monthStart, monthEnd) }
             .firstOrNull { it.name == name }
-            ?: CategoryUsage(name = name, hidden = body.hidden, pinnedType = pinned)
+            ?: CategoryUsage(
+                name = name,
+                hidden = body.hidden,
+                pinnedType = pinned,
+                icono = iconoGuardado,
+                color = colorGuardado,
+            )
         call.respond(actualizada)
     }
 }
@@ -361,6 +398,12 @@ internal fun Transaction.rewriteCategory(
         .firstOrNull()
     val tipoFijadoDestino = prefDestino?.get(CategoryPrefs.pinnedType)
         ?: prefOrigen?.get(CategoryPrefs.pinnedType)
+    // Ola B: ícono y color viajan con la MISMA regla que el tipo fijado — el destino gana, y si
+    // no tiene nada propio hereda lo del origen. Ambas operaciones (rename y merge) lo hacen
+    // igual: a diferencia de "escondida" (que sí distingue rename de merge, ver abajo), no hay
+    // motivo para que renombrar o unificar decidan un ícono distinto al que ya conservan el tipo.
+    val iconoDestino = prefDestino?.get(CategoryPrefs.icono) ?: prefOrigen?.get(CategoryPrefs.icono)
+    val colorDestino = prefDestino?.get(CategoryPrefs.color) ?: prefOrigen?.get(CategoryPrefs.color)
     // **Renombrar conserva el "escondida"; unificar no.** Son las dos mitades de la misma regla
     // ("la preferencia viaja con el nombre", arriba), y se separan porque las dos operaciones
     // significan cosas distintas:
@@ -379,12 +422,14 @@ internal fun Transaction.rewriteCategory(
     val escondidoDestino = !esUnificacion && prefOrigen?.get(CategoryPrefs.hidden) == true
     CategoryPrefs.deleteWhere { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq from) }
     CategoryPrefs.deleteWhere { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq to) }
-    if (tipoFijadoDestino != null || escondidoDestino) {
+    if (tipoFijadoDestino != null || escondidoDestino || iconoDestino != null || colorDestino != null) {
         CategoryPrefs.insert {
             it[userId]     = uid
             it[name]       = to
             it[hidden]     = escondidoDestino
             it[pinnedType] = tipoFijadoDestino
+            it[icono]      = iconoDestino
+            it[color]      = colorDestino
         }
     }
     // Unificar una del CATÁLOGO necesita además esconderla: quedó sin nada detrás, pero el
@@ -397,6 +442,8 @@ internal fun Transaction.rewriteCategory(
             it[name]       = from
             it[hidden]     = true
             it[pinnedType] = null
+            it[icono]      = null
+            it[color]      = null
         }
     }
 
@@ -408,6 +455,9 @@ internal fun Transaction.rewriteCategory(
         recurringRules = recurrentes,
     )
 }
+
+/** Una fila de `category_prefs`, ya leída — para no acarrear cuatro `Pair` anidados. */
+private data class PrefRow(val hidden: Boolean, val pinnedType: String?, val icono: String?, val color: String?)
 
 /** Acumulador mutable del recorrido — solo vive dentro de [categoryUsage]. */
 private class UsageAcc {
@@ -487,7 +537,14 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
 
     val prefs = CategoryPrefs.selectAll()
         .where { CategoryPrefs.userId eq uid }
-        .associate { it[CategoryPrefs.name] to (it[CategoryPrefs.hidden] to it[CategoryPrefs.pinnedType]) }
+        .associate {
+            it[CategoryPrefs.name] to PrefRow(
+                hidden = it[CategoryPrefs.hidden],
+                pinnedType = it[CategoryPrefs.pinnedType],
+                icono = it[CategoryPrefs.icono],
+                color = it[CategoryPrefs.color],
+            )
+        }
 
     // El catálogo entra completo aunque no se haya usado nunca: esconder «Freelance» sin haberla
     // usado es un caso normal, y para eso tiene que estar en la lista.
@@ -502,8 +559,10 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
                     else CategoryScope.CUSTOM,
             reserved = isReservedCategory(nombre),
             usedTypes = a.tipos.sortedBy { it.name },
-            pinnedType = pref?.second,
-            hidden = pref?.first ?: false,
+            pinnedType = pref?.pinnedType,
+            hidden = pref?.hidden ?: false,
+            icono = pref?.icono,
+            color = pref?.color,
             movements = a.movimientos,
             total = a.gastado,
             incomeTotal = a.recibido,

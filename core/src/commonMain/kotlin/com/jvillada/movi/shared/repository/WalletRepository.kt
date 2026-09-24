@@ -185,13 +185,23 @@ interface WalletRepository {
     suspend fun mergeCategory(from: String, into: String): CategoryRewriteResult
 
     /**
-     * Esconder / mostrar una categoría y fijarle el tipo («EXPENSE», «INCOME», «BOTH» o `null`
-     * para volver a lo que diga el catálogo o el uso).
+     * Esconder / mostrar una categoría, fijarle el tipo («EXPENSE», «INCOME», «BOTH» o `null`
+     * para volver a lo que diga el catálogo o el uso) y (Ola B) ponerle ícono y/o color.
      *
      * **Esconder no borra nada**: los movimientos viejos la siguen diciendo y siguen contando
      * donde contaban; lo único que cambia es que deja de ofrecerse al escribir.
+     *
+     * `icono`/`color` en `null` significa "no cambiar" (el server conserva lo que había); la
+     * cadena vacía `""` es el pedido explícito de volver al default de Movi. Ver
+     * `CategoryPrefsRequest` en `:core` y el KDoc de `PUT /api/categories/prefs`.
      */
-    suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?): CategoryUsage
+    suspend fun setCategoryPrefs(
+        name: String,
+        hidden: Boolean,
+        pinnedType: String?,
+        icono: String? = null,
+        color: String? = null,
+    ): CategoryUsage
 
     /**
      * Ola A: la memoria de nombres del dueño (ver [RecuerdoDeCategoria] y
