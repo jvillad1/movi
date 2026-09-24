@@ -460,6 +460,8 @@ open class NoOpRepository(
     override suspend fun requestPasswordReset(request: PasswordResetRequest) = 202
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String) =
         StatementParseResult("", "", "", emptyList(), emptyList())
+    override suspend fun readStatementFromDocument(id: String) =
+        StatementParseResult("", "", "", emptyList(), emptyList())
     override suspend fun importStatement(decision: ImportDecision) {}
     override suspend fun deleteStatementImport(id: String) {}
     override suspend fun payInstallment(request: CreatePagoDeCuotaRequest) =

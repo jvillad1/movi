@@ -469,29 +469,10 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                 }
             }
 
-            // Meta principal
-            item {
-                Spacer(Modifier.height(14.dp))
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Meta principal", action = "Ver metas", onAction = { onNavigate(Screen.Goals) })
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        // F45: "Sin meta definida" + "Ve a Metas para crear tu primera meta"
-                        // prometía un alta que Metas todavía no tiene (F26 — llega en la Ola
-                        // 6). El texto ya no promete: solo dice que no hay meta y enlaza a
-                        // Metas.
-                        CardRow(
-                            left = { Text("Aún sin meta", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio) },
-                            sub = "Ver Metas de ahorro",
-                            isLast = true,
-                            onClick = { onNavigate(Screen.Goals) },
-                        )
-                    }
-                }
-            }
+            // Ola B, tarea 7: acá vivía «Meta principal» — siempre decía «Aún sin meta» (F26
+            // nunca llegó a darle una forma de crear una) y era la única puerta que le quedaba a
+            // Metas en Perfil. Se saca entera junto con la ficha de Más: Metas no se borra, solo
+            // deja de tener puerta.
 
             // F45: acá vivía la sección "Cuenta" con las filas "Familia" (sin acción),
             // "Privacidad y datos · SMS y extractos cifrados" (no hay cifrado propio en el

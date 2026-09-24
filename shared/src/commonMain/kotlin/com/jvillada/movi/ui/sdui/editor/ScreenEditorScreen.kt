@@ -81,6 +81,9 @@ private val NAVIGATE_TARGET_LABELS = mapOf(
     "mas" to "Más",
     "accounts" to "Cuentas",
     "credits" to "Créditos",
+    // Ola B, tarea 7: Metas salió de la navegación y ya no se ofrece más abajo
+    // (NAVEGABLES_DESDE_EL_EDITOR); el rótulo se queda solo para una definición vieja que todavía
+    // traiga este target (ver SduiRenderer.screenForTarget, que lo manda a Cuentas).
     "goals" to "Metas",
     // F61: sin pantalla propia — el cliente lo manda a Cuentas (ver SduiRenderer.screenForTarget).
     "investments" to "Cuentas (inversión)",
@@ -90,10 +93,24 @@ private val NAVIGATE_TARGET_LABELS = mapOf(
     "subscriptions" to "Recurrentes (suscripciones)",
     "recurrentes" to "Recurrentes",
     "categorias" to "Categorías",
-    "extractos" to "Extractos",
+    // Ola B, tarea 7: Extractos se unió a Documentos — el rótulo lo dice, mismo patrón que
+    // "investments"/"subscriptions" acá arriba.
+    "extractos" to "Documentos (extractos)",
     "aichat" to "Movi AI",
     "profile" to "Perfil",
 )
+
+/**
+ * Los targets que el Editor OFRECE para un `NAVIGATE` nuevo — no necesariamente todos los de
+ * `ScreenTaxonomy.NAVIGATE_TARGETS`.
+ *
+ * Ola B, tarea 7: «Metas» se saca de la lista porque salió de la navegación entera (a diferencia
+ * de "investments"/"subscriptions"/"extractos", que remapean a un lugar concreto, "goals" no
+ * tiene un «donde ahora vive» que valga la pena ofrecer). El target sigue siendo válido —una
+ * definición guardada de antes de esta tanda con target "goals" no se rompe— así que no sale de
+ * `NAVIGATE_TARGETS`, solo de lo que este selector propone para una tarjeta nueva.
+ */
+internal val NAVEGABLES_DESDE_EL_EDITOR = ScreenTaxonomy.NAVIGATE_TARGETS - "goals"
 
 /**
  * Extrae el mensaje legible del server para un 422 (`{"error": "..."}`, ver
@@ -502,7 +519,10 @@ private fun ActionEditor(action: ScreenAction?, onChange: (ScreenAction?) -> Uni
             "NAVIGATE" -> {
                 Spacer(Modifier.height(8.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ScreenTaxonomy.NAVIGATE_TARGETS.forEach { target ->
+                    // NAVEGABLES_DESDE_EL_EDITOR y no NAVIGATE_TARGETS: «Metas» ya no se ofrece
+                    // (Ola B, tarea 7). Una tarjeta vieja con target "goals" sigue mostrándose sin
+                    // fila resaltada acá — no crashea, solo no tiene opción para reelegirla.
+                    NAVEGABLES_DESDE_EL_EDITOR.forEach { target ->
                         SelectRow(
                             label = NAVIGATE_TARGET_LABELS[target] ?: target,
                             selected = action.target == target,

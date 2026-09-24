@@ -18,6 +18,7 @@ import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
 import io.ktor.http.content.streamProvider
 import io.ktor.server.application.call
+import io.ktor.server.application.log
 import io.ktor.server.request.receive
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.header
@@ -285,6 +286,39 @@ fun Route.documentRoutes() {
             Documents.deleteWhere { (Documents.id eq id) and (Documents.userId eq uid) }
         }
         if (borrados == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.NoContent)
+    }
+
+    /**
+     * **«Importar movimientos» desde un documento ya guardado** — Ola B, tarea 7: «Extractos»
+     * sale de la navegación y se une a Documentos, así que un PDF o una imagen que el dueño ya
+     * archivó (a mano, o porque otro extracto lo archivó solo) tiene que poder pasar por el mismo
+     * lector sin subirlo de nuevo.
+     *
+     * Corre [procesarExtracto] — EL MISMO camino que `POST /api/statements/upload`, no una copia —
+     * sobre los bytes que ya están en `Documents.content`. 404 si el documento no existe o es de
+     * otro dueño; el `where` filtra por `userId` igual que el resto de esta ruta, así que un
+     * documento ajeno ni se lee.
+     */
+    post("/api/documents/{id}/leer-extracto") {
+        val uid = call.userId()
+        val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta el id")
+        val fila = dbQuery {
+            Documents.selectAll()
+                .where { (Documents.id eq id) and (Documents.userId eq uid) }
+                .firstOrNull()
+        } ?: return@post call.respond(HttpStatusCode.NotFound)
+
+        try {
+            val resultado = procesarExtracto(
+                uid = uid,
+                fileName = fila[Documents.name],
+                mimeType = fila[Documents.mimeType],
+                bytes = fila[Documents.content],
+            ) { msg, t -> call.application.log.warn(msg, t) }
+            call.respond(resultado)
+        } catch (e: FallaAlProcesarExtracto) {
+            call.respond(e.status, e.mensaje)
+        }
     }
 }
 

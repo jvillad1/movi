@@ -562,4 +562,78 @@ class DocumentRoutesTest {
             header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
         }.bodyAsText(), "y no quedó guardado sin la cuenta tampoco")
     }
+
+    // ── «Importar movimientos» sobre un documento ya guardado (Ola B, tarea 7) ─────────
+    //
+    // «Extractos» se une a Documentos: `POST /api/documents/{id}/leer-extracto` tiene que correr
+    // EXACTAMENTE el mismo camino que `POST /api/statements/upload`, no una copia. Estas pruebas
+    // no dependen de ANTHROPIC_API_KEY (no configurada en este entorno de pruebas, ver
+    // `ClaudeStatementParser.resolveApiKey`): con la clave ausente, tanto subir como leer caen en
+    // el mismo 422 `LECTURA_SIN_LLAVE`, que es justo el terreno común para probar el aislamiento
+    // y la reutilización sin necesitar una lectura real de Claude.
+    //
+    // El nombre del documento en estas pruebas termina en `.txt` a propósito: `procesarExtracto`
+    // elige cómo leer el archivo por la EXTENSIÓN del nombre guardado (ver
+    // `StatementParser.extractText`), y un `.pdf` con bytes que no son un PDF de verdad hace
+    // explotar PDFBox antes de llegar a la pregunta que estas pruebas quieren hacer.
+
+    private suspend fun ApplicationTestBuilder.leerExtracto(uid: String, id: String) =
+        client.post("/api/documents/$id/leer-extracto") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(uid)}")
+        }
+
+    @Test
+    fun `el dueño puede leer el extracto de su propio documento`() = testApplication {
+        wireApp()
+        val id = subir(duenoId, nombre = "extracto.txt", contenido = "sin movimientos reconocibles".toByteArray(), mime = "text/plain")
+
+        val res = leerExtracto(duenoId, id)
+        val cuerpo = res.bodyAsText()
+
+        // 422 y no 404 ni 500: encontró el documento, es SUYO, y llegó hasta el lector —que sin
+        // clave de Anthropic no puede leer nada, y lo dice.
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status, cuerpo)
+        assertTrue("Tu archivo no tiene nada malo" in cuerpo, cuerpo)
+    }
+
+    @Test
+    fun `leer el extracto de un documento inexistente da 404`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.NotFound, leerExtracto(duenoId, "doc_no_existe").status)
+    }
+
+    @Test
+    fun `otro usuario no puede leer el extracto de mi documento`() = testApplication {
+        wireApp()
+        val mio = subir(duenoId, nombre = "extracto.txt", mime = "text/plain")
+
+        assertEquals(HttpStatusCode.NotFound, leerExtracto(otroId, mio).status)
+    }
+
+    @Test
+    fun `leer el extracto de un documento ya guardado contesta exactamente lo mismo que subirlo`() = testApplication {
+        // La prueba de que es EL MISMO camino y no una copia: los mismos bytes, por las dos
+        // puertas, tienen que dar el mismo status y el mismo cuerpo.
+        wireApp()
+        val bytes = "sin movimientos reconocibles".toByteArray()
+        val id = subir(duenoId, nombre = "extracto.txt", contenido = bytes, mime = "text/plain")
+
+        val desdeElDocumento = leerExtracto(duenoId, id)
+        val subiendoDeNuevo = client.post("/api/statements/upload") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("file", bytes, Headers.build {
+                            append(HttpHeaders.ContentDisposition, "filename=\"extracto.txt\"")
+                            append(HttpHeaders.ContentType, "text/plain")
+                        })
+                    },
+                ),
+            )
+        }
+
+        assertEquals(desdeElDocumento.status, subiendoDeNuevo.status)
+        assertEquals(desdeElDocumento.bodyAsText(), subiendoDeNuevo.bodyAsText())
+    }
 }

@@ -758,6 +758,12 @@ class WalletRepositoryImpl(
             }))
         }.exigirExito().body()
 
+    // `exigirExito()` por el mismo motivo que `uploadStatement`: el server explica el rechazo en
+    // el cuerpo («no encontramos movimientos», «falta la clave»), y sin esto se pierde adentro de
+    // la excepción de deserialización.
+    override suspend fun readStatementFromDocument(id: String): StatementParseResult =
+        client.post("$baseUrl/api/documents/$id/leer-extracto").exigirExito().body()
+
     // Los cuatro comprueban el status, como el resto del archivo. Sin esto `deleteDocument`
     // decía «listo» ante un 500 —el documento seguía ahí y la lista se recargaba igual— y un 401
     // al subir salía como «Algo salió mal» en vez de «Tu sesión expiró».

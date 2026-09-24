@@ -109,6 +109,7 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun changePassword(request: ChangePasswordRequest): Unit = trasEscribir { delegado.changePassword(request) }
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = trasEscribir { delegado.requestPasswordReset(request) }
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult = trasEscribir { delegado.uploadStatement(fileName, bytes, mimeType) }
+    override suspend fun readStatementFromDocument(id: String): StatementParseResult = trasEscribir { delegado.readStatementFromDocument(id) }
     override suspend fun uploadDocument(fileName: String, bytes: ByteArray, mimeType: String, tipo: TipoDeDocumento, accountId: String?, periodo: String?, notas: String?): Documento = trasEscribir { delegado.uploadDocument(fileName, bytes, mimeType, tipo, accountId, periodo, notas) }
     override suspend fun updateDocument(id: String, cambios: EdicionDeDocumento): Documento = trasEscribir { delegado.updateDocument(id, cambios) }
     override suspend fun deleteDocument(id: String): Unit = trasEscribir { delegado.deleteDocument(id) }

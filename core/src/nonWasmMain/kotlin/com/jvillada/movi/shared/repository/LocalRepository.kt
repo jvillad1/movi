@@ -2125,6 +2125,9 @@ class LocalRepository(
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = remote.requestPasswordReset(request)
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
         remote.uploadStatement(fileName, bytes, mimeType)
+    // Igual que uploadStatement: sin espejo local, siempre a la red.
+    override suspend fun readStatementFromDocument(id: String): StatementParseResult =
+        remote.readStatementFromDocument(id)
     override suspend fun importStatement(decision: ImportDecision) =
         remote.importStatement(decision)
 

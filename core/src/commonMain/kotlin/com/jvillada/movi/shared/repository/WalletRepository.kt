@@ -497,6 +497,13 @@ interface WalletRepository {
     suspend fun requestPasswordReset(request: PasswordResetRequest): Int
     suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult
 
+    /**
+     * `POST /api/documents/{id}/leer-extracto` — Ola B, tarea 7: «Importar movimientos» sobre un
+     * documento YA guardado (PDF o imagen), en vez de volver a subir el archivo. Mismo resultado
+     * y los mismos mensajes de error que [uploadStatement]: el server corre el mismo camino.
+     */
+    suspend fun readStatementFromDocument(id: String): StatementParseResult
+
     // ── Documentos ─────────────────────────────────────────────────────────────
 
     /** Los papeles guardados, lo más reciente primero. **Metadatos, nunca bytes** — ver [Documento]. */

@@ -989,3 +989,48 @@ class InicioNoAfirmaVacioTest {
         assertEquals("Sin cuentas aún", contestoVacio.sub)
     }
 }
+
+// ── Ola B, tarea 7: la misma condición decide el Inicio Y la ficha de Más ──────────
+
+class GuiaIncompletaTest {
+
+    @Test
+    fun sin_respuesta_todavia_la_guia_no_se_ofrece() {
+        // `guiaIncompleta` empieza en `puedeAfirmarVacio`, así que hereda su misma cautela: sin
+        // datos no se afirma que falte algo, igual que no se afirma que no falte nada.
+        assertFalse(DashboardData().guiaIncompleta)
+    }
+
+    @Test
+    fun con_cuenta_y_movimiento_la_guia_esta_completa() {
+        val data = DashboardData(
+            accounts = listOf(Account(id = "a1", name = "Nu", type = AccountType.SAVINGS, balance = 1)),
+            summary = summaryConEventos(3),
+            upcoming = emptyList(),
+            credits = emptyList(),
+            cards = emptyList(),
+        )
+        assertFalse(data.guiaIncompleta)
+    }
+
+    @Test
+    fun sin_cuenta_o_sin_movimiento_la_guia_sigue_incompleta() {
+        val sinCuenta = DashboardData(
+            accounts = emptyList(),
+            summary = summaryConEventos(3),
+            upcoming = emptyList(),
+            credits = emptyList(),
+            cards = emptyList(),
+        )
+        assertTrue(sinCuenta.guiaIncompleta)
+
+        val sinMovimiento = DashboardData(
+            accounts = listOf(Account(id = "a1", name = "Nu", type = AccountType.SAVINGS, balance = 1)),
+            summary = summaryConEventos(0),
+            upcoming = emptyList(),
+            credits = emptyList(),
+            cards = emptyList(),
+        )
+        assertTrue(sinMovimiento.guiaIncompleta)
+    }
+}

@@ -46,21 +46,28 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
+import com.jvillada.movi.shared.model.StatementImport
+import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.Hairline
+import com.jvillada.movi.ui.components.MinCard
+import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NewItemButton
+import com.jvillada.movi.ui.extractos.ImportCard
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.components.toUserMessage
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -119,6 +126,13 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     // cuentas el selector dice «No tienes cuentas todavía» y el papel se sube sin cuenta, que es
     // exactamente lo que pasaba antes de que esto existiera.
     var cuentas by remember { mutableStateOf(emptyList<Account>()) }
+    // Ola B, tarea 7: la sección «Importaciones» que se mudó acá desde Extractos. Igual que
+    // `cuentas`, una lectura que falla no le impide a la pantalla andar — simplemente no aparece
+    // la sección, que es lo mismo que hacía Extractos cuando el historial estaba vacío.
+    var imports by remember { mutableStateOf(emptyList<StatementImport>()) }
+    // El id del documento con «Importar movimientos» en vuelo, o `null`. Un segundo toque
+    // mientras Claude está leyendo mandaría dos lecturas del mismo archivo.
+    var importando by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutine = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
@@ -133,6 +147,10 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
 
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
+    }
+
+    LaunchedEffect(refreshKey) {
+        runCatching { Repositories.wallets.getStatementImports() }.onSuccess { imports = it }
     }
 
     val elegirArchivo = rememberFilePicker(TiposDeArchivo.TODOS) { nombre, bytes, mime ->
@@ -173,6 +191,26 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
+    /**
+     * **«Importar movimientos»** — Ola B, tarea 7: lo que antes era subir el archivo de nuevo en
+     * Extractos ahora es un toque sobre el mismo documento ya guardado. Mismo destino
+     * ([Screen.StatementReview]) y mismo manejo de error ([toUserMessage]) que tenía Extractos:
+     * el motivo que explica el server («no encontramos movimientos», «falta la clave») es lo
+     * único que el dueño puede usar.
+     */
+    fun importar(doc: Documento) {
+        if (importando != null) return
+        importando = doc.id
+        coroutine.launch {
+            runCatching { Repositories.wallets.readStatementFromDocument(doc.id) }
+                .onSuccess { result: StatementParseResult ->
+                    onNavigate(Screen.StatementReview(Json.encodeToString(result)))
+                }
+                .onFailure { error = "No pude procesar el extracto: ${it.toUserMessage()}" }
+            importando = null
+        }
+    }
+
     fun borrar(doc: Documento) {
         if (borrando) return
         borrando = true
@@ -199,7 +237,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     { NewItemButton(label = "Subir archivo", onClick = elegirArchivo) }
                 } else null,
             )
-            if (cargando || subiendo) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            if (cargando || subiendo || importando != null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
             val lista = documentos
             when {
@@ -248,9 +286,36 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                                 onAbrir = { abrir(doc) },
                                 onBorrar = { aBorrar = doc },
                                 onEditar = { aEditar = doc },
+                                onImportar = if (esImportable(doc)) { { importar(doc) } } else null,
                             )
                         }
                         item(key = "espacio-${tipo.name}") { Spacer(Modifier.height(18.dp)) }
+                    }
+
+                    // Ola B, tarea 7: la sección «Importaciones» que se mudó acá desde Extractos,
+                    // debajo de la lista de documentos y solo si hay algo que mostrar — un
+                    // historial vacío no merece encabezado propio, misma regla que el resto de
+                    // esta pantalla (ver `porTipo`).
+                    if (imports.isNotEmpty()) {
+                        item(key = "encabezado-importaciones") {
+                            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                MinSectionHeader(title = "Importaciones", count = imports.size)
+                            }
+                        }
+                        item(key = "lista-importaciones") {
+                            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                MinCard(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    variant = MinCardVariant.Elevated,
+                                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                                ) {
+                                    imports.forEachIndexed { i, imp ->
+                                        ImportCard(imp) { onNavigate(Screen.ImportDetail(imp.id)) }
+                                        if (i < imports.size - 1) Hairline()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -356,6 +421,12 @@ private fun FilaDeDocumento(
     onAbrir: () -> Unit,
     onBorrar: () -> Unit,
     onEditar: () -> Unit,
+    /**
+     * Ola B, tarea 7: «Importar movimientos» — `null` cuando [esImportable] dice que este
+     * documento no es un PDF ni una imagen, y entonces la acción ni se ofrece (no una acción
+     * deshabilitada: un botón gris que nunca sirve es peor que no tenerlo).
+     */
+    onImportar: (() -> Unit)? = null,
 ) {
     // El texto arriba a todo el ancho y las acciones en un renglón DEBAJO. Con las tres acciones a
     // la derecha, en un teléfono de ~390 dp se comían un tercio de la fila y el nombre del archivo
@@ -406,6 +477,9 @@ private fun FilaDeDocumento(
                 AccionDeFila("Editar", Movi.colores.textoMedio, null, onEditar)
                 // «Borrar» no borra: abre la confirmación (ver `aBorrar` en la pantalla).
                 AccionDeFila("Borrar", Movi.colores.sale, null, onBorrar)
+                // Al final: es la acción menos frecuente de las cuatro, y solo en un PDF o una
+                // imagen (ver [esImportable]).
+                onImportar?.let { AccionDeFila("Importar movimientos", Movi.colores.marca, null, it) }
             }
         }
         Hairline()

@@ -124,10 +124,12 @@ fun StatementReviewScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
-        // F60 · F22: encabezado único; vuelve a la lista de Extractos si no hay historial.
+        // F60 · F22: encabezado único; vuelve a Documentos si no hay historial de navegación.
+        // Ola B, tarea 7: era Screen.Extractos, que salió de Más — «Importar movimientos» se
+        // llega desde Documentos ahora, y es ahí donde tiene sentido volver.
         MinScreenHeader(
             title = "${result.bankName} · ${result.period}",
-            leading = HeaderLeading.Back(fallback = Screen.Extractos),
+            leading = HeaderLeading.Back(fallback = Screen.Documentos),
             subtitle = "${result.newTransactions.size} nuevas · ${result.matches.size} coincidencias",
         )
         Spacer(Modifier.height(12.dp))

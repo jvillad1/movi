@@ -67,6 +67,13 @@ object ScreenTaxonomy {
     // lista haría que `isValidAction` le arrancara la acción al acceso «Suscripciones» que YA está
     // guardado en el Inicio de cada instalación (y que ScreenValidation rechazara con 422 cualquier
     // guardado del Editor que todavía lo traiga). Se queda, y el cliente lo redirige.
+    // "goals" y "extractos" (Ola B, tarea 7): mismo trato — Metas salió de la navegación y
+    // Extractos se unió a Documentos, y las dos siguen acá para que un `NAVIGATE` guardado antes
+    // de esta tanda no se vuelva inválido. El cliente los manda a Cuentas y a Documentos
+    // respectivamente (ver `screenForTarget`); el Editor de pantallas ya no ofrece «Metas» como
+    // opción nueva (`ScreenEditorScreen`), y un acceso «Metas» con cifra que haya quedado guardado
+    // se saca directamente de la sección (`renderableSections`, más abajo) en vez de solo perder
+    // su acción.
     val NAVIGATE_TARGETS = listOf(
         "dashboard", "transactions", "quickadd", "budgets", "mas", "accounts", "credits",
         "goals", "investments", "subscriptions", "recurrentes", "extractos",
@@ -82,12 +89,21 @@ object ScreenTaxonomy {
  * Secciones que un renderer de esta versión sabe dibujar, con acciones inválidas strippeadas.
  * Tolerancia vive aquí (en el filtro), NO en la deserialización: un tipo/target desconocido
  * no debe romper la pantalla, solo omitirse/limpiarse.
+ *
+ * Ola B, tarea 7: un acceso «Metas» (QUICK_LINKS_WITH_TOTALS) que quedó guardado en una
+ * definición de antes de esta tanda no se pinta más — Metas salió de la navegación y "goals" ya
+ * no tiene pantalla propia (ver `screenForTarget` en `:shared`). Se saca ACÁ, la fila entera y no
+ * solo su acción, y solo de los accesos con cifra: un BANNER u otra tarjeta que use "goals" por
+ * otro motivo no entra en esta poda.
  */
 fun renderableSections(def: ScreenDefinition): List<ScreenSection> =
     def.sections
         .filter { it.type in ScreenTaxonomy.SECTION_TYPES }
         .map { section ->
-            section.copy(cards = section.cards.map { card ->
+            val cards = if (section.type == "QUICK_LINKS_WITH_TOTALS") {
+                section.cards.filterNot { it.action?.target == "goals" }
+            } else section.cards
+            section.copy(cards = cards.map { card ->
                 if (card.action != null && !isValidAction(card.action)) card.copy(action = null) else card
             })
         }

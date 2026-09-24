@@ -18,6 +18,21 @@ fun pesoLegible(bytes: Long): String = when {
     }
 }
 
+/**
+ * ¿«Importar movimientos» tiene sentido para este documento? — Ola B, tarea 7.
+ *
+ * Solo PDF e imagen: es lo que Extractos ya sabía leer con Claude (`ClaudeStatementParser`), y es
+ * la resolución de ambigüedad explícita de la tarea — un CSV o un XLS que el importador de
+ * Extractos también aceptaba por el selector de archivo no entra acá, porque un documento
+ * archivado no guarda de qué extensión venía, solo su `mimeType`, y adivinar CSV/XLS por mimeType
+ * es mucho menos confiable que por PDF/imagen (los navegadores mandan `application/octet-stream`
+ * para un XLS seguido).
+ */
+fun esImportable(doc: Documento): Boolean {
+    val mime = doc.mimeType.substringBefore(';').trim().lowercase()
+    return mime == "application/pdf" || mime.startsWith("image/")
+}
+
 /** El nombre en español de cada tipo, en singular — es el rótulo de una fila, no un título. */
 fun nombreDeTipo(tipo: TipoDeDocumento): String = when (tipo) {
     TipoDeDocumento.EXTRACTO -> "Extracto"

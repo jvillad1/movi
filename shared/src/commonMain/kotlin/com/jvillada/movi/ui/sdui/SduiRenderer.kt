@@ -167,8 +167,12 @@ private fun SduiSection(
  * NAVIGATE target → [Screen], cubriendo los targets de `ScreenTaxonomy.NAVIGATE_TARGETS`.
  * `renderableSections` ya strippeó cualquier NAVIGATE fuera de esa lista, así que el `else`
  * es defensivo — `target` es un String, no un sealed type, y el `when` no puede ser exhaustivo.
+ *
+ * `internal` y no `private`: es una función pura sin nada de Compose, y los remapeos (`"goals"`,
+ * `"investments"`, `"subscriptions"`, `"extractos"`, …) se prueban directo, sin montar una
+ * pantalla — ver `SduiRendererTest`.
  */
-private fun screenForTarget(target: String): Screen? = when (target) {
+internal fun screenForTarget(target: String): Screen? = when (target) {
     "dashboard" -> Screen.Dashboard
     "transactions" -> Screen.Transactions()
     "quickadd" -> Screen.QuickAdd()
@@ -176,7 +180,12 @@ private fun screenForTarget(target: String): Screen? = when (target) {
     "mas" -> Screen.Mas
     "accounts" -> Screen.Accounts
     "credits" -> Screen.Credits
-    "goals" -> Screen.Goals
+    // Ola B, tarea 7: Metas salió de la navegación (fuera de Más, fuera de Perfil) y no tiene
+    // reemplazo con forma propia — a diferencia de Suscripciones/Recurrentes, acá no quedó un
+    // «donde ahora viven las metas». Mismo trato que "investments" un poco más abajo: el target
+    // sobrevive (una definición guardada puede seguir trayéndolo) y se manda a Cuentas en vez de
+    // crashear con un destino desconocido. `MetasScreen` sigue existiendo, solo sin puerta.
+    "goals" -> Screen.Accounts
     // F61: Inversiones dejó de ser pantalla. Una definición guardada (o el Editor) puede seguir
     // trayendo este target — se manda a Cuentas, que es donde ahora viven las cuentas de
     // inversión. Nunca un crash por destino desconocido.
@@ -193,7 +202,10 @@ private fun screenForTarget(target: String): Screen? = when (target) {
     "subscriptions" -> Screen.Transactions(CHIP_RECURRENTES)
     "recurrentes" -> Screen.Transactions(CHIP_RECURRENTES)
     "categorias" -> Screen.Categorias
-    "extractos" -> Screen.Extractos
+    // Ola B, tarea 7: Extractos se unió a Documentos («Importar movimientos» vive en cada fila
+    // de PDF o imagen). Mismo trato que "goals": el target sobrevive y se manda a donde el papel
+    // ahora vive.
+    "extractos" -> Screen.Documentos
     "aichat" -> Screen.AIChat()
     "profile" -> Screen.Profile
     else -> null
