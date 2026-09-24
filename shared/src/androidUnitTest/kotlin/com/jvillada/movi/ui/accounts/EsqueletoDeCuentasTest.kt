@@ -4,13 +4,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.height
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.Bien
+import com.jvillada.movi.shared.model.CLASE_DE_BIEN_INMUEBLE
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import kotlinx.coroutines.CompletableDeferred
@@ -19,58 +25,107 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
- * # Task 7 en Cuentas: filas esqueleto, no una rueda, en la primera carga
+ * # Cuentas carga con la forma de Cuentas
  *
- * [puerta] mantiene `getAccounts()` colgada, así que la pantalla queda en su estado de "cargando,
- * sin una sola cuenta pintada" mientras la prueba mira. El esqueleto tiene un pulso infinito
- * (`rememberInfiniteTransition`, ver el KDoc de `Esqueleto.kt`): nunca queda "idle", así que estas
- * pruebas nunca llaman `waitForIdle()` — miden el frame inicial y, para el segundo estado, esperan
- * con `waitUntil` (que sondea, no espera "idle").
+ * Task 7 (ola A) cambió la rueda por seis filas sueltas. La ola B las cambia por la forma real de
+ * la pantalla: la tarjeta del patrimonio neto (cifra grande + cuatro renglones) y un grupo con su
+ * encabezado y cuatro filas con ícono. [puerta] mantiene `getAccounts()` colgada para mirar ese
+ * momento.
+ *
+ * `@GraphicsMode(NATIVE)` y `sdk = [34]` para medir el alto de la tarjeta del patrimonio cargando
+ * contra cargada con texto de verdad (ver el KDoc de `Esqueleto.kt`). `waitForIdle()` convive con
+ * el pulso del esqueleto sin colgarse (mismo KDoc).
  */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w390dp-h2400dp-xhdpi")
 class EsqueletoDeCuentasTest {
 
     @get:Rule val composeRule = createComposeRule()
 
     private val puerta = CompletableDeferred<List<Account>>()
 
+    /** Los cuatro renglones de la tarjeta: tu plata, lo condicionado, los bienes y las deudas. */
+    private val nu = Account("acc-nu", "Nu", AccountType.SAVINGS, 558_350L)
+    private val afc = Account("acc-afc", "AFC", AccountType.SAVINGS, 12_000_000L, condicionadaA = "vivienda")
+    private val hipoteca = Account("acc-1254", "Hipoteca 1254", AccountType.LOAN, 1_030_600_000L)
+    private val casa = Account(
+        "acc-casa", "Casa Almendros", AccountType.INVESTMENT, 0L,
+        bien = Bien(CLASE_DE_BIEN_INMUEBLE, 1_411_903_920L, valorAl = "2026-08-28", deudaId = "acc-1254"),
+    )
+
     @After
     fun salir() {
         Repositories.sustitutoDePrueba = null
     }
 
-    @Test
-    fun `sin una cuenta pintada todavia, se ven 6 filas esqueleto y no la rueda`() {
+    private fun montar() {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = puerta.await()
         }
-        composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { AccountsScreen(onNavigate = {}) } }
         }
+    }
+
+    private fun hay(texto: String): Boolean =
+        composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    private fun contarTag(tag: String): Int = composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().size
+
+    @Test
+    fun `desde el primer cuadro, la tarjeta del patrimonio y un grupo esqueleto, sin cifras ni vacios`() {
+        montar()
+        composeRule.mainClock.autoAdvance = false
         composeRule.mainClock.advanceTimeByFrame()
 
-        assertEquals(6, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(1, contarTag(TAG_ESQUELETO_DEL_PATRIMONIO))
+        assertEquals(4, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
+        assertTrue(!hay("\$0"))
+        assertTrue(!hay("Sin cuentas"))
+        assertTrue(!hay("No pudimos cargar"), "el primer cuadro no puede decir que falló una lectura que ni empezó")
+        assertTrue(hay("Nueva cuenta"))
     }
 
     @Test
-    fun `al llegar las cuentas, el esqueleto se va y quedan las filas reales`() {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
-            override suspend fun getAccounts(): List<Account> = puerta.await()
-        }
-        composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { AccountsScreen(onNavigate = {}) } }
-        }
+    fun `al llegar las cuentas, el esqueleto se va sin que salte la tarjeta del patrimonio`() {
+        montar()
         composeRule.waitForIdle()
-        assertEquals(6, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
+        val altoCargando = composeRule.onNodeWithTag(TAG_TARJETA_DEL_PATRIMONIO).getUnclippedBoundsInRoot().height
 
-        puerta.complete(listOf(Account(id = "a1", name = "Nu", type = AccountType.SAVINGS, balance = 558_350L)))
+        puerta.complete(listOf(nu, afc, casa, hipoteca))
         composeRule.waitForIdle()
 
-        assertEquals(0, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(0, contarTag(TAG_ESQUELETO_DEL_PATRIMONIO))
+        assertEquals(0, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
         composeRule.onNodeWithText("Nu", useUnmergedTree = true).assertIsDisplayed()
+
+        val altoCargado = composeRule.onNodeWithTag(TAG_TARJETA_DEL_PATRIMONIO).getUnclippedBoundsInRoot().height
+        val diferencia = abs(altoCargado.value - altoCargando.value)
+        assertTrue(
+            diferencia <= 8f,
+            "La tarjeta del patrimonio mide ${altoCargando.value} dp cargando y ${altoCargado.value} dp " +
+                "cargada — diferencia de $diferencia dp, el máximo son 8 dp",
+        )
+    }
+
+    @Test
+    fun `sin cuentas de verdad, el vacio de siempre`() {
+        montar()
+        composeRule.waitForIdle()
+
+        puerta.complete(emptyList())
+        composeRule.waitForIdle()
+
+        assertTrue(hay("Sin cuentas aún"))
+        assertEquals(0, contarTag(TAG_ESQUELETO_DEL_PATRIMONIO))
+        assertEquals(0, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
     }
 }
