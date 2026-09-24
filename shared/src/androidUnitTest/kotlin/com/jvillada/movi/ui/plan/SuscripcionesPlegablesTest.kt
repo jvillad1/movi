@@ -89,7 +89,7 @@ class SuscripcionesPlegablesTest {
             override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
         }
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
         esperarTexto("SUSCRIPCIONES ACTIVAS")
     }

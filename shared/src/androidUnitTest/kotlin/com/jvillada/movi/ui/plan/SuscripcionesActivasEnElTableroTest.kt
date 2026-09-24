@@ -57,7 +57,7 @@ import org.robolectric.annotation.Config
  *
  * Mismo patrón de montaje que [ResumenRecurrentesEnElTableroTest]. *
  * Ola C: el tablero salió del chip «Recurrentes» de Movimientos a Plan · Pagos del mes; esta prueba
- * lo monta solo ([TableroDeRecurrentes]) y afirma lo mismo que afirmaba adentro de Movimientos.
+ * lo monta solo ([TableroDeRecurrentesDePrueba]) y afirma lo mismo que afirmaba adentro de Movimientos.
  */
 @RunWith(RobolectricTestRunner::class)
 // Más alta que los 731dp del resto de las pruebas de esta pantalla, a propósito: la sección va al
@@ -159,7 +159,7 @@ class SuscripcionesActivasEnElTableroTest {
         RecurringOfferGate.clear()
         Repositories.sustitutoDePrueba = Repo()
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
         esperarTexto("SUSCRIPCIONES ACTIVAS")
         // La sección **arranca plegada** desde que el dueño pidió que no ocupara la pantalla

@@ -38,7 +38,7 @@ import kotlin.test.assertIs
 
 /**
  * PR 3 del rediseño de Recurrentes (2026-09): «Próximos pagos» y el flujo de «¿esto ya ocurrió?»
- * montados de verdad en el tablero de Recurrentes ([TableroDeRecurrentes]; ola C: Plan · Pagos del
+ * montados de verdad en el tablero de Recurrentes ([TableroDeRecurrentesDePrueba]; ola C: Plan · Pagos del
  * mes, antes el chip «Recurrentes» de Movimientos).
  *
  * Lo que prueba no es que un texto aparezca: es que **lo que sella un periodo llegue al
@@ -113,7 +113,7 @@ class ProximosPagosEnElTableroTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = { navegoA = it })
+                    TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = { navegoA = it })
                 }
             }
         }

@@ -37,7 +37,7 @@ import org.robolectric.annotation.Config
 /**
  * Ola 16 — **un cobro anual pintado de verdad**, con el tablero de Recurrentes montado. *
  * Ola C: el tablero salió del chip «Recurrentes» de Movimientos a Plan · Pagos del mes; esta prueba
- * lo monta solo ([TableroDeRecurrentes]) y afirma lo mismo que afirmaba adentro de Movimientos.
+ * lo monta solo ([TableroDeRecurrentesDePrueba]) y afirma lo mismo que afirmaba adentro de Movimientos.
  *
  * Lo que una función pura no alcanza a probar es justamente lo que más importa acá: que las tres
  * cifras que la pantalla muestra a la vez —el cobro real de la fila, lo que esa fila aporta, y el
@@ -102,7 +102,7 @@ class SuscripcionAnualEnElTableroTest {
         RecurringOfferGate.clear()
         Repositories.sustitutoDePrueba = Repo()
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
         esperarTexto("SUSCRIPCIONES ACTIVAS")
         // La sección arranca plegada (ver `SuscripcionesPlegablesTest`); todo lo que esta clase

@@ -49,7 +49,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * El checklist del período, montado de verdad en el tablero de Recurrentes ([TableroDeRecurrentes])
+ * El checklist del período, montado de verdad en el tablero de Recurrentes ([TableroDeRecurrentesDePrueba])
  * — ola C: Plan · Pagos del mes, que es donde aterriza el «Ver todos» del Hoy.
  *
  * Lo que prueba no es que un texto aparezca: es que **la casilla dejó de ser un control**, y que lo
@@ -196,7 +196,7 @@ class ChecklistDelPeriodoEnElTableroTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = { navegoA = it })
+                    TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = { navegoA = it })
                 }
             }
         }

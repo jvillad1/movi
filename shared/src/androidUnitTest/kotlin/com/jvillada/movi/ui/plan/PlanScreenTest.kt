@@ -19,6 +19,20 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.height
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.performSemanticsAction
+import com.jvillada.movi.shared.model.EventSource
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.PaymentStatus
+import com.jvillada.movi.shared.model.RecurringOccurrence
+import com.jvillada.movi.shared.model.TransactionType
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -84,6 +98,14 @@ class PlanScreenTest {
     private val puerta = CompletableDeferred<Unit>()
     private var lecturasDelResumen = 0
 
+    /** Lo que el tablero enumera; vacío salvo en la prueba del checklist. */
+    private var pagos: List<UpcomingPayment> = emptyList()
+    private var ocurrencias: List<OccurrenceState> = emptyList()
+    private val sellos = mutableListOf<Triple<String, String, String?>>()
+
+    /** Solo las suscripciones fallan: el aviso del tablero, sin tocar la tarjeta. */
+    private var suscripcionesFallan = false
+
     /** Sin red: todo lo que la tarjeta y el tablero leen falla. */
     private var sinRed = false
 
@@ -111,10 +133,20 @@ class PlanScreenTest {
             return UserProfile(id = "u", email = "u@local", name = "U", avatarColor = "#000000", periodCutoffDay = 25)
         }
 
-        override suspend fun getUpcomingPayments(): List<UpcomingPayment> = emptyList<UpcomingPayment>().also { cortar() }
-        override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList<OccurrenceState>().also { cortar() }
+        override suspend fun getUpcomingPayments(): List<UpcomingPayment> = pagos.also { cortar() }
+        override suspend fun getOccurrenceStates(): List<OccurrenceState> = ocurrencias.also { cortar() }
+        override suspend fun markOccurrence(ruleId: String, period: String, eventId: String?): RecurringOccurrence {
+            sellos += Triple(ruleId, period, eventId)
+            ocurrencias = ocurrencias.map {
+                if (it.ruleId == ruleId) it.copy(occurred = true, eventId = eventId, candidates = emptyList()) else it
+            }
+            return RecurringOccurrence(ruleId = ruleId, period = period, eventId = eventId)
+        }
         override suspend fun getRecurringRules(): List<RecurringRule> = emptyList()
-        override suspend fun getSubscriptions(): SubscriptionsResult = SubscriptionsResult(emptyList(), monthlyTotalCop = 0)
+        override suspend fun getSubscriptions(): SubscriptionsResult {
+            if (suscripcionesFallan) error("sin señal")
+            return SubscriptionsResult(emptyList(), monthlyTotalCop = 0)
+        }
         override suspend fun getBudgets(): List<Budget> = listOf(Budget("Comida", 1_000_000L))
         override suspend fun getEventsByDay(): List<EventDay> = emptyList()
     }
@@ -177,6 +209,69 @@ class PlanScreenTest {
         assertTrue(hay("Este período no tiene pagos anotados"))
         assertTrue(!hay("Gastado en", substring = true), "Presupuestos no se pinta con Pagos elegido")
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_TABLERO))
+    }
+
+    /**
+     * **El tablero por el camino de Plan**, no por el envoltorio de las pruebas del tablero: con el
+     * corte del dueño leído del perfil, los vencimientos pedidos aunque el segmento cambie
+     * (`vencimientosSiempre`) y el esqueleto hasta que las dos cosas llegan. Un pago de hoy con un
+     * movimiento candidato; «Sí, fue este» lo sella contra ese movimiento y la fila pasa a pagada.
+     */
+    @Test
+    fun `en Pagos del mes un pago pendiente se confirma con su movimiento`() {
+        val hoy = Clock.System.todayIn(TimeZone.of("America/Bogota"))
+        val arriendo = RecurringRule(
+            id = "rr_arriendo", name = "Arriendo", category = "Vivienda",
+            amount = 1_800_000L, dayOfMonth = hoy.dayOfMonth, type = TransactionType.EXPENSE,
+        )
+        val movimiento = FinancialEvent(
+            id = "ev_arriendo", accountId = "acc-banco", type = TransactionType.EXPENSE, amount = 1_800_000L,
+            category = "Vivienda", description = "Arriendo", source = EventSource.MANUAL,
+            timestamp = Clock.System.now().toEpochMilliseconds(),
+        )
+        pagos = listOf(UpcomingPayment(rule = arriendo, dueDate = hoy.toString(), daysUntil = 0, status = PaymentStatus.DUE_TODAY))
+        ocurrencias = listOf(
+            OccurrenceState(
+                ruleId = "rr_arriendo", period = hoy.toString().take(7), dueDate = hoy.toString(),
+                occurred = false, candidates = listOf(movimiento),
+            ),
+        )
+        puerta.complete(Unit)
+        montar()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("¿Ya pagaste", substring = true) }
+        assertEquals(0, contarTag(TAG_ESQUELETO_DEL_TABLERO))
+        assertTrue(composeRule.onAllNodesWithContentDescription("Pagado", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Sí, fue este")), useUnmergedTree = true)
+            .onFirst().performSemanticsAction(SemanticsActions.OnClick)
+
+        composeRule.waitUntil(timeoutMillis = 5_000) { sellos.isNotEmpty() }
+        assertEquals<List<Triple<String, String, String?>>>(listOf(Triple("rr_arriendo", hoy.toString().take(7), "ev_arriendo")), sellos)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithContentDescription("Pagado", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(!hay("¿Ya pagaste", substring = true), "la pregunta se fue: ya está sellado")
+    }
+
+    /**
+     * El «Reintentar» del aviso del tablero recarga también la tarjeta de arriba: los dos leen del
+     * mismo período, y reintentar uno solo dejaba la tarjeta con lo de antes.
+     */
+    @Test
+    fun `el Reintentar del aviso del tablero recarga tambien la tarjeta`() {
+        suscripcionesFallan = true
+        puerta.complete(Unit)
+        montar()
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Reintentar") }
+        val lecturasAntes = lecturasDelResumen
+
+        suscripcionesFallan = false
+        composeRule.onNodeWithText("Reintentar", useUnmergedTree = true).performClick()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) { lecturasDelResumen > lecturasAntes }
+        composeRule.waitForIdle()
+        assertTrue(!hay("Reintentar"))
     }
 
     @Test

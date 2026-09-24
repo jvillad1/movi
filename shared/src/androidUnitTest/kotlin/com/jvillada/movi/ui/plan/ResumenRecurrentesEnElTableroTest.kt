@@ -39,7 +39,7 @@ import org.robolectric.annotation.Config
  * candidatas «por confirmar» se pinten, y que «Confirmar» de verdad mueva la candidata, no solo
  * cambie un texto en pantalla. *
  * Ola C: el tablero salió del chip «Recurrentes» de Movimientos a Plan · Pagos del mes; esta prueba
- * lo monta solo ([TableroDeRecurrentes]) y afirma lo mismo que afirmaba adentro de Movimientos.
+ * lo monta solo ([TableroDeRecurrentesDePrueba]) y afirma lo mismo que afirmaba adentro de Movimientos.
  *
  * Que Movimientos ya NO los pinte lo prueba `MovimientosSinTableroTest`.
  */
@@ -99,7 +99,7 @@ class ResumenRecurrentesEnElTableroTest {
         RecurringOfferGate.clear()
         Repositories.sustitutoDePrueba = Repo()
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
         // El card de «Flujo libre» espera a sus dos lecturas: es la señal de que las cargas
         // iniciales (todas async) terminaron.

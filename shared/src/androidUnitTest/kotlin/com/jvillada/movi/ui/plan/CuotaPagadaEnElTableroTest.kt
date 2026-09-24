@@ -128,7 +128,7 @@ class CuotaPagadaEnElTableroTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {})
+                    TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = {})
                 }
             }
         }

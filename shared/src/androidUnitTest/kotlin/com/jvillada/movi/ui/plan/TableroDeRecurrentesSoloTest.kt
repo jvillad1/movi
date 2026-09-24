@@ -41,7 +41,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 /**
- * [TableroDeRecurrentes] montado **solo**, sin Movimientos alrededor.
+ * [TableroDeRecurrentesDePrueba] montado **solo**, sin Movimientos alrededor.
  *
  * Hasta la ola C el tablero solo existía adentro de `TransactionsScreen`, colgado de SU carga: el
  * aviso de error, el «Reintentar», las cuentas y el período eran de la pantalla. Las pruebas que ya
@@ -154,7 +154,7 @@ class TableroDeRecurrentesSoloTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(cutoffDay = 1), onNavigate = {})
+                    TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(cutoffDay = 1), onNavigate = {})
                 }
             }
         }

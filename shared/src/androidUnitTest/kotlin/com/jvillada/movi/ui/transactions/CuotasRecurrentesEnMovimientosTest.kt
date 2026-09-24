@@ -28,7 +28,7 @@ import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
-import com.jvillada.movi.ui.plan.TableroDeRecurrentes
+import com.jvillada.movi.ui.plan.TableroDeRecurrentesDePrueba
 import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Before
@@ -183,7 +183,7 @@ class CuotasRecurrentesEnMovimientosTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {})
+                    TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = {})
                 }
             }
         }
