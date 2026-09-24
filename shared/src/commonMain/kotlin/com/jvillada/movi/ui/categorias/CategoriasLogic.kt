@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.categorias
 
 import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
@@ -319,6 +320,28 @@ private fun comparteTipoEfectivo(a: CategoryUsage, b: CategoryUsage): Boolean {
     return tiposA.isEmpty() || tiposB.isEmpty() || tiposA.intersect(tiposB).isNotEmpty()
 }
 
+/**
+ * Las categorías **que no son reservadas pero sostienen reglas de plata por su nombre exacto**: el
+ * dueño las puede elegir y renombrar como cualquier otra, pero el orden automático no puede
+ * hacerlas desaparecer. Hoy es una sola, [CUOTA_CATEGORY]: la escribe el pago de una cuota, y con
+ * ese nombre el server la saca del gasto variable (`GastoVariable`), tilda las cuotas del checklist
+ * (`PagosDelChecklist`), la manda a «Préstamos» en `PlataDelPeriodo` y decide qué se puede editar
+ * de la pata (`EdicionDeMovimiento`). Si «Ordena tus categorías» la unificara EN otra, todo eso
+ * dejaría de verla en silencio.
+ *
+ * Por eso: en un par de la regla 1 solo puede ser el DESTINO (si los movimientos la dejan como
+ * origen, el par no se propone), y nunca entra en la regla 2 (esconder) ni en la 3 (un solo uso,
+ * que termina en unificarla en otra). Se compara normalizado — la protección de más es barata.
+ *
+ * Se revisó el resto: las demás categorías que el server lee por nombre (Traspaso, Saldo inicial,
+ * Pago de tarjeta, Ajuste de saldo, Descuento de nómina, Pago de un tercero, Cuenta eliminada) ya
+ * son reservadas y ni siquiera llegan a las reglas.
+ */
+private val SOSTIENEN_REGLAS_DE_PLATA: Set<String> = setOf(normalizarParaBuscar(CUOTA_CATEGORY))
+
+private fun sostieneReglasDePlata(c: CategoryUsage): Boolean =
+    normalizarParaBuscar(c.name) in SOSTIENEN_REGLAS_DE_PLATA
+
 /** El máximo de propuestas que ofrece la tarjeta a la vez — para que no se vuelva una lista sin fin. */
 const val MAX_PROPUESTAS_DE_ORDEN: Int = 12
 
@@ -348,7 +371,10 @@ const val MAX_PROPUESTAS_DE_ORDEN: Int = 12
  * 2. **Esconder nunca usadas**: del catálogo, sin movimientos, sin presupuesto, sin recurrente, y
  *    todavía no escondida.
  * 3. **Un solo uso**: propias, exactamente 1 movimiento en toda su historia, sin presupuesto ni
- *    recurrente.
+ *    recurrente, y no escondidas.
+ *
+ * Ninguna de las tres saca de circulación a una de [SOSTIENEN_REGLAS_DE_PLATA]: en la 1 solo es
+ * destino, y en la 2 y la 3 no entra.
  *
  * Las reservadas nunca entran (se sacan antes de aplicar ninguna regla) — no se pueden tocar. Una
  * categoría del catálogo con uso (como «Tecnología» con 1 movimiento) no cae en la regla 3 —no es
@@ -387,6 +413,8 @@ fun propuestasDeOrden(
                 else -> b to a
             }
             if (totalMovimientos(destino) == 0) continue
+            // «Cuota de crédito» solo puede recibir: ver [SOSTIENEN_REGLAS_DE_PLATA].
+            if (sostieneReglasDePlata(origen)) continue
             unificarParecidas += PropuestaDeOrden.UnificarParecidas(origen, destino)
         }
     }
@@ -400,6 +428,8 @@ fun propuestasDeOrden(
         .filter {
             it.scope == CategoryScope.CUSTOM && totalMovimientos(it) == 1 &&
                 it.budgets == 0 && it.recurringRules == 0 &&
+                // Una escondida ya la sacó el dueño de circulación: no hay nada que preguntarle.
+                !it.hidden && !sostieneReglasDePlata(it) &&
                 normalizarParaBuscar(it.name) !in yaPropuestas
         }
         .sortedWith(compareBy(CATEGORY_NAME_ORDER) { it.name })
@@ -408,6 +438,7 @@ fun propuestasDeOrden(
     val esconderNuncaUsadas = utiles
         .filter {
             it.scope == CategoryScope.PREDEFINED && !it.hidden && !it.enUso &&
+                !sostieneReglasDePlata(it) &&
                 normalizarParaBuscar(it.name) !in yaPropuestas
         }
         .sortedWith(compareBy(CATEGORY_NAME_ORDER) { it.name })

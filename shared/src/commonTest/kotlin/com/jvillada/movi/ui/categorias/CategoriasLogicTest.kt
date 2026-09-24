@@ -564,4 +564,43 @@ class CategoriasLogicTest {
         assertEquals("Movi encontró 1 cosa para ordenar", textoDeLaTarjetaDeOrden(1))
         assertEquals("Movi encontró 3 cosas para ordenar", textoDeLaTarjetaDeOrden(3))
     }
+
+    // ── Revisión final de la ola ──────────────────────────────────────────────
+    // «Cuota de crédito» no es reservada, pero el server la lee por su nombre exacto (gasto
+    // variable, checklist de cuotas, préstamos del período): el orden automático nunca la puede
+    // hacer desaparecer.
+
+    @Test
+    fun `Cuota de credito nunca es el origen de una unificacion, aunque tenga menos movimientos`() {
+        val cuotaDeCredito = cat("Cuota de crédito", movements = 1)
+        val credito = cat("Crédito", movements = 3)
+        val propuestas = propuestasDeOrden(listOf(cuotaDeCredito, credito))
+        assertTrue(propuestas.filterIsInstance<PropuestaDeOrden.UnificarParecidas>().isEmpty())
+        // Tampoco se la ofrece como «un solo uso» (que termina unificándola en otra).
+        assertTrue(propuestas.none { it is PropuestaDeOrden.UnUso && it.categoria.name == "Cuota de crédito" })
+    }
+
+    @Test
+    fun `Cuota de credito si puede ser el destino de una unificacion`() {
+        val cuotaDeCredito = cat("Cuota de crédito", movements = 4)
+        val credito = cat("Crédito", movements = 1)
+        val unificar = propuestasDeOrden(listOf(credito, cuotaDeCredito))
+            .filterIsInstance<PropuestaDeOrden.UnificarParecidas>().single()
+        assertEquals("Crédito", unificar.origen.name)
+        assertEquals("Cuota de crédito", unificar.destino.name)
+    }
+
+    @Test
+    fun `Cuota de credito nunca se propone esconder ni como un solo uso`() {
+        val delCatalogoSinUso = cat("Cuota de crédito", scope = CategoryScope.PREDEFINED)
+        assertTrue(propuestasDeOrden(listOf(delCatalogoSinUso)).isEmpty())
+        val propiaDeUnUso = cat("cuota de credito", movements = 1)
+        assertTrue(propuestasDeOrden(listOf(propiaDeUnUso)).isEmpty())
+    }
+
+    @Test
+    fun `una propia escondida con un solo movimiento no se propone como un solo uso`() {
+        val escondida = cat("Ñoquis", movements = 1, hidden = true)
+        assertTrue(propuestasDeOrden(listOf(escondida)).isEmpty())
+    }
 }
