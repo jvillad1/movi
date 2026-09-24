@@ -55,7 +55,6 @@ import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import com.jvillada.movi.ui.transactions.MovementRow
 import com.jvillada.movi.ui.transactions.MovementSingleRow
 import com.jvillada.movi.ui.transactions.TransferRow
-import com.jvillada.movi.ui.transactions.collapseTransfers
 
 /** El título de la bandeja, y el rótulo con que la nombran los demás. */
 const val TITULO_DE_POR_REVISAR: String = "Por revisar"
@@ -112,11 +111,11 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     val lecturas = rememberLecturasPorRevisar(recarga)
 
     /** `null` hasta que `getEventsByDay` contesta bien; un reintento que falla conserva lo último. */
-    var dias by remember { mutableStateOf<List<EventDay>?>(null) }
+    var diasLeidos by remember { mutableStateOf<List<EventDay>?>(null) }
     var leyendoDias by remember { mutableStateOf(true) }
     LaunchedEffect(recarga, refreshTick) {
         leyendoDias = true
-        intentar { Repositories.wallets.getEventsByDay() }.onSuccess { dias = it }
+        intentar { Repositories.wallets.getEventsByDay() }.onSuccess { diasLeidos = it }
         leyendoDias = false
     }
     // Secundarias: sin las cuentas los renglones dicen solo la categoría, y sin el perfil no se
@@ -134,10 +133,16 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     // porque el refetch puede fallar y dejarla vieja: sin esto, un pago recién resuelto volvía a
     // aparecer con sus botones activos, como si la acción no se hubiera guardado.
     var candidatosResueltos by remember { mutableStateOf(emptySet<String>()) }
+    // Lo mismo para los movimientos que se confirmaron o anularon desde su hoja: la llave es el
+    // traspaso cuando lo hay, porque confirmar una pata confirma el par (y el renglón es uno).
+    var movimientosResueltos by remember { mutableStateOf(emptySet<String>()) }
     var viendoCandidatos by remember { mutableStateOf(false) }
     var movimientoAbierto by remember { mutableStateOf<FinancialEvent?>(null) }
 
     val mensajes = lecturas.mensajes
+    val dias = diasLeidos?.map { dia ->
+        dia.copy(items = dia.items.filterNot { (it.transferId ?: it.id) in movimientosResueltos })
+    }
     val candidatos = lecturas.candidatos?.filterNot { it.id in candidatosResueltos }
     val nombresDeCuentas = remember(cuentas) { cuentas.associate { it.id to it.name } }
     val tiposDeCuentas = remember(cuentas) { cuentas.associate { it.id to it.type } }
@@ -205,14 +210,15 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             }
 
             // ── Entraron solos ────────────────────────────────────────────────────
-            val diasLeidos = dias
-            if (diasLeidos == null) {
+            if (dias == null) {
                 item { SeccionQueNoSeLeyo("No pudimos cargar tus movimientos") { recarga++ } }
             } else {
-                val solos = entraronSolos(diasLeidos)
-                if (solos.isNotEmpty()) {
+                // Se cuentan los renglones, no los eventos: un traspaso es uno (ver
+                // [renglonesQueEntraronSolos]), el mismo número que el renglón de Movimientos.
+                val renglones = renglonesQueEntraronSolos(dias)
+                if (renglones.isNotEmpty()) {
                     item {
-                        MinSectionHeader(title = "Entraron solos", count = solos.size)
+                        MinSectionHeader(title = "Entraron solos", count = renglones.size)
                         Text(
                             "Llegaron por SMS, por un extracto o por una foto. Hasta confirmarlos no cuentan en " +
                                 "tus gastos ni ingresos: tócalos para revisar el monto y la categoría.",
@@ -220,7 +226,6 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                             color = Movi.colores.textoMedio,
                             modifier = Modifier.padding(horizontal = Movi.espacios.corto).padding(bottom = 10.dp),
                         )
-                        val renglones = collapseTransfers(solos)
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
@@ -285,6 +290,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             cuentas = cuentas,
             onDismiss = { movimientoAbierto = null },
             onCambiado = { movimientoAbierto = null; recarga++ },
+            onResuelto = { resuelto -> movimientosResueltos = movimientosResueltos + (resuelto.transferId ?: resuelto.id) },
             onVerCuenta = tiposDeCuentas[evento.accountId]?.let { tipo ->
                 { onNavigate(Screen.AccountDetail(evento.accountId, tipo.group)) }
             },

@@ -9,6 +9,7 @@ import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.ui.accounts.VoidEventSheet
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
@@ -65,6 +66,12 @@ fun HojaDelMovimiento(
      * es el caso del propio detalle de la cuenta.
      */
     onVerCuenta: (() -> Unit)? = null,
+    /**
+     * Avisa que el movimiento **dejó de esperar una decisión**: se confirmó o se anuló. Lo usa la
+     * bandeja «Por revisar» para sacarlo de la lista aunque la relectura que sigue falle; quien no
+     * lleva esa cuenta lo ignora. Se llama antes que [onCambiado].
+     */
+    onResuelto: (FinancialEvent) -> Unit = {},
 ) {
     var pidioAnular by remember(event.id) { mutableStateOf(false) }
     var prefillRecurrente by remember(event.id) { mutableStateOf<RecurringPrefill?>(null) }
@@ -79,7 +86,14 @@ fun HojaDelMovimiento(
         event = event,
         cuentas = cuentas,
         onDismiss = onDismiss,
-        onEventChanged = { onCambiado() },
+        onEventChanged = { actualizado ->
+            if (esperaEnPorConfirmar(event.reconciliationStatus) &&
+                !esperaEnPorConfirmar(actualizado.reconciliationStatus)
+            ) {
+                onResuelto(actualizado)
+            }
+            onCambiado()
+        },
         onVerCuenta = onVerCuenta,
         onAnular = { pidioAnular = true },
         onMarcarComoRecurrente = { prefill -> prefillRecurrente = prefill },
@@ -126,6 +140,7 @@ fun HojaDelMovimiento(
             onDismiss = { pidioAnular = false },
             onVoided = {
                 pidioAnular = false
+                onResuelto(event)
                 onCambiado()
             },
         )

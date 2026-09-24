@@ -8,6 +8,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import com.jvillada.movi.ui.LocalRefreshTick
+import kotlinx.coroutines.CompletableDeferred
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -24,6 +28,7 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.porrevisar.TAG_RENGLON_POR_REVISAR
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import androidx.compose.ui.test.onNodeWithTag
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
@@ -126,7 +131,31 @@ class PorConfirmarEnMovimientosTest {
     @Test
     fun `sin nada pendiente en ninguna fuente el renglon no ocupa espacio`() {
         // El caso normal de quien anota todo a mano, y el punto entero del renglón.
-        montar(listOf(aMano), esperar = "Carnes y Legumbres", mensajes = listOf(sms("s1", SMS_STATE_CONFIRMED)))
+        //
+        // Se espera a que las dos lecturas propias del renglón contesten: afirmar «no está» con
+        // ellas todavía en vuelo pasaría igual aunque el renglón apareciera un cuadro después.
+        var contestaronMensajes = false
+        var contestaronCandidatos = false
+        DiasPlegadosStore.clear()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = listOf(banco)
+            override suspend fun getEventsByDay(): List<EventDay> =
+                listOf(EventDay(date = HOY_ISO, total = -18_500L, items = listOf(aMano)))
+            override suspend fun getCardPaymentCandidates(): List<FinancialEvent> =
+                emptyList<FinancialEvent>().also { contestaronCandidatos = true }
+            override suspend fun getSmsMessages(): List<SmsMessage> =
+                listOf(sms("s1", SMS_STATE_CONFIRMED)).also { contestaronMensajes = true }
+        }
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            contestaronMensajes && contestaronCandidatos &&
+                composeRule.onAllNodesWithText("Carnes y Legumbres", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        assertTrue(contestaronMensajes && contestaronCandidatos)
 
         composeRule.onNodeWithTag(TAG_RENGLON_POR_REVISAR, useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("por revisar", substring = true, useUnmergedTree = true).assertDoesNotExist()
@@ -152,6 +181,57 @@ class PorConfirmarEnMovimientosTest {
         composeRule.onNodeWithText("4 por revisar", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         assertEquals(listOf<Screen>(Screen.PorRevisar), navegaciones)
+    }
+
+    /**
+     * **Una recarga no lo saca de la pantalla.** Cada guardado desde la hoja de Agregar y cada
+     * «Reintentar» vuelven a leer todo; si el renglón se desmontara mientras tanto, la lista
+     * saltaría ~56 dp hacia arriba y volvería a bajar. Con las lecturas de la recarga detenidas a
+     * propósito, el renglón sigue ahí con el último número que se leyó.
+     */
+    @Test
+    fun `una recarga no saca el renglon mientras lee`() {
+        val tick = mutableStateOf(0)
+        var compuerta: CompletableDeferred<Unit>? = null
+        DiasPlegadosStore.clear()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = listOf(banco)
+            override suspend fun getEventsByDay(): List<EventDay> {
+                compuerta?.await()
+                return listOf(EventDay(date = HOY_ISO, total = -18_500L, items = listOf(aMano, porSms)))
+            }
+            override suspend fun getCardPaymentCandidates(): List<FinancialEvent> {
+                compuerta?.await()
+                return emptyList()
+            }
+            override suspend fun getSmsMessages(): List<SmsMessage> {
+                compuerta?.await()
+                return listOf(sms("s1", SMS_STATE_PENDING))
+            }
+        }
+        composeRule.setContent {
+            MoviTheme {
+                CompositionLocalProvider(LocalRefreshTick provides tick.value) {
+                    Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) }
+                }
+            }
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("2 por revisar", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // La recarga: todas las lecturas quedan en vuelo hasta abrir la compuerta.
+        val cerrada = CompletableDeferred<Unit>()
+        compuerta = cerrada
+        tick.value++
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(TAG_RENGLON_POR_REVISAR, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("2 por revisar", useUnmergedTree = true).assertExists()
+
+        cerrada.complete(Unit)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("2 por revisar", useUnmergedTree = true).assertExists()
     }
 
     /** Si solo hay mensajes del banco, el renglón igual está: la bandeja es una sola. */

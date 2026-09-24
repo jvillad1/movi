@@ -175,6 +175,31 @@ class PorRevisarEnPantallaTest {
         assertEquals("e-solo", confirmado)
     }
 
+    /**
+     * Confirmado desde la hoja, el movimiento sale de la bandeja **aunque la relectura falle**: si
+     * se quedara, el dueño lo vería todavía pendiente y creería que «Confirmar» no se guardó — lo
+     * mismo que ya se hacía con los pagos de tarjeta resueltos.
+     */
+    @Test
+    fun `confirmado, sale de la bandeja aunque la relectura falle`() {
+        montar(object : Repo(eventos = listOf(porConfirmar)) {
+            override suspend fun getEventsByDay(): List<EventDay> =
+                if (confirmado != null) error("sin señal") else super.getEventsByDay()
+        })
+        esperarTexto("Compra Exito")
+
+        composeRule.onNodeWithText("Compra Exito", useUnmergedTree = true).performClick()
+        esperarTexto("POR CONFIRMAR")
+        composeRule.onNode(hasClickAction() and hasAnyChild(hasText("Confirmar")), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { confirmado != null }
+        composeRule.waitUntil(5_000) { !hay("POR CONFIRMAR") }
+        composeRule.waitForIdle()
+
+        assertTrue("ya no está pendiente", !hay("Compra Exito"))
+        assertTrue(!hay("ENTRARON SOLOS"))
+    }
+
     @Test
     fun `los pagos de tarjeta se revisan uno por uno en su hoja`() {
         montar(Repo(candidatos = listOf(pagoNu)))

@@ -77,6 +77,22 @@ class PorRevisarLogicaTest {
         assertEquals("1 por revisar", textoDePorRevisar(1))
     }
 
+    /**
+     * **Se cuenta lo que se dibuja.** Un traspaso son dos eventos —la salida y la entrada— pero un
+     * solo renglón en la bandeja (ver `collapseTransfers`); si el número los contara por separado,
+     * «2 por revisar» abriría una bandeja con una sola cosa.
+     */
+    @Test
+    fun `un traspaso que entro solo cuenta como un renglon`() {
+        val salida = evento(ReconciliationStatus.UNCONFIRMED).copy(transferId = "t1", type = TransactionType.EXPENSE)
+        val entrada = evento(ReconciliationStatus.UNCONFIRMED).copy(transferId = "t1", type = TransactionType.INCOME)
+        val suelto = evento(ReconciliationStatus.UNCONFIRMED)
+        val dias = listOf(dia(salida, entrada, suelto))
+
+        assertEquals(2, renglonesQueEntraronSolos(dias).size)
+        assertEquals(2, cuantosPorRevisar(mensajes = emptyList(), dias = dias, candidatos = emptyList()))
+    }
+
     /** Una fuente que no contestó no inventa pendientes: suma cero, y la bandeja dice cuál falló. */
     @Test
     fun `una fuente sin leer no suma`() {

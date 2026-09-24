@@ -18,6 +18,8 @@ import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.sms.mensajesMasRecientesPrimero
+import com.jvillada.movi.ui.transactions.MovementRow
+import com.jvillada.movi.ui.transactions.collapseTransfers
 
 /**
  * # «Por revisar»: una sola bandeja para lo que entró solo
@@ -47,6 +49,14 @@ fun entraronSolos(dias: List<EventDay>): List<FinancialEvent> =
     dias.flatMap { it.items }.filter { esperaEnPorConfirmar(it.reconciliationStatus) }
 
 /**
+ * **Los renglones de «Entraron solos»**, tal como la bandeja los dibuja: un traspaso —su salida y
+ * su entrada, dos eventos— es un solo renglón (ver [collapseTransfers]). El número de la sección y
+ * el del renglón de Movimientos cuentan **esto**, no los eventos: si contaran los eventos, «2 por
+ * revisar» abriría una bandeja con una sola cosa adentro.
+ */
+fun renglonesQueEntraronSolos(dias: List<EventDay>): List<MovementRow> = collapseTransfers(entraronSolos(dias))
+
+/**
  * **Cuánto hay por revisar**, sumando las tres fuentes. Una fuente en `null` —su lectura no
  * contestó— no suma: el número es una invitación a entrar, y adentro la bandeja dice cuál fuente
  * no se pudo leer. Lo que nunca hace es inventar pendientes que no se leyeron.
@@ -57,7 +67,7 @@ fun cuantosPorRevisar(
     candidatos: List<FinancialEvent>?,
 ): Int =
     (mensajes?.let { mensajesPorRevisar(it).size } ?: 0) +
-        (dias?.let { entraronSolos(it).size } ?: 0) +
+        (dias?.let { renglonesQueEntraronSolos(it).size } ?: 0) +
         (candidatos?.size ?: 0)
 
 /** Lo que dice el renglón de Movimientos. Sin plural que conjugar: «1 por revisar», «4 por revisar». */

@@ -937,6 +937,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // Ola C, tarea 5: los mensajes del banco y los candidatos a pago de tarjeta, solo para contar
     // lo que hay en «Por revisar» (ver [RenglonPorRevisar]). Se revisan allá, no acá.
     val porRevisar = rememberLecturasPorRevisar(recarga = refreshKey)
+    // El último número del renglón que salió de lecturas terminadas; `null` hasta la primera.
+    val ultimoConteoPorRevisar = remember { mutableStateOf<Int?>(null) }
 
     // Lo que hace falta para el ícono de repetición de cada fila. Ola C: el tablero de Recurrentes
     // se mudó a Plan y esta pantalla ya no lo pinta; de él solo lee estas dos listas (ver
@@ -1186,19 +1188,27 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         //
         // Espera a que las tres lecturas terminen: pintarlo con la primera que llega y corregir el
         // número con la segunda sería una cifra que baila, y con las tres en cero no ocupa lugar.
-        if (!loading && porRevisar.terminaron) {
-            val cuantos = cuantosPorRevisar(
+        //
+        // Durante una recarga (cada «Reintentar», cada guardado desde Agregar) se queda con el
+        // último número que se contó: desmontarlo mientras se lee hacía saltar la lista ~56 dp y
+        // volver. Solo se va cuando una lectura que terminó dice cero.
+        val conteoFresco = if (!loading && porRevisar.terminaron) {
+            cuantosPorRevisar(
                 mensajes = porRevisar.mensajes,
                 dias = if (diasLeidos) allDays else null,
                 candidatos = porRevisar.candidatos,
             )
-            if (cuantos > 0) {
-                RenglonPorRevisar(
-                    cuantos = cuantos,
-                    onClick = { onNavigate(Screen.PorRevisar) },
-                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
-                )
-            }
+        } else {
+            null
+        }
+        SideEffect { if (conteoFresco != null) ultimoConteoPorRevisar.value = conteoFresco }
+        val cuantosPorRevisarAhora = conteoFresco ?: ultimoConteoPorRevisar.value
+        if (cuantosPorRevisarAhora != null && cuantosPorRevisarAhora > 0) {
+            RenglonPorRevisar(
+                cuantos = cuantosPorRevisarAhora,
+                onClick = { onNavigate(Screen.PorRevisar) },
+                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
+            )
         }
         // Adentro de un modo sin chip («Entre cuentas»), el encabezado que dice dónde está y cómo
         // salir. Hace falta porque sin chip **ningún chip queda marcado**: la lista se vería
