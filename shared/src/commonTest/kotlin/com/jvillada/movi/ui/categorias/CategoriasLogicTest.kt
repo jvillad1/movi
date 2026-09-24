@@ -404,6 +404,61 @@ class CategoriasLogicTest {
         assertTrue(propuestas.filterIsInstance<PropuestaDeOrden.UnificarParecidas>().isEmpty())
     }
 
+    // ── Fix round 1 ───────────────────────────────────────────────────────────
+
+    @Test
+    fun `hallazgo 1 - filtra los Ahora no antes de aplicar el tope de 12, no despues`() {
+        // 14 candidatas de «un solo uso», nombradas para que el orden alfabético sea A..N. Sin el
+        // fix, el tope de 12 se aplicaba ANTES de sacar los descartados: al descartar A y B
+        // quedarían C..L (10) y nunca aparecerían M y N, aunque hay lugar de sobra para ellas.
+        val letras = ('A'..'N').toList()
+        val candidatas = letras.map { cat("Solo uso $it", movements = 1) }
+        val descartados = setOf(
+            claveDePropuesta(PropuestaDeOrden.UnUso(candidatas[0])), // Solo uso A
+            claveDePropuesta(PropuestaDeOrden.UnUso(candidatas[1])), // Solo uso B
+        )
+        val propuestas = propuestasDeOrden(candidatas, descartados)
+        assertEquals(12, propuestas.size)
+        assertTrue(propuestas.any { it is PropuestaDeOrden.UnUso && it.categoria.name == "Solo uso M" })
+        assertTrue(propuestas.any { it is PropuestaDeOrden.UnUso && it.categoria.name == "Solo uso N" })
+    }
+
+    @Test
+    fun `hallazgo 4 - no propone unificar si alguna de las dos esta escondida`() {
+        val visible = cat("Crédito", movements = 1)
+        val escondida = cat("Cuota de crédito", movements = 10, hidden = true)
+        assertTrue(propuestasDeOrden(listOf(visible, escondida)).filterIsInstance<PropuestaDeOrden.UnificarParecidas>().isEmpty())
+
+        val otraEscondida = cat("Crédito", movements = 1, hidden = true)
+        val otraVisible = cat("Cuota de crédito", movements = 10)
+        assertTrue(
+            propuestasDeOrden(listOf(otraEscondida, otraVisible)).filterIsInstance<PropuestaDeOrden.UnificarParecidas>().isEmpty(),
+        )
+    }
+
+    @Test
+    fun `hallazgo 5 - no propone unificar si el destino se queda en 0 movimientos`() {
+        // Las dos sin uso: no hay nada que ordenar unificándolas (y si alguna es del catálogo,
+        // ya la ofrece la regla 2 para esconder).
+        val a = cat("Mercado", movements = 0)
+        val b = cat("Mercado extra", movements = 0)
+        assertTrue(propuestasDeOrden(listOf(a, b)).isEmpty())
+    }
+
+    @Test
+    fun `hallazgo 5 - en un empate se unifica la contenida (mas corta) en la que la contiene`() {
+        val credito = cat("Crédito", movements = 3)
+        val cuotaDeCredito = cat("Cuota de crédito", movements = 3)
+        // Sin importar en qué orden llegan del server: el resultado es siempre el mismo.
+        val propuestasEnUnOrden = propuestasDeOrden(listOf(credito, cuotaDeCredito))
+        val propuestasEnElOtroOrden = propuestasDeOrden(listOf(cuotaDeCredito, credito))
+        for (propuestas in listOf(propuestasEnUnOrden, propuestasEnElOtroOrden)) {
+            val unificar = propuestas.filterIsInstance<PropuestaDeOrden.UnificarParecidas>().single()
+            assertEquals("Crédito", unificar.origen.name)
+            assertEquals("Cuota de crédito", unificar.destino.name)
+        }
+    }
+
     @Test
     fun `Arriendo recibido sin uso se propone esconder`() {
         val arriendoRecibido = cat("Arriendo recibido", scope = CategoryScope.PREDEFINED)

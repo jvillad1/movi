@@ -64,12 +64,10 @@ import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.Hairline
-import com.jvillada.movi.ui.components.SelectorDeCategoria
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.columnasDeLaCuadricula
@@ -115,7 +113,14 @@ import kotlinx.coroutines.launch
 private sealed class Hoja {
     data class Detalle(val categoria: CategoryUsage) : Hoja()
     data class Renombrar(val categoria: CategoryUsage) : Hoja()
-    data class Unificar(val categoria: CategoryUsage) : Hoja()
+    /**
+     * [soloVisibles] (fix round 1, hallazgo 3): la tarjeta de propuestas de orden abre esta misma
+     * hoja para «un solo uso» y pide `true` — nada de ofrecer como destino una categoría que el
+     * dueño ya escondió, cuando la está eligiendo desde una sugerencia automática y no desde su
+     * propio «Unificar en otra». El detalle de una categoría sigue mandando `false` (default):
+     * ahí el dueño ya sabe qué está buscando.
+     */
+    data class Unificar(val categoria: CategoryUsage, val soloVisibles: Boolean = false) : Hoja()
 }
 
 /**
@@ -194,8 +199,12 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
     // Recalculada apenas cambian las categorías o algún «Ahora no» — la propuesta que se acaba de
     // resolver (unificada, escondida) desaparece sola en el próximo `recargar()`, sin que haga
     // falta tocar `propuestasDescartadas` para eso.
+    //
+    // Fix round 1, hallazgo 1: `propuestasDescartadas` se le pasa a `propuestasDeOrden` para que
+    // filtre ANTES de cortar en 12 — filtrar acá afuera, después del corte, dejaba sin lugar a la
+    // propuesta 13ª apenas el dueño decía «Ahora no» a alguna de las primeras 12.
     val propuestasPendientes = remember(categorias, propuestasDescartadas) {
-        propuestasDeOrden(categorias).filterNot { claveDePropuesta(it) in propuestasDescartadas }
+        propuestasDeOrden(categorias, propuestasDescartadas)
     }
     // Si la última propuesta se resolvió o se descartó con la hoja abierta, se cierra sola: no hay
     // nada más que revisar y quedaría una hoja vacía esperando un toque que no sirve para nada.
@@ -420,6 +429,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
             is Hoja.Unificar -> HojaUnificar(
                 categoria = h.categoria,
                 existentes = categorias,
+                soloVisibles = h.soloVisibles,
                 error = errorDeHoja,
                 guardando = guardandoHoja,
                 onDismiss = { hoja = null; errorDeHoja = null },
@@ -460,7 +470,14 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                         errorDeOrden = null
                         scope.launch {
                             unificarCategoria(origen, destino)
-                                .onSuccess { errorDeOrden = null; recargar() }
+                                .onSuccess { r ->
+                                    // Fix round 1, hallazgo 6: el mismo texto de resultado que ve
+                                    // quien unifica desde el detalle de una categoría — no un
+                                    // «listo» distinto según por dónde entró.
+                                    confirmacion = textoDeResultado(r.movements, r.budgets, r.recurringRules, r.budgetsMerged, r.name)
+                                    errorDeOrden = null
+                                    recargar()
+                                }
                                 .onFailure { errorDeOrden = it.toUserMessage() }
                             guardandoOrden = false
                         }
@@ -475,6 +492,15 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                                 .onFailure { errorDeOrden = it.toUserMessage() }
                             guardandoOrden = false
                         }
+                    },
+                    // Fix round 1, hallazgo 3: «un solo uso» ya no unifica con un toque adentro de
+                    // esta hoja — abre la MISMA `Hoja.Unificar` que usa el detalle de una
+                    // categoría (búsqueda, aviso previo, botón de confirmar), con `soloVisibles`
+                    // para que una categoría escondida no aparezca como destino sugerido.
+                    onUnificarConOtra = { categoria ->
+                        revisandoOrden = false
+                        errorDeOrden = null
+                        hoja = Hoja.Unificar(categoria, soloVisibles = true)
                     },
                     onAhoraNo = {
                         propuestasDescartadas = PropuestasDescartadasStore.marcar(claveDePropuesta(actual))
@@ -513,17 +539,18 @@ private fun textoDeResultado(
  */
 @Composable
 private fun TarjetaDeOrden(cantidad: Int, onRevisar: () -> Unit) {
+    val forma = RoundedCornerShape(Movi.formas.amplia)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, top = 12.dp, end = 16.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .padding(start = Movi.espacios.amplio, top = Movi.espacios.medio, end = Movi.espacios.amplio)
+            .clip(forma)
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(14.dp))
+            .border(1.dp, Movi.colores.borde, forma)
             .clickable(onClick = onRevisar)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.amplio),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
     ) {
         Text(
             text = textoDeLaTarjetaDeOrden(cantidad),
@@ -545,10 +572,15 @@ private fun TarjetaDeOrden(cantidad: Int, onRevisar: () -> Unit) {
  * (la quita `propuestasPendientes` de `CategoriasScreen` apenas se resuelve o se descarta), así
  * que esta hoja nunca decide cuál mostrar, solo cómo mostrarla y qué hacer con el botón.
  *
- * Para [PropuestaDeOrden.UnUso], «Unificar con…» no unifica directo: abre la cuadrícula de
- * [SelectorDeCategoria] (Ola B, tarea 4) para que el dueño elija el destino. Ese paso vive en un
- * estado local (`eligiendoDestino`) — con `remember(propuesta)`, cambiar de propuesta (siguiente
- * revisión) lo vuelve a cerrar solo, sin arrastrar el picker de la anterior.
+ * Para [PropuestaDeOrden.UnificarParecidas] se muestra el mismo aviso previo que
+ * [HojaUnificar] ([avisoDeUnificacion]) — fix round 1, hallazgo 2: sin él, un par con presupuesto
+ * de los dos lados se unificaba sin avisar que los límites se suman y que eso no se puede deshacer,
+ * la única advertencia que sí ve quien unifica a mano desde el detalle de una categoría.
+ *
+ * Para [PropuestaDeOrden.UnUso], «Unificar con…» ya **no** unifica desde acá (fix round 1,
+ * hallazgo 3): `onUnificarConOtra` le pasa la categoría a `CategoriasScreen`, que abre la MISMA
+ * [Hoja.Unificar] que usa el detalle — con su búsqueda, su aviso y su botón de confirmar — en vez
+ * de comprometer la historia con el primer toque en una cuadrícula.
  */
 @Composable
 private fun HojaDeOrden(
@@ -558,11 +590,10 @@ private fun HojaDeOrden(
     error: String?,
     onUnificar: (origen: String, destino: String) -> Unit,
     onEsconder: (CategoryUsage) -> Unit,
+    onUnificarConOtra: (CategoryUsage) -> Unit,
     onAhoraNo: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var eligiendoDestino by remember(propuesta) { mutableStateOf(false) }
-
     HojaBase(onDismiss = onDismiss) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text(
@@ -570,84 +601,57 @@ private fun HojaDeOrden(
                 style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = Movi.espacios.minimo),
             )
             Text(
                 if (restantes == 1) "Queda 1 por revisar." else "Quedan $restantes por revisar.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
-                modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+                modifier = Modifier.padding(top = Movi.espacios.minimo, bottom = Movi.espacios.amplio),
             )
 
-            if (eligiendoDestino && propuesta is PropuestaDeOrden.UnUso) {
+            Text(
+                explicacionDePropuesta(propuesta),
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
+            if (propuesta is PropuestaDeOrden.UnificarParecidas) {
                 Text(
-                    "Unificar «${propuesta.categoria.name}» en…",
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.texto,
-                    modifier = Modifier.padding(bottom = 10.dp),
-                )
-                SelectorDeCategoria(
-                    elegida = "",
-                    onElegir = { destino ->
-                        // Guarda: elegirse a sí misma no es una unificación, y sin este chequeo la
-                        // categoría con 1 movimiento puede aparecer en su propia cuadrícula (ya
-                        // tiene ese movimiento anotado, así que es una candidata «usada» más).
-                        if (normalizarParaBuscar(destino) != normalizarParaBuscar(propuesta.categoria.name)) {
-                            onUnificar(propuesta.categoria.name, destino)
-                        }
-                    },
-                    tipo = null,
-                    usadas = UsedCategoriesCache.used,
-                    prefs = UsedCategoriesCache.prefs,
-                    usos = UsedCategoriesCache.usosRecientes,
-                )
-                MensajeDeErrorDeHoja(error)
-                Text(
-                    "Cancelar",
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.textoMedio,
-                    modifier = Modifier
-                        .padding(top = 14.dp, bottom = 20.dp)
-                        .clickable(enabled = !guardando) { eligiendoDestino = false },
-                )
-            } else {
-                Text(
-                    explicacionDePropuesta(propuesta),
+                    avisoDeUnificacion(propuesta.origen, propuesta.destino),
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 17.sp,
-                )
-                MensajeDeErrorDeHoja(error)
-                when (propuesta) {
-                    is PropuestaDeOrden.UnificarParecidas -> BotonDeHoja(
-                        texto = "Unificar en «${propuesta.destino.name}»",
-                        habilitado = !guardando,
-                        onClick = { onUnificar(propuesta.origen.name, propuesta.destino.name) },
-                    )
-                    is PropuestaDeOrden.EsconderNuncaUsada -> BotonDeHoja(
-                        texto = "Esconder",
-                        habilitado = !guardando,
-                        onClick = { onEsconder(propuesta.categoria) },
-                    )
-                    is PropuestaDeOrden.UnUso -> BotonDeHoja(
-                        texto = "Unificar con…",
-                        habilitado = !guardando,
-                        onClick = { eligiendoDestino = true },
-                    )
-                }
-                Text(
-                    "Ahora no",
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.textoMedio,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp)
-                        .clickable(enabled = !guardando, onClick = onAhoraNo),
+                    modifier = Modifier.padding(top = Movi.espacios.corto),
                 )
             }
+            MensajeDeErrorDeHoja(error)
+            when (propuesta) {
+                is PropuestaDeOrden.UnificarParecidas -> BotonDeHoja(
+                    texto = "Unificar en «${propuesta.destino.name}»",
+                    habilitado = !guardando,
+                    onClick = { onUnificar(propuesta.origen.name, propuesta.destino.name) },
+                )
+                is PropuestaDeOrden.EsconderNuncaUsada -> BotonDeHoja(
+                    texto = "Esconder",
+                    habilitado = !guardando,
+                    onClick = { onEsconder(propuesta.categoria) },
+                )
+                is PropuestaDeOrden.UnUso -> BotonDeHoja(
+                    texto = "Unificar con…",
+                    habilitado = !guardando,
+                    onClick = { onUnificarConOtra(propuesta.categoria) },
+                )
+            }
+            Text(
+                "Ahora no",
+                style = Movi.textos.apoyo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.textoMedio,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = Movi.espacios.margen)
+                    .clickable(enabled = !guardando, onClick = onAhoraNo),
+            )
         }
     }
 }
@@ -1238,6 +1242,13 @@ private fun HojaRenombrar(
     }
 }
 
+/**
+ * El `testTag` de una fila candidata en [HojaUnificar], para encontrarla en una prueba sin
+ * ambigüedad con la fila de la misma categoría en la lista principal (que usa
+ * [tagDeFilaDeCategoria] y puede seguir montada, tapada, detrás de esta hoja).
+ */
+fun tagDeCandidataDeUnificar(nombre: String): String = "categoria:unificar-candidata:$nombre"
+
 /** Unificar: se elige el destino de una lista, no se escribe — juntar con algo que no existe es renombrar. */
 @Composable
 private fun HojaUnificar(
@@ -1247,15 +1258,17 @@ private fun HojaUnificar(
     guardando: Boolean,
     onDismiss: () -> Unit,
     onConfirmar: (String) -> Unit,
+    /** Ver el KDoc de [Hoja.Unificar]. */
+    soloVisibles: Boolean = false,
 ) {
     var busqueda by remember { mutableStateOf("") }
     // La categoría destino ENTERA, no su nombre: el aviso previo necesita saber si ella también
     // tiene presupuesto para poder avisar de la suma antes de aplicarla (ver [avisoDeUnificacion]).
     var elegida by remember { mutableStateOf<CategoryUsage?>(null) }
 
-    val candidatas = remember(existentes, busqueda, categoria) {
+    val candidatas = remember(existentes, busqueda, categoria, soloVisibles) {
         filtrarCategorias(existentes, CategoryFilter.TODAS, busqueda)
-            .filter { !it.reserved && it.name != categoria.name }
+            .filter { !it.reserved && it.name != categoria.name && (!soloVisibles || !it.hidden) }
     }
 
     HojaBase(onDismiss = onDismiss) {
@@ -1278,6 +1291,7 @@ private fun HojaUnificar(
                 candidatas.forEach { c ->
                     Row(
                         modifier = Modifier
+                            .testTag(tagDeCandidataDeUnificar(c.name))
                             .fillMaxWidth()
                             .clickable(enabled = !guardando) { elegida = c }
                             .padding(vertical = 12.dp),

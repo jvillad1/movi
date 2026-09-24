@@ -257,12 +257,6 @@ fun rotuloDeIcono(clave: String): String = ICONOS_DEL_CATALOGO.firstOrNull { it.
 /** El rótulo del catálogo para una clave de color guardada. Ver [rotuloDeIcono]. */
 fun rotuloDeColor(clave: String): String = COLORES_DEL_CATALOGO.firstOrNull { it.clave == clave }?.rotulo ?: clave
 
-/**
- * Minúsculas y sin tildes/diéresis — misma normalización que las sugerencias de categoría (ver
- * `normalizeForMatch`), y **distinta de [CATEGORY_NAME_ORDER] en un solo punto**: para BUSCAR, la
- * `ñ` se aplasta contra la `n`; para ORDENAR va justo después de la n.
- */
-
 // ── Ola B · tarea 6: «Ordena tus categorías» ────────────────────────────────────
 
 /**
@@ -272,24 +266,26 @@ fun rotuloDeColor(clave: String): String = COLORES_DEL_CATALOGO.firstOrNull { it
  */
 sealed class PropuestaDeOrden {
     /**
-     * Dos categorías no reservadas cuyo nombre normalizado de una está contenido como palabra
-     * completa en el de la otra, y que comparten tipo efectivo (regla 1). [origen] es la de menos
-     * movimientos — la que desaparece — y [destino] la de más — la que se queda.
+     * Dos categorías no reservadas ni escondidas cuyo nombre normalizado de una está contenido
+     * como palabra completa en el de la otra, y que comparten tipo efectivo (regla 1). [origen]
+     * es la de menos movimientos — la que desaparece — y [destino] la de más — la que se queda.
      */
     data class UnificarParecidas(val origen: CategoryUsage, val destino: CategoryUsage) : PropuestaDeOrden()
-
-    /**
-     * Una categoría **propia** con un solo movimiento en toda su historia, sin presupuesto ni
-     * recurrente (regla 3). Se ofrece «Unificar con…» —el dueño elige el destino en la
-     * cuadrícula de [com.jvillada.movi.ui.components.SelectorDeCategoria]— o «Ahora no».
-     */
-    data class UnUso(val categoria: CategoryUsage) : PropuestaDeOrden()
 
     /**
      * Una categoría **del catálogo** que el dueño nunca usó: sin movimientos, presupuesto ni
      * recurrente, y todavía no escondida (regla 2).
      */
     data class EsconderNuncaUsada(val categoria: CategoryUsage) : PropuestaDeOrden()
+
+    /**
+     * Una categoría **propia** con un solo movimiento en toda su historia, sin presupuesto ni
+     * recurrente (regla 3). Se ofrece «Unificar con…» —fix round 1: pasa por la misma hoja de
+     * unificar que usa el detalle de una categoría, con su búsqueda, su aviso previo y su botón de
+     * confirmar, así que elegir el destino nunca es un solo toque que ya reescribió la historia— o
+     * «Ahora no».
+     */
+    data class UnUso(val categoria: CategoryUsage) : PropuestaDeOrden()
 }
 
 /** Cuántos movimientos lleva [c] **en total**, mezclando COP y otra moneda — solo para contar, no para sumar plata. Mismo criterio que [resumenDeUsoCorto] y [avisoDeUnificacion]. */
@@ -309,14 +305,11 @@ private fun contenidoComoPalabras(corto: List<String>, largo: List<String>): Boo
     return false
 }
 
-/**
- * ¿[a] y [b] son «parecidas» para la regla 1? El nombre normalizado de una contenido como
- * palabra(s) completa(s) en el de la otra, en cualquiera de los dos sentidos.
- */
-private fun nombresParecidos(a: String, b: String): Boolean {
-    val palabrasA = normalizarParaBuscar(a).split(' ').filter { it.isNotEmpty() }
-    val palabrasB = normalizarParaBuscar(b).split(' ').filter { it.isNotEmpty() }
-    return contenidoComoPalabras(palabrasA, palabrasB) || contenidoComoPalabras(palabrasB, palabrasA)
+/** ¿El nombre de [contenida] es una secuencia de palabras completas dentro del de [contenedora]? Ver [contenidoComoPalabras]. */
+private fun estaContenidaEn(contenida: CategoryUsage, contenedora: CategoryUsage): Boolean {
+    val palabrasContenida = normalizarParaBuscar(contenida.name).split(' ').filter { it.isNotEmpty() }
+    val palabrasContenedora = normalizarParaBuscar(contenedora.name).split(' ').filter { it.isNotEmpty() }
+    return contenidoComoPalabras(palabrasContenida, palabrasContenedora)
 }
 
 /** «Comparten tipo efectivo»: la intersección no es vacía, o a alguna no se le conoce ninguno. */
@@ -331,19 +324,31 @@ const val MAX_PROPUESTAS_DE_ORDEN: Int = 12
 
 /**
  * **Las propuestas de orden**, ya resueltas y en el orden en que se muestran. Pura — sin red, sin
- * `Settings`; lo que el dueño ya descartó con «Ahora no» lo filtra quien llama
- * ([com.jvillada.movi.data.PropuestasDescartadasStore]), no esta función.
+ * `Settings` — pero SÍ recibe [descartados] ([com.jvillada.movi.data.PropuestasDescartadasStore.descartadas],
+ * las claves de [claveDePropuesta] que el dueño ya rechazó con «Ahora no»): fix round 1, hallazgo
+ * 1. Antes el llamador filtraba los descartados DESPUÉS de que esta función ya había cortado en
+ * [MAX_PROPUESTAS_DE_ORDEN] — con más de 12 propuestas reales, decir «Ahora no» a una de las
+ * primeras 12 nunca dejaba lugar para la 13ª, que existía pero jamás se mostraba. Filtrar tiene
+ * que pasar ANTES del corte, así que el corte se mueve acá adentro.
  *
- * Tres reglas, en este orden (1, 3, 2 — así lo pidió la tarea, no es un accidente de escritura):
+ * Tres reglas, en este orden (1, 2, 3 al numerarlas — el mismo orden de la tarea — pero se
+ * **muestran** 1, 3, 2, como pide el brief; ver el `return` al final):
  *
- * 1. **Unificar parecidas**: ver [nombresParecidos] y [comparteTipoEfectivo]. No propone un par
- *    donde las DOS tienen 5 movimientos o más — a esa altura de uso es más probable que sean
- *    categorías distintas a propósito («Mercado» y «Mercado extra», las dos vivas) que un
- *    duplicado por descuido.
- * 2. **Un solo uso**: propias, exactamente 1 movimiento en toda su historia, sin presupuesto ni
- *    recurrente.
- * 3. **Esconder nunca usadas**: del catálogo, sin movimientos, sin presupuesto, sin recurrente, y
+ * 1. **Unificar parecidas**: ver [estaContenidaEn] y [comparteTipoEfectivo]. Ninguna de las dos
+ *    puede estar escondida (fix round 1, hallazgo 4: una escondida es un destino que el dueño ya
+ *    decidió sacar de circulación, mal candidato para recibir historia nueva sin que se lo
+ *    pregunten). No propone un par donde las DOS tienen 5 movimientos o más — a esa altura de uso
+ *    es más probable que sean categorías distintas a propósito («Mercado» y «Mercado extra», las
+ *    dos vivas) que un duplicado por descuido. Tampoco propone si el DESTINO se queda en 0
+ *    movimientos (fix round 1, hallazgo 5): unificar dos categorías que nunca se usaron no tiene
+ *    nada que ordenar, y esconder la que corresponda ya lo hace la regla 2. [origen]/[destino] los
+ *    decide la cantidad de movimientos; en un empate, la CONTENIDA (el nombre más corto) se
+ *    unifica en la que la contiene — determinístico, no depende del orden en que el server
+ *    devuelva la lista.
+ * 2. **Esconder nunca usadas**: del catálogo, sin movimientos, sin presupuesto, sin recurrente, y
  *    todavía no escondida.
+ * 3. **Un solo uso**: propias, exactamente 1 movimiento en toda su historia, sin presupuesto ni
+ *    recurrente.
  *
  * Las reservadas nunca entran (se sacan antes de aplicar ninguna regla) — no se pueden tocar. Una
  * categoría del catálogo con uso (como «Tecnología» con 1 movimiento) no cae en la regla 3 —no es
@@ -355,7 +360,10 @@ const val MAX_PROPUESTAS_DE_ORDEN: Int = 12
  * crédito»): repetirla como «un solo uso, elige destino» sería preguntar dos veces lo mismo con
  * dos botones distintos.
  */
-fun propuestasDeOrden(categorias: List<CategoryUsage>): List<PropuestaDeOrden> {
+fun propuestasDeOrden(
+    categorias: List<CategoryUsage>,
+    descartados: Set<String> = emptySet(),
+): List<PropuestaDeOrden> {
     val utiles = categorias.filterNot { it.reserved }
 
     val unificarParecidas = mutableListOf<PropuestaDeOrden.UnificarParecidas>()
@@ -363,12 +371,22 @@ fun propuestasDeOrden(categorias: List<CategoryUsage>): List<PropuestaDeOrden> {
         for (j in (i + 1) until utiles.size) {
             val a = utiles[i]
             val b = utiles[j]
-            if (!nombresParecidos(a.name, b.name)) continue
+            if (a.hidden || b.hidden) continue
+            val aContenida = estaContenidaEn(a, b)
+            val bContenida = estaContenidaEn(b, a)
+            if (!aContenida && !bContenida) continue
             if (!comparteTipoEfectivo(a, b)) continue
             val movA = totalMovimientos(a)
             val movB = totalMovimientos(b)
             if (movA >= 5 && movB >= 5) continue
-            val (origen, destino) = if (movA <= movB) a to b else b to a
+            val (origen, destino) = when {
+                movA < movB -> a to b
+                movB < movA -> b to a
+                // Empate: la contenida (el nombre más corto) se unifica en la que la contiene.
+                aContenida -> a to b
+                else -> b to a
+            }
+            if (totalMovimientos(destino) == 0) continue
             unificarParecidas += PropuestaDeOrden.UnificarParecidas(origen, destino)
         }
     }
@@ -395,7 +413,11 @@ fun propuestasDeOrden(categorias: List<CategoryUsage>): List<PropuestaDeOrden> {
         .sortedWith(compareBy(CATEGORY_NAME_ORDER) { it.name })
         .map { PropuestaDeOrden.EsconderNuncaUsada(it) }
 
-    return (unificarParecidas + unUso + esconderNuncaUsadas).take(MAX_PROPUESTAS_DE_ORDEN)
+    // El orden que se MUESTRA es 1, 3, 2 (así lo pidió la tarea); filtrar los «Ahora no» y recién
+    // ACÁ cortar en el máximo — nunca al revés (ver el KDoc de arriba, hallazgo 1).
+    return (unificarParecidas + unUso + esconderNuncaUsadas)
+        .filterNot { claveDePropuesta(it) in descartados }
+        .take(MAX_PROPUESTAS_DE_ORDEN)
 }
 
 /**
@@ -427,3 +449,9 @@ fun explicacionDePropuesta(p: PropuestaDeOrden): String = when (p) {
 /** El texto de la tarjeta de arriba, con singular/plural (nunca «1 cosas»). */
 fun textoDeLaTarjetaDeOrden(cantidad: Int): String =
     "Movi encontró $cantidad ${if (cantidad == 1) "cosa" else "cosas"} para ordenar"
+
+/**
+ * Minúsculas y sin tildes/diéresis — misma normalización que las sugerencias de categoría (ver
+ * `normalizeForMatch`), y **distinta de [CATEGORY_NAME_ORDER] en un solo punto**: para BUSCAR, la
+ * `ñ` se aplasta contra la `n`; para ORDENAR va justo después de la n.
+ */
