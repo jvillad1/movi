@@ -119,6 +119,154 @@ data class ColoresDeMovi(
     val entreCuentas: Color,
     /** Relleno de gráficos para lo que no tiene color propio. */
     val neutro: Color,
+    /** Los diez colores con los que se pinta una categoría. Ver [ColoresDeCategoria]. */
+    val categorias: ColoresDeCategoria,
+) {
+    /**
+     * El color de una categoría **por su clave** (`"naranja"`, `"ambar"`…): el del ícono, y el de
+     * la barra si la categoría tiene una. Una clave desconocida da `gris` — ver
+     * [ColoresDeCategoria.color].
+     */
+    fun categoria(clave: String?): Color = categorias.color(clave)
+
+    /** El círculo que va detrás del ícono de esa categoría: el mismo color, con alfa bajo. */
+    fun circuloDeCategoria(clave: String?): Color = categorias.circulo(clave)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CATEGORÍAS — diez colores con nombre
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Antes de los temas y no después: son `val` de nivel superior del mismo archivo, que se
+// inicializan en orden de aparición. Declaradas más abajo, `COLORES_OSCUROS` las leería en `null`.
+
+/** Un color del catálogo de categorías, como lo guarda el server y como lo lee el dueño. */
+@Immutable
+data class ColorDelCatalogo(
+    /** Lo que viaja y se guarda (`category_prefs.color`, 20 caracteres): corto, ASCII, sin tildes. */
+    val clave: String,
+    /** Cómo se dice en pantalla. */
+    val rotulo: String,
+)
+
+/** La clave del color que toma una categoría que no se sabe pintar. */
+const val COLOR_DE_CATEGORIA_RESPALDO = "gris"
+
+/**
+ * Los diez colores que el dueño puede elegir para una categoría, **en el orden del selector**.
+ *
+ * Son claves y no colores porque el color depende del tema y la clave no: el dueño elige
+ * «naranja» una vez y lo ve naranja en los dos. Por eso lo que se guarda en el server es la clave.
+ */
+val COLORES_DEL_CATALOGO: List<ColorDelCatalogo> = listOf(
+    ColorDelCatalogo("naranja", "Naranja"),
+    ColorDelCatalogo("rojo", "Rojo"),
+    ColorDelCatalogo("rosa", "Rosa"),
+    ColorDelCatalogo("violeta", "Violeta"),
+    ColorDelCatalogo("azul", "Azul"),
+    ColorDelCatalogo("celeste", "Celeste"),
+    ColorDelCatalogo("verde", "Verde"),
+    ColorDelCatalogo("lima", "Lima"),
+    ColorDelCatalogo("ambar", "Ámbar"),
+    ColorDelCatalogo(COLOR_DE_CATEGORIA_RESPALDO, "Gris"),
+)
+
+/** ¿Es una clave de [COLORES_DEL_CATALOGO]? Una desconocida puede venir de una versión más nueva. */
+fun esColorDelCatalogo(clave: String?): Boolean = COLORES_DEL_CATALOGO.any { it.clave == clave }
+
+/**
+ * Los colores de las categorías en un tema.
+ *
+ * ### Pensados para un solo dibujo
+ *
+ * Un ícono pintado con el color, sobre un círculo **del mismo color con alfa bajo**
+ * ([alfaDelCirculo]), encima de la tarjeta o del fondo. Es el dibujo que usa `IconoDeCategoria`, y
+ * `ContrasteDeLosTokensTest` mide exactamente eso: el ícono contra la tarjeta, contra el fondo y
+ * contra el círculo ya compuesto sobre cada uno, en los dos temas, con el 3:1 que WCAG pide para
+ * gráficos que no son texto. Hoy el par más justo es el naranja del tema claro contra su círculo
+ * sobre el fondo (3,99:1): margen hay, pero no para aclarar ese naranja a ojo.
+ *
+ * ### No son colores de plata
+ *
+ * El verde de una categoría **no** es [ColoresDeMovi.entra], y el ámbar no es
+ * [ColoresDeMovi.aviso], aunque se parezcan: una categoría es un nombre, no un sentido del
+ * dinero. Están a propósito corridos de esos tokens, para que nadie tenga la tentación de usar uno
+ * por el otro.
+ *
+ * ### Por qué un `when` y no un mapa
+ *
+ * Diez campos con nombre hacen que olvidarse un color en un tema sea un error de compilación, no
+ * un gris que aparece en silencio. El `when` de [color] es la única traducción de clave a campo.
+ */
+@Immutable
+data class ColoresDeCategoria(
+    val naranja: Color,
+    val rojo: Color,
+    val rosa: Color,
+    val violeta: Color,
+    val azul: Color,
+    val celeste: Color,
+    val verde: Color,
+    val lima: Color,
+    val ambar: Color,
+    val gris: Color,
+    /**
+     * Cuánto del color lleva el círculo de detrás del ícono. Más alto en oscuro que en claro: el
+     * mismo 12 % que en blanco ya se nota, sobre `#161D25` casi no se ve.
+     */
+    val alfaDelCirculo: Float,
+) {
+    /** El color de una clave del catálogo. Una clave desconocida —o `null`— da [gris]. */
+    fun color(clave: String?): Color = when (clave) {
+        "naranja" -> naranja
+        "rojo" -> rojo
+        "rosa" -> rosa
+        "violeta" -> violeta
+        "azul" -> azul
+        "celeste" -> celeste
+        "verde" -> verde
+        "lima" -> lima
+        "ambar" -> ambar
+        else -> gris
+    }
+
+    /** El círculo de detrás del ícono: [color] con [alfaDelCirculo]. */
+    fun circulo(clave: String?): Color = color(clave).copy(alpha = alfaDelCirculo)
+}
+
+/** Claros y poco saturados: sobre la tarjeta oscura el más apagado da 6,76:1. */
+val CATEGORIAS_OSCURAS = ColoresDeCategoria(
+    naranja = Color(0xFFF2A365),
+    rojo    = Color(0xFFEF8585),
+    rosa    = Color(0xFFF09AC6),
+    violeta = Color(0xFFC3A2F2),
+    azul    = Color(0xFF80AEF0),
+    celeste = Color(0xFF6FCCE0),
+    verde   = Color(0xFF74CF98),
+    lima    = Color(0xFFB3D56E),
+    ambar   = Color(0xFFE5BC55),
+    gris    = Color(0xFFA2ACB7),
+    alfaDelCirculo = 0.18f,
+)
+
+/**
+ * Oscuros, porque el ícono va sobre blanco **y** sobre su círculo teñido: el círculo lo aclara
+ * todo un poco, así que un color que pasa raspando contra el blanco deja de pasar contra él. Lima
+ * y ámbar son los que más lo sienten — un lima o un ámbar «de verdad» no llega a 3:1 sobre blanco,
+ * y por eso acá son un oliva y un ocre.
+ */
+val CATEGORIAS_CLARAS = ColoresDeCategoria(
+    naranja = Color(0xFFA94E12),
+    rojo    = Color(0xFFB0302F),
+    rosa    = Color(0xFFA3346C),
+    violeta = Color(0xFF6A42B5),
+    azul    = Color(0xFF2059A8),
+    celeste = Color(0xFF0E6A80),
+    verde   = Color(0xFF1E7445),
+    lima    = Color(0xFF4B6614),
+    ambar   = Color(0xFF835A06),
+    gris    = Color(0xFF5A6571),
+    alfaDelCirculo = 0.12f,
 )
 
 /**
@@ -149,6 +297,7 @@ val COLORES_OSCUROS = ColoresDeMovi(
     aviso         = Color(0xFFE8C06A),
     entreCuentas  = Color(0xFF8FB8E8),
     neutro        = Color(0xFF4A5763),
+    categorias    = CATEGORIAS_OSCURAS,
 )
 
 /**
@@ -192,6 +341,7 @@ val COLORES_CLAROS = ColoresDeMovi(
     aviso         = Color(0xFF7F5D0F),
     entreCuentas  = Color(0xFF1F5B96),
     neutro        = Color(0xFF98A3AE),
+    categorias    = CATEGORIAS_CLARAS,
 )
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 package com.jvillada.movi.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -45,6 +46,10 @@ import kotlin.test.fail
  *   que el que reemplaza.
  * - **Bordes: 1,25:1** contra su fondo. Un borde que no se ve no separa nada, y en una paleta de
  *   poco contraste **la profundidad la dan la superficie y el borde juntos**, no la superficie sola.
+ * - **El ícono de una categoría: 3:1** — el mínimo de WCAG para gráficos que no son texto —
+ *   contra la tarjeta, contra el fondo y contra su propio círculo teñido ya compuesto sobre cada
+ *   uno. Al lado del ícono siempre va el nombre, así que el color nunca es la única pista; pero
+ *   un ícono que no se ve es ruido.
  */
 class ContrasteDeLosTokensTest {
 
@@ -86,6 +91,7 @@ class ContrasteDeLosTokensTest {
     private val TEXTO_AA = 4.5
     private val PLANOS_MINIMO = 1.15
     private val BORDE_MINIMO = 1.25
+    private val GRAFICO_AA = 3.0
 
     private val temas = listOf("oscuro" to COLORES_OSCUROS, "claro" to COLORES_CLAROS)
 
@@ -244,6 +250,61 @@ class ContrasteDeLosTokensTest {
                         "identidad y acción; nunca significa plata.",
                 )
             }
+        }
+    }
+
+    /**
+     * **El ícono de una categoría se ve sobre todo lo que puede tener detrás.**
+     *
+     * El dibujo es uno solo (ver `ColoresDeCategoria`): el ícono del color, sobre un círculo del
+     * mismo color con alfa bajo. El círculo se mide **ya compuesto** sobre la tarjeta y sobre el
+     * fondo, que es lo que llega a la pantalla — medir el color con alfa contra nada no mide nada.
+     *
+     * Se prueba contra los dos planos aunque el ícono viva casi siempre en una tarjeta: una fila de
+     * movimientos puede estar sobre el fondo, y en el tema claro el fondo es el plano más difícil
+     * (el círculo teñido lo acerca al ícono).
+     */
+    @Test
+    fun `el icono de cada categoria se ve sobre la tarjeta, el fondo y su circulo, en los dos temas`() {
+        val fallas = mutableListOf<String>()
+        for ((tema, c) in temas) {
+            for (opcion in COLORES_DEL_CATALOGO) {
+                val icono = c.categoria(opcion.clave)
+                for ((dondeNombre, donde) in listOf("tarjeta" to c.tarjeta, "fondo" to c.fondo)) {
+                    val circulo = c.circuloDeCategoria(opcion.clave).compositeOver(donde)
+                    for ((contraNombre, contra) in listOf(
+                        dondeNombre to donde,
+                        "su círculo sobre $dondeNombre" to circulo,
+                    )) {
+                        val r = contraste(icono, contra)
+                        if (r < GRAFICO_AA) {
+                            fallas += "  $tema · ícono «${opcion.clave}» contra $contraNombre: " +
+                                "${r.legible()}:1 (mínimo ${GRAFICO_AA.legible()})"
+                        }
+                    }
+                }
+            }
+        }
+        if (fallas.isNotEmpty()) {
+            fail("Hay colores de categoría que no se ven:\n" + fallas.joinToString("\n"))
+        }
+    }
+
+    /**
+     * Cada clave del catálogo tiene **su** color en cada tema: si dos claves dieran el mismo, el
+     * `when` de `ColoresDeCategoria.color` estaría mal cableado y el selector ofrecería diez
+     * círculos con uno repetido. Y una clave que no existe cae en gris, no en un color cualquiera.
+     */
+    @Test
+    fun `cada color de categoria es distinto y una clave desconocida da gris`() {
+        for ((tema, c) in temas) {
+            val colores = COLORES_DEL_CATALOGO.map { c.categoria(it.clave) }
+            assertTrue(
+                colores.toSet().size == COLORES_DEL_CATALOGO.size,
+                "En el tema $tema hay claves de color de categoría con el mismo color",
+            )
+            assertTrue(c.categoria("fucsia") == c.categorias.gris, "tema $tema: clave desconocida")
+            assertTrue(c.categoria(null) == c.categorias.gris, "tema $tema: sin clave")
         }
     }
 
