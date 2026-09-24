@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -168,6 +169,15 @@ class EstadoDelTableroDeRecurrentes internal constructor(
      * dato, una lectura caída se veía igual que una lenta — para siempre.
      */
     internal var recurrentesNoSePudieronLeer by mutableStateOf(false)
+
+    /**
+     * La primera lectura de lo que el tablero enumera —vencimientos y ocurrencias— todavía no
+     * contestó, ni bien ni mal. Es la misma condición con la que el checklist no se pinta (ver
+     * [SeccionChecklistDelPeriodo]); quien monta el tablero con esqueleto (la pestaña Plan) la usa
+     * para poner la forma en su lugar en vez de dos rótulos sueltos sin nada abajo.
+     */
+    val primeraLecturaEnCurso: Boolean
+        get() = !recurrentesNoSePudieronLeer && !(vencimientosOk && ocurrenciasOk)
     /**
      * Lo que el dueño rechazó con «no fue este», **mientras dure esta pantalla**. Las claves son
      * (regla, movimiento) — ver [claveDescartada].
@@ -862,6 +872,85 @@ fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes) {
 }
 
 /**
+ * **Lo que el tablero necesita cuando no lo monta Movimientos**: su propio aviso de error con
+ * «Reintentar», su propia recarga y los nombres de las cuentas. Movimientos le da los suyos (un
+ * solo aviso para toda la pantalla, las cuentas que ya lee para sus filas); montado solo —en
+ * [TableroDeRecurrentes] o en la pestaña Plan— los pone esto, una vez, para que ninguno de los dos
+ * lo copie.
+ *
+ * El aviso va en [aviso]: quien lo monta pone un `SnackbarHost` con ese estado donde le quede bien.
+ */
+@Stable
+class TableroMontadoSolo internal constructor(
+    val estado: EstadoDelTableroDeRecurrentes,
+    val aviso: SnackbarHostState,
+    cuentas: State<List<Account>>,
+) {
+    /** Para decir con qué se paga cada cobro. Vacío si la lectura falla: las filas no nombran la cuenta. */
+    val accountNames: Map<String, String> by derivedStateOf { cuentas.value.associate { it.id to it.name } }
+}
+
+/**
+ * Ver [TableroMontadoSolo].
+ *
+ * @param activo lo mismo que en [rememberEstadoDelTableroDeRecurrentes]: en Plan, si el segmento
+ *   «Pagos del mes» es el que se ve. Las cuentas tampoco se piden sin él.
+ */
+@Composable
+fun rememberTableroMontadoSolo(activo: Boolean = true): TableroMontadoSolo {
+    val error = remember { mutableStateOf<String?>(null) }
+    var recarga by remember { mutableStateOf(0) }
+    val estado = rememberEstadoDelTableroDeRecurrentes(activo = activo, recarga = recarga, error = error)
+    val refreshTick = LocalRefreshTick.current
+    val cuentas = remember { mutableStateOf<List<Account>>(emptyList()) }
+    LaunchedEffect(recarga, refreshTick, activo) {
+        if (!activo) return@LaunchedEffect
+        runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas.value = it }
+    }
+    val aviso = remember { SnackbarHostState() }
+    LaunchedEffect(error.value) {
+        val msg = error.value ?: return@LaunchedEffect
+        val result = aviso.showSnackbar(msg, actionLabel = "Reintentar")
+        error.value = null
+        if (result == SnackbarResult.ActionPerformed) recarga++
+    }
+    return remember(estado, aviso) { TableroMontadoSolo(estado, aviso, cuentas) }
+}
+
+/** Cada fila esqueleto del tablero, para contarlas sin depender de ningún texto. */
+const val TAG_ESQUELETO_DEL_TABLERO: String = "esqueleto-del-tablero"
+
+/**
+ * **El tablero mientras su primera lectura viaja** (ver
+ * [EstadoDelTableroDeRecurrentes.primeraLecturaEnCurso]): el rótulo y la tarjeta del checklist con
+ * cuatro filas, y los de «Próximos» con dos. Sin ningún título real: «Checklist del período» sobre
+ * una tarjeta vacía ya diría que hay (o que no hay) pagos.
+ *
+ * Mismos rellenos que las secciones reales (16 dp a los lados y abajo) y la fila de siempre
+ * ([FilaDeListaEsqueleto]). Lo pinta Plan; Movimientos sigue con su barra de carga.
+ */
+fun LazyListScope.tableroDeRecurrentesEsqueleto() {
+    listOf(4, 2).forEach { filas ->
+        item {
+            Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+                RotuloDeSeccionEsqueleto()
+                MinCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = MinCardVariant.Elevated,
+                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                ) {
+                    repeat(filas) { i ->
+                        Box(Modifier.testTag(TAG_ESQUELETO_DEL_TABLERO)) {
+                            FilaDeListaEsqueleto(isLast = i == filas - 1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * **El tablero entero, montado solo**: su scroll, su aviso de error con «Reintentar», sus hojas y
  * su propia lectura de cuentas. Siempre sobre el período en curso — el único del que
  * `/api/payments/upcoming` y `/api/payments/occurrences` saben contestar.
@@ -880,24 +969,9 @@ fun TableroDeRecurrentes(
     onNavigate: (Screen) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val error = remember { mutableStateOf<String?>(null) }
-    var recarga by remember { mutableStateOf(0) }
-    val estado = rememberEstadoDelTableroDeRecurrentes(activo = true, recarga = recarga, error = error)
-    val refreshTick = LocalRefreshTick.current
-    var cuentas by remember { mutableStateOf<List<Account>>(emptyList()) }
-    LaunchedEffect(recarga, refreshTick) {
-        runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
-    }
-    val accountNames = remember(cuentas) { cuentas.associate { it.id to it.name } }
+    val solo = rememberTableroMontadoSolo()
     val periodoDeHoy = remember(ajustesDelPeriodo) {
         periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
-    }
-    val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(error.value) {
-        val msg = error.value ?: return@LaunchedEffect
-        val result = snackbarHostState.showSnackbar(msg, actionLabel = "Reintentar")
-        error.value = null
-        if (result == SnackbarResult.ActionPerformed) recarga++
     }
 
     Box(modifier = modifier) {
@@ -907,19 +981,19 @@ fun TableroDeRecurrentes(
             contentPadding = PaddingValues(bottom = 60.dp),
         ) {
             tableroDeRecurrentes(
-                estado = estado,
+                estado = solo.estado,
                 periodoVisible = periodoDeHoy,
                 periodoDeHoy = periodoDeHoy,
                 ajustesDelPeriodo = ajustesDelPeriodo,
-                accountNames = accountNames,
+                accountNames = solo.accountNames,
                 onNavigate = onNavigate,
             )
         }
         SnackbarHost(
-            hostState = snackbarHostState,
+            hostState = solo.aviso,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
         )
-        HojasDelTableroDeRecurrentes(estado)
+        HojasDelTableroDeRecurrentes(solo.estado)
     }
 }
 
