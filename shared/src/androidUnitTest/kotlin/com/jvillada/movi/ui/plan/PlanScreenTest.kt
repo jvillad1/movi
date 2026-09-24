@@ -391,6 +391,26 @@ class PlanScreenTest {
         assertTrue(hay("Comida"))
     }
 
+    /**
+     * «¿De dónde sale?» no hace nada mientras la tarjeta es esqueleto: si el toque quedara
+     * guardado, la tarjeta llegaría ya abierta, más alta que su esqueleto, y empujaría todo.
+     */
+    @Test
+    fun `De donde sale no se abre mientras la tarjeta carga`() {
+        montar()
+        assertEquals(1, contarTag(TAG_ESQUELETO_DEL_DISPONIBLE))
+
+        composeRule.onNodeWithText("¿De dónde sale?", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        assertTrue(!hay("Ocultar"))
+
+        puerta.complete(Unit)
+        composeRule.waitForIdle()
+        assertTrue(hay("\$5M"))
+        assertTrue(hay("¿De dónde sale?"), "llega cerrada")
+        assertTrue(!hay("Ocultar"))
+    }
+
     /** Fix round 1: lo de antes, mientras se actualiza, no se hace pasar por lo de ahora. */
     @Test
     fun `con la instantanea del Inicio pinta la cifra y dice Actualizando mientras recarga`() {

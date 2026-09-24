@@ -107,12 +107,13 @@ internal fun TarjetaDelDisponible(
 
     Column(modifier = modifier.padding(horizontal = Movi.espacios.amplio)) {
         // El «¿De dónde sale?» está desde el primer cuadro, también cargando: es parte del alto del
-        // encabezado (su letra es más alta que la del rótulo). Tocarlo mientras carga no muestra
-        // nada todavía — no hay de dónde.
+        // encabezado (su letra es más alta que la del rótulo). Mientras carga no hace nada — no hay
+        // de dónde, y si el toque quedara guardado la tarjeta llegaría ya abierta y más alta que
+        // su esqueleto.
         MinSectionHeader(
             title = titulo,
             action = if (verDeDondeSale) "Ocultar" else "¿De dónde sale?",
-            onAction = { verDeDondeSale = !verDeDondeSale },
+            onAction = { if (disponible != null) verDeDondeSale = !verDeDondeSale },
         )
         MinCard(
             modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_DISPONIBLE),
