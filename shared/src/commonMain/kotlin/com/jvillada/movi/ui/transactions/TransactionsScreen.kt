@@ -421,6 +421,16 @@ const val TAG_ENCABEZADO_DE_DIA_ESQUELETO: String = "encabezado-de-dia-esqueleto
 const val TAG_ENCABEZADO_DE_DIA: String = "encabezado-de-dia"
 
 /**
+ * El tag de la línea del rango del período («Del 25 de agosto al 24 de septiembre…») mientras el
+ * perfil no contestó — Ola B, tarea 2. Reserva su lugar para que la línea real (o su ausencia, con
+ * corte 1) no empuje la lista de abajo al llegar el perfil.
+ */
+const val TAG_LINEA_DE_PERIODO_ESQUELETO: String = "linea-de-periodo-esqueleto"
+
+/** El tag de la línea del rango del período ya con el dato real — ver [TAG_LINEA_DE_PERIODO_ESQUELETO]. */
+const val TAG_LINEA_DE_PERIODO: String = "linea-de-periodo"
+
+/**
  * **Movimientos mientras carga, con la forma de Movimientos** (Ola B, tarea 9).
  *
  * Task 7 (ola A) puso UNA tarjeta de 6 filas sueltas. La pantalla real no es una lista: son varios
@@ -1008,6 +1018,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     var cutoffDay by remember { mutableStateOf(1) }
     /** Los períodos que el dueño declaró que arrancaron otro día. Ver `PeriodSettings.iniciosPropios`. */
     var iniciosPropios by remember { mutableStateOf(emptyMap<String, String>()) }
+    // Ola B, tarea 2: distingue «todavía no sabemos el corte» (`cutoffDay` en su default de 1) de
+    // «ya se leyó y de verdad es corte 1» — sin esto, la línea del rango (`rangoLegibleDe`)
+    // aparecía recién cuando el perfil contestaba y empujaba toda la lista de abajo. Se prende con
+    // éxito O con fallo del perfil: los dos son «ya sabemos qué mostrar».
+    var perfilLeido by remember { mutableStateOf(false) }
     /** Está en vuelo el guardado de un arranque propio. */
     var guardandoInicio by remember { mutableStateOf(false) }
     var errorDelInicio by remember { mutableStateOf<String?>(null) }
@@ -1070,6 +1085,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             // otro período con otro total. Se dice, con el mismo «Reintentar» de siempre; si
             // además fallan los movimientos, ese error (abajo) es el que manda.
             .onFailure { error = PERIODO_NO_LEIDO }
+        perfilLeido = true
         runCatching { Repositories.wallets.getEventsByDay() }
             .onSuccess {
                 allDays = it
@@ -1624,12 +1640,31 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                     )
-                    // Con corte 1 esto es `null` y no se pinta: no hay nada que aclarar sobre un
-                    // mes de calendario. Con cualquier otro corte es lo único que explica por qué
-                    // «septiembre» empieza en agosto.
-                    rangoLegibleDe(periodoVisible, ajustesDelPeriodo)?.let { rango ->
+                    // Ola B, tarea 2: mientras el perfil no contestó, un esqueleto reserva el
+                    // lugar de esta línea — sin él, aparecía recién cuando el perfil traía el
+                    // corte de verdad y empujaba toda la lista de abajo (el esqueleto de
+                    // Movimientos incluido). Con corte 1 (mes de calendario, ya confirmado) no
+                    // hay nada que aclarar y no se pinta nada, como siempre.
+                    if (!perfilLeido) {
                         Spacer(Modifier.height(2.dp))
-                        Text(text = rango, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+                        LineaEsqueleto(
+                            fraccionDelAncho = 0.5f,
+                            estilo = Movi.textos.apoyo,
+                            modifier = Modifier.testTag(TAG_LINEA_DE_PERIODO_ESQUELETO),
+                        )
+                    } else {
+                        // Con corte 1 esto es `null` y no se pinta: no hay nada que aclarar sobre
+                        // un mes de calendario. Con cualquier otro corte es lo único que explica
+                        // por qué «septiembre» empieza en agosto.
+                        rangoLegibleDe(periodoVisible, ajustesDelPeriodo)?.let { rango ->
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = rango,
+                                style = Movi.textos.apoyo,
+                                color = Movi.colores.textoApagado,
+                                modifier = Modifier.testTag(TAG_LINEA_DE_PERIODO),
+                            )
+                        }
                     }
                 }
                 val puedeAvanzar = puedeAvanzarDePeriodo(periodoVisible, periodoDeHoy)

@@ -160,6 +160,60 @@ class EsqueletoDeMovimientosTest {
     }
 
     /**
+     * **Ola B, tarea 2.** La línea del rango del período («Del 25 de agosto al 24 de
+     * septiembre…») aparecía recién cuando el perfil contestaba y empujaba toda la lista de
+     * abajo — el esqueleto de Movimientos incluido, aunque siguiera cargando. Con [puertaPerfil]
+     * colgada por separado de [puerta] (los eventos), se puede mirar el Y del primer grupo
+     * esqueleto ANTES de que el perfil conteste (con el esqueleto de la línea reservando su
+     * lugar) y compararlo contra el del primer día real una vez que los dos —perfil (corte 26,
+     * como el dueño) y eventos— contestaron.
+     */
+    @Test
+    fun `la linea del rango se reserva antes de que el perfil conteste`() {
+        val puertaPerfil = CompletableDeferred<UserProfile>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getUserProfile(): UserProfile = puertaPerfil.await()
+            override suspend fun getEventsByDay(): List<EventDay> = puerta.await()
+        }
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+        }
+        composeRule.waitForIdle()
+
+        val yEsqueleto = composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO, useUnmergedTree = true)
+            .onFirst().getUnclippedBoundsInRoot().top
+
+        puertaPerfil.complete(
+            UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "morado", periodCutoffDay = 26),
+        )
+        composeRule.waitForIdle()
+
+        val evento = FinancialEvent(
+            id = "e1",
+            accountId = "a1",
+            type = TransactionType.EXPENSE,
+            amount = 25_000L,
+            category = "Comida",
+            description = "Almuerzo",
+            timestamp = 1_758_326_400_000L, // 2026-09-20 00:00:00 UTC
+            reconciliationStatus = ReconciliationStatus.RECONCILED,
+        )
+        puerta.complete(listOf(EventDay(date = "2026-09-20", total = 25_000L, items = listOf(evento))))
+        composeRule.waitForIdle()
+
+        val yReal = composeRule.onNodeWithTag(TAG_ENCABEZADO_DE_DIA, useUnmergedTree = true)
+            .getUnclippedBoundsInRoot().top
+
+        val diferencia = abs(yReal.value - yEsqueleto.value)
+        assertTrue(
+            diferencia <= 2f,
+            "El primer grupo (con la línea del período todavía esqueleto) arrancaba en " +
+                "${yEsqueleto.value} dp y el primer día real, con la línea ya puesta, en " +
+                "${yReal.value} dp — diferencia de $diferencia dp, el máximo son 2 dp",
+        )
+    }
+
+    /**
      * Ola B, tarea 9: la tercera fase de la regla compartida con las demás listas —«vacío de
      * verdad solo con lista vacía»—. Una lectura que CONTESTA vacía (no colgada, no caída) tiene
      * que mostrar «Sin movimientos aún» sin ningún tag de esqueleto de por medio.
