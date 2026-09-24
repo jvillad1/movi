@@ -51,6 +51,9 @@ import com.jvillada.movi.ui.dashboard.pieDeLoYaPagado
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
 import com.jvillada.movi.ui.recurrentes.CasillaDeChecklist
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
+import com.jvillada.movi.ui.categorias.IconoDeCategoria
+import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
+import com.jvillada.movi.ui.categorias.colorDeCategoria
 
 /**
  * # Las secciones que convierten el Inicio en el resumen del período
@@ -127,9 +130,19 @@ internal fun GastoPorCategoriaSection(
 private fun FilaDeCategoria(categoria: CategoriaDelPeriodo, entrada: Float) {
     // El color se decide una vez acá y no dentro del Canvas de la barra: una lambda de dibujo no
     // puede leer un CompositionLocal.
-    val colorDeLaBarra = if (categoria.superada) Movi.colores.sale else Movi.colores.marca
+    //
+    // Task 3 (Ola B): la barra pasa del `marca` único de siempre al color propio de la categoría
+    // —el mismo que ya pinta su ícono— para que «Comida» se lea naranja acá igual que en
+    // Movimientos. Sobrepasada sigue siendo `sale`: ese rojo es un estado de alerta, no la
+    // identidad de la categoría, y no puede competir con ella. Los tonos de `CATEGORIAS_CLARAS`
+    // ya están medidos a 3:1 contra `tarjeta` y `fondo` (`ContrasteDeLosTokensTest`); `hilo`, la
+    // pista de la barra, es apenas un tono más oscuro que `fondo` en los dos temas, así que la
+    // misma medición vale para la pista sin agregar una nueva.
+    val colorDeLaBarra = if (categoria.superada) Movi.colores.sale else colorDeCategoria(categoria.nombre)
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            IconoDeCategoria(categoria.nombre, tamano = TamanoDeIconoDeCategoria.Chico)
+            Spacer(Modifier.size(Movi.espacios.minimo))
             Text(
                 text = categoria.nombre,
                 style = Movi.textos.cuerpo,

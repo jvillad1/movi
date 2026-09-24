@@ -108,6 +108,7 @@ import com.jvillada.movi.ui.recurrentes.hojaParaAnotar
 import com.jvillada.movi.ui.recurrentes.contextoDeCandidata
 import com.jvillada.movi.ui.recurrentes.contextoDeSuscripcionActiva
 import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
+import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.recurrentes.avisoDeCandidataDuplicada
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
@@ -395,6 +396,12 @@ const val CHIP_RECURRENTES = 5
  * cómo verificar que sigue ahí.
  */
 const val TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS: String = "barra-de-carga-de-movimientos"
+
+/**
+ * El tag de un renglón suelto de Movimientos (Task 3, Ola B): sin él, una prueba no tiene forma de
+ * medir el alto real del renglón para verificar que agregarle [IconoDeCategoria] no lo hizo crecer.
+ */
+const val TAG_FILA_DE_MOVIMIENTO_SUELTO: String = "fila-de-movimiento-suelto"
 
 /** Los rótulos de los chips, en el orden de sus índices. */
 val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes")
@@ -2348,6 +2355,11 @@ private fun TransferRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // Neutro a propósito: un traspaso (o la cuota / el pago de tarjeta que se ven con esta
+        // misma forma) no es una categoría del dueño, es plata que cambió de cuenta. Por eso el
+        // ícono es siempre el de TRANSFER_CATEGORY y no el de la categoría real de la pata —
+        // «Cuota de crédito» se vería violeta, como si fuera un gasto con carácter propio.
+        IconoDeCategoria(TRANSFER_CATEGORY)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = transferRowTitle(row, accountTypes),
@@ -2413,6 +2425,9 @@ private fun RenglonDeAjustes(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // Mismo criterio que TransferRow: un ajuste de saldo no es una categoría, es una
+        // corrección — el ícono es el neutro de ADJUSTMENT_CATEGORY, no el de ningún gasto.
+        IconoDeCategoria(ADJUSTMENT_CATEGORY)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = tituloDeLosAjustes(events),
@@ -2469,11 +2484,15 @@ private fun MovementSingleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(TAG_FILA_DE_MOVIMIENTO_SUELTO)
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // El ícono de la categoría — la apertura, el ajuste y la pata huérfana ya resuelven a un
+        // ícono neutro por su nombre (ver `aparienciaDe`), así que acá no hace falta distinguir.
+        IconoDeCategoria(tx.category)
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

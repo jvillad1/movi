@@ -10,7 +10,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -67,6 +66,8 @@ import com.jvillada.movi.ui.recurrentes.puedeOfrecerseComoRecurrenteDesdeElDetal
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.time.epochMillisToAppDate
+import com.jvillada.movi.ui.categorias.IconoDeCategoria
+import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 
 /**
  * Mismo armazón visual que [com.jvillada.movi.ui.credits.CreditBalanceSheet]: fondo oscuro
@@ -131,10 +132,10 @@ private fun CategoryRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // Ola 2 #5 (F11): el catálogo solo trae un emoji por categoría (Category.icon) — en la
-        // web sale como ▯. No hay un mapa a íconos Material por categoría, así que se usa uno
-        // genérico y uniforme en vez de intentar mapear 15+ emojis uno a uno.
-        Icon(Icons.AutoMirrored.Rounded.Label, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(18.dp))
+        // Task 3 (Ola B): reemplaza el ícono genérico de etiqueta por el de la categoría —
+        // resuelto por `aparienciaDe`, el mismo que ya pinta Movimientos y el Inicio — así que la
+        // fila de «la categoría actual» y cada opción de la lista se ven con su propio ícono.
+        IconoDeCategoria(name, tamano = TamanoDeIconoDeCategoria.Chico)
         Column(modifier = Modifier.weight(1f)) {
             Text(name, style = Movi.textos.titulo, color = Movi.colores.texto)
             if (subtitle != null) {

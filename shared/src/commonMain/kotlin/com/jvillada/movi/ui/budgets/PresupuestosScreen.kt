@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -53,6 +54,8 @@ import com.jvillada.movi.shared.model.EstadoDePresupuesto
 import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.FinancialEvent
 import androidx.compose.runtime.rememberCoroutineScope
+import com.jvillada.movi.ui.categorias.IconoDeCategoria
+import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 
 /** `internal` y no `private` para poder probar [estadoDelPresupuesto] — ver EstadoDelPresupuestoTest. */
 internal data class BudgetProgress(
@@ -530,13 +533,24 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = p.budget.category,
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-                letterSpacing = (-0.1).sp,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+                modifier = Modifier.weight(1f, fill = false),
+            ) {
+                // Task 3 (Ola B): el ícono de la categoría, chico — el mismo que ya identifica a
+                // «Comida» en Movimientos y en el Inicio, acá junto a su nombre.
+                IconoDeCategoria(p.budget.category, tamano = TamanoDeIconoDeCategoria.Chico)
+                Text(
+                    text = p.budget.category,
+                    style = Movi.textos.titulo,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.texto,
+                    letterSpacing = (-0.1).sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             // F15: el chevron es lo que insinúa que la tarjeta se toca — mismo ícono que usa la
             // guía de primeros pasos del Inicio (ver ChevronRight).
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
