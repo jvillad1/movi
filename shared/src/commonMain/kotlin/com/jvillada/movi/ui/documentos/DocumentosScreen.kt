@@ -277,17 +277,32 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     modifier = Modifier.padding(horizontal = 16.dp).padding(top = 14.dp),
                 )
 
-                lista.isEmpty() -> Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        text = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel " +
-                            "que quieras tener a mano. Los extractos que importes se archivan solos.",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.textoMedio,
-                        lineHeight = 18.sp,
+                // Revisión final de la ola: sin documentos, «Importaciones» TAMBIÉN se pinta. Es el
+                // único camino a «Deshacer importación», y el caso típico de llegar acá sin
+                // documentos es justamente haber borrado los PDF de una importación que salió mal:
+                // esconderla ahí dejaba esa importación sin forma de deshacerse. Y un solo «Subir
+                // archivo» — el del encabezado, que está desde el primer cuadro; el segundo botón
+                // a lo ancho decía lo mismo dos veces en la misma pantalla.
+                lista.isEmpty() -> Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            text = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel " +
+                                "que quieras tener a mano. Los extractos que importes se archivan solos.",
+                            style = Movi.textos.cuerpo,
+                            color = Movi.colores.textoMedio,
+                            lineHeight = 18.sp,
+                        )
+                    }
+                    SeccionDeImportaciones(
+                        error = importsError,
+                        imports = imports,
+                        onReintentar = { refreshKey++ },
+                        onAbrir = { onNavigate(Screen.ImportDetail(it.id)) },
+                        modifier = Modifier.padding(top = 18.dp, bottom = 80.dp),
                     )
-                    Spacer(Modifier.height(16.dp))
-                    NewItemButton(label = "Subir archivo", onClick = elegirArchivo, full = true)
                 }
 
                 else -> LazyColumn(
@@ -317,49 +332,23 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     }
 
                     // Ola B, tarea 7: la sección «Importaciones» que se mudó acá desde Extractos,
-                    // debajo de la lista de documentos. Fix round 1: una lectura que falla se
-                    // DICE (con reintento) — ocultar la sección en silencio afirmaría «no hay
-                    // importaciones» sobre un historial que en realidad no se pudo leer. Un
-                    // historial vacío SIN error, en cambio, de verdad no merece encabezado
-                    // propio, misma regla que el resto de esta pantalla (ver `porTipo`).
+                    // debajo de la lista de documentos. Ver [SeccionDeImportaciones].
                     //
                     // Fix round 2: `errorDeImports` se captura ACÁ, fuera del `item { }`. El
                     // contenido de un `item` es un lambda que Compose guarda y ejecuta después —
-                    // leer `importsError!!` ADENTRO de ese lambda apostaba a que el estado
-                    // mutable siguiera sin cambiar entre el `when` de arriba y esa ejecución
-                    // diferida; tocar «Reintentar» lo pone en `null` antes de que ese `item` se
-                    // descarte, y ese `!!` explota. Un `val` local es un valor fijo de ESTA
-                    // composición, no una referencia viva al estado.
+                    // leer el estado mutable ADENTRO de ese lambda apostaba a que siguiera sin
+                    // cambiar entre esta composición y esa ejecución diferida. Un `val` local es
+                    // un valor fijo de ESTA composición, no una referencia viva al estado.
                     val errorDeImports = importsError
-                    when {
-                        errorDeImports != null -> item(key = "importaciones-error") {
-                            Column(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 4.dp)) {
-                                NoSePudoLeer(
-                                    errorDeImports,
-                                    onReintentar = { refreshKey++ },
-                                )
-                            }
-                        }
-                        imports.isNotEmpty() -> {
-                            item(key = "encabezado-importaciones") {
-                                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                    MinSectionHeader(title = "Importaciones", count = imports.size)
-                                }
-                            }
-                            item(key = "lista-importaciones") {
-                                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                    MinCard(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        variant = MinCardVariant.Elevated,
-                                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                                    ) {
-                                        imports.forEachIndexed { i, imp ->
-                                            ImportCard(imp) { onNavigate(Screen.ImportDetail(imp.id)) }
-                                            if (i < imports.size - 1) Hairline()
-                                        }
-                                    }
-                                }
-                            }
+                    val importsAhora = imports
+                    if (errorDeImports != null || importsAhora.isNotEmpty()) {
+                        item(key = "importaciones") {
+                            SeccionDeImportaciones(
+                                error = errorDeImports,
+                                imports = importsAhora,
+                                onReintentar = { refreshKey++ },
+                                onAbrir = { onNavigate(Screen.ImportDetail(it.id)) },
+                            )
                         }
                     }
                 }
@@ -395,6 +384,43 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 onCancelar = { aBorrar = null },
                 onConfirmar = { borrar(doc) },
             )
+        }
+    }
+}
+
+/**
+ * La sección **«Importaciones»** (Ola B, tarea 7: se mudó acá desde Extractos). Se pinta igual con
+ * documentos o sin ellos — ver el vacío de [DocumentosScreen].
+ *
+ * Fix round 1: una lectura que falla se DICE (con reintento) — ocultar la sección en silencio
+ * afirmaría «no hay importaciones» sobre un historial que en realidad no se pudo leer. Un
+ * historial vacío SIN error, en cambio, de verdad no merece encabezado propio, misma regla que el
+ * resto de esta pantalla (ver `porTipo`): no pinta nada.
+ */
+@Composable
+private fun SeccionDeImportaciones(
+    error: String?,
+    imports: List<StatementImport>,
+    onReintentar: () -> Unit,
+    onAbrir: (StatementImport) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when {
+        error != null -> Column(modifier = modifier.padding(horizontal = 16.dp).padding(top = 4.dp)) {
+            NoSePudoLeer(error, onReintentar = onReintentar)
+        }
+        imports.isNotEmpty() -> Column(modifier = modifier.padding(horizontal = 16.dp)) {
+            MinSectionHeader(title = "Importaciones", count = imports.size)
+            MinCard(
+                modifier = Modifier.fillMaxWidth(),
+                variant = MinCardVariant.Elevated,
+                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+            ) {
+                imports.forEachIndexed { i, imp ->
+                    ImportCard(imp) { onAbrir(imp) }
+                    if (i < imports.size - 1) Hairline()
+                }
+            }
         }
     }
 }

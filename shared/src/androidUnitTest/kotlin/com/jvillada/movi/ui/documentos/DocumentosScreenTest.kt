@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasAnyChild
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -209,5 +210,44 @@ class DocumentosScreenTest {
         // mostrar la lista que sí llegó.
         composeRule.onAllNodesWithText("No pude cargar el historial de importaciones", useUnmergedTree = true)
             .fetchSemanticsNodes().let { assertTrue(it.isEmpty()) }
+    }
+
+    // ── Revisión final: sin documentos, «Importaciones» sigue ahí ─────────────────────────────
+
+    private inner class SinDocumentosConUnaImportacion : RepositorioDePrueba() {
+        override suspend fun getDocuments(): List<Documento> = emptyList()
+        override suspend fun getAccounts(): List<Account> = emptyList()
+        override suspend fun getStatementImports(): List<StatementImport> = listOf(
+            StatementImport(
+                id = "imp1", accountId = "acc1", bankName = "Bancolombia",
+                period = "agosto 2026", importedAt = 0L, importedCount = 3, reconciledCount = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun `sin documentos, la seccion Importaciones y su fila se muestran y llevan al detalle`() {
+        // Borrar los PDF de una importación que salió mal es el caso típico de quedar sin
+        // documentos — y «Importaciones» es el único camino a «Deshacer importación».
+        montarConRepo(SinDocumentosConUnaImportacion())
+        esperarTexto("Aquí se guardan tus extractos")
+        esperarTexto("IMPORTACIONES")
+        esperarTexto("BANCOLOMBIA")
+
+        composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText("BANCOLOMBIA", substring = true)), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertEquals(Screen.ImportDetail("imp1"), navegado.single())
+    }
+
+    @Test
+    fun `sin documentos hay un solo Subir archivo, el del encabezado`() {
+        montarConRepo(SinDocumentosConUnaImportacion())
+        esperarTexto("Aquí se guardan tus extractos")
+        assertEquals(
+            1,
+            composeRule.onAllNodesWithText("Subir archivo", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().size,
+        )
     }
 }
