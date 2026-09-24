@@ -164,6 +164,11 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
     // tenía que volver a escribir el nombre. Mismo criterio que presupuestos, metas y recurrentes.
     var errorDeHoja by remember { mutableStateOf<String?>(null) }
     var guardandoHoja by remember { mutableStateOf(false) }
+    // Revisión final de la Ola B: lo mismo que `guardandoHoja`, para los toques de la hoja de
+    // detalle (ícono, color, tipo). El server guarda la preferencia borrando e insertando la fila;
+    // dos toques rápidos mandaban dos de esas en paralelo, y la segunda chocaba con la llave
+    // primaria de la primera — un 500 que el dueño leía como «no se guardó».
+    var guardandoPrefs by remember { mutableStateOf(false) }
     // Ver [NoSePudoLeer]: «0 categorías · Nada por aquí todavía» solo si la lectura contestó.
     var leidas by remember { mutableStateOf(false) }
 
@@ -368,6 +373,8 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     }
                 },
                 onFijarTipo = { tipo ->
+                    if (guardandoPrefs) return@HojaDetalle
+                    guardandoPrefs = true
                     scope.launch {
                         runCatching {
                             Repositories.wallets.setCategoryPrefs(h.categoria.name, h.categoria.hidden, tipo)
@@ -384,12 +391,15 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                                 categorias.firstOrNull { c -> c.name == h.categoria.name } ?: h.categoria,
                             )
                         }.onFailure { error = it.toUserMessage(); confirmacion = null; hoja = null }
+                        guardandoPrefs = false
                     }
                 },
                 // Ola B · tarea 5: elegir ícono/color, o «Volver al de Movi» (que manda `""` en
                 // los dos campos). Mismo criterio que `onFijarTipo`: la hoja se queda abierta con
                 // el dato fresco, así el dueño ve el cambio sin tener que reabrir nada.
                 onCambiarApariencia = { icono, color ->
+                    if (guardandoPrefs) return@HojaDetalle
+                    guardandoPrefs = true
                     scope.launch {
                         runCatching {
                             Repositories.wallets.setCategoryPrefs(
@@ -405,6 +415,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                                 categorias.firstOrNull { c -> c.name == h.categoria.name } ?: h.categoria,
                             )
                         }.onFailure { error = it.toUserMessage(); confirmacion = null; hoja = null }
+                        guardandoPrefs = false
                     }
                 },
             )

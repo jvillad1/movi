@@ -19,6 +19,7 @@ import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.theme.MoviTheme
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -140,5 +141,52 @@ class ElegirIconoYColorEnLaHojaTest {
         tocar("Volver al de Movi")
         composeRule.waitUntil(5_000) { llamadas.size == 3 }
         assertEquals(Triple("", "", false), llamadas[2])
+    }
+
+    /**
+     * Revisión final de la Ola B: el server guarda la preferencia borrando e insertando la fila, así
+     * que dos guardados en paralelo chocaban en la llave primaria (500). Mientras el primero está
+     * en vuelo, un segundo toque —otro ícono, un color— se ignora.
+     */
+    @Test
+    fun `un segundo toque mientras se guarda el primero se ignora`() {
+        val puerta = CompletableDeferred<Unit>()
+        val llamadas = mutableListOf<Pair<String?, String?>>()
+        val mercado = CategoryUsage(name = "Mercado", movements = 2)
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getCategories(): List<CategoryUsage> = listOf(mercado)
+            override suspend fun setCategoryPrefs(
+                name: String,
+                hidden: Boolean,
+                pinnedType: String?,
+                icono: String?,
+                color: String?,
+            ): CategoryUsage {
+                llamadas += icono to color
+                puerta.await()
+                return mercado.copy(icono = icono ?: mercado.icono, color = color ?: mercado.color)
+            }
+        }
+        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { CategoriasScreen(onNavigate = {}) } } }
+        composeRule.waitUntil(5_000) { hay("Mercado") }
+        tocar("Mercado")
+        composeRule.waitUntil(5_000) { hay("ÍCONO") }
+
+        tocar("Restaurante")
+        composeRule.waitUntil(5_000) { llamadas.size == 1 }
+        // El primero sigue en vuelo: ni otro ícono ni un color salen hacia el server.
+        tocar("Restaurante")
+        composeRule.onNodeWithTag(tagDeColorDelCatalogo("violeta"), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertEquals(listOf<Pair<String?, String?>>("restaurante" to null), llamadas)
+
+        // Cuando contesta, la hoja vuelve a aceptar toques.
+        puerta.complete(Unit)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(tagDeColorDelCatalogo("violeta"), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { llamadas.size == 2 }
+        assertEquals(null to "violeta", llamadas[1])
     }
 }
