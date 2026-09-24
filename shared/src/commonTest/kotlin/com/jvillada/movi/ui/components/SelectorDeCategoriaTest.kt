@@ -163,6 +163,33 @@ class SelectorDeCategoriaTest {
         assertEquals(1, columnasDeLaCuadricula(10.dp, espacio)) // nunca cero columnas
     }
 
+    // ── El rótulo que no corta una palabra a la mitad (Ola B, tarea 4) ────────
+
+    @Test
+    fun `las palabras de un rotulo de una sola palabra es una lista de una`() {
+        assertEquals(listOf("Entretenimiento"), palabrasDe("Entretenimiento"))
+    }
+
+    @Test
+    fun `las palabras de un rotulo con varias palabras son todas, en orden`() {
+        assertEquals(listOf("Restaurantes", "y", "domicilios"), palabrasDe("Restaurantes y domicilios"))
+    }
+
+    @Test
+    fun `modo normal cuando la palabra mas larga entra al tamano de siempre`() {
+        assertEquals(ModoDelRotulo.NORMAL, modoDelRotulo(anchoDePalabra = 60f, anchoDisponible = 80f))
+    }
+
+    @Test
+    fun `modo achicado cuando la palabra mas larga no entra al tamano de siempre`() {
+        assertEquals(ModoDelRotulo.ACHICADO, modoDelRotulo(anchoDePalabra = 100f, anchoDisponible = 80f))
+    }
+
+    @Test
+    fun `modo normal en el borde exacto (entra justo)`() {
+        assertEquals(ModoDelRotulo.NORMAL, modoDelRotulo(anchoDePalabra = 80f, anchoDisponible = 80f))
+    }
+
     // ── La celda marcada (revisión final de la Ola B) ─────────────────────────
 
     @Test

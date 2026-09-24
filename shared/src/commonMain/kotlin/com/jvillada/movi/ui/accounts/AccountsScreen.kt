@@ -28,7 +28,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.FormaDeCuentas
+import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -74,6 +77,9 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     // `accountsLoaded` en la hoja de Agregar.
 
     val snackbarHostState = remember { SnackbarHostState() }
+    // La forma de la última carga que salió bien (ver `FormaRecordada`): el esqueleto la copia.
+    // Se lee una vez, al montar.
+    val formaRecordada = remember { FormaRecordada.delAparato.cuentas(SessionManager.userId) }
 
     // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
     // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
@@ -83,7 +89,10 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
         loading = true
         error = null
         runCatching { Repositories.wallets.getAccounts() }
-            .onSuccess { accounts = it }
+            .onSuccess {
+                accounts = it
+                FormaRecordada.delAparato.guardarCuentas(SessionManager.userId, formaDeCuentas(it))
+            }
             .onFailure { e -> error = e.toUserMessage() }
         loading = false
     }
@@ -133,7 +142,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     // Ola B: la forma REAL de la pantalla, no filas sueltas. Solo mientras la
                     // lectura no contestó nunca — con algo ya pintado, la barra de arriba basta y
                     // esta lista sigue mostrando lo que ya tenía. Ver [cuentasEsqueleto].
-                    cuentasEsqueleto()
+                    cuentasEsqueleto(formaRecordada)
                 } else if (cuentas == null) {
                     // No se pudo leer y no hay nada que mostrar: se dice eso, y nada más. El
                     // botón acá sería «Reintentar», no «Crear primera cuenta» — proponer crear
@@ -275,10 +284,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     // subtotal (Dinero e Inversión, según AccountGroup). Las deudas viven en
                     // Créditos, así que acá no se listan (aunque sigan sumando en el
                     // patrimonio neto de arriba).
-                    val dinero = cuentas.filter { it.type.group == AccountGroup.DINERO }
-                    // Un bien viaja como INVESTMENT (ver `Bien` en :core) pero no es una inversión:
-                    // tiene su propia sección, abajo, con su valor y la fecha del avalúo.
-                    val inversion = cuentas.filter { it.type.group == AccountGroup.INVERSION && !it.esBien }
+                    val dinero = cuentasDeDinero(cuentas)
+                    val inversion = cuentasDeInversion(cuentas)
                     val bienes = bienesDe(cuentas)
 
                     item { AccountsGroup(title = "Dinero", accounts = dinero, onNavigate = onNavigate) }
@@ -570,7 +577,7 @@ private fun AccountsGroup(
     accounts: List<Account>,
     onNavigate: (Screen) -> Unit,
 ) {
-    Column {
+    Column(Modifier.testTag(TAG_GRUPO_DE_CUENTAS)) {
         // Mismo lenguaje que MinSectionHeader (rótulo en mayúsculas + conteo), con el subtotal
         // del grupo a la derecha en mono — no es una acción, así que no va en Movi.colores.marca.
         Row(
@@ -642,6 +649,7 @@ private fun AccountsGroup(
                     isLast = index == accounts.size - 1,
                     showChevron = true,
                     onClick = { onNavigate(Screen.AccountDetail(account.id, account.type.group)) },
+                    modifier = Modifier.testTag(TAG_FILA_DE_CUENTA),
                 )
             }
         }
@@ -665,8 +673,50 @@ const val TAG_TARJETA_DEL_PATRIMONIO: String = "tarjeta-del-patrimonio"
 /** La cifra esqueleto del patrimonio neto — está solo mientras carga. */
 const val TAG_ESQUELETO_DEL_PATRIMONIO: String = "esqueleto-del-patrimonio"
 
-/** Las filas esqueleto del grupo de cuentas que todavía no llegó. */
+/** Las filas esqueleto del grupo de cuentas cuando no hay forma recordada (la primera vez). */
 private const val FILAS_DEL_GRUPO_ESQUELETO = 4
+
+/** Tope de filas esqueleto por grupo: más no caben en ninguna pantalla, y todas se componen. */
+private const val MAX_FILAS_DEL_GRUPO_ESQUELETO = 12
+
+/** Cada grupo de cuentas («Dinero», «Inversión»), cargando o cargado: el mismo tag en los dos. */
+const val TAG_GRUPO_DE_CUENTAS: String = "grupo-de-cuentas"
+
+/**
+ * Cada fila de cuenta real, para medirla contra `FilaDeListaEsqueleto(conIcono = true)` — Ola B,
+ * tarea 2: la fila real medía más alto que la esqueleto y la lista bajaba un poco al llegar los
+ * datos. Antes de `clickable`/`padding`, como pide la convención de medir posiciones.
+ */
+const val TAG_FILA_DE_CUENTA: String = "fila-de-cuenta"
+
+/** Las cuentas del grupo «Dinero». */
+internal fun cuentasDeDinero(cuentas: List<Account>): List<Account> =
+    cuentas.filter { it.type.group == AccountGroup.DINERO }
+
+/**
+ * Las cuentas del grupo «Inversión». Un bien viaja como INVESTMENT (ver `Bien` en :core) pero no es
+ * una inversión: tiene su propia sección, abajo, con su valor y la fecha del avalúo.
+ */
+internal fun cuentasDeInversion(cuentas: List<Account>): List<Account> =
+    cuentas.filter { it.type.group == AccountGroup.INVERSION && !it.esBien }
+
+/**
+ * **La forma de Cuentas que se recuerda** (ver `FormaRecordada`): cuántos renglones de desglose
+ * tiene la tarjeta del patrimonio —con las mismas condiciones que la tarjeta real: tu plata
+ * siempre, lo condicionado, los bienes y las deudas si hay— y cuántas cuentas tiene cada grupo.
+ * Solo números: ni un saldo ni un nombre.
+ */
+internal fun formaDeCuentas(cuentas: List<Account>): FormaDeCuentas {
+    val balance = heroBalance(cuentas)
+    val renglones = 1 +
+        (if (balance.condicionado > 0L) 1 else 0) +
+        (if (balance.bienes > 0L) 1 else 0) +
+        (if (balance.deudas > 0) 1 else 0)
+    return FormaDeCuentas(
+        renglonesDelPatrimonio = renglones,
+        filasPorGrupo = listOf(cuentasDeDinero(cuentas).size, cuentasDeInversion(cuentas).size),
+    )
+}
 
 /**
  * **Cuentas mientras carga, con la forma de Cuentas.**
@@ -677,12 +727,17 @@ private const val FILAS_DEL_GRUPO_ESQUELETO = 4
  * («DINERO · 5 · $20,9M») de filas con ícono. Así que al llegar, las filas sueltas se convertían en
  * una tarjeta alta que empujaba todo hacia abajo — el salto que el dueño vio en su Pixel.
  *
- * Esto copia la tarjeta real (mismos rellenos, la cifra con el alto de `Movi.textos.cifra`, cuatro
- * renglones de apoyo a 4 dp) y un grupo con su encabezado y [FILAS_DEL_GRUPO_ESQUELETO] filas con
- * ícono. Reserva los cuatro renglones porque es el caso del dueño; quien no tiene bienes ni deudas
- * ve la tarjeta encoger un poco al llegar, nunca crecer.
+ * Esto copia la tarjeta real (mismos rellenos, la cifra con el alto de `Movi.textos.cifra`, los
+ * renglones de apoyo a 4 dp) y los grupos, cada uno con su encabezado y sus filas con ícono.
+ *
+ * **Con [forma]** (la última carga que salió bien en este aparato, ver `FormaRecordada`) reserva
+ * los renglones del patrimonio y los grupos con la cantidad de filas que tenían. **Sin ella** —la
+ * primera vez— cuatro renglones (el caso del dueño: quien no tiene bienes ni deudas ve la tarjeta
+ * encoger un poco al llegar, nunca crecer) y un grupo de [FILAS_DEL_GRUPO_ESQUELETO] filas.
  */
-private fun LazyListScope.cuentasEsqueleto() {
+private fun LazyListScope.cuentasEsqueleto(forma: FormaDeCuentas?) {
+    val renglones = forma?.renglonesDelPatrimonio ?: 4
+    val grupos = forma?.filasPorGrupo ?: listOf(FILAS_DEL_GRUPO_ESQUELETO)
     item {
         MinCard(
             modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_PATRIMONIO),
@@ -697,7 +752,7 @@ private fun LazyListScope.cuentasEsqueleto() {
                 modifier = Modifier.testTag(TAG_ESQUELETO_DEL_PATRIMONIO),
             )
             Spacer(Modifier.height(12.dp))
-            repeat(4) { i ->
+            repeat(renglones) { i ->
                 if (i > 0) Spacer(Modifier.height(4.dp))
                 RenglonConCifraEsqueleto(
                     fraccionDelRotulo = 0.3f,
@@ -708,19 +763,33 @@ private fun LazyListScope.cuentasEsqueleto() {
         }
         Spacer(Modifier.height(20.dp))
     }
-    item {
-        Column {
-            // El encabezado de [AccountsGroup]: 8 dp a los lados, 12 abajo, rótulo y subtotal en apoyo.
-            Box(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 12.dp)) {
-                RenglonConCifraEsqueleto(fraccionDelRotulo = 0.3f, anchoDeLaCifra = 72.dp, estiloDeLaCifra = Movi.textos.apoyo)
-            }
-            MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-            ) {
-                repeat(FILAS_DEL_GRUPO_ESQUELETO) { i ->
-                    FilaDeListaEsqueleto(isLast = i == FILAS_DEL_GRUPO_ESQUELETO - 1, conIcono = true)
+    grupos.forEachIndexed { g, filasDelGrupo ->
+        val filas = filasDelGrupo.coerceAtMost(MAX_FILAS_DEL_GRUPO_ESQUELETO)
+        item {
+            // Los 20 dp que [AccountsScreen] pone antes del segundo grupo.
+            if (g > 0) Spacer(Modifier.height(20.dp))
+            Column(Modifier.testTag(TAG_GRUPO_DE_CUENTAS)) {
+                // El encabezado de [AccountsGroup]: 8 dp a los lados, 12 abajo, rótulo y subtotal en apoyo.
+                Box(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 12.dp)) {
+                    RenglonConCifraEsqueleto(fraccionDelRotulo = 0.3f, anchoDeLaCifra = 72.dp, estiloDeLaCifra = Movi.textos.apoyo)
+                }
+                MinCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = MinCardVariant.Elevated,
+                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                ) {
+                    if (filas == 0) {
+                        // El «Sin cuentas de … aún» de un grupo vacío: un renglón de cuerpo con 14 dp
+                        // arriba y abajo.
+                        LineaEsqueleto(
+                            fraccionDelAncho = 0.5f,
+                            estilo = Movi.textos.cuerpo,
+                            modifier = Modifier.padding(vertical = 14.dp),
+                        )
+                    }
+                    repeat(filas) { i ->
+                        FilaDeListaEsqueleto(isLast = i == filas - 1, conIcono = true)
+                    }
                 }
             }
         }

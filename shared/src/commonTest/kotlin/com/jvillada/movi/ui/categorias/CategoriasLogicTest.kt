@@ -261,6 +261,46 @@ class CategoriasLogicTest {
         assertTrue(aviso.contains("No se borra nada"), aviso)
     }
 
+    /**
+     * Ola B, tarea 2: con UNA sola cosa en singular («1 movimiento», «su presupuesto» a secas o
+     * «1 recurrente») el verbo tiene que concordar — «pasa», no «pasan».
+     */
+    @Test
+    fun `el aviso de unificar concuerda en singular con un solo movimiento`() {
+        val aviso = avisoDeUnificacion(cat("Trasnporte", movements = 1), cat("Transporte", scope = CategoryScope.PREDEFINED))
+        assertTrue(aviso.contains("1 movimiento de «Trasnporte» pasa a decir"), aviso)
+        assertFalse(aviso.contains("pasan"), aviso)
+    }
+
+    @Test
+    fun `el aviso de unificar concuerda en singular con un solo presupuesto y nada mas`() {
+        val aviso = avisoDeUnificacion(cat("Trasnporte", budgets = 1), cat("Transporte", scope = CategoryScope.PREDEFINED))
+        assertTrue(aviso.contains("su presupuesto de «Trasnporte» pasa a decir"), aviso)
+        assertFalse(aviso.contains("pasan"), aviso)
+    }
+
+    @Test
+    fun `el aviso de unificar concuerda en singular con un solo recurrente`() {
+        val aviso = avisoDeUnificacion(cat("Trasnporte", recurringRules = 1), cat("Transporte", scope = CategoryScope.PREDEFINED))
+        assertTrue(aviso.contains("1 recurrente de «Trasnporte» pasa a decir"), aviso)
+        assertFalse(aviso.contains("pasan"), aviso)
+    }
+
+    @Test
+    fun `el aviso de unificar concuerda en plural con varios movimientos`() {
+        val aviso = avisoDeUnificacion(cat("Trasnporte", movements = 3), cat("Transporte", scope = CategoryScope.PREDEFINED))
+        assertTrue(aviso.contains("3 movimientos de «Trasnporte» pasan a decir"), aviso)
+    }
+
+    @Test
+    fun `el aviso de unificar concuerda en plural cuando hay mas de una cosa, aunque cada una sea singular`() {
+        val aviso = avisoDeUnificacion(
+            cat("Trasnporte", movements = 1, recurringRules = 1),
+            cat("Transporte", scope = CategoryScope.PREDEFINED),
+        )
+        assertTrue(aviso.contains("1 movimiento, 1 recurrente de «Trasnporte» pasan a decir"), aviso)
+    }
+
     @Test
     fun `si las dos tienen presupuesto, el aviso lo dice ANTES y avisa que no se deshace`() {
         // La suma de los dos límites es lo único de la operación que no es «el mismo dato con

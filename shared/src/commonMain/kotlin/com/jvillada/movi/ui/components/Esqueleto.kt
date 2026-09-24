@@ -260,8 +260,18 @@ fun FilaDeListaEsqueleto(isLast: Boolean = false, conIcono: Boolean = false, dia
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 14.dp)
-                .testTag(TAG_FILA_DE_LISTA_ESQUELETO),
+                // Ola B, tarea 2: el tag va ANTES del `padding` — mismo lugar en la cadena que
+                // `TAG_FILA_DE_CUENTA` en la fila real de `CardRow` (y que `TAG_FILA_DE_DOCUMENTO`
+                // en `FilaDeDocumento`), para que los dos midan el mismo punto (el borde exterior
+                // de la fila, relleno incluido) en vez de que uno mida adentro del relleno y el
+                // otro no. La fila real y la esqueleto siempre midieron lo mismo visualmente — lo
+                // que estaba mal era el PUNTO de medición: con el tag después del `padding`, una
+                // prueba que comparaba `TAG_FILA_DE_LISTA_ESQUELETO` contra la fila real (que sí
+                // media desde el borde exterior) reportaba 27 dp de diferencia — los 28 dp del
+                // relleno vertical (14 arriba + 14 abajo) que el tag se perdía por quedar adentro
+                // del `padding` —, un artefacto de la medición, no un salto real en la lista.
+                .testTag(TAG_FILA_DE_LISTA_ESQUELETO)
+                .padding(vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             // El mismo `Movi.espacios.medio` (12 dp) que separa `IconoDeCategoria` del texto en
             // `MovementSingleRow`: con `diametroIconoAlFrente` puesto, este `spacedBy` ya deja el

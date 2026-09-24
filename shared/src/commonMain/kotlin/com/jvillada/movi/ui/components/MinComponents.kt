@@ -158,11 +158,13 @@ fun CardRow(
      * ocupar dos renglones).
      */
     rightMaxFraction: Float? = null,
+    modifier: Modifier = Modifier,
 ) {
     Column {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(modifier)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,

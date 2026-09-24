@@ -10,6 +10,7 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.height
@@ -152,6 +153,33 @@ class EsqueletoDeCuentasTest {
         assertTrue(hay("No pudimos cargar tus cuentas"))
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_PATRIMONIO))
         assertEquals(0, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
+    }
+
+    /**
+     * Ola B, tarea 2: en el teléfono del dueño la fila real («Nu», con ícono, subtítulo y
+     * chevron) medía más alto que `FilaDeListaEsqueleto(conIcono = true)` y la lista bajaba un
+     * poco al llegar los datos — no los ~130 dp del hallazgo de `FormaRecordada`, unos pocos dp
+     * por fila, pero se notaban porque son varias filas seguidas.
+     */
+    @Test
+    fun `la fila esqueleto con icono mide lo mismo que la fila real de Cuentas`() {
+        montar()
+        composeRule.waitForIdle()
+        val filaEsqueleto = composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO, useUnmergedTree = true)
+            .onFirst().getUnclippedBoundsInRoot().height
+
+        puerta.complete(listOf(nu))
+        composeRule.waitForIdle()
+
+        val filaReal = composeRule.onNodeWithTag(TAG_FILA_DE_CUENTA, useUnmergedTree = true)
+            .getUnclippedBoundsInRoot().height
+
+        val diferencia = abs(filaReal.value - filaEsqueleto.value)
+        assertTrue(
+            diferencia <= 2f,
+            "La fila esqueleto medía ${filaEsqueleto.value} dp y la real ${filaReal.value} dp " +
+                "— diferencia de $diferencia dp, el máximo son 2 dp",
+        )
     }
 
     @Test

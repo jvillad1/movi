@@ -22,13 +22,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.FormaDeCreditos
+import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -128,6 +132,16 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     // una sola vez y baja a las tarjetas: la aritmética vive en `:core` para que el server y los
     // tres clientes vean el mismo número. Ver [PlanDelCredito].
     val planes = remember(credits) { credits.orEmpty().associate { it.account.id to planDelCredito(it) } }
+    // ── La forma de la última carga (ver `FormaRecordada`) ──────────────────────
+    // Se lee una vez, al montar: es lo que el esqueleto reserva mientras la lectura no contestó.
+    val formaRecordada = remember { FormaRecordada.delAparato.creditos(SessionManager.userId) }
+    // Los renglones que ocupó cada aviso de la tarjeta de resumen, medidos al dibujarse — el texto
+    // trae una cifra y parte distinto según su largo y el ancho de la pantalla. 0 = sin medir.
+    var renglonesDelAvisoAmbar by remember { mutableStateOf(0) }
+    var renglonesDelAvisoRojo by remember { mutableStateOf(0) }
+    val resumen = remember(planes) {
+        planes.values.filterNotNull().takeIf { it.isNotEmpty() }?.let { resumirDeudas(it) }
+    }
     /**
      * El mes en curso, para poder decir «enero de 2046» en vez de «232 cuotas».
      *
@@ -147,6 +161,24 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     }
     val periodoActual = remember(ajustesDelPeriodo) {
         periodoDe(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
+    }
+    // Se escribe cuando la lectura salió bien y la tarjeta ya midió sus avisos: un aviso presente
+    // sin medir todavía (0 renglones) esperaría al próximo cuadro, no se guarda como ausente.
+    LaunchedEffect(creditosListos, tarjetasListas, resumen, renglonesDelAvisoAmbar, renglonesDelAvisoRojo) {
+        if (creditosListos == null || tarjetasListas == null) return@LaunchedEffect
+        val hayAmbar = (resumen?.creditosQueNoSeTerminan ?: 0) > 0
+        val hayRojo = (resumen?.creditosQueCrecen ?: 0) > 0
+        if (hayAmbar && renglonesDelAvisoAmbar == 0) return@LaunchedEffect
+        if (hayRojo && renglonesDelAvisoRojo == 0) return@LaunchedEffect
+        FormaRecordada.delAparato.guardarCreditos(
+            SessionManager.userId,
+            FormaDeCreditos(
+                gruposDelResumen = resumen?.let { gruposDelResumen(it) }.orEmpty(),
+                renglonesDelAvisoAmbar = if (hayAmbar) renglonesDelAvisoAmbar else 0,
+                renglonesDelAvisoRojo = if (hayRojo) renglonesDelAvisoRojo else 0,
+                prestamos = creditosListos.size,
+            ),
+        )
     }
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -186,7 +218,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             }
 
             if (cargando) {
-                CreditosEsqueleto(modifier = Modifier.weight(1f))
+                CreditosEsqueleto(forma = formaRecordada, modifier = Modifier.weight(1f))
             } else if (creditosListos != null && tarjetasListas != null) LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
                 item {
                     MinCard(
@@ -208,6 +240,8 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                             planes.values.filterNotNull(),
                             periodoActual,
                             quienesPaganLoQueNoSaleDeTuBolsillo(creditosListos.mapNotNull { it.terms }),
+                            onRenglonesDelAvisoAmbar = { renglonesDelAvisoAmbar = it },
+                            onRenglonesDelAvisoRojo = { renglonesDelAvisoRojo = it },
                         )
                     }
                 }
@@ -348,6 +382,8 @@ private fun LoQueCuestaLaDeuda(
     planes: List<PlanDelCredito>,
     periodoActual: PeriodoFinanciero,
     quienesPagan: List<String> = emptyList(),
+    onRenglonesDelAvisoAmbar: (Int) -> Unit = {},
+    onRenglonesDelAvisoRojo: (Int) -> Unit = {},
 ) {
     if (planes.isEmpty()) return
     val resumen = resumirDeudas(planes)
@@ -395,6 +431,7 @@ private fun LoQueCuestaLaDeuda(
             texto = textoDeLoQueNoSeTermina(resumen.creditosQueNoSeTerminan, resumen.deudaQueNoSeTermina),
             color = Movi.colores.aviso,
             fondo = Movi.colores.tarjeta,
+            onRenglones = onRenglonesDelAvisoAmbar,
         )
     }
     // La alerta, arriba de todo y contada en créditos: si hay uno solo en el que la deuda crece
@@ -405,6 +442,7 @@ private fun LoQueCuestaLaDeuda(
             texto = textoDeLaAmortizacionNegativa(resumen.creditosQueCrecen),
             color = Movi.colores.sale,
             fondo = Movi.colores.sale.copy(alpha = 0.14f),
+            onRenglones = onRenglonesDelAvisoRojo,
         )
     }
 
@@ -441,17 +479,31 @@ private fun FilaDelResumen(alcance: String, valor: String) {
  * que uno recién creado: una barra en 0 % y la palabra «pagado» al lado.
  */
 @Composable
-private fun AvisoDeLaPantalla(texto: String, color: Color, fondo: Color) {
+private fun AvisoDeLaPantalla(texto: String, color: Color, fondo: Color, onRenglones: (Int) -> Unit = {}) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(fondo)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = RELLENO_DEL_AVISO_H, vertical = RELLENO_DEL_AVISO_V),
     ) {
-        Text(texto, style = Movi.textos.apoyo, color = color, lineHeight = 16.sp, fontWeight = FontWeight.Medium)
+        Text(
+            texto,
+            style = Movi.textos.apoyo,
+            color = color,
+            lineHeight = INTERLINEADO_DEL_AVISO,
+            fontWeight = FontWeight.Medium,
+            // Cuántos renglones ocupó, para que la próxima carga reserve ese alto (ver
+            // `FormaRecordada`).
+            onTextLayout = { onRenglones(it.lineCount) },
+        )
     }
 }
+
+/** Los rellenos y el interlineado de [AvisoDeLaPantalla], compartidos con [AvisoEsqueleto]. */
+private val RELLENO_DEL_AVISO_H = 12.dp
+private val RELLENO_DEL_AVISO_V = 10.dp
+private val INTERLINEADO_DEL_AVISO = 16.sp
 
 /**
  * Tarjeta de un préstamo: cuota, tasa, plazo y progreso — lo que Créditos mostraba desde siempre.
@@ -851,6 +903,12 @@ const val TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA: String = "esqueleto-del-resumen-de
 /** Cada tarjeta de préstamo que todavía no llegó. */
 const val TAG_ESQUELETO_TARJETA_DE_PRESTAMO: String = "esqueleto-tarjeta-de-prestamo"
 
+/** Cada aviso de la tarjeta de «Deuda total» que todavía no llegó (solo si la última carga lo tenía). */
+const val TAG_ESQUELETO_DE_AVISO: String = "esqueleto-de-aviso-de-credito"
+
+/** Tope de tarjetas de préstamo esqueleto: más no caben en ninguna pantalla, y todas se componen. */
+private const val MAX_PRESTAMOS_ESQUELETO = 12
+
 /**
  * **Créditos mientras carga: la forma de lo que viene, sin una sola cifra.**
  *
@@ -861,15 +919,21 @@ const val TAG_ESQUELETO_TARJETA_DE_PRESTAMO: String = "esqueleto-tarjeta-de-pres
  *
  * Cada pieza copia los rellenos y los estilos de texto de la real ([LoQueCuestaLaDeuda],
  * [LoanCard]) para que la tarjeta de arriba mida lo mismo cargando que cargada (±8 dp, lo mide
- * `CreditosNoAfirmanMientrasCarganTest`). El resumen reserva los tres grupos que tiene una cartera
- * con tasas registradas (intereses del mes, los que faltan, la última cuota) y el renglón del
- * supuesto; una cartera más chica encoge al llegar, pero nunca crece.
+ * `CreditosNoAfirmanMientrasCarganTest`).
+ *
+ * **Con [forma] (la última carga que salió bien en este aparato, ver `FormaRecordada`) reserva
+ * exactamente lo que había**: las filas de cada grupo del resumen, los avisos ámbar y rojo con los
+ * renglones que ocuparon, y tantas tarjetas de préstamo como había. Sin ella —la primera vez— la
+ * forma de siempre: los tres grupos de una fila, sin avisos, y tres préstamos; una cartera más
+ * chica encoge al llegar, una con avisos crece (una sola vez: la próxima ya los recuerda).
  *
  * Es una `LazyColumn` sin desplazamiento y no una `Column`: así recorta lo que no entra en vez de
  * dibujarlo encima de la barra de abajo.
  */
 @Composable
-private fun CreditosEsqueleto(modifier: Modifier = Modifier) {
+private fun CreditosEsqueleto(forma: FormaDeCreditos?, modifier: Modifier = Modifier) {
+    val grupos = forma?.gruposDelResumen ?: listOf(1, 1, 1)
+    val prestamos = (forma?.prestamos ?: 3).coerceAtMost(MAX_PRESTAMOS_ESQUELETO)
     LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 80.dp), userScrollEnabled = false) {
         item {
             MinCard(
@@ -887,39 +951,73 @@ private fun CreditosEsqueleto(modifier: Modifier = Modifier) {
                     estilo = Movi.textos.cifra,
                     modifier = Modifier.testTag(TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA),
                 )
-                // Los mismos espacios que [LoQueCuestaLaDeuda]: 16 · hilo · 14 y 12 entre grupos.
-                Spacer(Modifier.height(16.dp))
-                Hairline()
-                Spacer(Modifier.height(14.dp))
-                repeat(3) { i ->
-                    if (i > 0) Spacer(Modifier.height(12.dp))
-                    // [TituloDelGrupo] y [FilaDelResumen]: el rótulo, 6 dp, y la fila con 10 dp de
-                    // sangría.
-                    LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
-                    Spacer(Modifier.height(6.dp))
-                    RenglonConCifraEsqueleto(
-                        modifier = Modifier.padding(start = 10.dp),
-                        fraccionDelRotulo = 0.55f,
-                    )
+                // Sin grupos, [LoQueCuestaLaDeuda] no dibuja nada: ni el hilo, ni los avisos, ni el
+                // supuesto.
+                if (grupos.isNotEmpty()) {
+                    // Los mismos espacios que [LoQueCuestaLaDeuda]: 16 · hilo · 14 y 12 entre grupos.
+                    Spacer(Modifier.height(16.dp))
+                    Hairline()
+                    Spacer(Modifier.height(14.dp))
+                    grupos.forEachIndexed { i, filas ->
+                        if (i > 0) Spacer(Modifier.height(12.dp))
+                        // [TituloDelGrupo] y [FilaDelResumen]: el rótulo, 6 dp, y cada fila con 10 dp
+                        // de sangría y 4 dp entre una y otra.
+                        LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
+                        Spacer(Modifier.height(6.dp))
+                        repeat(filas) { f ->
+                            if (f > 0) Spacer(Modifier.height(4.dp))
+                            RenglonConCifraEsqueleto(
+                                modifier = Modifier.padding(start = 10.dp),
+                                fraccionDelRotulo = 0.55f,
+                            )
+                        }
+                    }
+                    // Los avisos, con los espacios de [LoQueCuestaLaDeuda]: 12 antes del ámbar, 8
+                    // antes del rojo.
+                    val ambar = forma?.renglonesDelAvisoAmbar ?: 0
+                    if (ambar > 0) {
+                        Spacer(Modifier.height(12.dp))
+                        AvisoEsqueleto(ambar)
+                    }
+                    val rojo = forma?.renglonesDelAvisoRojo ?: 0
+                    if (rojo > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        AvisoEsqueleto(rojo)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    // [SUPUESTO_DE_LA_PROYECCION]: dos renglones de apoyo a 15 sp de interlineado en
+                    // un teléfono.
+                    val supuesto = Movi.textos.apoyo.copy(lineHeight = 15.sp)
+                    LineaEsqueleto(fraccionDelAncho = 0.95f, estilo = supuesto)
+                    LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = supuesto)
                 }
-                Spacer(Modifier.height(12.dp))
-                // [SUPUESTO_DE_LA_PROYECCION]: dos renglones de apoyo a 15 sp de interlineado en
-                // un teléfono.
-                val supuesto = Movi.textos.apoyo.copy(lineHeight = 15.sp)
-                LineaEsqueleto(fraccionDelAncho = 0.95f, estilo = supuesto)
-                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = supuesto)
             }
         }
-        item {
-            Spacer(Modifier.height(20.dp))
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                RotuloDeSeccionEsqueleto()
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    repeat(3) { TarjetaDePrestamoEsqueleto() }
+        if (prestamos > 0) {
+            item {
+                Spacer(Modifier.height(20.dp))
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    RotuloDeSeccionEsqueleto()
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        repeat(prestamos) { TarjetaDePrestamoEsqueleto() }
+                    }
                 }
             }
         }
     }
+}
+
+/**
+ * Un aviso de la tarjeta de resumen que todavía no llegó: un solo bloque del alto de
+ * [AvisoDeLaPantalla] con [renglones] renglones — sus rellenos más un interlineado por renglón.
+ */
+@Composable
+private fun AvisoEsqueleto(renglones: Int) {
+    val interlineado = with(LocalDensity.current) { INTERLINEADO_DEL_AVISO.toDp() }
+    BloqueEsqueleto(
+        alto = RELLENO_DEL_AVISO_V * 2 + interlineado * renglones,
+        modifier = Modifier.testTag(TAG_ESQUELETO_DE_AVISO),
+    )
 }
 
 /**

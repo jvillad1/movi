@@ -56,7 +56,10 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.COLORES_DEL_CATALOGO
 import com.jvillada.movi.theme.ColorDelCatalogo
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.data.FormaDeCategorias
+import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.PropuestasDescartadasStore
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
@@ -71,7 +74,9 @@ import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.MinScreenHeader
+import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.CirculoEsqueleto
+import com.jvillada.movi.ui.components.altoDeUnRenglon
 import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
@@ -181,6 +186,12 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
     var errorDeOrden by remember { mutableStateOf<String?>(null) }
     var guardandoOrden by remember { mutableStateOf(false) }
 
+    // La forma de la última carga que salió bien (ver `FormaRecordada`): si había tarjeta de
+    // «ordenar» y cuántas filas. Se lee una vez, al montar; el esqueleto la copia.
+    val formaRecordada = remember { FormaRecordada.delAparato.categorias(SessionManager.userId) }
+    // Los renglones que ocupó el texto de la tarjeta de «ordenar», medidos al dibujarse. 0 = sin medir.
+    var renglonesDeLaTarjetaDeOrden by remember { mutableStateOf(0) }
+
     suspend fun recargar() {
         runCatching { Repositories.wallets.getCategories() }
             .onSuccess { categorias = it; error = null; leidas = true }
@@ -194,7 +205,13 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
         loading = false
     }
 
-    val escondidas = categorias.count { it.hidden }
+    // Ola B, tarea 2: el título contaba TODAS las que trae el server, reservadas incluidas —
+    // «35 categorías» cuando la lista de abajo (que ya las saca, ver `filtrarCategorias`) muestra
+    // menos. Cuenta lo que la pantalla de verdad enumera.
+    val categoriasVisibles = categorias.count { !it.reserved }
+    // Fix round 1: una reservada nunca debería venir marcada `hidden`, pero si algún día lo
+    // trajera el server, no puede contarse acá — ya no cuenta en `categoriasVisibles`.
+    val escondidas = categorias.count { it.hidden && !it.reserved }
     // Destapar la ÚLTIMA escondida hacía desaparecer su pastilla y dejaba el filtro apuntando a
     // un conjunto vacío: «17 categorías» arriba, «Nada por aquí todavía» abajo y ninguna pastilla
     // marcada, sin nada que indicara cómo salir. El filtro cae solo a «Todas» cuando deja de tener
@@ -221,6 +238,20 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
     LaunchedEffect(revisandoOrden, propuestasPendientes.isEmpty()) {
         if (revisandoOrden && propuestasPendientes.isEmpty()) revisandoOrden = false
     }
+    // Se escribe con una lectura que salió bien, y con la tarjeta de «ordenar» ya medida si está.
+    // Las filas son las del filtro de siempre («Todas», sin búsqueda): es lo que se ve al abrir.
+    LaunchedEffect(leidas, categorias, propuestasPendientes.isNotEmpty(), renglonesDeLaTarjetaDeOrden) {
+        if (!leidas) return@LaunchedEffect
+        val hayTarjeta = propuestasPendientes.isNotEmpty()
+        if (hayTarjeta && renglonesDeLaTarjetaDeOrden == 0) return@LaunchedEffect
+        FormaRecordada.delAparato.guardarCategorias(
+            SessionManager.userId,
+            FormaDeCategorias(
+                renglonesDeLaTarjetaDeOrden = if (hayTarjeta) renglonesDeLaTarjetaDeOrden else 0,
+                filas = filtrarCategorias(categorias, CategoryFilter.TODAS, "").size,
+            ),
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -233,9 +264,9 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 ),
                 subtitle = when {
                     loading || !leidas -> null
-                    escondidas == 1 -> "${categorias.size} categorías · 1 escondida"
-                    escondidas > 1 -> "${categorias.size} categorías · $escondidas escondidas"
-                    else -> "${categorias.size} categorías"
+                    escondidas == 1 -> "$categoriasVisibles categorías · 1 escondida"
+                    escondidas > 1 -> "$categoriasVisibles categorías · $escondidas escondidas"
+                    else -> "$categoriasVisibles categorías"
                 },
             )
 
@@ -245,7 +276,12 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 TarjetaDeOrden(
                     cantidad = propuestasPendientes.size,
                     onRevisar = { errorDeOrden = null; revisandoOrden = true },
+                    onRenglones = { renglonesDeLaTarjetaDeOrden = it },
                 )
+            } else if (loading && !leidas && (formaRecordada?.renglonesDeLaTarjetaDeOrden ?: 0) > 0) {
+                // La última carga la tenía: se reserva su lugar para que la lista no baje cuando
+                // llegue. Ver `FormaRecordada`.
+                TarjetaDeOrdenEsqueleto(formaRecordada!!.renglonesDeLaTarjetaDeOrden)
             }
 
             // Las pastillas de filtro son, literalmente, la respuesta a la pregunta: el tipo
@@ -301,7 +337,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     // blanco entre los filtros/la búsqueda y la primera fila — ver
                     // [categoriasEsqueleto]. Con `leidas` ya en `true` (una recarga con la lista
                     // en pantalla) no vuelve a mostrarse: la lista de siempre sigue ahí.
-                    categoriasEsqueleto()
+                    categoriasEsqueleto(formaRecordada?.filas ?: FILAS_DE_CATEGORIA_ESQUELETO)
                 } else if (!leidas && !loading) {
                     item {
                         NoSePudoLeer(
@@ -560,10 +596,11 @@ private fun textoDeResultado(
  * sugerencia que el dueño puede ignorar del todo, no una alerta.
  */
 @Composable
-private fun TarjetaDeOrden(cantidad: Int, onRevisar: () -> Unit) {
+private fun TarjetaDeOrden(cantidad: Int, onRevisar: () -> Unit, onRenglones: (Int) -> Unit = {}) {
     val forma = RoundedCornerShape(Movi.formas.amplia)
     Row(
         modifier = Modifier
+            .testTag(TAG_TARJETA_DE_ORDEN)
             .fillMaxWidth()
             .padding(start = Movi.espacios.amplio, top = Movi.espacios.medio, end = Movi.espacios.amplio)
             .clip(forma)
@@ -579,6 +616,9 @@ private fun TarjetaDeOrden(cantidad: Int, onRevisar: () -> Unit) {
             style = Movi.textos.cuerpo,
             color = Movi.colores.texto,
             modifier = Modifier.weight(1f),
+            // Cuántos renglones ocupó, para que la próxima carga reserve ese alto (ver
+            // `FormaRecordada`).
+            onTextLayout = { onRenglones(it.lineCount) },
         )
         Text(
             "Revisar",
@@ -586,6 +626,37 @@ private fun TarjetaDeOrden(cantidad: Int, onRevisar: () -> Unit) {
             fontWeight = FontWeight.Medium,
             color = Movi.colores.marca,
         )
+    }
+}
+
+/** La tarjeta de «ordenar», cargando o cargada: el mismo tag en las dos para medir que no salte. */
+const val TAG_TARJETA_DE_ORDEN: String = "tarjeta-de-orden"
+
+/**
+ * [TarjetaDeOrden] mientras la lista no llegó, **solo si la última carga la tenía** (ver
+ * `FormaRecordada`): mismos rellenos, borde y forma, un bloque de [renglones] renglones de
+ * `Movi.textos.cuerpo` donde va el texto y otro del alto de `Movi.textos.apoyo` donde va
+ * «Revisar». Sin él, la tarjeta aparecía con los datos y empujaba la lista ~50 dp.
+ */
+@Composable
+private fun TarjetaDeOrdenEsqueleto(renglones: Int) {
+    val forma = RoundedCornerShape(Movi.formas.amplia)
+    Row(
+        modifier = Modifier
+            .testTag(TAG_TARJETA_DE_ORDEN)
+            .fillMaxWidth()
+            .padding(start = Movi.espacios.amplio, top = Movi.espacios.medio, end = Movi.espacios.amplio)
+            .clip(forma)
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, forma)
+            .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.amplio),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+    ) {
+        Box(Modifier.weight(1f)) {
+            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.cuerpo) * renglones, ancho = null)
+        }
+        BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 52.dp)
     }
 }
 
@@ -800,8 +871,11 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
  */
 internal val ALTO_DE_FILA_DE_CATEGORIA = 60.dp
 
-/** Cuántas filas pinta [categoriasEsqueleto] mientras la lista no llegó ni una vez. */
+/** Cuántas filas pinta [categoriasEsqueleto] mientras la lista no llegó ni una vez y no hay forma recordada. */
 private const val FILAS_DE_CATEGORIA_ESQUELETO = 6
+
+/** Tope de filas esqueleto: la lista es perezosa, pero un número absurdo no tiene por qué llegar acá. */
+private const val MAX_FILAS_DE_CATEGORIA_ESQUELETO = 60
 
 /**
  * **Categorías mientras carga, con la forma de la fila compacta** (Ola B, tarea 9). Antes de esta
@@ -810,9 +884,12 @@ private const val FILAS_DE_CATEGORIA_ESQUELETO = 6
  * ([TamanoDeIconoDeCategoria.Normal]), mismo alto mínimo ([ALTO_DE_FILA_DE_CATEGORIA]), mismo
  * `Movi.textos.titulo` para el nombre y `Movi.textos.apoyo` para el resumen de uso — sin la cifra
  * del mes, porque todavía no se sabe si esta categoría tuvo gasto este mes.
+ *
+ * [filas] es la cantidad de la última carga que salió bien en este aparato (ver `FormaRecordada`),
+ * o [FILAS_DE_CATEGORIA_ESQUELETO] la primera vez.
  */
-private fun LazyListScope.categoriasEsqueleto() {
-    items(FILAS_DE_CATEGORIA_ESQUELETO) {
+private fun LazyListScope.categoriasEsqueleto(filas: Int) {
+    items(filas.coerceIn(0, MAX_FILAS_DE_CATEGORIA_ESQUELETO)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
