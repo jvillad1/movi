@@ -17,12 +17,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -118,7 +120,9 @@ private sealed class Sheet {
 
 @Composable
 fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
-    var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
+    // `null` = la lectura todavía no contestó bien; `emptyList()` = contestó y no hay ninguno. Ver
+    // [listo] para por qué con los presupuestos solos no alcanza para pintar la lista.
+    var budgets by remember { mutableStateOf<List<Budget>?>(null) }
     var cutoffDay by remember { mutableStateOf(1) }
     /** Los meses que arrancaron otro día. Ver `PeriodSettings.iniciosPropios`. */
     var iniciosPropios by remember { mutableStateOf(emptyMap<String, String>()) }
@@ -140,16 +144,19 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     var loading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
-    // Ver [NoSePudoLeer]: sin esto una lectura caída pintaba «Gastado $0 de $0» y el botón de
-    // crear, a quien ya tiene presupuestos.
-    var presupuestosLeidos by remember { mutableStateOf(false) }
+    // Los movimientos del período contestaron bien al menos una vez: son el respaldo del gasto
+    // cuando el server no contesta (ver [gastoPorCategoria]).
+    var eventosLeidos by remember { mutableStateOf(false) }
+    // La lectura del gasto del server y la del perfil ya contestaron (bien o mal) al menos una vez.
+    // Hasta entonces, cualquier gasto que se pintara podía cambiar —el del aparato por el del
+    // server, o el mes de calendario por el período del dueño— y con él el ORDEN de la lista.
+    var gastoYPeriodoContestaron by remember { mutableStateOf(false) }
 
     suspend fun reload() {
         // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
         // esta pantalla ya carga presupuestos y movimientos, no hace falta un fetch nuevo.
         runCatching { Repositories.wallets.getBudgets() }.onSuccess {
             budgets = it
-            presupuestosLeidos = true
             // Ola 9 · A3: un presupuesto es, por definición, un límite de GASTO — así que sus
             // categorías se anotan con ese tipo y no como "no se sabe".
             UsedCategoriesCache.recordAll(it.map { b -> b.category to TransactionType.EXPENSE })
@@ -165,6 +172,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         reload()
         runCatching { Repositories.wallets.getEventsByDay() }.onSuccess {
             days = it
+            eventosLeidos = true
             // Ola 9 · A3: con el tipo de cada movimiento, así una categoría propia se ofrece
             // del lado en que de verdad se usó.
             UsedCategoriesCache.recordAll(it.flatMap { d -> d.items }.map { ev -> ev.category to ev.type })
@@ -178,6 +186,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // queda en 1 —mes de calendario— que es el comportamiento de siempre.
         runCatching { Repositories.wallets.getUserProfile() }
             .onSuccess { cutoffDay = it.periodCutoffDay; iniciosPropios = it.periodStarts }
+        gastoYPeriodoContestaron = true
         loading = false
     }
 
@@ -216,7 +225,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // (spentByCategoryForPeriod): solo el período en curso y solo COP. Antes esta pantalla sumaba
         // TODO el historial mientras el encabezado decía «Gastado en agosto» — el Inicio y
         // Presupuestos daban cifras distintas para el mismo presupuesto.
-        budgets.map { b -> BudgetProgress(b, gastoPorCategoria[b.category] ?: 0L) }
+        budgets.orEmpty().map { b -> BudgetProgress(b, gastoPorCategoria[b.category] ?: 0L) }
             // Se ordena por el porcentaje ENTERO, no por el `Float`.
             //
             // Era `pctRaw`, o sea exactamente el cálculo que este archivo argumenta que no es de
@@ -233,9 +242,26 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         val settings = PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios)
         Month(periodoDe(Clock.System.now().toEpochMilliseconds(), settings).month).spanishName()
     }
-    val noSeLeyo = !loading && !presupuestosLeidos
+    /**
+     * **Ola B: nada se pinta hasta que se sabe lo gastado.** Los presupuestos llegan primero y el
+     * gasto después, y en ese medio la pantalla decía «$0» gastado y cada categoría «$0 … 0 % …
+     * $1.000.000 disponibles»; al llegar el gasto aparecía «2 Sobrepasados», las categorías se
+     * REORDENABAN (van por porcentaje) y las filas crecían. Así que la lista espera a las tres
+     * cosas —presupuestos, un gasto que contestó bien, y el período— con el esqueleto en su lugar.
+     *
+     * El gasto conocido es el del server o, si el server no contestó, el que se calcula con los
+     * movimientos (el respaldo de siempre). Sin ninguno de los dos no hay gasto que decir: un «$0»
+     * ahí sería inventado, así que la pantalla dice que no pudo leer, igual que sin presupuestos.
+     */
+    val gastoConocido = serverSpent != null || eventosLeidos
+    val listo = budgets != null && gastoConocido && gastoYPeriodoContestaron
+    // Ver [NoSePudoLeer]: sin esto una lectura caída pintaba «Gastado $0 de $0» y el botón de
+    // crear, a quien ya tiene presupuestos.
+    val noSeLeyo = !loading && !listo
+    val cargando = loading && !listo
+    val sinPresupuestos = listo && budgets.isNullOrEmpty()
 
-    val totalLimit = budgets.sumOf { it.monthlyLimit }
+    val totalLimit = budgets.orEmpty().sumOf { it.monthlyLimit }
     val totalSpent = progresses.sumOf { it.spent }
     // «Al límite» cuenta como aviso, no como sobrepasado: el encabezado decía «2 Sobrepasados»
     // con uno de los dos exactamente en el límite.
@@ -247,10 +273,14 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
             // F60: encabezado único — avatar en ancho (Presupuestos está en el rail), flecha a
             // Más en el teléfono (se llega por Más). Con presupuestos ya creados, el alta
             // compacta a la derecha (F18).
+            //
+            // Ola B: el alta compacta está desde el primer cuadro, también mientras carga — si
+            // aparecía al llegar los datos, el título se corría. Se va solo con la lectura que no se
+            // pudo hacer y con el vacío de verdad, que tiene su botón ancho.
             MinScreenHeader(
                 title = "Presupuestos",
                 leading = leadingFor(Screen.Budgets, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
-                action = if (budgets.isNotEmpty() && !noSeLeyo) {
+                action = if (!sinPresupuestos && !noSeLeyo) {
                     // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la
                     // pantalla quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En esta
                     // pantalla no hay otra cosa que se pueda crear, así que la palabra alcanza.
@@ -264,7 +294,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                     onReintentar = { refreshKeyLocal++ },
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
-            } else if (budgets.isEmpty() && !loading) {
+            } else if (sinPresupuestos) {
                 NewItemButton(
                     label = "Nuevo presupuesto",
                     onClick = { sheet = Sheet.Add },
@@ -275,13 +305,15 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 Spacer(Modifier.height(14.dp))
             }
 
-            if (!noSeLeyo) LazyColumn(
+            if (cargando) {
+                PresupuestosEsqueleto(modifier = Modifier.weight(1f))
+            } else if (listo) LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 80.dp),
             ) {
                 item {
                     MinCard(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(22.dp),
                     ) {
@@ -322,7 +354,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 item {
                     Spacer(Modifier.height(20.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Categorías", count = budgets.size)
+                        MinSectionHeader(title = "Categorías", count = progresses.size)
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             progresses.forEach { p ->
                                 BudgetCard(p, onClick = { sheet = Sheet.Edit(p.budget) })
@@ -421,14 +453,24 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     }
 }
 
+/**
+ * El número de una insignia de [AlertBadge]. Tamaño suelto a propósito: el número grande de un
+ * contador en la tarjeta; `cifra` (42) no cabe y `titular` (19) es para títulos.
+ *
+ * **Con su interlineado declarado** (ola B). Antes eran 22 sp sobre el interlineado de `monto`
+ * (18 sp): el renglón medía lo que pedía la fuente —28 dp, medido con el motor de texto real— y
+ * el esqueleto de la tarjeta no tenía de dónde sacar ese número. Declarado, el renglón mide lo
+ * mismo que antes y [PresupuestosEsqueleto] lo lee de acá.
+ */
+@Composable
+private fun estiloDelContador(): TextStyle = Movi.textos.monto.copy(fontSize = 22.sp, lineHeight = 28.sp)
+
 @Composable
 private fun AlertBadge(label: String, count: Int, color: Color) {
     Column {
         Text(
             text = "$count",
-            // Tamaño suelto a propósito: el número grande de un contador en la tarjeta; `cifra` (42) no cabe y `titular` (19) es para títulos.
-            fontSize = 22.sp,
-            style = Movi.textos.monto,
+            style = estiloDelContador(),
             fontWeight = FontWeight.Medium,
             color = color,
             letterSpacing = (-0.4).sp,
@@ -981,5 +1023,102 @@ private fun BudgetSheet(
 
             Spacer(Modifier.height(14.dp))
         }
+    }
+}
+
+/** La tarjeta de «Gastado en …», cargando o cargada: el mismo tag en las dos para medir que no salte. */
+const val TAG_TARJETA_DEL_GASTO_DEL_PERIODO: String = "tarjeta-del-gasto-del-periodo"
+
+/** La cifra esqueleto de «Gastado en …» — está solo mientras carga. */
+const val TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO: String = "esqueleto-del-gasto-del-periodo"
+
+/** Cada categoría que todavía no llegó. */
+const val TAG_ESQUELETO_FILA_DE_PRESUPUESTO: String = "esqueleto-fila-de-presupuesto"
+
+/**
+ * **Presupuestos mientras carga: la forma, sin «$0» ni «0 %».**
+ *
+ * Ola B. La tarjeta de «Gastado en …» con su cifra, el «de $…» y la fila de sobrepasados/sin
+ * margen **reservada** —es la que más saltaba: aparecía de golpe con el gasto—, y cuatro categorías
+ * con su barra. Los rellenos y estilos son los de la tarjeta real y los de [BudgetCard], para que
+ * nada cambie de alto cuando llega el dato (±8 dp, lo mide `PresupuestosNoAfirmanMientrasCarganTest`).
+ * Un mes sin nada sobrepasado encoge esa fila al llegar; nunca crece.
+ *
+ * `LazyColumn` sin desplazamiento, como el de Créditos: recorta lo que no entra.
+ */
+@Composable
+private fun PresupuestosEsqueleto(modifier: Modifier = Modifier) {
+    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 80.dp), userScrollEnabled = false) {
+        item {
+            MinCard(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
+                variant = MinCardVariant.Elevated,
+                padding = PaddingValues(22.dp),
+            ) {
+                // El nombre del mes también espera: sale del período del dueño, que llega con el
+                // perfil — con corte 25, el 26 ya es el mes siguiente.
+                LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
+                Spacer(Modifier.height(10.dp))
+                LineaEsqueleto(
+                    fraccionDelAncho = 0.55f,
+                    estilo = Movi.textos.cifra,
+                    modifier = Modifier.testTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO),
+                )
+                Spacer(Modifier.height(6.dp))
+                LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.monto)
+                Spacer(Modifier.height(14.dp))
+                Hairline()
+                Spacer(Modifier.height(14.dp))
+                // Las dos insignias de [AlertBadge]: el número y su rótulo, a 20 dp una de otra.
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    repeat(2) {
+                        Column {
+                            BloqueEsqueleto(alto = altoDeUnRenglon(estiloDelContador()), ancho = 24.dp)
+                            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 76.dp)
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Spacer(Modifier.height(20.dp))
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                RotuloDeSeccionEsqueleto()
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    repeat(4) { FilaDePresupuestoEsqueleto() }
+                }
+            }
+        }
+    }
+}
+
+/** Una categoría que todavía no llegó, con la forma de [BudgetCard]: nombre y porcentaje, «$… de $…» y la barra. */
+@Composable
+private fun FilaDePresupuestoEsqueleto() {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_ESQUELETO_FILA_DE_PRESUPUESTO),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(18.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { LineaEsqueleto(fraccionDelAncho = 0.45f, estilo = Movi.textos.titulo) }
+            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 32.dp)
+            Spacer(Modifier.width(6.dp))
+            // El lugar del chevron (18 dp).
+            Spacer(Modifier.size(18.dp))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.weight(1.7f)) { LineaEsqueleto(fraccionDelAncho = 0.8f, estilo = Movi.textos.monto) }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                LineaEsqueleto(fraccionDelAncho = 0.8f, estilo = Movi.textos.apoyo)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        BloqueEsqueleto(alto = 2.dp)
     }
 }
