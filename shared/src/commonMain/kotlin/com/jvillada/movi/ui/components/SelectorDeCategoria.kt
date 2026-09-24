@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Search
@@ -31,14 +33,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.MAX_CATEGORIA_LENGTH
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
@@ -188,6 +195,37 @@ fun contenidoDelSelectorDeCategoria(
  */
 internal fun columnasDeLaCuadricula(ancho: Dp, espacio: Dp): Int =
     (((ancho + espacio) / (ANCHO_MINIMO_DE_CELDA + espacio)).toInt()).coerceAtLeast(1)
+
+/**
+ * El tamaño mínimo legible al que se achica el rótulo de una celda cuando su palabra más larga
+ * no entra al tamaño normal — Ola B, tarea 4. Más chico que esto deja de leerse.
+ */
+internal val TAMANO_MINIMO_DEL_ROTULO = 9.sp
+
+/**
+ * La palabra más larga de [rotulo] — la que manda si el texto entra en dos renglones sin
+ * cortarse a la mitad. Sin espacio (una sola palabra, como «Entretenimiento») devuelve el
+ * rótulo entero.
+ */
+internal fun palabraMasLargaDe(rotulo: String): String =
+    rotulo.split(" ").maxByOrNull { it.length } ?: rotulo
+
+/**
+ * Cómo dibujar el rótulo de una celda, según si su palabra más larga entra en el ancho
+ * disponible ([anchoDisponible]) al tamaño normal ([anchoDePalabra]). Pura, para probarla sin
+ * Compose — la medición real del ancho vive en [CeldaDeLaCuadricula].
+ *
+ * - [ModoDelRotulo.NORMAL]: como siempre, dos renglones a tamaño normal.
+ * - [ModoDelRotulo.ACHICADO]: **un solo renglón**, con `autoSize` (`BasicText`) bajando hasta
+ *   [TAMANO_MINIMO_DEL_ROTULO] y «…» si ni así entra. Nunca dos renglones: con `maxLines = 2` una
+ *   palabra sin espacios entra «sin desborde» partiéndola entre los dos —Compose no necesita
+ *   achicar nada para lograrlo—, que es exactamente el corte a mitad de palabra que esto corrige.
+ *   Un solo renglón no le deja esa salida.
+ */
+internal enum class ModoDelRotulo { NORMAL, ACHICADO }
+
+internal fun modoDelRotulo(anchoDePalabra: Float, anchoDisponible: Float): ModoDelRotulo =
+    if (anchoDePalabra <= anchoDisponible) ModoDelRotulo.NORMAL else ModoDelRotulo.ACHICADO
 
 /**
  * # El selector de categoría: una cuadrícula, y el teclado solo si lo pides
@@ -341,6 +379,10 @@ private fun CuadriculaDeCategorias(
     val espacio = Movi.espacios.minimo
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val columnas = columnasDeLaCuadricula(maxWidth, espacio)
+        // El ancho real de una celda, la misma cuenta que hace `GridCells.Adaptive` por dentro:
+        // lo necesita [CeldaDeLaCuadricula] para decidir si el nombre entra en dos renglones o si
+        // la palabra más larga no cabe y hay que achicar la letra (Ola B, tarea 4).
+        val anchoDeCelda = (maxWidth - espacio * (columnas - 1)) / columnas
         Column(verticalArrangement = Arrangement.spacedBy(espacio)) {
             celdas.chunked(columnas).forEach { fila ->
                 Row(
@@ -353,6 +395,7 @@ private fun CuadriculaDeCategorias(
                             elegida = esLaCeldaElegida(celda, elegida),
                             prefs = prefs,
                             onClick = { onElegir(celda.nombre) },
+                            anchoDeCelda = anchoDeCelda,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -370,6 +413,7 @@ private fun CeldaDeLaCuadricula(
     elegida: Boolean,
     prefs: Map<String, CategoryPref>,
     onClick: () -> Unit,
+    anchoDeCelda: Dp,
     modifier: Modifier = Modifier,
 ) {
     val forma = RoundedCornerShape(Movi.formas.normal)
@@ -408,17 +452,52 @@ private fun CeldaDeLaCuadricula(
             IconoDeCategoria(apariencia = apariencia)
         }
         Spacer(Modifier.height(Movi.espacios.minimo))
-        Text(
-            rotulo,
-            style = Movi.textos.apoyo,
-            fontWeight = if (elegida || celda !is CeldaDeCategoria.Existente) FontWeight.Medium else FontWeight.Normal,
-            color = if (elegida || celda !is CeldaDeCategoria.Existente) Movi.colores.marca else Movi.colores.texto,
-            textAlign = TextAlign.Center,
-            // Dos renglones siempre: así todas las celdas de una fila miden lo mismo y el borde de
-            // la elegida no queda más bajo que sus vecinas.
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        val colorDelRotulo = if (elegida || celda !is CeldaDeCategoria.Existente) Movi.colores.marca else Movi.colores.texto
+        val pesoDelRotulo = if (elegida || celda !is CeldaDeCategoria.Existente) FontWeight.Medium else FontWeight.Normal
+        // Ola B, tarea 4: «Entretenimiento» se partía a mitad de palabra («Entretenimient / o»)
+        // porque el `Text` de siempre ajusta a dos renglones sin mirar si la palabra más larga
+        // entra. Se mide la palabra más larga contra el ancho real de la celda al tamaño normal;
+        // si no entra, [modoDelRotulo] manda al renglón único con `autoSize` — nunca a los dos
+        // renglones de siempre con `maxLines = 2`: con una sola palabra (sin espacio en el medio),
+        // Compose la cuenta como «entra sin desborde» partiéndola entre los dos renglones, así que
+        // `autoSize` ni se molesta en achicar la letra. Un solo renglón no le deja esa salida:
+        // `autoSize` achica hasta el mínimo legible, y si ni así entra, «…» — nunca la palabra
+        // partida a la mitad.
+        val resolvedorDeFuentes = LocalFontFamilyResolver.current
+        val densidad = LocalDensity.current
+        val direccion = LocalLayoutDirection.current
+        val medidor = remember(resolvedorDeFuentes, densidad, direccion) {
+            TextMeasurer(resolvedorDeFuentes, densidad, direccion)
+        }
+        val estiloDelRotulo = Movi.textos.apoyo
+        val anchoDisponiblePx = with(densidad) { (anchoDeCelda - Movi.espacios.minimo * 2).toPx() }
+        val palabraLarga = remember(rotulo) { palabraMasLargaDe(rotulo) }
+        val modo = remember(palabraLarga, anchoDisponiblePx, estiloDelRotulo) {
+            val anchoDeLaPalabra = medidor.measure(palabraLarga, estiloDelRotulo, softWrap = false, maxLines = 1).size.width.toFloat()
+            modoDelRotulo(anchoDeLaPalabra, anchoDisponiblePx)
+        }
+        when (modo) {
+            ModoDelRotulo.NORMAL -> Text(
+                rotulo,
+                style = estiloDelRotulo,
+                fontWeight = pesoDelRotulo,
+                color = colorDelRotulo,
+                textAlign = TextAlign.Center,
+                // Dos renglones siempre: así todas las celdas de una fila miden lo mismo y el borde
+                // de la elegida no queda más bajo que sus vecinas.
+                minLines = 2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            ModoDelRotulo.ACHICADO -> BasicText(
+                text = rotulo,
+                style = estiloDelRotulo.copy(color = colorDelRotulo, fontWeight = pesoDelRotulo, textAlign = TextAlign.Center),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                autoSize = TextAutoSize.StepBased(minFontSize = TAMANO_MINIMO_DEL_ROTULO, maxFontSize = estiloDelRotulo.fontSize, stepSize = 0.5.sp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
