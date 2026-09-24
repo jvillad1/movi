@@ -697,6 +697,7 @@ fun CreateRecurringRuleSheet(
                             type = selectedType,
                             usedCategories = usedCategories,
                             prefs = categoryPrefs,
+                            usos = UsedCategoriesCache.usosRecientes,
                             label = "CATEGORÍA",
                             placeholder = "Ej: Vivienda, Suscripción, Salud",
                         )

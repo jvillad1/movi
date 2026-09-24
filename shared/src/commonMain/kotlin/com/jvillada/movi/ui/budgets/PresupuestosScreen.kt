@@ -703,8 +703,9 @@ private fun BudgetSheet(
 
             // Category
             if (categoryEditable) {
-                // F35/F17: campo libre con sugerencias en vez de texto libre a ciegas — el
-                // mismo campo sirve para crear (categoría nueva) y para editar (renombrar).
+                // F35/F17: el mismo campo sirve para crear (categoría nueva) y para editar
+                // (renombrar): desde la Ola B, escribiendo el nombre nuevo en la búsqueda y
+                // tocando «Crear "…"».
                 // Solo EXPENSE: no tiene sentido presupuestar una categoría de ingreso.
                 CategoryField(
                     value = category,
@@ -713,12 +714,8 @@ private fun BudgetSheet(
                     usedCategories = UsedCategoriesCache.used,
                     prefs = UsedCategoriesCache.prefs,
                     label = "Categoría",
+                    usos = UsedCategoriesCache.usosRecientes,
                     placeholder = "Mercado, Salud, Restaurantes…",
-                    // Desde que esta hoja se desplaza, el tope de 220 dp del panel sería un
-                    // scroll adentro de otro scroll — el defecto que el dueño reportó con
-                    // «cuando quiero ver las categorías, al hacer scroll desaparecen». Ver el
-                    // KDoc de `maxSuggestionsHeight`.
-                    maxSuggestionsHeight = null,
                 )
                 // F17: onDelete solo viene no-nulo al editar un presupuesto EXISTENTE (Sheet.Add
                 // lo manda null) — ahí es donde "cambiar el nombre" significa renombrar una

@@ -50,7 +50,6 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.CATEGORY_RESERVED_SHORT
-import com.jvillada.movi.shared.model.MAX_CATEGORIA_LENGTH
 import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
 import com.jvillada.movi.shared.model.CuentasDelPicker
 import com.jvillada.movi.shared.model.TransactionType
@@ -223,7 +222,7 @@ fun QuickAddScreen(
     var amount by remember { mutableStateOf(presetMonto?.takeIf { it > 0 }?.toString() ?: "") }
     var note by remember { mutableStateOf(presetNota?.trim().orEmpty()) }
     // F35: arranca en la primera categoría predefinida de Gastos, como antes arrancaba en
-    // "Mercado" — ahora es texto libre con sugerencias (CategoryField), no una lista fija.
+    // "Mercado" — y se cambia desde la cuadrícula de [SelectorDeCategoria] (Ola B).
     //
     // Ola 10 (revisión): el valor inicial sale de [categoriaPorDefectoPara] y no de
     // `PREDEFINED_CATEGORIES.first { … }`. Con la línea vieja, esconder «Comida» en
@@ -247,9 +246,9 @@ fun QuickAddScreen(
     }
 
     /**
-     * Ola A — **el dueño eligió esta categoría con el dedo**, no la puso la app. Lo llenan dos
-     * caminos: tocar un chip de frecuentes (ver [pickCategoriaFrecuente]) y un [presetCategoria]
-     * válido, que viene de un recurrente que el dueño ya categorizó — es tan «a mano» como tocar
+     * Ola A — **el dueño eligió esta categoría con el dedo**, no la puso la app. Lo llenan tres
+     * caminos: tocar un chip de frecuentes o una celda del selector de «Categoría» (ver
+     * [elegirCategoriaAMano]) y un [presetCategoria] válido, que viene de un recurrente que el dueño ya categorizó — es tan «a mano» como tocar
      * un chip, solo que lo hizo en otra pantalla.
      *
      * Existe para distinguir «esto lo eligió él» de «esto lo puso la app» antes de pisarlo con
@@ -279,8 +278,8 @@ fun QuickAddScreen(
      * que distingue los dos casos — ver el `LaunchedEffect` de acá abajo.
      *
      * Se limpian los tres juntos, en los tres lugares donde algo que no es "la nota en esta misma
-     * pestaña" decide la categoría: [pickCategoriaFrecuente], el campo de la fila «Categoría» (más
-     * abajo) y la reconciliación de tipo cuando pisa la categoría por su cuenta.
+     * pestaña" decide la categoría: [elegirCategoriaAMano] (chips y selector de «Categoría») y la
+     * reconciliación de tipo cuando pisa la categoría por su cuenta.
      */
     var sugerenciaVigente by remember { mutableStateOf<com.jvillada.movi.shared.model.RecuerdoDeCategoria?>(null) }
     var categoriaAntesDeLaSugerencia by remember { mutableStateOf<String?>(null) }
@@ -382,8 +381,8 @@ fun QuickAddScreen(
             // **Ola 14: se restaura SIEMPRE, también cuando el objetivo es 0.** Antes esta rama
             // pedía `> 0`, y estaba bien mientras ningún sub-picker se pudiera desplazar: el
             // desplazamiento no cambiaba durante la visita, así que volver a 0 era volver a donde
-            // ya se estaba. Desde que la lista de categorías se estira (ver `maxSuggestionsHeight`
-            // en la rama Picker.Category), el sub-picker SÍ se desplaza — el dueño baja hasta
+            // ya se estaba. Desde que la lista de categorías se estira (hoy la cuadrícula de
+            // [SelectorDeCategoria], sin tope, en la rama Picker.Category), el sub-picker SÍ se desplaza — el dueño baja hasta
             // «Vivienda», elige, y al cerrarse el cuerpo vuelve a ser corto: el desplazamiento
             // heredado del picker se recorta contra el `maxValue` del editor y queda en cualquier
             // lado, no en 0. O sea el teclado movido bajo el dedo, otra vez, por el camino nuevo.
@@ -639,8 +638,8 @@ fun QuickAddScreen(
         if (sugerencia == null) {
             // La sugerencia desapareció porque cambió la NOTA (el caso de la pestaña ya se
             // resolvió arriba) — pero solo si Movi fue quien la puso. Si el dueño ya la había
-            // elegido a mano, [sugerenciaVigente] ya está en `null` (ver [pickCategoriaFrecuente]
-            // y el `onValueChange` del campo de categoría) y acá no hay nada que deshacer.
+            // elegido a mano, [sugerenciaVigente] ya está en `null` (ver [elegirCategoriaAMano])
+            // y acá no hay nada que deshacer.
             if (sugerenciaVigente != null) {
                 categoriaAntesDeLaSugerencia?.let { category = it }
                 sugerenciaVigente = null
@@ -677,8 +676,11 @@ fun QuickAddScreen(
         )
     }
 
-    /** Tocar un chip: pone la categoría Y la marca como elegida a mano (ver [categoriaElegidaAMano]). */
-    fun pickCategoriaFrecuente(nombre: String) {
+    /**
+     * Tocar un chip de frecuentes o una celda del selector de «Categoría»: pone la categoría Y la
+     * marca como elegida a mano (ver [categoriaElegidaAMano]).
+     */
+    fun elegirCategoriaAMano(nombre: String) {
         category = nombre
         categoriaElegidaAMano = true
         // Task 5: eligió con el dedo — lo que Movi venía sugiriendo (o podía llegar a sugerir)
@@ -919,12 +921,12 @@ fun QuickAddScreen(
                 // `CategoryField`, `heightIn(max = 220.dp)`— tenían el alto acotado ANTES de su
                 // scroll. [WalletPicker] sigue así.
                 //
-                // **Las sugerencias de categoría ya NO** (Ola 14): este mismo archivo les pasa
-                // `maxSuggestionsHeight = null` unas líneas más abajo, así que no traen scroll
-                // propio y sí se estiran con la altura infinita de acá — que es exactamente el
-                // arreglo, porque el tope de 220 dp era lo que dejaba 4 categorías a la vista con
-                // una losa vacía debajo. Lo que las contiene no es un tope propio sino el
-                // desplazamiento de la hoja, uno solo. Ver el KDoc de `maxSuggestionsHeight`.
+                // **Las sugerencias de categoría ya NO** (Ola 14, y desde la Ola B la cuadrícula
+                // de [SelectorDeCategoria]): no traen scroll propio y sí se estiran con la altura
+                // infinita de acá — que es exactamente el arreglo, porque el tope de 220 dp era lo
+                // que dejaba 4 categorías a la vista con una losa vacía debajo. Lo que las
+                // contiene no es un tope propio sino el desplazamiento de la hoja, uno solo. Por
+                // eso la cuadrícula no es una `LazyVerticalGrid` (ver el KDoc del selector).
                 Column(
                     modifier = Modifier
                         // El peso va primero por lectura: no mide nada, solo le dice a la Column
@@ -1035,63 +1037,32 @@ fun QuickAddScreen(
                             .then(if (pickers.propio == Picker.None) Modifier else Modifier.heightIn(min = pinnedHeight)),
                     ) {
                     when (pickers.propio) {
-                        // F35: campo libre con sugerencias en vez de una lista fija — tocar una
-                        // sugerencia cierra el sub-picker igual que antes (onSuggestionPicked);
-                        // escribir una categoría nueva la deja tal cual, sin forzar a elegir.
+                        // Ola B · Task 4: la cuadrícula de categorías, con la búsqueda SIN foco al
+                        // abrir. Antes (Ola 2 #3c) este sub-picker pedía el foco del campo apenas se
+                        // abría: elegir «Comida» con un toque levantaba el teclado del sistema y le
+                        // partía la ventana al medio. Ver [SelectorDeCategoria].
+                        //
+                        // Tocar una celda elige y cierra, y cuenta como elección a mano — igual que
+                        // un chip de frecuentes ([elegirCategoriaAMano]). Con la cuadrícula no hay
+                        // cambios de texto que filtrar: lo único que llega acá es un toque.
                         Picker.Category -> Column(modifier = Modifier.fillMaxWidth()) {
                             PickerHeader("Categoría", onClose = { pasarA(pickers.cerrar()) })
-                            // Ola 2 #3c: sin esto el sub-picker se abría con el campo prellenado
-                            // ("Comida") pero sin foco — había que tocarlo a mano para ver las
-                            // sugerencias o poder escribir.
-                            val categoryFocusRequester = remember { FocusRequester() }
-                            LaunchedEffect(Unit) { categoryFocusRequester.requestFocus() }
-                            CategoryField(
-                                value = category,
-                                // El tope es el de la COLUMNA (`varchar(100)`), no uno inventado
-                                // más corto: una categoría más larga que eso no se rechazaba —
-                                // reventaba el insert del server con un 500, y en el teléfono
-                                // quedaba rebotando en el sync cada 30 s sin decir nada. Ver
-                                // [rechazoDeLosTextos], que es la misma regla del otro lado.
-                                onValueChange = {
-                                    val recortado = it.take(MAX_CATEGORIA_LENGTH)
-                                    // Fix round 1: CategoryField llama a esto en cada cambio de
-                                    // `TextFieldValue`, y eso incluye un cambio de SELECCIÓN con
-                                    // el mismo texto — al abrir este sub-picker, `CategoryField`
-                                    // selecciona todo el texto al ganar el foco (Ola 2 #3b), lo
-                                    // que ya disparaba este lambda con `it == category` y marcaba
-                                    // «elegida a mano» solo por haber ABIERTO la fila, sin que el
-                                    // dueño tocara nada. Comparar antes de asignar es lo que
-                                    // distingue «tipeó o tocó una sugerencia» de «se paró acá».
-                                    if (recortado != category) {
-                                        category = recortado
-                                        // Task 5: escribir o tocar una sugerencia EN ESTE CAMPO es
-                                        // tan "a mano" como tocar un chip — ver
-                                        // [categoriaElegidaAMano]. No entra acá lo que la propia
-                                        // sugerencia por nombre o la reconciliación de tipo
-                                        // escriben: esas asignan `category` directo, sin pasar por
-                                        // este lambda.
-                                        categoriaElegidaAMano = true
-                                        sugerenciaVigente = null
-                                        categoriaAntesDeLaSugerencia = null
-                                        tipoDeLaSugerenciaVigente = null
-                                    }
+                            SelectorDeCategoria(
+                                elegida = category,
+                                onElegir = {
+                                    elegirCategoriaAMano(it)
+                                    pasarA(pickers.cerrar())
                                 },
-                                type = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
-                                usedCategories = usedCategories,
+                                tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
+                                usadas = usedCategories,
                                 prefs = categoryPrefs,
-                                label = null,
-                                onSuggestionPicked = { pasarA(pickers.cerrar()) },
-                                focusRequester = categoryFocusRequester,
-                                // Ola 14 — «al hacer scroll desaparecen». Acá el campo NO es un
-                                // renglón de un formulario: es la pantalla entera del
-                                // sub-picker, con la hoja desplazándose por debajo. Un panel
-                                // acotado a 220 dp con scroll propio dejaba 4 categorías de 24 a
-                                // la vista, una losa vacía debajo, y el gesto del dedo repartido
-                                // entre dos áreas desplazables. Sin tope, la lista se estira
-                                // hasta donde llegue y la desplaza la hoja — una sola área. Ver
-                                // el KDoc de `maxSuggestionsHeight`.
-                                maxSuggestionsHeight = null,
+                                usos = usosRecientes,
                             )
+                            // La cuadrícula no tiene tope ni scroll propio: se estira y la
+                            // desplaza la hoja, un solo desplazamiento (Ola 14 — «al hacer scroll
+                            // desaparecen»). Ver el KDoc de [SelectorDeCategoria].
+                            Spacer(Modifier.height(8.dp))
+                            EnlaceAdministrarCategorias()
                             Spacer(Modifier.height(4.dp))
                         }
                         Picker.Wallet -> WalletPicker(
@@ -1167,10 +1138,10 @@ fun QuickAddScreen(
                             category = category,
                             // Task 5: solo se muestra la sugerencia que Movi puso, no cualquier
                             // "Movi la reconoce" persistente — desaparece apenas el dueño elige a
-                            // mano ([pickCategoriaFrecuente] y el campo ya ponen esto en `null`).
+                            // mano ([elegirCategoriaAMano] pone esto en `null`).
                             categoriaSugeridaHint = sugerenciaVigente?.let { "Movi la reconoce: ${it.nombre}" },
                             categoriasFrecuentes = categoriasFrecuentesDelTipo,
-                            onPickCategoriaFrecuente = ::pickCategoriaFrecuente,
+                            onPickCategoriaFrecuente = ::elegirCategoriaAMano,
                             // **Anotado, no arreglado (B3, y es de master):** si `getAccounts()`
                             // falla y la hoja se abrió con `presetAccountId`, `selectedAccount` es
                             // null —la lista está vacía— así que esto dice «Seleccionar cuenta»,

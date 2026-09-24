@@ -366,34 +366,9 @@ class CategoryFieldTest {
         assertTrue(categoriaPorDefectoPara(TransactionType.EXPENSE, prefs = prefs).isNotEmpty())
     }
 
-    @Test
-    fun `con una escondida escrita, el panel sigue mostrando todas las demas`() {
-        // B2: `matches` quedaba vacío y el panel se reducía a «Usar "Comida"» — para elegir otra
-        // había que borrar el campo primero. Esconder una hacía desaparecer todas.
-        val prefs = mapOf("Comida" to CategoryPref(hidden = true))
-        val conocidas = PREDEFINED_CATEGORIES.map { it.name }
-        val matches = categoriasParaElPanel("Comida", TransactionType.EXPENSE, prefs = prefs)
-        // La escondida no está…
-        assertFalse("Comida" in matches)
-        // …pero el resto del catálogo sí, y se la puede seguir usando a mano si insiste.
-        assertTrue("Transporte" in matches)
-        assertTrue(shouldOfferKnownFromOtherSide("Comida", matches, conocidas))
-    }
-
-    @Test
-    fun `el panel sigue filtrando cuando lo escrito NO es una categoria conocida`() {
-        // La otra mitad de la regla: escribir «Trans» tiene que acotar, no listar todo.
-        val matches = categoriasParaElPanel("Trans", TransactionType.EXPENSE)
-        assertEquals(listOf("Transporte"), matches)
-    }
-
-    @Test
-    fun `con el campo vacio el panel lista todas las del tipo`() {
-        assertEquals(
-            suggestCategoryMatches("", TransactionType.INCOME),
-            categoriasParaElPanel("", TransactionType.INCOME),
-        )
-    }
+    // Las tres pruebas de `categoriasParaElPanel` («con una escondida escrita el panel sigue
+    // mostrando todas», «sigue filtrando lo que no es conocido», «vacío lista todas») se mudaron a
+    // `SelectorDeCategoriaTest`, contra la función que la reemplazó en la Ola B.
 
     @Test
     fun `una categoria fijada en Ambos sirve para los dos tipos`() {

@@ -5,8 +5,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -14,7 +14,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.height
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -25,6 +25,8 @@ import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.ui.components.TAG_CAMPO_DE_CATEGORIA
+import com.jvillada.movi.ui.components.tagDeCeldaDeCategoria
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
@@ -229,7 +231,10 @@ class PresupuestosNoAfirmanMientrasCarganTest {
         montar()
         composeRule.onAllNodesWithText("Nuevo", useUnmergedTree = true).onFirst().performClick()
         composeRule.waitForIdle()
-        composeRule.onNode(hasSetTextAction(), useUnmergedTree = true).performTextInput("Comida")
+        // Ola B: la categoría se elige en la cuadrícula — abrir el campo y tocar la celda.
+        composeRule.onNodeWithTag(TAG_CAMPO_DE_CATEGORIA).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Comida")).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
 
         assertTrue(!hay("No tienes gastos"))

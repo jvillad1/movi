@@ -655,6 +655,7 @@ fun ChangeCategorySheet(
                 type = event.type,
                 usedCategories = UsedCategoriesCache.used,
                 prefs = UsedCategoriesCache.prefs,
+                usos = UsedCategoriesCache.usosRecientes,
                 label = null,
                 placeholder = "Ej: Colegio",
             )

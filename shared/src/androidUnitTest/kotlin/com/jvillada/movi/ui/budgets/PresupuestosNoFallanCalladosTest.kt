@@ -7,20 +7,22 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.onNodeWithTag
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.TAG_CAMPO_DE_CATEGORIA
+import com.jvillada.movi.ui.components.tagDeCeldaDeCategoria
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
@@ -113,13 +115,17 @@ class PresupuestosNoFallanCalladosTest {
         composeRule.onAllNodesWithText("Nuevo", useUnmergedTree = true).onFirst().performClick()
         esperarTexto("Mercado, Salud, Restaurantes")
 
-        composeRule.onNode(hasSetTextAction(), useUnmergedTree = true).performTextInput("Salud")
+        // Ola B: la categoría se elige en la cuadrícula — abrir el campo y tocar la celda.
+        composeRule.onNodeWithTag(TAG_CAMPO_DE_CATEGORIA).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Salud")).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
         tocar("5")
         tocar("Guardar")
 
         esperarTexto("Ya hay un presupuesto para Salud")
-        composeRule.onNode(hasSetTextAction(), useUnmergedTree = true).assertExists()
-        esperarTexto("Salud")
+        // «Con lo escrito»: el campo sigue diciendo la categoría elegida.
+        composeRule.onNodeWithTag(TAG_CAMPO_DE_CATEGORIA).assertTextContains("Salud")
     }
 
     @Test

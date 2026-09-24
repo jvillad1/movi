@@ -230,10 +230,11 @@ class HojaAgregarGeometriaTest {
      * (`else if (scrollAntesDelPicker > 0)`) no atendía.
      *
      * Corre a [TELEFONO_CON_TECLADO] y no al alto del AVD porque hace falta que el sub-picker se
-     * DESBORDE, y con las 10 categorías del catálogo (acá no hay red, así que no hay categorías
-     * propias) a 731 dp entran todas y no habría nada que desplazar — la prueba pasaría sin
-     * ejercitar una sola línea. En el teléfono del dueño se desborda por las dos puntas: tiene
-     * más categorías Y el teclado del sistema le come la mitad de la ventana.
+     * DESBORDE. **Ola B:** con la cuadrícula de cuatro columnas, las 10 categorías del catálogo
+     * son tres filas y entran enteras aun a 520 dp, así que la prueba siembra categorías propias
+     * ([CATEGORIAS_PROPIAS_DE_RELLENO]) y además **comprueba** que desplazar movió algo — sin eso
+     * pasaría sin ejercitar una sola línea. En el teléfono del dueño se desborda solo: tiene
+     * decenas de categorías propias.
      *
      * Mide los límites **sin recortar**: a esta altura el teclado numérico cae fuera de la
      * ventana, y dos rectángulos recortados contra el mismo borde se ven iguales aunque el
@@ -242,6 +243,7 @@ class HojaAgregarGeometriaTest {
     @Test
     @Config(qualifiers = TELEFONO_CON_TECLADO)
     fun elTecladoNoSeMueveAunqueSeDesplaceLaListaDelSubPicker() {
+        CATEGORIAS_PROPIAS_DE_RELLENO.forEach { UsedCategoriesCache.record(it, TransactionType.EXPENSE) }
         montarHoja()
         val enReposo = tecla9SinRecortar()
 
@@ -252,11 +254,19 @@ class HojaAgregarGeometriaTest {
         // «La última» se mide, no se deduce: [CATEGORIAS_OFRECIDAS] viene en el orden del
         // catálogo y el panel las muestra alfabéticamente, así que su `.last()` («Otros») cae en
         // el medio de la lista y desplazaría casi nada — la prueba pasaría sin ejercitar nada.
-        val ultima = CATEGORIAS_OFRECIDAS.maxByOrNull {
+        val ofrecidas = CATEGORIAS_OFRECIDAS + CATEGORIAS_PROPIAS_DE_RELLENO
+        val ultima = ofrecidas.maxByOrNull {
             composeRule.onNodeWithText(it, useUnmergedTree = true).getUnclippedBoundsInRoot().top.value
         }!!
+        val antes = composeRule.onNodeWithText(ultima, useUnmergedTree = true).getUnclippedBoundsInRoot()
         composeRule.onNodeWithText(ultima, useUnmergedTree = true).performScrollTo()
         composeRule.waitForIdle()
+        val despuesDeBajar = composeRule.onNodeWithText(ultima, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(
+            "Bajar hasta «$ultima» no movió nada: el sub-picker no se desbordó y esta prueba no " +
+                "está probando nada. ¿Se agrandó la ventana o se achicaron las celdas?",
+            abs(despuesDeBajar.top.value - antes.top.value) > 1f,
+        )
         cerrarSubPicker()
 
         val despues = tecla9SinRecortar()
@@ -311,13 +321,13 @@ class HojaAgregarGeometriaTest {
      * desplazamiento y no dos. Lo que esta prueba impide es volver a la ventanita.
      *
      * Cuenta solo las que se ven ENTERAS (ver [assertSeVeEntero] para por qué
-     * `assertIsDisplayed()` a secas no alcanza), y deja «Comida» afuera de la cuenta porque es el
-     * valor inicial del campo: su texto aparece dos veces y `onNodeWithText` no sabría cuál medir.
+     * `assertIsDisplayed()` a secas no alcanza).
      *
-     * **La cuenta vale para ESTE panel: el del catálogo y nada más.** El margen es de una fila
-     * exacta —«Vivienda» ya sale recortada 3,5 dp— así que una sugerencia de más la tumba. Eso no
-     * es un defecto de la hoja sino de la entrada, y por eso la entrada se controla en
-     * [aislarLoQueOtraClasePudoDejar]. Quien tenga categorías propias está cubierto por
+     * **La cuenta vale para ESTE panel: el del catálogo y nada más.** Con la lista vieja el margen
+     * era de una fila exacta —«Vivienda» salía recortada 3,5 dp—; con la cuadrícula de cuatro
+     * columnas de la Ola B el catálogo son tres filas y entra con holgura. La entrada igual se
+     * controla (ver `AppDePrueba`): una categoría que se colara de otra clase no es un defecto de
+     * la hoja. Quien tenga categorías propias está cubierto por
      * [elPanelSeEstiraTambienConLasCategoriasPropias], que afirma lo mismo sin depender de que
      * quepan.
      */
@@ -344,8 +354,9 @@ class HojaAgregarGeometriaTest {
      * **debe** desplazarse con la hoja, que es lo que la Ola 14 vino a conseguir—. Contar, ese
      * día, se pondría rojo por la razón equivocada.
      *
-     * Por eso esta afirma el invariante SIN contar: con 12 sugerencias (el catálogo más dos
-     * propias), lo único que puede recortar una fila es **el borde de la hoja**. Si el panel
+     * Por eso esta afirma el invariante SIN contar: con el catálogo más dos propias y el relleno
+     * de [CATEGORIAS_PROPIAS_DE_RELLENO] (Ola B: en cuadrícula de a cuatro, doce ya no alcanzaban
+     * para pasarse del borde), lo único que puede recortar una celda es **el borde de la hoja**. Si el panel
      * volviera a tener su tope de 220 dp con scroll propio, las filas de abajo quedarían
      * cortadas contra el panel —muy por encima del borde— y esto se pone rojo. Es la misma
      * promesa que la de arriba, dicha de una forma que sobrevive a que el catálogo crezca.
@@ -356,18 +367,18 @@ class HojaAgregarGeometriaTest {
      */
     @Test
     fun elPanelSeEstiraTambienConLasCategoriasPropias() {
-        UsedCategoriesCache.record("Mercado", TransactionType.EXPENSE)
-        UsedCategoriesCache.record("Carro", TransactionType.EXPENSE)
+        val propias = listOf("Mercado", "Carro") + CATEGORIAS_PROPIAS_DE_RELLENO
+        propias.forEach { UsedCategoriesCache.record(it, TransactionType.EXPENSE) }
         montarHoja()
         tocar("Categoría")
 
-        val ofrecidas = CATEGORIAS_OFRECIDAS + listOf("Mercado", "Carro")
+        val ofrecidas = CATEGORIAS_OFRECIDAS + propias
         val fondoDeLaHoja = composeRule.onRoot().getUnclippedBoundsInRoot().bottom - ALTO_BARRA_INFERIOR
         val masProfunda = ofrecidas.maxOf {
             composeRule.onNodeWithText(it, useUnmergedTree = true).getUnclippedBoundsInRoot().bottom.value
         }
         assertTrue(
-            "Con 12 sugerencias la lista tiene que pasarse del borde de la hoja " +
+            "Con ${ofrecidas.size} categorías la cuadrícula tiene que pasarse del borde de la hoja " +
                 "(${fondoDeLaHoja.value} dp) y llegó a $masProfunda. Si no se pasa, esta prueba no " +
                 "está probando nada: no hay nada recortado que mirar.",
             masProfunda > fondoDeLaHoja.value,
@@ -494,10 +505,10 @@ private const val IPHONE_16 = "w393dp-h852dp-xhdpi"
 /**
  * El mismo teléfono del AVD **con el teclado del sistema abierto**: 411×520 dp.
  *
- * No es un dispositivo: es el estado en el que el dueño usa el sub-picker de Categoría, porque
- * abrirlo pide el foco del campo y eso levanta el teclado. La ventana se parte al medio, y ahí
- * cualquier cosa que se desborde se desborda de verdad. Los 520 salen de restarle ~210 dp
- * (teclado del sistema) a los 731 del AVD.
+ * No es un dispositivo: es el estado en el que el dueño usa el sub-picker de Categoría cuando
+ * toca «Buscar o crear categoría» — desde la Ola B abrirlo ya NO pide el foco, así que el teclado
+ * sale solo si busca. La ventana se parte al medio, y ahí cualquier cosa que se desborde se
+ * desborda de verdad. Los 520 salen de restarle ~210 dp (teclado del sistema) a los 731 del AVD.
  */
 private const val TELEFONO_CON_TECLADO = "w411dp-h520dp-xhdpi"
 
@@ -522,7 +533,11 @@ private val SUB_PICKERS = listOf(
 
 /**
  * Las categorías que el sub-picker ofrece para un GASTO en esta prueba: las del catálogo, sin las
- * reservadas (`CategoryField` no las sugiere) y sin «Comida», que es el valor inicial del campo.
+ * reservadas (la cuadrícula no las ofrece).
+ *
+ * «Comida» (el valor inicial) quedaba afuera cuando el sub-picker era un campo de texto: su texto
+ * aparecía dos veces —en el campo y en la lista— y `onNodeWithText` no sabría cuál medir. Con la
+ * cuadrícula (Ola B) la búsqueda arranca vacía y «Comida» es una celda más, marcada.
  *
  * Se calculan del catálogo y no se listan a mano: agregar una categoría nueva no debería obligar
  * a tocar esta prueba. Acá no hay red, así que no hay categorías propias del dueño — solo estas.
@@ -530,4 +545,10 @@ private val SUB_PICKERS = listOf(
 private val CATEGORIAS_OFRECIDAS: List<String> = PREDEFINED_CATEGORIES
     .filter { it.type == "EXPENSE" && !isReservedCategory(it.name) }
     .map { it.name }
-    .filterNot { it == "Comida" }
+
+/**
+ * Categorías propias para que la cuadrícula se desborde en las pruebas que necesitan desplazarla:
+ * de a cuatro por fila, el catálogo solo son tres filas. Veinticuatro son seis filas más — lo que
+ * tiene un dueño de verdad, no un número forzado.
+ */
+private val CATEGORIAS_PROPIAS_DE_RELLENO: List<String> = (1..24).map { "Propia $it" }
