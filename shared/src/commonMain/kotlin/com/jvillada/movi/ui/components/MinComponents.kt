@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -159,19 +158,6 @@ fun CardRow(
      * ocupar dos renglones).
      */
     rightMaxFraction: Float? = null,
-    /**
-     * Techo de líneas para [sub], como el de arriba pero para el subtítulo. `null` (el valor de
-     * siempre) = sin techo, se envuelve lo que haga falta — es lo que necesitan «Reordena y edita
-     * las secciones del Inicio sin desplegar» (`PerfilScreen`) o «Puedes usar esta plata para lo
-     * que quieras» (`AccountDetailScreen`), y truncarlos de golpe sería peor que dejarlos en dos
-     * renglones.
-     *
-     * Task 5 (fix round 1) lo agrega para la línea «Movi la reconoce: …» de «Agregar», que SÍ
-     * necesita quedarse en un renglón — un nombre largo empujando el resto de la fila sería el
-     * mismo defecto que ya resolvió [rightMaxFraction]. Optativo y ajeno a los demás llamadores,
-     * a propósito: uno solo pide el techo, el resto no cambia ni un píxel.
-     */
-    subMaxLines: Int? = null,
 ) {
     Column {
         Row(
@@ -190,8 +176,6 @@ fun CardRow(
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.padding(top = 2.dp),
-                        maxLines = subMaxLines ?: Int.MAX_VALUE,
-                        overflow = if (subMaxLines != null) TextOverflow.Ellipsis else TextOverflow.Clip,
                     )
                 }
             }
