@@ -133,6 +133,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
+import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.shared.model.normalizarParaBuscar
@@ -463,9 +464,15 @@ private fun LazyListScope.movimientosEsqueleto() {
                     variant = MinCardVariant.Elevated,
                     padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                 ) {
-                    // El mismo círculo de 36 dp que `IconoDeCategoria` — ver el KDoc de
-                    // `FilaDeListaEsqueleto` (Task 3, fix round 1).
-                    repeat(filas) { i -> FilaDeListaEsqueleto(isLast = i == filas - 1, diametroIconoAlFrente = 36.dp) }
+                    // El mismo círculo que `IconoDeCategoria` — ver el KDoc de
+                    // `FilaDeListaEsqueleto` (Task 3, fix round 1). Leído del tamaño y no copiado:
+                    // si el ícono cambia de medida, el esqueleto no se queda atrás.
+                    repeat(filas) { i ->
+                        FilaDeListaEsqueleto(
+                            isLast = i == filas - 1,
+                            diametroIconoAlFrente = TamanoDeIconoDeCategoria.Normal.circulo,
+                        )
+                    }
                 }
             }
         }
