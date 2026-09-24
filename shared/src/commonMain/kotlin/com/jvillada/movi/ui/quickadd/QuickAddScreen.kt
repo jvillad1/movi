@@ -1412,15 +1412,27 @@ private fun EditorBody(
             // Ver el KDoc de [rightMaxFraction] en CardRow: una categoría propia larga
             // («Mantenimiento del carro») se llevaba la fila entera y partía la etiqueta.
             rightMaxFraction = FRACCION_VALOR_FILA,
-            // Task 5: «Movi la reconoce: <nombre>» cuando lo de arriba lo puso una sugerencia
-            // automática. `null` no dibuja nada — el aspecto de siempre para todo lo demás.
-            sub = categoriaSugeridaHint,
-            // Fix round 1: un nombre largo («Panadería y Pastelería de la 33») no puede envolver
-            // y empujar «Cuenta» hacia abajo — un renglón, con «…» si no entra.
-            subMaxLines = 1,
             showChevron = true,
             onClick = onPickCategory,
+            // La línea de la sugerencia va debajo, a lo ancho, y el hairline después de ella.
+            isLast = categoriaSugeridaHint != null,
         )
+        // Task 5: «Movi la reconoce: <nombre>» cuando lo de arriba lo puso una sugerencia
+        // automática. Va en su propio renglón, a lo ancho de la tarjeta, y no como subtítulo de
+        // «Categoría»: ahí le tocaba la columna izquierda (el valor se lleva el 55 %) y en el
+        // Pixel del dueño «Movi la reconoce: Señor Gol + Mora Soccer» se leía «Movi la
+        // reconoce: P…». Un renglón, con «…» si aun así no entra.
+        if (categoriaSugeridaHint != null) {
+            Text(
+                text = categoriaSugeridaHint,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().padding(bottom = Movi.espacios.corto),
+            )
+            if (categoriasFrecuentes.isEmpty()) Hairline()
+        }
         // Ola A: los chips de frecuentes, entre «Categoría» y «Cuenta» — justo debajo de la
         // categoría que resumen, y antes de la fila que decide dónde sale la plata. Vacía = no
         // se dibuja nada y `CardRow` de arriba sigue con su hairline pegado al de «Cuenta», que
