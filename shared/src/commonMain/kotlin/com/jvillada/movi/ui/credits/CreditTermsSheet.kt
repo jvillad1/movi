@@ -878,7 +878,7 @@ private fun OpcionDeAlta(
  */
 const val SIN_CUENTA_PARA_EL_DESEMBOLSO =
     "Todavía no tienes ninguna cuenta en pesos donde pueda haber entrado esta plata. Créala " +
-        "primero en Cuentas y vuelve a este crédito."
+        "primero en Patrimonio y vuelve a este crédito."
 
 /**
  * Lo que se le dice cuando **no se pudieron leer** sus cuentas.

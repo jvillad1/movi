@@ -216,14 +216,14 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                             Spacer(Modifier.height(12.dp))
                             if (silencioActual) {
                                 Text(
-                                    "Este aviso no se muestra en Inicio.",
+                                    "Este aviso no se muestra en Hoy ni en Por revisar.",
                                     style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                 )
                                 Spacer(Modifier.height(6.dp))
                             }
                             Text(
-                                if (silencioActual) "Volver a avisarme en Inicio" else "No me avises de esto en Inicio",
+                                if (silencioActual) "Volver a avisarme en Hoy y en Por revisar" else "No me avises de esto en Hoy ni en Por revisar",
                                 style = Movi.textos.apoyo,
                                 color = Movi.colores.texto,
                                 fontWeight = FontWeight.Medium,

@@ -156,7 +156,7 @@ class CapturaDeSmsEnLaBandejaTest {
             substring = true, useUnmergedTree = true,
         ).assertExists()
         // Y no se ofrece callar un aviso que no existe.
-        composeRule.onNodeWithText("No me avises de esto en Inicio", useUnmergedTree = true)
+        composeRule.onNodeWithText("No me avises de esto en Hoy ni en Por revisar", useUnmergedTree = true)
             .assertDoesNotExist()
     }
 
@@ -196,10 +196,10 @@ class CapturaDeSmsEnLaBandejaTest {
         mensajes = emptyList()
         montar()
 
-        esperarTexto("No me avises de esto en Inicio")
-        composeRule.onNodeWithText("No me avises de esto en Inicio", useUnmergedTree = true).performClick()
+        esperarTexto("No me avises de esto en Hoy ni en Por revisar")
+        composeRule.onNodeWithText("No me avises de esto en Hoy ni en Por revisar", useUnmergedTree = true).performClick()
 
-        esperarTexto("Este aviso no se muestra en Inicio.")
+        esperarTexto("Este aviso no se muestra en Hoy ni en Por revisar.")
         assertEquals(true, pedido?.smsAlertMuted)
         // El hecho sigue ahí: lo que se calló es el recordatorio, no la noticia.
         composeRule.onNodeWithText("NUNCA HA LLEGADO UN MENSAJE", useUnmergedTree = true).assertExists()
@@ -211,10 +211,10 @@ class CapturaDeSmsEnLaBandejaTest {
         silenciadoEnElServer = true
         montar()
 
-        esperarTexto("Volver a avisarme en Inicio")
-        composeRule.onNodeWithText("Volver a avisarme en Inicio", useUnmergedTree = true).performClick()
+        esperarTexto("Volver a avisarme en Hoy y en Por revisar")
+        composeRule.onNodeWithText("Volver a avisarme en Hoy y en Por revisar", useUnmergedTree = true).performClick()
 
-        esperarTexto("No me avises de esto en Inicio")
+        esperarTexto("No me avises de esto en Hoy ni en Por revisar")
         assertEquals(false, pedido?.smsAlertMuted)
     }
 }
