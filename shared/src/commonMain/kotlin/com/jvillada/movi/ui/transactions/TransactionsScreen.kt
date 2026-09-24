@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -38,41 +37,26 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.DiasPlegadosStore
-import com.jvillada.movi.data.FormaDeMovimientos
 import com.jvillada.movi.data.FormaRecordada
-import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.Repositories
-import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
-import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
-import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
-import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
-import com.jvillada.movi.shared.model.OccurrenceState
-import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.RecurringRule
-import com.jvillada.movi.shared.model.SubStatus
-import com.jvillada.movi.shared.model.Subscription
-import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
-import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.periodoAnterior
@@ -91,42 +75,12 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
+import com.jvillada.movi.ui.porrevisar.RenglonPorRevisar
+import com.jvillada.movi.ui.porrevisar.cuantosPorRevisar
+import com.jvillada.movi.ui.porrevisar.rememberLecturasPorRevisar
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
-import com.jvillada.movi.ui.recurrentes.ETIQUETA_MINIMOS_DE_TARJETA
-import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
-import com.jvillada.movi.ui.recurrentes.OrigenDeSuscripcion
-import com.jvillada.movi.ui.recurrentes.Recurrente
-import com.jvillada.movi.ui.recurrentes.ReminderWarningBanner
-import com.jvillada.movi.ui.dashboard.checklistDelPeriodo
-import com.jvillada.movi.ui.recurrentes.ResumenRecurrentes
-import com.jvillada.movi.ui.recurrentes.SeccionChecklistDelPeriodo
-import com.jvillada.movi.ui.recurrentes.planesDeLasCuotas
-import com.jvillada.movi.ui.recurrentes.SeccionProximosPagos
-import com.jvillada.movi.ui.recurrentes.SeccionSinConfirmar
-import com.jvillada.movi.ui.recurrentes.SeccionYaOcurrieron
-import com.jvillada.movi.ui.recurrentes.avisoDeMinimosQueFaltan
-import com.jvillada.movi.ui.recurrentes.candidatasSinConfirmar
-import com.jvillada.movi.ui.recurrentes.claveDeNombre
-import com.jvillada.movi.ui.recurrentes.claveDescartada
-import com.jvillada.movi.ui.recurrentes.hojaParaAnotar
-import com.jvillada.movi.ui.recurrentes.contextoDeCandidata
-import com.jvillada.movi.ui.recurrentes.contextoDeSuscripcionActiva
-import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
-import com.jvillada.movi.ui.recurrentes.avisoDeCandidataDuplicada
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
-import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
-import com.jvillada.movi.ui.recurrentes.notaDeProrrateo
-import com.jvillada.movi.ui.recurrentes.ocurrenciasAbiertasSinUrgencia
-import com.jvillada.movi.ui.recurrentes.ocurrenciasSelladas
-import com.jvillada.movi.ui.recurrentes.proximosQueUrgen
-import com.jvillada.movi.ui.recurrentes.quitarBorraLaSuscripcion
-import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
-import com.jvillada.movi.ui.recurrentes.shouldShowReminderWarning
-import com.jvillada.movi.ui.recurrentes.subtituloDelFlujoLibre
-import com.jvillada.movi.ui.recurrentes.suscripcionesActivas
-import com.jvillada.movi.ui.recurrentes.textoDelMontoDeSuscripcion
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import com.jvillada.movi.ui.plan.rememberMarcasDeRecurrentes
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
@@ -217,18 +171,11 @@ fun isTransferLeg(event: FinancialEvent): Boolean =
  *
  * Un día que se queda sin filas se descarta entero (encabezado incluido): un día vacío con su
  * «Flujo del día» no le dice nada a nadie.
- *
- * @param reglas y @param nombresDeSuscripcionesActivas: lo que hace falta para el chip
- *   [CHIP_RECURRENTES] (ver [matchesChip] y [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe]).
- *   Vacíos por defecto — ningún otro chip los necesita, y así los tests de los chips que ya
- *   existían no tienen que cambiar una línea.
  */
 fun diasVisibles(
     days: List<EventDay>,
     chip: Int,
     query: String,
-    reglas: List<RecurringRule> = emptyList(),
-    nombresDeSuscripcionesActivas: List<String> = emptyList(),
 ): List<EventDay> =
     days.mapNotNull { day ->
         val filtered = day.items
@@ -236,7 +183,7 @@ fun diasVisibles(
             // [showsInMovements], que también explica por qué el filtro vive acá y no en
             // `/by-day` ni en `LocalRepository`.
             .filter { showsInMovements(it, query) }
-            .filter { matchesChip(it, chip, reglas, nombresDeSuscripcionesActivas) }
+            .filter { matchesChip(it, chip) }
             .filter { matchesQuery(it, query) }
         if (filtered.isEmpty()) null
         else day.copy(
@@ -388,17 +335,19 @@ const val CHIP_INGRESOS = 2
 const val CHIP_POR_CONFIRMAR = 3
 const val CHIP_ENTRE_CUENTAS = 4
 /**
- * PR 1 del rediseño de Recurrentes (2026-09): el dueño pidió, palabra por palabra, poder «en esa
- * página revisar cuáles de todos los gastos por filtro o lo que sea son recurrentes» — este es
- * ese filtro. Ver [matchesChip] y [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe].
+ * PR 1 del rediseño de Recurrentes (2026-09) lo puso como chip; la ola C lo sacó de Movimientos:
+ * el tablero de lo que se repite es ahora **Plan · Pagos del mes**, y lo que queda acá de esa idea
+ * es el ícono de repetición de cada fila (ver [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe]).
+ *
+ * **El índice no se borra ni se reusa**: viaja adentro de `Screen.Transactions`, y quien todavía
+ * lo pida —un enlace viejo, una pila— termina en Plan (ver `destinoVigente` en Navigation.kt). Si
+ * aun así llegara a Movimientos, [chipInicialDeMovimientos] lo trata como «Todo».
  */
 const val CHIP_RECURRENTES = 5
 
 /**
- * El tag de la barra de carga de Movimientos (Task 7, fix round 1): con «Recurrentes» la lista de
- * días nunca se pinta (ni cargada ni cargando, ver [mostrarLaListaDeDias]), así que esta barra es
- * la ÚNICA señal de carga que le queda a ese chip en su primera vez — sin tag, una prueba no tiene
- * cómo verificar que sigue ahí.
+ * El tag de la barra de carga de Movimientos (Task 7, fix round 1): la que se pinta cuando se
+ * recarga con la lista ya en pantalla — sin tag, una prueba no tiene cómo distinguirla.
  */
 const val TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS: String = "barra-de-carga-de-movimientos"
 
@@ -492,7 +441,10 @@ private fun LazyListScope.movimientosEsqueleto() {
     }
 }
 
-/** Los rótulos de los chips, en el orden de sus índices. */
+/**
+ * Los rótulos de los chips, en el orden de sus índices. «Recurrentes» ya no se dibuja (ver
+ * [CHIP_RECURRENTES]) pero su rótulo se queda en su lugar: sacarlo correría los índices.
+ */
 val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes")
 
 /**
@@ -507,16 +459,18 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
  * tarea pendiente, y su estado normal —el de quien anota todo a mano— es *vacío*. Un chip que la
  * enorme mayoría de los días no lleva a ningún lado ocupa el mismo espacio que los que sí.
  *
- * Así que sale de la fila y entra como aviso arriba de la lista, que aparece **solo cuando hay
- * algo que confirmar** (ver [avisoDePorConfirmar]). Es el mismo camino que ya tenían los
- * candidatos a pago de tarjeta, por el mismo motivo.
+ * Así que salió de la fila y pasó a ser un aviso arriba de la lista. Ola C, tarea 5: ese aviso y el
+ * de los candidatos a pago de tarjeta se juntaron con los mensajes del banco en **una sola bandeja,
+ * «Por revisar»** (`ui/porrevisar/PorRevisarScreen.kt`), y acá queda un solo renglón «N por
+ * revisar» que la abre.
  *
  * ### Por qué la constante sigue existiendo y valiendo 3
  *
- * [CHIP_POR_CONFIRMAR] no se borra: sigue siendo un filtro de verdad —el aviso lo activa— y
- * [matchesChip] lo sigue contestando. Y sobre todo, **los índices no se renumeran**: el número
- * viaja adentro de `Screen.Transactions` y puede volver desde una pila de navegación restaurada.
- * Correr «Recurrentes» del 5 al 3 haría que un 3 viejo signifique otra cosa, en silencio.
+ * [CHIP_POR_CONFIRMAR] no se borra aunque Movimientos ya no tenga ese modo: [matchesChip] lo sigue
+ * contestando, y sobre todo **los índices no se renumeran** — el número viaja adentro de
+ * `Screen.Transactions` y puede volver desde una pila de navegación restaurada. Quien lo pida llega
+ * a «Por revisar» (ver `destinoVigente` en Navigation.kt). Correr «Recurrentes» del 5 al 3 haría
+ * que un 3 viejo signifique otra cosa, en silencio.
  *
  * ### «Entre cuentas» salió por otro motivo
  *
@@ -524,20 +478,14 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
  * sí: un traspaso, una cuota o un pago de tarjeta son hechos **entre dos cuentas suyas**, no una
  * forma de mirar sus gastos. La lista sigue existiendo igual —el mismo filtro, la misma pantalla—
  * pero se entra desde Cuentas, que es de lo que habla. Ver `AccountsScreen`.
- */
-val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_RECURRENTES)
-
-/**
- * **Cuántos movimientos entraron solos y esperan confirmación** — los que llegaron por SMS, por
- * un extracto o por OCR, y de los que el dueño todavía no dijo si el monto y la categoría están
- * bien.
  *
- * Se cuenta sobre los días completos (`allDays`) y no sobre los visibles: el aviso tiene que
- * decir la verdad esté donde esté parado el dueño, y con el chip «Gastos» activo los que están
- * por confirmar ni siquiera aparecen en la lista (ver [matchesChip]).
+ * ### «Recurrentes» se mudó a Plan (ola C)
+ *
+ * El tablero que ese chip mostraba —qué vence, qué ya ocurrió, qué falta confirmar— no es una forma
+ * de mirar movimientos sino la respuesta a «¿qué me falta pagar?», que es la pregunta de la pestaña
+ * Plan. Ahí vive ahora, como «Pagos del mes». Ver [CHIP_RECURRENTES].
  */
-fun cuantosPorConfirmar(days: List<EventDay>): Int =
-    days.sumOf { dia -> dia.items.count { it.reconciliationStatus == ReconciliationStatus.UNCONFIRMED } }
+val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS)
 
 /**
  * **El aviso de lo que no subió**, o `null` si todo subió. Lo que el server rechaza (la cuenta se
@@ -553,78 +501,18 @@ fun textoDeRechazados(rechazados: List<MovimientoRechazado>): String? {
 }
 
 /**
- * ¿Se pinta el aviso de «por confirmar» arriba de la lista?
- *
- * Solo si hay algo que confirmar **y** no se está mirando ya esa bandeja: adentro de ella el
- * aviso sería un botón que lleva a donde uno ya está. Ahí lo que corresponde es el encabezado que
- * dice en qué modo está y cómo salir (ver [MODO_POR_CONFIRMAR_TITULO]).
- */
-fun avisoDePorConfirmar(chip: Int, cuantos: Int): Boolean =
-    cuantos > 0 && chip != CHIP_POR_CONFIRMAR
-
-/**
- * Lo que dice el aviso. **Nombra el hecho, no la etiqueta**: «entraron solos» explica por qué hay
- * algo que revisar, que es justo la pregunta que el chip viejo dejaba sin contestar — el dueño la
- * hizo con todas las letras, *«¿Qué es Por confirmar?»*.
- */
-fun textoDelAvisoPorConfirmar(cuantos: Int): String =
-    if (cuantos == 1) "1 movimiento entró solo y falta confirmarlo"
-    else "$cuantos movimientos entraron solos y faltan confirmar"
-
-/**
- * El encabezado que reemplaza al chip cuando se está adentro de la bandeja. Hace falta porque, al
- * no haber chip, **ningún chip queda marcado**: sin esto la lista se vería filtrada sin nada que
- * dijera por qué ni cómo volver.
- */
-const val MODO_POR_CONFIRMAR_TITULO = "Por confirmar"
-
-/**
  * El rótulo del encabezado cuando se está adentro de un filtro que **no tiene chip**, o `null` si
  * el filtro activo sí es uno de los que se dibujan.
  *
- * Los dos que salieron de la fila necesitan lo mismo y por lo mismo: sin chip marcado, la lista se
- * vería filtrada sin nada que dijera por qué ni cómo volver. Ver [CHIPS_VISIBLES].
+ * Sin chip marcado, la lista se vería filtrada sin nada que dijera por qué ni cómo volver. Ver
+ * [CHIPS_VISIBLES]. Hoy es solo «Entre cuentas»: «Por confirmar» dejó de ser un modo de esta
+ * pantalla en la ola C (ver [CHIP_POR_CONFIRMAR]).
  */
 fun tituloDelModoSinChip(chip: Int): String? = when (chip) {
-    CHIP_POR_CONFIRMAR -> MODO_POR_CONFIRMAR_TITULO
     CHIP_ENTRE_CUENTAS -> CHIPS_DE_MOVIMIENTOS[CHIP_ENTRE_CUENTAS]
     else -> null
 }
 
-/**
- * PR 2 del rediseño de Recurrentes (2026-09): ¿se pinta el card de «Flujo libre» y la sección de
- * candidatas por confirmar?
- *
- * Solo con el chip «Recurrentes» activo — en «Todo» o «Gastos» esas dos piezas hablan de una cosa
- * que no tiene nada que ver con lo que el chip pidió ver, y encima duplicarían el «Flujo libre»
- * que ya existía en la pantalla vieja: acá es un resumen DEL FILTRO, no un segundo total suelto
- * en medio de la lista. Función aparte (en vez de comparar `chip == CHIP_RECURRENTES` en el
- * `@Composable`) para poder testear la decisión sin montar Compose.
- */
-fun mostrarResumenDeRecurrentes(chip: Int): Boolean = chip == CHIP_RECURRENTES
-
-/**
- * **¿Se pinta la lista de movimientos agrupada por día?**
- *
- * Con el chip «Recurrentes» activo, no. El dueño: *«Me gusta lo de Ya ocurrieron pero se repiten
- * más abajo agrupando por día, creo que esto no tiene mucho sentido: solo debería tener pendientes
- * y ya ocurrieron, nada más»*.
- *
- * Tiene razón, y el motivo es que esa lista **no agrega nada acá**: arriba ya está el mismo hecho
- * dicho mejor. «Ya ocurrieron» no es una lista de movimientos, es la respuesta a «¿este mes ya
- * pagaste el arriendo?» — con el pago que lo prueba y un «Deshacer» si no era ese. Repetir abajo
- * los mismos pagos, ahora sueltos y sin esa pregunta encima, obliga a leer dos veces para
- * enterarse de lo mismo.
- *
- * Con eso, «Recurrentes» deja de ser una lista filtrada y pasa a ser lo que el dueño usa: el
- * **tablero de lo que se repite** — qué vence, qué ya ocurrió, qué falta confirmar y cuánto suma.
- * Los movimientos siguen enteros en «Todo» y en «Gastos», que es donde se leen como movimientos.
- *
- * **Buscar es la excepción**, por tercera vez en esta pantalla y por el mismo motivo que las otras
- * dos (`showsInMovements`, `agruparAjustesDeSaldo`): escribir una consulta es pedir explícitamente
- * que aparezca algo, y una lista que esconde justo lo que acabás de buscar es peor que una que
- * muestra de más.
- */
 /**
  * **Los días que caen adentro de un período**, para que Movimientos muestre el mes que el dueño
  * vive y no el del calendario.
@@ -658,27 +546,21 @@ fun diasDelPeriodo(
 fun puedeAvanzarDePeriodo(visible: PeriodoFinanciero, actual: PeriodoFinanciero): Boolean =
     visible.prefijo < actual.prefijo
 
-fun mostrarLaListaDeDias(chip: Int, query: String): Boolean =
-    chip != CHIP_RECURRENTES || query.isNotBlank()
-
 /**
  * PR 3 del rediseño de Recurrentes (2026-09): **con qué chip arranca Movimientos** cuando alguien
- * la abrió pidiendo uno.
- *
- * Existe porque los enlaces que antes llevaban a la pantalla de Recurrentes ahora llevan acá (el
- * «Ver todos» de Próximos pagos del Inicio, la campana, «Anota tus gastos recurrentes», los
- * targets SDUI). Si esos enlaces cayeran en Movimientos sin filtro, el dueño tocaría un pago que
- * vence y llegaría a la lista completa de sus movimientos, sin ninguna relación visible con lo que
- * acaba de tocar: el destino tiene que responder a lo que se tocó, no solo estar cerca.
+ * la abrió pidiendo uno — hoy, el modo sin chip «Entre cuentas», desde Patrimonio.
  *
  * `null` —el caso normal, entrar por la pestaña— es «Todo». Un índice fuera de rango también cae
  * en «Todo» y no explota: el valor viaja adentro de [com.jvillada.movi.ui.Screen.Transactions], y
  * una pila restaurada o una definición SDUI vieja podrían traer un número que hoy no existe.
  * Arrancar en «Todo» ahí es la caída correcta — es la pantalla completa, no un filtro que esconde
- * cosas sin decirlo.
+ * cosas sin decirlo. [CHIP_RECURRENTES] y [CHIP_POR_CONFIRMAR] caen igual: esos modos ya no
+ * existen acá (ola C: uno se mudó a Plan, el otro a «Por revisar») y la navegación los desvía antes
+ * de llegar; si aun así llegaran, «Todo» es lo honesto.
  */
 fun chipInicialDeMovimientos(pedido: Int?): Int =
-    if (pedido != null && pedido in CHIPS_DE_MOVIMIENTOS.indices) pedido else CHIP_TODO
+    if (pedido != null && pedido in CHIPS_DE_MOVIMIENTOS.indices && pedido != CHIP_RECURRENTES && pedido != CHIP_POR_CONFIRMAR) pedido
+    else CHIP_TODO
 
 /**
  * ¿Este movimiento entra en el chip [chip]?
@@ -704,38 +586,18 @@ fun chipInicialDeMovimientos(pedido: Int?): Int =
  * «Entre cuentas» es el cuarto filtro: los tres pares y el pago de tarjeta suelto, ver
  * [esEntreCuentas]. Las dos patas de cada par pasan, así que [collapseTransfers] las junta.
  *
- * «Recurrentes» es el quinto: lo que ya reconocemos como una regla o una suscripción confirmada,
- * ver [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe] — con las mismas dos listas ya
- * cargadas, sin ningún viaje de red por fila (ese es el precio, y está documentado ahí) — **más lo
- * que el dueño ya pagó contra una deuda suya**, que no se reconoce por nombre sino por su forma:
- * la cuota de un crédito ([com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada]) y el pago de una
- * tarjeta ([com.jvillada.movi.ui.recurrentes.nombreDePagoDeTarjeta]). De cada par entra **solo la
- * pata del dinero**: la de la deuda es el otro lado del mismo hecho, y con las dos el chip
- * mostraría dos filas por cada pago en la lista que el dueño lee para sumar lo que sale al mes.
- * Como la hermana no pasa el filtro, [collapseTransfers] la deja suelta — la cuota se ve como el
- * gasto que es (rojo, con signo) y el pago de tarjeta como lo que es (gris, sin signo, fuera del
- * «Flujo del día»), que es el mismo camino que ya tenían, por el mismo motivo.
- *
- * **Que el pago de una tarjeta se vea acá no lo convierte en un gasto**: `countsAsCashFlow` sigue
- * diciendo `false` y ni «Gastos del mes» ni el total de «Flujo libre» lo suman. El dueño pidió las
- * dos cosas a la vez — verlo y que no cuente — y el porqué está en
- * [com.jvillada.movi.ui.recurrentes.nombreDePagoDeTarjeta].
- *
- * @param reglas y @param nombresDeSuscripcionesActivas solo los usa [CHIP_RECURRENTES]; el resto
- *   de los chips ni los mira, así que quedan con default vacío y no rompen ningún llamado viejo.
+ * «Recurrentes» fue el quinto hasta la ola C, cuando su tablero se mudó a Plan (ver
+ * [CHIP_RECURRENTES]); lo que queda de él en esta pantalla es el ícono de repetición de cada fila.
  */
 fun matchesChip(
     event: FinancialEvent,
     chip: Int,
-    reglas: List<RecurringRule> = emptyList(),
-    nombresDeSuscripcionesActivas: List<String> = emptyList(),
 ): Boolean = when (chip) {
     CHIP_GASTOS -> event.type == TransactionType.EXPENSE && cuentaEnGastosEIngresos(event)
     // Igual que Gastos: lo que entró solo espera en «Por confirmar» y no se suma hasta confirmarlo.
     CHIP_INGRESOS -> event.type == TransactionType.INCOME && cuentaEnGastosEIngresos(event)
     CHIP_POR_CONFIRMAR -> esperaEnPorConfirmar(event.reconciliationStatus)
     CHIP_ENTRE_CUENTAS -> esEntreCuentas(event)
-    CHIP_RECURRENTES -> nombreRecurrenteDe(event, reglas, nombresDeSuscripcionesActivas) != null
     else -> true
 }
 
@@ -750,7 +612,8 @@ const val PERIODO_NO_LEIDO: String =
  * una cuenta recién abierta. Con el chip «Por confirmar» activo y nada por confirmar —que es el
  * caso normal de quien anota todo a mano— ese texto mentía dos veces: sí hay movimientos, y
  * registrar uno nuevo no tiene nada que ver con confirmar los que entraron solos. El dueño lo
- * leyó exactamente así: *«¿Qué es Por confirmar?»*.
+ * leyó exactamente así: *«¿Qué es Por confirmar?»*. Ola C: ese modo se mudó a la bandeja «Por
+ * revisar», que tiene su propio vacío; acá quedan los de los chips.
  *
  * [ofreceRegistrar] solo cuando de verdad no hay nada anotado: es la única situación en la que
  * el botón contesta la pregunta que el vacío plantea.
@@ -762,12 +625,6 @@ data class VacioDeMovimientos(
 )
 
 fun vacioDeMovimientos(chip: Int, hayMovimientos: Boolean): VacioDeMovimientos = when {
-    chip == CHIP_POR_CONFIRMAR -> VacioDeMovimientos(
-        titulo = "Nada por confirmar",
-        detalle = "Todo lo que hay lo registraste tú. Aquí caen los movimientos que entran solos, " +
-            "por SMS o por extracto, hasta que los confirmes.",
-        ofreceRegistrar = false,
-    )
     !hayMovimientos -> VacioDeMovimientos("Sin movimientos aún", null, ofreceRegistrar = true)
     chip == CHIP_GASTOS -> VacioDeMovimientos(
         titulo = "Sin gastos",
@@ -783,12 +640,6 @@ fun vacioDeMovimientos(chip: Int, hayMovimientos: Boolean): VacioDeMovimientos =
         titulo = "Nada entre cuentas",
         detalle = "Aquí van los traspasos, las cuotas de crédito y los pagos de tarjeta: plata que " +
             "fue de una cuenta tuya a otra.",
-        ofreceRegistrar = false,
-    )
-    chip == CHIP_RECURRENTES -> VacioDeMovimientos(
-        titulo = "Nada recurrente",
-        detalle = "Aquí aparecen los movimientos que ya reconocemos como un recurrente que tienes " +
-            "anotado o una suscripción confirmada.",
         ofreceRegistrar = false,
     )
     else -> VacioDeMovimientos("Sin movimientos aún", null, ofreceRegistrar = true)
@@ -869,27 +720,6 @@ fun agruparAjustesDeSaldo(rows: List<MovementRow>, query: String): List<Movement
  * **Cuántos movimientos dice tener un día plegado.** Cuenta hechos, no renglones — y el grupo de
  * ajustes no es un hecho.
  */
-/**
- * **Lo que dice «Suscripciones activas» cuando está plegada.**
- *
- * El dueño, mirando Recurrentes: *«Debemos dejar que suscripciones sea una opción de filtro o de
- * menú colapsable dentro de recurrentes»*. Con nueve cobros activos la sección medía más que todo
- * lo demás junto, y la enorme mayoría de las veces que se abre esa pantalla no es para revisar el
- * inventario: es para ver qué vence y qué falta confirmar.
- *
- * Plegada, entonces, tiene que seguir diciendo **lo que se mira de reojo** —cuánto suman al mes— y
- * dejar la lista a un toque. Sin esto, plegar escondería la cifra junto con las filas y la sección
- * dejaría de informar en vez de ocupar menos.
- *
- * El total llega calculado desde `ResumenRecurrentes.gastosDeSuscripciones`, que es el mismo que
- * alimenta el «Flujo libre» de arriba: acá no se suma nada, para que las dos cifras no puedan
- * discrepar.
- */
-fun resumenPlegadoDeSuscripciones(cuantas: Int, totalMensual: Long): String {
-    val plural = if (cuantas == 1) "1 cobro" else "$cuantas cobros"
-    return "$plural · ${formatCOP(totalMensual)} al mes"
-}
-
 fun cuantosMovimientosDice(rows: List<MovementRow>): Int = rows.sumOf { row ->
     when (row) {
         // Un par plegado es UN hecho: la plata cambió de cuenta una sola vez. Esa decisión es
@@ -1001,13 +831,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
      * limitación.
      */
     var ajustesAbiertos by remember { mutableStateOf(emptySet<String>()) }
-    /**
-     * ¿Está abierta la lista de suscripciones activas? **Arranca cerrada**, y por lo mismo que el
-     * grupo de ajustes es transitorio: abrir el inventario es un vistazo, no una preferencia. La
-     * cifra que se mira de reojo —cuánto suman al mes— sigue a la vista plegada, así que cerrar no
-     * esconde información, solo filas. Ver [resumenPlegadoDeSuscripciones].
-     */
-    var suscripcionesAbiertas by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     // Pantalla ancha: la rueda del mouse sobre los márgenes, a los lados de la columna, también
     // tiene que mover esta lista. Ver [ScrollDesdeLosMargenes].
@@ -1047,7 +870,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     var errorDelInicio by remember { mutableStateOf<String?>(null) }
     var editandoElInicio by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }  // true de entrada: antes de la primera lectura no se afirma ni vacío ni error
-    var error by remember { mutableStateOf<String?>(null) }
+    val errorDeLaPantalla = remember { mutableStateOf<String?>(null) }
+    var error by errorDeLaPantalla
     var refreshKey by remember { mutableStateOf(0) }
     // Se prende solo cuando `getEventsByDay` contestó de verdad (ver [NoSePudoLeer]). Sin esto, una
     // lectura caída dejaba «Sin movimientos aún · + Registrar el primero» a quien tiene cientos.
@@ -1081,19 +905,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // Se calcula una vez por composición y no dentro del bucle de días.
     val hoyIso = remember { todayIsoInAppZone() }
 
-    // Candidatos a pago de tarjeta sin marcar (Task 2 del plan): entrada opcional, así que un
-    // fallo al traerlos no debe tapar Movimientos con un snackbar.
-    var candidates by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
-    // Los que el dueño ya resolvió en esta pantalla — confirmados con "Marcar" o descartados con
-    // "No es", mismo tratamiento para los dos. Se descuentan de `candidates` porque el refetch
-    // puede fallar y dejar la lista vieja: sin esto, un pago recién resuelto volvía a aparecer
-    // con sus botones activos y el contador seguía diciendo el número de antes — o sea, la app le
-    // decía que su acción no se había guardado, cuando sí se guardó. Para "No es" en particular,
-    // sin este descuento el falso positivo revivía en cuanto el refetch fallaba.
-    var resolvedIds by remember { mutableStateOf(emptySet<String>()) }
-    val pendingCandidates = candidates.filterNot { it.id in resolvedIds }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
-    var showCandidatesSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(refreshKey, refreshTick) {
         loading = true
@@ -1122,379 +934,20 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         runCatching { Repositories.wallets.getMovimientosRechazados() }.onSuccess { rechazados = it }
     }
 
-    LaunchedEffect(refreshKey, refreshTick) {
-        runCatching { Repositories.wallets.getCardPaymentCandidates() }
-            .onSuccess { candidates = it }
-    }
+    // Ola C, tarea 5: los mensajes del banco y los candidatos a pago de tarjeta, solo para contar
+    // lo que hay en «Por revisar» (ver [RenglonPorRevisar]). Se revisan allá, no acá.
+    val porRevisar = rememberLecturasPorRevisar(recarga = refreshKey)
+    // El último número del renglón que salió de lecturas terminadas; `null` hasta la primera.
+    val ultimoConteoPorRevisar = remember { mutableStateOf<Int?>(null) }
 
-    // PR 1 del rediseño de Recurrentes: lo que hace falta para el chip «Recurrentes» y la marca
-    // en cada fila (ver [nombreRecurrenteDe]). Sale del MISMO cache que ya usa la barra de
-    // «¿esto se repite?» de después de guardar — ver [RecurringOfferGate.listasParaMovimientos]:
-    // si esta pantalla es la primera en pedirlas esta sesión, las carga UNA vez; si ya las cargó
-    // otra pantalla (o esta misma en una visita anterior), no hay ningún viaje de red de más.
-    var reglasRecurrentes by remember { mutableStateOf<List<RecurringRule>>(emptyList()) }
-    var nombresDeSuscripcionesActivas by remember { mutableStateOf<List<String>>(emptyList()) }
-    // Sube tras cada Confirmar / No es / Buscar cobros, para volver a traer las listas sin
-    // esperar a `refreshKey` (que dispararía además una recarga innecesaria de los movimientos).
-    var recurrentesReloadKey by remember { mutableStateOf(0) }
-    // `recurrentesReloadKey` también es clave acá, y no solo de las candidatas: confirmar una
-    // candidata la vuelve un cobro ACTIVO, y de eso dependen el filtro del chip y la marca de
-    // cada fila (ver [nombreRecurrenteDe]). Sin esta clave, el dueño confirmaba «Netflix» y sus
-    // movimientos seguían sin reconocerse hasta salir de la pantalla y volver a entrar.
-    LaunchedEffect(refreshKey, refreshTick, recurrentesReloadKey) {
-        val (reglas, cobros) = RecurringOfferGate.listasParaMovimientos()
-        reglasRecurrentes = reglas
-        nombresDeSuscripcionesActivas = nombresDeSuscripcionesQueYaSuman(cobros)
-    }
-
-    // PR 2 del rediseño de Recurrentes: el «Flujo libre» y las candidatas «por confirmar» que
-    // vivían solo en la pantalla vieja. A diferencia de `reglasRecurrentes` de arriba —que solo
-    // necesita reconocer un nombre, y ahí una lista de hace un rato no hace daño— acá el dueño
-    // viene a hacer algo con lo que ve (confirmar o descartar una candidata), así que se trae
-    // FRESCO cada vez que el chip se activa, sin pasar por el cache de `RecurringOfferGate`: una
-    // candidata que el detector ya encontró en otra sesión, o que otro dispositivo ya resolvió,
-    // tiene que verse tal cual está, no la última que ese cache recuerde. Es el mismo endpoint
-    // que `listasParaMovimientos` ya usa; la diferencia es que acá SÍ se repite la llamada.
-    var subsParaRecurrentes by remember { mutableStateOf(SubscriptionsResult(emptyList(), 0)) }
-    var subsParaRecurrentesOk by remember { mutableStateOf(false) }
-    // Ids con una acción en vuelo, para no dejar tocar dos veces la misma suscripción mientras se
-    // guarda — mismo motivo que `marcando` en la pantalla vieja. Sirve a las dos acciones que hay
-    // sobre una suscripción (Confirmar/No es de una candidata, y Quitar de una activa): son
-    // conjuntos disjuntos de filas, y el id es el id.
-    var suscripcionesEnVuelo by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var buscandoCobros by remember { mutableStateOf(false) }
-    val coroutineRecurrentes = rememberCoroutineScope()
-
-    // `refreshKey` también: es la clave del «Reintentar» del snackbar y de anular/editar un
-    // movimiento desde su hoja. Sin ella, reintentar después de un fallo acá no volvía a pedir
-    // nada y «Próximos» quedaba cargando para siempre.
-    LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick, refreshKey) {
-        if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
-        runCatching { Repositories.wallets.getSubscriptions() }
-            .onSuccess {
-                subsParaRecurrentes = it
-                subsParaRecurrentesOk = true
-                // El gate queda con lo mismo que se acaba de traer — igual que hace el
-                // re-escaneo de la pantalla vieja (`rescan()`), para que la barra de «¿esto se
-                // repite?» de después de guardar no vuelva a proponer una candidata recién
-                // confirmada acá.
-                RecurringOfferGate.recordarLoQueYaHay(reglas = null, suscripciones = it.subscriptions)
-            }
-            .onFailure { error = it.toUserMessage() }
-    }
-
-    // PR 3 del rediseño de Recurrentes: los vencimientos y «¿esto ya ocurrió?», la última pieza
-    // que solo vivía en la pantalla vieja. Misma disciplina que las candidatas de arriba: se
-    // traen FRESCAS con el chip activo (acá el dueño viene a sellar un periodo, no a mirar) y se
-    // vuelven a traer tras cada marca con `recurrentesReloadKey`.
-    var upcomingRecurrentes by remember { mutableStateOf<List<UpcomingPayment>>(emptyList()) }
-    var vencimientosOk by remember { mutableStateOf(false) }
-    var ocurrencias by remember { mutableStateOf<List<OccurrenceState>>(emptyList()) }
-    var ocurrenciasOk by remember { mutableStateOf(false) }
-    /**
-     * **Alguna de esas dos lecturas falló.** `vencimientosOk`/`ocurrenciasOk` solo distinguen «ya
-     * contestó» de «todavía no», y el checklist necesita la tercera: mientras viaja no dice nada, y
-     * si no llegó tiene que decir que no pudo leerlo (ver [SeccionChecklistDelPeriodo]). Sin este
-     * dato, una lectura caída se veía igual que una lenta — para siempre.
-     */
-    var recurrentesNoSePudieronLeer by remember { mutableStateOf(false) }
-    /**
-     * Lo que el dueño rechazó con «no fue este», **mientras dure esta pantalla**. Las claves son
-     * (regla, movimiento) — ver [claveDescartada].
-     *
-     * Ya no es la única memoria del rechazo: desde que Movi empareja solo, el «no» se guarda en el
-     * server (ver `rechazarOcurrencia`), porque uno que se olvida al recargar dejaría al
-     * emparejamiento automático volviendo a dar por ocurrido lo mismo en la siguiente lectura. Esto
-     * que queda acá es la capa optimista: la propuesta siguiente aparece en el cuadro siguiente, sin
-     * esperar el viaje de red. Las dos usan la misma clave a propósito.
-     */
-    var descartadas by remember { mutableStateOf<Set<String>>(emptySet()) }
-    // Reglas con una escritura en vuelo. Un conjunto y no un id: confirmar el salario no puede
-    // congelar la pregunta del arriendo — son dos hechos independientes.
-    var marcando by remember { mutableStateOf<Set<String>>(emptySet()) }
-    // Para el aviso ámbar de «pediste que te recordemos y no tenemos por dónde». Ver
-    // [shouldShowReminderWarning]: `canales == null` es «todavía no se sabe» y ahí NO se avisa.
-    var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
-    var pushRefreshTick by remember { mutableStateOf(0) }
-    val canalesDeAviso = ReminderChannelsCache.canales
-    /**
-     * La regla que el dueño pidió editar tocando su renglón en «Próximos».
-     *
-     * En la pantalla «Recurrentes» —la que el rediseño de 2026-09 disolvió acá adentro— ese toque
-     * abría la hoja de editar, y esa es la única acción que la fila prometía: relocalizarla como
-     * «no hace nada» habría sido perder función, y mandarla a la pantalla vieja habría sido justo
-     * lo que el rediseño venía a terminar. Es la misma hoja, en modo edición, que ya abre
-     * [HojaDelMovimiento] desde el detalle de un movimiento (PR 1).
-     *
-     * La regla que se pasa sale de `upcomingRecurrentes`, que se recarga al activar el chip y tras
-     * cada cambio (`recurrentesReloadKey`) — la precaución que esa pantalla documentaba: prellenar el
-     * formulario con una fila vieja hace que «Guardar cambios» reescriba lo que el dueño ya había
-     * corregido.
-     */
-    var reglaRecurrenteAEditar by remember { mutableStateOf<RecurringRule?>(null) }
-    // Ola 18: la suscripción abierta para editar. Hasta acá la fila solo ofrecía «Quitar», así
-    // que corregirle el monto a un cobro era quitarlo y volver a escribirlo entero — y en una
-    // detectada eso ni siquiera funcionaba: «Quitar» la marca DISMISSED, no la borra.
-    var suscripcionAEditar by remember { mutableStateOf<Subscription?>(null) }
-    /** La suscripción que el dueño tocó «Quitar» y todavía no confirmó. */
-    var suscripcionPorQuitar by remember { mutableStateOf<Subscription?>(null) }
-
-    LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick, refreshKey) {
-        if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
-        ReminderChannelsCache.cargar()
-        // En paralelo, como las hace la pantalla vieja: en serie son dos viajes encadenados y la
-        // sección se queda a medias el doble de tiempo.
-        coroutineScope {
-            val porVencer = async { runCatching { Repositories.wallets.getUpcomingPayments() } }
-            val porOcurrir = async { runCatching { Repositories.wallets.getOccurrenceStates() } }
-            recurrentesNoSePudieronLeer = false
-            porVencer.await()
-                .onSuccess { upcomingRecurrentes = it; vencimientosOk = true }
-                .onFailure { error = it.toUserMessage(); recurrentesNoSePudieronLeer = true }
-            // Si esta falla no se pinta ninguna propuesta ni ninguna marca: la sección se ve como
-            // antes de que existiera. Un «ya ocurrió» que en realidad no se pudo leer sería una
-            // afirmación sin respaldo, que es lo único que esta pieza no puede permitirse.
-            porOcurrir.await()
-                .onSuccess { ocurrencias = it; ocurrenciasOk = true }
-                .onFailure {
-                    if (error == null) error = it.toUserMessage()
-                    recurrentesNoSePudieronLeer = true
-                }
-        }
-    }
-
-    /**
-     * **El plan de cada crédito, para poder decir cuánto trae la cuota de este período.**
-     *
-     * El dueño paga su crédito del carro de memoria —el banco no le publica un valor a pagar— y en
-     * septiembre giró $77.040 de más. Con esto, la fila de la cuota en el checklist muestra el
-     * reparto que Movi estima (ver [planesDeLasCuotas] y
-     * [com.jvillada.movi.ui.recurrentes.estimacionDeLaFila]).
-     *
-     * Se pide con el chip activo, igual que los vencimientos y las candidatas, y por la misma caché
-     * del repositorio que ya usa la pestaña «Cuota» de Agregar, así que en el teléfono no cuesta un
-     * viaje cada vez.
-     *
-     * **Un fallo acá NO es un error de la pantalla**, a diferencia de los vencimientos: el mapa se
-     * queda vacío, las filas se ven como antes de esta ola, y el checklist sigue siendo utilizable.
-     * Un cartel rojo por una estimación que no llegó le taparía lo que vino a hacer, que es tildar
-     * lo que ya pagó.
-     */
-    var planesDeCuotas by remember { mutableStateOf<Map<String, PlanDelCredito>>(emptyMap()) }
-    LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick, refreshKey) {
-        if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
-        runCatching { Repositories.wallets.getCredits() }
-            .onSuccess { planesDeCuotas = planesDeLasCuotas(it) }
-            // Sin plan no hay estimación, y eso ya lo dice la ausencia de la línea.
-            .onFailure { planesDeCuotas = emptyMap() }
-    }
-
-    // El flujo de permisos del navegador es async (moviPush.js): tras pedirlo se refresca unas
-    // veces para que el aviso desaparezca sin reabrir la app. Solo donde el push existe Y con el
-    // chip activo — en Android/iOS `status()` es una constante, y en el resto de Movimientos este
-    // bucle no tendría a quién servir.
-    if (PushOptIn.supported) {
-        LaunchedEffect(pushRefreshTick, activeFilter) {
-            if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
-            repeat(20) {
-                kotlinx.coroutines.delay(600)
-                pushStatus = PushOptIn.status()
-            }
-        }
-    }
-
-    // Las CIFRAS solo se pintan con la fuente fresca ya cargada — un total a medias es peor que
-    // ningún total, mismo criterio que la pantalla vieja (`reglasOk && cobrosOk`).
-    //
-    // **A las reglas del dueño se les suman las sintéticas** (las cuotas de sus créditos, que no
-    // son filas de ninguna tabla y solo llegan por `/api/payments/upcoming`), porque desde este
-    // cambio entran al «Flujo libre». Quién de ellas suma lo decide `cuentaComoCompromisoMensual`
-    // adentro de `resumenRecurrentes` —la de una tarjeta no, la de un crédito de pago único
-    // tampoco—, no este llamado. Ver [reglasSinteticas].
-    //
-    // **Y las del dueño también salen de ahí**, no de `reglasRecurrentes`. Esa lista viene del
-    // cache de sesión de `RecurringOfferGate`: no se refresca si la regla cambió en otro dispositivo
-    // y, si su lectura falló, queda VACÍA en silencio — el chip perdía el sueldo y mostraba «libre al
-    // mes» en −$4.398.426 mientras el Inicio decía +$601.574. `/api/payments/upcoming` trae todas las
-    // reglas (reales y sintéticas), fresco cada vez que se activa el chip, y es exactamente lo que
-    // usa el Inicio (`quickLinkFigure("recurrentes")`): misma fuente, misma cifra. La cifra ya espera
-    // a `vencimientosOk`, así que sin esa respuesta no se pinta.
-    val reglasParaElResumen = remember(upcomingRecurrentes) {
-        upcomingRecurrentes.map { it.rule }
-    }
-    val resumenRecurrentesDelChip = if (subsParaRecurrentesOk) {
-        resumenRecurrentes(reglasParaElResumen, subsParaRecurrentes)
-    } else null
-    val candidatasRecurrentes = remember(subsParaRecurrentes) {
-        candidatasSinConfirmar(subsParaRecurrentes.subscriptions)
-    }
-    // Las ACTIVAS (AUTO + CONFIRMED), que entre el PR 2 y el PR 4 se quedaron sin ninguna
-    // superficie: sumaban en «Gastos recurrentes» y no había dónde verlas ni cómo sacar una. Sale
-    // del resumen y no de un filtro propio — ver [suscripcionesActivas].
-    val activasRecurrentes = remember(resumenRecurrentesDelChip) {
-        resumenRecurrentesDelChip?.let { suscripcionesActivas(it) } ?: emptyList()
-    }
-    // Para avisar en una candidata que el dueño ya la tiene anotada a mano, antes de confirmarla.
-    val clavesDeReglasRecurrentes = remember(reglasRecurrentes) {
-        reglasRecurrentes.map { claveDeNombre(it.name) }.toSet()
-    }
-
-    // «Próximos» muestra lo que URGE, no todas las reglas: el server manda una entrada por regla
-    // (ver [proximosQueUrgen]). Y lo ya sellado va aparte, con su «Deshacer» — apenas se sella, el
-    // recurrente desaparece de «Próximos», así que sin esa sección marcar por error no tendría
-    // vuelta atrás hasta el mes siguiente (ver [SeccionYaOcurrieron]).
-    val proximosRecurrentes = remember(upcomingRecurrentes) { proximosQueUrgen(upcomingRecurrentes) }
-    val selladasRecurrentes = remember(upcomingRecurrentes, ocurrencias, ocurrenciasOk) {
-        if (ocurrenciasOk) ocurrenciasSelladas(upcomingRecurrentes, ocurrencias) else emptyList()
-    }
-    // Y lo que quedó abierto pero ya no urge: una regla sale de «Próximos» apenas pasan los días
-    // de gracia aunque nadie la haya confirmado, y su periodo sigue abierto igual. Sin esto, un
-    // recurrente de principio de mes no tenía dónde confirmarse hasta el mes siguiente — ver
-    // [ocurrenciasAbiertasSinUrgencia].
-    val abiertasRecurrentes = remember(upcomingRecurrentes, ocurrencias, ocurrenciasOk, proximosRecurrentes) {
-        if (ocurrenciasOk) {
-            ocurrenciasAbiertasSinUrgencia(upcomingRecurrentes, ocurrencias, proximosRecurrentes)
-        } else emptyList()
-    }
-    // El aviso ámbar mira lo que se PIDIÓ, no lo que existe: promete una promesa rota, y sin
-    // promesa no hay nada que anunciar. Ver [hayRecordatoriosPedidos].
-    val pidieronRecordatorios = hayRecordatoriosPedidos(upcomingRecurrentes)
-
-    /**
-     * Sellar «esto ya ocurrió», **anclado al movimiento que el dueño confirmó**.
-     *
-     * Después de esto el recurrente deja de leerse como vencido y deja de avisar **ese mes**: su
-     * vencimiento vigente pasa a ser el del mes que viene (lo decide el server, ver `dueDateFor`).
-     * Al mes siguiente vuelve a estar pendiente solo.
-     *
-     * **[eventId] ya no puede ser `null`.** El server lo sigue aceptando —hay sellos viejos hechos
-     * así en la base del dueño y romperlos sería peor— pero la app no lo manda desde ningún lado:
-     * era la puerta de «marcar sin que el movimiento exista» que esta ola vino a cerrar, y dejarla
-     * abierta en la firma es dejarla abierta.
-     */
-    fun marcarOcurrio(ruleId: String, period: String, eventId: String) {
-        if (ruleId in marcando) return
-        marcando = marcando + ruleId
-        coroutineRecurrentes.launch {
-            runCatching { Repositories.wallets.markOccurrence(ruleId, period, eventId) }
-                .onSuccess { recurrentesReloadKey++ }
-                .onFailure { error = it.toUserMessage() }
-            marcando = marcando - ruleId
-        }
-    }
-
-    /**
-     * **«No fue este»** — el movimiento que Movi propuso (o emparejó solo) no es esta ocurrencia.
-     *
-     * Dos escrituras, y el orden importa: primero el rechazo, que es el hecho que tiene que
-     * sobrevivir a un F5; después, **si había un sello guardado**, el DELETE que lo borra. Al revés,
-     * un corte entre las dos dejaría el período abierto y el emparejamiento automático volviendo a
-     * proponer —o a dar por hecho— exactamente lo que se acaba de rechazar.
-     *
-     * [periodoDelSello] es `null` cuando no hay nada que borrar, que es el caso normal: lo que Movi
-     * empareja solo se deriva en cada lectura y no escribe ninguna fila (ver
-     * `OccurrenceState.automatica`). Solo lo que el dueño confirmó a mano tiene sello.
-     */
-    fun noFueEste(ruleId: String, eventId: String, periodoDelSello: String?) {
-        if (ruleId in marcando) return
-        marcando = marcando + ruleId
-        descartadas = descartadas + claveDescartada(ruleId, eventId)
-        coroutineRecurrentes.launch {
-            runCatching {
-                Repositories.wallets.rechazarOcurrencia(ruleId, eventId)
-                if (periodoDelSello != null) {
-                    Repositories.wallets.unmarkOccurrence(ruleId, periodoDelSello)
-                }
-            }
-                .onSuccess { recurrentesReloadKey++ }
-                .onFailure { error = it.toUserMessage() }
-            marcando = marcando - ruleId
-        }
-    }
-
-    /** Deshacer: marcar por error tiene que poder revertirse sin ceremonia. */
-    fun deshacerOcurrio(ruleId: String, period: String) {
-        if (ruleId in marcando) return
-        marcando = marcando + ruleId
-        coroutineRecurrentes.launch {
-            runCatching { Repositories.wallets.unmarkOccurrence(ruleId, period) }
-                .onSuccess { recurrentesReloadKey++ }
-                .onFailure { error = it.toUserMessage() }
-            marcando = marcando - ruleId
-        }
-    }
-
-    /**
-     * **Volver a barrer los movimientos buscando cobros que se repiten.**
-     *
-     * Se mudó acá con el resto de Recurrentes, y no era opcional: el barrido automático corre en
-     * UN solo lugar del server —después de importar un extracto (`StatementRoutes`)— y el día a
-     * día del dueño entra por SMS, que nunca lo dispara. Sin este botón, sacar la pantalla vieja
-     * del menú dejaba el detector sin ninguna forma de correr para el camino que él más usa.
-     *
-     * Vive junto al resumen y no dentro de «Detectadas · por confirmar»: esa sección solo existe
-     * cuando YA hay candidatas, y buscar cobros es justamente lo que se hace cuando no hay
-     * ninguna todavía.
-     */
-    fun buscarCobros() {
-        if (buscandoCobros) return
-        buscandoCobros = true
-        error = null
-        coroutineRecurrentes.launch {
-            runCatching { Repositories.wallets.detectSubscriptions() }
-                .onSuccess {
-                    subsParaRecurrentes = it
-                    subsParaRecurrentesOk = true
-                    // Un barrido puede DESCUBRIR cobros: el gate tiene que enterarse, o la barra
-                    // de «¿esto se repite?» ofrecería una regla que duplica uno recién detectado.
-                    RecurringOfferGate.recordarLoQueYaHay(reglas = null, suscripciones = it.subscriptions)
-                    // Y las listas del chip también, que es lo que decide qué filas se reconocen.
-                    recurrentesReloadKey++
-                }
-                .onFailure { error = it.toUserMessage() }
-            buscandoCobros = false
-        }
-    }
-
-    fun confirmarCandidata(sub: Subscription, status: SubStatus) {
-        if (sub.id in suscripcionesEnVuelo) return
-        suscripcionesEnVuelo = suscripcionesEnVuelo + sub.id
-        coroutineRecurrentes.launch {
-            runCatching { Repositories.wallets.updateSubscription(sub.id, sub.copy(status = status)) }
-                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); recurrentesReloadKey++ }
-                .onFailure { error = it.toUserMessage() }
-            suscripcionesEnVuelo = suscripcionesEnVuelo - sub.id
-        }
-    }
-
-    /**
-     * **«Quitar» una suscripción activa.** Qué significa quitar depende de quién la puso, y esa
-     * decisión no se toma acá: la toma [quitarBorraLaSuscripcion], que es la misma función que
-     * decide la etiqueta de origen de la fila. Así la fila no puede decir «la encontró Movi»
-     * sobre algo que se va a borrar de verdad.
-     *
-     * Después de escribir, lo mismo que hace `confirmarCandidata`: el gate se olvida de lo
-     * cacheado y `recurrentesReloadKey` vuelve a traer las listas. Sin eso, la marca de cada fila
-     * de abajo, el filtro del chip y el «Flujo libre» se quedan mostrando una suscripción que ya
-     * no está.
-     */
-    fun quitarSuscripcion(sub: Subscription) {
-        if (sub.id in suscripcionesEnVuelo) return
-        suscripcionesEnVuelo = suscripcionesEnVuelo + sub.id
-        coroutineRecurrentes.launch {
-            val resultado = if (quitarBorraLaSuscripcion(sub)) {
-                runCatching { Repositories.wallets.deleteSubscription(sub.id) }
-            } else {
-                runCatching {
-                    Repositories.wallets.updateSubscription(sub.id, sub.copy(status = SubStatus.DISMISSED))
-                }
-            }
-            resultado
-                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); recurrentesReloadKey++ }
-                .onFailure { error = it.toUserMessage() }
-            suscripcionesEnVuelo = suscripcionesEnVuelo - sub.id
-        }
-    }
+    // Lo que hace falta para el ícono de repetición de cada fila. Ola C: el tablero de Recurrentes
+    // se mudó a Plan y esta pantalla ya no lo pinta; de él solo lee estas dos listas (ver
+    // [MarcasDeRecurrentes]). Su «Reintentar» (`refreshKey`) también las vuelve a leer.
+    val marcas = rememberMarcasDeRecurrentes(recarga = refreshKey)
+    val reglasRecurrentes = marcas.reglas
+    val nombresDeSuscripcionesActivas = marcas.nombresDeSuscripcionesActivas
+    // Para guardar el arranque propio de un período (ver [InicioDelPeriodoSheet]).
+    val alcanceDeLaPantalla = rememberCoroutineScope()
 
     LaunchedEffect(error) {
         val msg = error ?: return@LaunchedEffect
@@ -1516,10 +969,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // período al que el dueño haya navegado.
     LaunchedEffect(perfilOk, periodoDeHoy, ajustesDelPeriodo) {
         if (!perfilOk) return@LaunchedEffect
-        FormaRecordada.delAparato.guardarMovimientos(
-            SessionManager.userId,
-            FormaDeMovimientos(lineaDePeriodo = rangoLegibleDe(periodoDeHoy, ajustesDelPeriodo) != null),
-        )
+        FormaRecordada.delAparato.recordarLineaDePeriodo(SessionManager.userId, periodoDeHoy, ajustesDelPeriodo)
     }
     /**
      * Qué período se está mirando. `remember(periodoDeHoy)` y no `remember { }` a secas: si el
@@ -1528,46 +978,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
      */
     var periodoVisible by remember(periodoDeHoy) { mutableStateOf(periodoDeHoy) }
 
-    val visibleDays = remember(activeFilter, allDays, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas, periodoVisible, ajustesDelPeriodo) {
-        val filtrados = diasVisibles(allDays, activeFilter, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas)
+    val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo) {
+        val filtrados = diasVisibles(allDays, activeFilter, searchQuery)
         // **Buscar atraviesa los períodos**, por cuarta vez en esta pantalla y por el mismo motivo
         // que las otras tres: escribir una consulta es pedir que algo aparezca, y encontrarlo solo
         // si además caía en el mes que estabas mirando es la peor forma de no encontrarlo.
         if (searchQuery.isNotBlank()) filtrados
         else diasDelPeriodo(filtrados, periodoVisible, ajustesDelPeriodo)
-    }
-    // Con «Recurrentes» la lista de días no se pinta (ver [mostrarLaListaDeDias]): ni su vacío real
-    // más abajo ni —Task 7— sus filas esqueleto tienen sentido debajo de un tablero que ya cubre
-    // ese chip por su cuenta.
-    val hayListaDeDias = mostrarLaListaDeDias(activeFilter, searchQuery)
-
-    /**
-     * **El checklist del período**, la lista que el dueño pidió ver al tocar «Ver todos» en el
-     * Inicio: todo lo que se paga este período —lo tildado incluido—, con su monto y su fecha.
-     *
-     * Sale de la MISMA función pura que la tarjeta del Inicio (`checklistDelPeriodo`), con las dos
-     * lecturas que este chip ya trae frescas. Una segunda cuenta acá habría vuelto a poner al
-     * Inicio y a Movimientos a decir cosas distintas del mismo mes, que es un error que este repo
-     * ya cometió y arregló.
-     *
-     * **Solo para el período en curso.** Movimientos deja navegar a meses anteriores, pero
-     * `/api/payments/upcoming` y `/api/payments/occurrences` contestan sobre HOY: pintar sus filas
-     * bajo el rótulo de agosto sería afirmar sobre un mes cerrado con los datos de otro. En un
-     * período que no es el de hoy, el checklist no se pinta.
-     */
-    val checklistDelChip = remember(
-        upcomingRecurrentes, ocurrencias, ocurrenciasOk, periodoVisible, periodoDeHoy, ajustesDelPeriodo,
-    ) {
-        if (periodoVisible != periodoDeHoy) emptyList()
-        else checklistDelPeriodo(
-            upcoming = upcomingRecurrentes,
-            // Con la lectura de ocurrencias a medias no se tilda nada: un «ya pagado» que en
-            // realidad no se pudo leer sería una afirmación sin respaldo — la misma regla que
-            // gobierna las propuestas de «Próximos».
-            ocurrencias = if (ocurrenciasOk) ocurrencias else emptyList(),
-            periodo = periodoVisible,
-            settings = ajustesDelPeriodo,
-        )
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
@@ -1575,7 +992,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         // F60: encabezado único — Movimientos es raíz: avatar + rótulo del menú + la lupa.
         MinScreenHeader(
             title = "Movimientos",
-            leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+            leading = HeaderLeading.Avatar(onNavigate),
             action = {
                 Icon(
                     imageVector = Icons.Filled.Search,
@@ -1756,9 +1173,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             }
         }
 
-        // «Por confirmar» dejó de ser un chip y es esto: un aviso que **solo existe cuando hay
-        // algo que confirmar**. Ver [CHIPS_VISIBLES] para el porqué, y [avisoDePorConfirmar] para
-        // cuándo se pinta. Mismo camino que los candidatos de pago de tarjeta, acá abajo.
         textoDeRechazados(rechazados)?.let { texto ->
             MinCard(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
@@ -1768,32 +1182,37 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 Text(text = texto, style = Movi.textos.cuerpo, color = Movi.colores.aviso)
             }
         }
-        val porConfirmar = cuantosPorConfirmar(allDays)
-        if (avisoDePorConfirmar(activeFilter, porConfirmar)) {
-            MinCard(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
-                variant = MinCardVariant.Default,
-                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                onClick = { activeFilter = CHIP_POR_CONFIRMAR },
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = textoDelAvisoPorConfirmar(porConfirmar),
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                    )
-                    ChevronRight()
-                }
-            }
+        // Ola C, tarea 5: **un solo renglón** por todo lo que entró solo y espera una decisión —los
+        // movimientos por confirmar, los mensajes del banco y los pagos de tarjeta sin marcar— en
+        // vez de un aviso por fuente. Abre la bandeja «Por revisar», donde se resuelve cada uno.
+        //
+        // Espera a que las tres lecturas terminen: pintarlo con la primera que llega y corregir el
+        // número con la segunda sería una cifra que baila, y con las tres en cero no ocupa lugar.
+        //
+        // Durante una recarga (cada «Reintentar», cada guardado desde Agregar) se queda con el
+        // último número que se contó: desmontarlo mientras se lee hacía saltar la lista ~56 dp y
+        // volver. Solo se va cuando una lectura que terminó dice cero.
+        val conteoFresco = if (!loading && porRevisar.terminaron) {
+            cuantosPorRevisar(
+                mensajes = porRevisar.mensajes,
+                dias = if (diasLeidos) allDays else null,
+                candidatos = porRevisar.candidatos,
+            )
+        } else {
+            null
         }
-        // Y adentro de la bandeja, el encabezado que dice dónde está y cómo salir. Hace falta
-        // porque sin chip **ningún chip queda marcado**: la lista se vería filtrada sin nada que
-        // explicara por qué.
+        SideEffect { if (conteoFresco != null) ultimoConteoPorRevisar.value = conteoFresco }
+        val cuantosPorRevisarAhora = conteoFresco ?: ultimoConteoPorRevisar.value
+        if (cuantosPorRevisarAhora != null && cuantosPorRevisarAhora > 0) {
+            RenglonPorRevisar(
+                cuantos = cuantosPorRevisarAhora,
+                onClick = { onNavigate(Screen.PorRevisar) },
+                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
+            )
+        }
+        // Adentro de un modo sin chip («Entre cuentas»), el encabezado que dice dónde está y cómo
+        // salir. Hace falta porque sin chip **ningún chip queda marcado**: la lista se vería
+        // filtrada sin nada que explicara por qué.
         val tituloDelModo = tituloDelModoSinChip(activeFilter)
         if (tituloDelModo != null) {
             Row(
@@ -1820,40 +1239,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             }
         }
 
-        // Entrada discreta a los candidatos de pago de tarjeta: solo aparece si hay algo que
-        // proponer, y abre una lista donde cada uno se confirma por separado (ver
-        // CardPaymentCandidatesSheet) — nunca se marcan todos de una.
-        if (pendingCandidates.isNotEmpty()) {
-            MinCard(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
-                variant = MinCardVariant.Default,
-                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                onClick = { showCandidatesSheet = true },
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = if (pendingCandidates.size == 1) "1 pago de tarjeta sin marcar"
-                               else "${pendingCandidates.size} pagos de tarjeta sin marcar",
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                    )
-                    ChevronRight()
-                }
-            }
-        }
-
         // Task 7, fix round 1: con algo ya pintado (volver a este chip, un reintento con la lista
         // de antes en pantalla) la barra de siempre; sin nada pintado todavía, las filas esqueleto
         // de más abajo ya dicen «cargando» con la forma de lo que viene, y la barra sería la misma
-        // señal dos veces — PERO con «Recurrentes» esas filas nunca se pintan (`!hayListaDeDias`,
-        // ver más abajo), así que sin este `||` la primera carga de ese chip se quedaba SIN
-        // ninguna señal de carga: ni barra ni esqueleto. La barra vuelve a cubrir ese caso.
-        if (loading && (visibleDays.isNotEmpty() || !hayListaDeDias)) {
+        // señal dos veces.
+        if (loading && visibleDays.isNotEmpty()) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().testTag(TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS))
         }
 
@@ -1863,249 +1253,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             contentPadding = PaddingValues(bottom = 60.dp),
         ) {
             // Task 7 puso una tarjeta de 6 filas sueltas; la Task 9 (ola B) la cambia por la forma
-            // real — 2-3 DÍAS, cada uno con su encabezado y su propia tarjeta. `hayListaDeDias`
-            // porque con «Recurrentes» esta lista no se pinta ni cargada ni cargando (ver arriba);
-            // el tablero de esa vista tiene su propio estado. Ver [movimientosEsqueleto].
-            if (loading && visibleDays.isEmpty() && hayListaDeDias) {
+            // real — 2-3 DÍAS, cada uno con su encabezado y su propia tarjeta. Ver
+            // [movimientosEsqueleto].
+            if (loading && visibleDays.isEmpty()) {
                 movimientosEsqueleto()
             }
 
-            // PR 2 del rediseño de Recurrentes: el resumen del filtro y lo que falta revisar.
-            // Solo con el chip activo — ver [mostrarResumenDeRecurrentes] — y ARRIBA de la lista
-            // de días (que acá abajo son los movimientos que YA se reconocen como recurrentes;
-            // esto es lo que resume ese total y lo que todavía no se confirmó ni descartó).
-            if (mostrarResumenDeRecurrentes(activeFilter)) {
-                // ── El orden: primero lo que pide algo, después lo que solo informa ──────
-                //
-                // El dueño abre este chip para responder «¿qué se repite, y qué necesita algo de
-                // mí?». Así que arriba va lo accionable —el aviso de que sus recordatorios no van
-                // a llegar, los pagos que urgen con su «¿ya ocurrió?», las candidatas por
-                // confirmar— y el resumen pasivo queda abajo, pegado a la lista de movimientos
-                // que resume. En el orden anterior (PR 2) el «Flujo libre» era lo único que había
-                // y por eso encabezaba; con la mudanza del PR 3, dejar una cifra que no pide nada
-                // por encima de una propuesta abierta sería enterrar lo urgente bajo lo bonito.
-                //
-                // El PR 5 agrega «Suscripciones activas» al FINAL, debajo del «Flujo libre»: es
-                // el desglose de ese total, no una decisión pendiente. Ver
-                // [SeccionSuscripcionesActivas].
-
-                // ── Aviso: pediste recordatorios y no hay por dónde mandártelos ──────────
-                // Se muda con el resto: era la única pantalla que lo mostraba, y sacarla del menú
-                // lo habría dejado sin ningún lugar donde salir. No es hipotético — hoy no hay
-                // ninguna suscripción de push activa. Ver [shouldShowReminderWarning]: con
-                // `canales == null` («todavía no se sabe») NO se avisa nada.
-                if (shouldShowReminderWarning(pushStatus, pidieronRecordatorios, canalesDeAviso)) {
-                    item {
-                        Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-                            ReminderWarningBanner(
-                                pushStatus = pushStatus,
-                                onEnable = {
-                                    PushOptIn.enable()
-                                    pushRefreshTick++
-                                },
-                            )
-                        }
-                    }
-                }
-
-                // ── El checklist del período ────────────────────────────────────────────
-                //
-                // Va PRIMERO, y es el destino del «Ver todos» del Inicio: el dueño llegaba acá
-                // buscando «los recurrentes tipo checklist del mes, con valor y fecha» y se
-                // encontraba las mismas obligaciones repartidas en tres tarjetas, ninguna de las
-                // cuales enumera el período entero. Las tres siguen abajo, porque contestan otra
-                // cosa (qué movimiento fue cada pago, qué quedó sin confirmar, de dónde salió cada
-                // sello). Ver [SeccionChecklistDelPeriodo].
-                if (periodoVisible == periodoDeHoy) {
-                    item {
-                        SeccionChecklistDelPeriodo(
-                            checklist = checklistDelChip,
-                            cargando = !recurrentesNoSePudieronLeer && !(vencimientosOk && ocurrenciasOk),
-                            pudoLeer = !recurrentesNoSePudieronLeer,
-                            marcando = marcando,
-                            descartadas = descartadas,
-                            // Las cuatro acciones que reemplazaron a la casilla. Ninguna sella nada
-                            // sin un movimiento detrás — ver el KDoc de [SeccionChecklistDelPeriodo].
-                            onConfirmar = { pago, eventId ->
-                                pago.periodoDelSello?.let { marcarOcurrio(pago.ruleId, it, eventId) }
-                            },
-                            // El sello solo existe si lo puso el dueño: lo que Movi empareja solo se
-                            // deriva en cada lectura y no escribe ninguna fila que borrar.
-                            onNoFueEste = { pago, eventId ->
-                                val sello = pago.periodoDelSello?.takeIf { pago.pagado && !pago.automatica }
-                                noFueEste(pago.ruleId, eventId, sello)
-                            },
-                            onAnotarMovimiento = { pago -> onNavigate(hojaParaAnotar(pago)) },
-                            onQuitarLaMarca = { pago ->
-                                pago.periodoDelSello?.let { deshacerOcurrio(pago.ruleId, it) }
-                            },
-                            onReintentar = { recurrentesReloadKey++ },
-                            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-                            planesDeCuotas = planesDeCuotas,
-                        )
-                    }
-                }
-
-                // ── Próximos + «¿esto ya ocurrió?» ──────────────────────────────────────
-                item {
-                    SeccionProximosPagos(
-                        proximos = proximosRecurrentes,
-                        ocurrencias = ocurrencias,
-                        ocurrenciasOk = ocurrenciasOk,
-                        descartadas = descartadas,
-                        marcando = marcando,
-                        // «Todavía no llegó la lista», no «la pantalla está cargando»: mientras
-                        // no haya respuesta no se dibuja una tarjeta vacía que diga que no hay
-                        // nada por vencer, porque eso no se sabe todavía.
-                        cargando = !vencimientosOk,
-                        conteoVisible = vencimientosOk,
-                        onAbrirPago = { payment ->
-                            // F20: la cuota de un crédito y el pago de una tarjeta son reglas
-                            // sintéticas del server, no algo que se edite acá — se gestionan en
-                            // Créditos. Misma distinción que hacía la pantalla vieja.
-                            if (payment.rule.id.startsWith(CREDIT_RULE_PREFIX) ||
-                                payment.rule.id.startsWith(CARD_RULE_PREFIX)
-                            ) {
-                                onNavigate(Screen.Credits)
-                            } else {
-                                reglaRecurrenteAEditar = payment.rule
-                            }
-                        },
-                        onMarcar = { ruleId, period, eventId -> marcarOcurrio(ruleId, period, eventId) },
-                        // El «no» ahora se guarda: sin eso, el emparejamiento automático volvería a
-                        // proponer lo mismo en la siguiente lectura. Ver [noFueEste].
-                        onDescartarPropuesta = { ruleId, eventId -> noFueEste(ruleId, eventId, null) },
-                        onAnotarMovimiento = { pago -> onNavigate(hojaParaAnotar(pago.rule, pago.dueDate)) },
-                        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-                    )
-                }
-
-                // ── Sin confirmar · abiertos que ya no urgen ────────────────────────────
-                if (abiertasRecurrentes.isNotEmpty()) {
-                    item {
-                        SeccionSinConfirmar(
-                            abiertas = abiertasRecurrentes,
-                            descartadas = descartadas,
-                            marcando = marcando,
-                            onMarcar = { ruleId, period, eventId -> marcarOcurrio(ruleId, period, eventId) },
-                            onDescartarPropuesta = { ruleId, eventId -> noFueEste(ruleId, eventId, null) },
-                            onAnotarMovimiento = { rule ->
-                                // La fecha sale de la ocurrencia abierta de ESA regla, que es la que
-                                // esta sección está preguntando; el `dueDate` de «Próximos» ya rodó.
-                                val vence = abiertasRecurrentes.firstOrNull { it.first.id == rule.id }
-                                    ?.second?.dueDate.orEmpty()
-                                onNavigate(hojaParaAnotar(rule, vence))
-                            },
-                            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-                        )
-                    }
-                }
-
-                // ── Detectadas · por confirmar ──────────────────────────────────────────
-                if (candidatasRecurrentes.isNotEmpty()) {
-                    item {
-                        Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-                            MinSectionHeader(title = "Detectadas · por confirmar", count = candidatasRecurrentes.size)
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                candidatasRecurrentes.forEach { s ->
-                                    CandidataSuscripcionCard(
-                                        sub = s,
-                                        accountNames = accountNames,
-                                        // Contra las reglas Y contra las suscripciones que ya
-                                        // suman: confirmar un duplicado cuenta el cobro dos veces.
-                                        // Ver [avisoDeCandidataDuplicada].
-                                        aviso = avisoDeCandidataDuplicada(
-                                            candidata = s,
-                                            clavesDeReglas = clavesDeReglasRecurrentes,
-                                            activas = subsParaRecurrentes.subscriptions,
-                                        ),
-                                        enVuelo = s.id in suscripcionesEnVuelo,
-                                        onConfirmar = { confirmarCandidata(s, SubStatus.CONFIRMED) },
-                                        onDescartar = { confirmarCandidata(s, SubStatus.DISMISSED) },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ── Ya ocurrieron · con su «Deshacer» ───────────────────────────────────
-                if (selladasRecurrentes.isNotEmpty()) {
-                    item {
-                        SeccionYaOcurrieron(
-                            selladas = selladasRecurrentes,
-                            marcando = marcando,
-                            onDeshacer = { ruleId, period -> deshacerOcurrio(ruleId, period) },
-                            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-                        )
-                    }
-                }
-
-                // ── El resumen, abajo, pegado a lo que resume ───────────────────────────
-                item {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-                        // «Buscar cobros» va en este encabezado —que se pinta siempre con el chip
-                        // activo— y no en el de las candidatas, que solo existe cuando ya hay
-                        // alguna. Ver [buscarCobros].
-                        MinSectionHeader(
-                            title = "Recurrentes",
-                            action = if (buscandoCobros) "Buscando…" else "Buscar cobros",
-                            onAction = { buscarCobros() },
-                        )
-                        ResumenFlujoLibreCard(
-                            // **Sin los vencimientos no hay cifra.** Las cuotas de los créditos
-                            // llegan solo por ahí y son la mitad del mes del dueño: si esa
-                            // llamada falló, el total saldría plausible y $5.445.772 más alto
-                            // que la verdad, sin nada que lo delate. Un guion se entiende; un
-                            // número optimista, no. Mismo criterio que `subsParaRecurrentesOk`.
-                            cifras = resumenRecurrentesDelChip?.takeIf { vencimientosOk },
-                        )
-                    }
-                }
-
-                // ── Suscripciones activas · el desglose de «Gastos recurrentes» ─────────
-                // Pegado al card de arriba a propósito: es lo que ese total tiene adentro, con
-                // la fila marcada «no se suma dos veces» incluida. Ver [SeccionSuscripcionesActivas].
-                //
-                // **Con `vencimientosOk`, igual que la cifra de arriba**, y no solo por coherencia
-                // visual: `resumenRecurrentes` decide qué suscripción está tapada por una regla
-                // comparándola contra `reglasParaElResumen`, que INCLUYE las sintéticas de
-                // `/api/payments/upcoming`. Si esa llamada falló, la lista de reglas llega corta,
-                // una duplicada puede dejar de marcarse «no se suma dos veces» y el total del pie
-                // sale alto. Sería el mismo número plausible y sin nada que lo delate que el card
-                // de arriba ya se niega a pintar — y encima debajo de un guion.
-                resumenRecurrentesDelChip
-                    ?.takeIf { vencimientosOk && activasRecurrentes.isNotEmpty() }
-                    ?.let { resumen ->
-                    item {
-                        SeccionSuscripcionesActivas(
-                            activas = activasRecurrentes,
-                            // El total sale del resumen, no de una suma sobre `activas`: es el
-                            // mismo reparto que ya prorrateó, convirtió y salteó duplicadas.
-                            // Ver [ResumenRecurrentes.gastosDeSuscripciones].
-                            totalMensual = resumen.gastosDeSuscripciones,
-                            sinConvertir = resumen.sinConvertir,
-                            // La misma tasa con la que se armó el total de arriba: es lo único
-                            // que le permite a [notaDeProrrateo] saber si una fila anual en
-                            // dólares de verdad entró a ese total o quedó afuera sin convertir.
-                            usdToCop = subsParaRecurrentes.usdToCop,
-                            // El mismo mapa que usan las filas de movimientos de esta pantalla.
-                            accountNames = accountNames,
-                            enVuelo = suscripcionesEnVuelo,
-                            // Pregunta antes (ver [ConfirmarEnHoja]); quitar se decide abajo.
-                            onQuitar = { suscripcionPorQuitar = it },
-                            onEditar = { suscripcionAEditar = it },
-                            abierta = suscripcionesAbiertas,
-                            onAlternar = { suscripcionesAbiertas = !suscripcionesAbiertas },
-                            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-                        )
-                    }
-                }
-            }
-
-            // Su vacío real (ver [hayListaDeDias] arriba): decir «no hay movimientos recurrentes»
-            // debajo de un tablero lleno de vencimientos sería contradecirse en la misma pantalla.
-            if (!loading && visibleDays.isEmpty() && hayListaDeDias) {
+            if (!loading && visibleDays.isEmpty()) {
                 item {
                     if (!diasLeidos) {
                         NoSePudoLeer(
@@ -2173,7 +1327,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 }
             }
 
-            (if (hayListaDeDias) visibleDays else emptyList()).forEach { day ->
+            visibleDays.forEach { day ->
                 // Sin `key`: con la fecha como clave, `LazyColumn` ancla el primer día visible al
                 // cambiar de chip, y pasar de «Gastos» a «Todo» dejaba el día nuevo de arriba
                 // escondido por encima del tope (visto a ojo en la web). Posicional, como antes.
@@ -2325,17 +1479,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
     )
 
-    suscripcionPorQuitar?.let { sub ->
-        ConfirmarEnHoja(
-            pregunta = "¿Quitar «${sub.displayName}»?",
-            detalle = "Deja de contar en tus recurrentes y en el flujo libre. Los cobros que ya anotaste no se tocan.",
-            textoConfirmar = "Quitar",
-            ocupado = sub.id in suscripcionesEnVuelo,
-            onConfirmar = { quitarSuscripcion(sub); suscripcionPorQuitar = null },
-            onCancelar = { suscripcionPorQuitar = null },
-        )
-    }
-
     selectedEvent?.let { event ->
         // El mismo juego de hojas que abre el detalle de la cuenta — categoría, fecha, monto,
         // cuenta, concepto, «esto se repite» y anular — porque es el mismo movimiento tocado.
@@ -2360,37 +1503,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         )
     }
 
-    // Editar un recurrente desde su renglón de «Próximos» — la misma hoja, en modo edición, que
-    // abre el detalle de un movimiento. Al guardar se invalida el cache del gate y se recarga la
-    // sección: el monto o el día nuevos tienen que verse en el mismo renglón que se acaba de
-    // tocar, no en la próxima visita.
-    reglaRecurrenteAEditar?.let { regla ->
-        CreateRecurringRuleSheet(
-            onDismiss = { reglaRecurrenteAEditar = null },
-            onSaved = {
-                reglaRecurrenteAEditar = null
-                RecurringOfferGate.olvidarLoCacheado()
-                recurrentesReloadKey++
-            },
-            existing = regla,
-        )
-    }
-
-    // La misma hoja, en modo suscripción. Al guardar se recarga la sección por el mismo camino
-    // que usa la edición de una regla: el monto nuevo tiene que verse —y sumar distinto en el
-    // «Total al mes»— en la fila que se acaba de tocar.
-    suscripcionAEditar?.let { suscripcion ->
-        CreateRecurringRuleSheet(
-            onDismiss = { suscripcionAEditar = null },
-            onSaved = {
-                suscripcionAEditar = null
-                RecurringOfferGate.olvidarLoCacheado()
-                recurrentesReloadKey++
-            },
-            existingSub = suscripcion,
-        )
-    }
-
     if (editandoElInicio) {
         InicioDelPeriodoSheet(
             periodo = periodoVisible,
@@ -2407,7 +1519,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     val nuevo =
                         if (inicio == null) iniciosPropios - periodoVisible.prefijo
                         else iniciosPropios + (periodoVisible.prefijo to inicio)
-                    coroutineRecurrentes.launch {
+                    alcanceDeLaPantalla.launch {
                         runCatching { Repositories.wallets.updateUserProfile(UpdateProfileRequest(periodStarts = nuevo)) }
                             .onSuccess {
                                 iniciosPropios = it.periodStarts
@@ -2418,15 +1530,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     }
                 }
             },
-        )
-    }
-
-    if (showCandidatesSheet) {
-        CardPaymentCandidatesSheet(
-            candidates = pendingCandidates,
-            onDismiss = { showCandidatesSheet = false },
-            onConfirmed = { id -> resolvedIds = resolvedIds + id; refreshKey++ },
-            onDismissedCandidate = { id -> resolvedIds = resolvedIds + id; refreshKey++ },
         )
     }
 
@@ -2486,9 +1589,12 @@ fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color = when (tono
  * Los dos pares se siguen viendo igual que antes —el azul de «entre cuentas», sin signo— y el
  * título los distingue («Cuota de crédito» / «Pago de tarjeta», ver [transferRowTitle]), que es lo
  * que hace falta: uno cuenta en el mes y el otro no.
+ *
+ * `internal` desde la ola C: la bandeja «Por revisar» pinta con este mismo renglón lo que entró
+ * solo, para que un movimiento se vea igual allá y acá.
  */
 @Composable
-private fun TransferRow(
+internal fun TransferRow(
     row: MovementRow.Transfer,
     accountNames: Map<String, String>,
     accountTypes: Map<String, AccountType>,
@@ -2615,9 +1721,12 @@ private fun RenglonDeAjustes(
  * en el rail y en Más ([Icons.Rounded.Repeat]), chico y sin color propio —el mismo `Movi.colores.textoMedio`
  * del subtítulo— junto a la categoría. No es un botón: solo informa: para editar el recurrente
  * hay que abrir el movimiento y usar «¿Se repite todos los meses?» (ver `SeccionEstoSeRepite`).
+ *
+ * `internal` desde la ola C: la bandeja «Por revisar» pinta con este mismo renglón lo que entró
+ * solo, para que un movimiento se vea igual allá y acá.
  */
 @Composable
-private fun MovementSingleRow(
+internal fun MovementSingleRow(
     tx: FinancialEvent,
     accountNames: Map<String, String>,
     esRecurrente: Boolean = false,
@@ -2705,517 +1814,5 @@ private fun MovementSingleRow(
             fontWeight = FontWeight.Medium,
             color = colorDelTono(tono, Movi.colores),
         )
-    }
-}
-
-/**
- * PR 2 del rediseño de Recurrentes (2026-09): el card de «Flujo libre», mudado de la pantalla
- * «Recurrentes» (ya borrada) a Movimientos —solo visible con el chip «Recurrentes» activo, ver
- * [mostrarResumenDeRecurrentes]—. Las cifras salen de [resumenRecurrentes], la misma función
- * pura que ya usaba esa pantalla y el acceso «Recurrentes» del Inicio: mudar DÓNDE se muestra
- * no puede hacer que el número discrepe de los demás lugares que cuentan lo mismo.
- *
- * `cifras == null` mientras las fuentes frescas todavía no llegaron (ver los `LaunchedEffect` que
- * las cargan en [TransactionsScreen]) — un total a medias es peor que un guion. Desde que las
- * cuotas de los créditos entran a este total, «las fuentes» son **dos**: las suscripciones y los
- * vencimientos, que es por donde llegan esas cuotas.
- *
- * ## Las líneas de abajo, y por qué ninguna puede contradecir a otra
- *
- * Todas salen de lo que ENTRÓ al total, nunca de lo que existe en otra parte de la pantalla, así
- * que cualquier combinación de las cuatro sigue siendo cierta al mismo tiempo: dos hablan de una
- * transformación que sufre una fila entre la lista y el total (la TRM y el prorrateo anual), una
- * de lo que el total sí incluye (las cuotas, con su cifra) y otra de lo que deja afuera a
- * propósito (el crédito de pago único). La quinta —el aviso ámbar de lo que no se pudo convertir—
- * es la única que reemplaza a otra: con un cobro sin convertir, prometer que la TRM se aplicó
- * sería falso.
- */
-@Composable
-private fun ResumenFlujoLibreCard(
-    cifras: ResumenRecurrentes?,
-) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(20.dp),
-    ) {
-        Text("Flujo libre", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-        Spacer(Modifier.height(8.dp))
-        // **La cifra grande es [ResumenRecurrentes.disponible], no `flujoLibre`.** El mínimo de una
-        // tarjeta no es un gasto del mes —eso sigue igual, ver `cuentaComoCompromisoMensual`— pero
-        // es plata que hay que pagar sí o sí, y mientras el número grande la ignoraba el dueño leía
-        // $601.574 libres sin saber que el mínimo de su Master Black son $1.843.014. Las dos
-        // cifras se muestran; la que manda es la que ya descontó lo comprometido.
-        Text(
-            text = cifras?.let { formatCOP(it.disponible) } ?: "—",
-            // Sin estilo a propósito: cifra de una tarjeta, no de la pantalla; `cifra` (42) la infla y `titular` (19) la achica.
-            fontSize = 28.sp,
-            style = Movi.textos.monto,
-            color = Movi.colores.texto,
-            letterSpacing = (-1.1).sp,
-            lineHeight = 28.sp,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = cifras?.let { subtituloDelFlujoLibre(it) } ?: "Ingresos recurrentes − Gastos recurrentes",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-        )
-        Spacer(Modifier.height(14.dp))
-        Hairline()
-        Spacer(Modifier.height(12.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Ingresos recurrentes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = cifras?.let { formatCOP(it.ingresos) } ?: "—",
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.entra,
-                    letterSpacing = (-0.3).sp,
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Gastos recurrentes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = cifras?.let { formatCOP(it.gastos) } ?: "—",
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                    letterSpacing = (-0.3).sp,
-                )
-            }
-        }
-        // **Los mínimos, en su propia fila y no adentro de «Gastos recurrentes».** Es la tensión
-        // que esta feature tuvo que resolver: el pago de una tarjeta NO es gasto del mes (las
-        // compras ya contaron), así que sumarlo ahí contaría la misma plata dos veces; pero sí es
-        // plata comprometida, así que ignorarlo deja al dueño con una cifra optimista. La salida
-        // es restarlo del disponible **con rótulo propio**, que además es lo único que le permite
-        // verificar la resta contra su extracto.
-        if (cifras != null && cifras.minimosDeTarjeta > 0L) {
-            Spacer(Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(ETIQUETA_MINIMOS_DE_TARJETA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        // El signo lo trae el formato, no un prefijo pegado afuera (F36): `formatCOP` ya sabe
-                        // escribir un negativo, y duplicarlo daría «− −$…» el día que alguien pase otra cifra.
-                        text = formatCOP(-cifras.minimosDeTarjeta),
-                        style = Movi.textos.monto,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                        letterSpacing = (-0.3).sp,
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Libre sin las tarjetas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = formatCOP(cifras.flujoLibre),
-                        style = Movi.textos.monto,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.textoMedio,
-                        letterSpacing = (-0.3).sp,
-                    )
-                }
-            }
-        }
-        // Y cuando el mínimo no está cargado, la cifra grande deja de ser un hecho y se dice.
-        // Ver [avisoDeMinimosQueFaltan].
-        cifras?.let { avisoDeMinimosQueFaltan(it) }?.let { aviso ->
-            Spacer(Modifier.height(12.dp))
-            Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso, lineHeight = 15.sp)
-        }
-        // Mismo criterio que la pantalla vieja: un total al que le faltan filas se dice, no se
-        // disimula. Ver el KDoc de [ResumenRecurrentes.sinConvertir].
-        if (cifras != null && cifras.sinConvertir > 0) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = if (cifras.sinConvertir == 1) {
-                    "Este total no incluye 1 cobro en otra moneda: no pudimos convertirlo a pesos."
-                } else {
-                    "Este total no incluye ${cifras.sinConvertir} cobros en otra moneda: no pudimos " +
-                        "convertirlos a pesos."
-                },
-                style = Movi.textos.apoyo,
-                color = Movi.colores.aviso,
-                lineHeight = 15.sp,
-            )
-        } else if (cifras != null && cifras.hayMonedaExtranjera) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Lo que te cobran en dólares entra al total convertido a pesos con la tasa " +
-                    "de cambio más reciente que pudimos consultar.",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                lineHeight = 15.sp,
-            )
-        }
-        // Ola 16: la otra transformación que sufre una fila entre la lista de abajo y este total.
-        // Va aparte del aviso de la TRM —y no en el mismo `else if`— porque las dos pueden pasar
-        // a la vez sobre la misma suscripción, y callar una de ellas dejaría un número sin
-        // explicar igual. Sin esta línea, «Gastos recurrentes» cuenta $30.825 de algo que la
-        // lista de abajo dice que cuesta $369.900, y no hay forma de saber cuál de los dos está
-        // mal. Ver [ResumenRecurrentes.hayCobrosAnuales]: solo aparece si un cobro anual de
-        // verdad entró al total.
-        if (cifras != null && cifras.hayCobrosAnuales) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Lo que te cobran una vez al año entra repartido: dividimos el cobro en 12 " +
-                    "para que este total sea lo que te cuesta cada mes.",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                lineHeight = 15.sp,
-            )
-        }
-        // La tercera diferencia entre la lista de abajo y este total, y la más cara: las cuotas
-        // de los créditos. El PR anterior las hizo visibles en la lista y puso acá una línea que
-        // admitía que el total no las contaba; el dueño decidió que **sí deben contar**, así que
-        // esa línea ya sería mentira y en su lugar va la cifra.
-        //
-        // **Se dice con número y no con un «ya se cuentan».** «Gastos recurrentes» le crece
-        // $5.445.772 de un día para el otro; sin decir cuánto de ese total son cuotas, el dueño
-        // no tiene cómo verificar el número nuevo contra sus créditos.
-        //
-        // Y se nombra lo que queda afuera, que es lo que más se nota en su caso: de sus ocho
-        // créditos, cuatro los paga alguien más (dos libranzas, dos hipotecas que gira Skandia) y
-        // esas cuotas ni siquiera llegan al cliente —el server las filtra con
-        // `entraAlBarridoDeAvisos`, porque su salario ya viene neto y contarlas restaría dos
-        // veces—. Sin esta frase, la suma de sus cuotas no le va a dar y no va a saber por qué.
-        //
-        // En `Movi.colores.textoMedio` y no en `Movi.colores.aviso`: no hay nada roto ni nada que reintentar (que es lo
-        // que distingue al aviso de la moneda sin convertir); es el alcance del total, como el
-        // aviso del prorrateo de acá arriba.
-        if (cifras != null && cifras.cuotasDeCredito > 0L) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Las cuotas de tus créditos entran en este total: ${formatCOP(cifras.cuotasDeCredito)} " +
-                    "al mes. No contamos las que te descuentan de la nómina ni las que paga otra " +
-                    "persona, porque esa plata no sale de tu bolsillo.",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                lineHeight = 15.sp,
-            )
-        }
-        // Y la cuota que se paga una sola vez, que es la otra mitad de decir la verdad sobre las
-        // cuotas: entró la del carro, no entró la del «Techo Gardenera» —$10.000.000 a un mes—
-        // porque no es un gasto de todos los meses. Se cuenta y se dice por el mismo motivo que
-        // `sinConvertir`: es una fila que existe, vence y sale en «Próximos», y este total no la
-        // suma a propósito. Ver [ResumenRecurrentes.pagosUnicosFuera].
-        if (cifras != null && cifras.pagosUnicosFuera > 0) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                // Sin prometer dónde se ve: «Próximos» muestra lo que URGE (ver
-                // `proximosQueUrgen`), así que un pago único con fecha lejana no está ahí todavía,
-                // y el aviso depende de que el dueño lo haya pedido. Una frase que no se pueda
-                // desmentir en la misma pantalla vale más que una que ayude a buscarlo.
-                text = if (cifras.pagosUnicosFuera == 1) {
-                    "Un crédito tuyo se paga de una sola vez, así que su cuota no entra en este " +
-                        "total: no es un gasto de todos los meses."
-                } else {
-                    "${cifras.pagosUnicosFuera} créditos tuyos se pagan de una sola vez, así que sus " +
-                        "cuotas no entran en este total: no son un gasto de todos los meses."
-                },
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                lineHeight = 15.sp,
-            )
-        }
-    }
-}
-
-/**
- * **Las suscripciones que hoy están activas** — el inventario que el rediseño de Recurrentes se
- * llevó por delante sin reponer.
- *
- * Vale la pena decir qué se había perdido, porque no era solo una etiqueta: entre el PR 2 y el
- * PR 4 las suscripciones **activas** dejaron de tener cualquier superficie. Seguían sumando en
- * «Gastos recurrentes» (ver [resumenRecurrentes]) y seguían marcando filas en la lista de abajo,
- * pero no había dónde verlas ni cómo sacar una. Eso pesa sobre todo en las
- * [OrigenDeSuscripcion.LA_ENCONTRO_MOVI_Y_LA_ACTIVO_SOLA]: están sumando plata todos los meses
- * sin que el dueño las haya aprobado nunca.
- *
- * Va **debajo del card de «Flujo libre»** y no arriba con lo accionable, porque esto es el
- * desglose de la línea «Gastos recurrentes» de ese card — incluida la fila marcada «no se suma
- * dos veces», que es lo que explica por qué el total no es la suma ingenua de la lista. Separar
- * el total de su desglose es justo la duda que la pantalla vieja documentaba querer evitar.
- * «Quitar» es una corrección, no una decisión pendiente: no compite con las candidatas por
- * confirmar ni con un «¿esto ya ocurrió?».
- *
- * @param enVuelo ids con una acción guardándose, para no dejar tocar «Quitar» dos veces.
- */
-@Composable
-private fun SeccionSuscripcionesActivas(
-    activas: List<Recurrente.Suscripcion>,
-    /**
-     * Lo que suman estas filas en UN mes, ya en pesos. Llega calculado desde
-     * [ResumenRecurrentes.gastosDeSuscripciones] — no se suma acá, ver ahí el porqué.
-     */
-    totalMensual: Long,
-    /**
-     * Cuántos cobros quedaron FUERA de [totalMensual] por no poder pasarlos a pesos. Se dice al
-     * pie, corto: la explicación larga ya está en el card de «Flujo libre», justo encima.
-     */
-    sinConvertir: Int,
-    /** La tasa con la que se armó el total de arriba. Ver [notaDeProrrateo]. */
-    usdToCop: Double,
-    /**
-     * Los nombres de las cuentas, para poder decir con qué se paga cada cobro. Es el mismo mapa
-     * que ya usan las filas de movimientos de esta pantalla, no una lectura nueva: si todavía no
-     * llegó, la fila simplemente no nombra la cuenta (ver [contextoDeSuscripcionActiva]).
-     */
-    accountNames: Map<String, String>,
-    enVuelo: Set<String>,
-    onQuitar: (Subscription) -> Unit,
-    onEditar: (Subscription) -> Unit,
-    /** ¿Se ven las filas, o solo el resumen? Ver [resumenPlegadoDeSuscripciones]. */
-    abierta: Boolean,
-    onAlternar: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (activas.isEmpty()) return
-    Column(modifier = modifier) {
-        MinSectionHeader(
-            title = "Suscripciones activas",
-            count = activas.size,
-            action = if (abierta) "Ocultar" else "Ver",
-            onAction = onAlternar,
-        )
-        if (!abierta) {
-            MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
-                onClick = onAlternar,
-            ) {
-                Text(
-                    text = resumenPlegadoDeSuscripciones(activas.size, totalMensual),
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.textoMedio,
-                )
-            }
-            return@Column
-        }
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-        ) {
-            // Hairline en TODAS, la última incluida: ahora hay un pie que separar.
-            activas.forEach { item ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    Box(
-                        modifier = Modifier.size(36.dp).clip(CircleShape).background(Movi.colores.tarjeta),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "${item.dayOfMonth}",
-                            style = Movi.textos.monto,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = item.sub.displayName,
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                            letterSpacing = (-0.1).sp,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        // Con qué se paga y de dónde salió, en una sola línea de dos segmentos y
-                        // decidido en un solo lugar — ver [contextoDeSuscripcionActiva], que es
-                        // también quien se calla la cuenta cuando no hay ninguna que nombrar.
-                        Text(
-                            contextoDeSuscripcionActiva(item, accountNames),
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                        )
-                        // Y, solo en un cobro anual que SÍ suma, cuánto de él entra al total de
-                        // este mes: es lo que explica por qué el «Flujo libre» de arriba no es la
-                        // suma de los montos que se ven acá. Ver [notaDeProrrateo], que devuelve
-                        // null en todos los casos donde no hay nada que aclarar.
-                        notaDeProrrateo(item, usdToCop)?.let { nota ->
-                            Spacer(Modifier.height(2.dp))
-                            Text(nota, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-                        }
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            // En SU moneda, sin convertir, y con la periodicidad puesta: una
-                            // suscripción en dólares se lee "−US$12" y una anual "−$369.900 al
-                            // año". Solo el total de arriba pasa por la TRM, y lo dice. Ver
-                            // [textoDelMontoDeSuscripcion].
-                            text = textoDelMontoDeSuscripcion(item.sub, conSigno = true),
-                            style = Movi.textos.monto,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                            letterSpacing = (-0.3).sp,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        val guardando = item.sub.id in enVuelo
-                        // «Editar» antes que «Quitar», y en ese orden: es la acción que el dueño
-                        // va a querer casi siempre —un precio que subió, un día que se corrió— y
-                        // la que no destruye nada. Mientras hay una operación en vuelo las dos se
-                        // apagan: tocar «Editar» sobre una fila que se está quitando abriría una
-                        // hoja sobre algo que quizá ya no exista.
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(
-                                text = "Editar",
-                                style = Movi.textos.apoyo,
-                                color = if (guardando) Movi.colores.textoMedio else Movi.colores.marca,
-                                modifier = Modifier.clickable { if (!guardando) onEditar(item.sub) },
-                            )
-                            Text(
-                                text = if (guardando) "Quitando…" else "Quitar",
-                                style = Movi.textos.apoyo,
-                                color = if (guardando) Movi.colores.textoMedio else Movi.colores.sale,
-                                modifier = Modifier.clickable { if (!guardando) onQuitar(item.sub) },
-                            )
-                        }
-                    }
-                }
-                Hairline()
-            }
-            // ── El total, cerrando la lista que resume ──────────────────────────────
-            // Va al pie y no en el encabezado de sección: es la consecuencia de las filas de
-            // arriba, y leerlo después de verlas es lo que hace evidente que $369.900 al año no
-            // aportan $369.900 al mes. El encabezado además ya lleva el contador.
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        // «al mes» no es decoración: es lo único que distingue este número de la
-                        // suma de los montos que se ven arriba, que da otra cosa.
-                        text = "Total al mes",
-                        style = Movi.textos.monto,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                    )
-                    if (sinConvertir > 0) {
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = if (sinConvertir == 1) {
-                                "No incluye 1 cobro que no pudimos pasar a pesos."
-                            } else {
-                                "No incluye $sinConvertir cobros que no pudimos pasar a pesos."
-                            },
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.aviso,
-                            lineHeight = 15.sp,
-                        )
-                    }
-                }
-                Text(
-                    // Sin signo, igual que «Gastos recurrentes» en el card de arriba: los dos son
-                    // totales de gasto y se leen en la misma pantalla, uno debajo del otro.
-                    text = formatCOP(totalMensual),
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                    letterSpacing = (-0.3).sp,
-                )
-            }
-        }
-    }
-}
-
-/**
- * Una candidata «detectada · por confirmar», en su nuevo hogar dentro de Movimientos.
- *
- * Mismo contenido que la fila que tenía la pantalla «Recurrentes» (nombre, monto en su moneda,
- * cuántos meses la vio el detector y su día de cobro, el aviso de «ya la tienes anotada» cuando
- * corresponde) pero con el lenguaje visual de [RecurringOfferBar] —un card compacto, no una hoja
- * modal— que es lo que esta pantalla ya usa para ofrecimientos de esta misma familia.
- */
-@Composable
-private fun CandidataSuscripcionCard(
-    sub: Subscription,
-    /** Para poder decir en qué tarjeta vio Movi el cobro. Ver [contextoDeCandidata]. */
-    accountNames: Map<String, String>,
-    /** «Ya lo tienes como…», o `null` si es nueva de verdad. Ver [avisoDeCandidataDuplicada]. */
-    aviso: String?,
-    enVuelo: Boolean,
-    onConfirmar: () -> Unit,
-    onDescartar: () -> Unit,
-) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(sub.displayName, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            Text(
-                // Con su periodicidad, igual que la fila de una activa. Hoy el detector solo
-                // produce cobros mensuales (agrupa por mes, ver `detectSubscriptions`), así que
-                // acá esto no cambia nada — se usa la misma función igual, para que el día que
-                // una candidata pueda ser anual no haya un renderer al que se le olvidó.
-                text = textoDelMontoDeSuscripcion(sub),
-                style = Movi.textos.monto,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-            )
-        }
-        Text(
-            // Cuántos meses la vio, qué día cobra y —si Movi la pudo resolver— en qué cuenta vio
-            // el cargo. Esa última parte es la que vuelve reconocible un comercio cuyo nombre
-            // normalizado no le dice nada al dueño. Ver [contextoDeCandidata].
-            text = contextoDeCandidata(sub, accountNames),
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        if (aviso != null) {
-            Text(
-                text = aviso,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.aviso,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AccionCandidataChip(
-                label = when {
-                    enVuelo -> "Guardando…"
-                    aviso != null -> "Confirmar igual"
-                    else -> "Confirmar"
-                },
-                primary = true,
-                habilitado = !enVuelo,
-                onClick = onConfirmar,
-            )
-            AccionCandidataChip(label = "No es", primary = false, habilitado = !enVuelo, onClick = onDescartar)
-        }
-    }
-}
-
-/** Los botones «Confirmar» / «No es» de una candidata — mismo lenguaje que el de la hoja vieja. */
-@Composable
-private fun AccionCandidataChip(label: String, primary: Boolean, habilitado: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (primary) Movi.colores.texto else Movi.colores.tarjeta)
-            .clickable(enabled = habilitado, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) {
-        Text(label, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = if (primary) Movi.colores.fondo else Movi.colores.texto)
     }
 }

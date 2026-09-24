@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.automirrored.rounded.EventNote
+import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,19 +27,35 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 
 /**
- * Destinos de la navegación principal. En el teléfono la barra muestra cinco
- * (Inicio · Movimientos · + · Cuentas · Más); en pantalla ancha el rail muestra además
- * Créditos y Presupuestos como entradas propias. Una pantalla declara UN destino
- * (ver `navTabFor` en Navigation.kt) y cada superficie decide cómo lo resalta: la barra del
- * teléfono pinta CREDITS y BUDGETS como "Más", que es por donde se llega a ellos ahí.
+ * Los destinos de la navegación principal.
+ *
+ * Ola C (2026-09): **cuatro lugares y el botón de agregar**, los mismos en el teléfono y en la web.
+ * Hasta acá la barra del teléfono decía «Inicio · Movs · + · Cuentas · Más» y el rail de la web
+ * agregaba Créditos y Presupuestos, así que la misma pantalla se resaltaba distinto según el ancho y
+ * «Más» era un cajón de todo lo que no entraba. Ahora cada pestaña contesta una pregunta (ver
+ * `navTabFor` en Navigation.kt) y lo que antes vivía en «Más» se abre tocando el avatar (Ajustes).
+ *
+ * [ADD] no es un lugar: es la hoja de «Agregar», que se abre encima de la pantalla actual.
  */
-enum class NavTab { HOME, TRANSACTIONS, ADD, ACCOUNTS, CREDITS, BUDGETS, MORE }
+enum class NavTab { HOY, MOVIMIENTOS, ADD, PLAN, PATRIMONIO }
 
-/** Qué ítem de la barra del teléfono se resalta para un destino dado. */
-fun NavTab.asBottomBarTab(): NavTab = when (this) {
-    NavTab.CREDITS, NavTab.BUDGETS -> NavTab.MORE
-    else -> this
-}
+/** Un destino principal: pestaña + rótulo + ícono. */
+data class DestinoPrincipal(val tab: NavTab, val label: String, val icon: ImageVector)
+
+/**
+ * Las cuatro pestañas, en orden. Es la ÚNICA fuente: la barra del teléfono ([MinBottomNav]) pinta
+ * las dos primeras, el «+» y las dos últimas; el rail de la web ([MinNavRail]) las cuatro y debajo
+ * «Agregar». Que las dos lean esta lista es lo que garantiza que no vuelvan a separarse.
+ *
+ * «Movimientos» va entero también en el teléfono (antes «Movs»): entra a 390 dp junto a las otras
+ * tres y el «+», medido con el motor de texto real en `LasCuatroPestanasTest`.
+ */
+val destinosPrincipales: List<DestinoPrincipal> = listOf(
+    DestinoPrincipal(NavTab.HOY, "Hoy", Icons.Rounded.Today),
+    DestinoPrincipal(NavTab.MOVIMIENTOS, "Movimientos", Icons.Rounded.SwapVert),
+    DestinoPrincipal(NavTab.PLAN, "Plan", Icons.AutoMirrored.Rounded.EventNote),
+    DestinoPrincipal(NavTab.PATRIMONIO, "Patrimonio", Icons.Rounded.AccountBalance),
+)
 
 @Composable
 fun MinBottomNav(
@@ -50,7 +66,7 @@ fun MinBottomNav(
     // Desde la Ola 4 esta barra la pinta SOLO App.kt, una vez, debajo de la pantalla activa;
     // ninguna pantalla la llama por su cuenta.
     if (LocalWindowWidthClass.current == WindowWidthClass.Expanded) return
-    val highlighted = active?.asBottomBarTab()
+    val (antes, despues) = destinosPrincipales.chunked(2).let { it[0] to it[1] }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -67,8 +83,7 @@ fun MinBottomNav(
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            NavItem(NavTab.HOME, "Inicio", Icons.Rounded.Home, highlighted, onTabSelected)
-            NavItem(NavTab.TRANSACTIONS, "Movs", Icons.Rounded.SwapVert, highlighted, onTabSelected)
+            antes.forEach { NavItem(it.tab, it.label, it.icon, active, onTabSelected) }
 
             // Center FAB
             Box(
@@ -91,10 +106,7 @@ fun MinBottomNav(
                 )
             }
 
-            // F19: Cuentas entra a la barra — antes el único camino era un "Ver todas +" del
-            // Inicio que solo aparecía con al menos una cuenta creada. Presupuestos pasó a Más.
-            NavItem(NavTab.ACCOUNTS, "Cuentas", Icons.Rounded.AccountBalanceWallet, highlighted, onTabSelected)
-            NavItem(NavTab.MORE, "Más", Icons.Rounded.GridView, highlighted, onTabSelected)
+            despues.forEach { NavItem(it.tab, it.label, it.icon, active, onTabSelected) }
         }
     }
 }
@@ -136,6 +148,9 @@ private fun NavItem(
         }
         Text(
             text = label,
+            // Un renglón siempre: un rótulo que se partiera en dos haría esa pestaña más alta que
+            // las otras y correría su ícono hacia arriba. Ver [destinosPrincipales].
+            maxLines = 1,
             style = Movi.textos.rotulo.copy(
                 letterSpacing = 0.2.sp,
                 fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,

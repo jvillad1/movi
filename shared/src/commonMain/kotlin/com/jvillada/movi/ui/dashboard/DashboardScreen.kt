@@ -26,17 +26,14 @@ import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.isAndroid
-import com.jvillada.movi.shared.model.CapturaDeSms
 import com.jvillada.movi.shared.model.Scope
-import com.jvillada.movi.shared.model.periodoDe
-import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.notifications.NotificationsPanel
@@ -170,6 +167,12 @@ fun debeRecargarElInicio(
     // gastar diez llamadas.
     else -> (ahora - cargadoEn) !in 0..TTL_DEL_INICIO_MS
 }
+
+/**
+ * El título del Inicio y el rótulo de su pestaña. Ola C: «Hoy» — contesta «¿cómo estoy? ¿qué
+ * viene?», y así se lee junto a Movimientos, Plan y Patrimonio.
+ */
+const val TITULO_DEL_HOY: String = "Hoy"
 
 @Composable
 fun DashboardScreen(
@@ -359,36 +362,10 @@ fun DashboardScreen(
             launch {
                 runCatching { Repositories.wallets.getDashboardSummary(scope) }
                     .onSuccess { s ->
-                        data = data.copy(
-                            spentByCategory = s.spentByCategory,
-                            cardCandidates = s.cardPaymentCandidates,
-                            pendingSms = s.pendingSms,
-                            // Lo que se sabe de la captura de SMS. Viene en esta MISMA respuesta
-                            // —no es una llamada nueva— y es lo que le permite al Inicio decir
-                            // «Movi nunca ha recibido un mensaje de tu banco». Ver CapturaDeSms
-                            // en :core: la captura estuvo muda semanas y el único lugar que
-                            // podía delatarlo era una pantalla de Android que el dueño no abre.
-                            captura = CapturaDeSms(total = s.smsTotal, ultimo = s.smsLastAt),
-                            capturaSilenciada = s.smsAlertMuted,
-                            // La tarjeta «Disponible». Misma respuesta, ninguna llamada nueva.
-                            gastoVariablePorDia = s.gastoVariablePorDia,
-                            // Lo que tenías al empezar el período y lo que entró. Un server viejo
-                            // no lo manda y la tarjeta vuelve a «ingresos menos fijos».
-                            plataDelDisponible = plataDelDisponibleDe(s),
-                            // El patrimonio ya partido (entrega A). La tarjeta lo usa solo si las
-                            // cuentas no llegaron: ver `patrimonioDelInicio`.
-                            patrimonio = s.patrimonio,
-                        )
-                        llegado = llegado.copy(
-                            spentByCategory = data.spentByCategory,
-                            cardCandidates = data.cardCandidates,
-                            pendingSms = data.pendingSms,
-                            captura = data.captura,
-                            capturaSilenciada = data.capturaSilenciada,
-                            gastoVariablePorDia = data.gastoVariablePorDia,
-                            plataDelDisponible = data.plataDelDisponible,
-                            patrimonio = data.patrimonio,
-                        )
+                        // La traducción de la respuesta vive en [conResumenDelInicio]: la pestaña
+                        // Plan lee la misma para su tarjeta «Disponible».
+                        data = data.conResumenDelInicio(s)
+                        llegado = llegado.conResumenDelInicio(s)
                         resumenDelInicioLlego = true
                         // Ola 9 · A2: las categorías propias del dueño quedan disponibles en
                         // «Agregar» aunque entre directo desde acá, sin haber pasado por
@@ -424,12 +401,9 @@ fun DashboardScreen(
             // la app.
             launch {
                 runCatching { Repositories.wallets.getUserProfile() }.onSuccess { perfil ->
-                    val ajustes = PeriodSettings(perfil.periodCutoffDay, perfil.periodStarts)
-                    data = data.copy(
-                        ajustesDePeriodo = ajustes,
-                        periodoActual = periodoDe(Clock.System.now().toEpochMilliseconds(), ajustes),
-                    )
-                    llegado = llegado.copy(ajustesDePeriodo = data.ajustesDePeriodo, periodoActual = data.periodoActual)
+                    val ahora = Clock.System.now().toEpochMilliseconds()
+                    data = data.conElPerfil(perfil, ahora)
+                    llegado = llegado.conElPerfil(perfil, ahora)
                     perfilLlego = true
                 }
             }
@@ -497,12 +471,13 @@ fun DashboardScreen(
             .background(Movi.colores.fondo)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // F60: encabezado único — Inicio es raíz: avatar + el rótulo del menú + la campana.
+            // F60: encabezado único — el Hoy es raíz: avatar + el rótulo del menú + la campana.
             // F5: la campana tiene contenido real — el punto solo aparece cuando `notifications`
-            // no está vacío.
+            // no está vacío. Ola C: se llama «Hoy», igual que su pestaña. El título vive en el
+            // binario, no en la definición SDUI, así que cambiarlo no pide otra generación.
             MinScreenHeader(
-                title = "Inicio",
-                leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+                title = TITULO_DEL_HOY,
+                leading = HeaderLeading.Avatar(onNavigate),
                 action = {
                     // Recargando con cifras ya pintadas (la caché o la instantánea): una línea
                     // discreta en vez de la barra de ancho completo. Va en la cabecera, cuyo alto
@@ -657,9 +632,8 @@ internal fun PrimerosPasosCard(
             done = data.hasRecurringRule,
             title = "Anota tus gastos recurrentes",
             subtitle = "Colegio, arriendo, gimnasio, cuotas",
-            // PR 3 del rediseño de Recurrentes: los recurrentes se anotan y se revisan en
-            // Movimientos, con su chip puesto. La pantalla aparte dejó de tener entradas.
-            onClick = { onNavigate(Screen.Transactions(CHIP_RECURRENTES)) },
+            // Ola C: los recurrentes se anotan y se revisan en Plan · Pagos del mes.
+            onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
         )
         Hairline()
         PasoRow(done = data.hasCredit, title = "Si tienes préstamos o tarjetas, cárgalos", onClick = { onNavigate(Screen.Credits) })
@@ -678,7 +652,7 @@ internal fun PrimerosPasosCard(
             // Ola B, tarea 7: era «Extractos» → Screen.Extractos; esa pantalla salió de la
             // navegación y «Importar movimientos» vive ahora en Documentos.
             AccesoLink("Documentos") { onNavigate(Screen.Documentos) }
-            if (isAndroid) AccesoLink("SMS del banco") { onNavigate(Screen.SMSInbox) }
+            if (isAndroid) AccesoLink("SMS del banco") { onNavigate(Screen.CapturaDelBanco) }
         }
     }
 }

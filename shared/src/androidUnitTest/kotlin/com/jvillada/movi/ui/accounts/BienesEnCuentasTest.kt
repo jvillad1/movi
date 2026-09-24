@@ -18,6 +18,9 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Bien
 import com.jvillada.movi.shared.model.CLASE_DE_BIEN_INMUEBLE
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Rule
@@ -73,6 +76,9 @@ class BienesEnCuentasTest {
     fun `la seccion Bienes muestra el valor, el avaluo y lo que es tuyo de verdad`() {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(casa, hipoteca, nu)
+            override suspend fun getCredits(): List<CreditSummary> = emptyList()
+            override suspend fun getCards(): List<CardSummary> = emptyList()
+            override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
         }
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { AccountsScreen(onNavigate = {}) } } }
 

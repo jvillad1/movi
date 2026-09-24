@@ -516,7 +516,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         ) {
                             CardRow(
                                 left = { Text("Editor de pantallas", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
-                                sub = "Reordena y edita las secciones del Inicio sin desplegar",
+                                sub = "Reordena y edita las secciones de Hoy sin desplegar",
                                 showChevron = true,
                                 isLast = true,
                                 onClick = { onNavigate(Screen.ScreenEditor) },

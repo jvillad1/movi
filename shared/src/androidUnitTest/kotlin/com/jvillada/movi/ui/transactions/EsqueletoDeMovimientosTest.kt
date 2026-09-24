@@ -154,8 +154,8 @@ class EsqueletoDeMovimientosTest {
         val yEsqueleto = composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO, useUnmergedTree = true)
             .onFirst().getUnclippedBoundsInRoot().top
 
-        // RECONCILED y no el default (UNCONFIRMED): un evento sin confirmar dispara el aviso
-        // «N por confirmar» ARRIBA de la lista (ver `avisoDePorConfirmar`), que es una fila
+        // RECONCILED y no el default (UNCONFIRMED): un evento sin confirmar dispara el renglón
+        // «N por revisar» ARRIBA de la lista (ver `RenglonPorRevisar`), que es una fila
         // más entre el encabezado y el primer día — real, pero ajena a lo que esta prueba
         // mide (el padding del primer grupo). Con RECONCILED no hay nada que confirmar y el
         // único cambio entre las dos capturas es el esqueleto convirtiéndose en la fila real.
@@ -291,25 +291,6 @@ class EsqueletoDeMovimientosTest {
 
         composeRule.onNodeWithText("Sin movimientos aún", substring = true, useUnmergedTree = true).assertIsDisplayed()
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
-        assertEquals(0, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
-    }
-
-    /**
-     * **Fix round 1, punto 2.** Con «Recurrentes» la lista de días nunca se pinta (ni cargada ni
-     * cargando: [mostrarLaListaDeDias] la apaga para ese chip), así que las filas esqueleto de
-     * arriba tampoco aparecen ahí — y sin este arreglo la primera carga de ese chip se quedaba
-     * SIN NINGUNA señal de que algo estaba en camino. La barra de progreso vuelve a cubrir ese
-     * caso: `loading && (visibleDays.isNotEmpty() || !hayListaDeDias)`.
-     */
-    @Test
-    fun `con Recurrentes, sin dia pintado todavia, la barra de carga esta pero no las filas esqueleto`() {
-        Repositories.sustitutoDePrueba = repositorio()
-        composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}, chipInicial = CHIP_RECURRENTES) } }
-        }
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithTag(TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS).assertIsDisplayed()
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
     }
 }

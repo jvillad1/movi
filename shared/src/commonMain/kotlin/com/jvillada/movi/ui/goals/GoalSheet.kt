@@ -203,7 +203,7 @@ fun GoalSheet(
                 Spacer(Modifier.height(8.dp))
                 if (cuentas.vacio) {
                     Text(
-                        "No tienes cuentas de Dinero o Inversión — crea una en Cuentas primero",
+                        "No tienes cuentas de Dinero o Inversión — crea una en Patrimonio primero",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )

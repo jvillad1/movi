@@ -32,13 +32,18 @@ import com.jvillada.movi.data.FormaDeCuentas
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.ui.transactions.CHIP_ENTRE_CUENTAS
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
@@ -53,6 +58,8 @@ import com.jvillada.movi.shared.model.esBien
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
 @Composable
@@ -88,7 +95,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     LaunchedEffect(refreshKey, refreshTick) {
         loading = true
         error = null
-        runCatching { Repositories.wallets.getAccounts() }
+        intentar { Repositories.wallets.getAccounts() }
             .onSuccess {
                 accounts = it
                 FormaRecordada.delAparato.guardarCuentas(SessionManager.userId, formaDeCuentas(it))
@@ -104,13 +111,49 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
+    // ── «Deudas» (Ola C, tarea 4): el mismo total y el mismo conteo que el encabezado de
+    // Créditos, leídos acá para no navegar hasta Créditos solo para saber si hay algo que ver.
+    // Lectura propia —`null` = no contestó, no vacía por default— e independiente de `accounts`:
+    // esta tarjeta tiene que poder aparecer aunque Cuentas siga cargando o se haya rendido.
+    var creditos by remember { mutableStateOf<List<CreditSummary>?>(null) }
+    var tarjetasDeCredito by remember { mutableStateOf<List<CardSummary>?>(null) }
+    var cargandoDeudas by remember { mutableStateOf(true) }
+    LaunchedEffect(refreshKey, refreshTick) {
+        cargandoDeudas = true
+        val prestamos = launch { intentar { Repositories.wallets.getCredits() }.onSuccess { creditos = it } }
+        val tarjetas = launch { intentar { Repositories.wallets.getCards() }.onSuccess { tarjetasDeCredito = it } }
+        prestamos.join()
+        tarjetas.join()
+        cargandoDeudas = false
+    }
+
+    // ── «Te deben» (Ola C, tarea 4): cuántas cuentas de otros hay guardadas — mismo dato que
+    // muestra `DestinosScreen`, leído acá y no recalculado.
+    var destinosGuardados by remember { mutableStateOf<List<DestinoConocido>?>(null) }
+    var cargandoTeDeben by remember { mutableStateOf(true) }
+    LaunchedEffect(refreshKey, refreshTick) {
+        cargandoTeDeben = true
+        intentar { Repositories.wallets.getDestinos() }.onSuccess { destinosGuardados = it }
+        cargandoTeDeben = false
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // F60: encabezado único — Cuentas es raíz (está en la barra y en el rail), así que
-            // lleva avatar y el MISMO rótulo que el menú («Cuentas», ya no «Mis cuentas»).
+            // F60: encabezado único — esta pantalla es la raíz de la pestaña Patrimonio (Ola C),
+            // así que lleva avatar y el MISMO rótulo que la pestaña.
+            //
+            // Fix round 1: «Cuadrar» SALIÓ del encabezado. Iba ahí como ícono solo (sin
+            // rótulo, tras medir que el texto no entraba a 390 dp sin recortar el título) pero
+            // eso era peor en dos frentes a la vez: le quitaba el rótulo a «Nueva cuenta» —la
+            // única puerta permanente para crear una cuenta una vez que los grupos ya tienen
+            // alguna— y un chequecito suelto para «Cuadrar» era ambiguo, y redundante con la
+            // tarjeta «Cuadre de saldos» de más abajo, que YA abre la misma pantalla con su
+            // propio rótulo. El brief pide «Cuadrar» como acción de Patrimonio; esa tarjeta ya
+            // lo cumple, así que el encabezado vuelve a ser el de siempre: título + «+ Nueva
+            // cuenta».
             MinScreenHeader(
-                title = "Cuentas",
-                leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+                title = "Patrimonio",
+                leading = HeaderLeading.Avatar(onNavigate),
                 action = { NewItemButton(label = "Nueva cuenta", onClick = { showCreateSheet = true }) },
             )
 
@@ -316,35 +359,18 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         Spacer(Modifier.height(20.dp))
                         val ahora = remember(cuentas) { Clock.System.now().toEpochMilliseconds() }
                         val atrasadas = cuentasSinCuadrar(cuentas, ahora)
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                        // Fix round 1: comparte `FilaDeResumenPatrimonio` con «Deudas» y «Te
+                        // deben» — las tres filas eran el mismo `Row` copiado tres veces. Esta
+                        // es también la forma en que el brief pide «Cuadrar» como acción de
+                        // Patrimonio (ver el header, más arriba: ya no repite la puerta acá).
+                        FilaDeResumenPatrimonio(
+                            titulo = "Cuadre de saldos",
+                            subtitulo = textoDelAvisoDeCuadre(atrasadas)
+                                ?: "Compara con lo que dice tu banco y anota la diferencia",
+                            colorSubtitulo = if (atrasadas.isEmpty()) Movi.colores.textoMedio else Movi.colores.aviso,
                             onClick = { onNavigate(Screen.CuadreDeSaldos) },
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Cuadre de saldos",
-                                        style = Movi.textos.cuerpo,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Movi.colores.texto,
-                                    )
-                                    Spacer(Modifier.height(3.dp))
-                                    Text(
-                                        text = textoDelAvisoDeCuadre(atrasadas)
-                                            ?: "Compara con lo que dice tu banco y anota la diferencia",
-                                        style = Movi.textos.apoyo,
-                                        color = if (atrasadas.isEmpty()) Movi.colores.textoMedio else Movi.colores.aviso,
-                                    )
-                                }
-                                ChevronRight()
-                            }
-                        }
+                            testTag = TAG_TARJETA_DE_CUADRE,
+                        )
                     }
 
                     // **La plata que se movió entre estas cuentas**, que hasta acá era un chip en
@@ -389,6 +415,31 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             }
                         }
                     }
+                }
+
+                // ── «Deudas» y «Te deben» (Ola C, tarea 4) ──────────────────────────────
+                //
+                // Lecturas propias, así que aparecen (o su esqueleto, o su error) sin importar en
+                // qué estado esté `cuentas` arriba — Cuentas puede seguir cargando o haberse
+                // rendido y estas dos puertas igual contestan.
+                item {
+                    Spacer(Modifier.height(20.dp))
+                    SeccionDeDeudas(
+                        creditos = creditos,
+                        tarjetas = tarjetasDeCredito,
+                        cargando = cargandoDeudas,
+                        onReintentar = { refreshKey++ },
+                        onClick = { onNavigate(Screen.Credits) },
+                    )
+                }
+                item {
+                    Spacer(Modifier.height(20.dp))
+                    SeccionDeTeDeben(
+                        destinos = destinosGuardados,
+                        cargando = cargandoTeDeben,
+                        onReintentar = { refreshKey++ },
+                        onClick = { onNavigate(Screen.Destinos) },
+                    )
                 }
             }
         }
@@ -791,6 +842,177 @@ private fun LazyListScope.cuentasEsqueleto(forma: FormaDeCuentas?) {
                         FilaDeListaEsqueleto(isLast = i == filas - 1, conIcono = true)
                     }
                 }
+            }
+        }
+    }
+}
+
+// ── «Deudas» y «Te deben» (Ola C, tarea 4) ──────────────────────────────────────────
+
+/** La tarjeta de «Deudas», cargando o cargada: el mismo tag en las dos. */
+const val TAG_TARJETA_DE_DEUDAS: String = "tarjeta-de-deudas"
+
+/** La tarjeta de «Te deben», cargando o cargada: el mismo tag en las dos. */
+const val TAG_TARJETA_DE_TE_DEBEN: String = "tarjeta-de-te-deben"
+
+/**
+ * La tarjeta de «Cuadre de saldos» — ya existía antes de esta tarea; el tag es nuevo (Fix round
+ * 1, al pasarla por `FilaDeResumenPatrimonio`) para poder tocarla desde una prueba sin depender
+ * de su texto, que cambia si hay cuentas atrasadas.
+ */
+const val TAG_TARJETA_DE_CUADRE: String = "tarjeta-de-cuadre"
+
+/**
+ * **«Deudas»**: la puerta a Créditos desde Patrimonio, con el mismo total y el mismo conteo que
+ * su encabezado — [totalDebtCop] es la MISMA función que usa [CreditosScreen], no una cuenta
+ * nueva. Lee lo suyo de forma independiente de `accounts`: puede contestar aunque Cuentas siga
+ * cargando o se haya rendido.
+ */
+@Composable
+private fun SeccionDeDeudas(
+    creditos: List<CreditSummary>?,
+    tarjetas: List<CardSummary>?,
+    cargando: Boolean,
+    onReintentar: () -> Unit,
+    onClick: () -> Unit,
+) {
+    if (creditos == null || tarjetas == null) {
+        if (cargando) {
+            FilaDeResumenPatrimonioEsqueleto(conCifra = true, testTag = TAG_TARJETA_DE_DEUDAS)
+        } else {
+            NoSePudoLeer("No pudimos cargar tus deudas", onReintentar = onReintentar)
+        }
+    } else {
+        val total = totalDebtCop(creditos, tarjetas)
+        FilaDeResumenPatrimonio(
+            titulo = "Deudas",
+            subtitulo = resumenDeDeudas(creditos, tarjetas),
+            cifra = formatCOP(total),
+            // Sin deudas, un «$0» en rojo parece una alarma: el rojo es para lo que se debe.
+            colorCifra = if (total == 0L) Movi.colores.texto else Movi.colores.sale,
+            onClick = onClick,
+            testTag = TAG_TARJETA_DE_DEUDAS,
+        )
+    }
+}
+
+/** El conteo de la tarjeta de «Deudas»: «3 créditos · 2 tarjetas», solo los grupos que hay. */
+internal fun resumenDeDeudas(creditos: List<CreditSummary>, tarjetas: List<CardSummary>): String {
+    val partes = buildList {
+        if (creditos.isNotEmpty()) add(if (creditos.size == 1) "1 crédito" else "${creditos.size} créditos")
+        if (tarjetas.isNotEmpty()) add(if (tarjetas.size == 1) "1 tarjeta" else "${tarjetas.size} tarjetas")
+    }
+    return if (partes.isEmpty()) "Sin deudas registradas" else partes.joinToString(" · ")
+}
+
+/**
+ * **«Te deben»**: la puerta a `DestinosScreen` (Cuentas de otros) — hasta esta tarea esa pantalla
+ * no tenía ninguna entrada, así que esta tarjeta es la que la hace alcanzable. Solo el conteo: la
+ * pantalla no calcula un total agregado entre todos los destinos (cada uno trae el suyo), y
+ * sumarlo acá sería una cuenta nueva que el brief no pidió.
+ */
+@Composable
+private fun SeccionDeTeDeben(
+    destinos: List<DestinoConocido>?,
+    cargando: Boolean,
+    onReintentar: () -> Unit,
+    onClick: () -> Unit,
+) {
+    if (destinos == null) {
+        if (cargando) {
+            FilaDeResumenPatrimonioEsqueleto(conCifra = false, testTag = TAG_TARJETA_DE_TE_DEBEN)
+        } else {
+            NoSePudoLeer("No pudimos cargar Cuentas de otros", onReintentar = onReintentar)
+        }
+    } else {
+        FilaDeResumenPatrimonio(
+            titulo = "Te deben",
+            subtitulo = resumenDeTeDeben(destinos),
+            onClick = onClick,
+            testTag = TAG_TARJETA_DE_TE_DEBEN,
+        )
+    }
+}
+
+/** El subtítulo de la tarjeta de «Te deben»: cuántas cuentas de otros hay guardadas. */
+internal fun resumenDeTeDeben(destinos: List<DestinoConocido>): String = when (destinos.size) {
+    0 -> "Aún no hay ninguna guardada"
+    1 -> "1 cuenta guardada"
+    else -> "${destinos.size} cuentas guardadas"
+}
+
+/**
+ * La fila compartida de «Deudas» y «Te deben»: título, subtítulo, una cifra opcional y el chevron
+ * — la misma forma que ya tenían «Cuadre de saldos» y «Movimientos entre cuentas» más arriba en
+ * esta pantalla, con una cifra de más. Una sola función para las dos tarjetas: repetir el mismo
+ * `Row` dos veces es el tipo de copia que este proyecto evita.
+ */
+@Composable
+private fun FilaDeResumenPatrimonio(
+    titulo: String,
+    subtitulo: String,
+    onClick: () -> Unit,
+    testTag: String,
+    cifra: String? = null,
+    colorCifra: Color = Movi.colores.texto,
+    // Fix round 1: el cuadre lo necesita para el aviso ámbar de «llevas más de un período sin
+    // cuadrar» (ver `textoDelAvisoDeCuadre`) — el resto de las filas usan el default.
+    colorSubtitulo: Color = Movi.colores.textoMedio,
+) {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+        onClick = onClick,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(titulo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                Spacer(Modifier.height(3.dp))
+                Text(subtitulo, style = Movi.textos.apoyo, color = colorSubtitulo)
+            }
+            if (cifra != null) {
+                Text(
+                    cifra,
+                    style = Movi.textos.monto,
+                    fontWeight = FontWeight.Medium,
+                    color = colorCifra,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+            }
+            ChevronRight()
+        }
+    }
+}
+
+/** [FilaDeResumenPatrimonio] mientras carga: misma forma, sin un solo dato de verdad. */
+@Composable
+private fun FilaDeResumenPatrimonioEsqueleto(conCifra: Boolean, testTag: String) {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.cuerpo)
+                Spacer(Modifier.height(3.dp))
+                LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
+            }
+            if (conCifra) {
+                BloqueEsqueleto(
+                    alto = altoDeUnRenglon(Movi.textos.monto),
+                    ancho = 96.dp,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
             }
         }
     }

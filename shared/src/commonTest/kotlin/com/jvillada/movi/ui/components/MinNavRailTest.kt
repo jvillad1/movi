@@ -1,26 +1,38 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.ui.navTabFor
+import com.jvillada.movi.ui.screenForTab
 import kotlin.test.Test
-import kotlin.test.assertTrue
+import kotlin.test.assertEquals
 
 /**
- * PR 2 del rediseño de Recurrentes (2026-09): con «Flujo libre» y las candidatas mudadas a
- * Movimientos, y editar un recurrente existente ya resuelto desde el detalle de un movimiento
- * (PR 1), Recurrentes dejó de tener una entrada propia en el rail — la única puerta que le
- * quedaba a crear un recurrente "a ciegas", sin movimiento asociado.
- *
- * PR 4 borró `NavTab.RECURRING`, así que ya no hay forma de escribir «el rail no ofrece
- * Recurrentes»: el compilador la cierra. Lo que queda es fijar la lista COMPLETA, que dice lo
- * mismo y además protege el orden.
+ * Ola C (2026-09): **cuatro pestañas**, las mismas en el teléfono y en la web. La barra y el rail
+ * leen la misma lista ([destinosPrincipales]); fijarla entera protege el orden y los rótulos, y que
+ * no vuelvan Créditos, Presupuestos ni Más. Que las dos superficies la pinten de verdad lo prueba
+ * `LasCuatroPestanasTest`, montándolas.
  */
 class MinNavRailTest {
 
     @Test
-    fun `el rail sigue con sus otros destinos, en el mismo orden`() {
-        assertTrue(
-            railDestinations.map { it.tab } == listOf(
-                NavTab.HOME, NavTab.TRANSACTIONS, NavTab.ACCOUNTS, NavTab.CREDITS, NavTab.BUDGETS, NavTab.MORE,
-            ),
+    fun `las cuatro pestanas, en orden y con sus rotulos`() {
+        assertEquals(
+            listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.PATRIMONIO),
+            destinosPrincipales.map { it.tab },
         )
+        assertEquals(listOf("Hoy", "Movimientos", "Plan", "Patrimonio"), destinosPrincipales.map { it.label })
+    }
+
+    @Test
+    fun `Agregar no es una pestana de la lista, es el boton`() {
+        assertEquals(false, destinosPrincipales.any { it.tab == NavTab.ADD })
+    }
+
+    @Test
+    fun `cada pestana vuelve a su pantalla principal`() {
+        // La lista y `screenForTab` no pueden desalinearse: si una pestaña no resolviera a una
+        // pantalla que declara ESA pestaña, el ítem quedaría sin resaltar.
+        destinosPrincipales.forEach { dest ->
+            assertEquals(dest.tab, navTabFor(screenForTab(dest.tab)), dest.label)
+        }
     }
 }

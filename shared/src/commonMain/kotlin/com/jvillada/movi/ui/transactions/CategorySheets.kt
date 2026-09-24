@@ -1303,7 +1303,7 @@ private fun SeccionEstoSeRepite(
     // «Sí, se repite todos los meses». Ver [FinancialEvent.noSeRepite].
     if (event.noSeRepite) {
         Text(
-            text = "Marcaste que este movimiento no se repite, así que no aparece en Recurrentes. " +
+            text = "Marcaste que este movimiento no se repite, así que Movi no lo marca como recurrente. " +
                 "Esto vale solo para este movimiento: si tienes un cobro mensual con el mismo " +
                 "nombre, ese sigue igual.",
             style = Movi.textos.apoyo,
@@ -1330,7 +1330,7 @@ private fun SeccionEstoSeRepite(
         return
     }
     Text(
-        text = "Movi puede anotarlo en Recurrentes con lo que ya tiene este movimiento: el " +
+        text = "Movi puede anotarlo en Plan · Pagos del mes con lo que ya tiene este movimiento: el " +
             "concepto, el monto, la categoría, la cuenta y el día. El primer recordatorio será " +
             "el mes que viene, porque este pago ya lo hiciste.",
         style = Movi.textos.apoyo,

@@ -259,7 +259,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 title = "Categorías",
                 leading = leadingFor(
                     Screen.Categorias,
-                    onProfile = { onNavigate(Screen.Profile) },
+                    onNavigate = onNavigate,
                     fallback = Screen.Mas,
                 ),
                 subtitle = when {

@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.EventDay
@@ -36,6 +38,7 @@ import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
@@ -44,6 +47,7 @@ import com.jvillada.movi.ui.dashboard.spentByCategoryForPeriod
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.ventanaDe
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Month
@@ -116,49 +120,70 @@ private fun Month.spanishName(): String = when (this) {
     Month.DECEMBER -> "diciembre"
 }
 
-private sealed class Sheet {
+internal sealed class Sheet {
     data class Edit(val current: Budget) : Sheet()
     data object Add : Sheet()
 }
 
-@Composable
-fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
+/*
+ * # Presupuestos, en tres piezas
+ *
+ * Ola C: el cuerpo de esta pantalla es también el segmento «Presupuestos» de la pestaña Plan. Para
+ * que las dos no sean dos copias se parte igual que el tablero de Recurrentes
+ * (`ui/plan/TableroDeRecurrentes.kt`):
+ *
+ * - [EstadoDePresupuestos] (con [rememberEstadoDePresupuestos]): lo que se lee y lo que el dueño
+ *   le hace. Carga lo suyo.
+ * - [presupuestos]: sus renglones, como extensión de `LazyListScope`, para ir dentro de la lista de
+ *   quien lo monte —en Plan, debajo del disponible y del selector, con un solo scroll—.
+ * - [HojasDePresupuestos]: crear y editar, afuera de la lista.
+ *
+ * [PresupuestosScreen] las junta con su encabezado. El «Nuevo» compacto va en el encabezado de quien
+ * lo monta; cuándo se ofrece lo dice [EstadoDePresupuestos.nuevoEnElEncabezado].
+ */
+
+/**
+ * **Lo que Presupuestos lee y lo que el dueño le hace.** Estaba suelto adentro de
+ * [PresupuestosScreen] como una docena de `remember`; se juntó acá sin cambiar ni una clave ni un
+ * orden de lectura.
+ */
+@Stable
+class EstadoDePresupuestos internal constructor(private val alcance: CoroutineScope) {
     // `null` = la lectura todavía no contestó bien; `emptyList()` = contestó y no hay ninguno. Ver
     // [listo] para por qué con los presupuestos solos no alcanza para pintar la lista.
-    var budgets by remember { mutableStateOf<List<Budget>?>(null) }
-    var cutoffDay by remember { mutableStateOf(1) }
+    internal var budgets by mutableStateOf<List<Budget>?>(null)
+    internal var cutoffDay by mutableStateOf(1)
     /** Los meses que arrancaron otro día. Ver `PeriodSettings.iniciosPropios`. */
-    var iniciosPropios by remember { mutableStateOf(emptyMap<String, String>()) }
-    var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
+    internal var iniciosPropios by mutableStateOf(emptyMap<String, String>())
+    internal var days by mutableStateOf<List<EventDay>>(emptyList())
     // Se incrementa al asociar un gasto, para volver a leer con el movimiento ya movido.
-    var refreshKeyLocal by remember { mutableStateOf(0) }
+    internal var refreshKeyLocal by mutableStateOf(0)
     // Gasto del mes por categoría según el server (la misma fuente que el Inicio); null hasta
     // que llegue o si no hay red — ver `progresses`.
-    var serverSpent by remember { mutableStateOf<Map<String, Long>?>(null) }
-    var sheet by remember { mutableStateOf<Sheet?>(null) }
+    internal var serverSpent by mutableStateOf<Map<String, Long>?>(null)
+    internal var sheet by mutableStateOf<Sheet?>(null)
     // Error de guardar/renombrar que la hoja tiene que mostrar (409 del server, red).
-    var sheetError by remember { mutableStateOf<String?>(null) }
+    internal var sheetError by mutableStateOf<String?>(null)
     // Mientras una llamada de la hoja está en vuelo no sale otra: un doble toque en «Guardar»
     // mandaba el rename dos veces, y el segundo volvía 404 con un error sobre algo que sí se hizo.
     // Mismo `!saving` que las hojas de metas, recurrentes, tarjetas y créditos.
-    var guardando by remember { mutableStateOf(false) }
+    internal var guardando by mutableStateOf(false)
     // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
     // parpadeaba un instante antes de que llegaran los presupuestos reales.
-    var loading by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
+    internal var loading by mutableStateOf(true)
 
     // Los movimientos del período contestaron bien al menos una vez: son el respaldo del gasto
     // cuando el server no contesta (ver [gastoPorCategoria]).
-    var eventosLeidos by remember { mutableStateOf(false) }
+    internal var eventosLeidos by mutableStateOf(false)
     // La lectura del gasto del server y la del perfil ya contestaron (bien o mal) al menos una vez.
     // Hasta entonces, cualquier gasto que se pintara podía cambiar —el del aparato por el del
     // server, o el mes de calendario por el período del dueño— y con él el ORDEN de la lista.
-    var gastoYPeriodoContestaron by remember { mutableStateOf(false) }
+    internal var gastoYPeriodoContestaron by mutableStateOf(false)
 
-    suspend fun reload() {
+    internal suspend fun reload() {
         // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
         // esta pantalla ya carga presupuestos y movimientos, no hace falta un fetch nuevo.
-        runCatching { Repositories.wallets.getBudgets() }.onSuccess {
+        intentar { Repositories.wallets.getBudgets() }.onSuccess {
             budgets = it
             // Ola 9 · A3: un presupuesto es, por definición, un límite de GASTO — así que sus
             // categorías se anotan con ese tipo y no como "no se sabe".
@@ -166,31 +191,24 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    val refreshTick = LocalRefreshTick.current
-    // `refreshTick` y no `Unit`: con Unit esta pantalla no recargaba NUNCA mientras estuviera
-    // compuesta, y desde que Agregar es una modal se puede registrar un gasto parado acá y ver
-    // la barra del presupuesto sin moverse. Ver [LocalRefreshTick].
-    LaunchedEffect(refreshTick, refreshKeyLocal) {
-        loading = true
-        reload()
-        runCatching { Repositories.wallets.getEventsByDay() }.onSuccess {
-            days = it
-            eventosLeidos = true
-            // Ola 9 · A3: con el tipo de cada movimiento, así una categoría propia se ofrece
-            // del lado en que de verdad se usó.
-            UsedCategoriesCache.recordAll(it.flatMap { d -> d.items }.map { ev -> ev.category to ev.type })
+    // Mover un movimiento a la categoría del presupuesto. Va acá y no en la hoja porque después
+    // hay que recargar la lista: el gasto recién asociado tiene que aparecer contado.
+    internal fun asociarGasto(evento: FinancialEvent, categoria: String) {
+        alcance.launch {
+            runCatching { Repositories.wallets.updateEventCategory(evento.id, categoria) }
+                .onSuccess { refreshKeyLocal++ }
+                .onFailure { sheetError = it.toUserMessage() }
         }
-        // Misma cifra que el Inicio: el server suma con TODO lo que sabe (todos los dispositivos,
-        // SMS, importaciones; anulados fuera). En el teléfono `getEventsByDay` es local y solo
-        // conoce lo de este aparato, así que el Inicio podía decir «Comida superado» y esta
-        // pantalla no. Si falla (sin red) queda el cálculo local de abajo como fallback.
-        runCatching { Repositories.wallets.getDashboardSummary(Scope.SELF) }.onSuccess { serverSpent = it.spentByCategory }
-        // El corte del período: define qué ventana usa el cálculo local de respaldo. Si falla,
-        // queda en 1 —mes de calendario— que es el comportamiento de siempre.
-        runCatching { Repositories.wallets.getUserProfile() }
-            .onSuccess { cutoffDay = it.periodCutoffDay; iniciosPropios = it.periodStarts }
-        gastoYPeriodoContestaron = true
-        loading = false
+    }
+
+    /** «Nuevo» y «Nuevo presupuesto»: abren la hoja de crear. */
+    fun abrirNuevo() {
+        sheet = Sheet.Add
+    }
+
+    /** El «Reintentar» de la lectura que no se pudo hacer. */
+    internal fun reintentar() {
+        refreshKeyLocal++
     }
 
     // El gasto del período por categoría, una sola vez: lo usan las barras de progreso y también
@@ -199,28 +217,17 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     // El período del usuario, no el mes de calendario. `serverSpent` ya viene calculado con la
     // ventana correcta (el server usa `currentPeriodWindow`); el cálculo local es el respaldo y
     // tiene que usar la MISMA ventana o las dos mitades de la app dirían cifras distintas.
-    val alcance = rememberCoroutineScope()
-    // Mover un movimiento a la categoría del presupuesto. Va acá y no en la hoja porque después
-    // hay que recargar la lista: el gasto recién asociado tiene que aparecer contado.
-    fun asociarGasto(evento: FinancialEvent, categoria: String) {
-        alcance.launch {
-            runCatching { Repositories.wallets.updateEventCategory(evento.id, categoria) }
-                .onSuccess { refreshKeyLocal++ }
-                .onFailure { sheetError = it.toUserMessage() }
-        }
-    }
-
-    val ventanaDelPeriodo = remember(cutoffDay, iniciosPropios) {
+    internal val ventanaDelPeriodo: LongRange by derivedStateOf {
         // El período entero, no solo el corte: si el dueño declaró que este mes arrancó otro día,
         // Presupuestos tiene que contar la misma ventana que Movimientos le está mostrando.
         val settings = PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios)
         ventanaDe(periodoDe(kotlinx.datetime.Clock.System.now().toEpochMilliseconds(), settings), settings)
     }
-    val gastoPorCategoria = remember(days, serverSpent, ventanaDelPeriodo) {
+    internal val gastoPorCategoria: Map<String, Long> by derivedStateOf {
         serverSpent ?: spentByCategoryForPeriod(days, ventanaDelPeriodo)
     }
 
-    val progresses = remember(budgets, gastoPorCategoria) {
+    internal val progresses: List<BudgetProgress> by derivedStateOf {
         // countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin él, un ajuste de
         // saldo de un crédito caía en la categoría "Otros" y ponía en OVER al instante a un
         // presupuesto con ese nombre.
@@ -241,10 +248,11 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     // F16: "Gastado del mes" no decía CUÁL mes — el nombre lo hace explícito. Es el nombre del
     // **período** (el mismo que suma `ventanaDelPeriodo`), no del mes de calendario: con corte 25,
     // el 26 de septiembre ya es octubre en Movimientos, y el título tiene que decir lo mismo.
-    val monthName = remember(cutoffDay, iniciosPropios) {
+    internal val monthName: String by derivedStateOf {
         val settings = PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios)
         Month(periodoDe(Clock.System.now().toEpochMilliseconds(), settings).month).spanishName()
     }
+
     /**
      * **Ola B: nada se pinta hasta que se sabe lo gastado.** Los presupuestos llegan primero y el
      * gasto después, y en ese medio la pantalla decía «$0» gastado y cada categoría «$0 … 0 % …
@@ -258,207 +266,285 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
      * **Salvo sin presupuestos**: el vacío de siempre («Nuevo presupuesto») no depende del gasto
      * —no hay categoría a la que ponerle una cifra—, así que ahí un gasto caído no es un error.
      */
-    val gastoConocido = serverSpent != null || eventosLeidos
-    val listo = budgets != null && gastoYPeriodoContestaron && (gastoConocido || budgets.isNullOrEmpty())
+    internal val gastoConocido: Boolean get() = serverSpent != null || eventosLeidos
+    internal val listo: Boolean get() =
+        budgets != null && gastoYPeriodoContestaron && (gastoConocido || budgets.isNullOrEmpty())
     // Lo que la hoja de crear/editar sabe del gasto: nada (`null`) hasta que el gasto definitivo
     // contestó. Antes recibía el cálculo sobre `days = emptyList()` y, con «Nuevo» tocado en el
     // primer cuadro, decía «Todavía no tienes gastos registrados este mes» a quien sí tiene.
-    val gastoParaLaHoja = gastoPorCategoria.takeIf { gastoConocido && gastoYPeriodoContestaron }
+    internal val gastoParaLaHoja: Map<String, Long>? get() =
+        gastoPorCategoria.takeIf { gastoConocido && gastoYPeriodoContestaron }
     // Ver [NoSePudoLeer]: sin esto una lectura caída pintaba «Gastado $0 de $0» y el botón de
     // crear, a quien ya tiene presupuestos.
-    val noSeLeyo = !loading && !listo
-    val cargando = loading && !listo
-    val sinPresupuestos = listo && budgets.isNullOrEmpty()
+    internal val noSeLeyo: Boolean get() = !loading && !listo
+    internal val cargando: Boolean get() = loading && !listo
+    internal val sinPresupuestos: Boolean get() = listo && budgets.isNullOrEmpty()
 
-    val totalLimit = budgets.orEmpty().sumOf { it.monthlyLimit }
-    val totalSpent = progresses.sumOf { it.spent }
+    /**
+     * ¿Va el «Nuevo» compacto en el encabezado de quien monta esto?
+     *
+     * Ola B: está desde el primer cuadro, también mientras carga — si aparecía al llegar los datos,
+     * el título se corría. Se va solo con la lectura que no se pudo hacer y con el vacío de verdad,
+     * que tiene su botón ancho.
+     */
+    val nuevoEnElEncabezado: Boolean get() = !sinPresupuestos && !noSeLeyo
+
+    internal val totalLimit: Long get() = budgets.orEmpty().sumOf { it.monthlyLimit }
+    internal val totalSpent: Long get() = progresses.sumOf { it.spent }
     // «Al límite» cuenta como aviso, no como sobrepasado: el encabezado decía «2 Sobrepasados»
     // con uno de los dos exactamente en el límite.
-    val warnCount = progresses.count { it.state == EstadoDePresupuesto.CERCA || it.state == EstadoDePresupuesto.AL_LIMITE }
-    val overCount = progresses.count { it.state.estaSuperado }
+    internal val warnCount: Int get() =
+        progresses.count { it.state == EstadoDePresupuesto.CERCA || it.state == EstadoDePresupuesto.AL_LIMITE }
+    internal val overCount: Int get() = progresses.count { it.state.estaSuperado }
+}
+
+/**
+ * El estado de Presupuestos, atado a la composición, **con sus lecturas corriendo**.
+ *
+ * @param activo si el cuerpo se está mostrando. En Plan, con el segmento «Pagos del mes» elegido,
+ *   no hay a quién servirle los movimientos del período (la lectura más pesada de las cuatro): no
+ *   se pide nada hasta que el dueño elige «Presupuestos». [PresupuestosScreen] lo deja siempre en
+ *   `true`.
+ */
+@Composable
+fun rememberEstadoDePresupuestos(activo: Boolean = true): EstadoDePresupuestos {
+    val alcance = rememberCoroutineScope()
+    val estado = remember(alcance) { EstadoDePresupuestos(alcance) }
+    val refreshTick = LocalRefreshTick.current
+    // `refreshTick` y no `Unit`: con Unit esta pantalla no recargaba NUNCA mientras estuviera
+    // compuesta, y desde que Agregar es una modal se puede registrar un gasto parado acá y ver
+    // la barra del presupuesto sin moverse. Ver [LocalRefreshTick].
+    LaunchedEffect(refreshTick, estado.refreshKeyLocal, activo) {
+        if (!activo) return@LaunchedEffect
+        estado.loading = true
+        estado.reload()
+        intentar { Repositories.wallets.getEventsByDay() }.onSuccess {
+            estado.days = it
+            estado.eventosLeidos = true
+            // Ola 9 · A3: con el tipo de cada movimiento, así una categoría propia se ofrece
+            // del lado en que de verdad se usó.
+            UsedCategoriesCache.recordAll(it.flatMap { d -> d.items }.map { ev -> ev.category to ev.type })
+        }
+        // Misma cifra que el Inicio: el server suma con TODO lo que sabe (todos los dispositivos,
+        // SMS, importaciones; anulados fuera). En el teléfono `getEventsByDay` es local y solo
+        // conoce lo de este aparato, así que el Inicio podía decir «Comida superado» y esta
+        // pantalla no. Si falla (sin red) queda el cálculo local de abajo como fallback.
+        intentar { Repositories.wallets.getDashboardSummary(Scope.SELF) }.onSuccess { estado.serverSpent = it.spentByCategory }
+        // El corte del período: define qué ventana usa el cálculo local de respaldo. Si falla,
+        // queda en 1 —mes de calendario— que es el comportamiento de siempre.
+        intentar { Repositories.wallets.getUserProfile() }
+            .onSuccess { estado.cutoffDay = it.periodCutoffDay; estado.iniciosPropios = it.periodStarts }
+        estado.gastoYPeriodoContestaron = true
+        estado.loading = false
+    }
+    return estado
+}
+
+/**
+ * **Los renglones de Presupuestos**, para pintarlos dentro de una `LazyColumn` ajena: el aviso de
+ * que no se pudo leer (o el botón ancho del vacío), y después el esqueleto o la tarjeta de «Gastado
+ * en …» con sus categorías.
+ */
+fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
+    item {
+        if (estado.noSeLeyo) {
+            Spacer(Modifier.height(14.dp))
+            NoSePudoLeer(
+                "No pudimos cargar tus presupuestos",
+                onReintentar = { estado.reintentar() },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        } else if (estado.sinPresupuestos) {
+            NewItemButton(
+                label = "Nuevo presupuesto",
+                onClick = { estado.abrirNuevo() },
+                modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
+                full = true,
+            )
+        } else {
+            Spacer(Modifier.height(14.dp))
+        }
+    }
+
+    if (estado.cargando) {
+        presupuestosEsqueleto()
+    } else if (estado.listo) {
+        item {
+            MinCard(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
+                variant = MinCardVariant.Elevated,
+                padding = PaddingValues(22.dp),
+            ) {
+                Text("Gastado en ${estado.monthName}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(10.dp))
+                // La protagonista de esta pantalla, como «Tu plata» en el Inicio y la deuda
+                // total en Créditos: misma letra y un renglón siempre.
+                CifraProtagonista(formatCOP(estado.totalSpent), color = Movi.colores.texto)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "de ${formatCOP(estado.totalLimit)}",
+                    color = Movi.colores.textoMedio,
+                    style = Movi.textos.monto,
+                )
+                val warnCount = estado.warnCount
+                val overCount = estado.overCount
+                if (warnCount + overCount > 0) {
+                    Spacer(Modifier.height(14.dp))
+                    Hairline()
+                    Spacer(Modifier.height(14.dp))
+                    // Las insignias dicen lo MISMO que las tarjetas de abajo.
+                    //
+                    // Antes el encabezado rotulaba «Cerca del límite» en amarillo a los
+                    // presupuestos que las tarjetas pintan verdes — y uno de ellos es el
+                    // que está justo en el límite, del que el comentario de la tarjeta
+                    // dice literalmente «no está cerca, está justo ahí». La misma pantalla
+                    // se contradecía a sí misma en color y en palabra.
+                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        if (overCount > 0) {
+                            AlertBadge("Sobrepasados", overCount, Movi.colores.sale)
+                        }
+                        if (warnCount > 0) {
+                            AlertBadge("Sin margen o cerca", warnCount, Movi.colores.entra)
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(20.dp))
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                val progresses = estado.progresses
+                MinSectionHeader(title = "Categorías", count = progresses.size)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    progresses.forEach { p ->
+                        BudgetCard(p, onClick = { estado.sheet = Sheet.Edit(p.budget) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Crear y editar un presupuesto: van afuera de la lista, como toda hoja. */
+@Composable
+fun HojasDePresupuestos(estado: EstadoDePresupuestos) {
+    val scope = rememberCoroutineScope()
+    when (val s = estado.sheet) {
+        is Sheet.Edit -> BudgetSheet(
+            error = estado.sheetError,
+            title = "Editar presupuesto",
+            gastoPorCategoria = estado.gastoParaLaHoja,
+            dias = estado.days,
+            ventana = estado.ventanaDelPeriodo,
+            onAsociar = estado::asociarGasto,
+            initialCategory = s.current.category,
+            // F17: la categoría dejó de ser de solo lectura — antes era una limitación
+            // técnica filtrada a la pantalla (la categoría es la PK en el server), ahora
+            // PUT /api/budgets/{category}/rename la resuelve del lado del servidor.
+            categoryEditable = true,
+            initialAmount = s.current.monthlyLimit,
+            onDismiss = { estado.sheet = null; estado.sheetError = null },
+            guardando = estado.guardando,
+            onDelete = {
+                if (estado.guardando) return@BudgetSheet
+                estado.guardando = true
+                scope.launch {
+                    // Igual que guardar: si el borrado falla, la hoja queda abierta con el
+                    // motivo. Antes se tragaba el error, recargaba y cerraba — el presupuesto
+                    // seguía ahí y nada decía por qué.
+                    runCatching { Repositories.wallets.deleteBudget(s.current.category) }
+                        .onSuccess { estado.reload(); estado.sheet = null; estado.sheetError = null }
+                        .onFailure { estado.sheetError = it.toUserMessage() }
+                    estado.guardando = false
+                }
+            },
+            onSave = { cat, amt ->
+                if (estado.guardando) return@BudgetSheet
+                estado.guardando = true
+                scope.launch {
+                    val result = runCatching {
+                        // F17: renombrar y cambiar el monto son dos llamadas separadas
+                        // porque son dos endpoints separados — rename conserva el límite
+                        // viejo, así que si además cambió el monto hay que pisarlo después.
+                        val renamed = cat != s.current.category
+                        val finalCategory = if (renamed) {
+                            Repositories.wallets.renameBudget(s.current.category, cat).category
+                        } else {
+                            s.current.category
+                        }
+                        if (!renamed || amt != s.current.monthlyLimit) {
+                            Repositories.wallets.updateBudget(finalCategory, Budget(finalCategory, amt))
+                        }
+                    }
+                    // El 409 del server («Ya existe un presupuesto llamado…») tiene que
+                    // llegarle a la persona: cerrar la hoja en silencio era decirle que se
+                    // guardó cuando no. La hoja queda abierta con el mensaje; reintenta o cierra.
+                    result.onSuccess { estado.reload(); estado.sheet = null; estado.sheetError = null }
+                        .onFailure { estado.sheetError = it.toUserMessage() }
+                    estado.guardando = false
+                }
+            },
+        )
+        Sheet.Add -> BudgetSheet(
+            error = estado.sheetError,
+            title = "Nuevo presupuesto",
+            initialCategory = "",
+            categoryEditable = true,
+            initialAmount = 0,
+            gastoPorCategoria = estado.gastoParaLaHoja,
+            dias = estado.days,
+            ventana = estado.ventanaDelPeriodo,
+            onAsociar = estado::asociarGasto,
+            onDismiss = { estado.sheet = null; estado.sheetError = null },
+            onDelete = null,
+            guardando = estado.guardando,
+            onSave = { cat, amt ->
+                if (cat.isBlank() || amt <= 0L || estado.guardando) return@BudgetSheet
+                estado.guardando = true
+                scope.launch {
+                    // Lo mismo que editar: sin red o con un 409 («ya hay un presupuesto para
+                    // esa categoría») la hoja no se cierra como si se hubiera guardado.
+                    runCatching { Repositories.wallets.createBudget(Budget(cat.trim(), amt)) }
+                        .onSuccess { estado.reload(); estado.sheet = null; estado.sheetError = null }
+                        .onFailure { estado.sheetError = it.toUserMessage() }
+                    estado.guardando = false
+                }
+            },
+        )
+        null -> {}
+    }
+}
+
+@Composable
+fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
+    val estado = rememberEstadoDePresupuestos()
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // F60: encabezado único — avatar en ancho (Presupuestos está en el rail), flecha a
-            // Más en el teléfono (se llega por Más). Con presupuestos ya creados, el alta
-            // compacta a la derecha (F18).
-            //
-            // Ola B: el alta compacta está desde el primer cuadro, también mientras carga — si
-            // aparecía al llegar los datos, el título se corría. Se va solo con la lectura que no se
-            // pudo hacer y con el vacío de verdad, que tiene su botón ancho.
+            // F60: encabezado único. Ola C: Presupuestos es un segmento de Plan, así que esta
+            // pantalla suelta lleva flecha y vuelve a Plan · Presupuestos. Con presupuestos ya creados, el alta
+            // compacta a la derecha (F18), desde el primer cuadro (ver
+            // [EstadoDePresupuestos.nuevoEnElEncabezado]).
             MinScreenHeader(
                 title = "Presupuestos",
-                leading = leadingFor(Screen.Budgets, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
-                action = if (!sinPresupuestos && !noSeLeyo) {
+                leading = leadingFor(Screen.Budgets, onNavigate, fallback = Screen.Plan(SEGMENTO_PRESUPUESTOS)),
+                action = if (estado.nuevoEnElEncabezado) {
                     // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la
                     // pantalla quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En esta
                     // pantalla no hay otra cosa que se pueda crear, así que la palabra alcanza.
-                    { NewItemButton(label = "Nuevo", onClick = { sheet = Sheet.Add }) }
+                    { NewItemButton(label = "Nuevo", onClick = { estado.abrirNuevo() }) }
                 } else null,
             )
-            if (noSeLeyo) {
-                Spacer(Modifier.height(14.dp))
-                NoSePudoLeer(
-                    "No pudimos cargar tus presupuestos",
-                    onReintentar = { refreshKeyLocal++ },
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            } else if (sinPresupuestos) {
-                NewItemButton(
-                    label = "Nuevo presupuesto",
-                    onClick = { sheet = Sheet.Add },
-                    modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
-                    full = true,
-                )
-            } else {
-                Spacer(Modifier.height(14.dp))
-            }
-
-            if (cargando) {
-                PresupuestosEsqueleto(modifier = Modifier.weight(1f))
-            } else if (listo) LazyColumn(
+            LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 80.dp),
             ) {
-                item {
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(22.dp),
-                    ) {
-                        Text("Gastado en $monthName", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                        Spacer(Modifier.height(10.dp))
-                        // La protagonista de esta pantalla, como «Tu plata» en el Inicio y la deuda
-                        // total en Créditos: misma letra y un renglón siempre.
-                        CifraProtagonista(formatCOP(totalSpent), color = Movi.colores.texto)
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = "de ${formatCOP(totalLimit)}",
-                            color = Movi.colores.textoMedio,
-                            style = Movi.textos.monto,
-                        )
-                        if (warnCount + overCount > 0) {
-                            Spacer(Modifier.height(14.dp))
-                            Hairline()
-                            Spacer(Modifier.height(14.dp))
-                            // Las insignias dicen lo MISMO que las tarjetas de abajo.
-                            //
-                            // Antes el encabezado rotulaba «Cerca del límite» en amarillo a los
-                            // presupuestos que las tarjetas pintan verdes — y uno de ellos es el
-                            // que está justo en el límite, del que el comentario de la tarjeta
-                            // dice literalmente «no está cerca, está justo ahí». La misma pantalla
-                            // se contradecía a sí misma en color y en palabra.
-                            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                                if (overCount > 0) {
-                                    AlertBadge("Sobrepasados", overCount, Movi.colores.sale)
-                                }
-                                if (warnCount > 0) {
-                                    AlertBadge("Sin margen o cerca", warnCount, Movi.colores.entra)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                item {
-                    Spacer(Modifier.height(20.dp))
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Categorías", count = progresses.size)
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            progresses.forEach { p ->
-                                BudgetCard(p, onClick = { sheet = Sheet.Edit(p.budget) })
-                            }
-                        }
-                    }
-                }
+                presupuestos(estado)
             }
-
         }
 
-        when (val s = sheet) {
-            is Sheet.Edit -> BudgetSheet(
-                error = sheetError,
-                title = "Editar presupuesto",
-                gastoPorCategoria = gastoParaLaHoja,
-                dias = days,
-                ventana = ventanaDelPeriodo,
-                onAsociar = ::asociarGasto,
-                initialCategory = s.current.category,
-                // F17: la categoría dejó de ser de solo lectura — antes era una limitación
-                // técnica filtrada a la pantalla (la categoría es la PK en el server), ahora
-                // PUT /api/budgets/{category}/rename la resuelve del lado del servidor.
-                categoryEditable = true,
-                initialAmount = s.current.monthlyLimit,
-                onDismiss = { sheet = null; sheetError = null },
-                guardando = guardando,
-                onDelete = {
-                    if (guardando) return@BudgetSheet
-                    guardando = true
-                    scope.launch {
-                        // Igual que guardar: si el borrado falla, la hoja queda abierta con el
-                        // motivo. Antes se tragaba el error, recargaba y cerraba — el presupuesto
-                        // seguía ahí y nada decía por qué.
-                        runCatching { Repositories.wallets.deleteBudget(s.current.category) }
-                            .onSuccess { reload(); sheet = null; sheetError = null }
-                            .onFailure { sheetError = it.toUserMessage() }
-                        guardando = false
-                    }
-                },
-                onSave = { cat, amt ->
-                    if (guardando) return@BudgetSheet
-                    guardando = true
-                    scope.launch {
-                        val result = runCatching {
-                            // F17: renombrar y cambiar el monto son dos llamadas separadas
-                            // porque son dos endpoints separados — rename conserva el límite
-                            // viejo, así que si además cambió el monto hay que pisarlo después.
-                            val renamed = cat != s.current.category
-                            val finalCategory = if (renamed) {
-                                Repositories.wallets.renameBudget(s.current.category, cat).category
-                            } else {
-                                s.current.category
-                            }
-                            if (!renamed || amt != s.current.monthlyLimit) {
-                                Repositories.wallets.updateBudget(finalCategory, Budget(finalCategory, amt))
-                            }
-                        }
-                        // El 409 del server («Ya existe un presupuesto llamado…») tiene que
-                        // llegarle a la persona: cerrar la hoja en silencio era decirle que se
-                        // guardó cuando no. La hoja queda abierta con el mensaje; reintenta o cierra.
-                        result.onSuccess { reload(); sheet = null; sheetError = null }
-                            .onFailure { sheetError = it.toUserMessage() }
-                        guardando = false
-                    }
-                },
-            )
-            Sheet.Add -> BudgetSheet(
-                error = sheetError,
-                title = "Nuevo presupuesto",
-                initialCategory = "",
-                categoryEditable = true,
-                initialAmount = 0,
-                gastoPorCategoria = gastoParaLaHoja,
-                dias = days,
-                ventana = ventanaDelPeriodo,
-                onAsociar = ::asociarGasto,
-                onDismiss = { sheet = null; sheetError = null },
-                onDelete = null,
-                guardando = guardando,
-                onSave = { cat, amt ->
-                    if (cat.isBlank() || amt <= 0L || guardando) return@BudgetSheet
-                    guardando = true
-                    scope.launch {
-                        // Lo mismo que editar: sin red o con un 409 («ya hay un presupuesto para
-                        // esa categoría») la hoja no se cierra como si se hubiera guardado.
-                        runCatching { Repositories.wallets.createBudget(Budget(cat.trim(), amt)) }
-                            .onSuccess { reload(); sheet = null; sheetError = null }
-                            .onFailure { sheetError = it.toUserMessage() }
-                        guardando = false
-                    }
-                },
-            )
-            null -> {}
-        }
+        HojasDePresupuestos(estado)
     }
 }
 
@@ -469,7 +555,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
  * **Con su interlineado declarado** (ola B). Antes eran 22 sp sobre el interlineado de `monto`
  * (18 sp): el renglón medía lo que pedía la fuente —28 dp, medido con el motor de texto real— y
  * el esqueleto de la tarjeta no tenía de dónde sacar ese número. Declarado, el renglón mide lo
- * mismo que antes y [PresupuestosEsqueleto] lo lee de acá.
+ * mismo que antes y [presupuestosEsqueleto] lo lee de acá.
  */
 @Composable
 private fun estiloDelContador(): TextStyle = Movi.textos.monto.copy(fontSize = 22.sp, lineHeight = 28.sp)
@@ -1066,49 +1152,47 @@ const val TAG_ESQUELETO_FILA_DE_PRESUPUESTO: String = "esqueleto-fila-de-presupu
  * nada cambie de alto cuando llega el dato (±8 dp, lo mide `PresupuestosNoAfirmanMientrasCarganTest`).
  * Un mes sin nada sobrepasado encoge esa fila al llegar; nunca crece.
  *
- * `LazyColumn` sin desplazamiento, como el de Créditos: recorta lo que no entra.
+ * Ola C: son renglones de la misma lista que después pinta los datos (ver [presupuestos]), no una
+ * lista aparte, para que en Plan vayan debajo del disponible con el mismo scroll.
  */
-@Composable
-private fun PresupuestosEsqueleto(modifier: Modifier = Modifier) {
-    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 80.dp), userScrollEnabled = false) {
-        item {
-            MinCard(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(22.dp),
-            ) {
-                // El nombre del mes también espera: sale del período del dueño, que llega con el
-                // perfil — con corte 25, el 26 ya es el mes siguiente.
-                LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
-                Spacer(Modifier.height(10.dp))
-                LineaEsqueleto(
-                    fraccionDelAncho = 0.55f,
-                    estilo = Movi.textos.cifra,
-                    modifier = Modifier.testTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO),
-                )
-                Spacer(Modifier.height(6.dp))
-                LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.monto)
-                Spacer(Modifier.height(14.dp))
-                Hairline()
-                Spacer(Modifier.height(14.dp))
-                // Las dos insignias de [AlertBadge]: el número y su rótulo, a 20 dp una de otra.
-                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    repeat(2) {
-                        Column {
-                            BloqueEsqueleto(alto = altoDeUnRenglon(estiloDelContador()), ancho = 24.dp)
-                            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 76.dp)
-                        }
+private fun LazyListScope.presupuestosEsqueleto() {
+    item {
+        MinCard(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(22.dp),
+        ) {
+            // El nombre del mes también espera: sale del período del dueño, que llega con el
+            // perfil — con corte 25, el 26 ya es el mes siguiente.
+            LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
+            Spacer(Modifier.height(10.dp))
+            LineaEsqueleto(
+                fraccionDelAncho = 0.55f,
+                estilo = Movi.textos.cifra,
+                modifier = Modifier.testTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO),
+            )
+            Spacer(Modifier.height(6.dp))
+            LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.monto)
+            Spacer(Modifier.height(14.dp))
+            Hairline()
+            Spacer(Modifier.height(14.dp))
+            // Las dos insignias de [AlertBadge]: el número y su rótulo, a 20 dp una de otra.
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                repeat(2) {
+                    Column {
+                        BloqueEsqueleto(alto = altoDeUnRenglon(estiloDelContador()), ancho = 24.dp)
+                        BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 76.dp)
                     }
                 }
             }
         }
-        item {
-            Spacer(Modifier.height(20.dp))
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                RotuloDeSeccionEsqueleto()
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    repeat(4) { FilaDePresupuestoEsqueleto() }
-                }
+    }
+    item {
+        Spacer(Modifier.height(20.dp))
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            RotuloDeSeccionEsqueleto()
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                repeat(4) { FilaDePresupuestoEsqueleto() }
             }
         }
     }

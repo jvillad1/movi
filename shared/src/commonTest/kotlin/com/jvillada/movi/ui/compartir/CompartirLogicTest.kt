@@ -2,7 +2,7 @@ package com.jvillada.movi.ui.compartir
 
 import com.jvillada.movi.shared.model.VIGENCIAS_DE_ENLACE
 import com.jvillada.movi.shared.model.VIGENCIA_POR_DEFECTO
-import com.jvillada.movi.ui.components.NavTab
+import com.jvillada.movi.ui.esDeAjustes
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.navTabFor
 import kotlin.test.Test
@@ -78,7 +78,9 @@ class CompartirLogicTest {
     }
 
     @Test
-    fun `Compartir vive con las fichas de Mas`() {
-        assertEquals(NavTab.MORE, navTabFor(Screen.Compartir))
+    fun `Compartir vive en Ajustes, que no es una pestana`() {
+        // Ola C: «Más» dejó de ser pestaña; Ajustes se abre por el avatar y no marca ninguna.
+        assertEquals(null, navTabFor(Screen.Compartir))
+        assertTrue(esDeAjustes(Screen.Compartir))
     }
 }

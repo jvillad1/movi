@@ -117,7 +117,10 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
         Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
             MinScreenHeader(
                 title = "Cuentas de otros",
-                leading = HeaderLeading.Back(fallback = Screen.Mas),
+                // Ola C, tarea 4: la puerta a esta pantalla ya no es una ficha de Más — es la
+                // tarjeta «Te deben» de Patrimonio (ver `SeccionDeTeDeben` en `AccountsScreen`),
+                // así que «volver» sin historial cae ahí y no en Ajustes.
+                leading = HeaderLeading.Back(fallback = Screen.Accounts),
                 subtitle = when {
                     cargando || noSeLeyo -> null
                     destinos.size == 1 -> "1 cuenta guardada"

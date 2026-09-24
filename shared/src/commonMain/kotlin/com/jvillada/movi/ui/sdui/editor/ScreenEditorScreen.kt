@@ -73,25 +73,32 @@ private val SECTION_TYPE_LABELS = mapOf(
     "PATRIMONIO" to "Tu patrimonio",
 )
 
-private val NAVIGATE_TARGET_LABELS = mapOf(
-    "dashboard" to "Inicio",
+/**
+ * Cómo se llama cada target en el selector del Editor. `internal` para poder fijarlo en una prueba.
+ *
+ * Ola C: los rótulos nombran el LUGAR al que el dueño llega hoy, no la pantalla de antes — «Plan»,
+ * «Patrimonio», «Ajustes». Los targets no cambian (viajan en definiciones guardadas, ver
+ * `SduiRenderer.screenForTarget`); cambia lo que el selector dice de ellos.
+ */
+internal val NAVIGATE_TARGET_LABELS = mapOf(
+    "dashboard" to "Hoy",
     "transactions" to "Movimientos",
     "quickadd" to "Agregar",
-    "budgets" to "Presupuestos",
-    "mas" to "Más",
-    "accounts" to "Cuentas",
+    // Ola C: los tres abren Plan; el paréntesis dice en qué segmento.
+    "budgets" to "Plan (presupuestos)",
+    "mas" to "Ajustes",
+    "accounts" to "Patrimonio",
     "credits" to "Créditos",
     // Ola B, tarea 7: Metas salió de la navegación y ya no se ofrece más abajo
     // (NAVEGABLES_DESDE_EL_EDITOR); el rótulo se queda solo para una definición vieja que todavía
     // traiga este target (ver SduiRenderer.screenForTarget, que lo manda a Cuentas).
     "goals" to "Metas",
-    // F61: sin pantalla propia — el cliente lo manda a Cuentas (ver SduiRenderer.screenForTarget).
-    "investments" to "Cuentas (inversión)",
-    // Ola 8 + rediseño de 2026-09: ni las suscripciones ni los recurrentes tienen pantalla propia
-    // — el cliente manda los dos targets a Movimientos con el chip «Recurrentes» puesto (ver
-    // SduiRenderer.screenForTarget). El rótulo sigue nombrando lo que el dueño va a ver ahí.
-    "subscriptions" to "Recurrentes (suscripciones)",
-    "recurrentes" to "Recurrentes",
+    // F61: sin pantalla propia — el cliente lo manda a Patrimonio (ver SduiRenderer.screenForTarget).
+    "investments" to "Patrimonio (inversión)",
+    // Ola 8 + ola C: ni las suscripciones ni los recurrentes tienen pantalla propia — el cliente
+    // manda los dos targets a Plan · Pagos del mes (ver SduiRenderer.screenForTarget).
+    "subscriptions" to "Plan (suscripciones)",
+    "recurrentes" to "Plan (pagos del mes)",
     "categorias" to "Categorías",
     // Ola B, tarea 7: Extractos se unió a Documentos — el rótulo lo dice, mismo patrón que
     // "investments"/"subscriptions" acá arriba.

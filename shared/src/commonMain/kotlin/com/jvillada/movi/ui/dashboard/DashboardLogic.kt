@@ -26,6 +26,9 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.DashboardSummary
+import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.SubscriptionsResult
@@ -34,7 +37,8 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.components.isDebtAccount
@@ -523,21 +527,24 @@ fun dashboardAlerts(
 ): List<DashboardAlert> = buildList {
     when (overBudget.size) {
         0 -> Unit
-        1 -> add(DashboardAlert("Presupuesto de ${overBudget[0]} superado", Screen.Budgets))
-        else -> add(DashboardAlert("${overBudget.size} presupuestos superados", Screen.Budgets))
+        // Ola C: Presupuestos es un segmento de Plan — la alerta abre Plan con ese segmento puesto.
+        1 -> add(DashboardAlert("Presupuesto de ${overBudget[0]} superado", Screen.Plan(SEGMENTO_PRESUPUESTOS)))
+        else -> add(DashboardAlert("${overBudget.size} presupuestos superados", Screen.Plan(SEGMENTO_PRESUPUESTOS)))
     }
+    // Ola C: las dos llevan a la misma bandeja, «Por revisar», que junta lo que entró solo. Antes
+    // cada una abría un lugar distinto (Movimientos, Mensajes del banco) y ninguno tenía lo otro.
     if (cardCandidates > 0) {
-        add(DashboardAlert(plural(cardCandidates, "pago de tarjeta", "pagos de tarjeta") + " por confirmar", Screen.Transactions()))
+        add(DashboardAlert(plural(cardCandidates, "pago de tarjeta", "pagos de tarjeta") + " por confirmar", Screen.PorRevisar))
     }
     if (pendingSms > 0) {
-        add(DashboardAlert(plural(pendingSms, "mensaje del banco", "mensajes del banco") + " por confirmar", Screen.SMSInbox))
+        add(DashboardAlert(plural(pendingSms, "mensaje del banco", "mensajes del banco") + " por confirmar", Screen.PorRevisar))
     }
     // Va última y nunca convive con la de arriba: si hay algo por confirmar, es que llegó algo.
     // El dueño pasó semanas anotando a mano creyendo que la captura corría, y no se enteró
     // porque el único indicador vivía en una pantalla a la que no tenía motivo para entrar. La
-    // fila es el motivo.
+    // fila es el motivo. Lleva a «Captura del banco», donde se arregla y donde se silencia.
     captura?.let { c ->
-        alertaDeCapturaEnInicio(c, capturaSilenciada)?.let { add(DashboardAlert(it, Screen.SMSInbox)) }
+        alertaDeCapturaEnInicio(c, capturaSilenciada)?.let { add(DashboardAlert(it, Screen.CapturaDelBanco)) }
     }
 }
 
@@ -743,13 +750,12 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
         // F20: las cuotas de crédito y los pagos de tarjeta son sintéticos (UpcomingPayment
         // generado por el server, no una regla que viva en Recurrentes) — se resuelven en
         // Créditos, no en Recurrentes.
-        // PR 3 del rediseño de Recurrentes: una regla se resuelve en Movimientos con el chip
-        // «Recurrentes» puesto — ahí está su «¿ya ocurrió?». Con el chip y no sin él: la campana
-        // habla de UN pago, y caer en la lista completa de movimientos no responde nada.
+        // Ola C: una regla se resuelve en Plan · Pagos del mes — ahí está su «¿ya ocurrió?». La
+        // campana habla de UN pago, y caer en la lista completa de movimientos no responde nada.
         val target = if (p.rule.id.startsWith(CREDIT_RULE_PREFIX) || p.rule.id.startsWith(CARD_RULE_PREFIX)) {
             Screen.Credits
         } else {
-            Screen.Transactions(CHIP_RECURRENTES)
+            Screen.Plan(SEGMENTO_PAGOS)
         }
         add(NotificationRow("${p.rule.name} · ${dueLabel(p.daysUntil)}", target))
     }
@@ -888,10 +894,10 @@ internal fun disponibleDelInicio(
     data: DashboardData,
     hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
 ): DisponibleDelPeriodo? {
+    if (!alcanzaParaElDisponible(data)) return null
     val periodo = data.periodoActual ?: return null
     val summary = data.summary ?: return null
     val gasto = data.gastoVariablePorDia ?: return null
-    if (data.upcoming == null || data.ocurrencias == null) return null
     return disponibleDelPeriodo(
         ingresosRecibidos = summary.ingresos,
         checklist = checklistDelPeriodoDe(data),
@@ -901,4 +907,54 @@ internal fun disponibleDelInicio(
         hoy = hoy,
         plata = data.plataDelDisponible,
     )
+}
+
+/**
+ * ¿Llegaron las cinco lecturas de las que sale la tarjeta «Disponible»? (ver [disponibleDelInicio]).
+ *
+ * Aparte porque «no hay disponible» quiere decir dos cosas que la pestaña Plan tiene que distinguir:
+ * que **falta un dato** —la carga no terminó o se cayó, y ahí no se afirma nada— o que los datos
+ * están y **no hay nada honesto que decir** (sin ingresos ni plata, ver [disponibleDelPeriodo]). El
+ * Inicio no pinta la tarjeta en ninguno de los dos casos; Plan, que la tiene como protagonista, dice
+ * cuál de los dos es.
+ */
+internal fun alcanzaParaElDisponible(data: DashboardData): Boolean =
+    data.periodoActual != null && data.summary != null && data.gastoVariablePorDia != null &&
+        data.upcoming != null && data.ocurrencias != null
+
+/**
+ * Lo que trae `GET /api/dashboard/summary`, puesto en [DashboardData].
+ *
+ * Ola C: lo leen el Inicio y la pestaña Plan (que necesita de ahí el gasto variable y la plata del
+ * disponible). Una sola traducción de la respuesta: si mañana el server manda un campo más para la
+ * tarjeta, no puede llegar a una pantalla y no a la otra.
+ */
+internal fun DashboardData.conResumenDelInicio(s: DashboardSummary): DashboardData = copy(
+    spentByCategory = s.spentByCategory,
+    cardCandidates = s.cardPaymentCandidates,
+    pendingSms = s.pendingSms,
+    // Lo que se sabe de la captura de SMS. Viene en esta MISMA respuesta —no es una llamada
+    // nueva— y es lo que le permite al Inicio decir «Movi nunca ha recibido un mensaje de tu
+    // banco». Ver CapturaDeSms en :core: la captura estuvo muda semanas y el único lugar que
+    // podía delatarlo era una pantalla de Android que el dueño no abre.
+    captura = CapturaDeSms(total = s.smsTotal, ultimo = s.smsLastAt),
+    capturaSilenciada = s.smsAlertMuted,
+    // La tarjeta «Disponible». Misma respuesta, ninguna llamada nueva.
+    gastoVariablePorDia = s.gastoVariablePorDia,
+    // Lo que tenías al empezar el período y lo que entró. Un server viejo no lo manda y la
+    // tarjeta vuelve a «ingresos menos fijos».
+    plataDelDisponible = plataDelDisponibleDe(s),
+    // El patrimonio ya partido (entrega A). La tarjeta lo usa solo si las cuentas no llegaron:
+    // ver `patrimonioDelInicio`.
+    patrimonio = s.patrimonio,
+)
+
+/**
+ * El período del dueño —su día de corte y los inicios que movió a mano— sacado de su perfil, y el
+ * período en curso a [ahora] según esos ajustes. Sin esto el Inicio (y Plan) hablarían del mes de
+ * calendario, que es justo lo que dejó de hacer el resto de la app.
+ */
+internal fun DashboardData.conElPerfil(perfil: UserProfile, ahora: Long): DashboardData {
+    val ajustes = PeriodSettings(perfil.periodCutoffDay, perfil.periodStarts)
+    return copy(ajustesDePeriodo = ajustes, periodoActual = periodoDe(ahora, ajustes))
 }

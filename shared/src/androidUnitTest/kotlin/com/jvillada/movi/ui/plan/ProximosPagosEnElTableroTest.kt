@@ -1,4 +1,4 @@
-package com.jvillada.movi.ui.transactions
+package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +23,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import org.junit.After
@@ -37,7 +38,8 @@ import kotlin.test.assertIs
 
 /**
  * PR 3 del rediseño de Recurrentes (2026-09): «Próximos pagos» y el flujo de «¿esto ya ocurrió?»
- * montados de verdad dentro de [TransactionsScreen], bajo el chip «Recurrentes».
+ * montados de verdad en el tablero de Recurrentes ([TableroDeRecurrentesDePrueba]; ola C: Plan · Pagos del
+ * mes, antes el chip «Recurrentes» de Movimientos).
  *
  * Lo que prueba no es que un texto aparezca: es que **lo que sella un periodo llegue al
  * repositorio y que la pantalla refleje lo que quedó**. Sellar algo que no ocurrió apaga el aviso
@@ -49,11 +51,11 @@ import kotlin.test.assertIs
  * puerta en el checklist, y dejarla viva acá la habría movido un toque más allá en vez de
  * cerrarla: ahora lo que se ofrece es **anotar el movimiento que falta**.
  *
- * Mismo patrón de montaje que [ResumenRecurrentesEnMovimientosTest].
+ * Mismo patrón de montaje que [ResumenRecurrentesEnElTableroTest].
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h731dp-xhdpi")
-class ProximosPagosEnMovimientosTest {
+class ProximosPagosEnElTableroTest {
 
     @get:Rule val composeRule = createComposeRule()
 
@@ -107,11 +109,11 @@ class ProximosPagosEnMovimientosTest {
         }
     }
 
-    private fun montar(chipInicial: Int? = null) {
+    private fun montar() {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    TransactionsScreen(onNavigate = { navegoA = it }, chipInicial = chipInicial)
+                    TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = { navegoA = it })
                 }
             }
         }
@@ -153,17 +155,9 @@ class ProximosPagosEnMovimientosTest {
         }
     }
 
-    private fun activarElChip() {
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
-    }
-
     @Test
-    fun `el vencimiento y su propuesta abierta aparecen bajo el chip Recurrentes`() {
+    fun `el vencimiento y su propuesta abierta aparecen en el tablero`() {
         montar()
-        // Con el chip «Todo» no hay nada de esto: es un resumen DEL FILTRO, no una caja suelta.
-        composeRule.onNodeWithText("Arriendo", useUnmergedTree = true).assertDoesNotExist()
-
-        activarElChip()
 
         esperarTexto("Arriendo")
         // MinSectionHeader pinta el título en mayúsculas.
@@ -194,7 +188,6 @@ class ProximosPagosEnMovimientosTest {
     @Test
     fun `Anotar el movimiento abre la hoja prellenada y no sella nada`() {
         montar()
-        activarElChip()
         esperarTexto("Anotar el movimiento")
 
         // `onLast()`: el checklist va arriba y ofrece el mismo rótulo sobre la misma regla; el de
@@ -219,7 +212,6 @@ class ProximosPagosEnMovimientosTest {
     fun `Deshacer revierte el sello y la pregunta vuelve`() {
         estadoDelArriendo = estadoDelArriendo.copy(occurred = true, eventId = "ev_1")
         montar()
-        activarElChip()
         esperarTexto("YA OCURRIERON")
 
         composeRule.onNodeWithText("Deshacer", useUnmergedTree = true).performClick()
@@ -227,19 +219,5 @@ class ProximosPagosEnMovimientosTest {
         esperarQueDesaparezca("YA OCURRIERON")
         assertEquals(1, desmarcadas)
         esperarTexto("¿Ya pagaste el de septiembre?")
-    }
-
-    /**
-     * El destino de los enlaces que antes iban a la pantalla de Recurrentes: Movimientos **con el
-     * filtro puesto**. Sin esto, tocar «Ver todos» sobre un pago que vence aterrizaba en la lista
-     * completa de movimientos, sin ninguna relación visible con lo que se acababa de tocar.
-     */
-    @Test
-    fun `entrar pidiendo el chip Recurrentes lo deja activo desde el arranque`() {
-        montar(chipInicial = CHIP_RECURRENTES)
-
-        esperarTexto("Arriendo")
-        composeRule.onNodeWithText("PRÓXIMOS", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Flujo libre", useUnmergedTree = true).assertIsDisplayed()
     }
 }

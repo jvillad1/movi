@@ -246,7 +246,7 @@ fun BienSheet(
                     Rotulo("LO FINANCIA (OPCIONAL)")
                     Spacer(Modifier.height(Movi.espacios.minimo))
                     Text(
-                        text = "Con la deuda al lado, Cuentas te muestra cuánto de este bien es tuyo de verdad. " +
+                        text = "Con la deuda al lado, Patrimonio te muestra cuánto de este bien es tuyo de verdad. " +
                             "No cambia tu patrimonio.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,

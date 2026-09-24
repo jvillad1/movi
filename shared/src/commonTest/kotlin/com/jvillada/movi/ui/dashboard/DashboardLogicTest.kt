@@ -27,7 +27,8 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -143,9 +144,10 @@ class DashboardLogicTest {
         val alerts = dashboardAlerts(overBudget = listOf("Mercado"), cardCandidates = 2, pendingSms = 1)
         assertEquals(
             listOf(
-                "Presupuesto de Mercado superado" to Screen.Budgets,
-                "2 pagos de tarjeta por confirmar" to Screen.Transactions(),
-                "1 mensaje del banco por confirmar" to Screen.SMSInbox,
+                "Presupuesto de Mercado superado" to Screen.Plan(SEGMENTO_PRESUPUESTOS),
+                // Ola C: las dos llevan a la misma bandeja.
+                "2 pagos de tarjeta por confirmar" to Screen.PorRevisar,
+                "1 mensaje del banco por confirmar" to Screen.PorRevisar,
             ),
             alerts.map { it.text to it.target },
         )
@@ -167,7 +169,8 @@ class DashboardLogicTest {
             captura = CapturaDeSms(),
         )
         assertEquals(
-            listOf("Movi nunca ha recibido un mensaje de tu banco" to Screen.SMSInbox),
+            // A «Captura del banco»: donde se arregla, y donde se silencia.
+            listOf("Movi nunca ha recibido un mensaje de tu banco" to Screen.CapturaDelBanco),
             alerts.map { it.text to it.target },
         )
     }
@@ -885,10 +888,10 @@ class DashboardLogicTest {
             listOf(
                 "Cuota Carro · Vencido ayer" to Screen.Credits,       // synthetic de crédito -> Créditos
                 "Pago Visa · Vence hoy" to Screen.Credits,            // synthetic de tarjeta -> Créditos
-                "Colegio · Vence en 2 días" to Screen.Transactions(CHIP_RECURRENTES), // regla real -> Movimientos con el chip puesto
-                "Presupuesto de Mercado superado" to Screen.Budgets,
-                "1 pago de tarjeta por confirmar" to Screen.Transactions(),
-                "2 mensajes del banco por confirmar" to Screen.SMSInbox,
+                "Colegio · Vence en 2 días" to Screen.Plan(SEGMENTO_PAGOS), // regla real -> Plan · Pagos del mes
+                "Presupuesto de Mercado superado" to Screen.Plan(SEGMENTO_PRESUPUESTOS),
+                "1 pago de tarjeta por confirmar" to Screen.PorRevisar,
+                "2 mensajes del banco por confirmar" to Screen.PorRevisar,
             ),
             rows.map { it.text to it.target },
         )

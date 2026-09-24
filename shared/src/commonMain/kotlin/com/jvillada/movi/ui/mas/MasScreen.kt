@@ -26,12 +26,9 @@ import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.HeaderLeading
-import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.MinScreenHeader
-import com.jvillada.movi.ui.components.WindowWidthClass
-import com.jvillada.movi.ui.components.railDestinations
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
-import com.jvillada.movi.ui.screenForTab
+import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
 
 private data class MasItem(
     val label: String,
@@ -41,78 +38,66 @@ private data class MasItem(
     val screen: Screen,
 )
 
+/**
+ * Las fichas de **Ajustes**, en orden.
+ *
+ * Ola C (2026-09): «Más» dejó de ser pestaña y pasó a ser Ajustes, la pantalla que abre el avatar.
+ * Salió de acá todo lo que ahora es (o vive en) una pestaña: Cuentas, el cuadre de saldos, Créditos
+ * y «Cuentas de otros» son Patrimonio; Presupuestos es Plan. Quedaron las cosas que se ajustan de
+ * vez en cuando, no las que se miran todos los días.
+ */
 private val items = listOf(
-    // F19: Cuentas era invisible sin al menos una cuenta ya creada (el "Ver todas +" del Inicio
-    // solo aparece con la lista no vacía) — entra acá como primer acceso, incondicional.
-    MasItem("Cuentas",      Icons.Rounded.AccountBalanceWallet, Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Accounts),
-    // El cuadre de saldos va PEGADO a Cuentas: es la misma plata mirada desde el banco. Tiene ficha
-    // propia además del acceso que vive en Cuentas por la razón de siempre (ver Screen.Destinos):
-    // una ficha de Más es una puerta que no depende de que otra pantalla conserve su enlace.
-    MasItem("Cuadre de saldos", Icons.Rounded.Balance, Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.CuadreDeSaldos),
-    // Ola 4: Presupuestos dejó su lugar en la barra inferior a Cuentas y entra acá, justo después.
-    MasItem("Presupuestos", Icons.Rounded.PieChart,         Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Budgets),
-    MasItem("Créditos",     Icons.Rounded.CreditCard,      Color(0xFFFFB4AB), Color(0x1FFFB4AB), Screen.Credits),
-    // F61: Inversiones ya no es sección — las cuentas de inversión se ven en Cuentas.
-    // Ola B, tarea 7: «Metas» y «Extractos» salieron del mosaico. Metas no tenía uso real (la
-    // sección «Meta principal» de Perfil decía siempre «Aún sin meta»); Extractos se unió a
-    // Documentos, que ahora ofrece «Importar movimientos» en cada PDF o imagen y una sección
-    // «Importaciones» con el mismo historial. Ninguna de las dos pantallas se borró —siguen
-    // ahí, solo sin puerta— así que no hay nada que restaurar si el dueño las extraña.
-    // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú).
-    MasItem("Mensajes del banco", Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
-    MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat()),
-    // Rediseño de Recurrentes (2026-09): sin entrada propia — «Flujo libre», las candidatas por
-    // confirmar y los próximos pagos se mudaron a Movimientos (chip «Recurrentes») y editar un
-    // recurrente existente ya se hacía desde el detalle de un movimiento. `Screen.Recurrentes`
-    // ya no existe; el destino equivalente es `Screen.Transactions(CHIP_RECURRENTES)`.
-    // Ola 10: la única puerta a «Categorías». Va junto a Presupuestos —la otra pantalla que se
-    // cruza con el gasto POR NOMBRE DE CATEGORÍA—, que es donde el dueño va a acordarse de que
-    // quería arreglar un nombre.
+    // F40: "Análisis" no analizaba — era un índice con cifras, y eso ahora es el Inicio. Perfil va
+    // primero: es lo que el avatar abría hasta la ola C, y quien lo toca por costumbre lo busca.
+    MasItem("Perfil",       Icons.Rounded.ManageAccounts,   Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Profile),
+    // Ola 10: la única puerta a «Categorías» (además del acceso de cada campo de categoría).
     MasItem("Categorías",   Icons.AutoMirrored.Rounded.Label, Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Categorias),
-    // Ola 24: las cuentas de OTROS — la de su esposa, la del papá. Va acá y no en «Cuentas» a
-    // propósito: esa pantalla lista la plata de él, y esto no es su plata (ver DestinoConocido).
-    // El rótulo es el mismo que el título de la pantalla, como en toda ficha de Más.
-    MasItem("Cuentas de otros", Icons.Rounded.Diversity3, Color(0xFFFFB4AB), Color(0x1FFFB4AB), Screen.Destinos),
     // Ola 18: los papeles. Ola B, tarea 7: absorbió a «Extractos» — el importador archiva ahí
     // lo que pasa por él, y ahora también «Importar movimientos» vive en cada fila de acá.
     MasItem("Documentos",   Icons.Rounded.Folder,           Color(0xFFB3C8FF), Color(0x1AB3C8FF), Screen.Documentos),
-    // Compartir con un tercero: el enlace de solo lectura para Caro o un asesor. Va después de
-    // Documentos —lo otro que el dueño «muestra» de sus papeles— y tiene además un ícono en el
-    // encabezado del Inicio. El rótulo es el título de la pantalla, como en toda ficha de Más.
+    // Compartir con un tercero: el enlace de solo lectura para Caro o un asesor. Tiene además un
+    // ícono en el encabezado del Hoy. El rótulo es el título de la pantalla, como en toda ficha.
     MasItem("Compartir",    Icons.Rounded.Share,            Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Compartir),
+    MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat()),
+    // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú). Ola C: lo
+    // pendiente se mudó a «Por revisar» (Movimientos) y acá quedó la configuración de la captura y
+    // el historial — «Captura del banco» en Android, «Mensajes del banco» donde no hay captura.
+    MasItem(tituloDeCapturaDelBanco, Icons.Rounded.Sms,           Color(0xFF81D4FA), Color(0x2481D4FA), Screen.CapturaDelBanco),
     // Ola 14: la guía de arranque, que se apaga sola en el Inicio y hasta acá no tenía forma de
-    // volver a abrirse. Va en Más y no en el Inicio a propósito: el dueño pidió *poder volver*,
-    // no que la guía le reaparezca (ver PrimerosPasosScreen).
+    // volver a abrirse. Solo se ofrece mientras le quede algo por tildar (ver [MasScreen]).
     MasItem("Primeros pasos", Icons.Rounded.Checklist,      Color(0xFFFFD479), Color(0x24FFD479), Screen.PrimerosPasos),
-    // F40: "Análisis" no analizaba — era un índice con cifras, y eso ahora es el Inicio.
-    MasItem("Perfil",       Icons.Rounded.ManageAccounts,   Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Profile),
+    // Ola B, tarea 7: «Metas» y «Extractos» salieron del mosaico. Ninguna de las dos pantallas se
+    // borró —siguen ahí, solo sin puerta— así que no hay nada que restaurar si el dueño las extraña.
 )
 
+/** El título de la pantalla que abre el avatar. Ver [MasScreen]. */
+const val TITULO_DE_AJUSTES: String = "Ajustes"
+
+/**
+ * **Ajustes** — la pantalla que abre el avatar de cualquier pestaña (ver `HeaderLeading.Avatar`).
+ *
+ * Sigue llamándose `MasScreen` / `Screen.Mas` porque el destino SDUI `"mas"` y las pilas ya lo
+ * nombran así; lo que el dueño ve es «Ajustes». No es una pestaña, así que lleva flecha y no avatar:
+ * se vuelve a donde se estaba, o al Hoy si no hay historial.
+ */
 @Composable
 fun MasScreen(onNavigate: (Screen) -> Unit) {
     // F47 · F48: "Editor de pantallas" vivía acá, agregado a la grilla después de que
-    // isScreenAdmin() resolvía — eso hacía que la grilla "saltara" al cargar, y además era
-    // una herramienta de administración mezclada con Créditos y Metas. Se mudó al final de
+    // isScreenAdmin() resolvía — eso hacía que la grilla "saltara" al cargar. Se mudó al final de
     // Perfil, en una sección "Administración" visible solo para quien administra el Inicio.
 
-    // F59: en pantalla ancha el rail de la izquierda ya muestra Inicio, Movimientos, Cuentas,
-    // Créditos, Presupuestos y Más — repetirlos acá era ruido. La lista sale de la MISMA
-    // fuente que pinta el rail (railDestinations), no de una copia a mano. En el teléfono la
-    // barra tiene menos destinos, así que Más sigue completo.
-    val widthClass = LocalWindowWidthClass.current
     // Ola B, tarea 7: «Primeros pasos» solo se ofrece mientras la guía del Inicio tenga algo por
     // tildar — la MISMA condición que decide si el Inicio la pinta (`DashboardData.guiaIncompleta`,
     // reusada y no copiada). Se lee de `DashboardDataCache` —lo mismo que ya hacen
     // `PrimerosPasosScreen` y `AIChatScreen`— en vez de pedir las diez respuestas del Inicio: si
     // todavía no cargó (`data == null`), `guiaIncompleta` da `false` —mismo defecto que
-    // `puedeAfirmarVacio`— así que la ficha no se ofrece con datos que Más nunca pidió.
+    // `puedeAfirmarVacio`— así que la ficha no se ofrece con datos que Ajustes nunca pidió.
+    //
+    // Ola C: ya no se filtra lo que el rail muestra en pantalla ancha — nada de esta lista es una
+    // pestaña, así que el teléfono y la web ven las mismas fichas.
     val guiaIncompleta = DashboardDataCache.data?.guiaIncompleta == true
-    val visibleItems = remember(widthClass, guiaIncompleta) {
-        val conGuia = if (guiaIncompleta) items else items.filterNot { it.screen == Screen.PrimerosPasos }
-        if (widthClass == WindowWidthClass.Expanded) {
-            val railScreens = railDestinations.map { screenForTab(it.tab) }
-            conGuia.filterNot { it.screen in railScreens }
-        } else conGuia
+    val visibleItems = remember(guiaIncompleta) {
+        if (guiaIncompleta) items else items.filterNot { it.screen == Screen.PrimerosPasos }
     }
 
     Column(
@@ -121,8 +106,8 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
             .background(Movi.colores.fondo),
     ) {
         MinScreenHeader(
-            title = "Más",
-            leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+            title = TITULO_DE_AJUSTES,
+            leading = HeaderLeading.Back(fallback = Screen.Dashboard),
         )
 
         LazyVerticalGrid(

@@ -20,6 +20,9 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Bien
 import com.jvillada.movi.shared.model.CLASE_DE_BIEN_INMUEBLE
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.LocalRefreshTick
@@ -74,10 +77,22 @@ class EsqueletoDeCuentasTest {
         Repositories.sustitutoDePrueba = null
     }
 
-    /** Monta la pantalla con [cuentas] como `getAccounts()` — por default, colgada en [puerta]. */
+    /**
+     * Monta la pantalla con [cuentas] como `getAccounts()` — por default, colgada en [puerta].
+     *
+     * Ola C, tarea 4: `AccountsScreen` también lee créditos, tarjetas y destinos para sus
+     * tarjetas de «Deudas» y «Te deben» — acá coladas para siempre y a propósito, porque estas
+     * pruebas miden la tarjeta del patrimonio y los grupos, no esas dos tarjetas nuevas (ver
+     * `TarjetaDeDeudasYTeDebenTest`), y devolverlas ya resueltas haría aparecer «Sin deudas
+     * registradas · $0» en el primer cuadro — verdadero para esas tarjetas, pero ruido para lo
+     * que estas pruebas afirman.
+     */
     private fun montar(cuentas: suspend () -> List<Account> = { puerta.await() }) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = cuentas()
+            override suspend fun getCredits(): List<CreditSummary> = CompletableDeferred<List<CreditSummary>>().await()
+            override suspend fun getCards(): List<CardSummary> = CompletableDeferred<List<CardSummary>>().await()
+            override suspend fun getDestinos(): List<DestinoConocido> = CompletableDeferred<List<DestinoConocido>>().await()
         }
         composeRule.setContent {
             MoviTheme {

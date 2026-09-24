@@ -43,11 +43,13 @@ import com.jvillada.movi.ui.hayAdondeVolver
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.navTabFor
+import com.jvillada.movi.ui.muestraLaNavegacion
 import com.jvillada.movi.ui.opensAsOverlay
 import com.jvillada.movi.ui.screenForTab
 import com.jvillada.movi.ui.auth.LoginScreen
 import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.ai.AIChatScreen
+import com.jvillada.movi.ui.plan.PlanScreen
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.categorias.CategoriasScreen
 import com.jvillada.movi.ui.destinos.DestinosScreen
@@ -64,7 +66,8 @@ import com.jvillada.movi.ui.quickadd.QuickAddScreen
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.RecurringOfferBar
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
-import com.jvillada.movi.ui.sms.SMSInboxScreen
+import com.jvillada.movi.ui.sms.CapturaDelBancoScreen
+import com.jvillada.movi.ui.porrevisar.PorRevisarScreen
 import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.TransactionsScreen
 import com.jvillada.movi.ui.accounts.AccountsScreen
@@ -251,8 +254,11 @@ fun App() {
             ) {
                 val widthClass = if (maxWidth < 840.dp) WindowWidthClass.Compact else WindowWidthClass.Expanded
                 val activeTab = navTabFor(currentScreen)
-                val showRail = widthClass == WindowWidthClass.Expanded && activeTab != null
-                val showBottomNav = widthClass == WindowWidthClass.Compact && activeTab != null
+                // Ola C: Ajustes y lo que cuelga de ahí no marcan pestaña pero sí llevan la
+                // barra — ver [muestraLaNavegacion].
+                val conNavegacion = muestraLaNavegacion(currentScreen)
+                val showRail = widthClass == WindowWidthClass.Expanded && conNavegacion
+                val showBottomNav = widthClass == WindowWidthClass.Compact && conNavegacion
                 val tecladoALaVista = elTecladoEstaALaVista()
                 val onTabSelected: (NavTab) -> Unit = { tab -> navigate(screenForTab(tab)) }
 
@@ -312,6 +318,7 @@ fun App() {
                 Screen.Credits           -> CreditosScreen(navigate)
                 Screen.Goals             -> MetasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)
+                is Screen.Plan           -> PlanScreen(navigate, segmento = currentScreen.segmento)
                 Screen.Categorias        -> CategoriasScreen(navigate)
                 Screen.Destinos          -> DestinosScreen(navigate)
                 Screen.Documentos        -> DocumentosScreen(navigate)
@@ -319,7 +326,8 @@ fun App() {
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.OCRCapture        -> OCRCaptureScreen(navigate)
                 Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
-                Screen.SMSInbox          -> SMSInboxScreen(navigate)
+                Screen.PorRevisar        -> PorRevisarScreen(navigate)
+                Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
                 is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)
                 Screen.Mas               -> MasScreen(navigate)
                 Screen.Extractos         -> ExtractosScreen(navigate)

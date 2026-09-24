@@ -91,7 +91,7 @@ class PickersDeLaHojaTest {
 
     /**
      * **La fuga de la novena ronda.** Entrar a Traspaso, tocar «Desde», ver la lista, darse
-     * cuenta de que era un gasto y tocar «Gasto»: [TypeSegments] vive fuera del `Box`, así que
+     * cuenta de que era un gasto y tocar «Gasto»: [com.jvillada.movi.ui.components.SelectorSegmentado] vive fuera del `Box`, así que
      * sigue tocable con el sub-picker abierto. [TransferBody] sale de composición con su
      * `picking` puesto y nadie avisa que se cerró.
      *

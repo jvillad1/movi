@@ -31,6 +31,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.ui.components.suggestCategoryMatches
 import com.jvillada.movi.data.isAndroid
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.momentoDelSms
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CategoryPref
@@ -76,8 +77,25 @@ import kotlinx.datetime.Clock
 fun mensajesMasRecientesPrimero(mensajes: List<SmsMessage>): List<SmsMessage> =
     mensajes.sortedByDescending { it.time }
 
+/**
+ * El nombre de la ficha de Ajustes y el título de su pantalla ([CapturaDelBancoScreen]).
+ *
+ * En Android es **«Captura del banco»**: ahí se configura lo que la captura necesita (el permiso de
+ * SMS, el acceso a notificaciones, la hibernación). En la web y en iOS no hay nada que configurar
+ * —esos aparatos no leen mensajes— pero el historial igual existe (los correos del banco también
+ * llegan ahí), y «Captura» sería prometer algo que ese aparato no hace: se llama **«Mensajes del
+ * banco»**, que es lo que se ve.
+ */
+val tituloDeCapturaDelBanco: String get() = if (isAndroid) "Captura del banco" else "Mensajes del banco"
+
+/**
+ * **«Captura del banco»** — ola C: lo que quedó de la bandeja de SMS cuando lo pendiente se mudó a
+ * «Por revisar» (ver `PorRevisarScreen`). Arriba, qué se sabe de la captura y lo que la configura;
+ * abajo, el **historial** de todos los mensajes que llegaron —confirmados, ignorados y los que
+ * todavía esperan— para consultar. Es una ficha de Ajustes: esto se toca de vez en cuando.
+ */
 @Composable
-fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
+fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
     val coroutine = rememberCoroutineScope()
     /**
      * `null` = la bandeja todavía no contestó (o su lectura falló); lista vacía = contestó y no
@@ -92,29 +110,28 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
     var silenciada by remember { mutableStateOf<Boolean?>(null) }
 
     var leyendo by remember { mutableStateOf(true) }
+    // `intentar` y no `runCatching`: una lectura cancelada no puede quedar contada como contestada.
     LaunchedEffect(refreshKey) {
         leyendo = true
-        runCatching { Repositories.wallets.getSmsMessages() }
+        intentar { Repositories.wallets.getSmsMessages() }
             .onSuccess { smsItems = it }
         leyendo = false
     }
     LaunchedEffect(Unit) {
-        runCatching { Repositories.wallets.getUserProfile() }
+        intentar { Repositories.wallets.getUserProfile() }
             .onSuccess { silenciada = it.smsAlertMuted }
     }
     val mensajes = mensajesMasRecientesPrimero(smsItems.orEmpty())
-    val pendingCount = mensajes.count { it.state == SMS_STATE_PENDING }
     // El estado de la captura sale de la MISMA función que usa el server para el Inicio
     // (`capturaDeSms`, en :core) — acá sin un viaje extra, porque la lista ya está bajada.
     val aviso = smsItems?.let { avisoDeCaptura(capturaDeSms(it.map { sms -> sms.time })) }
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
-        // F60: encabezado único — se abre desde Más (flecha, F22); la cuenta de pendientes
-        // va como subtítulo y «Actualizar» es la acción propia.
+        // F60: encabezado único — se abre desde Ajustes (flecha, F22); «Actualizar» es la acción
+        // propia. Ola C: ya no lleva «N por confirmar» de subtítulo — lo pendiente se revisa en
+        // «Por revisar», y esta pantalla es el historial.
         MinScreenHeader(
-            title = "Mensajes del banco",
+            title = tituloDeCapturaDelBanco,
             leading = HeaderLeading.Back(fallback = Screen.Mas),
-            // Sin respuesta no se sabe cuántos hay: «0 por confirmar» sería afirmar algo que no se leyó.
-            subtitle = if (smsItems == null) null else "$pendingCount por confirmar",
             action = {
                 Icon(
                     Icons.Rounded.Refresh,
@@ -182,7 +199,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                         }
                     } else {
                         Text(
-                            "Este dispositivo no puede leer mensajes: eso lo hace un teléfono Android con Movi instalado. Aquí los revisas antes de que cuenten.",
+                            "Este dispositivo no puede leer mensajes: eso lo hace un teléfono Android con Movi instalado. Aquí queda el historial de lo que llegó; lo pendiente se revisa en «Por revisar», desde Movimientos.",
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                             lineHeight = 18.sp,
@@ -199,14 +216,14 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                             Spacer(Modifier.height(12.dp))
                             if (silencioActual) {
                                 Text(
-                                    "Este aviso no se muestra en Inicio.",
+                                    "Este aviso no se muestra en Hoy ni en Por revisar.",
                                     style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                 )
                                 Spacer(Modifier.height(6.dp))
                             }
                             Text(
-                                if (silencioActual) "Volver a avisarme en Inicio" else "No me avises de esto en Inicio",
+                                if (silencioActual) "Volver a avisarme en Hoy y en Por revisar" else "No me avises de esto en Hoy ni en Por revisar",
                                 style = Movi.textos.apoyo,
                                 color = Movi.colores.texto,
                                 fontWeight = FontWeight.Medium,
@@ -237,7 +254,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                 SmsSensorSetupSection(onSynced = { refreshKey++ })
 
                 Spacer(Modifier.height(14.dp))
-                MinSectionHeader(title = "Bandeja", count = if (smsItems == null) null else mensajes.size)
+                MinSectionHeader(title = "Historial", count = if (smsItems == null) null else mensajes.size)
                 if (smsItems == null && !leyendo) {
                     NoSePudoLeer("No pudimos cargar tus mensajes", onReintentar = { refreshKey++ })
                 }
@@ -245,73 +262,86 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
 
             mensajes.forEach { sms ->
                 item {
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(16.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Text(sms.bank, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                            StatusDot(Movi.colores.textoApagado, 2.dp)
-                            // La fecha se lleva lo que sobra y, si no alcanza, es la que se corta: el
-                            // banco y el estado son lo que se busca con la vista.
-                            Text(
-                                sms.time,
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            val (label, color) = when (sms.state) {
-                                SMS_STATE_PENDING -> "PENDIENTE" to Movi.colores.aviso
-                                SMS_STATE_CONFIRMED -> "CONFIRMADO" to Movi.colores.entra
-                                SMS_STATE_IGNORED -> "IGNORADO" to Movi.colores.textoMedio
-                                else -> sms.state.uppercase() to Movi.colores.textoMedio
-                            }
-                            // Un renglón siempre. Con el espaciado completo de `rotulo` (1,7 sp),
-                            // «CONFIRMADO» no entraba al lado de la fecha: primero se partía en
-                            // «CONFIRMAD» con la «O» abajo, y sin partirse le comía los minutos a la
-                            // hora. Visto en la web a 390 dp. A 0,8 sp entran los dos; en un teléfono más
-                            // angosto la fecha es la que cede.
-                            Text(
-                                label,
-                                style = Movi.textos.rotulo.copy(letterSpacing = 0.8.sp),
-                                color = color,
-                                maxLines = 1,
-                                softWrap = false,
-                            )
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
-                            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Movi.colores.hilo))
-                            Text(sms.text, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace, lineHeight = 17.sp, modifier = Modifier.padding(start = 12.dp))
-                        }
-                        Spacer(Modifier.height(14.dp))
-                        Hairline()
-                        Spacer(Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(sms.det, style = Movi.textos.cuerpo, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
-                            if (sms.state == SMS_STATE_PENDING) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
-                                        .clickable { onNavigate(Screen.SMSReconcile(sms.id)) }
-                                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                                ) {
-                                    Text("Revisar", style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
-                                }
-                            }
-                        }
-                    }
+                    TarjetaDeMensajeDelBanco(sms, onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) })
+                }
+            }
+        }
+    }
+}
+
+/**
+ * **Un mensaje del banco**, como se lee en todas partes: el banco, cuándo llegó y en qué estado
+ * está; el texto tal cual; y lo que Movi entendió, con «Revisar» si todavía espera una decisión.
+ *
+ * Ola C: la usan la bandeja «Por revisar» (los pendientes) y el historial de «Captura del banco»
+ * (todos). Una sola tarjeta para las dos, para que un mensaje no se vea distinto según por dónde
+ * se lo mire.
+ */
+@Composable
+internal fun TarjetaDeMensajeDelBanco(sms: SmsMessage, onRevisar: () -> Unit) {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(sms.bank, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            StatusDot(Movi.colores.textoApagado, 2.dp)
+            // La fecha se lleva lo que sobra y, si no alcanza, es la que se corta: el
+            // banco y el estado son lo que se busca con la vista.
+            Text(
+                sms.time,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            val (label, color) = when (sms.state) {
+                SMS_STATE_PENDING -> "PENDIENTE" to Movi.colores.aviso
+                SMS_STATE_CONFIRMED -> "CONFIRMADO" to Movi.colores.entra
+                SMS_STATE_IGNORED -> "IGNORADO" to Movi.colores.textoMedio
+                else -> sms.state.uppercase() to Movi.colores.textoMedio
+            }
+            // Un renglón siempre. Con el espaciado completo de `rotulo` (1,7 sp),
+            // «CONFIRMADO» no entraba al lado de la fecha: primero se partía en
+            // «CONFIRMAD» con la «O» abajo, y sin partirse le comía los minutos a la
+            // hora. Visto en la web a 390 dp. A 0,8 sp entran los dos; en un teléfono más
+            // angosto la fecha es la que cede.
+            Text(
+                label,
+                style = Movi.textos.rotulo.copy(letterSpacing = 0.8.sp),
+                color = color,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
+            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Movi.colores.hilo))
+            Text(sms.text, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace, lineHeight = 17.sp, modifier = Modifier.padding(start = 12.dp))
+        }
+        Spacer(Modifier.height(14.dp))
+        Hairline()
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(sms.det, style = Movi.textos.cuerpo, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
+            if (sms.state == SMS_STATE_PENDING) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
+                        .clickable(onClick = onRevisar)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text("Revisar", style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -351,7 +381,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 .onSuccess {
                     working = false
                     sms = sms?.copy(state = SMS_STATE_CONFIRMED)
-                    goBack(Screen.SMSInbox)
+                    goBack(Screen.PorRevisar)
                 }
                 .onFailure { working = false; error = it.toUserMessage() }
         }
@@ -446,7 +476,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 sms = sms?.copy(state = SMS_STATE_CONFIRMED)
                 // Ola 2 #1: pop, no push — un segundo tap en ‹ desde la bandeja no debe volver
                 // a este detalle ya confirmado (evita duplicar el movimiento).
-                goBack(Screen.SMSInbox)
+                goBack(Screen.PorRevisar)
             }.onFailure {
                 working = false
                 error = it.toUserMessage()
@@ -472,17 +502,18 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             working = false
             result.onSuccess {
                 sms = sms?.copy(state = SMS_STATE_IGNORED)
-                goBack(Screen.SMSInbox)
+                goBack(Screen.PorRevisar)
             }
                 .onFailure { error = it.toUserMessage() }
         }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
-        // F60 · F22: el detalle vuelve a la bandeja si no hay historial (su padre lógico).
+        // F60 · F22: el detalle vuelve a la bandeja si no hay historial (su padre lógico). Ola C:
+        // esa bandeja es «Por revisar».
         MinScreenHeader(
             title = "Reconciliar movimiento",
-            leading = HeaderLeading.Back(fallback = Screen.SMSInbox),
+            leading = HeaderLeading.Back(fallback = Screen.PorRevisar),
         )
         Spacer(Modifier.height(14.dp))
 
