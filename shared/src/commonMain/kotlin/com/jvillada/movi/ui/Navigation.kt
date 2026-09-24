@@ -4,6 +4,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 
 sealed class Screen {
     data object Login            : Screen()
@@ -79,7 +80,23 @@ sealed class Screen {
     data class AIChat(val preguntaInicial: String? = null) : Screen()
     data object Credits : Screen()
     data object Goals : Screen()
+    /**
+     * Presupuestos suelto. Ola C: su cuerpo es el mismo que el segmento «Presupuestos» de [Plan]
+     * (ver `rememberEstadoDePresupuestos`); la pantalla sigue existiendo para las puertas que ya
+     * llevan acá (el destino SDUI `"budgets"`, pilas restauradas) hasta que la Task 3 las mande a
+     * Plan.
+     */
     data object Budgets : Screen()
+    /**
+     * **Plan** (ola C): «¿cuánto puedo gastar y qué me falta pagar?» — el disponible del período y,
+     * debajo, dos segmentos: «Pagos del mes» (el tablero de Recurrentes) y «Presupuestos».
+     *
+     * [segmento] es con cuál arranca (`SEGMENTO_PAGOS` o `SEGMENTO_PRESUPUESTOS`, en
+     * `ui/plan/PlanScreen.kt`). `data class` por el mismo precedente que [Transactions]: el valor
+     * viaja en la pila, así que entrar a Presupuestos desde un acceso y a Pagos desde la pestaña
+     * son dos pantallas para [NavStack.shouldPush] y para el `SaveableStateProvider` de App.kt.
+     */
+    data class Plan(val segmento: Int = SEGMENTO_PAGOS) : Screen()
     /**
      * Ola 10 — «Más → Categorías»: ver, renombrar, unificar, esconder y fijar el tipo.
      *
