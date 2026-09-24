@@ -70,6 +70,14 @@ class DocumentosLogicTest {
     }
 
     @Test
+    fun heic_no_se_ofrece_porque_el_server_siempre_lo_rechaza() {
+        // `ClaudeStatementParser.supportedImageMime` solo entiende JPEG/PNG/GIF/WEBP — ofrecer
+        // «Importar movimientos» sobre un HEIC sería un botón que siempre contesta 422.
+        assertFalse(esImportable(doc("d1", TipoDeDocumento.OTRO).copy(mimeType = "image/heic")))
+        assertFalse(esImportable(doc("d2", TipoDeDocumento.OTRO).copy(mimeType = "image/heif")))
+    }
+
+    @Test
     fun los_grupos_vacios_no_se_pintan() {
         // Cuatro encabezados sobre tres archivos se lee peor que una lista corrida.
         val grupos = porTipo(listOf(doc("a", TipoDeDocumento.EXTRACTO), doc("b", TipoDeDocumento.EXTRACTO)))

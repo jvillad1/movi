@@ -79,6 +79,7 @@ import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.ui.components.ListaDeCuentasElegibles
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -126,10 +127,13 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     // cuentas el selector dice «No tienes cuentas todavía» y el papel se sube sin cuenta, que es
     // exactamente lo que pasaba antes de que esto existiera.
     var cuentas by remember { mutableStateOf(emptyList<Account>()) }
-    // Ola B, tarea 7: la sección «Importaciones» que se mudó acá desde Extractos. Igual que
-    // `cuentas`, una lectura que falla no le impide a la pantalla andar — simplemente no aparece
-    // la sección, que es lo mismo que hacía Extractos cuando el historial estaba vacío.
+    // Ola B, tarea 7: la sección «Importaciones» que se mudó acá desde Extractos. A diferencia
+    // de `cuentas`, una lectura que falla SÍ se dice: Extractos ya mostraba «No pude cargar el
+    // historial: …», y ocultar la sección en silencio afirmaría «no hay importaciones» sobre un
+    // dueño que sí las tiene — la misma clase de mentira que el resto de esta pantalla evita
+    // (ver el KDoc de arriba sobre «Todavía no guardaste nada»).
     var imports by remember { mutableStateOf(emptyList<StatementImport>()) }
+    var importsError by remember { mutableStateOf<String?>(null) }
     // El id del documento con «Importar movimientos» en vuelo, o `null`. Un segundo toque
     // mientras Claude está leyendo mandaría dos lecturas del mismo archivo.
     var importando by remember { mutableStateOf<String?>(null) }
@@ -150,7 +154,13 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     }
 
     LaunchedEffect(refreshKey) {
-        runCatching { Repositories.wallets.getStatementImports() }.onSuccess { imports = it }
+        importsError = null
+        runCatching { Repositories.wallets.getStatementImports() }
+            .onSuccess { imports = it }
+            .onFailure { t ->
+                if (t is CancellationException) throw t
+                importsError = "No pude cargar el historial de importaciones: ${t.toUserMessage()}"
+            }
     }
 
     val elegirArchivo = rememberFilePicker(TiposDeArchivo.TODOS) { nombre, bytes, mime ->
@@ -293,25 +303,37 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     }
 
                     // Ola B, tarea 7: la sección «Importaciones» que se mudó acá desde Extractos,
-                    // debajo de la lista de documentos y solo si hay algo que mostrar — un
-                    // historial vacío no merece encabezado propio, misma regla que el resto de
-                    // esta pantalla (ver `porTipo`).
-                    if (imports.isNotEmpty()) {
-                        item(key = "encabezado-importaciones") {
-                            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                MinSectionHeader(title = "Importaciones", count = imports.size)
+                    // debajo de la lista de documentos. Fix round 1: una lectura que falla se
+                    // DICE (con reintento) — ocultar la sección en silencio afirmaría «no hay
+                    // importaciones» sobre un historial que en realidad no se pudo leer. Un
+                    // historial vacío SIN error, en cambio, de verdad no merece encabezado
+                    // propio, misma regla que el resto de esta pantalla (ver `porTipo`).
+                    when {
+                        importsError != null -> item(key = "importaciones-error") {
+                            Column(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 4.dp)) {
+                                NoSePudoLeer(
+                                    importsError!!,
+                                    onReintentar = { refreshKey++ },
+                                )
                             }
                         }
-                        item(key = "lista-importaciones") {
-                            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                MinCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    variant = MinCardVariant.Elevated,
-                                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                                ) {
-                                    imports.forEachIndexed { i, imp ->
-                                        ImportCard(imp) { onNavigate(Screen.ImportDetail(imp.id)) }
-                                        if (i < imports.size - 1) Hairline()
+                        imports.isNotEmpty() -> {
+                            item(key = "encabezado-importaciones") {
+                                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                    MinSectionHeader(title = "Importaciones", count = imports.size)
+                                }
+                            }
+                            item(key = "lista-importaciones") {
+                                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                    MinCard(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        variant = MinCardVariant.Elevated,
+                                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                                    ) {
+                                        imports.forEachIndexed { i, imp ->
+                                            ImportCard(imp) { onNavigate(Screen.ImportDetail(imp.id)) }
+                                            if (i < imports.size - 1) Hairline()
+                                        }
                                     }
                                 }
                             }

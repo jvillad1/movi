@@ -16,6 +16,7 @@ import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.TipoDeDocumento
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import org.junit.After
@@ -64,23 +65,36 @@ class DocumentosScreenTest {
         subidoEn = 0L,
     )
 
-    private inner class ConDocumentos(private val docs: List<Documento>) : RepositorioDePrueba() {
+    /**
+     * `idSolicitado` graba el id en vez de afirmar adentro de `readStatementFromDocument`: esa
+     * función corre bajo el `runCatching` de `DocumentosScreen.importar`, que atrapa
+     * `Throwable` — un `AssertionError` ahí adentro queda envuelto en el snackbar de error en
+     * vez de tumbar la prueba. Se graba y se afirma DESPUÉS, fuera de ese `runCatching`.
+     */
+    private inner class ConDocumentos(
+        private val docs: List<Documento>,
+        private val falla: ApiException? = null,
+    ) : RepositorioDePrueba() {
+        var idSolicitado: String? = null
         override suspend fun getDocuments(): List<Documento> = docs
         override suspend fun getAccounts(): List<Account> = emptyList()
         override suspend fun getStatementImports(): List<StatementImport> = emptyList()
         override suspend fun readStatementFromDocument(id: String): StatementParseResult {
-            assertEquals(elPdf.id, id, "tiene que pedir el extracto del documento que se tocó")
+            idSolicitado = id
+            falla?.let { throw it }
             return elResultado
         }
     }
 
     private val navegado = mutableListOf<Screen>()
 
-    private fun montar(docs: List<Documento>) {
-        Repositories.sustitutoDePrueba = ConDocumentos(docs)
+    private fun montar(docs: List<Documento>, falla: ApiException? = null): ConDocumentos {
+        val repo = ConDocumentos(docs, falla)
+        Repositories.sustitutoDePrueba = repo
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { DocumentosScreen(onNavigate = { navegado += it }) } }
         }
+        return repo
     }
 
     @After
@@ -106,11 +120,15 @@ class DocumentosScreenTest {
 
     @Test
     fun `Importar movimientos en un PDF navega a la revision con el resultado del repositorio`() {
-        montar(listOf(elPdf))
+        val repo = montar(listOf(elPdf))
         esperarTexto("Importar movimientos")
 
         tocar("Importar movimientos")
         composeRule.waitUntil(timeoutMillis = 5_000) { navegado.isNotEmpty() }
+
+        // Pidió el extracto del documento que se tocó — afirmado ACÁ, fuera del `runCatching`
+        // de la pantalla (ver el KDoc de `ConDocumentos`).
+        assertEquals(elPdf.id, repo.idSolicitado)
 
         val destino = navegado.single()
         assertTrue(destino is Screen.StatementReview, "navegó a $destino")
@@ -127,5 +145,19 @@ class DocumentosScreenTest {
 
         composeRule.onAllNodesWithText("Importar movimientos", useUnmergedTree = true)
             .fetchSemanticsNodes().let { assertTrue(it.isEmpty()) }
+    }
+
+    @Test
+    fun `si el server rechaza el extracto, se muestra su motivo y no se navega`() {
+        val motivo = "No encontramos movimientos en este archivo."
+        montar(listOf(elPdf), falla = ApiException(422, motivo))
+        esperarTexto("Importar movimientos")
+
+        tocar("Importar movimientos")
+
+        // El mismo criterio que tenía Extractos: `toUserMessage()` sobre un 4xx de validación
+        // devuelve el cuerpo que escribió el server, no un genérico «Algo salió mal».
+        esperarTexto(motivo)
+        assertTrue(navegado.isEmpty(), "un extracto rechazado no navega a la revisión")
     }
 }

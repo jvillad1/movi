@@ -27,10 +27,19 @@ fun pesoLegible(bytes: Long): String = when {
  * archivado no guarda de qué extensión venía, solo su `mimeType`, y adivinar CSV/XLS por mimeType
  * es mucho menos confiable que por PDF/imagen (los navegadores mandan `application/octet-stream`
  * para un XLS seguido).
+ *
+ * Fix round 1, hallazgo 5: aceptar cualquier mime que empezara con "image/" ofrecía HEIC
+ * también, y el server SIEMPRE lo rechaza —
+ * `ClaudeStatementParser.supportedImageMime` solo entiende JPEG/PNG/GIF/WEBP (ver
+ * `POST /api/documents/{id}/leer-extracto`, «Formato de imagen no soportado»). La lista de acá
+ * es la MISMA que esa función acepta, para no ofrecer un botón que el server siempre va a
+ * rechazar.
  */
+private val IMAGENES_IMPORTABLES = setOf("image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp")
+
 fun esImportable(doc: Documento): Boolean {
     val mime = doc.mimeType.substringBefore(';').trim().lowercase()
-    return mime == "application/pdf" || mime.startsWith("image/")
+    return mime == "application/pdf" || mime in IMAGENES_IMPORTABLES
 }
 
 /** El nombre en español de cada tipo, en singular — es el rótulo de una fila, no un título. */

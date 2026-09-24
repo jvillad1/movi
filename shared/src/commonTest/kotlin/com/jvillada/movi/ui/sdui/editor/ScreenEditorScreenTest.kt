@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.sdui.editor
 
 import com.jvillada.movi.shared.model.ScreenTaxonomy
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -24,10 +25,6 @@ class ScreenEditorScreenTest {
 
     @Test
     fun el_resto_de_los_targets_se_sigue_ofreciendo() {
-        assertEqualsSinGoals(ScreenTaxonomy.NAVIGATE_TARGETS, NAVEGABLES_DESDE_EL_EDITOR)
-    }
-
-    private fun assertEqualsSinGoals(todos: List<String>, ofrecidos: List<String>) {
-        assertTrue(todos.filterNot { it == "goals" } == ofrecidos)
+        assertEquals(ScreenTaxonomy.NAVIGATE_TARGETS.filterNot { it == "goals" }, NAVEGABLES_DESDE_EL_EDITOR)
     }
 }

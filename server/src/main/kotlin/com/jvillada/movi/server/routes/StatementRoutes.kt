@@ -112,6 +112,31 @@ internal fun fallaDeLaLectura(lectura: ClaudeStatementParser.Lectura, esImagen: 
     }
 
 /**
+ * El nombre que decide CÓMO leer el archivo — `StatementParser.extractText` despacha por la
+ * EXTENSIÓN del nombre, y el `mimeType` guardado es la señal más fuerte cuando las dos no
+ * coinciden (mismo criterio que ya usa `isImage`, un poco más abajo, con `isImageMime`).
+ *
+ * Ola B, tarea 7, fix round 1: un documento archivado como PDF y después renombrado desde
+ * «Editar» (`Documento.nombre` es lo único editable — `mimeType` no) perdía la extensión, y
+ * `extractText` caía al `else` genérico: `bytes.toString(UTF_8)` sobre bytes de un PDF real,
+ * basura que viajaba a Claude como si fuera el texto del extracto. `Documents.mimeType` es el
+ * dato que no miente —lo puso el server al subir, el dueño no lo toca— así que gana cuando el
+ * nombre no trae la extensión que ese mime pide.
+ */
+internal fun nombreParaExtraerTexto(fileName: String, mimeType: String): String {
+    val mime = mimeType.substringBefore(';').trim().lowercase()
+    val extensionEsperada = when (mime) {
+        "application/pdf" -> "pdf"
+        "application/vnd.ms-excel" -> "xls"
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> "xlsx"
+        "text/csv" -> "csv"
+        else -> return fileName
+    }
+    val extensionActual = fileName.substringAfterLast('.', "").lowercase()
+    return if (extensionActual == extensionEsperada) fileName else "$fileName.$extensionEsperada"
+}
+
+/**
  * Una falla de [procesarExtracto], con el status HTTP que le corresponde.
  *
  * Ola B, tarea 7: `POST /api/statements/upload` y `POST /api/documents/{id}/leer-extracto` llaman
@@ -175,7 +200,7 @@ internal suspend fun procesarExtracto(
         if (falla != null) throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, falla)
         parsed = (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
     } else {
-        val text = StatementParser.extractText(bytes, fileName)
+        val text = StatementParser.extractText(bytes, nombreParaExtraerTexto(fileName, mimeType))
         textoDelExtracto = text
         val docType = StatementParser.detectDocumentType(text)
         if (docType == StatementDocumentType.LOAN_SUMMARY || docType == StatementDocumentType.INVESTMENT_FUND) {
