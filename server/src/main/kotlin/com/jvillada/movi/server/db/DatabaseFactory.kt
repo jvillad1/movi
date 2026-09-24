@@ -96,7 +96,12 @@ object DatabaseFactory {
             // AiTurns: `cifras_sin_respaldo` y `cifras_corregidas` (el verificador de cifras de Movi
             // AI) — las dos NULLABLE, y AiTurns en esta lista por lo mismo que Subscriptions: la
             // tabla ya existe en producción y el `create` de arriba no le agrega columnas.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns)
+            // CategoryPrefs: `icono` y `color` (Ola B) — mismo motivo que Subscriptions y AiTurns:
+            // la tabla ya existe en producción desde Ola 10, así que sin esta línea las dos
+            // columnas quedarían solo en el código y cada PUT/GET de categorías que las nombre
+            // fallaría con «column does not exist» apenas desplegara. Las dos NULLABLE, así que el
+            // ALTER no puede fallar sobre las filas que ya existen.
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }

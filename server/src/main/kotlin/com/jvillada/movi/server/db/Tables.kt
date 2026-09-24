@@ -365,6 +365,11 @@ object Budgets : Table("budgets") {
  * PUT la borra en vez de guardarla, así que esta tabla solo tiene lo que el dueño de verdad
  * cambió. Tabla nueva → `SchemaUtils.create` la crea sola al arrancar (CREATE TABLE IF NOT
  * EXISTS), sin migración ni DDL que pueda tumbar el arranque.
+ *
+ * Ola B: [icono] y [color], por el mismo motivo que [pinnedType] — no son datos, son cómo el
+ * dueño quiere VER la categoría. Columnas nuevas → van también en `createMissingTablesAndColumns`
+ * (`DatabaseFactory.kt`), porque esta tabla ya existe en producción desde Ola 10 y un
+ * `SchemaUtils.create` sobre una tabla que ya está no emite ningún `ALTER`.
  */
 object CategoryPrefs : Table("category_prefs") {
     val userId     = varchar("user_id", 50)
@@ -372,6 +377,10 @@ object CategoryPrefs : Table("category_prefs") {
     val hidden     = bool("hidden").default(false)
     /** "EXPENSE" | "INCOME" | "BOTH", o NULL = sin fijar (manda el catálogo, o el uso). */
     val pinnedType = varchar("pinned_type", 10).nullable()
+    /** Clave de texto (p. ej. "restaurante"), o NULL = el ícono que Movi asigna por defecto. */
+    val icono      = varchar("icono", 40).nullable()
+    /** Clave de texto (p. ej. "naranja"), o NULL = el color que Movi asigna por defecto. */
+    val color      = varchar("color", 20).nullable()
     override val primaryKey = PrimaryKey(userId, name)
 }
 

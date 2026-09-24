@@ -18,6 +18,30 @@ fun pesoLegible(bytes: Long): String = when {
     }
 }
 
+/**
+ * ¿«Importar movimientos» tiene sentido para este documento? — Ola B, tarea 7.
+ *
+ * Solo PDF e imagen: es lo que Extractos ya sabía leer con Claude (`ClaudeStatementParser`), y es
+ * la resolución de ambigüedad explícita de la tarea — un CSV o un XLS que el importador de
+ * Extractos también aceptaba por el selector de archivo no entra acá, porque un documento
+ * archivado no guarda de qué extensión venía, solo su `mimeType`, y adivinar CSV/XLS por mimeType
+ * es mucho menos confiable que por PDF/imagen (los navegadores mandan `application/octet-stream`
+ * para un XLS seguido).
+ *
+ * Fix round 1, hallazgo 5: aceptar cualquier mime que empezara con "image/" ofrecía HEIC
+ * también, y el server SIEMPRE lo rechaza —
+ * `ClaudeStatementParser.supportedImageMime` solo entiende JPEG/PNG/GIF/WEBP (ver
+ * `POST /api/documents/{id}/leer-extracto`, «Formato de imagen no soportado»). La lista de acá
+ * es la MISMA que esa función acepta, para no ofrecer un botón que el server siempre va a
+ * rechazar.
+ */
+private val IMAGENES_IMPORTABLES = setOf("image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp")
+
+fun esImportable(doc: Documento): Boolean {
+    val mime = doc.mimeType.substringBefore(';').trim().lowercase()
+    return mime == "application/pdf" || mime in IMAGENES_IMPORTABLES
+}
+
 /** El nombre en español de cada tipo, en singular — es el rótulo de una fila, no un título. */
 fun nombreDeTipo(tipo: TipoDeDocumento): String = when (tipo) {
     TipoDeDocumento.EXTRACTO -> "Extracto"

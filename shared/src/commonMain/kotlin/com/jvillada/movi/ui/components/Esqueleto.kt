@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -111,7 +112,7 @@ private fun estadoDelPulso(): State<Float> {
 }
 
 @Composable
-private fun CajaDelEsqueleto(modifier: Modifier, alto: Dp) {
+private fun CajaDelEsqueleto(modifier: Modifier, alto: Dp, forma: Shape = RoundedCornerShape(Movi.formas.minima)) {
     val pulso = estadoDelPulso()
     Box(
         modifier
@@ -125,7 +126,7 @@ private fun CajaDelEsqueleto(modifier: Modifier, alto: Dp) {
             // filas esqueleto de la pantalla (hasta 6 en Cuentas/Movimientos, más las del hero y
             // «Pregúntale a Movi» juntas), por un cambio que solo necesitaba redibujar un `Box`.
             .graphicsLayer { alpha = pulso.value }
-            .background(Movi.colores.borde, RoundedCornerShape(Movi.formas.minima)),
+            .background(Movi.colores.borde, forma),
     )
 }
 
@@ -143,6 +144,25 @@ fun BloqueEsqueleto(alto: Dp, ancho: Dp? = null, modifier: Modifier = Modifier) 
 }
 
 /**
+ * Un círculo de [diametro] que todavía no llegó: el lugar de un ícono redondo —el de
+ * `IconoDeCategoria`, hoy el único caso—. Mismo pulso y mismo color que [BloqueEsqueleto]; la
+ * única diferencia es la forma, `Movi.formas.pleno` en vez de la mínima, para que el placeholder
+ * sea un círculo y no un cuadrado con las puntas apenas cortadas.
+ *
+ * Ola B, tarea 3 (fix round 1): sin esto, la fila esqueleto de Movimientos y la de Presupuestos
+ * medían el mismo alto que la real pero el título arrancaba más a la izquierda —sin el hueco del
+ * ícono— y saltaba ~32–48 dp hacia la derecha al llegar el dato.
+ */
+@Composable
+fun CirculoEsqueleto(diametro: Dp, modifier: Modifier = Modifier) {
+    CajaDelEsqueleto(
+        modifier = modifier.width(diametro),
+        alto = diametro,
+        forma = RoundedCornerShape(Movi.formas.pleno),
+    )
+}
+
+/**
  * Un renglón de texto que todavía no llegó: [fraccionDelAncho] del ancho disponible, con el alto de
  * [estilo] —`Movi.textos.cuerpo` si no se dice otro—, para que el bloque ocupe lo mismo que ocuparía
  * el texto real y nada salte cuando llegue.
@@ -154,10 +174,68 @@ fun LineaEsqueleto(fraccionDelAncho: Float, modifier: Modifier = Modifier, estil
 }
 
 /**
+ * El alto de UN renglón de [estilo], en dp: su `lineHeight`. Es el número del que salen todos los
+ * bloques de esta familia, así que una pantalla que arma su propio esqueleto (Créditos,
+ * Presupuestos, Cuentas) lo pide acá en vez de repetir la cuenta de densidad.
+ */
+@Composable
+fun altoDeUnRenglon(estilo: TextStyle): Dp = with(LocalDensity.current) { estilo.lineHeight.toDp() }
+
+/**
+ * **Un renglón «rótulo … cifra» que todavía no llegó**: una línea a la izquierda con el alto de
+ * [estiloDelRotulo] y un bloque a la derecha, de [anchoDeLaCifra], con el alto de
+ * [estiloDeLaCifra]. Es la forma de «Tu plata $…», «Intereses este mes $…», «Cuota · día 15 $…»:
+ * la fila más repetida de las pantallas de plata. El `Row` se alinea al centro, igual que los
+ * reales, así que mide lo que mide el más alto de los dos — lo mismo que la fila de verdad.
+ */
+@Composable
+fun RenglonConCifraEsqueleto(
+    modifier: Modifier = Modifier,
+    fraccionDelRotulo: Float = 0.5f,
+    anchoDeLaCifra: Dp = 88.dp,
+    estiloDelRotulo: TextStyle = Movi.textos.apoyo,
+    estiloDeLaCifra: TextStyle = Movi.textos.monto,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+    ) {
+        Box(Modifier.weight(1f)) { LineaEsqueleto(fraccionDelAncho = fraccionDelRotulo, estilo = estiloDelRotulo) }
+        BloqueEsqueleto(alto = altoDeUnRenglon(estiloDeLaCifra), ancho = anchoDeLaCifra)
+    }
+}
+
+/**
+ * El encabezado de una sección que todavía no llegó, con la forma de [MinSectionHeader]: mismos
+ * rellenos y el alto de `Movi.textos.rotulo`. No dice «PRÉSTAMOS · 12» porque ni el título ni la
+ * cuenta se saben todavía — un título sin sus filas ya es una afirmación («tienes préstamos»).
+ */
+@Composable
+fun RotuloDeSeccionEsqueleto(fraccionDelAncho: Float = 0.3f) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = Movi.espacios.corto, end = Movi.espacios.corto, bottom = Movi.espacios.medio),
+    ) {
+        LineaEsqueleto(fraccionDelAncho = fraccionDelAncho, estilo = Movi.textos.rotulo)
+    }
+}
+
+/**
  * El tag de cada [FilaDeListaEsqueleto], para contarlas en una prueba sin depender de ningún
  * texto (no tienen — son bloques).
  */
 const val TAG_FILA_DE_LISTA_ESQUELETO: String = "fila-de-lista-esqueleto"
+
+/**
+ * El tag del **título** de una fila esqueleto — [FilaDeListaEsqueleto] y la de Presupuestos
+ * (`FilaDePresupuestoEsqueleto`, que tiene su propia forma pero pide prestado este tag). Ola B,
+ * tarea 3 (fix round 1): sin un tag propio para el título (a diferencia del bloque completo, que
+ * ya tenía [TAG_FILA_DE_LISTA_ESQUELETO]) una prueba no tenía cómo medir en qué X arranca contra
+ * el título real, que es lo que prueba que el hueco del ícono es el mismo de los dos lados.
+ */
+const val TAG_TITULO_DE_FILA_ESQUELETO: String = "titulo-de-fila-esqueleto"
 
 /**
  * **La fila de una lista que todavía no llegó**: título y subtítulo a la izquierda, un monto a la
@@ -165,9 +243,19 @@ const val TAG_FILA_DE_LISTA_ESQUELETO: String = "fila-de-lista-esqueleto"
  * usan las dos pantallas donde hoy se ve una rueda antes de la primera lista (ver sus KDoc): mismo
  * relleno vertical (14 dp) y el mismo hairline entre filas que [CardRow], para que la lista no
  * salte de alto cuando la rueda se convierte en filas de verdad.
+ *
+ * [conIcono] agrega el ícono de 20 dp que Cuentas pone delante del nombre, DENTRO de la columna de
+ * texto (ola B): sin él, el esqueleto de Cuentas decía «una lista» cuando la pantalla real dice
+ * «una lista de cuentas».
+ *
+ * [diametroIconoAlFrente] es la otra posición: un círculo AL FRENTE de toda la fila, afuera de la
+ * columna de texto — la forma de `IconoDeCategoria` en `MovementSingleRow` de Movimientos (Ola B,
+ * tarea 3, fix round 1), que va a la izquierda del título y no pegado a él. Los dos parámetros son
+ * independientes (uno adentro de la columna, el otro afuera) porque son dos filas reales
+ * distintas — Cuentas no cambia con este fix.
  */
 @Composable
-fun FilaDeListaEsqueleto(isLast: Boolean = false) {
+fun FilaDeListaEsqueleto(isLast: Boolean = false, conIcono: Boolean = false, diametroIconoAlFrente: Dp? = null) {
     Column {
         Row(
             modifier = Modifier
@@ -175,10 +263,37 @@ fun FilaDeListaEsqueleto(isLast: Boolean = false) {
                 .padding(vertical = 14.dp)
                 .testTag(TAG_FILA_DE_LISTA_ESQUELETO),
             verticalAlignment = Alignment.CenterVertically,
+            // El mismo `Movi.espacios.medio` (12 dp) que separa `IconoDeCategoria` del texto en
+            // `MovementSingleRow`: con `diametroIconoAlFrente` puesto, este `spacedBy` ya deja el
+            // hueco correcto entre el círculo y la columna sin ningún ajuste extra.
             horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
         ) {
+            if (diametroIconoAlFrente != null) {
+                CirculoEsqueleto(diametroIconoAlFrente)
+            }
             Column(modifier = Modifier.weight(1f)) {
-                LineaEsqueleto(fraccionDelAncho = 0.55f, estilo = Movi.textos.titulo)
+                if (conIcono) {
+                    // El ícono de 20 dp de la fila de una cuenta, a 8 dp del nombre: los dos
+                    // valores de `AccountsGroup`. El renglón mide el más alto de los dos, como el
+                    // real.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        BloqueEsqueleto(alto = 20.dp, ancho = 20.dp)
+                        LineaEsqueleto(
+                            fraccionDelAncho = 0.55f,
+                            estilo = Movi.textos.titulo,
+                            modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
+                        )
+                    }
+                } else {
+                    LineaEsqueleto(
+                        fraccionDelAncho = 0.55f,
+                        estilo = Movi.textos.titulo,
+                        modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
+                    )
+                }
                 Spacer(Modifier.height(2.dp))
                 LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.apoyo)
             }

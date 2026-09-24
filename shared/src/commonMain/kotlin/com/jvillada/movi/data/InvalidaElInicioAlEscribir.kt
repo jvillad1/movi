@@ -71,7 +71,8 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun renameBudget(category: String, newCategory: String): Budget = trasEscribir { delegado.renameBudget(category, newCategory) }
     override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult = trasEscribir { delegado.renameCategory(from, to) }
     override suspend fun mergeCategory(from: String, into: String): CategoryRewriteResult = trasEscribir { delegado.mergeCategory(from, into) }
-    override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?): CategoryUsage = trasEscribir { delegado.setCategoryPrefs(name, hidden, pinnedType) }
+    override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?, icono: String?, color: String?): CategoryUsage =
+        trasEscribir { delegado.setCategoryPrefs(name, hidden, pinnedType, icono, color) }
     override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule = trasEscribir { delegado.createRecurringRule(rule) }
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = trasEscribir { delegado.updateRecurringRule(id, rule) }
     override suspend fun deleteRecurringRule(id: String): Unit = trasEscribir { delegado.deleteRecurringRule(id) }
@@ -108,6 +109,7 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun changePassword(request: ChangePasswordRequest): Unit = trasEscribir { delegado.changePassword(request) }
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = trasEscribir { delegado.requestPasswordReset(request) }
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult = trasEscribir { delegado.uploadStatement(fileName, bytes, mimeType) }
+    override suspend fun readStatementFromDocument(id: String): StatementParseResult = trasEscribir { delegado.readStatementFromDocument(id) }
     override suspend fun uploadDocument(fileName: String, bytes: ByteArray, mimeType: String, tipo: TipoDeDocumento, accountId: String?, periodo: String?, notas: String?): Documento = trasEscribir { delegado.uploadDocument(fileName, bytes, mimeType, tipo, accountId, periodo, notas) }
     override suspend fun updateDocument(id: String, cambios: EdicionDeDocumento): Documento = trasEscribir { delegado.updateDocument(id, cambios) }
     override suspend fun deleteDocument(id: String): Unit = trasEscribir { delegado.deleteDocument(id) }

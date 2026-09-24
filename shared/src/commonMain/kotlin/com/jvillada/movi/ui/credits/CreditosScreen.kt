@@ -51,12 +51,18 @@ import kotlinx.datetime.Clock
  */
 @Composable
 fun CreditosScreen(onNavigate: (Screen) -> Unit) {
-    var credits by remember { mutableStateOf<List<CreditSummary>>(emptyList()) }
-    var cards by remember { mutableStateOf<List<CardSummary>>(emptyList()) }
-    // Se prenden solo cuando una lectura contestó de verdad (ver [NoSePudoLeer]). Una vez leídos se
-    // quedan prendidos: si un reintento posterior falla se sigue mostrando lo último que se supo.
-    var creditosLeidos by remember { mutableStateOf(false) }
-    var tarjetasLeidas by remember { mutableStateOf(false) }
+    // `null` = la lectura todavía no contestó bien; `emptyList()` = contestó y no hay ninguno. Son
+    // dos cosas distintas y la pantalla las dice distinto: la primera con el esqueleto (o con
+    // [NoSePudoLeer] si ya se rindió), la segunda con el vacío de siempre. Antes las dos eran una
+    // lista vacía, y mientras cargaba se leía «Deuda total $0 · Sin créditos registrados» a quien
+    // debe $2.191 millones en 12 préstamos. Una vez leídas no vuelven a `null`: si un reintento
+    // falla se sigue mostrando lo último que se supo, como antes con `creditosLeidos`.
+    var credits by remember { mutableStateOf<List<CreditSummary>?>(null) }
+    var cards by remember { mutableStateOf<List<CardSummary>?>(null) }
+    // El perfil ya contestó (bien o mal) al menos una vez. Hasta entonces el mes de la última cuota
+    // se diría con el corte 1 y cambiaría de nombre cuando llegue el corte del dueño — ver
+    // [ajustesDelPeriodo]. Si falla se sigue con el corte 1, como siempre: esto solo espera.
+    var perfilContestado by remember { mutableStateOf(false) }
     var showTypeChooser by remember { mutableStateOf(false) }
     var showLoanSheet by remember { mutableStateOf(false) }
     var editingLoan by remember { mutableStateOf<CreditSummary?>(null) }
@@ -91,8 +97,8 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     var iniciosPropios by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(reloadKey, refreshTick) {
         loading = true
-        val loans = launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it; creditosLeidos = true } }
-        val tarjetas = launch { runCatching { Repositories.wallets.getCards() }.onSuccess { cards = it; tarjetasLeidas = true } }
+        val loans = launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it } }
+        val tarjetas = launch { runCatching { Repositories.wallets.getCards() }.onSuccess { cards = it } }
         // Si el perfil no se puede leer, se queda el corte 1 (el mes de calendario) y no se dice:
         // acá el período no cambia ninguna cifra de plata, solo el NOMBRE del mes de la última
         // cuota. Un error a pantalla completa por un mes corrido sería más ruido que el defecto.
@@ -101,6 +107,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 cutoffDay = it.periodCutoffDay
                 iniciosPropios = it.periodStarts
             }
+            perfilContestado = true
         }
         loans.join()
         tarjetas.join()
@@ -109,12 +116,18 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     }
     // Sin las DOS respuestas no se sabe si hay deudas: «Deuda total $0 · Sin créditos» con el botón
     // de crear uno era mentirle a quien sí debe, e invitarlo a duplicar. Ver [NoSePudoLeer].
-    val noSeLeyo = !loading && (!creditosLeidos || !tarjetasLeidas)
-    val isEmpty = credits.isEmpty() && cards.isEmpty() && !noSeLeyo
+    val noSeLeyo = !loading && (credits == null || cards == null)
+    // Lo que ya se puede pintar: las dos listas y el período. Mientras falte algo y la lectura siga
+    // en vuelo, el esqueleto; una recarga con esto ya pintado NO vuelve al esqueleto (las listas no
+    // vuelven a `null`), así que guardar un crédito no hace parpadear la pantalla.
+    val creditosListos = credits.takeIf { perfilContestado }
+    val tarjetasListas = cards.takeIf { perfilContestado }
+    val cargando = !noSeLeyo && (creditosListos == null || tarjetasListas == null)
+    val isEmpty = creditosListos?.isEmpty() == true && tarjetasListas?.isEmpty() == true
     // El plan de cada préstamo (interés de la cuota, si amortiza, cuándo termina). Se calcula acá
     // una sola vez y baja a las tarjetas: la aritmética vive en `:core` para que el server y los
     // tres clientes vean el mismo número. Ver [PlanDelCredito].
-    val planes = remember(credits) { credits.associate { it.account.id to planDelCredito(it) } }
+    val planes = remember(credits) { credits.orEmpty().associate { it.account.id to planDelCredito(it) } }
     /**
      * El mes en curso, para poder decir «enero de 2046» en vez de «232 cuotas».
      *
@@ -142,6 +155,11 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             // F60: encabezado único — avatar en ancho (Créditos está en el rail), flecha a Más
             // en el teléfono (se llega por Más; F22: reserva si no hay historial). Con deudas ya
             // creadas, el alta compacta a la derecha (F18).
+            //
+            // Ola B: el alta compacta está **desde el primer cuadro**, también mientras carga. Antes
+            // aparecía cuando llegaban los créditos y el título se corría. Solo se va en los dos
+            // casos que tienen su propia forma: la lectura que no se pudo hacer (no se invita a
+            // duplicar) y el vacío de verdad (el botón ancho de abajo).
             MinScreenHeader(
                 title = "Créditos",
                 leading = leadingFor(Screen.Credits, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
@@ -156,7 +174,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     onReintentar = { reloadKey++ },
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
-            } else if (isEmpty && !loading) {
+            } else if (isEmpty) {
                 NewItemButton(
                     label = "Nuevo crédito",
                     onClick = { showTypeChooser = true },
@@ -167,10 +185,12 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 Spacer(Modifier.height(14.dp))
             }
 
-            if (!noSeLeyo) LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
+            if (cargando) {
+                CreditosEsqueleto(modifier = Modifier.weight(1f))
+            } else if (creditosListos != null && tarjetasListas != null) LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
                 item {
                     MinCard(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(22.dp),
                     ) {
@@ -179,7 +199,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         // F20: préstamos + tarjetas — la MISMA función que usa el Inicio.
                         // La protagonista de esta pantalla, igual que «Tu plata» en el Inicio: misma
                         // letra, mismo tamaño, y un renglón siempre. Ver [CifraProtagonista].
-                        CifraProtagonista(formatCOP(totalDebtCop(credits, cards)), color = Movi.colores.texto)
+                        CifraProtagonista(formatCOP(totalDebtCop(creditosListos, tarjetasListas)), color = Movi.colores.texto)
                         // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
                         // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
                         // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
@@ -187,7 +207,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         LoQueCuestaLaDeuda(
                             planes.values.filterNotNull(),
                             periodoActual,
-                            quienesPaganLoQueNoSaleDeTuBolsillo(credits.mapNotNull { it.terms }),
+                            quienesPaganLoQueNoSaleDeTuBolsillo(creditosListos.mapNotNull { it.terms }),
                         )
                     }
                 }
@@ -211,13 +231,13 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     }
                 }
 
-                if (credits.isNotEmpty()) {
+                if (creditosListos.isNotEmpty()) {
                     item {
                         Spacer(Modifier.height(20.dp))
                         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            MinSectionHeader(title = "Préstamos", count = credits.size)
+                            MinSectionHeader(title = "Préstamos", count = creditosListos.size)
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                credits.forEach { c ->
+                                creditosListos.forEach { c ->
                                     LoanCard(
                                         credit = c,
                                         plan = planes[c.account.id],
@@ -234,13 +254,13 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     }
                 }
 
-                if (cards.isNotEmpty()) {
+                if (tarjetasListas.isNotEmpty()) {
                     item {
                         Spacer(Modifier.height(20.dp))
                         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            MinSectionHeader(title = "Tarjetas", count = cards.size)
+                            MinSectionHeader(title = "Tarjetas", count = tarjetasListas.size)
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                cards.forEach { c ->
+                                tarjetasListas.forEach { c ->
                                     CreditCardCard(
                                         card = c,
                                         onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
@@ -263,7 +283,11 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
         if (showLoanSheet) {
             CreditTermsSheet(
                 editing = editingLoan,
-                candidates = credits.filter { it.terms == null }.map { it.account },
+                // «+ Nuevo crédito» se puede tocar desde el primer cuadro, antes de que contesten
+                // los créditos. La hoja lee [candidates] en cada composición, así que la línea
+                // «Ya tienes una deuda cargada como cuenta, ¿es esta?» aparece sola en cuanto
+                // llegan — lo prueba `CreditosNoAfirmanMientrasCarganTest`.
+                candidates = credits.orEmpty().filter { it.terms == null }.map { it.account },
                 onDismiss = { showLoanSheet = false },
                 onSaved = { showLoanSheet = false; reloadKey++ },
             )
@@ -817,3 +841,123 @@ private fun EditTermsIcon(onEdit: () -> Unit) {
 private fun Modifier.clickableSimple(onClick: () -> Unit) = this.then(
     Modifier.clickable(onClick = onClick)
 )
+
+/** La tarjeta de «Deuda total», cargando o cargada: el mismo tag en las dos para medir que no salte. */
+const val TAG_TARJETA_DEL_RESUMEN_DE_DEUDA: String = "tarjeta-del-resumen-de-deuda"
+
+/** La cifra esqueleto de la tarjeta de «Deuda total» — está solo mientras carga. */
+const val TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA: String = "esqueleto-del-resumen-de-deuda"
+
+/** Cada tarjeta de préstamo que todavía no llegó. */
+const val TAG_ESQUELETO_TARJETA_DE_PRESTAMO: String = "esqueleto-tarjeta-de-prestamo"
+
+/**
+ * **Créditos mientras carga: la forma de lo que viene, sin una sola cifra.**
+ *
+ * Ola B. Antes esta pantalla, en frío, decía «Deuda total $0» y «Sin créditos registrados» durante
+ * el segundo que tardaba la lectura — y después aparecían $2.191 millones en 12 préstamos. No era
+ * solo un salto: era una afirmación falsa sobre la plata del dueño, en la cifra más grande de la
+ * pantalla.
+ *
+ * Cada pieza copia los rellenos y los estilos de texto de la real ([LoQueCuestaLaDeuda],
+ * [LoanCard]) para que la tarjeta de arriba mida lo mismo cargando que cargada (±8 dp, lo mide
+ * `CreditosNoAfirmanMientrasCarganTest`). El resumen reserva los tres grupos que tiene una cartera
+ * con tasas registradas (intereses del mes, los que faltan, la última cuota) y el renglón del
+ * supuesto; una cartera más chica encoge al llegar, pero nunca crece.
+ *
+ * Es una `LazyColumn` sin desplazamiento y no una `Column`: así recorta lo que no entra en vez de
+ * dibujarlo encima de la barra de abajo.
+ */
+@Composable
+private fun CreditosEsqueleto(modifier: Modifier = Modifier) {
+    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 80.dp), userScrollEnabled = false) {
+        item {
+            MinCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
+                variant = MinCardVariant.Elevated,
+                padding = PaddingValues(22.dp),
+            ) {
+                LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.apoyo)
+                Spacer(Modifier.height(10.dp))
+                LineaEsqueleto(
+                    fraccionDelAncho = 0.7f,
+                    estilo = Movi.textos.cifra,
+                    modifier = Modifier.testTag(TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA),
+                )
+                // Los mismos espacios que [LoQueCuestaLaDeuda]: 16 · hilo · 14 y 12 entre grupos.
+                Spacer(Modifier.height(16.dp))
+                Hairline()
+                Spacer(Modifier.height(14.dp))
+                repeat(3) { i ->
+                    if (i > 0) Spacer(Modifier.height(12.dp))
+                    // [TituloDelGrupo] y [FilaDelResumen]: el rótulo, 6 dp, y la fila con 10 dp de
+                    // sangría.
+                    LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
+                    Spacer(Modifier.height(6.dp))
+                    RenglonConCifraEsqueleto(
+                        modifier = Modifier.padding(start = 10.dp),
+                        fraccionDelRotulo = 0.55f,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                // [SUPUESTO_DE_LA_PROYECCION]: dos renglones de apoyo a 15 sp de interlineado en
+                // un teléfono.
+                val supuesto = Movi.textos.apoyo.copy(lineHeight = 15.sp)
+                LineaEsqueleto(fraccionDelAncho = 0.95f, estilo = supuesto)
+                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = supuesto)
+            }
+        }
+        item {
+            Spacer(Modifier.height(20.dp))
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                RotuloDeSeccionEsqueleto()
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    repeat(3) { TarjetaDePrestamoEsqueleto() }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Un préstamo que todavía no llegó, con la forma de [LoanCard]: nombre y tasa, el banco, el saldo
+ * con su avance, la barra, y debajo del hilo la cuota, el plazo y la línea del interés.
+ */
+@Composable
+private fun TarjetaDePrestamoEsqueleto() {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(18.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.titulo) }
+            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 52.dp)
+            // El lugar del lápiz de [EditTermsIcon]: 8 dp antes, 6 dp alrededor y 16 dp de ícono.
+            Box(Modifier.padding(start = 8.dp).padding(6.dp)) { BloqueEsqueleto(alto = 16.dp, ancho = 16.dp) }
+        }
+        LineaEsqueleto(
+            fraccionDelAncho = 0.3f,
+            estilo = Movi.textos.apoyo,
+            modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+        )
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.monto), ancho = 112.dp)
+            Spacer(Modifier.weight(1f))
+            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 64.dp)
+        }
+        Spacer(Modifier.height(8.dp))
+        BloqueEsqueleto(alto = 2.dp)
+        Spacer(Modifier.height(14.dp))
+        Hairline()
+        Spacer(Modifier.height(12.dp))
+        RenglonConCifraEsqueleto(fraccionDelRotulo = 0.4f)
+        Spacer(Modifier.height(6.dp))
+        LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.apoyo)
+        Spacer(Modifier.height(10.dp))
+        LineaEsqueleto(fraccionDelAncho = 0.85f, estilo = Movi.textos.apoyo)
+    }
+}

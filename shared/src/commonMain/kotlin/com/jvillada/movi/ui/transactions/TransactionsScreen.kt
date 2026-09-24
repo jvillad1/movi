@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -131,6 +132,8 @@ import kotlinx.datetime.minus
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
+import com.jvillada.movi.ui.categorias.IconoDeCategoria
+import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.shared.model.normalizarParaBuscar
@@ -395,6 +398,86 @@ const val CHIP_RECURRENTES = 5
  * cómo verificar que sigue ahí.
  */
 const val TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS: String = "barra-de-carga-de-movimientos"
+
+/**
+ * El tag de un renglón suelto de Movimientos (Task 3, Ola B): sin él, una prueba no tiene forma de
+ * medir el alto real del renglón para verificar que agregarle [IconoDeCategoria] no lo hizo crecer.
+ */
+const val TAG_FILA_DE_MOVIMIENTO_SUELTO: String = "fila-de-movimiento-suelto"
+
+/**
+ * El tag del renglón de encabezado de un día esqueleto («HOY · Flujo del día …»), para contar
+ * cuántos GRUPOS pinta [movimientosEsqueleto] sin depender de ningún texto — no hay ninguno
+ * todavía, ver su KDoc.
+ */
+const val TAG_ENCABEZADO_DE_DIA_ESQUELETO: String = "encabezado-de-dia-esqueleto"
+
+/**
+ * El tag del renglón de encabezado de un día REAL («HOY · Flujo del día …», el que pliega y
+ * despliega el día). Ola B, tarea 9 (fix round 1): sin él, una prueba no tenía cómo comparar el
+ * TOP de este renglón contra el del encabezado esqueleto de arriba y verificar que el primer
+ * grupo no salta al llegar los datos.
+ */
+const val TAG_ENCABEZADO_DE_DIA: String = "encabezado-de-dia"
+
+/**
+ * **Movimientos mientras carga, con la forma de Movimientos** (Ola B, tarea 9).
+ *
+ * Task 7 (ola A) puso UNA tarjeta de 6 filas sueltas. La pantalla real no es una lista: son varios
+ * DÍAS, cada uno con su renglón de encabezado («HOY · Flujo del día −$250.100», ver más abajo en
+ * el `forEach` real) y su propia tarjeta — así que la tarjeta única se convertía en 2-3 tarjetas
+ * más chicas apenas llegaban los datos, el salto que reportó el dueño.
+ *
+ * [GRUPOS_DEL_ESQUELETO] imita eso con dos o tres grupos de tamaño distinto (ni todos los días
+ * tienen el mismo número de movimientos, y repetir la misma forma se lee más a rueda que a lista
+ * real). El encabezado usa [RenglonConCifraEsqueleto] —rótulo a la izquierda, cifra a la
+ * derecha, la misma pieza que ya arma el resto de esta ola— en vez de decir «HOY» o un total: ni
+ * la fecha ni el flujo del día se conocen todavía, y afirmar cualquiera de los dos sería la misma
+ * falla que la Task 8 le corrigió a Créditos y Presupuestos.
+ */
+private val GRUPOS_DEL_ESQUELETO = listOf(3, 2, 2)
+
+private fun LazyListScope.movimientosEsqueleto() {
+    GRUPOS_DEL_ESQUELETO.forEach { filas ->
+        item {
+            // `top = 20.dp` SIEMPRE, sin excepción para el primer grupo — fix round 1. El
+            // `Column` de cada día real (más abajo, en el `forEach` de `visibleDays`) usa
+            // `padding(top = 20.dp)` para TODOS los días, primero incluido: el `contentPadding`
+            // de esta `LazyColumn` no trae ningún `top`, así que ese es el único aire arriba del
+            // primer renglón. Un `0.dp` acá adelantaba el primer grupo 20 dp contra el primer día
+            // real y la lista saltaba hacia abajo apenas llegaban los datos.
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 20.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO)
+                        .padding(horizontal = 4.dp, vertical = 8.dp),
+                ) {
+                    RenglonConCifraEsqueleto(fraccionDelRotulo = 0.2f, anchoDeLaCifra = 110.dp)
+                }
+                MinCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = MinCardVariant.Elevated,
+                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                ) {
+                    // El mismo círculo que `IconoDeCategoria` — ver el KDoc de
+                    // `FilaDeListaEsqueleto` (Task 3, fix round 1). Leído del tamaño y no copiado:
+                    // si el ícono cambia de medida, el esqueleto no se queda atrás.
+                    repeat(filas) { i ->
+                        FilaDeListaEsqueleto(
+                            isLast = i == filas - 1,
+                            diametroIconoAlFrente = TamanoDeIconoDeCategoria.Normal.circulo,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 /** Los rótulos de los chips, en el orden de sus índices. */
 val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes")
@@ -1707,20 +1790,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 60.dp),
         ) {
-            // Task 7: primera carga de este chip, ni una fila pintada todavía — 5-6 filas con la
-            // forma de un día de movimientos. `hayListaDeDias` porque con «Recurrentes» esta lista
-            // no se pinta ni cargada ni cargando (ver arriba); el tablero de esa vista tiene su
-            // propio estado.
+            // Task 7 puso una tarjeta de 6 filas sueltas; la Task 9 (ola B) la cambia por la forma
+            // real — 2-3 DÍAS, cada uno con su encabezado y su propia tarjeta. `hayListaDeDias`
+            // porque con «Recurrentes» esta lista no se pinta ni cargada ni cargando (ver arriba);
+            // el tablero de esa vista tiene su propio estado. Ver [movimientosEsqueleto].
             if (loading && visibleDays.isEmpty() && hayListaDeDias) {
-                item {
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        repeat(6) { i -> FilaDeListaEsqueleto(isLast = i == 5) }
-                    }
-                }
+                movimientosEsqueleto()
             }
 
             // PR 2 del rediseño de Recurrentes: el resumen del filtro y lo que falta revisar.
@@ -2040,6 +2115,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                // Ola B, tarea 9 (fix round 1): el tag va ANTES de `clip`/
+                                // `clickable`/`padding` — mismo lugar en la cadena que
+                                // `TAG_ENCABEZADO_DE_DIA_ESQUELETO` en el esqueleto — para que
+                                // los dos midan el mismo punto (el borde exterior del renglón,
+                                // no adentro del relleno). Sin este orden, una prueba medía el
+                                // esqueleto 8 dp más abajo que el real sin que el padding de
+                                // ninguno de los dos hubiera cambiado.
+                                .testTag(TAG_ENCABEZADO_DE_DIA)
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable { diasPlegados = DiasPlegadosStore.alternar(day.date) }
                                 .padding(horizontal = 4.dp, vertical = 8.dp),
@@ -2348,6 +2431,11 @@ private fun TransferRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // Neutro a propósito: un traspaso (o la cuota / el pago de tarjeta que se ven con esta
+        // misma forma) no es una categoría del dueño, es plata que cambió de cuenta. Por eso el
+        // ícono es siempre el de TRANSFER_CATEGORY y no el de la categoría real de la pata —
+        // «Cuota de crédito» se vería violeta, como si fuera un gasto con carácter propio.
+        IconoDeCategoria(TRANSFER_CATEGORY)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = transferRowTitle(row, accountTypes),
@@ -2413,6 +2501,9 @@ private fun RenglonDeAjustes(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // Mismo criterio que TransferRow: un ajuste de saldo no es una categoría, es una
+        // corrección — el ícono es el neutro de ADJUSTMENT_CATEGORY, no el de ningún gasto.
+        IconoDeCategoria(ADJUSTMENT_CATEGORY)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = tituloDeLosAjustes(events),
@@ -2469,11 +2560,15 @@ private fun MovementSingleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(TAG_FILA_DE_MOVIMIENTO_SUELTO)
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // El ícono de la categoría — la apertura, el ajuste y la pata huérfana ya resuelven a un
+        // ícono neutro por su nombre (ver `aparienciaDe`), así que acá no hace falta distinguir.
+        IconoDeCategoria(tx.category)
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

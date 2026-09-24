@@ -7,7 +7,6 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
 import com.jvillada.movi.server.balance.looksLikeCardPayment
-import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.Users
@@ -331,9 +330,10 @@ private fun Transaction.sumasAntesDe(
  * no cuenta.
  */
 private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<String>): List<UsedCategory> {
-    val prefs = CategoryPrefs.selectAll()
-        .where { CategoryPrefs.userId eq uid }
-        .associate { it[CategoryPrefs.name].trim() to (it[CategoryPrefs.hidden] to it[CategoryPrefs.pinnedType]) }
+    // Misma lectura de `category_prefs` que usa `GET /api/categories` (ver
+    // `CategoryRoutes.preferenciasDeCategorias`): una sola función para las dos rutas, para que
+    // no vuelvan a desincronizarse las columnas que acarrea cada una.
+    val prefs = preferenciasDeCategorias(uid)
 
     val porUso = Events.select(Events.category, Events.type)
         .where { Events.userId eq uid }
@@ -363,8 +363,10 @@ private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<
             UsedCategory(
                 name = nombre,
                 types = porUso[nombre].orEmpty(),
-                hidden = pref?.first ?: false,
-                pinnedType = pref?.second,
+                hidden = pref?.hidden ?: false,
+                pinnedType = pref?.pinnedType,
+                icono = pref?.icono,
+                color = pref?.color,
                 usosRecientes = usosRecientesPorCategoria[nombre] ?: 0,
             )
         }

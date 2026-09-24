@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,19 +54,24 @@ import kotlinx.datetime.Clock
 
 @Composable
 fun AccountsScreen(onNavigate: (Screen) -> Unit) {
-    var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
-    var loading by remember { mutableStateOf(false) }
+    // `null` = la lectura todavía no contestó bien; `emptyList()` = contestó y no hay ninguna. Ola B:
+    // antes era una lista vacía más un `cuentasLeidas` aparte; con `null` las dos preguntas («¿llegó?»
+    // y «¿está vacía?») son una sola variable y no se pueden desalinear. Una vez leída no vuelve a
+    // `null`: una recarga que falla sigue mostrando lo último que se supo.
+    var accounts by remember { mutableStateOf<List<Account>?>(null) }
+    // `true` desde el primer cuadro: el efecto de abajo arranca la lectura en ese mismo cuadro, y
+    // con `false` el primer cuadro caía en «no se pudo leer» antes de que la lectura empezara.
+    var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     var showCreateSheet by remember { mutableStateOf(false) }
     // La hoja de un bien abierta: `existente = null` es uno nuevo (desde «Nueva cuenta» → «Bien»).
     var bienAbierto by remember { mutableStateOf<BienAbierto?>(null) }
     // «Sin cuentas aún» es una afirmación sobre la plata del dueño, así que solo se hace cuando
-    // una lectura DE VERDAD contestó y contestó vacío. Antes bastaba una lectura fallida: el
-    // snackbar de error se autodescartaba y abajo quedaba el estado vacío invitando a «crear tu
-    // primera cuenta» a alguien que ya tiene tres. Mismo criterio que `accountsLoaded` en la
-    // hoja de Agregar.
-    var cuentasLeidas by remember { mutableStateOf(false) }
+    // una lectura DE VERDAD contestó y contestó vacío (`accounts` no nulo y vacío). Antes bastaba
+    // una lectura fallida: el snackbar de error se autodescartaba y abajo quedaba el estado vacío
+    // invitando a «crear tu primera cuenta» a alguien que ya tiene tres. Mismo criterio que
+    // `accountsLoaded` en la hoja de Agregar.
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -76,7 +83,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
         loading = true
         error = null
         runCatching { Repositories.wallets.getAccounts() }
-            .onSuccess { accounts = it; cuentasLeidas = true }
+            .onSuccess { accounts = it }
             .onFailure { e -> error = e.toUserMessage() }
         loading = false
     }
@@ -102,7 +109,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
             // con una barra — dice CON QUÉ FORMA va a llegar, con las filas esqueleto de más abajo.
             // Una recarga con cuentas ya en pantalla (tocar «Reintentar», volver de crear una) sigue
             // con la barra de siempre: ahí no hay esqueleto que la reemplace.
-            if (loading && accounts.isNotEmpty()) {
+            if (loading && !accounts.isNullOrEmpty()) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
                     color = Movi.colores.marca.copy(alpha = 0.16f),
@@ -121,27 +128,20 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     bottom = 80.dp,
                 ),
             ) {
-                if (accounts.isEmpty() && loading) {
-                    // Task 7: 5-6 filas con la forma de una cuenta real, no una rueda. Solo mientras
-                    // no hay NI UNA cuenta pintada todavía — con algo ya pintado, la barra de arriba
-                    // basta y esta lista sigue mostrando lo que ya tenía.
-                    item {
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                        ) {
-                            repeat(6) { i -> FilaDeListaEsqueleto(isLast = i == 5) }
-                        }
-                    }
-                } else if (accounts.isEmpty() && !loading && !cuentasLeidas) {
+                val cuentas = accounts
+                if (cuentas == null && loading) {
+                    // Ola B: la forma REAL de la pantalla, no filas sueltas. Solo mientras la
+                    // lectura no contestó nunca — con algo ya pintado, la barra de arriba basta y
+                    // esta lista sigue mostrando lo que ya tenía. Ver [cuentasEsqueleto].
+                    cuentasEsqueleto()
+                } else if (cuentas == null) {
                     // No se pudo leer y no hay nada que mostrar: se dice eso, y nada más. El
                     // botón acá sería «Reintentar», no «Crear primera cuenta» — proponer crear
                     // una cuenta sin saber si ya existe es como se fabrican los duplicados.
                     item {
                         NoSePudoLeer("No pudimos cargar tus cuentas", onReintentar = { refreshKey++ })
                     }
-                } else if (accounts.isEmpty() && !loading) {
+                } else if (cuentas.isEmpty()) {
                     item {
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
@@ -177,7 +177,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             }
                         }
                     }
-                } else if (accounts.isNotEmpty()) {
+                } else {
                     // Total assets card
                     item {
                         // **La MISMA función que el hero del Inicio**, no `assetsDebtsNet` por su
@@ -187,9 +187,9 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         // ya cometió dos veces (Créditos vs. Inicio en la Ola 4, los presupuestos
                         // en la Ola 16). El desglose de abajo ahora escribe la cuenta completa:
                         // tu plata + lo condicionado − las deudas = el patrimonio de arriba.
-                        val balance = heroBalance(accounts)
+                        val balance = heroBalance(cuentas)
                         MinCard(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_PATRIMONIO),
                             variant = MinCardVariant.Elevated,
                             padding = PaddingValues(20.dp),
                         ) {
@@ -275,11 +275,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     // subtotal (Dinero e Inversión, según AccountGroup). Las deudas viven en
                     // Créditos, así que acá no se listan (aunque sigan sumando en el
                     // patrimonio neto de arriba).
-                    val dinero = accounts.filter { it.type.group == AccountGroup.DINERO }
+                    val dinero = cuentas.filter { it.type.group == AccountGroup.DINERO }
                     // Un bien viaja como INVESTMENT (ver `Bien` en :core) pero no es una inversión:
                     // tiene su propia sección, abajo, con su valor y la fecha del avalúo.
-                    val inversion = accounts.filter { it.type.group == AccountGroup.INVERSION && !it.esBien }
-                    val bienes = bienesDe(accounts)
+                    val inversion = cuentas.filter { it.type.group == AccountGroup.INVERSION && !it.esBien }
+                    val bienes = bienesDe(cuentas)
 
                     item { AccountsGroup(title = "Dinero", accounts = dinero, onNavigate = onNavigate) }
                     item {
@@ -295,7 +295,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             Spacer(Modifier.height(20.dp))
                             SeccionDeBienes(
                                 bienes = bienes,
-                                cuentas = accounts,
+                                cuentas = cuentas,
                                 onAbrir = { bienAbierto = BienAbierto(existente = it) },
                             )
                         }
@@ -307,8 +307,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     // Inicio (ver `cuentasSinCuadrar`), no una regla aparte.
                     item {
                         Spacer(Modifier.height(20.dp))
-                        val ahora = remember(accounts) { Clock.System.now().toEpochMilliseconds() }
-                        val atrasadas = cuentasSinCuadrar(accounts, ahora)
+                        val ahora = remember(cuentas) { Clock.System.now().toEpochMilliseconds() }
+                        val atrasadas = cuentasSinCuadrar(cuentas, ahora)
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
@@ -413,7 +413,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
             BienSheet(
                 existente = abierto.existente,
                 nombreInicial = abierto.nombre,
-                cuentas = accounts,
+                cuentas = accounts.orEmpty(),
                 onDismiss = { bienAbierto = null },
                 onGuardado = {
                     bienAbierto = null
@@ -657,4 +657,72 @@ private fun accountTypeIcon(type: AccountType): ImageVector = when (type) {
     AccountType.INVESTMENT  -> Icons.AutoMirrored.Filled.TrendingUp
     AccountType.CREDIT_CARD -> Icons.Filled.CreditCard
     AccountType.LOAN        -> Icons.Filled.RequestQuote
+}
+
+/** La tarjeta del patrimonio neto, cargando o cargada: el mismo tag en las dos para medir que no salte. */
+const val TAG_TARJETA_DEL_PATRIMONIO: String = "tarjeta-del-patrimonio"
+
+/** La cifra esqueleto del patrimonio neto — está solo mientras carga. */
+const val TAG_ESQUELETO_DEL_PATRIMONIO: String = "esqueleto-del-patrimonio"
+
+/** Las filas esqueleto del grupo de cuentas que todavía no llegó. */
+private const val FILAS_DEL_GRUPO_ESQUELETO = 4
+
+/**
+ * **Cuentas mientras carga, con la forma de Cuentas.**
+ *
+ * La ola A puso seis filas sueltas en vez de una rueda. Ya era mejor, pero la pantalla real no
+ * empieza con filas: empieza con la tarjeta del **patrimonio neto** (una cifra grande y sus cuatro
+ * renglones — tu plata, lo condicionado, los bienes, las deudas) y sigue con **grupos**
+ * («DINERO · 5 · $20,9M») de filas con ícono. Así que al llegar, las filas sueltas se convertían en
+ * una tarjeta alta que empujaba todo hacia abajo — el salto que el dueño vio en su Pixel.
+ *
+ * Esto copia la tarjeta real (mismos rellenos, la cifra con el alto de `Movi.textos.cifra`, cuatro
+ * renglones de apoyo a 4 dp) y un grupo con su encabezado y [FILAS_DEL_GRUPO_ESQUELETO] filas con
+ * ícono. Reserva los cuatro renglones porque es el caso del dueño; quien no tiene bienes ni deudas
+ * ve la tarjeta encoger un poco al llegar, nunca crecer.
+ */
+private fun LazyListScope.cuentasEsqueleto() {
+    item {
+        MinCard(
+            modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_PATRIMONIO),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(20.dp),
+        ) {
+            LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.apoyo)
+            Spacer(Modifier.height(8.dp))
+            LineaEsqueleto(
+                fraccionDelAncho = 0.65f,
+                estilo = Movi.textos.cifra,
+                modifier = Modifier.testTag(TAG_ESQUELETO_DEL_PATRIMONIO),
+            )
+            Spacer(Modifier.height(12.dp))
+            repeat(4) { i ->
+                if (i > 0) Spacer(Modifier.height(4.dp))
+                RenglonConCifraEsqueleto(
+                    fraccionDelRotulo = 0.3f,
+                    anchoDeLaCifra = 96.dp,
+                    estiloDeLaCifra = Movi.textos.apoyo,
+                )
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+    }
+    item {
+        Column {
+            // El encabezado de [AccountsGroup]: 8 dp a los lados, 12 abajo, rótulo y subtotal en apoyo.
+            Box(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 12.dp)) {
+                RenglonConCifraEsqueleto(fraccionDelRotulo = 0.3f, anchoDeLaCifra = 72.dp, estiloDeLaCifra = Movi.textos.apoyo)
+            }
+            MinCard(
+                modifier = Modifier.fillMaxWidth(),
+                variant = MinCardVariant.Elevated,
+                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+            ) {
+                repeat(FILAS_DEL_GRUPO_ESQUELETO) { i ->
+                    FilaDeListaEsqueleto(isLast = i == FILAS_DEL_GRUPO_ESQUELETO - 1, conIcono = true)
+                }
+            }
+        }
+    }
 }

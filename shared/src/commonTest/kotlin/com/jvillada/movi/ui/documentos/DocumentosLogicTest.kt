@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DocumentosLogicTest {
@@ -48,6 +49,32 @@ class DocumentosLogicTest {
         // deja de merecer confianza.
         assertEquals(TipoDeDocumento.OTRO, tipoSugeridoPara("IMG_4821.jpg"))
         assertEquals(TipoDeDocumento.OTRO, tipoSugeridoPara("documento final v3.pdf"))
+    }
+
+    // ── «Importar movimientos» (Ola B, tarea 7) ─────────────────────────────────
+
+    @Test
+    fun pdf_e_imagen_son_importables() {
+        assertTrue(esImportable(doc("d1", TipoDeDocumento.EXTRACTO).copy(mimeType = "application/pdf")))
+        assertTrue(esImportable(doc("d2", TipoDeDocumento.OTRO).copy(mimeType = "image/jpeg")))
+        assertTrue(esImportable(doc("d3", TipoDeDocumento.OTRO).copy(mimeType = "image/png")))
+        // Con parámetros después del `;` (charset y cosas así) también cuenta.
+        assertTrue(esImportable(doc("d4", TipoDeDocumento.OTRO).copy(mimeType = "application/pdf; charset=binary")))
+    }
+
+    @Test
+    fun otros_tipos_de_archivo_no_ofrecen_importar() {
+        assertFalse(esImportable(doc("d1", TipoDeDocumento.CONTRATO).copy(mimeType = "application/msword")))
+        assertFalse(esImportable(doc("d2", TipoDeDocumento.NOMINA).copy(mimeType = "text/csv")))
+        assertFalse(esImportable(doc("d3", TipoDeDocumento.OTRO).copy(mimeType = "application/octet-stream")))
+    }
+
+    @Test
+    fun heic_no_se_ofrece_porque_el_server_siempre_lo_rechaza() {
+        // `ClaudeStatementParser.supportedImageMime` solo entiende JPEG/PNG/GIF/WEBP — ofrecer
+        // «Importar movimientos» sobre un HEIC sería un botón que siempre contesta 422.
+        assertFalse(esImportable(doc("d1", TipoDeDocumento.OTRO).copy(mimeType = "image/heic")))
+        assertFalse(esImportable(doc("d2", TipoDeDocumento.OTRO).copy(mimeType = "image/heif")))
     }
 
     @Test

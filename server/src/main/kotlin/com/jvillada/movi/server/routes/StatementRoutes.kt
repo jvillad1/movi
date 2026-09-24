@@ -91,6 +91,17 @@ const val EXTRACTO_SIN_MOVIMIENTOS: String =
         "movimientos y no un resumen o un certificado."
 
 /**
+ * Fix round 3, hallazgo 1: `StatementParser.extractText` y `WorkbookFactory.create` (Famirios)
+ * leen bytes con una librería (PDFBox, POI) que lanza su propia excepción cuando el archivo no
+ * es lo que su extensión dice — un PDF renombrado a `.xls`, un archivo corrupto, cualquier bytes
+ * que no son lo que `nombreParaExtraerTexto` decidió que eran. Sin atajarla, esa excepción salía
+ * de `procesarExtracto` sin pasar por [FallaAlProcesarExtracto] y las dos rutas la devolvían como
+ * un 500 crudo — sin explicación, y peor, un 500 es lo que un cliente reintenta a ciegas.
+ */
+const val LECTURA_FALLO: String =
+    "No pude leer este archivo como extracto. Revisa que sea el PDF o la hoja de cálculo del banco."
+
+/**
  * **Por qué esta lectura no se puede importar**, o `null` si sí se puede.
  *
  * Es el único lugar donde se decide, y por eso es una función y no un `when` adentro de la ruta:
@@ -111,17 +122,342 @@ internal fun fallaDeLaLectura(lectura: ClaudeStatementParser.Lectura, esImagen: 
             if (lectura.movimientos.isEmpty()) EXTRACTO_SIN_MOVIMIENTOS else null
     }
 
+/** Las extensiones que `StatementParser.extractText` sabe leer distinto — ver más abajo. */
+private val EXTENSIONES_RECONOCIDAS = setOf("pdf", "csv", "xls", "xlsx")
+
+/**
+ * El nombre que decide CÓMO leer el archivo — `StatementParser.extractText` despacha por la
+ * EXTENSIÓN del nombre. Quién gana entre el nombre y el `mimeType` guardado depende de
+ * [mimeEsConfiable].
+ *
+ * Ola B, tarea 7, fix round 1: un documento archivado como PDF y después renombrado desde
+ * «Editar» (`Documento.nombre` es lo único editable — `mimeType` no) perdía la extensión, y
+ * `extractText` caía al `else` genérico: `bytes.toString(UTF_8)` sobre bytes de un PDF real,
+ * basura que viajaba a Claude como si fuera el texto del extracto. Esa versión usaba el
+ * `mimeType` para IMPONER una extensión distinta incluso cuando el nombre ya traía una
+ * reconocida.
+ *
+ * Fix round 2: esa versión rompía el caso contrario en `POST /api/statements/upload`, donde el
+ * `mimeType` lo manda el NAVEGADOR de quien sube —no el server— y un Excel/Windows reporta un
+ * `.csv` como `application/vnd.ms-excel`. Con esa versión, `extracto.csv` con ese mime se
+ * convertía en `extracto.csv.xls`, y `WorkbookFactory.create` explotaba contra un archivo que en
+ * realidad es texto plano. Ahí el nombre tiene que ganar: [mimeEsConfiable] = `false`.
+ *
+ * Fix round 3, hallazgo 2: `/api/documents/{id}/leer-extracto` (la única otra llamadora) lee un
+ * `mimeType` que **el server puso al subir** y nadie edita después; el `nombre`, en cambio, es
+ * texto libre que el dueño sí edita («Extracto agosto» renombrado por accidente a «Extracto
+ * agosto.xls», con bytes que siguen siendo un PDF — el caso que reventaba con la versión
+ * anterior: el nombre ya traía una extensión "reconocida", así que ganaba, y
+ * `WorkbookFactory.create` explotaba contra bytes de PDF). Ahí [mimeEsConfiable] = `true`: el
+ * mime gana SIEMPRE que reconozca un tipo, incluso sobre una extensión del nombre que también
+ * sea reconocida pero errada. (Un `mimeType` desconocido sigue cayendo al nombre tal cual, en
+ * los dos modos — no hay nada más confiable que consultar ahí.)
+ */
+internal fun nombreParaExtraerTexto(fileName: String, mimeType: String, mimeEsConfiable: Boolean = false): String {
+    val extensionActual = fileName.substringAfterLast('.', "").lowercase()
+    if (!mimeEsConfiable && extensionActual in EXTENSIONES_RECONOCIDAS) return fileName
+    val mime = mimeType.substringBefore(';').trim().lowercase()
+    val extensionDelMime = when (mime) {
+        "application/pdf" -> "pdf"
+        "application/vnd.ms-excel" -> "xls"
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> "xlsx"
+        "text/csv" -> "csv"
+        else -> return fileName
+    }
+    return if (extensionActual == extensionDelMime) fileName else "$fileName.$extensionDelMime"
+}
+
+/** Las extensiones de nombre que se leen como foto (el camino de visión de Claude). */
+private val EXTENSIONES_DE_IMAGEN = setOf("png", "jpg", "jpeg", "webp", "gif", "heic")
+
+/** Los `mimeType` que no dicen nada del contenido: con ellos decide el nombre, en los dos modos. */
+private val MIMES_GENERICOS = setOf("", "application/octet-stream", "binary/octet-stream")
+
+/**
+ * ¿El archivo va por el camino de la FOTO (visión de Claude) o por el de texto
+ * ([nombreParaExtraerTexto] + `StatementParser.extractText`)?
+ *
+ * Con [mimeEsConfiable] = `false` (`POST /api/statements/upload`, el mime lo manda el navegador)
+ * es lo de siempre: basta con que el mime O la extensión del nombre digan imagen.
+ *
+ * Revisión final de la Ola B: con [mimeEsConfiable] = `true` (`leer-extracto`, el mime lo guardó
+ * el server al subir y el nombre es texto libre que el dueño edita) el mime decide SOLO — la misma
+ * regla que ya seguía [nombreParaExtraerTexto]. Sin esto, un PDF renombrado a «extracto.png»
+ * pasaba esa función sin problema pero se desviaba ANTES, acá, hacia la lectura de fotos: bytes de
+ * PDF mandados a Claude como si fueran un PNG, una llamada paga para un error seguro. Solo un mime
+ * genérico ([MIMES_GENERICOS]) le devuelve la decisión al nombre, porque no hay nada mejor que
+ * consultar.
+ */
+internal fun esImagenParaExtraer(fileName: String, mimeType: String, mimeEsConfiable: Boolean = false): Boolean {
+    val porMime = ClaudeStatementParser.isImageMime(mimeType)
+    val mime = mimeType.substringBefore(';').trim().lowercase()
+    if (mimeEsConfiable && mime !in MIMES_GENERICOS) return porMime
+    return porMime || fileName.substringAfterLast('.', "").lowercase() in EXTENSIONES_DE_IMAGEN
+}
+
+/**
+ * Una falla de [procesarExtracto], con el status HTTP que le corresponde.
+ *
+ * Ola B, tarea 7: `POST /api/statements/upload` y `POST /api/documents/{id}/leer-extracto` llaman
+ * a la misma función y tienen que contestar EXACTAMENTE lo mismo ante la misma falla — status y
+ * mensaje viajan juntos para que las dos rutas no se puedan desalinear.
+ */
+internal class FallaAlProcesarExtracto(val status: HttpStatusCode, val mensaje: String) : Exception(mensaje)
+
+/**
+ * El cuerpo entero de `POST /api/statements/upload`, sin la parte de HTTP: lee un extracto, lo
+ * parsea, lo concilia contra lo que ya existe y archiva el papel en Documentos.
+ *
+ * Ola B, tarea 7: `POST /api/documents/{id}/leer-extracto` corre este mismo camino sobre los bytes
+ * de un documento que YA está guardado — «Extractos» sale de la navegación y se une a Documentos,
+ * y esto es lo que evita que la lógica quede duplicada en dos rutas. El archivado de más abajo es
+ * lo que lo hace seguro: compara por nombre+tamaño, así que leer el extracto de un documento que
+ * YA es ese archivo encuentra al documento mismo (`yaEstaba`) y no inserta una fila nueva.
+ *
+ * Lanza [FallaAlProcesarExtracto] en vez de responder directo: quien la llama decide cómo
+ * contestarle a SU cliente (ambas rutas de hoy simplemente la traducen 1:1), pero la próxima que
+ * la use no tiene por qué acoplarse a `ApplicationCall`.
+ */
+internal suspend fun procesarExtracto(
+    uid: String,
+    fileName: String,
+    mimeType: String,
+    bytes: ByteArray,
+    log: (String, Throwable) -> Unit,
+    /**
+     * Fix round 3, hallazgo 2: `true` solo desde `/api/documents/{id}/leer-extracto`, donde el
+     * `mimeType` es el que el server guardó al subir —no el navegador de ahora— y el `nombre` es
+     * texto libre que el dueño pudo haber editado después. Ver [nombreParaExtraerTexto].
+     */
+    mimeConfiable: Boolean = false,
+): StatementParseResult {
+    if (bytes.isEmpty()) throw FallaAlProcesarExtracto(HttpStatusCode.BadRequest, "No file received")
+    // Desde que esta ruta ARCHIVA el archivo (y no solo lo parsea), le aplica el mismo tope
+    // que la de documentos: sin esto, un PDF de 200 MB entraba a Postgres por la puerta de
+    // atrás y después aparecía en la pantalla de Documentos, saltándose el límite que esa
+    // pantalla sí respeta. Dos topes distintos para el mismo dato terminan dejando pasar por
+    // una puerta lo que la otra rechaza.
+    if (bytes.size > MAX_DOCUMENTO_BYTES) {
+        throw FallaAlProcesarExtracto(
+            HttpStatusCode.PayloadTooLarge,
+            "El archivo pesa más de ${MAX_DOCUMENTO_BYTES / (1024 * 1024)} MB",
+        )
+    }
+
+    // Para leerle los números de cuenta al armar la respuesta (ver `numerosDeCuenta`).
+    var textoDelExtracto = ""
+
+    val isImage = esImagenParaExtraer(fileName, mimeType, mimeConfiable)
+
+    val bankName: String
+    val parsed: List<ParsedTransaction>
+    var isFamirios = false
+    if (isImage) {
+        val imageMime = ClaudeStatementParser.supportedImageMime(mimeType, fileName)
+            ?: throw FallaAlProcesarExtracto(
+                HttpStatusCode.UnprocessableEntity,
+                "Formato de imagen no soportado. Sube PNG, JPG, GIF o WEBP (HEIC no se puede leer).",
+            )
+        bankName = StatementParser.detectBankName(fileName)
+        val lectura = ClaudeStatementParser.leerImagen(bytes, imageMime, Stores.merchantRules.getRules(uid))
+        val falla = fallaDeLaLectura(lectura, esImagen = true)
+        if (falla != null) throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, falla)
+        parsed = (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
+    } else {
+        val text = try {
+            StatementParser.extractText(bytes, nombreParaExtraerTexto(fileName, mimeType, mimeConfiable))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, LECTURA_FALLO)
+        }
+        textoDelExtracto = text
+        val docType = StatementParser.detectDocumentType(text)
+        if (docType == StatementDocumentType.LOAN_SUMMARY || docType == StatementDocumentType.INVESTMENT_FUND) {
+            val msg = when (docType) {
+                StatementDocumentType.LOAN_SUMMARY ->
+                    "Este documento es un resumen de crédito, no un extracto de movimientos. No contiene transacciones importables."
+                else ->
+                    "Este documento es un estado de fondo de inversión. No contiene transacciones importables."
+            }
+            throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, msg)
+        }
+        isFamirios = docType == StatementDocumentType.FAMIRIOS
+        bankName = if (isFamirios) "Famirios" else StatementParser.detectBankName(fileName, text)
+        parsed = if (isFamirios) {
+            try {
+                WorkbookFactory.create(ByteArrayInputStream(bytes)).use { wb ->
+                    FamiriosParser.parse(wb, AppClock.today())
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, LECTURA_FALLO)
+            }
+        } else {
+            val lectura = ClaudeStatementParser.leer(text, Stores.merchantRules.getRules(uid))
+            val falla = fallaDeLaLectura(lectura, esImagen = false)
+            if (falla != null) throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, falla)
+            (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
+        }
+        if (isFamirios && parsed.isEmpty()) {
+            throw FallaAlProcesarExtracto(
+                HttpStatusCode.UnprocessableEntity,
+                "El archivo parece un Famirios pero no contiene celdas importables.",
+            )
+        }
+    }
+
+    val voidedIds = dbQuery {
+        VoidEvents.selectAll()
+            .where { VoidEvents.userId eq uid }
+            .map { it[VoidEvents.originalEventId] }
+    }
+    val existing = dbQuery {
+        Events.selectAll()
+            .where {
+                (Events.userId eq uid) and
+                (if (voidedIds.isNotEmpty()) Events.id notInList voidedIds else Op.TRUE)
+            }
+            .map { it.toFinancialEvent() }
+    }
+
+    val matches = mutableListOf<ReconciliationMatch>()
+    val newTransactions = mutableListOf<ParsedTransaction>()
+
+    // Las cuentas de otros que el dueño registró: una fila que dice «a la cuenta *31973270756»
+    // se propone como «Transferencia a Caro», igual que un SMS. Se leen UNA vez para todo el
+    // extracto. Ver `conElDestinoConocido` en :core para cuándo NO renombra (cuando el papel ya
+    // trajo un nombre de verdad).
+    val destinos = dbQuery { destinosDelDueno(uid) }
+
+    // Cada movimiento anotado puede ser la pareja de UNA sola fila. Antes el mismo movimiento
+    // se proponía para todas las filas iguales: dos compras de $50.000 en días seguidos
+    // quedaban emparejadas con el único SMS, y al confirmar las dos la segunda compra real no
+    // se importaba nunca.
+    val yaEmparejados = mutableSetOf<String>()
+    for (tx in parsed) {
+        val parsedEpoch = runCatching {
+            appDateToEpochMillis(fechaDelExtracto(tx.date)!!)
+        }.getOrNull()
+
+        val match = if (parsedEpoch != null) {
+            existing
+                .filter { ev ->
+                    ev.id !in yaEmparejados &&
+                        ev.amount == tx.amount &&
+                        ev.currency == tx.currency &&
+                        // Un reembolso de $80.000 no es la compra de $80.000.
+                        ev.type == tx.type &&
+                        abs(parsedEpoch - ev.timestamp) <= 2 * 86_400_000L
+                }
+                // El más cercano en fecha, no el primero que devolvió la base.
+                .minByOrNull { abs(parsedEpoch - it.timestamp) }
+        } else null
+        match?.let { yaEmparejados += it.id }
+
+        if (match != null) {
+            // Mismo día civil de Bogotá, no mismo bucket de 24 h desde la época (UTC).
+            val sameDay = parsedEpoch != null &&
+                epochMillisToAppDate(parsedEpoch) == epochMillisToAppDate(match.timestamp)
+            matches += ReconciliationMatch(
+                parsed = tx,
+                existingEventId = match.id,
+                existingEvent = match,
+                matchConfidence = if (sameDay) 0.95f else 0.7f,
+            )
+        } else {
+            newTransactions += conElDestinoConocido(tx, destinos)
+        }
+    }
+
+    val period = if (isFamirios) {
+        val years = parsed.mapNotNull { fechaDelExtracto(it.date)?.year }
+        if (years.isEmpty()) "" else "${years.min()}–${years.max()}"
+    } else runCatching {
+        val date = parsed.firstNotNullOfOrNull { fechaDelExtracto(it.date) } ?: LocalDate.parse("2025-01-01")
+        "${monthName(date.monthValue)} ${date.year}"
+    }.getOrDefault("")
+
+    // El extracto se ARCHIVA, no se tira.
+    //
+    // Hasta acá esta ruta recibía el PDF, lo parseaba y perdía los bytes: quedaban los
+    // movimientos y desaparecía el papel del que salieron — que es exactamente lo que hace
+    // falta el día que una cifra no cuadra con el banco. El dueño lo pidió así: «me gustaría
+    // que guardemos en Movi extractos y documentos en algún lugar y los podamos listar y
+    // acceder desde el sitio y la app».
+    //
+    // Se archiva al SUBIR y no al confirmar la importación, a propósito: un extracto que se
+    // miró y no se importó igual es un papel del banco que uno quiere tener. Y si el
+    // archivado falla, la importación NO se cae: el dueño vino a importar movimientos, y
+    // perder eso por no poder guardar una copia sería cambiar un problema chico por uno
+    // grande. Falla en silencio en el log, que es donde se mira.
+    val documentoId: String? = runCatching {
+        dbQuery {
+            // **No se archiva dos veces el mismo papel.** Esto corre en la VISTA PREVIA, no
+            // en la importación: subir «Extracto_agosto.pdf», mirarlo, volver atrás y volver
+            // a subirlo dejaba dos filas idénticas —mismo nombre, mismo peso, mismo período,
+            // misma nota— indistinguibles en la pantalla. Se compara por nombre y tamaño, que
+            // es lo que un dueño reconoce como «el mismo archivo»; un hash sería más exacto y
+            // más caro, y acá el falso negativo (dos versiones distintas del mismo mes con el
+            // mismo peso al byte) es tan improbable como inofensivo.
+            // Se devuelve el ID del que YA estaba, no `true`: el importe le va a colgar la
+            // cuenta al papel (ver `POST /api/statements/import`), y el que corresponde es
+            // este mismo archivo aunque esta subida no haya escrito nada. Es también lo que
+            // hace idempotente a `/api/documents/{id}/leer-extracto`: leer el extracto de un
+            // documento ya guardado encuentra ACÁ ese mismo documento y no archiva uno nuevo.
+            val yaEstaba = Documents
+                .select(listOf(Documents.id))
+                .where {
+                    (Documents.userId eq uid) and
+                        (Documents.name eq fileName.take(255)) and
+                        (Documents.sizeBytes eq bytes.size.toLong())
+                }
+                .firstOrNull()
+                ?.get(Documents.id)
+            if (yaEstaba != null) yaEstaba else {
+                val nuevo = Documento(
+                    id = "doc_${UUID.randomUUID()}",
+                    // Recortado como en la ruta de documentos: la columna es varchar(255) y un
+                    // nombre más largo hacía fallar el insert, o sea que el archivado se perdía
+                    // en silencio justo para los archivos peor nombrados.
+                    nombre = fileName.take(255),
+                    tipo = TipoDeDocumento.EXTRACTO,
+                    mimeType = mimeType.ifBlank { "application/octet-stream" }.take(120),
+                    bytes = bytes.size.toLong(),
+                    subidoEn = System.currentTimeMillis(),
+                    periodo = period.takeIf { it.isNotBlank() },
+                    notas = "Importado desde $bankName",
+                )
+                guardarDocumento(uid, nuevo, bytes)
+                nuevo.id
+            }
+        }
+    }.onFailure { log("[documentos] no se pudo archivar $fileName", it) }
+        // `null` si el archivado falló: la importación sigue igual, solo que el papel se queda
+        // sin cuenta. Perder la importación por no poder colgar una etiqueta sería cambiar un
+        // problema chico por uno grande, que es la misma regla del archivado entero.
+        .getOrNull()
+
+    return StatementParseResult(
+        statementId = UUID.randomUUID().toString(),
+        bankName = bankName,
+        period = period,
+        newTransactions = newTransactions,
+        matches = matches,
+        numerosDeCuenta = StatementParser.numerosDeCuenta(fileName, textoDelExtracto),
+        documentoId = documentoId,
+    )
+}
+
 fun Route.statementRoutes() {
 
     post("/api/statements/upload") {
         val uid = call.userId()
         val multipart = call.receiveMultipart()
         var fileName = "statement"
-        // Para leerle los números de cuenta al armar la respuesta (ver `numerosDeCuenta`).
-        var textoDelExtracto = ""
-        var bytes = ByteArray(0)
-
         var mimeType = ""
+        var bytes = ByteArray(0)
         multipart.forEachPart { part ->
             if (part is PartData.FileItem) {
                 fileName = part.originalFileName ?: "statement"
@@ -131,222 +467,16 @@ fun Route.statementRoutes() {
             part.dispose()
         }
 
-        if (bytes.isEmpty()) {
-            call.respond(HttpStatusCode.BadRequest, "No file received")
-            return@post
+        try {
+            // `mimeConfiable` se queda en su default (`false`): acá el mimeType lo manda el
+            // navegador de quien sube, no el server (ver `nombreParaExtraerTexto`).
+            val resultado = procesarExtracto(uid, fileName, mimeType, bytes, log = { msg, t ->
+                call.application.log.warn(msg, t)
+            })
+            call.respond(resultado)
+        } catch (e: FallaAlProcesarExtracto) {
+            call.respond(e.status, e.mensaje)
         }
-        // Desde que esta ruta ARCHIVA el archivo (y no solo lo parsea), le aplica el mismo tope
-        // que la de documentos: sin esto, un PDF de 200 MB entraba a Postgres por la puerta de
-        // atrás y después aparecía en la pantalla de Documentos, saltándose el límite que esa
-        // pantalla sí respeta. Dos topes distintos para el mismo dato terminan dejando pasar por
-        // una puerta lo que la otra rechaza.
-        if (bytes.size > MAX_DOCUMENTO_BYTES) {
-            call.respond(
-                HttpStatusCode.PayloadTooLarge,
-                "El archivo pesa más de ${MAX_DOCUMENTO_BYTES / (1024 * 1024)} MB",
-            )
-            return@post
-        }
-
-        val isImage = ClaudeStatementParser.isImageMime(mimeType) ||
-            fileName.substringAfterLast('.', "").lowercase() in setOf("png", "jpg", "jpeg", "webp", "gif", "heic")
-
-        val bankName: String
-        val parsed: List<ParsedTransaction>
-        var isFamirios = false
-        if (isImage) {
-            val imageMime = ClaudeStatementParser.supportedImageMime(mimeType, fileName)
-            if (imageMime == null) {
-                call.respond(
-                    HttpStatusCode.UnprocessableEntity,
-                    "Formato de imagen no soportado. Sube PNG, JPG, GIF o WEBP (HEIC no se puede leer).",
-                )
-                return@post
-            }
-            bankName = StatementParser.detectBankName(fileName)
-            val lectura = ClaudeStatementParser.leerImagen(bytes, imageMime, Stores.merchantRules.getRules(uid))
-            val falla = fallaDeLaLectura(lectura, esImagen = true)
-            if (falla != null) {
-                call.respond(HttpStatusCode.UnprocessableEntity, falla)
-                return@post
-            }
-            parsed = (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
-        } else {
-            val text = StatementParser.extractText(bytes, fileName)
-            textoDelExtracto = text
-            val docType = StatementParser.detectDocumentType(text)
-            if (docType == StatementDocumentType.LOAN_SUMMARY || docType == StatementDocumentType.INVESTMENT_FUND) {
-                val msg = when (docType) {
-                    StatementDocumentType.LOAN_SUMMARY ->
-                        "Este documento es un resumen de crédito, no un extracto de movimientos. No contiene transacciones importables."
-                    else ->
-                        "Este documento es un estado de fondo de inversión. No contiene transacciones importables."
-                }
-                call.respond(HttpStatusCode.UnprocessableEntity, msg)
-                return@post
-            }
-            isFamirios = docType == StatementDocumentType.FAMIRIOS
-            bankName = if (isFamirios) "Famirios" else StatementParser.detectBankName(fileName, text)
-            parsed = if (isFamirios) {
-                WorkbookFactory.create(ByteArrayInputStream(bytes)).use { wb ->
-                    FamiriosParser.parse(wb, AppClock.today())
-                }
-            } else {
-                val lectura = ClaudeStatementParser.leer(text, Stores.merchantRules.getRules(uid))
-                val falla = fallaDeLaLectura(lectura, esImagen = false)
-                if (falla != null) {
-                    call.respond(HttpStatusCode.UnprocessableEntity, falla)
-                    return@post
-                }
-                (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
-            }
-            if (isFamirios && parsed.isEmpty()) {
-                call.respond(HttpStatusCode.UnprocessableEntity,
-                    "El archivo parece un Famirios pero no contiene celdas importables.")
-                return@post
-            }
-        }
-
-        val voidedIds = dbQuery {
-            VoidEvents.selectAll()
-                .where { VoidEvents.userId eq uid }
-                .map { it[VoidEvents.originalEventId] }
-        }
-        val existing = dbQuery {
-            Events.selectAll()
-                .where {
-                    (Events.userId eq uid) and
-                    (if (voidedIds.isNotEmpty()) Events.id notInList voidedIds else Op.TRUE)
-                }
-                .map { it.toFinancialEvent() }
-        }
-
-        val matches = mutableListOf<ReconciliationMatch>()
-        val newTransactions = mutableListOf<ParsedTransaction>()
-
-        // Las cuentas de otros que el dueño registró: una fila que dice «a la cuenta *31973270756»
-        // se propone como «Transferencia a Caro», igual que un SMS. Se leen UNA vez para todo el
-        // extracto. Ver `conElDestinoConocido` en :core para cuándo NO renombra (cuando el papel ya
-        // trajo un nombre de verdad).
-        val destinos = dbQuery { destinosDelDueno(uid) }
-
-        // Cada movimiento anotado puede ser la pareja de UNA sola fila. Antes el mismo movimiento
-        // se proponía para todas las filas iguales: dos compras de $50.000 en días seguidos
-        // quedaban emparejadas con el único SMS, y al confirmar las dos la segunda compra real no
-        // se importaba nunca.
-        val yaEmparejados = mutableSetOf<String>()
-        for (tx in parsed) {
-            val parsedEpoch = runCatching {
-                appDateToEpochMillis(fechaDelExtracto(tx.date)!!)
-            }.getOrNull()
-
-            val match = if (parsedEpoch != null) {
-                existing
-                    .filter { ev ->
-                        ev.id !in yaEmparejados &&
-                            ev.amount == tx.amount &&
-                            ev.currency == tx.currency &&
-                            // Un reembolso de $80.000 no es la compra de $80.000.
-                            ev.type == tx.type &&
-                            abs(parsedEpoch - ev.timestamp) <= 2 * 86_400_000L
-                    }
-                    // El más cercano en fecha, no el primero que devolvió la base.
-                    .minByOrNull { abs(parsedEpoch - it.timestamp) }
-            } else null
-            match?.let { yaEmparejados += it.id }
-
-            if (match != null) {
-                // Mismo día civil de Bogotá, no mismo bucket de 24 h desde la época (UTC).
-                val sameDay = parsedEpoch != null &&
-                    epochMillisToAppDate(parsedEpoch) == epochMillisToAppDate(match.timestamp)
-                matches += ReconciliationMatch(
-                    parsed = tx,
-                    existingEventId = match.id,
-                    existingEvent = match,
-                    matchConfidence = if (sameDay) 0.95f else 0.7f,
-                )
-            } else {
-                newTransactions += conElDestinoConocido(tx, destinos)
-            }
-        }
-
-        val period = if (isFamirios) {
-            val years = parsed.mapNotNull { fechaDelExtracto(it.date)?.year }
-            if (years.isEmpty()) "" else "${years.min()}–${years.max()}"
-        } else runCatching {
-            val date = parsed.firstNotNullOfOrNull { fechaDelExtracto(it.date) } ?: LocalDate.parse("2025-01-01")
-            "${monthName(date.monthValue)} ${date.year}"
-        }.getOrDefault("")
-
-        // El extracto se ARCHIVA, no se tira.
-        //
-        // Hasta acá esta ruta recibía el PDF, lo parseaba y perdía los bytes: quedaban los
-        // movimientos y desaparecía el papel del que salieron — que es exactamente lo que hace
-        // falta el día que una cifra no cuadra con el banco. El dueño lo pidió así: «me gustaría
-        // que guardemos en Movi extractos y documentos en algún lugar y los podamos listar y
-        // acceder desde el sitio y la app».
-        //
-        // Se archiva al SUBIR y no al confirmar la importación, a propósito: un extracto que se
-        // miró y no se importó igual es un papel del banco que uno quiere tener. Y si el
-        // archivado falla, la importación NO se cae: el dueño vino a importar movimientos, y
-        // perder eso por no poder guardar una copia sería cambiar un problema chico por uno
-        // grande. Falla en silencio en el log, que es donde se mira.
-        val documentoId: String? = runCatching {
-            dbQuery {
-                // **No se archiva dos veces el mismo papel.** Esto corre en la VISTA PREVIA, no
-                // en la importación: subir «Extracto_agosto.pdf», mirarlo, volver atrás y volver
-                // a subirlo dejaba dos filas idénticas —mismo nombre, mismo peso, mismo período,
-                // misma nota— indistinguibles en la pantalla. Se compara por nombre y tamaño, que
-                // es lo que un dueño reconoce como «el mismo archivo»; un hash sería más exacto y
-                // más caro, y acá el falso negativo (dos versiones distintas del mismo mes con el
-                // mismo peso al byte) es tan improbable como inofensivo.
-                // Se devuelve el ID del que YA estaba, no `true`: el importe le va a colgar la
-                // cuenta al papel (ver `POST /api/statements/import`), y el que corresponde es
-                // este mismo archivo aunque esta subida no haya escrito nada.
-                val yaEstaba = Documents
-                    .select(listOf(Documents.id))
-                    .where {
-                        (Documents.userId eq uid) and
-                            (Documents.name eq fileName.take(255)) and
-                            (Documents.sizeBytes eq bytes.size.toLong())
-                    }
-                    .firstOrNull()
-                    ?.get(Documents.id)
-                if (yaEstaba != null) yaEstaba else {
-                    val nuevo = Documento(
-                        id = "doc_${UUID.randomUUID()}",
-                        // Recortado como en la ruta de documentos: la columna es varchar(255) y un
-                        // nombre más largo hacía fallar el insert, o sea que el archivado se perdía
-                        // en silencio justo para los archivos peor nombrados.
-                        nombre = fileName.take(255),
-                        tipo = TipoDeDocumento.EXTRACTO,
-                        mimeType = mimeType.ifBlank { "application/octet-stream" }.take(120),
-                        bytes = bytes.size.toLong(),
-                        subidoEn = System.currentTimeMillis(),
-                        periodo = period.takeIf { it.isNotBlank() },
-                        notas = "Importado desde $bankName",
-                    )
-                    guardarDocumento(uid, nuevo, bytes)
-                    nuevo.id
-                }
-            }
-        }.onFailure { call.application.log.warn("[documentos] no se pudo archivar $fileName", it) }
-            // `null` si el archivado falló: la importación sigue igual, solo que el papel se queda
-            // sin cuenta. Perder la importación por no poder colgar una etiqueta sería cambiar un
-            // problema chico por uno grande, que es la misma regla del archivado entero.
-            .getOrNull()
-
-        call.respond(
-            StatementParseResult(
-                statementId = UUID.randomUUID().toString(),
-                bankName = bankName,
-                period = period,
-                newTransactions = newTransactions,
-                matches = matches,
-                numerosDeCuenta = StatementParser.numerosDeCuenta(fileName, textoDelExtracto),
-                documentoId = documentoId,
-            )
-        )
     }
 
     /**

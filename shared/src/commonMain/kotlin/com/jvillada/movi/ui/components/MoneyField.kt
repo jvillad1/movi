@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -167,6 +168,26 @@ internal fun RotuloDeCampo(texto: String) {
         overflow = TextOverflow.Ellipsis,
     )
     Spacer(Modifier.height(6.dp))
+}
+
+/**
+ * **El alto de [MoneyField] con rótulo**, calculado desde los MISMOS tokens que arma el campo
+ * real, no eyeballeado. Ola B, tarea 9 (fix round 1): el esqueleto de Cuadre de saldos —el primer
+ * lugar que necesitó imitar este campo sin poder abrir un teclado de verdad— tenía un
+ * `BloqueEsqueleto(alto = 48.dp)` puesto a ojo; un cambio futuro en `Movi.textos.apoyo` o
+ * `Movi.textos.monto` lo habría desalineado en silencio.
+ *
+ * Suma, de arriba a abajo: [RotuloDeCampo] ([altoDeUnRenglon] de `Movi.textos.apoyo`, más sus
+ * 6 dp de aire) y la caja con borde ([altoDeUnRenglon] de `Movi.textos.monto` — la línea más alta
+ * de su `Row`, ya sea el prefijo, el placeholder o el campo — más los 14 dp de relleno arriba y
+ * abajo). `MoneyFieldAltoConRotuloTest` mide un `MoneyField` real al lado y confirma que estos dos
+ * números no se separan más de 2 dp.
+ */
+@Composable
+fun altoDeMoneyFieldConRotulo(): Dp {
+    val altoDelRotulo = altoDeUnRenglon(Movi.textos.apoyo) + 6.dp
+    val altoDeLaCaja = altoDeUnRenglon(Movi.textos.monto) + 28.dp
+    return altoDelRotulo + altoDeLaCaja
 }
 
 @Composable

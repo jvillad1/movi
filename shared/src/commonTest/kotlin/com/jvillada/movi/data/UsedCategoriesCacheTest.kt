@@ -192,4 +192,60 @@ class UsedCategoriesCacheTest {
         assertEquals(CategoryPref(hidden = false, pinnedType = "BOTH"), UsedCategoriesCache.prefs["Auto"])
         assertFalse("Carro" in UsedCategoriesCache.prefs)
     }
+
+    // ── Ola B: ícono y color, el mismo espejo que ya lleva pinnedType ──────────
+
+    @Test
+    fun `recordFromServer guarda el icono y el color`() {
+        UsedCategoriesCache.recordFromServer(
+            listOf(UsedCategory("Mercado", icono = "restaurante", color = "naranja")),
+        )
+
+        assertEquals(
+            CategoryPref(icono = "restaurante", color = "naranja"),
+            UsedCategoriesCache.prefs["Mercado"],
+        )
+    }
+
+    @Test
+    fun `applyPref con solo icono o color no lo descarta como si fuera el default`() {
+        // Antes de Ola B, una preferencia sin `hidden` y sin `pinnedType` se trataba como "no
+        // dice nada distinto del default" y se borraba. Con ícono y color eso ya no es cierto:
+        // guardar un ícono sin esconder ni fijar el tipo es exactamente el caso de uso nuevo.
+        UsedCategoriesCache.applyPref("Mercado", CategoryPref(icono = "restaurante"))
+
+        assertEquals(CategoryPref(icono = "restaurante"), UsedCategoriesCache.prefs["Mercado"])
+    }
+
+    @Test
+    fun `el destino hereda el icono y el color del origen si no tiene los suyos`() {
+        UsedCategoriesCache.recordFromServer(
+            listOf(
+                UsedCategory("Trasnporte", listOf(TransactionType.EXPENSE), icono = "bus", color = "verde"),
+                UsedCategory("Transporte"),
+            ),
+        )
+        UsedCategoriesCache.applyRename("Trasnporte", "Transporte")
+
+        assertEquals(
+            CategoryPref(hidden = false, icono = "bus", color = "verde"),
+            UsedCategoriesCache.prefs["Transporte"],
+        )
+    }
+
+    @Test
+    fun `el destino conserva su propio icono y color en vez del origen`() {
+        UsedCategoriesCache.recordFromServer(
+            listOf(
+                UsedCategory("Trasnporte", listOf(TransactionType.EXPENSE), icono = "bus", color = "verde"),
+                UsedCategory("Transporte", icono = "carro", color = "azul"),
+            ),
+        )
+        UsedCategoriesCache.applyRename("Trasnporte", "Transporte")
+
+        assertEquals(
+            CategoryPref(hidden = false, icono = "carro", color = "azul"),
+            UsedCategoriesCache.prefs["Transporte"],
+        )
+    }
 }

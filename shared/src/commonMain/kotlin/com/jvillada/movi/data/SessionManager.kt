@@ -328,6 +328,9 @@ object SessionManager {
         CuentaMasUsadaCache.clear()
         // Y los días que plegó en Movimientos: son fechas de SU lista.
         DiasPlegadosStore.clear()
+        // Ola B · tarea 6: y los «Ahora no» de la tarjeta de ordenar categorías — son SUS
+        // propuestas, sobre SUS categorías.
+        PropuestasDescartadasStore.clear()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
         // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres

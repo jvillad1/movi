@@ -1,39 +1,32 @@
 package com.jvillada.movi.ui.components
 
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
@@ -43,10 +36,13 @@ import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.ui.LocalNavigate
 import com.jvillada.movi.ui.Screen
-import kotlinx.coroutines.delay
-import com.jvillada.movi.shared.model.normalizarParaBuscar
+import com.jvillada.movi.ui.categorias.IconoDeCategoria
+import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
+import com.jvillada.movi.ui.categorias.aparienciaDe
+import com.jvillada.movi.ui.categorias.prefDeCategoria
 
 /**
  * F35: filtra y ordena las sugerencias de categoría para [CategoryField]. Separada del
@@ -209,34 +205,6 @@ private fun ordenarSugerencias(nombres: List<String>, query: String): List<Strin
         compareBy<String> { if (q.isEmpty() || normalizarParaBuscar(it).startsWith(q)) 0 else 1 }
             .then(CATEGORY_NAME_ORDER),
     )
-}
-
-/**
- * **Lo que el panel de sugerencias muestra de verdad**, ya decidido: la lista completa o la
- * filtrada por lo escrito.
- *
- * Vivía suelto adentro del `@Composable`, y ahí se escondió un defecto que ningún test podía ver:
- * con una categoría **escondida** escrita en el campo (p. ej. «Comida», que era el valor inicial),
- * lo escrito no coincidía con ninguna sugerencia visible, así que se caía a la lista filtrada —
- * vacía, porque la única que matchea está escondida— y el panel se reducía a un solo renglón,
- * «Usar "Comida"». Para elegir otra había que borrar el campo primero: esconder UNA categoría
- * hacía desaparecer TODAS las demás, que es lo contrario de lo que el botón promete.
- *
- * La regla correcta no es «coincide con una sugerencia» sino **«Movi ya conoce este nombre»**,
- * visible o no: si lo conoce, no hay nada que filtrar y se muestran todas.
- */
-fun categoriasParaElPanel(
-    query: String,
-    type: TransactionType? = null,
-    usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
-    prefs: Map<String, CategoryPref> = emptyMap(),
-): List<String> {
-    val todas = suggestCategoryMatches("", type, usedCategories, prefs)
-    val q = normalizarParaBuscar(query.trim())
-    val conocidas = usedCategories.keys + PREDEFINED_CATEGORIES.map { it.name } + prefs.keys
-    val esNombreConocido = q.isNotEmpty() && conocidas.any { normalizarParaBuscar(it.trim()) == q }
-    val mostrarTodas = query.isBlank() || esNombreConocido || todas.any { normalizarParaBuscar(it) == q }
-    return if (mostrarTodas) todas else suggestCategoryMatches(query, type, usedCategories, prefs)
 }
 
 /**
@@ -473,14 +441,29 @@ fun nombreCanonicoConocido(
  */
 
 /**
- * Campo de categoría compartido: texto libre con sugerencias, en vez de un picker de lista
- * fija o un texto libre sin ayuda. Usado en QuickAdd, Presupuestos (crear) y Recurrentes
- * (crear/editar) — así una categoría se llama igual en todos lados, lo que importa porque
- * presupuestos y gastos se cruzan por nombre. [ChangeCategorySheet] se queda como lista: ahí
- * se elige entre el catálogo para UN movimiento existente, no se escribe una categoría nueva.
+ * Campo de categoría compartido: muestra la categoría puesta y, al tocarlo, despliega el
+ * [SelectorDeCategoria] — la cuadrícula con las frecuentes primero y la búsqueda que no levanta
+ * el teclado sola. Usado en Presupuestos, Recurrentes y la hoja de recategorizar (el sub-picker
+ * de «Agregar» usa el selector directo, porque ahí ya es una pantalla entera); así una categoría
+ * se llama igual en todos lados, lo que importa porque presupuestos y gastos se cruzan por nombre.
  *
- * Tocar una sugerencia la elige y cierra la lista; escribir algo que no matchea se acepta tal
- * cual (el recorte de espacios lo hace quien guarda, como ya hacían estas pantallas).
+ * **Ola B · Task 4 — ya no es un campo de texto.** Antes era texto libre con sugerencias: lo que
+ * se tecleaba ERA el valor, así que enfocar el campo era la única forma de ver las categorías, y
+ * enfocarlo levantaba el teclado. Ahora se elige tocando una celda, y escribir es buscar; una
+ * categoría nueva se crea con la celda «Crear "…"», que es la misma capacidad dicha en voz alta
+ * (Ola 9 · A1). Tocar una celda elige y pliega el selector.
+ *
+ * Con eso se fueron tres cosas que eran del campo de texto y no tienen de qué ocuparse ahora:
+ * el foco pedido al abrir (Ola 2 #3c — justo lo contrario de lo que se quiere), la selección de
+ * todo al enfocar (Ola 2 #3b — la búsqueda arranca vacía) y la demora al perder el foco antes de
+ * esconder la lista (F62 — la cuadrícula no depende del foco, así que un toque en vuelo ya no se
+ * puede quedar sin destino). ⌘A sigue funcionando en la búsqueda.
+ *
+ * **Sin tope de alto ni scroll propio**: se fue `maxSuggestionsHeight`. Su propia regla era
+ * «¿la hoja que lo contiene se desplaza?» y hoy las cuatro se desplazan (las dos que conservaban
+ * el tope, Recurrentes y la de recategorizar, recibieron su `verticalScroll` después), así que el
+ * tope solo reproducía el scroll adentro de otro scroll de la Ola 14 — «al hacer scroll
+ * desaparecen». La cuadrícula se estira y la desplaza la hoja.
  */
 @Composable
 fun CategoryField(
@@ -492,311 +475,101 @@ fun CategoryField(
     usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
     /** Ola 10: lo que el dueño decidió en «Más → Categorías» (ver `UsedCategoriesCache.prefs`). */
     prefs: Map<String, CategoryPref> = emptyMap(),
+    /** Ola B: usos de los últimos 60 días, para poner las frecuentes primero (ver `UsedCategoriesCache.usosRecientes`). */
+    usos: Map<String, Int> = emptyMap(),
     label: String? = "CATEGORÍA",
     placeholder: String = "Ej: Vivienda, Suscripción, Salud",
-    /** Además de [onValueChange]: se dispara solo al tocar una sugerencia, nunca al tipear —
-     *  para que quien tiene un sub-picker de pantalla completa (QuickAdd) pueda cerrarlo solo. */
-    onSuggestionPicked: () -> Unit = {},
-    /** Ola 2 #3: si se pasa, QuickAdd la usa para pedir foco al abrir el sub-picker (el campo
-     *  arranca prellenado — sin esto nunca se veía el teclado ni la lista de sugerencias). */
-    focusRequester: FocusRequester? = null,
-    /**
-     * Alto máximo del panel de sugerencias, **con scroll propio adentro**; `null` = sin tope y
-     * **sin scroll propio**, o sea el panel se estira con sus filas y lo desplaza quien lo
-     * contenga.
-     *
-     * Ola 14 — nace de un reporte del dueño desde el navegador del teléfono: «cuando quiero ver
-     * las categorías para hacer un nuevo movimiento, al hacer scroll desaparecen». El tope de
-     * 220 dp nació cuando este campo era un renglón más de un formulario que NO se desplazaba:
-     * ahí acotarlo era lo correcto, porque si no el panel tapaba la pantalla entera. Desde que
-     * la hoja de «Agregar» se desplaza (Ola 12), en el sub-picker de Categoría ese mismo tope
-     * dejó dos defectos juntos, medidos en un teléfono de 375×812:
-     *
-     * - **Se ven 4 categorías** en una ventanita de 220 dp… con ~370 px de losa vacía justo
-     *   debajo, adentro del mismo sub-picker (medido en el navegador a 375×812, con una cuenta
-     *   sembrada que ofrece 24). Para ver el resto hay que desplazar la ventanita.
-     * - Y desplazarla es **un scroll adentro de otro scroll**: el gesto del dedo lo puede tomar
-     *   la hoja o la lista, y de ahí sale el «desaparecen».
-     *
-     * Por eso el sub-picker de pantalla completa pasa `null`: una sola área desplazable —la de
-     * la hoja— y la lista entera a la vista.
-     *
-     * **La regla es «¿la hoja que lo contiene se desplaza?», no qué pantalla es.** `BudgetSheet`
-     * conservaba el tope con el argumento de que ahí el panel se abre encima de un formulario
-     * que no se desplaza — y eso dejó de ser cierto cuando esa hoja recibió su propio
-     * `verticalScroll` (hacía falta: con la lista de movimientos del presupuesto, el teclado y
-     * «Guardar» se salían de la pantalla). Con la hoja desplazándose, el tope reproducía exacto
-     * el scroll-adentro-de-scroll de arriba, así que ahora también pasa `null`.
-     *
-     * Las otras dos (`CreateRecurringRuleSheet` y `CategorySheets`) sí conservan su tope: sus
-     * hojas siguen sin desplazarse.
-     */
-    maxSuggestionsHeight: Dp? = 220.dp,
 ) {
-    var focused by remember { mutableStateOf(false) }
-    // F62: la lista NO puede desmontarse en el mismo frame en que el campo pierde el foco.
-    // En táctil (web/PWA), el down del tap sobre una sugerencia desenfoca el campo ANTES de
-    // que llegue el up: si la lista se condiciona a `focused` a secas, se desmonta entre el
-    // down y el up y el tap muere en la nada — "toco la sugerencia y no pasa nada" (con
-    // mouse no se reproduce porque el click no roba el foco en el down). La lista se oculta
-    // con una pequeña demora tras perder el foco, para que el tap en vuelo se complete.
-    var suggestionsVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(focused) {
-        if (focused) {
-            suggestionsVisible = true
-        } else if (suggestionsVisible) {
-            delay(350)
-            suggestionsVisible = false
-        }
-    }
-    // El desplazamiento del panel acotado. Se recuerda acá arriba y no adentro de la rama que lo
-    // usa, porque un `remember` colgado de una rama que aparece y desaparece es frágil de leer.
-    //
-    // **La clave está en el `suggestionsVisible`**: con él, el estado se rehace cada vez que el
-    // panel se muestra, que es exactamente lo que hacía el `rememberScrollState()` de adentro del
-    // `if` — el panel se abría arriba de todo. Sin la clave, en las tres pantallas acotadas el
-    // panel reabría donde el dueño lo había dejado desplazado, y este cambio dejaba de ser
-    // «no toca nada» para ellas.
-    val suggestionsScroll = remember(suggestionsVisible) { ScrollState(0) }
-    val focusManager = LocalFocusManager.current
-    // Estado interno de texto+selección: separado de [value] para poder seleccionar todo el
-    // texto al enfocar (Ola 2 #3b) sin pelearse con el `value: String` que ya usan las 3
-    // pantallas que llaman a este campo. Solo se resincroniza con [value] cuando el cambio vino
-    // de AFUERA (p. ej. QuickAdd reseteando la categoría al cambiar Gasto/Ingreso) — si viene de
-    // nuestro propio tipeo, `textFieldValue.text` ya coincide y no hace falta tocar el cursor.
-    var textFieldValue by remember { mutableStateOf(TextFieldValue(value, selection = TextRange(value.length))) }
-    LaunchedEffect(value) {
-        if (value != textFieldValue.text) {
-            textFieldValue = TextFieldValue(value, selection = TextRange(value.length))
-        }
-    }
-
-    // Ola 9 · A1: lo escrito no coincide con nada → arriba de todo, la opción de crearlo. Ver
-    // [shouldOfferCreateCategory] para el porqué y para el caso de la coincidencia parcial.
-    val nuevaCategoria = value.trim()
-    // Las propias de cualquier tipo Y el catálogo entero: lo que ya existe no se "crea".
-    // Ola 10: escondida sigue siendo conocida — ofrecerle «Crear "Ropa"» a alguien que acaba de
-    // esconder «Ropa» sería prometerle algo nuevo y devolverle exactamente lo que sacó de la vista.
-    val conocidas = usedCategories.keys + PREDEFINED_CATEGORIES.map { it.name } + prefs.keys
-
-    // Ola 2 #3a + Ola 10: qué se lista lo decide [categoriasParaElPanel] — con el campo
-    // prellenado o con un nombre que Movi ya conoce (aunque esté escondido) se muestran TODAS las
-    // disponibles; si no, las que coinciden con lo escrito. Ver ahí el porqué de cada rama.
-    val matches = remember(value, type, usedCategories, prefs) {
-        categoriasParaElPanel(value, type, usedCategories, prefs)
-    }
-    // Ver [com.jvillada.movi.ui.LocalNavigate]: por qué un local y no un callback más en la firma.
-    val navegar = LocalNavigate.current
-
-    // Una reservada escrita a mano no se crea ni se "usa": se explica y se corta. Es la única
-    // rama del panel que no ofrece nada tocable, y a propósito — elegirla saca el gasto del mes.
-    val esReservada = isReservedCategory(value)
-    val ofrecerCrear = !esReservada &&
-        shouldOfferCreateCategory(query = value, matches = matches, conocidas = conocidas)
-    // Ola 9 · A4: y si no se crea porque YA existe (del otro lado), se dice — sin esto el panel
-    // quedaba completamente vacío. Ver [shouldOfferKnownFromOtherSide].
-    val ofrecerConocida = !esReservada && shouldOfferKnownFromOtherSide(value, matches, conocidas)
-    // ¿Está escondida? Entonces el renglón «Usar…» no puede decir «ya la tienes en Gastos» y
-    // callarse lo único que explica por qué no aparece en la lista de abajo.
-    val estaEscondida = prefs.entries
-        .firstOrNull { normalizarParaBuscar(it.key.trim()) == normalizarParaBuscar(value.trim()) }?.value?.hidden == true
-    val ladoConocido = when {
-        !ofrecerConocida -> null
-        estaEscondida -> "La escondiste en Categorías; puedes usarla igual"
-        else -> ladoConocidoDeCategoria(value, type, usedCategories, prefs)
-    }
-    val nombreConocido = if (ofrecerConocida) nombreCanonicoConocido(value, usedCategories, prefs) ?: nuevaCategoria else nuevaCategoria
-
-    fun pick(name: String) {
-        onValueChange(name)
-        textFieldValue = TextFieldValue(name, selection = TextRange(name.length))
-        // Ola 2 #3d: antes esto ponía `focused = false` a mano sin soltar el foco real del
-        // campo — el cursor seguía ahí, así que un onFocusChanged posterior nunca volvía a
-        // dispararse y las sugerencias no reaparecían al seguir tipeando. clearFocus() sí baja
-        // el foco de verdad; `focused` se actualiza solo, vía onFocusChanged.
-        focusManager.clearFocus()
-        // F62: al elegir sí se cierra al instante — la demora es solo para taps en vuelo.
-        suggestionsVisible = false
-        onSuggestionPicked()
-    }
+    var abierto by remember { mutableStateOf(false) }
+    val forma = RoundedCornerShape(Movi.formas.normal)
 
     Column(modifier = modifier) {
         if (label != null) {
             Text(label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Movi.espacios.corto))
         }
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .testTag(TAG_CAMPO_DE_CATEGORIA)
+                .clip(forma)
                 .background(Movi.colores.tarjeta)
-                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .border(1.dp, if (abierto) Movi.colores.marca else Movi.colores.borde, forma)
+                .clickable { abierto = !abierto }
+                .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.medio),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            BasicTextField(
-                value = textFieldValue,
-                onValueChange = {
-                    textFieldValue = it
-                    onValueChange(it.text)
-                },
-                singleLine = true,
-                cursorBrush = SolidColor(Movi.colores.texto),
-                textStyle = Movi.textos.titulo.copy(color = Movi.colores.texto),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                    // [esAtajoDeSeleccionarTodo]. Sin esto, el campo ya seleccionaba solo al ganar
-                    // el foco (abajo), pero volver con el teclado a reemplazar la categoría
-                    // escrita a medias no tenía cómo: ⌘A no seleccionaba nada y lo tecleado se
-                    // pegaba al final.
-                    .onPreviewKeyEvent { evento ->
-                        if (esAtajoDeSeleccionarTodo(evento) && textFieldValue.text.isNotEmpty()) {
-                            textFieldValue = conTodoSeleccionado(textFieldValue)
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    .onFocusChanged { state ->
-                        // Ola 2 #3b: al ganar el foco (no en cada recomposición), seleccionar
-                        // todo el texto — con el campo prellenado, tipear reemplaza en vez de
-                        // insertarse en medio de "Comida".
-                        if (state.isFocused && !focused) {
-                            textFieldValue = textFieldValue.copy(selection = TextRange(0, textFieldValue.text.length))
-                        }
-                        focused = state.isFocused
-                    },
-                decorationBox = { inner ->
-                    if (value.isEmpty()) Text(placeholder, style = Movi.textos.titulo, color = Movi.colores.textoApagado)
-                    inner()
-                },
+            val puesta = value.trim()
+            if (puesta.isNotEmpty()) {
+                val apariencia = remember(puesta, prefs) { aparienciaDe(puesta, prefDeCategoria(puesta, prefs)) }
+                IconoDeCategoria(apariencia = apariencia, tamano = TamanoDeIconoDeCategoria.Chico)
+                Spacer(Modifier.width(Movi.espacios.corto))
+            }
+            Text(
+                text = puesta.ifEmpty { placeholder },
+                style = Movi.textos.titulo,
+                color = if (puesta.isEmpty()) Movi.colores.textoApagado else Movi.colores.texto,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                if (abierto) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                contentDescription = null,
+                tint = Movi.colores.textoMedio,
             )
         }
-        // Visible mientras el campo tiene foco (más la demora de gracia de F62): tocar una
-        // sugerencia la elige y lo quita del medio.
-        if (suggestionsVisible && (matches.isNotEmpty() || ofrecerCrear || ofrecerConocida || esReservada)) {
-            Spacer(Modifier.height(6.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // Ver [maxSuggestionsHeight]: con tope, el panel trae su propio scroll; sin
-                    // tope no trae ninguno, y ese es justamente el punto — dos áreas
-                    // desplazables anidadas es lo que se lleva el gesto del dedo.
-                    .then(
-                        if (maxSuggestionsHeight != null) {
-                            Modifier.heightIn(max = maxSuggestionsHeight).verticalScroll(suggestionsScroll)
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Movi.colores.tarjeta)
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp)),
-            ) {
-                if (esReservada) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        Text(
-                            "«$nuevaCategoria» la usa Movi sola",
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                        )
-                        Text(
-                            "Es una categoría reservada y de ella dependen las cifras de tu mes. Elige otra.",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                        )
-                    }
-                    if (matches.isNotEmpty()) Hairline()
-                }
-                if (ofrecerCrear) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { pick(nuevaCategoria) }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                    ) {
-                        Text(
-                            "Crear \"$nuevaCategoria\"",
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.marca,
-                        )
-                        Text(
-                            "Se guarda tal cual, como categoría tuya",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                        )
-                    }
-                    if (matches.isNotEmpty()) Hairline()
-                }
-                if (ofrecerConocida) {
-                    // Se puede TOCAR, no es un cartel: elegirla es lo que el dueño vino a hacer
-                    // (la categoría es texto libre y usarla de los dos lados es válido), y así el
-                    // panel deja de ser una pantalla sin salida.
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { pick(nombreConocido) }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                    ) {
-                        Text(
-                            "Usar \"$nombreConocido\"",
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.marca,
-                        )
-                        Text(
-                            ladoConocido ?: "Ya la tienes anotada",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                        )
-                    }
-                    if (matches.isNotEmpty()) Hairline()
-                }
-                matches.forEachIndexed { i, name ->
-                    Text(
-                        name,
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.texto,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { pick(name) }
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                    )
-                    if (i < matches.size - 1) Hairline()
-                }
-
-            }
+        if (abierto) {
+            Spacer(Modifier.height(Movi.espacios.corto))
+            SelectorDeCategoria(
+                elegida = value,
+                onElegir = {
+                    onValueChange(it)
+                    abierto = false
+                },
+                tipo = type,
+                usadas = usedCategories,
+                prefs = prefs,
+                usos = usos,
+            )
         }
-
-        // El editor completo de categorías, SIEMPRE visible bajo el campo.
-        //
-        // El dueño: «Necesito un editor de categorías en las diferentes secciones». El editor ya
-        // existía y hace todo lo que hace falta —renombrar el error de tipeo, unificar
-        // duplicados, esconder lo que no quiere ver, fijar el tipo— pero vivía en «Más →
-        // Categorías» y solo se llegaba abandonando lo que uno estaba haciendo.
-        //
-        // Va acá, en el componente compartido, y no cuatro veces en cuatro pantallas: este campo
-        // ES donde la pregunta «¿qué categoría?» se hace en las cuatro secciones (Movimientos,
-        // Agregar, Presupuestos, Recurrentes), así que un solo renglón las cubre a todas y no
-        // puede desincronizarse.
-        //
-        // Fuera del panel de sugerencias y no adentro: adentro solo se veía al ENFOCAR el campo,
-        // y en la hoja de cambiar categoría —la sección desde la que el dueño lo pidió— la
-        // categoría se elige tocando la lista, sin pasar nunca por el campo libre. O sea que
-        // justo ahí el acceso no habría existido.
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Administrar categorías",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.marca,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { navegar(Screen.Categorias) }
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-        )
+        Spacer(Modifier.height(Movi.espacios.corto))
+        EnlaceAdministrarCategorias()
     }
+}
+
+/** El renglón del campo que muestra la categoría puesta — tocarlo abre y cierra el selector. */
+const val TAG_CAMPO_DE_CATEGORIA: String = "categoria:campo"
+
+/**
+ * El editor completo de categorías, SIEMPRE visible bajo el campo (y bajo el selector de
+ * «Agregar»).
+ *
+ * El dueño: «Necesito un editor de categorías en las diferentes secciones». El editor ya existía y
+ * hace todo lo que hace falta —renombrar el error de tipeo, unificar duplicados, esconder lo que
+ * no quiere ver, fijar el tipo— pero vivía en «Más → Categorías» y solo se llegaba abandonando lo
+ * que uno estaba haciendo.
+ *
+ * Va en el componente compartido y no cuatro veces en cuatro pantallas: este campo ES donde la
+ * pregunta «¿qué categoría?» se hace en las cuatro secciones (Movimientos, Agregar, Presupuestos,
+ * Recurrentes), así que un solo renglón las cubre a todas y no puede desincronizarse.
+ *
+ * Fuera del selector y no adentro: adentro solo se veía al abrirlo, y en la hoja de cambiar
+ * categoría —la sección desde la que el dueño lo pidió— la categoría se elige tocando la lista, sin
+ * pasar nunca por el campo. O sea que justo ahí el acceso no habría existido.
+ */
+@Composable
+fun EnlaceAdministrarCategorias() {
+    // Ver [com.jvillada.movi.ui.LocalNavigate]: por qué un local y no un callback más en la firma.
+    val navegar = LocalNavigate.current
+    Text(
+        text = "Administrar categorías",
+        style = Movi.textos.apoyo,
+        color = Movi.colores.marca,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier
+            .clip(RoundedCornerShape(Movi.formas.minima))
+            .clickable { navegar(Screen.Categorias) }
+            .padding(horizontal = Movi.espacios.corto, vertical = Movi.espacios.minimo),
+    )
 }

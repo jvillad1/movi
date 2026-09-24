@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,8 +17,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,7 +28,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,17 +43,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.COLORES_DEL_CATALOGO
+import com.jvillada.movi.theme.ColorDelCatalogo
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.data.PropuestasDescartadasStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
 import com.jvillada.movi.shared.model.CategoryPref
+import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.TransactionType
@@ -60,6 +71,11 @@ import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.MinScreenHeader
+import com.jvillada.movi.ui.components.CirculoEsqueleto
+import com.jvillada.movi.ui.components.LineaEsqueleto
+import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
+import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
+import com.jvillada.movi.ui.components.columnasDeLaCuadricula
 import com.jvillada.movi.ui.components.leadingFor
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
@@ -87,6 +103,12 @@ import kotlinx.coroutines.launch
  *   viejos la siguen diciendo y siguen contando donde contaban.
  * - **Fijar el tipo** — gasto, ingreso o ambos, por encima de lo que diga el catálogo o de lo
  *   aprendido del uso.
+ * - **Elegir ícono y color** (Ola B, tarea 5) — la hoja de detalle deja corregir lo que
+ *   [aparienciaDe] adivinó por el nombre, ahí mismo, sin pasar por otra pantalla.
+ *
+ * Las reservadas (`isReservedCategory`: traspasos, saldos iniciales, ajustes…) no aparecen en
+ * ninguna fila — las escribe Movi sola y no se pueden tocar — pero la pantalla lo explica en un
+ * pie si el dueño tiene alguna, en vez de mostrar renglones muertos.
  *
  * Renombrar y unificar **reescriben tres tablas** (`financial_events`, `budgets`,
  * `recurring_rules`) en una sola transacción del server; ver `CategoryRoutes.rewriteCategory`.
@@ -96,8 +118,33 @@ import kotlinx.coroutines.launch
 private sealed class Hoja {
     data class Detalle(val categoria: CategoryUsage) : Hoja()
     data class Renombrar(val categoria: CategoryUsage) : Hoja()
-    data class Unificar(val categoria: CategoryUsage) : Hoja()
+    /**
+     * [soloVisibles] (fix round 1, hallazgo 3): la tarjeta de propuestas de orden abre esta misma
+     * hoja para «un solo uso» y pide `true` — nada de ofrecer como destino una categoría que el
+     * dueño ya escondió, cuando la está eligiendo desde una sugerencia automática y no desde su
+     * propio «Unificar en otra». El detalle de una categoría sigue mandando `false` (default):
+     * ahí el dueño ya sabe qué está buscando.
+     */
+    data class Unificar(val categoria: CategoryUsage, val soloVisibles: Boolean = false) : Hoja()
 }
+
+/**
+ * Unificar [origen] en [destino]: la llamada al server más el espejo en `UsedCategoriesCache`,
+ * **en un solo lugar**. La hoja de detalle (unir con otra, y la colisión al renombrar) y la
+ * tarjeta de propuestas de orden (Ola B, tarea 6) hacen exactamente lo mismo con el resultado, así
+ * que las dos llaman acá en vez de repetir el `runCatching` + `applyRename`.
+ */
+private suspend fun unificarCategoria(origen: String, destino: String): Result<CategoryRewriteResult> =
+    runCatching { Repositories.wallets.mergeCategory(origen, destino) }
+        .onSuccess { r -> UsedCategoriesCache.applyRename(origen, r.name, escondeElOrigen = true) }
+
+/**
+ * Esconder o mostrar [categoria]: mismo criterio que [unificarCategoria] — la hoja de detalle y la
+ * tarjeta de propuestas de orden llaman acá en vez de repetir el `runCatching` + `applyPref`.
+ */
+private suspend fun ponerVisibilidad(categoria: CategoryUsage, escondida: Boolean): Result<CategoryUsage> =
+    runCatching { Repositories.wallets.setCategoryPrefs(categoria.name, escondida, categoria.pinnedType) }
+        .onSuccess { p -> UsedCategoriesCache.applyPref(p.name, CategoryPref(p.hidden, p.pinnedType, p.icono, p.color)) }
 
 @Composable
 fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
@@ -117,8 +164,22 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
     // tenía que volver a escribir el nombre. Mismo criterio que presupuestos, metas y recurrentes.
     var errorDeHoja by remember { mutableStateOf<String?>(null) }
     var guardandoHoja by remember { mutableStateOf(false) }
+    // Revisión final de la Ola B: lo mismo que `guardandoHoja`, para los toques de la hoja de
+    // detalle (ícono, color, tipo). El server guarda la preferencia borrando e insertando la fila;
+    // dos toques rápidos mandaban dos de esas en paralelo, y la segunda chocaba con la llave
+    // primaria de la primera — un 500 que el dueño leía como «no se guardó».
+    var guardandoPrefs by remember { mutableStateOf(false) }
     // Ver [NoSePudoLeer]: «0 categorías · Nada por aquí todavía» solo si la lectura contestó.
     var leidas by remember { mutableStateOf(false) }
+
+    // ── Ola B · tarea 6: «Ordena tus categorías» ─────────────────────────────
+    // Los «Ahora no» viven en el aparato (PropuestasDescartadasStore), no en Compose — se leen acá
+    // una vez y de ahí en más esta variable es la fuente de verdad de la pantalla, igual que
+    // `DiasPlegadosStore.alternar` se refleja en el `remember` de Movimientos.
+    var propuestasDescartadas by remember { mutableStateOf(PropuestasDescartadasStore.descartadas()) }
+    var revisandoOrden by remember { mutableStateOf(false) }
+    var errorDeOrden by remember { mutableStateOf<String?>(null) }
+    var guardandoOrden by remember { mutableStateOf(false) }
 
     suspend fun recargar() {
         runCatching { Repositories.wallets.getCategories() }
@@ -145,6 +206,21 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
     val visibles = remember(categorias, filtro, busqueda) {
         filtrarCategorias(categorias, filtro, busqueda)
     }
+    // Recalculada apenas cambian las categorías o algún «Ahora no» — la propuesta que se acaba de
+    // resolver (unificada, escondida) desaparece sola en el próximo `recargar()`, sin que haga
+    // falta tocar `propuestasDescartadas` para eso.
+    //
+    // Fix round 1, hallazgo 1: `propuestasDescartadas` se le pasa a `propuestasDeOrden` para que
+    // filtre ANTES de cortar en 12 — filtrar acá afuera, después del corte, dejaba sin lugar a la
+    // propuesta 13ª apenas el dueño decía «Ahora no» a alguna de las primeras 12.
+    val propuestasPendientes = remember(categorias, propuestasDescartadas) {
+        propuestasDeOrden(categorias, propuestasDescartadas)
+    }
+    // Si la última propuesta se resolvió o se descartó con la hoja abierta, se cierra sola: no hay
+    // nada más que revisar y quedaría una hoja vacía esperando un toque que no sirve para nada.
+    LaunchedEffect(revisandoOrden, propuestasPendientes.isEmpty()) {
+        if (revisandoOrden && propuestasPendientes.isEmpty()) revisandoOrden = false
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -162,6 +238,15 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     else -> "${categorias.size} categorías"
                 },
             )
+
+            // Ola B · tarea 6: la tarjeta va ARRIBA de los filtros y la búsqueda, y solo si hay
+            // algo pendiente — nada se ofrece dos veces, y un «Ahora no» la saca de acá.
+            if (propuestasPendientes.isNotEmpty()) {
+                TarjetaDeOrden(
+                    cantidad = propuestasPendientes.size,
+                    onRevisar = { errorDeOrden = null; revisandoOrden = true },
+                )
+            }
 
             // Las pastillas de filtro son, literalmente, la respuesta a la pregunta: el tipo
             // filtra una sola lista, no la parte en varias.
@@ -211,7 +296,13 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (!leidas && !loading) {
+                if (loading && !leidas) {
+                    // Ola B, tarea 9: antes de la primera lectura buena la pantalla quedaba en
+                    // blanco entre los filtros/la búsqueda y la primera fila — ver
+                    // [categoriasEsqueleto]. Con `leidas` ya en `true` (una recarga con la lista
+                    // en pantalla) no vuelve a mostrarse: la lista de siempre sigue ahí.
+                    categoriasEsqueleto()
+                } else if (!leidas && !loading) {
                     item {
                         NoSePudoLeer(
                             "No pudimos cargar tus categorías",
@@ -238,6 +329,20 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                         hoja = Hoja.Detalle(categoria)
                     }
                 }
+                // Las reservadas ya no salen como filas (ver `filtrarCategorias`): sin este pie,
+                // el dueño vería menos categorías de las que el server tiene y no sabría por qué.
+                if (categorias.any { it.reserved }) {
+                    item {
+                        Text(
+                            "Movi también usa categorías propias para traspasos, saldos " +
+                                "iniciales y ajustes; no se editan.",
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoApagado,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                        )
+                    }
+                }
             }
         }
 
@@ -255,29 +360,28 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 onUnificar = { hoja = Hoja.Unificar(h.categoria) },
                 onCambiarVisibilidad = { escondida ->
                     scope.launch {
-                        runCatching {
-                            Repositories.wallets.setCategoryPrefs(
-                                h.categoria.name, escondida, h.categoria.pinnedType,
-                            )
-                        }.onSuccess {
-                            UsedCategoriesCache.applyPref(
-                                it.name, CategoryPref(it.hidden, it.pinnedType),
-                            )
-                            confirmacion = if (escondida)
-                                "«${h.categoria.name}» ya no se te va a sugerir. Sus movimientos siguen ahí."
-                            else "«${h.categoria.name}» vuelve a sugerirse."
-                            error = null
-                            hoja = null
-                            recargar()
-                        }.onFailure { error = it.toUserMessage(); confirmacion = null; hoja = null }
+                        ponerVisibilidad(h.categoria, escondida)
+                            .onSuccess {
+                                confirmacion = if (escondida)
+                                    "«${h.categoria.name}» ya no se te va a sugerir. Sus movimientos siguen ahí."
+                                else "«${h.categoria.name}» vuelve a sugerirse."
+                                error = null
+                                hoja = null
+                                recargar()
+                            }
+                            .onFailure { error = it.toUserMessage(); confirmacion = null; hoja = null }
                     }
                 },
                 onFijarTipo = { tipo ->
+                    if (guardandoPrefs) return@HojaDetalle
+                    guardandoPrefs = true
                     scope.launch {
                         runCatching {
                             Repositories.wallets.setCategoryPrefs(h.categoria.name, h.categoria.hidden, tipo)
                         }.onSuccess {
-                            UsedCategoriesCache.applyPref(it.name, CategoryPref(it.hidden, it.pinnedType))
+                            UsedCategoriesCache.applyPref(
+                                it.name, CategoryPref(it.hidden, it.pinnedType, it.icono, it.color),
+                            )
                             error = null
                             recargar()
                             // La hoja se queda abierta con el dato fresco: fijar el tipo es un
@@ -287,6 +391,31 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                                 categorias.firstOrNull { c -> c.name == h.categoria.name } ?: h.categoria,
                             )
                         }.onFailure { error = it.toUserMessage(); confirmacion = null; hoja = null }
+                        guardandoPrefs = false
+                    }
+                },
+                // Ola B · tarea 5: elegir ícono/color, o «Volver al de Movi» (que manda `""` en
+                // los dos campos). Mismo criterio que `onFijarTipo`: la hoja se queda abierta con
+                // el dato fresco, así el dueño ve el cambio sin tener que reabrir nada.
+                onCambiarApariencia = { icono, color ->
+                    if (guardandoPrefs) return@HojaDetalle
+                    guardandoPrefs = true
+                    scope.launch {
+                        runCatching {
+                            Repositories.wallets.setCategoryPrefs(
+                                h.categoria.name, h.categoria.hidden, h.categoria.pinnedType, icono, color,
+                            )
+                        }.onSuccess {
+                            UsedCategoriesCache.applyPref(
+                                it.name, CategoryPref(it.hidden, it.pinnedType, it.icono, it.color),
+                            )
+                            error = null
+                            recargar()
+                            hoja = Hoja.Detalle(
+                                categorias.firstOrNull { c -> c.name == h.categoria.name } ?: h.categoria,
+                            )
+                        }.onFailure { error = it.toUserMessage(); confirmacion = null; hoja = null }
+                        guardandoPrefs = false
                     }
                 },
             )
@@ -322,6 +451,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
             is Hoja.Unificar -> HojaUnificar(
                 categoria = h.categoria,
                 existentes = categorias,
+                soloVisibles = h.soloVisibles,
                 error = errorDeHoja,
                 guardando = guardandoHoja,
                 onDismiss = { hoja = null; errorDeHoja = null },
@@ -330,11 +460,8 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     guardandoHoja = true
                     errorDeHoja = null
                     scope.launch {
-                        runCatching { Repositories.wallets.mergeCategory(h.categoria.name, destino) }
+                        unificarCategoria(h.categoria.name, destino)
                             .onSuccess { r ->
-                                // Unificar SIEMPRE esconde el origen del catálogo, del lado del
-                                // server y de este espejo. Ver `applyRename`.
-                                UsedCategoriesCache.applyRename(h.categoria.name, r.name, escondeElOrigen = true)
                                 confirmacion = textoDeResultado(r.movements, r.budgets, r.recurringRules, r.budgetsMerged, r.name)
                                 error = null
                                 hoja = null
@@ -345,6 +472,65 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     }
                 },
             )
+        }
+
+        // ── Ola B · tarea 6: la hoja de «Ordena tus categorías» ──────────────────
+        // Independiente de `hoja` (arriba): las dos pueden coexistir mientras una termina de
+        // cerrarse, y mezclarlas en el mismo `sealed class` obligaría a las otras ramas a saber
+        // de propuestas que no les incumben.
+        if (revisandoOrden) {
+            val actual = propuestasPendientes.firstOrNull()
+            if (actual != null) {
+                HojaDeOrden(
+                    propuesta = actual,
+                    restantes = propuestasPendientes.size,
+                    guardando = guardandoOrden,
+                    error = errorDeOrden,
+                    onUnificar = { origen, destino ->
+                        if (guardandoOrden) return@HojaDeOrden
+                        guardandoOrden = true
+                        errorDeOrden = null
+                        scope.launch {
+                            unificarCategoria(origen, destino)
+                                .onSuccess { r ->
+                                    // Fix round 1, hallazgo 6: el mismo texto de resultado que ve
+                                    // quien unifica desde el detalle de una categoría — no un
+                                    // «listo» distinto según por dónde entró.
+                                    confirmacion = textoDeResultado(r.movements, r.budgets, r.recurringRules, r.budgetsMerged, r.name)
+                                    errorDeOrden = null
+                                    recargar()
+                                }
+                                .onFailure { errorDeOrden = it.toUserMessage() }
+                            guardandoOrden = false
+                        }
+                    },
+                    onEsconder = { categoria ->
+                        if (guardandoOrden) return@HojaDeOrden
+                        guardandoOrden = true
+                        errorDeOrden = null
+                        scope.launch {
+                            ponerVisibilidad(categoria, true)
+                                .onSuccess { errorDeOrden = null; recargar() }
+                                .onFailure { errorDeOrden = it.toUserMessage() }
+                            guardandoOrden = false
+                        }
+                    },
+                    // Fix round 1, hallazgo 3: «un solo uso» ya no unifica con un toque adentro de
+                    // esta hoja — abre la MISMA `Hoja.Unificar` que usa el detalle de una
+                    // categoría (búsqueda, aviso previo, botón de confirmar), con `soloVisibles`
+                    // para que una categoría escondida no aparezca como destino sugerido.
+                    onUnificarConOtra = { categoria ->
+                        revisandoOrden = false
+                        errorDeOrden = null
+                        hoja = Hoja.Unificar(categoria, soloVisibles = true)
+                    },
+                    onAhoraNo = {
+                        propuestasDescartadas = PropuestasDescartadasStore.marcar(claveDePropuesta(actual))
+                        errorDeOrden = null
+                    },
+                    onDismiss = { revisandoOrden = false; errorDeOrden = null },
+                )
+            }
         }
     }
 }
@@ -364,6 +550,132 @@ private fun textoDeResultado(
     val base = if (partes.isEmpty()) "Listo: ahora se llama «$nombre»."
     else "Listo: ${partes.joinToString(", ")} ahora dicen «$nombre»."
     return if (presupuestosSumados) "$base Los dos presupuestos se sumaron en uno." else base
+}
+
+// ── Ola B · tarea 6: «Ordena tus categorías» ────────────────────────────────────
+
+/**
+ * «Movi encontró N cosas para ordenar», arriba de los filtros y la búsqueda — solo aparece cuando
+ * [propuestasDeOrden] tiene algo pendiente. Un borde y no el color de marca de lleno: es una
+ * sugerencia que el dueño puede ignorar del todo, no una alerta.
+ */
+@Composable
+private fun TarjetaDeOrden(cantidad: Int, onRevisar: () -> Unit) {
+    val forma = RoundedCornerShape(Movi.formas.amplia)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = Movi.espacios.amplio, top = Movi.espacios.medio, end = Movi.espacios.amplio)
+            .clip(forma)
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, forma)
+            .clickable(onClick = onRevisar)
+            .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.amplio),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+    ) {
+        Text(
+            text = textoDeLaTarjetaDeOrden(cantidad),
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.texto,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            "Revisar",
+            style = Movi.textos.apoyo,
+            fontWeight = FontWeight.Medium,
+            color = Movi.colores.marca,
+        )
+    }
+}
+
+/**
+ * La hoja que revisa las propuestas **una por una**: [propuesta] es siempre la primera pendiente
+ * (la quita `propuestasPendientes` de `CategoriasScreen` apenas se resuelve o se descarta), así
+ * que esta hoja nunca decide cuál mostrar, solo cómo mostrarla y qué hacer con el botón.
+ *
+ * Para [PropuestaDeOrden.UnificarParecidas] se muestra el mismo aviso previo que
+ * [HojaUnificar] ([avisoDeUnificacion]) — fix round 1, hallazgo 2: sin él, un par con presupuesto
+ * de los dos lados se unificaba sin avisar que los límites se suman y que eso no se puede deshacer,
+ * la única advertencia que sí ve quien unifica a mano desde el detalle de una categoría.
+ *
+ * Para [PropuestaDeOrden.UnUso], «Unificar con…» ya **no** unifica desde acá (fix round 1,
+ * hallazgo 3): `onUnificarConOtra` le pasa la categoría a `CategoriasScreen`, que abre la MISMA
+ * [Hoja.Unificar] que usa el detalle — con su búsqueda, su aviso y su botón de confirmar — en vez
+ * de comprometer la historia con el primer toque en una cuadrícula.
+ */
+@Composable
+private fun HojaDeOrden(
+    propuesta: PropuestaDeOrden,
+    restantes: Int,
+    guardando: Boolean,
+    error: String?,
+    onUnificar: (origen: String, destino: String) -> Unit,
+    onEsconder: (CategoryUsage) -> Unit,
+    onUnificarConOtra: (CategoryUsage) -> Unit,
+    onAhoraNo: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    HojaBase(onDismiss = onDismiss) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Text(
+                "Ordena tus categorías",
+                style = Movi.textos.titulo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.texto,
+                modifier = Modifier.padding(top = Movi.espacios.minimo),
+            )
+            Text(
+                if (restantes == 1) "Queda 1 por revisar." else "Quedan $restantes por revisar.",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.padding(top = Movi.espacios.minimo, bottom = Movi.espacios.amplio),
+            )
+
+            Text(
+                explicacionDePropuesta(propuesta),
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
+            if (propuesta is PropuestaDeOrden.UnificarParecidas) {
+                Text(
+                    avisoDeUnificacion(propuesta.origen, propuesta.destino),
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.padding(top = Movi.espacios.corto),
+                )
+            }
+            MensajeDeErrorDeHoja(error)
+            when (propuesta) {
+                is PropuestaDeOrden.UnificarParecidas -> BotonDeHoja(
+                    texto = "Unificar en «${propuesta.destino.name}»",
+                    habilitado = !guardando,
+                    onClick = { onUnificar(propuesta.origen.name, propuesta.destino.name) },
+                )
+                is PropuestaDeOrden.EsconderNuncaUsada -> BotonDeHoja(
+                    texto = "Esconder",
+                    habilitado = !guardando,
+                    onClick = { onEsconder(propuesta.categoria) },
+                )
+                is PropuestaDeOrden.UnUso -> BotonDeHoja(
+                    texto = "Unificar con…",
+                    habilitado = !guardando,
+                    onClick = { onUnificarConOtra(propuesta.categoria) },
+                )
+            }
+            Text(
+                "Ahora no",
+                style = Movi.textos.apoyo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.textoMedio,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = Movi.espacios.margen)
+                    .clickable(enabled = !guardando, onClick = onAhoraNo),
+            )
+        }
+    }
 }
 
 // ── Piezas de la lista ────────────────────────────────────────────────────────
@@ -410,91 +722,120 @@ private fun CampoDeBusqueda(valor: String, onValorCambia: (String) -> Unit, modi
     }
 }
 
+/** El `testTag` de [FilaDeCategoria], para medir su alto real en una prueba (fix round 1). */
+fun tagDeFilaDeCategoria(nombre: String): String = "categoria:fila:$nombre"
+
+/**
+ * Ola B · tarea 5: la fila compacta. Reemplaza a la de dos etiquetas y una oración — «Tuya» y el
+ * tipo («Ambos») salieron de acá: el tipo se dice solo cuando ayuda, y eso pasó a la hoja de
+ * detalle (ver [etiquetaDeTipo]). Lo que queda es lo mínimo para reconocer una categoría y decidir
+ * si vale la pena abrirla: el ícono, el nombre, la cifra de este mes si tiene, y cuánto la usó en
+ * total, sin adornos.
+ *
+ * **Alto MÍNIMO** ([ALTO_DE_FILA_DE_CATEGORIA], vía `heightIn(min = …)`, no `height(…)`) — fix
+ * round 1. `App.kt` multiplica la escala de letra ambiente por 1,12 en TODA la app (el «tamaño de
+ * Movi» no es el tamaño del sistema tal cual), así que un `.height()` fijo medido a escala 1 se
+ * queda corto: `titulo` (línea de 20 sp) + 2 dp + `apoyo` (línea de 16 sp) necesitan ≈42,3 dp a
+ * escala 1,12, y con el relleno vertical de antes (10 dp arriba y abajo → 40 dp libres) el texto
+ * se recortaba. El relleno bajó a 8 dp (44 dp libres, con margen) y el alto pasó a ser un PISO: a
+ * la escala por defecto de Movi la fila mide exactamente [ALTO_DE_FILA_DE_CATEGORIA] (el contenido
+ * entra con margen de sobra y el mínimo gana), y con una escala de letra más grande todavía la fila
+ * crece en vez de recortar — la tarea 9 arma un esqueleto que tiene que medir lo mismo que esta
+ * fila **a la escala por defecto**, no un alto que esta fila pueda superar.
+ */
 @Composable
 private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
-    Column(
+    Row(
         modifier = Modifier
+            .testTag(tagDeFilaDeCategoria(categoria.name))
             .fillMaxWidth()
+            .heightIn(min = ALTO_DE_FILA_DE_CATEGORIA)
             .clip(RoundedCornerShape(14.dp))
             .background(Movi.colores.tarjeta)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 13.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = categoria.name,
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = if (categoria.hidden) Movi.colores.textoMedio else Movi.colores.texto,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                // **Todo el ancho que sobra es del nombre.** Antes el nombre (`weight(1f, fill =
-                // false)`) y un separador (`weight(1f)`) se repartían el espacio en partes iguales:
-                // el nombre nunca pasaba de la mitad del renglón —«Restaurantes y domicilios a la
-                // casa» quedaba en «Restaurantes …» con espacio vacío al lado— y la etiqueta no
-                // llegaba al borde. Visto en la web a 390 dp.
-                modifier = Modifier.weight(1f),
-            )
-            if (categoria.reserved) {
-                Icon(
-                    Icons.Rounded.Lock,
-                    contentDescription = "Reservada de Movi",
-                    tint = Movi.colores.textoApagado,
-                    modifier = Modifier.size(13.dp),
+        IconoDeCategoria(categoria.name)
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = categoria.name,
+                    style = Movi.textos.titulo,
+                    fontWeight = FontWeight.Medium,
+                    color = if (categoria.hidden) Movi.colores.textoMedio else Movi.colores.texto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
+                cifraDelMes(categoria)?.let {
+                    Text(
+                        text = it,
+                        style = Movi.textos.apoyo,
+                        fontWeight = FontWeight.Medium,
+                        color = Movi.colores.texto,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-            Etiqueta(etiquetaDeTipo(categoria), tinteDeTipo(categoria))
-        }
-        Row(
-            modifier = Modifier.padding(top = 5.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
             Text(
-                text = resumenDeUso(categoria),
+                text = resumenDeUsoCorto(categoria),
                 color = Movi.colores.textoMedio,
                 style = Movi.textos.apoyo,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
+                modifier = Modifier.padding(top = 2.dp),
             )
-        }
-        val etiquetasExtra = buildList {
-            if (categoria.hidden) add("Escondida" to Movi.colores.aviso)
-            if (categoria.pinnedType != null) add("Tipo fijado" to Movi.colores.marca)
-            if (categoria.scope == CategoryScope.CUSTOM && !categoria.reserved) add("Tuya" to Movi.colores.textoMedio)
-        }
-        if (etiquetasExtra.isNotEmpty()) {
-            Row(
-                modifier = Modifier.padding(top = 7.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                etiquetasExtra.forEach { (texto, color) -> Etiqueta(texto, color) }
-            }
         }
     }
 }
 
-@Composable
-private fun tinteDeTipo(categoria: CategoryUsage): Color = when (etiquetaDeTipo(categoria)) {
-    "Gasto" -> Movi.colores.sale
-    "Ingreso" -> Movi.colores.entra
-    "Ambos" -> Movi.colores.marca
-    else -> Movi.colores.textoApagado
-}
+/**
+ * El alto MÍNIMO de [FilaDeCategoria], en el medio del rango que pide la tarea (56-64 dp). A la
+ * escala de letra por defecto de Movi es también el alto exacto — ver el KDoc de
+ * [FilaDeCategoria], fix round 1. `internal` y no `private`: la tarea 9 arma un esqueleto que
+ * tiene que medir esto, y que lo importe de acá es menos frágil que duplicar el número.
+ */
+internal val ALTO_DE_FILA_DE_CATEGORIA = 60.dp
 
-@Composable
-private fun Etiqueta(texto: String, color: Color) {
-    Text(
-        text = texto,
-        style = Movi.textos.apoyo,
-        fontWeight = FontWeight.Medium,
-        color = color,
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(color.copy(alpha = 0.12f))
-            .padding(horizontal = 7.dp, vertical = 3.dp),
-    )
+/** Cuántas filas pinta [categoriasEsqueleto] mientras la lista no llegó ni una vez. */
+private const val FILAS_DE_CATEGORIA_ESQUELETO = 6
+
+/**
+ * **Categorías mientras carga, con la forma de la fila compacta** (Ola B, tarea 9). Antes de esta
+ * tarea la pantalla quedaba en blanco entre los filtros/la búsqueda y la primera fila real — ni
+ * una rueda, nada. Esto imita [FilaDeCategoria]: mismo círculo de 36 dp
+ * ([TamanoDeIconoDeCategoria.Normal]), mismo alto mínimo ([ALTO_DE_FILA_DE_CATEGORIA]), mismo
+ * `Movi.textos.titulo` para el nombre y `Movi.textos.apoyo` para el resumen de uso — sin la cifra
+ * del mes, porque todavía no se sabe si esta categoría tuvo gasto este mes.
+ */
+private fun LazyListScope.categoriasEsqueleto() {
+    items(FILAS_DE_CATEGORIA_ESQUELETO) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = ALTO_DE_FILA_DE_CATEGORIA)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Movi.colores.tarjeta)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag(TAG_FILA_DE_LISTA_ESQUELETO),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CirculoEsqueleto(TamanoDeIconoDeCategoria.Normal.circulo)
+            Column(modifier = Modifier.weight(1f)) {
+                LineaEsqueleto(
+                    fraccionDelAncho = 0.5f,
+                    estilo = Movi.textos.titulo,
+                    modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
+                )
+                Spacer(Modifier.height(2.dp))
+                LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.apoyo)
+            }
+        }
+    }
 }
 
 // ── Las hojas ─────────────────────────────────────────────────────────────────
@@ -530,7 +871,17 @@ private fun HojaDetalle(
     onUnificar: () -> Unit,
     onCambiarVisibilidad: (Boolean) -> Unit,
     onFijarTipo: (String?) -> Unit,
+    /**
+     * Ola B · tarea 5. Ícono y color se eligen cada uno por su lado: `icono` no nulo cambia solo
+     * el ícono, `color` no nulo cambia solo el color, y «Volver al de Movi» manda los dos en
+     * blanco (`""`) — ver el KDoc de `CategoryPrefsRequest`, que es la semántica que respeta este
+     * request de principio a fin.
+     */
+    onCambiarApariencia: (icono: String?, color: String?) -> Unit,
 ) {
+    // Las reservadas ya no llegan acá: `filtrarCategorias` las saca de la lista antes de que se
+    // pueda tocar una fila (ver el pie de la pantalla, que explica por qué son menos de las que
+    // tiene el server). Sin una reservada que dibujar, esta hoja no necesita su propia rama.
     HojaBase(onDismiss = onDismiss) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text(
@@ -554,31 +905,23 @@ private fun HojaDetalle(
                     modifier = Modifier.padding(top = 3.dp),
                 )
             }
-
-            if (categoria.reserved) {
-                // Sin acciones y con el motivo: `isCashFlow` reconoce estas categorías por su
-                // nombre exacto, así que tocarlas rompería las cifras de todos los meses.
-                Column(modifier = Modifier.padding(top = 18.dp, bottom = 24.dp)) {
-                    Text(
-                        "Categoría reservada de Movi",
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.aviso,
-                    )
-                    Text(
-                        // Sin enumerar cuáles son: la lista ya iba desactualizada (le faltaban
-                        // «Descuento de nómina» y «Pago de un tercero») y esta pantalla ya está
-                        // mostrando CUÁL es. Lo que hace falta decir es por qué tiene candado.
-                        "La escribe Movi sola, y de su nombre exacto dependen las cifras de tu " +
-                            "mes. No se puede renombrar, unificar ni esconder.",
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                        lineHeight = 17.sp,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
-                return@Column
+            // El tipo se dice acá y no en la fila (Ola B · tarea 5) — y solo cuando ayuda: «Sin
+            // usar» no aporta nada que el dueño pueda hacer con eso.
+            etiquetaDeTipo(categoria).takeIf { it != "Sin usar" }?.let {
+                Text(
+                    it,
+                    color = Movi.colores.textoMedio,
+                    style = Movi.textos.apoyo,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
             }
+
+            SeccionApariencia(
+                categoria = categoria,
+                onElegirIcono = { onCambiarApariencia(it, null) },
+                onElegirColor = { onCambiarApariencia(null, it) },
+                onVolverAlDeMovi = { onCambiarApariencia("", "") },
+            )
 
             // ── Tipo ──────────────────────────────────────────────────────────
             Text(
@@ -653,6 +996,186 @@ private fun HojaDetalle(
                 Hairline()
             }
         }
+    }
+}
+
+/**
+ * Ola B · tarea 5: **Ícono y Color, editables ahí mismo** en la hoja de detalle — hasta acá una
+ * categoría se veía siempre con lo que [aparienciaDe] adivinaba por su nombre, sin forma de
+ * corregirlo si adivinaba mal.
+ *
+ * La vista previa arriba usa la apariencia YA RESUELTA ([apariencia]): lo que el dueño eligió
+ * ([CategoryUsage.icono]/[CategoryUsage.color]) si eligió algo, o si no, lo mismo que ya pinta esa
+ * categoría en toda la app. Así la cuadrícula marca de entrada el que está activo — nunca arranca
+ * en blanco — y «Volver al de Movi» solo se ofrece si de verdad hay algo elegido que deshacer.
+ */
+@Composable
+private fun SeccionApariencia(
+    categoria: CategoryUsage,
+    onElegirIcono: (String) -> Unit,
+    onElegirColor: (String) -> Unit,
+    onVolverAlDeMovi: () -> Unit,
+) {
+    val apariencia = remember(categoria.name, categoria.icono, categoria.color) {
+        aparienciaDe(categoria.name, CategoryPref(icono = categoria.icono, color = categoria.color))
+    }
+    Column(modifier = Modifier.padding(top = 20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            IconoDeCategoria(apariencia = apariencia)
+            Text(
+                "${rotuloDeIcono(apariencia.icono)} · ${rotuloDeColor(apariencia.color)}",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
+        }
+
+        Text(
+            "ÍCONO",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.4.sp,
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+        )
+        CuadriculaDeApariencia(ICONOS_DEL_CATALOGO) { item, modifier ->
+            CeldaDeIcono(item = item, elegido = item.clave == apariencia.icono, onClick = { onElegirIcono(item.clave) }, modifier = modifier)
+        }
+
+        Text(
+            "COLOR",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.4.sp,
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+        )
+        // Fila que se desplaza y no la misma cuadrícula que el ícono: un círculo sin rótulo no
+        // necesita el ancho de celda de 80 dp que pide un ícono con dos renglones de texto debajo
+        // — con ese ancho los diez círculos quedaban con huecos enormes entre uno y otro.
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+        ) {
+            COLORES_DEL_CATALOGO.forEach { item ->
+                CeldaDeColor(item = item, elegido = item.clave == apariencia.color, onClick = { onElegirColor(item.clave) })
+            }
+        }
+
+        // Solo si el dueño de verdad eligió algo: sin esto, el link aparecería siempre y
+        // «volver» a lo que ya se está mostrando no tiene sentido.
+        if (categoria.icono != null || categoria.color != null) {
+            Text(
+                "Volver al de Movi",
+                style = Movi.textos.apoyo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.marca,
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .clickable(onClick = onVolverAlDeMovi),
+            )
+        }
+    }
+}
+
+/**
+ * La cuadrícula que comparten el selector de ícono y el de color: misma cuenta de columnas que
+ * [com.jvillada.movi.ui.components.SelectorDeCategoria] ([columnasDeLaCuadricula]), para que las
+ * celdas midan lo mismo en toda la app y no haya dos criterios de «cuántas entran por fila».
+ */
+@Composable
+private fun <T> CuadriculaDeApariencia(items: List<T>, celda: @Composable (T, Modifier) -> Unit) {
+    val espacio = Movi.espacios.minimo
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val columnas = columnasDeLaCuadricula(maxWidth, espacio)
+        Column(verticalArrangement = Arrangement.spacedBy(espacio)) {
+            items.chunked(columnas).forEach { fila ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(espacio)) {
+                    fila.forEach { item -> celda(item, Modifier.weight(1f)) }
+                    repeat(columnas - fila.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+/** Testtag de una celda de [ICONOS_DEL_CATALOGO] en la hoja de detalle, para encontrarla en una prueba. */
+fun tagDeIconoDelCatalogo(clave: String): String = "categoria:icono:$clave"
+
+/** Testtag de una celda de [COLORES_DEL_CATALOGO] en la hoja de detalle. Ver [tagDeIconoDelCatalogo]. */
+fun tagDeColorDelCatalogo(clave: String): String = "categoria:color:$clave"
+
+@Composable
+private fun CeldaDeIcono(item: IconoDelCatalogo, elegido: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val forma = RoundedCornerShape(Movi.formas.normal)
+    Column(
+        modifier = modifier
+            .testTag(tagDeIconoDelCatalogo(item.clave))
+            .clip(forma)
+            .then(if (elegido) Modifier.border(2.dp, Movi.colores.marca, forma) else Modifier)
+            .clickable(onClick = onClick)
+            .padding(vertical = Movi.espacios.corto, horizontal = Movi.espacios.minimo),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(TamanoDeIconoDeCategoria.Normal.circulo)
+                .background(Movi.colores.fondo, RoundedCornerShape(Movi.formas.pleno)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                item.imagen,
+                contentDescription = null,
+                tint = if (elegido) Movi.colores.marca else Movi.colores.textoMedio,
+                modifier = Modifier.size(TamanoDeIconoDeCategoria.Normal.icono),
+            )
+        }
+        Text(
+            item.rotulo,
+            style = Movi.textos.apoyo,
+            fontWeight = if (elegido) FontWeight.Medium else FontWeight.Normal,
+            color = if (elegido) Movi.colores.marca else Movi.colores.texto,
+            textAlign = TextAlign.Center,
+            minLines = 2,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = Movi.espacios.minimo),
+        )
+    }
+}
+
+/**
+ * Un color, como un círculo lleno — el color de verdad, sin el alfa bajo de
+ * [com.jvillada.movi.theme.ColoresDeMovi.circuloDeCategoria] que usa el ícono: acá el color ES el
+ * dato, y aclararlo lo haría casi imposible de distinguir del vecino.
+ *
+ * El elegido se marca con un **anillo alrededor**, no con un check encima: un check necesita un
+ * tinte que contraste contra el color de fondo, y con diez colores de fondo distintos no hay un
+ * tinte único que sirva para los diez a la vez sin agregar tokens nuevos.
+ *
+ * **Fix round 1: `contentDescription` y estado de selección.** Un círculo de color no dice nada
+ * por sí solo a un lector de pantalla — acá lleva el rótulo en español del catálogo
+ * ([ColorDelCatalogo.rotulo], p. ej. «Naranja») y, con [selectable] en vez de `clickable`, el
+ * estado «seleccionado» que antes solo se veía (el anillo).
+ */
+@Composable
+private fun CeldaDeColor(item: ColorDelCatalogo, elegido: Boolean, onClick: () -> Unit) {
+    val forma = RoundedCornerShape(Movi.formas.pleno)
+    Box(
+        modifier = Modifier
+            .testTag(tagDeColorDelCatalogo(item.clave))
+            .clip(forma)
+            .then(if (elegido) Modifier.border(2.dp, Movi.colores.texto, forma) else Modifier)
+            .selectable(selected = elegido, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = item.rotulo }
+            .padding(3.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(TamanoDeIconoDeCategoria.Normal.circulo)
+                .clip(forma)
+                .background(Movi.colores.categoria(item.clave)),
+        )
     }
 }
 
@@ -779,6 +1302,13 @@ private fun HojaRenombrar(
     }
 }
 
+/**
+ * El `testTag` de una fila candidata en [HojaUnificar], para encontrarla en una prueba sin
+ * ambigüedad con la fila de la misma categoría en la lista principal (que usa
+ * [tagDeFilaDeCategoria] y puede seguir montada, tapada, detrás de esta hoja).
+ */
+fun tagDeCandidataDeUnificar(nombre: String): String = "categoria:unificar-candidata:$nombre"
+
 /** Unificar: se elige el destino de una lista, no se escribe — juntar con algo que no existe es renombrar. */
 @Composable
 private fun HojaUnificar(
@@ -788,15 +1318,17 @@ private fun HojaUnificar(
     guardando: Boolean,
     onDismiss: () -> Unit,
     onConfirmar: (String) -> Unit,
+    /** Ver el KDoc de [Hoja.Unificar]. */
+    soloVisibles: Boolean = false,
 ) {
     var busqueda by remember { mutableStateOf("") }
     // La categoría destino ENTERA, no su nombre: el aviso previo necesita saber si ella también
     // tiene presupuesto para poder avisar de la suma antes de aplicarla (ver [avisoDeUnificacion]).
     var elegida by remember { mutableStateOf<CategoryUsage?>(null) }
 
-    val candidatas = remember(existentes, busqueda, categoria) {
+    val candidatas = remember(existentes, busqueda, categoria, soloVisibles) {
         filtrarCategorias(existentes, CategoryFilter.TODAS, busqueda)
-            .filter { !it.reserved && it.name != categoria.name }
+            .filter { !it.reserved && it.name != categoria.name && (!soloVisibles || !it.hidden) }
     }
 
     HojaBase(onDismiss = onDismiss) {
@@ -819,6 +1351,7 @@ private fun HojaUnificar(
                 candidatas.forEach { c ->
                     Row(
                         modifier = Modifier
+                            .testTag(tagDeCandidataDeUnificar(c.name))
                             .fillMaxWidth()
                             .clickable(enabled = !guardando) { elegida = c }
                             .padding(vertical = 12.dp),

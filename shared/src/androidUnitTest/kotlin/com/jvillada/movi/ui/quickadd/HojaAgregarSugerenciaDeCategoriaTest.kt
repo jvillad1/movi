@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -25,6 +25,9 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.TAG_BUSCAR_CATEGORIA
+import com.jvillada.movi.ui.components.TAG_CREAR_CATEGORIA
+import com.jvillada.movi.ui.components.tagDeCeldaDeCategoria
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -293,23 +296,24 @@ class HojaAgregarSugerenciaDeCategoriaTest {
         tocar("Guardar nota")
     }
 
-    /** Abre el sub-picker de «Categoría» y escribe una a mano — con foco, tipear reemplaza. */
+    /**
+     * Abre el sub-picker de «Categoría», la busca y toca su celda — o «Crear "…"» si no existe.
+     * Tocar una celda elige y cierra el sub-picker solo (Ola B: la cuadrícula).
+     */
     private fun elegirCategoriaAMano(nombre: String) {
         tocar("Categoría")
-        composeRule.onNode(hasSetTextAction()).performTextInput(nombre)
-        cerrarSubPicker()
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performTextInput(nombre)
+        composeRule.waitForIdle()
+        val existe = composeRule.onAllNodesWithTag(tagDeCeldaDeCategoria(nombre)).fetchSemanticsNodes().isNotEmpty()
+        composeRule.onNodeWithTag(if (existe) tagDeCeldaDeCategoria(nombre) else TAG_CREAR_CATEGORIA)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
     }
 
     // Mismo motivo que en `HojaAgregarGeometriaTest`: bajo Robolectric `performClick()` no llega
     // al composable, así que se usa la acción semántica de clic.
     private fun tocar(texto: String) {
         composeRule.onNodeWithText(texto).performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
-    }
-
-    private fun cerrarSubPicker() {
-        composeRule.onNodeWithTag(TAG_CERRAR_SUB_PICKER)
-            .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 }

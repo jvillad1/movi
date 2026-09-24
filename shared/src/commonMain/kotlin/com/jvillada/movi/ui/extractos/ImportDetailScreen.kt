@@ -59,10 +59,12 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
-        // F60 · F22: encabezado único; el detalle vuelve a la lista de Extractos si no hay historial.
+        // F60 · F22: encabezado único; el detalle vuelve a Documentos si no hay historial de
+        // navegación. Ola B, tarea 7: era Screen.Extractos — la sección «Importaciones» que
+        // abre esta pantalla ahora vive en Documentos, no en Extractos (que salió de Más).
         MinScreenHeader(
             title = "Detalle de importación",
-            leading = HeaderLeading.Back(fallback = Screen.Extractos),
+            leading = HeaderLeading.Back(fallback = Screen.Documentos),
         )
         Spacer(Modifier.height(12.dp))
 
@@ -109,7 +111,7 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
                 errorDeDeshacer = null
                 coroutine.launch {
                     runCatching { Repositories.wallets.deleteStatementImport(importId) }
-                        .onSuccess { pidiendoDeshacer = false; goBack(Screen.Extractos) }
+                        .onSuccess { pidiendoDeshacer = false; goBack(Screen.Documentos) }
                         .onFailure { errorDeDeshacer = it.toUserMessage(); pidiendoDeshacer = false }
                     deshaciendo = false
                 }

@@ -177,6 +177,14 @@ data class DashboardData(
     val hasRecurringRule: Boolean get() = upcoming.orEmpty().any {
         !it.rule.id.startsWith(CREDIT_RULE_PREFIX) && !it.rule.id.startsWith(CARD_RULE_PREFIX)
     }
+    /**
+     * Si la guía de Primeros pasos todavía tiene algo por tildar — la MISMA cuenta que decide si
+     * el Inicio la pinta (`showGuide` en `DashboardScreen`). Ola B, tarea 7 la sacó de ahí para
+     * que el mosaico de Más pueda usarla también, y ofrecer la ficha «Primeros pasos» solo
+     * mientras haga falta: una copia a mano de esta condición en dos lugares es exactamente cómo
+     * se desalinean silenciosamente el día que uno de los dos cambie.
+     */
+    val guiaIncompleta: Boolean get() = puedeAfirmarVacio && !(hasAccount && hasMovement)
 }
 
 // ── Las dos cifras del Inicio ──────────────────────────────────────────────────────

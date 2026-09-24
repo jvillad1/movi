@@ -30,6 +30,7 @@ import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.components.railDestinations
+import com.jvillada.movi.ui.dashboard.DashboardDataCache
 import com.jvillada.movi.ui.screenForTab
 
 private data class MasItem(
@@ -52,8 +53,11 @@ private val items = listOf(
     MasItem("Presupuestos", Icons.Rounded.PieChart,         Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Budgets),
     MasItem("Créditos",     Icons.Rounded.CreditCard,      Color(0xFFFFB4AB), Color(0x1FFFB4AB), Screen.Credits),
     // F61: Inversiones ya no es sección — las cuentas de inversión se ven en Cuentas.
-    MasItem("Metas",        Icons.Rounded.Flag,             Color(0xFFFFD479), Color(0x24FFD479), Screen.Goals),
-    MasItem("Extractos",    Icons.Rounded.UploadFile,       Color(0xFFC7BCFF), Color(0x24C7BCFF), Screen.Extractos),
+    // Ola B, tarea 7: «Metas» y «Extractos» salieron del mosaico. Metas no tenía uso real (la
+    // sección «Meta principal» de Perfil decía siempre «Aún sin meta»); Extractos se unió a
+    // Documentos, que ahora ofrece «Importar movimientos» en cada PDF o imagen y una sección
+    // «Importaciones» con el mismo historial. Ninguna de las dos pantallas se borró —siguen
+    // ahí, solo sin puerta— así que no hay nada que restaurar si el dueño las extraña.
     // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú).
     MasItem("Mensajes del banco", Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
     MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat()),
@@ -69,8 +73,8 @@ private val items = listOf(
     // propósito: esa pantalla lista la plata de él, y esto no es su plata (ver DestinoConocido).
     // El rótulo es el mismo que el título de la pantalla, como en toda ficha de Más.
     MasItem("Cuentas de otros", Icons.Rounded.Diversity3, Color(0xFFFFB4AB), Color(0x1FFFB4AB), Screen.Destinos),
-    // Ola 18: los papeles. Va PEGADO a «Extractos» porque el importador archiva ahí lo que pasa
-    // por él — quien sube un extracto y después se pregunta «¿dónde quedó el PDF?» busca al lado.
+    // Ola 18: los papeles. Ola B, tarea 7: absorbió a «Extractos» — el importador archiva ahí
+    // lo que pasa por él, y ahora también «Importar movimientos» vive en cada fila de acá.
     MasItem("Documentos",   Icons.Rounded.Folder,           Color(0xFFB3C8FF), Color(0x1AB3C8FF), Screen.Documentos),
     // Compartir con un tercero: el enlace de solo lectura para Caro o un asesor. Va después de
     // Documentos —lo otro que el dueño «muestra» de sus papeles— y tiene además un ícono en el
@@ -96,11 +100,19 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
     // fuente que pinta el rail (railDestinations), no de una copia a mano. En el teléfono la
     // barra tiene menos destinos, así que Más sigue completo.
     val widthClass = LocalWindowWidthClass.current
-    val visibleItems = remember(widthClass) {
+    // Ola B, tarea 7: «Primeros pasos» solo se ofrece mientras la guía del Inicio tenga algo por
+    // tildar — la MISMA condición que decide si el Inicio la pinta (`DashboardData.guiaIncompleta`,
+    // reusada y no copiada). Se lee de `DashboardDataCache` —lo mismo que ya hacen
+    // `PrimerosPasosScreen` y `AIChatScreen`— en vez de pedir las diez respuestas del Inicio: si
+    // todavía no cargó (`data == null`), `guiaIncompleta` da `false` —mismo defecto que
+    // `puedeAfirmarVacio`— así que la ficha no se ofrece con datos que Más nunca pidió.
+    val guiaIncompleta = DashboardDataCache.data?.guiaIncompleta == true
+    val visibleItems = remember(widthClass, guiaIncompleta) {
+        val conGuia = if (guiaIncompleta) items else items.filterNot { it.screen == Screen.PrimerosPasos }
         if (widthClass == WindowWidthClass.Expanded) {
             val railScreens = railDestinations.map { screenForTab(it.tab) }
-            items.filterNot { it.screen in railScreens }
-        } else items
+            conGuia.filterNot { it.screen in railScreens }
+        } else conGuia
     }
 
     Column(

@@ -407,10 +407,11 @@ fun DashboardScreen(
                         CuentaMasUsadaCache.recordFromServer(s.cuentaMasUsada)
                     }
             }
-            launch {
-                runCatching { Repositories.wallets.getGoals() }
-                    .onSuccess { g -> data = data.copy(goals = g); llegado = llegado.copy(goals = g) }
-            }
+            // Ola B, tarea 7: acá pedía `getGoals()`. Metas salió de la navegación y su acceso
+            // con cifra ya no se pinta (`renderableSections` lo saca de cualquier definición que
+            // todavía lo traiga) — nada visible en el Inicio usa `data.goals`, así que pedirlo
+            // era una llamada de más en cada carga. `DashboardData.goals` se queda (no hay nada
+            // que migrar) pero ya no lo llena nadie.
             // Los sellos de «ya ocurrió», para poder tildar el checklist del período. Si falla, el
             // checklist muestra todo como pendiente: recordar algo ya pagado molesta; dar por
             // pagado algo que no, cuesta plata.
@@ -559,7 +560,7 @@ fun DashboardScreen(
             // Eso solo se puede decir cuando cuentas y resumen YA contestaron. Sin esta guarda,
             // cada carga en frío de la web —donde la caché en memoria se pierde al recargar—
             // saludaba con una lista de tareas ya hechas hace meses.
-            val showGuide = data.puedeAfirmarVacio && !(data.hasAccount && data.hasMovement)
+            val showGuide = data.guiaIncompleta
             // SDUI: la definición del server si la hay; si no, la misma lista que el server
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
             // `LocalCargandoElInicio`: el hero y «Pregúntale a Movi» solo reciben `data`, no
@@ -674,7 +675,9 @@ internal fun PrimerosPasosCard(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text("Deja que la app se llene sola", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.weight(1f))
-            AccesoLink("Extractos") { onNavigate(Screen.Extractos) }
+            // Ola B, tarea 7: era «Extractos» → Screen.Extractos; esa pantalla salió de la
+            // navegación y «Importar movimientos» vive ahora en Documentos.
+            AccesoLink("Documentos") { onNavigate(Screen.Documentos) }
             if (isAndroid) AccesoLink("SMS del banco") { onNavigate(Screen.SMSInbox) }
         }
     }

@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,21 +47,34 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
+import com.jvillada.movi.shared.model.StatementImport
+import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.Hairline
+import com.jvillada.movi.ui.components.MinCard
+import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NewItemButton
+import com.jvillada.movi.ui.components.BloqueEsqueleto
+import com.jvillada.movi.ui.components.LineaEsqueleto
+import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
+import com.jvillada.movi.ui.components.altoDeUnRenglon
+import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
+import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
+import com.jvillada.movi.ui.extractos.ImportCard
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.components.toUserMessage
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -72,6 +86,7 @@ import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.ui.components.ListaDeCuentasElegibles
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -119,6 +134,16 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     // cuentas el selector dice «No tienes cuentas todavía» y el papel se sube sin cuenta, que es
     // exactamente lo que pasaba antes de que esto existiera.
     var cuentas by remember { mutableStateOf(emptyList<Account>()) }
+    // Ola B, tarea 7: la sección «Importaciones» que se mudó acá desde Extractos. A diferencia
+    // de `cuentas`, una lectura que falla SÍ se dice: Extractos ya mostraba «No pude cargar el
+    // historial: …», y ocultar la sección en silencio afirmaría «no hay importaciones» sobre un
+    // dueño que sí las tiene — la misma clase de mentira que el resto de esta pantalla evita
+    // (ver el KDoc de arriba sobre «Todavía no guardaste nada»).
+    var imports by remember { mutableStateOf(emptyList<StatementImport>()) }
+    var importsError by remember { mutableStateOf<String?>(null) }
+    // El id del documento con «Importar movimientos» en vuelo, o `null`. Un segundo toque
+    // mientras Claude está leyendo mandaría dos lecturas del mismo archivo.
+    var importando by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutine = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
@@ -133,6 +158,16 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
 
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
+    }
+
+    LaunchedEffect(refreshKey) {
+        importsError = null
+        runCatching { Repositories.wallets.getStatementImports() }
+            .onSuccess { imports = it }
+            .onFailure { t ->
+                if (t is CancellationException) throw t
+                importsError = "No pude cargar el historial de importaciones: ${t.toUserMessage()}"
+            }
     }
 
     val elegirArchivo = rememberFilePicker(TiposDeArchivo.TODOS) { nombre, bytes, mime ->
@@ -173,6 +208,26 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
+    /**
+     * **«Importar movimientos»** — Ola B, tarea 7: lo que antes era subir el archivo de nuevo en
+     * Extractos ahora es un toque sobre el mismo documento ya guardado. Mismo destino
+     * ([Screen.StatementReview]) y mismo manejo de error ([toUserMessage]) que tenía Extractos:
+     * el motivo que explica el server («no encontramos movimientos», «falta la clave») es lo
+     * único que el dueño puede usar.
+     */
+    fun importar(doc: Documento) {
+        if (importando != null) return
+        importando = doc.id
+        coroutine.launch {
+            runCatching { Repositories.wallets.readStatementFromDocument(doc.id) }
+                .onSuccess { result: StatementParseResult ->
+                    onNavigate(Screen.StatementReview(Json.encodeToString(result)))
+                }
+                .onFailure { error = "No pude procesar el extracto: ${it.toUserMessage()}" }
+            importando = null
+        }
+    }
+
     fun borrar(doc: Documento) {
         if (borrando) return
         borrando = true
@@ -192,40 +247,62 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
+            // Ola B, tarea 9: la acción vive en el encabezado DESDE EL PRIMER CUADRO, como
+            // «+ Nuevo crédito» en Créditos (Task 8) — antes esperaba a que `documentos` no
+            // fuera nulo ni vacío, así que el título se corría apenas llegaba la lista.
             MinScreenHeader(
                 title = "Documentos",
                 leading = HeaderLeading.Back(fallback = Screen.Mas),
-                action = if (!documentos.isNullOrEmpty()) {
-                    { NewItemButton(label = "Subir archivo", onClick = elegirArchivo) }
-                } else null,
+                action = { NewItemButton(label = "Subir archivo", onClick = elegirArchivo) },
             )
-            if (cargando || subiendo) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-
             val lista = documentos
+            // Fix round 1: con nada pintado todavía (`lista == null && cargando`) el esqueleto de
+            // más abajo ya dice «cargando» con la forma de lo que viene — la barra sería la misma
+            // señal dos veces, Y además desaparecía apenas llegaban los datos y corría la primera
+            // fila 16,5 dp hacia arriba. Mismo criterio que Cuentas (Task 8) y Movimientos: la
+            // barra queda para una recarga con algo ya en pantalla (reintentar, subir un archivo).
+            if ((cargando && lista != null) || subiendo || importando != null) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
             when {
                 // «Todavía no guardaste nada» es una afirmación sobre lo que el dueño tiene, y no
                 // se hace antes de que la lectura conteste. Misma regla que el Inicio.
                 // Mientras lee, nada. Si ya terminó y sigue sin lista, la lectura falló: se dice eso
                 // con un reintento, en vez de dejar la pantalla en blanco sin salida (el snackbar
                 // del error se va solo). Ver [NoSePudoLeer].
-                lista == null && cargando -> Spacer(Modifier.height(1.dp))
+                lista == null && cargando -> DocumentosEsqueleto()
                 lista == null -> NoSePudoLeer(
                     "No pudimos cargar tus documentos",
                     onReintentar = { refreshKey++ },
                     modifier = Modifier.padding(horizontal = 16.dp).padding(top = 14.dp),
                 )
 
-                lista.isEmpty() -> Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        text = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel " +
-                            "que quieras tener a mano. Los extractos que importes se archivan solos.",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.textoMedio,
-                        lineHeight = 18.sp,
+                // Revisión final de la ola: sin documentos, «Importaciones» TAMBIÉN se pinta. Es el
+                // único camino a «Deshacer importación», y el caso típico de llegar acá sin
+                // documentos es justamente haber borrado los PDF de una importación que salió mal:
+                // esconderla ahí dejaba esa importación sin forma de deshacerse. Y un solo «Subir
+                // archivo» — el del encabezado, que está desde el primer cuadro; el segundo botón
+                // a lo ancho decía lo mismo dos veces en la misma pantalla.
+                lista.isEmpty() -> Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            text = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel " +
+                                "que quieras tener a mano. Los extractos que importes se archivan solos.",
+                            style = Movi.textos.cuerpo,
+                            color = Movi.colores.textoMedio,
+                            lineHeight = 18.sp,
+                        )
+                    }
+                    SeccionDeImportaciones(
+                        error = importsError,
+                        imports = imports,
+                        onReintentar = { refreshKey++ },
+                        onAbrir = { onNavigate(Screen.ImportDetail(it.id)) },
+                        modifier = Modifier.padding(top = 18.dp, bottom = 80.dp),
                     )
-                    Spacer(Modifier.height(16.dp))
-                    NewItemButton(label = "Subir archivo", onClick = elegirArchivo, full = true)
                 }
 
                 else -> LazyColumn(
@@ -248,9 +325,31 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                                 onAbrir = { abrir(doc) },
                                 onBorrar = { aBorrar = doc },
                                 onEditar = { aEditar = doc },
+                                onImportar = if (esImportable(doc)) { { importar(doc) } } else null,
                             )
                         }
                         item(key = "espacio-${tipo.name}") { Spacer(Modifier.height(18.dp)) }
+                    }
+
+                    // Ola B, tarea 7: la sección «Importaciones» que se mudó acá desde Extractos,
+                    // debajo de la lista de documentos. Ver [SeccionDeImportaciones].
+                    //
+                    // Fix round 2: `errorDeImports` se captura ACÁ, fuera del `item { }`. El
+                    // contenido de un `item` es un lambda que Compose guarda y ejecuta después —
+                    // leer el estado mutable ADENTRO de ese lambda apostaba a que siguiera sin
+                    // cambiar entre esta composición y esa ejecución diferida. Un `val` local es
+                    // un valor fijo de ESTA composición, no una referencia viva al estado.
+                    val errorDeImports = importsError
+                    val importsAhora = imports
+                    if (errorDeImports != null || importsAhora.isNotEmpty()) {
+                        item(key = "importaciones") {
+                            SeccionDeImportaciones(
+                                error = errorDeImports,
+                                imports = importsAhora,
+                                onReintentar = { refreshKey++ },
+                                onAbrir = { onNavigate(Screen.ImportDetail(it.id)) },
+                            )
+                        }
                     }
                 }
             }
@@ -285,6 +384,43 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 onCancelar = { aBorrar = null },
                 onConfirmar = { borrar(doc) },
             )
+        }
+    }
+}
+
+/**
+ * La sección **«Importaciones»** (Ola B, tarea 7: se mudó acá desde Extractos). Se pinta igual con
+ * documentos o sin ellos — ver el vacío de [DocumentosScreen].
+ *
+ * Fix round 1: una lectura que falla se DICE (con reintento) — ocultar la sección en silencio
+ * afirmaría «no hay importaciones» sobre un historial que en realidad no se pudo leer. Un
+ * historial vacío SIN error, en cambio, de verdad no merece encabezado propio, misma regla que el
+ * resto de esta pantalla (ver `porTipo`): no pinta nada.
+ */
+@Composable
+private fun SeccionDeImportaciones(
+    error: String?,
+    imports: List<StatementImport>,
+    onReintentar: () -> Unit,
+    onAbrir: (StatementImport) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when {
+        error != null -> Column(modifier = modifier.padding(horizontal = 16.dp).padding(top = 4.dp)) {
+            NoSePudoLeer(error, onReintentar = onReintentar)
+        }
+        imports.isNotEmpty() -> Column(modifier = modifier.padding(horizontal = 16.dp)) {
+            MinSectionHeader(title = "Importaciones", count = imports.size)
+            MinCard(
+                modifier = Modifier.fillMaxWidth(),
+                variant = MinCardVariant.Elevated,
+                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+            ) {
+                imports.forEachIndexed { i, imp ->
+                    ImportCard(imp) { onAbrir(imp) }
+                    if (i < imports.size - 1) Hairline()
+                }
+            }
         }
     }
 }
@@ -348,6 +484,67 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
     }
 }
 
+/** Cuántas filas pinta [DocumentosEsqueleto] mientras la lista no llegó ni una vez. */
+private const val FILAS_DE_DOCUMENTO_ESQUELETO = 4
+
+/**
+ * El tag de una fila REAL de [FilaDeDocumento]. Ola B, tarea 9 (fix round 1): sin él, una prueba
+ * no tenía forma de medir su TOP contra el de la primera fila esqueleto.
+ */
+internal const val TAG_FILA_DE_DOCUMENTO: String = "fila-de-documento"
+
+/**
+ * **Documentos mientras carga, con la forma de [FilaDeDocumento]** (Ola B, tarea 9). Antes de esta
+ * tarea el `when` de arriba pintaba un `Spacer` de 1 dp entre la barra de carga y la primera fila
+ * real — la pantalla se veía vacía con «+ Subir archivo» todavía sin aparecer (esa acción ya vive
+ * en el encabezado desde el primer cuadro, ver [DocumentosScreen]).
+ *
+ * Mismos rellenos que [FilaDeDocumento] (10/10/12/6 dp) y el mismo [Hairline] entre filas: el
+ * nombre con el alto de `Movi.textos.cuerpo`, el renglón de apoyo (cuenta · peso · fecha) más
+ * corto, y tres bloques cortos donde van «Abrir», «Editar», «Borrar».
+ */
+@Composable
+private fun DocumentosEsqueleto() {
+    Column(modifier = Modifier.padding(top = 14.dp)) {
+        // Fix round 1: la lista real arranca con un `MinSectionHeader` por tipo («Extractos · 3»)
+        // ANTES de la primera fila — sin este renglón acá, la primera fila esqueleto quedaba más
+        // arriba que la primera fila real y todo bajaba de golpe al llegar los datos.
+        // `RotuloDeSeccionEsqueleto` ya copia el relleno y el estilo exactos de `MinSectionHeader`
+        // (Task 8), así que alcanza con ponerlo en el mismo `Column(padding horizontal 16.dp)`.
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            RotuloDeSeccionEsqueleto()
+        }
+        // `Hairline()` en TODAS las filas, no solo entre ellas: es lo que hace `FilaDeDocumento`
+        // de verdad (su propio `Hairline()` va siempre, incluida la última fila de la lista).
+        repeat(FILAS_DE_DOCUMENTO_ESQUELETO) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // El tag va ANTES del `padding` — mismo lugar en la cadena que
+                        // `TAG_FILA_DE_DOCUMENTO` en la fila real (fix round 1: los dos tienen
+                        // que medir el mismo punto, el borde exterior de la fila).
+                        .testTag(TAG_FILA_DE_LISTA_ESQUELETO)
+                        .padding(start = 10.dp, end = 10.dp, top = 12.dp, bottom = 6.dp),
+                ) {
+                    LineaEsqueleto(
+                        fraccionDelAncho = 0.6f,
+                        estilo = Movi.textos.cuerpo,
+                        modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        repeat(3) { BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 44.dp) }
+                    }
+                }
+                Hairline()
+            }
+        }
+    }
+}
+
 @Composable
 private fun FilaDeDocumento(
     doc: Documento,
@@ -356,6 +553,12 @@ private fun FilaDeDocumento(
     onAbrir: () -> Unit,
     onBorrar: () -> Unit,
     onEditar: () -> Unit,
+    /**
+     * Ola B, tarea 7: «Importar movimientos» — `null` cuando [esImportable] dice que este
+     * documento no es un PDF ni una imagen, y entonces la acción ni se ofrece (no una acción
+     * deshabilitada: un botón gris que nunca sirve es peor que no tenerlo).
+     */
+    onImportar: (() -> Unit)? = null,
 ) {
     // El texto arriba a todo el ancho y las acciones en un renglón DEBAJO. Con las tres acciones a
     // la derecha, en un teléfono de ~390 dp se comían un tercio de la fila y el nombre del archivo
@@ -364,6 +567,11 @@ private fun FilaDeDocumento(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Ola B, tarea 9 (fix round 1): el tag va ANTES de `clip`/`clickable`/`padding`
+                // — mismo lugar en la cadena que `TAG_FILA_DE_LISTA_ESQUELETO` en el esqueleto,
+                // para que los dos midan el mismo punto (el borde exterior de la fila) en vez de
+                // que uno mida adentro del relleno y el otro no.
+                .testTag(TAG_FILA_DE_DOCUMENTO)
                 .clip(RoundedCornerShape(10.dp))
                 .clickable(onClick = onAbrir)
                 .padding(start = 10.dp, end = 10.dp, top = 12.dp, bottom = 6.dp),
@@ -406,6 +614,9 @@ private fun FilaDeDocumento(
                 AccionDeFila("Editar", Movi.colores.textoMedio, null, onEditar)
                 // «Borrar» no borra: abre la confirmación (ver `aBorrar` en la pantalla).
                 AccionDeFila("Borrar", Movi.colores.sale, null, onBorrar)
+                // Al final: es la acción menos frecuente de las cuatro, y solo en un PDF o una
+                // imagen (ver [esImportable]).
+                onImportar?.let { AccionDeFila("Importar movimientos", Movi.colores.marca, null, it) }
             }
         }
         Hairline()

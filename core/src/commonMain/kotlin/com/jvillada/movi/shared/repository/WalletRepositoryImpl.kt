@@ -393,10 +393,16 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
-    override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?): CategoryUsage {
+    override suspend fun setCategoryPrefs(
+        name: String,
+        hidden: Boolean,
+        pinnedType: String?,
+        icono: String?,
+        color: String?,
+    ): CategoryUsage {
         val response = client.put("$baseUrl/api/categories/prefs") {
             contentType(ContentType.Application.Json)
-            setBody(CategoryPrefsRequest(name = name, hidden = hidden, pinnedType = pinnedType))
+            setBody(CategoryPrefsRequest(name = name, hidden = hidden, pinnedType = pinnedType, icono = icono, color = color))
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
@@ -751,6 +757,12 @@ class WalletRepositoryImpl(
                 })
             }))
         }.exigirExito().body()
+
+    // `exigirExito()` por el mismo motivo que `uploadStatement`: el server explica el rechazo en
+    // el cuerpo («no encontramos movimientos», «falta la clave»), y sin esto se pierde adentro de
+    // la excepción de deserialización.
+    override suspend fun readStatementFromDocument(id: String): StatementParseResult =
+        client.post("$baseUrl/api/documents/$id/leer-extracto").exigirExito().body()
 
     // Los cuatro comprueban el status, como el resto del archivo. Sin esto `deleteDocument`
     // decía «listo» ante un 500 —el documento seguía ahí y la lista se recargaba igual— y un 401

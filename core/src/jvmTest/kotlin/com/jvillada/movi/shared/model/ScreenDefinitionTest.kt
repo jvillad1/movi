@@ -51,4 +51,42 @@ class ScreenDefinitionTest {
         assertNull(cards[0].action); assertNull(cards[1].action); assertNull(cards[2].action)
         assertEquals(ScreenAction("NAVIGATE", "credits"), cards[3].action)
     }
+
+    // ── Ola B, tarea 7: Metas salió de la navegación ────────────────────────────
+
+    /**
+     * Un acceso «Metas» (QUICK_LINKS_WITH_TOTALS) que quedó guardado de antes de esta tanda no se
+     * pinta más: se saca la FILA entera, no solo su acción — a diferencia de "settings" arriba,
+     * que sigue mostrando su tarjeta sin poder tocarla.
+     */
+    @Test
+    fun un_acceso_a_metas_guardado_no_se_pinta() {
+        val def = ScreenDefinition("dashboard", 1, listOf(
+            ScreenSection(type = "QUICK_LINKS_WITH_TOTALS", cards = listOf(
+                ScreenCard(title = "Metas", action = ScreenAction("NAVIGATE", "goals")),
+                ScreenCard(title = "Créditos", action = ScreenAction("NAVIGATE", "credits")),
+            )),
+        ))
+        val cards = renderableSections(def)[0].cards
+        assertEquals(1, cards.size)
+        assertEquals("Créditos", cards[0].title)
+    }
+
+    /**
+     * La poda es solo de los accesos con cifra. Un BANNER (o cualquier otro tipo) que use
+     * "goals" por otro motivo —el target sigue siendo válido en `NAVIGATE_TARGETS`— no se toca:
+     * lo que se saca es la puerta a Metas, no el target en general.
+     */
+    @Test
+    fun la_poda_de_metas_es_solo_en_los_accesos_con_cifra() {
+        val def = ScreenDefinition("dashboard", 1, listOf(
+            ScreenSection(
+                type = "BANNER", text = "Mira",
+                cards = listOf(ScreenCard(title = "", action = ScreenAction("NAVIGATE", "goals"))),
+            ),
+        ))
+        val renderable = renderableSections(def)
+        assertEquals(1, renderable.size)
+        assertEquals(ScreenAction("NAVIGATE", "goals"), renderable[0].cards[0].action)
+    }
 }

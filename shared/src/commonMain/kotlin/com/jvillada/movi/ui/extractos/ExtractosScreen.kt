@@ -255,8 +255,12 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
     }
 }
 
+/**
+ * `internal` y no `private`: Ola B, tarea 7 la reusa desde `DocumentosScreen` para la sección
+ * «Importaciones» que se mudó ahí — misma fila, no una copia.
+ */
 @Composable
-private fun ImportCard(imp: StatementImport, onClick: () -> Unit) {
+internal fun ImportCard(imp: StatementImport, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

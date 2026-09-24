@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
@@ -36,12 +38,18 @@ import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.HeaderLeading
+import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MoneyField
+import com.jvillada.movi.ui.components.altoDeMoneyFieldConRotulo
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
+import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
+import com.jvillada.movi.ui.components.altoDeUnRenglon
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
@@ -182,16 +190,24 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
                         )
                     }
                 }
-                items(cuentas, key = { it.id }) { cuenta ->
-                    FilaDeCuadre(
-                        cuenta = cuenta,
-                        hoy = hoy,
-                        ahora = ahora,
-                        escrito = escrito[cuenta.id],
-                        habilitado = !guardando,
-                        onEscribir = { escrito[cuenta.id] = it },
-                    )
-                    Spacer(Modifier.height(12.dp))
+                // Ola B, tarea 9: antes de la primera lectura buena, la pantalla quedaba en
+                // blanco debajo de la explicación — ni una fila, ni una rueda. `!leidas` y no
+                // solo `cargando`: una recarga con las cuentas ya pintadas (tocar «Reintentar»,
+                // volver de anotar un ajuste) sigue con `items(cuentas)` de siempre.
+                if (cargando && !leidas) {
+                    cuadreEsqueleto()
+                } else {
+                    items(cuentas, key = { it.id }) { cuenta ->
+                        FilaDeCuadre(
+                            cuenta = cuenta,
+                            hoy = hoy,
+                            ahora = ahora,
+                            escrito = escrito[cuenta.id],
+                            habilitado = !guardando,
+                            onEscribir = { escrito[cuenta.id] = it },
+                        )
+                        Spacer(Modifier.height(12.dp))
+                    }
                 }
                 item {
                     resultado?.let {
@@ -316,5 +332,62 @@ private fun FilaDeCuadre(
             color = Movi.colores.textoApagado,
             modifier = Modifier.padding(top = 6.dp),
         )
+    }
+}
+
+/** Cuántas filas pinta [cuadreEsqueleto] mientras las cuentas no llegaron ni una vez. */
+private const val FILAS_DE_CUADRE_ESQUELETO = 3
+
+/**
+ * **Cuadre de saldos mientras carga, con la forma de [FilaDeCuadre]** (Ola B, tarea 9). Antes de
+ * esta tarea la pantalla quedaba en blanco debajo de la explicación de arriba —ni una rueda, ni
+ * una fila— hasta que las cuentas contestaban. Copia el mismo `MinCard` de 18 dp de relleno, el
+ * título y subtítulo a la izquierda, «Movi dice» + su cifra a la derecha, el campo «LO QUE DICE EL
+ * BANCO» y las dos líneas de apoyo de abajo.
+ */
+private fun LazyListScope.cuadreEsqueleto() {
+    items(FILAS_DE_CUADRE_ESQUELETO) {
+        FilaDeCuadreEsqueleto()
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun FilaDeCuadreEsqueleto() {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_LISTA_ESQUELETO),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.fillMaxWidth(0.55f)) {
+                LineaEsqueleto(
+                    fraccionDelAncho = 0.7f,
+                    estilo = Movi.textos.titulo,
+                    modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
+                )
+                Spacer(Modifier.height(4.dp))
+                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 64.dp)
+                Spacer(Modifier.height(4.dp))
+                BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.monto), ancho = 96.dp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        // El campo «LO QUE DICE EL BANCO»: un bloque a todo el ancho, sin abrir el teclado que un
+        // `MoneyField` de verdad ofrecería. Fix round 1: el alto sale de `altoDeMoneyFieldConRotulo`
+        // —los mismos tokens que arma el campo real, no un número puesto a ojo— para que no se
+        // desalinee en silencio si `Movi.textos.apoyo`/`.monto` cambian.
+        BloqueEsqueleto(alto = altoDeMoneyFieldConRotulo())
+        Spacer(Modifier.height(8.dp))
+        LineaEsqueleto(fraccionDelAncho = 0.85f, estilo = Movi.textos.apoyo)
+        Spacer(Modifier.height(6.dp))
+        LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.apoyo)
     }
 }
