@@ -322,6 +322,14 @@ class CategoriasLogicTest {
     }
 
     @Test
+    fun `una categoria escondida lo dice en el resumen corto, no solo con el color`() {
+        // Fix round 1: sin las etiquetas de la fila vieja, el color gris no bastaba para decir
+        // «está escondida» — acá se dice con palabras, en el mismo renglón.
+        assertEquals("Escondida · 3 movimientos", resumenDeUsoCorto(cat("Ropa", movements = 3, hidden = true)))
+        assertEquals("Escondida · Sin movimientos", resumenDeUsoCorto(cat("Ropa", hidden = true)))
+    }
+
+    @Test
     fun `la cifra del mes es null si no la uso este mes`() {
         assertEquals(null, cifraDelMes(cat("Comida", movements = 12, total = 450_000)))
     }

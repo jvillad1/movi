@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -42,6 +43,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -458,6 +462,9 @@ private fun CampoDeBusqueda(valor: String, onValorCambia: (String) -> Unit, modi
     }
 }
 
+/** El `testTag` de [FilaDeCategoria], para medir su alto real en una prueba (fix round 1). */
+fun tagDeFilaDeCategoria(nombre: String): String = "categoria:fila:$nombre"
+
 /**
  * Ola B · tarea 5: la fila compacta. Reemplaza a la de dos etiquetas y una oración — «Tuya» y el
  * tipo («Ambos») salieron de acá: el tipo se dice solo cuando ayuda, y eso pasó a la hoja de
@@ -465,20 +472,28 @@ private fun CampoDeBusqueda(valor: String, onValorCambia: (String) -> Unit, modi
  * si vale la pena abrirla: el ícono, el nombre, la cifra de este mes si tiene, y cuánto la usó en
  * total, sin adornos.
  *
- * **Alto fijo** ([ALTO_DE_FILA_DE_CATEGORIA]): la tarea 9 arma un esqueleto que tiene que medir
- * exactamente lo mismo que esto para no saltar cuando llega el dato real — mismo criterio que
- * `MovementSingleRow` y sus filas de Movimientos.
+ * **Alto MÍNIMO** ([ALTO_DE_FILA_DE_CATEGORIA], vía `heightIn(min = …)`, no `height(…)`) — fix
+ * round 1. `App.kt` multiplica la escala de letra ambiente por 1,12 en TODA la app (el «tamaño de
+ * Movi» no es el tamaño del sistema tal cual), así que un `.height()` fijo medido a escala 1 se
+ * queda corto: `titulo` (línea de 20 sp) + 2 dp + `apoyo` (línea de 16 sp) necesitan ≈42,3 dp a
+ * escala 1,12, y con el relleno vertical de antes (10 dp arriba y abajo → 40 dp libres) el texto
+ * se recortaba. El relleno bajó a 8 dp (44 dp libres, con margen) y el alto pasó a ser un PISO: a
+ * la escala por defecto de Movi la fila mide exactamente [ALTO_DE_FILA_DE_CATEGORIA] (el contenido
+ * entra con margen de sobra y el mínimo gana), y con una escala de letra más grande todavía la fila
+ * crece en vez de recortar — la tarea 9 arma un esqueleto que tiene que medir lo mismo que esta
+ * fila **a la escala por defecto**, no un alto que esta fila pueda superar.
  */
 @Composable
 private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
     Row(
         modifier = Modifier
+            .testTag(tagDeFilaDeCategoria(categoria.name))
             .fillMaxWidth()
-            .height(ALTO_DE_FILA_DE_CATEGORIA)
+            .heightIn(min = ALTO_DE_FILA_DE_CATEGORIA)
             .clip(RoundedCornerShape(14.dp))
             .background(Movi.colores.tarjeta)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -518,9 +533,10 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
 }
 
 /**
- * El alto de [FilaDeCategoria], en el medio del rango que pide la tarea (56-64 dp). `internal` y
- * no `private`: la tarea 9 arma un esqueleto que tiene que medir exactamente esto, y que lo
- * importe de acá es menos frágil que duplicar el número.
+ * El alto MÍNIMO de [FilaDeCategoria], en el medio del rango que pide la tarea (56-64 dp). A la
+ * escala de letra por defecto de Movi es también el alto exacto — ver el KDoc de
+ * [FilaDeCategoria], fix round 1. `internal` y no `private`: la tarea 9 arma un esqueleto que
+ * tiene que medir esto, y que lo importe de acá es menos frágil que duplicar el número.
  */
 internal val ALTO_DE_FILA_DE_CATEGORIA = 60.dp
 
@@ -837,6 +853,11 @@ private fun CeldaDeIcono(item: IconoDelCatalogo, elegido: Boolean, onClick: () -
  * El elegido se marca con un **anillo alrededor**, no con un check encima: un check necesita un
  * tinte que contraste contra el color de fondo, y con diez colores de fondo distintos no hay un
  * tinte único que sirva para los diez a la vez sin agregar tokens nuevos.
+ *
+ * **Fix round 1: `contentDescription` y estado de selección.** Un círculo de color no dice nada
+ * por sí solo a un lector de pantalla — acá lleva el rótulo en español del catálogo
+ * ([ColorDelCatalogo.rotulo], p. ej. «Naranja») y, con [selectable] en vez de `clickable`, el
+ * estado «seleccionado» que antes solo se veía (el anillo).
  */
 @Composable
 private fun CeldaDeColor(item: ColorDelCatalogo, elegido: Boolean, onClick: () -> Unit) {
@@ -846,7 +867,8 @@ private fun CeldaDeColor(item: ColorDelCatalogo, elegido: Boolean, onClick: () -
             .testTag(tagDeColorDelCatalogo(item.clave))
             .clip(forma)
             .then(if (elegido) Modifier.border(2.dp, Movi.colores.texto, forma) else Modifier)
-            .clickable(onClick = onClick)
+            .selectable(selected = elegido, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = item.rotulo }
             .padding(3.dp),
         contentAlignment = Alignment.Center,
     ) {

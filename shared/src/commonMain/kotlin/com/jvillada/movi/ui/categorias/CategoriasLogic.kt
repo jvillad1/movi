@@ -157,14 +157,20 @@ fun resumenDelMes(c: CategoryUsage): String? {
  * El uso, pero pelado a cuántos movimientos — para la fila compacta de Ola B, que no tiene lugar
  * para una oración entera (ver [resumenDeUso], la versión larga que sigue usando la hoja de
  * detalle). Cuenta también los de otra moneda: acá no hay plata que mezclar, solo un conteo.
+ *
+ * **Fix round 1: «Escondida · …» cuando corresponde.** Sin las etiquetas de la fila vieja, lo
+ * único que decía «está escondida» era el nombre en gris — un color que no todos los ojos leen
+ * igual de bien. Acá se dice con palabras, en el mismo renglón corto que ya existía, en vez de
+ * agregar un renglón o una etiqueta nueva.
  */
 fun resumenDeUsoCorto(c: CategoryUsage): String {
     val total = c.movements + c.otherCurrencyMovements
-    return when (total) {
+    val uso = when (total) {
         0 -> "Sin movimientos"
         1 -> "1 movimiento"
         else -> "$total movimientos"
     }
+    return if (c.hidden) "Escondida · $uso" else uso
 }
 
 /**
