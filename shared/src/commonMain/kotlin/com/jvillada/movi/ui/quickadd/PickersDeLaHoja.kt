@@ -1,7 +1,7 @@
 package com.jvillada.movi.ui.quickadd
 
 /**
- * La pestaña «Traspaso» del selector de arriba de la hoja de «Agregar» ([TypeSegments]): la
+ * La pestaña «Traspaso» del selector de arriba de la hoja de «Agregar» ([com.jvillada.movi.ui.components.SelectorSegmentado]): la
  * única que dibuja [TransferBody], que es el único formulario con un sub-picker propio.
  */
 internal const val TIPO_TRASPASO = 2
@@ -41,7 +41,7 @@ internal sealed class Picker {
  * restauración del desplazamiento al cerrarlo (ver `recordarScroll` en [QuickAddScreen]). Esa
  * pregunta se contestaba con dos variables sueltas, `picker` acá y un espejo de `picking`, que
  * es estado de adentro de [TransferBody]. Un espejo se queda viejo: bastaba abrir «Desde» en
- * Traspaso y tocar «Gasto» —[TypeSegments] vive fuera del `Box`, así que sigue tocable con el
+ * Traspaso y tocar «Gasto» —[com.jvillada.movi.ui.components.SelectorSegmentado] vive fuera del `Box`, así que sigue tocable con el
  * sub-picker abierto— para que [TransferBody] saliera de composición sin avisar que su picker se
  * había ido. El espejo quedaba en `true` de por vida, `hayPicker` no volvía a cambiar nunca, y
  * la restauración del desplazamiento moría en las TRES pestañas: cada ida y vuelta a
@@ -92,7 +92,7 @@ internal data class PickersDeLaHoja(
         copy(deTraspaso = abierto && typeIndex >= TIPO_TRASPASO)
 
     /**
-     * Se eligió otra pestaña en [TypeSegments].
+     * Se eligió otra pestaña en [com.jvillada.movi.ui.components.SelectorSegmentado].
      *
      * Salir de Traspaso saca a [TransferBody] de composición y con él a su `picking`, así que el
      * espejo se suelta acá. Volver a tocar la pestaña en la que ya se está no cierra nada: no

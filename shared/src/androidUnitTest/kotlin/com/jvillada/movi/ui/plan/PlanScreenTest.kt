@@ -3,6 +3,14 @@ package com.jvillada.movi.ui.plan
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
+import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
+import com.jvillada.movi.ui.dashboard.instantaneaEnMemoria
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -27,6 +35,7 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.budgets.TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO
 import com.jvillada.movi.ui.budgets.TAG_TARJETA_DEL_GASTO_DEL_PERIODO
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
@@ -75,25 +84,35 @@ class PlanScreenTest {
     private val puerta = CompletableDeferred<Unit>()
     private var lecturasDelResumen = 0
 
+    /** Sin red: todo lo que la tarjeta y el tablero leen falla. */
+    private var sinRed = false
+
+    private fun cortar() {
+        if (sinRed) error("sin red")
+    }
+
     private inner class Repo : RepositorioDePrueba() {
         override suspend fun getFinanceSummary(scope: Scope): FinanceSummary {
             lecturasDelResumen++
+            cortar()
             puerta.await()
             return FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 5_000_000, egresos = 0)
         }
 
         override suspend fun getDashboardSummary(scope: Scope): DashboardSummary {
+            cortar()
             puerta.await()
             return DashboardSummary(spentByCategory = mapOf("Comida" to 300_000L), gastoVariablePorDia = emptyMap())
         }
 
         override suspend fun getUserProfile(): UserProfile {
+            cortar()
             puerta.await()
             return UserProfile(id = "u", email = "u@local", name = "U", avatarColor = "#000000", periodCutoffDay = 25)
         }
 
-        override suspend fun getUpcomingPayments(): List<UpcomingPayment> = emptyList()
-        override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
+        override suspend fun getUpcomingPayments(): List<UpcomingPayment> = emptyList<UpcomingPayment>().also { cortar() }
+        override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList<OccurrenceState>().also { cortar() }
         override suspend fun getRecurringRules(): List<RecurringRule> = emptyList()
         override suspend fun getSubscriptions(): SubscriptionsResult = SubscriptionsResult(emptyList(), monthlyTotalCop = 0)
         override suspend fun getBudgets(): List<Budget> = listOf(Budget("Comida", 1_000_000L))
@@ -109,7 +128,27 @@ class PlanScreenTest {
     @After
     fun limpiar() {
         Repositories.sustitutoDePrueba = null
+        InstantaneaDelInicio.sustitutoDePrueba = null
         RecurringOfferGate.clear()
+    }
+
+    /** Lo último que el Inicio guardó en el aparato: $5M disponibles en el período de hoy. */
+    private fun conInstantaneaDelInicio() {
+        InstantaneaDelInicio.sustitutoDePrueba = instantaneaEnMemoria(mutableMapOf())
+        SessionManager.save(token = "tok", userId = "u1", name = "Juan", email = "juan@ejemplo.com")
+        InstantaneaDelInicio.delAparato.guardarDatos("u1", datosDelInicio())
+    }
+
+    private fun datosDelInicio(): DashboardData {
+        val ahora = Clock.System.now().toEpochMilliseconds()
+        return DashboardData(
+            summary = FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 5_000_000, egresos = 0),
+            upcoming = emptyList(),
+            ocurrencias = emptyList(),
+            gastoVariablePorDia = emptyMap(),
+            ajustesDePeriodo = ajustes,
+            periodoActual = periodoActual(ahora, ajustes),
+        )
     }
 
     private fun montar(segmento: Int = SEGMENTO_PAGOS) {
@@ -181,14 +220,7 @@ class PlanScreenTest {
     @Test
     fun `con el Inicio fresco en memoria la tarjeta sale al primer cuadro, sin pedir nada`() {
         val ahora = Clock.System.now().toEpochMilliseconds()
-        DashboardDataCache.data = DashboardData(
-            summary = FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 5_000_000, egresos = 0),
-            upcoming = emptyList(),
-            ocurrencias = emptyList(),
-            gastoVariablePorDia = emptyMap(),
-            ajustesDePeriodo = ajustes,
-            periodoActual = periodoActual(ahora, ajustes),
-        )
+        DashboardDataCache.data = datosDelInicio()
         DashboardDataCache.cargadoEn = ahora
         DashboardDataCache.tickDeLaCarga = 0
         // La puerta queda cerrada: si Plan pidiera algo para la tarjeta, se quedaría esperando.
@@ -237,5 +269,88 @@ class PlanScreenTest {
             corrimiento <= 8f,
             "El selector de segmentos se corrió $corrimiento dp al llegar los datos (encabezado + tarjeta); el máximo son 8 dp",
         )
+    }
+
+    /**
+     * Fix round 1: cambiar de segmento cancela la carga de Presupuestos a medio camino. La lectura
+     * cancelada no puede darse por contestada: si lo hacía, al volver se pintaba el gasto del mes de
+     * calendario (sin el del server ni el período del dueño) y la lista se reordenaba al llegar.
+     */
+    @Test
+    fun `ir y volver de Presupuestos con la carga a medias no pinta cifras hasta que contesta`() {
+        montar(segmento = SEGMENTO_PRESUPUESTOS)
+        assertEquals(1, contarTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO))
+
+        composeRule.onNodeWithText("Pagos del mes", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Presupuestos", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(!hay("Gastado en", substring = true), "la carga cancelada no cuenta como contestada")
+        assertTrue(!hay("Comida"))
+        assertEquals(1, contarTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO))
+
+        puerta.complete(Unit)
+        composeRule.waitForIdle()
+        assertTrue(hay("Gastado en", substring = true))
+        assertTrue(hay("Comida"))
+    }
+
+    /** Fix round 1: lo de antes, mientras se actualiza, no se hace pasar por lo de ahora. */
+    @Test
+    fun `con la instantanea del Inicio pinta la cifra y dice Actualizando mientras recarga`() {
+        conInstantaneaDelInicio()
+        montar()
+
+        assertTrue(hay("\$5M"), "lo último que se supo, en el primer cuadro")
+        assertTrue(hay("Actualizando…"), "con la recarga en vuelo, la cabecera lo dice")
+
+        puerta.complete(Unit)
+        composeRule.waitForIdle()
+        assertTrue(hay("\$5M"))
+        assertTrue(!hay("Actualizando…"))
+    }
+
+    /** Fix round 1: si la recarga no contesta, las cifras de antes no quedan como si fueran de hoy. */
+    @Test
+    fun `con la instantanea y sin red, cambia la tarjeta por el reintento`() {
+        sinRed = true
+        conInstantaneaDelInicio()
+        montar()
+
+        assertTrue(hay("No pudimos calcular cuánto puedes gastar"))
+        assertTrue(!hay("\$5M"), "las cifras de la instantánea no se pueden dar por actuales")
+        assertTrue(!hay("Actualizando…"))
+    }
+
+    @Test
+    fun `el segmento elegido sobrevive a ir a otra pantalla y volver`() {
+        puerta.complete(Unit)
+        var enPlan by mutableStateOf(true)
+        composeRule.setContent {
+            MoviTheme {
+                // Lo mismo que hace App.kt con cada pantalla de la pila.
+                val guardado = rememberSaveableStateHolder()
+                Box(Modifier.fillMaxSize()) {
+                    if (enPlan) {
+                        guardado.SaveableStateProvider("plan") { PlanScreen(onNavigate = {}) }
+                    } else {
+                        Text("Otra pantalla")
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Presupuestos", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        enPlan = false
+        composeRule.waitForIdle()
+        assertTrue(hay("Otra pantalla"))
+        enPlan = true
+        composeRule.waitForIdle()
+
+        assertTrue(hay("Gastado en", substring = true), "vuelve a Presupuestos, no al segmento de entrada")
+        assertTrue(!hay(tituloDelChecklist))
     }
 }

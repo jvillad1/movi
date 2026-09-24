@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
@@ -169,6 +170,12 @@ class EstadoDelTableroDeRecurrentes internal constructor(
      * dato, una lectura caída se veía igual que una lenta — para siempre.
      */
     internal var recurrentesNoSePudieronLeer by mutableStateOf(false)
+
+    /**
+     * Hay una lectura de vencimientos y ocurrencias en vuelo (la primera o una recarga). La tarjeta
+     * del disponible de Plan, que usa estas mismas listas, dice «Actualizando…» mientras tanto.
+     */
+    internal var leyendoVencimientos by mutableStateOf(false)
 
     /**
      * La primera lectura de lo que el tablero enumera —vencimientos y ocurrencias— todavía no
@@ -454,12 +461,18 @@ class EstadoDelTableroDeRecurrentes internal constructor(
  *   Movimientos: su «Reintentar», anular o editar un movimiento). Además de esta, el tablero
  *   escucha [LocalRefreshTick] y su propia [EstadoDelTableroDeRecurrentes.recargas].
  * @param error dónde escribir lo que falló. Ver [EstadoDelTableroDeRecurrentes].
+ * @param vencimientosSiempre lee los vencimientos y las ocurrencias aunque el tablero no se vea.
+ *   Ola C: en Plan la tarjeta del disponible saca sus fijos de esas MISMAS dos listas (ver
+ *   `rememberDisponibleDelPlan`), con cualquiera de los dos segmentos a la vista; leerlas acá una
+ *   sola vez evita pedirlas dos veces y que la tarjeta y el checklist digan cosas distintas del
+ *   mismo período. Movimientos lo deja en `false`: ahí nadie más las usa.
  */
 @Composable
 fun rememberEstadoDelTableroDeRecurrentes(
     activo: Boolean,
     recarga: Int,
     error: MutableState<String?>,
+    vencimientosSiempre: Boolean = false,
 ): EstadoDelTableroDeRecurrentes {
     val alcance = rememberCoroutineScope()
     val estado = remember(alcance, error) { EstadoDelTableroDeRecurrentes(alcance, error) }
@@ -480,7 +493,7 @@ fun rememberEstadoDelTableroDeRecurrentes(
     // nada y «Próximos» quedaba cargando para siempre.
     LaunchedEffect(activo, estado.recargas, refreshTick, recarga) {
         if (!activo) return@LaunchedEffect
-        runCatching { Repositories.wallets.getSubscriptions() }
+        intentar { Repositories.wallets.getSubscriptions() }
             .onSuccess {
                 estado.subsParaRecurrentes = it
                 estado.subsParaRecurrentesOk = true
@@ -493,34 +506,42 @@ fun rememberEstadoDelTableroDeRecurrentes(
             .onFailure { error.value = it.toUserMessage() }
     }
 
-    LaunchedEffect(activo, estado.recargas, refreshTick, recarga) {
-        if (!activo) return@LaunchedEffect
-        ReminderChannelsCache.cargar()
-        // En paralelo, como las hace la pantalla vieja: en serie son dos viajes encadenados y la
-        // sección se queda a medias el doble de tiempo.
-        coroutineScope {
-            val porVencer = async { runCatching { Repositories.wallets.getUpcomingPayments() } }
-            val porOcurrir = async { runCatching { Repositories.wallets.getOccurrenceStates() } }
-            estado.recurrentesNoSePudieronLeer = false
-            porVencer.await()
-                .onSuccess { estado.upcomingRecurrentes = it; estado.vencimientosOk = true }
-                .onFailure { error.value = it.toUserMessage(); estado.recurrentesNoSePudieronLeer = true }
-            // Si esta falla no se pinta ninguna propuesta ni ninguna marca: la sección se ve como
-            // antes de que existiera. Un «ya ocurrió» que en realidad no se pudo leer sería una
-            // afirmación sin respaldo, que es lo único que esta pieza no puede permitirse.
-            porOcurrir.await()
-                .onSuccess { estado.ocurrencias = it; estado.ocurrenciasOk = true }
-                .onFailure {
-                    if (error.value == null) error.value = it.toUserMessage()
-                    estado.recurrentesNoSePudieronLeer = true
-                }
+    // Con `vencimientosSiempre` la clave es la misma con cualquier `activo`: cambiar de segmento en
+    // Plan no vuelve a pedir estas dos.
+    val leeVencimientos = activo || vencimientosSiempre
+    LaunchedEffect(leeVencimientos, estado.recargas, refreshTick, recarga) {
+        if (!leeVencimientos) return@LaunchedEffect
+        estado.leyendoVencimientos = true
+        try {
+            ReminderChannelsCache.cargar()
+            // En paralelo, como las hace la pantalla vieja: en serie son dos viajes encadenados y
+            // la sección se queda a medias el doble de tiempo.
+            coroutineScope {
+                val porVencer = async { intentar { Repositories.wallets.getUpcomingPayments() } }
+                val porOcurrir = async { intentar { Repositories.wallets.getOccurrenceStates() } }
+                estado.recurrentesNoSePudieronLeer = false
+                porVencer.await()
+                    .onSuccess { estado.upcomingRecurrentes = it; estado.vencimientosOk = true }
+                    .onFailure { error.value = it.toUserMessage(); estado.recurrentesNoSePudieronLeer = true }
+                // Si esta falla no se pinta ninguna propuesta ni ninguna marca: la sección se ve como
+                // antes de que existiera. Un «ya ocurrió» que en realidad no se pudo leer sería una
+                // afirmación sin respaldo, que es lo único que esta pieza no puede permitirse.
+                porOcurrir.await()
+                    .onSuccess { estado.ocurrencias = it; estado.ocurrenciasOk = true }
+                    .onFailure {
+                        if (error.value == null) error.value = it.toUserMessage()
+                        estado.recurrentesNoSePudieronLeer = true
+                    }
+            }
+        } finally {
+            estado.leyendoVencimientos = false
         }
     }
 
     // Ver [EstadoDelTableroDeRecurrentes.planesDeCuotas].
     LaunchedEffect(activo, estado.recargas, refreshTick, recarga) {
         if (!activo) return@LaunchedEffect
-        runCatching { Repositories.wallets.getCredits() }
+        intentar { Repositories.wallets.getCredits() }
             .onSuccess { estado.planesDeCuotas = planesDeLasCuotas(it) }
             // Sin plan no hay estimación, y eso ya lo dice la ausencia de la línea.
             .onFailure { estado.planesDeCuotas = emptyMap() }
@@ -895,17 +916,23 @@ class TableroMontadoSolo internal constructor(
  *
  * @param activo lo mismo que en [rememberEstadoDelTableroDeRecurrentes]: en Plan, si el segmento
  *   «Pagos del mes» es el que se ve. Las cuentas tampoco se piden sin él.
+ * @param vencimientosSiempre ver [rememberEstadoDelTableroDeRecurrentes].
  */
 @Composable
-fun rememberTableroMontadoSolo(activo: Boolean = true): TableroMontadoSolo {
+fun rememberTableroMontadoSolo(activo: Boolean = true, vencimientosSiempre: Boolean = false): TableroMontadoSolo {
     val error = remember { mutableStateOf<String?>(null) }
     var recarga by remember { mutableStateOf(0) }
-    val estado = rememberEstadoDelTableroDeRecurrentes(activo = activo, recarga = recarga, error = error)
+    val estado = rememberEstadoDelTableroDeRecurrentes(
+        activo = activo,
+        recarga = recarga,
+        error = error,
+        vencimientosSiempre = vencimientosSiempre,
+    )
     val refreshTick = LocalRefreshTick.current
     val cuentas = remember { mutableStateOf<List<Account>>(emptyList()) }
     LaunchedEffect(recarga, refreshTick, activo) {
         if (!activo) return@LaunchedEffect
-        runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas.value = it }
+        intentar { Repositories.wallets.getAccounts() }.onSuccess { cuentas.value = it }
     }
     val aviso = remember { SnackbarHostState() }
     LaunchedEffect(error.value) {

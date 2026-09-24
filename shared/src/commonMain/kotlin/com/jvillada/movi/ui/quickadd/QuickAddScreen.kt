@@ -960,7 +960,7 @@ fun QuickAddScreen(
                     //    solapamiento: la X del `PickerHeader` quedaba sobre la fila
                     //    «Gasto · Ingreso · Traspaso», y un toque impaciente después de cerrar
                     //    saltaba a «Traspaso» y se llevaba el monto de la vista. Por eso
-                    //    [TypeSegments] vive AHORA fuera de este `Box`: la franja de arriba es la
+                    //    [SelectorSegmentado] vive AHORA fuera de este `Box`: la franja de arriba es la
                     //    misma en los dos estados, el sub-picker empieza por debajo de ella y su X
                     //    cae sobre el monto — un `Text` sin `clickable`, donde un segundo toque no
                     //    hace nada.
@@ -997,7 +997,7 @@ fun QuickAddScreen(
                     // El selector de tipo elige entre DOS formularios distintos: un movimiento
                     // (gasto/ingreso) y un traspaso, que no tiene ni categoría ni tipo pero sí dos
                     // cuentas — por eso decide qué se dibuja abajo en vez de vivir en [EditorBody].
-                    TypeSegments(
+                    SelectorSegmentado(
                         // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
                         // habla igual — Inicio y Movimientos también dicen «Gastos».
                         // «Cuota» y no «Pago de cuota»: son cuatro segmentos en una fila que en
@@ -1186,58 +1186,6 @@ fun QuickAddScreen(
                 onDismiss = { showCreateSheet = false },
                 onAccountCreated = { showCreateSheet = false; accountsRefreshKey++ },
             )
-        }
-    }
-}
-
-/**
- * El selector de arriba de la hoja: Gasto · Ingreso · Traspaso.
- *
- * Vive fuera de [EditorBody] desde que existe la tercera opción: ya no elige una variante del
- * mismo formulario sino entre dos formularios distintos (ver [TransferBody]), así que el que lo
- * dibuja tiene que ser el que decide cuál se muestra.
- */
-@Composable
-internal fun TypeSegments(
-    labels: List<String>,
-    selected: Int,
-    onSelect: (Int) -> Unit,
-    enabled: Boolean = true,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(999.dp))
-            .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
-            .padding(3.dp),
-    ) {
-        labels.forEachIndexed { i, label ->
-            val isActive = i == selected
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (isActive) Movi.colores.tarjeta else Color.Transparent)
-                    .clickable(enabled = enabled) { onSelect(i) }
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label,
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isActive) Movi.colores.texto else Movi.colores.textoMedio,
-                    letterSpacing = 0.1.sp,
-                    // Una sola línea SIEMPRE. Con cuatro segmentos, cada uno se queda con ~82 dp
-                    // en un teléfono de 375 px: «Traspaso» a 13 sp mide ~55, pero con la escala de
-                    // fuente del sistema al 2× se pasa y envuelve, lo que crece la fila del
-                    // selector y corre el formulario entero hacia abajo. Con tres segmentos el
-                    // umbral estaba más lejos; con cuatro, no.
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
         }
     }
 }

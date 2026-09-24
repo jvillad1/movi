@@ -104,10 +104,12 @@ object RecurringOfferGate {
      * una pantalla que no carga por una función que solo iba a pintar un ícono de más.
      */
     suspend fun listasParaMovimientos(): Pair<List<RecurringRule>, List<Subscription>> {
-        val reglasAlDia = reglas ?: runCatching { Repositories.wallets.getRecurringRules() }
+        // `intentar` y no `runCatching`: una lectura cancelada (la pantalla ya no la quiere) no es
+        // una lista vacía — devolverla así dejaba sin marcas de repetición a quien la pidió.
+        val reglasAlDia = reglas ?: intentar { Repositories.wallets.getRecurringRules() }
             .onSuccess { reglas = it }
             .getOrNull()
-        val cobrosAlDia = suscripciones ?: runCatching { Repositories.wallets.getSubscriptions().subscriptions }
+        val cobrosAlDia = suscripciones ?: intentar { Repositories.wallets.getSubscriptions().subscriptions }
             .onSuccess { suscripciones = it }
             .getOrNull()
         return (reglasAlDia ?: emptyList()) to (cobrosAlDia ?: emptyList())

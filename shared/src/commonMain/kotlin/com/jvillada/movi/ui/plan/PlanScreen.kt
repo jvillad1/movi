@@ -42,7 +42,7 @@ import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
 import com.jvillada.movi.ui.dashboard.alcanzaParaElDisponible
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
-import com.jvillada.movi.ui.quickadd.TypeSegments
+import com.jvillada.movi.ui.components.SelectorSegmentado
 import com.jvillada.movi.ui.sdui.TarjetaDelDisponible
 import com.jvillada.movi.ui.sdui.encabezadoDelPeriodo
 import kotlinx.datetime.Clock
@@ -92,14 +92,19 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     var elegido by rememberSaveable { mutableStateOf(segmentoValido(segmento)) }
     val enPagos = elegido == SEGMENTO_PAGOS
 
-    val pagos = rememberTableroMontadoSolo(activo = enPagos)
+    // `vencimientosSiempre`: la tarjeta del disponible saca sus fijos de los vencimientos y las
+    // ocurrencias del tablero, también con Presupuestos a la vista (ver [DisponibleDelPlan]).
+    val pagos = rememberTableroMontadoSolo(activo = enPagos, vencimientosSiempre = true)
     val presupuestos = rememberEstadoDePresupuestos(activo = !enPagos)
     // Marcar que algo ocurrió, confirmar un cobro o editar un recurrente cambia los fijos del
     // período, que son la mitad del disponible: la tarjeta de arriba vuelve a leer con cada acción
-    // del tablero, además de con su propio «Reintentar».
-    var reintentosDelDisponible by remember { mutableStateOf(0) }
-    val disponible = rememberDisponibleDelPlan(recarga = reintentosDelDisponible + pagos.estado.recargas)
+    // del tablero. Su «Reintentar» pasa por el mismo camino (`recargar()`), que además vuelve a
+    // pedir los vencimientos — la otra mitad de lo que pudo fallar.
+    val disponible = rememberDisponibleDelPlan(recarga = pagos.estado.recargas, tablero = pagos.estado)
     val data = disponible.data
+    // Recargando con cifras ya pintadas (lo del Inicio): lo dice, como el Inicio, en vez de hacer
+    // pasar lo de antes por lo de ahora.
+    val actualizando = disponible.cargando && alcanzaParaElDisponible(data)
     // Si la última vez que el perfil contestó el período llevaba línea de rango. `null` (nada
     // recordado) la reserva, como Movimientos: ver `FormaRecordada.recordarLineaDePeriodo`.
     val lineaRecordada = remember { FormaRecordada.delAparato.movimientos(SessionManager.userId)?.lineaDePeriodo }
@@ -125,9 +130,21 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             MinScreenHeader(
                 title = "Plan",
                 leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
-                action = if (!enPagos && presupuestos.nuevoEnElEncabezado) {
-                    { NewItemButton(label = "Nuevo", onClick = { presupuestos.abrirNuevo() }) }
-                } else null,
+                action = {
+                    // Va en la cabecera, cuyo alto fija el avatar: aparecer y desaparecer no mueve
+                    // nada de lo de abajo. Mismo texto y estilo que el Inicio.
+                    if (actualizando) {
+                        Text(
+                            "Actualizando…",
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoApagado,
+                            maxLines = 1,
+                        )
+                    }
+                    if (!enPagos && presupuestos.nuevoEnElEncabezado) {
+                        NewItemButton(label = "Nuevo", onClick = { presupuestos.abrirNuevo() })
+                    }
+                },
             )
             LazyColumn(
                 state = listState,
@@ -143,13 +160,13 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                 item(key = "disponible") {
                     SeccionCuantoPuedesGastar(
                         disponible = disponible,
-                        onReintentar = { reintentosDelDisponible++ },
+                        onReintentar = { pagos.estado.recargar() },
                     )
                 }
                 item(key = "segmentos") {
                     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
                         Spacer(Modifier.height(Movi.espacios.seccion))
-                        TypeSegments(
+                        SelectorSegmentado(
                             labels = ROTULOS_DE_LOS_SEGMENTOS,
                             selected = elegido,
                             onSelect = { elegido = it },
@@ -216,9 +233,12 @@ const val TITULO_CUANTO_PUEDES_GASTAR = "Cuánto puedes gastar"
 /**
  * **«Cuánto puedes gastar»**, en sus cuatro estados, sin afirmar nada que no se leyó:
  *
- * - con los datos: la tarjeta del disponible, la misma del Inicio;
+ * - con los datos: la tarjeta del disponible, la misma del Inicio (con «Actualizando…» en la
+ *   cabecera si lo que se ve es de antes y la carga sigue en vuelo);
  * - cargando y sin datos: la misma tarjeta con su forma y sin cifras;
- * - la carga terminó y falta alguna lectura: «no pudimos calcular», con «Reintentar»;
+ * - la carga terminó y alguna lectura de ESTA carga no contestó, o falta alguna: «no pudimos
+ *   calcular», con «Reintentar» — aunque haya cifras de antes, que ya no se pueden dar por
+ *   actuales (ver [DisponibleDelPlan.fallo]);
  * - están todas y no hay nada honesto que decir (sin ingresos ni plata anotados, ver
  *   `disponibleDelPeriodo`): lo dice y dice qué falta, en vez de un disponible negativo que asuste.
  */
@@ -227,6 +247,7 @@ private fun SeccionCuantoPuedesGastar(disponible: DisponibleDelPlan, onReintenta
     val data = disponible.data
     val alcanza = alcanzaParaElDisponible(data)
     when {
+        !disponible.cargando && disponible.fallo -> NoSePudoLeerElDisponible(onReintentar)
         alcanza -> {
             val cifras = disponibleDelInicio(data)
             if (cifras != null) {
@@ -249,9 +270,14 @@ private fun SeccionCuantoPuedesGastar(disponible: DisponibleDelPlan, onReintenta
             }
         }
         disponible.cargando -> TarjetaDelDisponible(titulo = TITULO_CUANTO_PUEDES_GASTAR, disponible = null)
-        else -> Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-            MinSectionHeader(title = TITULO_CUANTO_PUEDES_GASTAR)
-            NoSePudoLeer("No pudimos calcular cuánto puedes gastar", onReintentar = onReintentar)
-        }
+        else -> NoSePudoLeerElDisponible(onReintentar)
+    }
+}
+
+@Composable
+private fun NoSePudoLeerElDisponible(onReintentar: () -> Unit) {
+    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
+        MinSectionHeader(title = TITULO_CUANTO_PUEDES_GASTAR)
+        NoSePudoLeer("No pudimos calcular cuánto puedes gastar", onReintentar = onReintentar)
     }
 }

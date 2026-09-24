@@ -95,6 +95,10 @@ class FormaRecordada(
      * CORTE del dueño, no de una pantalla, y la muestran Movimientos y Plan; las dos la anotan
      * con esto —y solo tras un perfil que contestó bien— y las dos la leen de [movimientos] para
      * reservarla (o no) antes de que el perfil conteste.
+     *
+     * **Reemplaza la [FormaDeMovimientos] entera**, no solo este campo: hoy es el único que tiene.
+     * Si mañana se le agrega otro, esto tiene que leer la guardada y copiarla con el campo nuevo,
+     * o cada visita a Plan borraría lo que Movimientos recordó.
      */
     fun recordarLineaDePeriodo(userId: String?, periodoDeHoy: PeriodoFinanciero, ajustes: PeriodSettings) =
         guardarMovimientos(userId, FormaDeMovimientos(lineaDePeriodo = rangoLegibleDe(periodoDeHoy, ajustes) != null))

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.EventDay
@@ -181,7 +182,7 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     internal suspend fun reload() {
         // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
         // esta pantalla ya carga presupuestos y movimientos, no hace falta un fetch nuevo.
-        runCatching { Repositories.wallets.getBudgets() }.onSuccess {
+        intentar { Repositories.wallets.getBudgets() }.onSuccess {
             budgets = it
             // Ola 9 · A3: un presupuesto es, por definición, un límite de GASTO — así que sus
             // categorías se anotan con ese tipo y no como "no se sabe".
@@ -316,7 +317,7 @@ fun rememberEstadoDePresupuestos(activo: Boolean = true): EstadoDePresupuestos {
         if (!activo) return@LaunchedEffect
         estado.loading = true
         estado.reload()
-        runCatching { Repositories.wallets.getEventsByDay() }.onSuccess {
+        intentar { Repositories.wallets.getEventsByDay() }.onSuccess {
             estado.days = it
             estado.eventosLeidos = true
             // Ola 9 · A3: con el tipo de cada movimiento, así una categoría propia se ofrece
@@ -327,10 +328,10 @@ fun rememberEstadoDePresupuestos(activo: Boolean = true): EstadoDePresupuestos {
         // SMS, importaciones; anulados fuera). En el teléfono `getEventsByDay` es local y solo
         // conoce lo de este aparato, así que el Inicio podía decir «Comida superado» y esta
         // pantalla no. Si falla (sin red) queda el cálculo local de abajo como fallback.
-        runCatching { Repositories.wallets.getDashboardSummary(Scope.SELF) }.onSuccess { estado.serverSpent = it.spentByCategory }
+        intentar { Repositories.wallets.getDashboardSummary(Scope.SELF) }.onSuccess { estado.serverSpent = it.spentByCategory }
         // El corte del período: define qué ventana usa el cálculo local de respaldo. Si falla,
         // queda en 1 —mes de calendario— que es el comportamiento de siempre.
-        runCatching { Repositories.wallets.getUserProfile() }
+        intentar { Repositories.wallets.getUserProfile() }
             .onSuccess { estado.cutoffDay = it.periodCutoffDay; estado.iniciosPropios = it.periodStarts }
         estado.gastoYPeriodoContestaron = true
         estado.loading = false
