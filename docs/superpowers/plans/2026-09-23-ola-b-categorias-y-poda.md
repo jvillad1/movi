@@ -222,3 +222,61 @@ recurrentes y la hoja de recategorizar).
 - Pruebas: «Más» sin Metas ni Extractos; Primeros pasos aparece con la guía incompleta y no con la guía
   completa; la acción «Importar movimientos» en un PDF navega a la revisión con el resultado del
   repositorio falso; los remapeos SDUI.
+
+### Task 8: Las pantallas de plata no afirman nada mientras cargan
+
+`:shared`. Pedido del dueño el 23-sep: *«algunas secciones de la app saltan al cargarse… si el skeleton
+puede predecir o precalcular el tamaño de las partes… se verá más profesional»*. Medido en su Pixel
+(arranque en frío, cuadros cada ~0,4 s):
+
+- **Créditos** (`ui/credits/`): mientras carga dice **«Deuda total $0» y «Sin créditos registrados»**;
+  después llegan $2.191 millones y 12 préstamos. Es una afirmación falsa, no solo un salto.
+- **Presupuestos** (`ui/budgets/PresupuestosScreen.kt`): mientras carga dice **«$0» gastado** y cada
+  categoría «$0 … 0 % … $1.000.000 disponibles»; después aparece la fila «2 Sobrepasados · 2 Sin
+  margen», las categorías **se reordenan** y las filas crecen.
+- **Cuentas** (`ui/accounts/AccountsScreen.kt`): el skeleton de la ola A son filas sueltas, pero la
+  pantalla real empieza con la tarjeta del **patrimonio neto** (cifra grande + 4 renglones) y sigue con
+  **grupos** («DINERO · 5 · $20,9M») de filas con ícono.
+
+Hacer:
+- **Regla**: ninguna de estas pantallas muestra una cifra, un «0 %», un «Sin …» ni un estado vacío
+  antes de que su lectura haya **contestado bien**. Distinguir «no llegó» (`null`) de «llegó vacío»
+  (lista vacía), como ya hace `DashboardData`. El vacío verdadero solo después de una lectura exitosa;
+  un error muestra el error de siempre.
+- **Skeletons con la forma real**, construidos con los componentes de `ui/components/Esqueleto.kt` (ola
+  A) y con alturas tomadas de los mismos estilos de texto y espacios que usa la pantalla cargada:
+  - Créditos: la tarjeta de resumen (cifra grande + sus renglones) y 2-3 tarjetas de crédito con su
+    forma (nombre + tasa, cifra, barra de avance, renglones de cuota).
+  - Presupuestos: la tarjeta de «Gastado en …» (cifra grande + renglón de apoyo + la fila de
+    sobrepasados/sin margen reservada) y 3-4 filas de categoría con su barra.
+  - Cuentas: la tarjeta del patrimonio neto (cifra grande + 4 renglones) y un grupo con encabezado y
+    3-4 filas con ícono.
+- **Nada se reordena al llegar**: si el orden depende de lo gastado (Presupuestos), no se pinta la lista
+  hasta tener lo gastado (el skeleton ocupa su lugar).
+- **Las acciones del encabezado** («+ Nuevo», «+ Nuevo crédito») se pintan desde el primer cuadro, no
+  cuando llegan los datos (hoy «+ Nuevo crédito» aparece después y mueve el título).
+- Pruebas Robolectric (`@GraphicsMode(NATIVE)` donde se mida): con el repositorio falso detenido
+  (`CompletableDeferred`), ninguna de las tres pantallas muestra «$0», «0 %», «Sin créditos registrados»
+  ni similares, y sí sus esqueletos; al contestar, los datos; con lista vacía de verdad, el vacío de
+  siempre. Para cada pantalla, el alto del bloque de arriba (resumen/patrimonio) cargando vs cargado
+  dentro de ±8 dp.
+
+### Task 9: Las listas tienen su esqueleto con la forma real
+
+`:shared`. Depende de la Task 8 (mismo criterio) y de la Task 5 (la pantalla de Categorías nueva).
+Medido en el Pixel del dueño:
+
+- **Movimientos**: el skeleton de la ola A es UNA tarjeta de 6 filas; la lista real llega **agrupada por
+  día** («HOY · Flujo del día −$250.100» y una tarjeta por día). El skeleton tiene que imitar eso:
+  2-3 grupos, cada uno con su renglón de encabezado (día a la izquierda, flujo a la derecha) y su tarjeta
+  de 2-3 filas **con el círculo del ícono de categoría** (Task 3).
+- **Categorías**: en blanco hasta que llega. Filas esqueleto con la forma de la fila compacta de la
+  Task 5 (ícono, nombre, cifra).
+- **Documentos**: una barra de progreso y la pantalla vacía; «+ Subir archivo» aparece después. Filas
+  esqueleto con la forma de `FilaDeDocumento` (nombre, renglón de apoyo, renglón de acciones) y la acción
+  del encabezado desde el primer cuadro.
+- **Cuadre de saldos** y **Cuentas de otros**: en blanco hasta que llega. Filas esqueleto con su forma.
+- Misma regla de la Task 8: nada de vacíos antes de una lectura exitosa, y los esqueletos se van cuando
+  la carga termina (bien o con error), nunca quedan latiendo.
+- Pruebas Robolectric por pantalla: esqueleto con el repositorio detenido; datos al contestar; vacío de
+  verdad solo con lista vacía.
