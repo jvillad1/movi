@@ -115,14 +115,18 @@ sealed class Screen {
     data object Categorias : Screen()
 
     /**
-     * **«Más → Cuentas de otros»** — el registro de cuentas ajenas: verlas, registrarlas,
-     * renombrarlas y borrarlas, y ver qué se le mandó a cada una.
+     * **«Cuentas de otros»** — el registro de cuentas ajenas: verlas, registrarlas, renombrarlas
+     * y borrarlas, y ver qué se le mandó a cada una.
      *
-     * Vive en Más y no en Cuentas **a propósito**, y no es una decisión de dibujo: `Screen.Accounts`
-     * lista la plata del dueño, y una cuenta de otra persona no es su plata (ver `DestinoConocido`).
-     * Ponerlas en la misma pantalla invitaría exactamente a la confusión que el modelo evita.
-     * Misma puerta que [Categorias] y [Documentos]: una ficha de Más, que es una lista que nadie
-     * está borrando, y no un enlace escondido dentro de otra pantalla.
+     * No vive dentro de `Screen.Accounts` **a propósito**, y no es una decisión de dibujo:
+     * `Screen.Accounts` lista la plata del dueño, y una cuenta de otra persona no es su plata (ver
+     * `DestinoConocido`). Ponerlas en la misma pantalla invitaría exactamente a la confusión que
+     * el modelo evita.
+     *
+     * Ola C, tarea 4: la puerta es la tarjeta **«Te deben»** de Patrimonio (ver `SeccionDeTeDeben`
+     * en `AccountsScreen.kt`) — antes de esta tarea no tenía ninguna, «Más» dejó de ser pestaña
+     * (Task 3) y esta pantalla se quedó sin como llegar. Marca la pestaña Patrimonio (ver
+     * [navTabFor]) y su flecha cae ahí, no en Ajustes.
      */
     data object Destinos : Screen()
 

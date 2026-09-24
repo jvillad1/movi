@@ -13,6 +13,8 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.RequestQuote
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
@@ -35,10 +37,14 @@ import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.ui.transactions.CHIP_ENTRE_CUENTAS
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
@@ -53,6 +59,8 @@ import com.jvillada.movi.shared.model.esBien
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
 @Composable
@@ -104,14 +112,65 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
+    // ── «Deudas» (Ola C, tarea 4): el mismo total y el mismo conteo que el encabezado de
+    // Créditos, leídos acá para no navegar hasta Créditos solo para saber si hay algo que ver.
+    // Lectura propia —`null` = no contestó, no vacía por default— e independiente de `accounts`:
+    // esta tarjeta tiene que poder aparecer aunque Cuentas siga cargando o se haya rendido.
+    var creditos by remember { mutableStateOf<List<CreditSummary>?>(null) }
+    var tarjetasDeCredito by remember { mutableStateOf<List<CardSummary>?>(null) }
+    var cargandoDeudas by remember { mutableStateOf(true) }
+    LaunchedEffect(refreshKey, refreshTick) {
+        cargandoDeudas = true
+        val prestamos = launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { creditos = it } }
+        val tarjetas = launch { runCatching { Repositories.wallets.getCards() }.onSuccess { tarjetasDeCredito = it } }
+        prestamos.join()
+        tarjetas.join()
+        cargandoDeudas = false
+    }
+
+    // ── «Te deben» (Ola C, tarea 4): cuántas cuentas de otros hay guardadas — mismo dato que
+    // muestra `DestinosScreen`, leído acá y no recalculado.
+    var destinosGuardados by remember { mutableStateOf<List<DestinoConocido>?>(null) }
+    var cargandoTeDeben by remember { mutableStateOf(true) }
+    LaunchedEffect(refreshKey, refreshTick) {
+        cargandoTeDeben = true
+        runCatching { Repositories.wallets.getDestinos() }.onSuccess { destinosGuardados = it }
+        cargandoTeDeben = false
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // F60: encabezado único — Cuentas es raíz (está en la barra y en el rail), así que
-            // lleva avatar y el MISMO rótulo que el menú («Cuentas», ya no «Mis cuentas»).
+            // F60: encabezado único — esta pantalla es la raíz de la pestaña Patrimonio (Ola C),
+            // así que lleva avatar y el MISMO rótulo que la pestaña.
+            //
+            // «Cuadrar» y «Nueva cuenta» como texto (con o sin «+») NO entran a 390 dp sin
+            // recortar el título — medido con `TarjetaDeDeudasYTeDebenTest`, «Patrimonio» se
+            // ganaba «…» con las dos al lado. Por eso las dos van como ícono solo, sin rótulo:
+            // el mismo patrón que ya usa el Inicio para dos acciones en el encabezado
+            // (compartir + campana, ver `DashboardScreen`), y no la píldora `NewItemButton` de
+            // «+ Nueva cuenta» que usan las pantallas con una sola acción.
             MinScreenHeader(
-                title = "Cuentas",
+                title = "Patrimonio",
                 leading = HeaderLeading.Avatar(onNavigate),
-                action = { NewItemButton(label = "Nueva cuenta", onClick = { showCreateSheet = true }) },
+                action = {
+                    Icon(
+                        Icons.Rounded.CheckCircle,
+                        contentDescription = "Cuadrar saldos",
+                        tint = Movi.colores.texto,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clickable { onNavigate(Screen.CuadreDeSaldos) }
+                            .testTag(TAG_ACCION_CUADRAR),
+                    )
+                    Icon(
+                        Icons.Rounded.Add,
+                        contentDescription = "Nueva cuenta",
+                        tint = Movi.colores.texto,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clickable { showCreateSheet = true },
+                    )
+                },
             )
 
             // Task 7: la primera carga (sin una sola cuenta pintada todavía) ya no dice «cargando»
@@ -389,6 +448,31 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             }
                         }
                     }
+                }
+
+                // ── «Deudas» y «Te deben» (Ola C, tarea 4) ──────────────────────────────
+                //
+                // Lecturas propias, así que aparecen (o su esqueleto, o su error) sin importar en
+                // qué estado esté `cuentas` arriba — Cuentas puede seguir cargando o haberse
+                // rendido y estas dos puertas igual contestan.
+                item {
+                    Spacer(Modifier.height(20.dp))
+                    SeccionDeDeudas(
+                        creditos = creditos,
+                        tarjetas = tarjetasDeCredito,
+                        cargando = cargandoDeudas,
+                        onReintentar = { refreshKey++ },
+                        onClick = { onNavigate(Screen.Credits) },
+                    )
+                }
+                item {
+                    Spacer(Modifier.height(20.dp))
+                    SeccionDeTeDeben(
+                        destinos = destinosGuardados,
+                        cargando = cargandoTeDeben,
+                        onReintentar = { refreshKey++ },
+                        onClick = { onNavigate(Screen.Destinos) },
+                    )
                 }
             }
         }
@@ -791,6 +875,168 @@ private fun LazyListScope.cuentasEsqueleto(forma: FormaDeCuentas?) {
                         FilaDeListaEsqueleto(isLast = i == filas - 1, conIcono = true)
                     }
                 }
+            }
+        }
+    }
+}
+
+// ── «Deudas» y «Te deben» (Ola C, tarea 4) ──────────────────────────────────────────
+
+/** La tarjeta de «Deudas», cargando o cargada: el mismo tag en las dos. */
+const val TAG_TARJETA_DE_DEUDAS: String = "tarjeta-de-deudas"
+
+/** La tarjeta de «Te deben», cargando o cargada: el mismo tag en las dos. */
+const val TAG_TARJETA_DE_TE_DEBEN: String = "tarjeta-de-te-deben"
+
+/** La acción «Cuadrar» del encabezado, para tocarla desde una prueba. */
+const val TAG_ACCION_CUADRAR: String = "accion-cuadrar"
+
+/**
+ * **«Deudas»**: la puerta a Créditos desde Patrimonio, con el mismo total y el mismo conteo que
+ * su encabezado — [totalDebtCop] es la MISMA función que usa [CreditosScreen], no una cuenta
+ * nueva. Lee lo suyo de forma independiente de `accounts`: puede contestar aunque Cuentas siga
+ * cargando o se haya rendido.
+ */
+@Composable
+private fun SeccionDeDeudas(
+    creditos: List<CreditSummary>?,
+    tarjetas: List<CardSummary>?,
+    cargando: Boolean,
+    onReintentar: () -> Unit,
+    onClick: () -> Unit,
+) {
+    if (creditos == null || tarjetas == null) {
+        if (cargando) {
+            FilaDeResumenPatrimonioEsqueleto(conCifra = true, testTag = TAG_TARJETA_DE_DEUDAS)
+        } else {
+            NoSePudoLeer("No pudimos cargar tus deudas", onReintentar = onReintentar)
+        }
+    } else {
+        FilaDeResumenPatrimonio(
+            titulo = "Deudas",
+            subtitulo = resumenDeDeudas(creditos, tarjetas),
+            cifra = formatCOP(totalDebtCop(creditos, tarjetas)),
+            colorCifra = Movi.colores.sale,
+            onClick = onClick,
+            testTag = TAG_TARJETA_DE_DEUDAS,
+        )
+    }
+}
+
+/** El conteo de la tarjeta de «Deudas»: «3 créditos · 2 tarjetas», solo los grupos que hay. */
+internal fun resumenDeDeudas(creditos: List<CreditSummary>, tarjetas: List<CardSummary>): String {
+    val partes = buildList {
+        if (creditos.isNotEmpty()) add(if (creditos.size == 1) "1 crédito" else "${creditos.size} créditos")
+        if (tarjetas.isNotEmpty()) add(if (tarjetas.size == 1) "1 tarjeta" else "${tarjetas.size} tarjetas")
+    }
+    return if (partes.isEmpty()) "Sin deudas registradas" else partes.joinToString(" · ")
+}
+
+/**
+ * **«Te deben»**: la puerta a `DestinosScreen` (Cuentas de otros) — hasta esta tarea esa pantalla
+ * no tenía ninguna entrada, así que esta tarjeta es la que la hace alcanzable. Solo el conteo: la
+ * pantalla no calcula un total agregado entre todos los destinos (cada uno trae el suyo), y
+ * sumarlo acá sería una cuenta nueva que el brief no pidió.
+ */
+@Composable
+private fun SeccionDeTeDeben(
+    destinos: List<DestinoConocido>?,
+    cargando: Boolean,
+    onReintentar: () -> Unit,
+    onClick: () -> Unit,
+) {
+    if (destinos == null) {
+        if (cargando) {
+            FilaDeResumenPatrimonioEsqueleto(conCifra = false, testTag = TAG_TARJETA_DE_TE_DEBEN)
+        } else {
+            NoSePudoLeer("No pudimos cargar Cuentas de otros", onReintentar = onReintentar)
+        }
+    } else {
+        FilaDeResumenPatrimonio(
+            titulo = "Te deben",
+            subtitulo = resumenDeTeDeben(destinos),
+            onClick = onClick,
+            testTag = TAG_TARJETA_DE_TE_DEBEN,
+        )
+    }
+}
+
+/** El subtítulo de la tarjeta de «Te deben»: cuántas cuentas de otros hay guardadas. */
+internal fun resumenDeTeDeben(destinos: List<DestinoConocido>): String = when (destinos.size) {
+    0 -> "Aún no hay ninguna guardada"
+    1 -> "1 cuenta guardada"
+    else -> "${destinos.size} cuentas guardadas"
+}
+
+/**
+ * La fila compartida de «Deudas» y «Te deben»: título, subtítulo, una cifra opcional y el chevron
+ * — la misma forma que ya tenían «Cuadre de saldos» y «Movimientos entre cuentas» más arriba en
+ * esta pantalla, con una cifra de más. Una sola función para las dos tarjetas: repetir el mismo
+ * `Row` dos veces es el tipo de copia que este proyecto evita.
+ */
+@Composable
+private fun FilaDeResumenPatrimonio(
+    titulo: String,
+    subtitulo: String,
+    onClick: () -> Unit,
+    testTag: String,
+    cifra: String? = null,
+    colorCifra: Color = Movi.colores.texto,
+) {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+        onClick = onClick,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(titulo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                Spacer(Modifier.height(3.dp))
+                Text(subtitulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+            if (cifra != null) {
+                Text(
+                    cifra,
+                    style = Movi.textos.monto,
+                    fontWeight = FontWeight.Medium,
+                    color = colorCifra,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+            }
+            ChevronRight()
+        }
+    }
+}
+
+/** [FilaDeResumenPatrimonio] mientras carga: misma forma, sin un solo dato de verdad. */
+@Composable
+private fun FilaDeResumenPatrimonioEsqueleto(conCifra: Boolean, testTag: String) {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.cuerpo)
+                Spacer(Modifier.height(3.dp))
+                LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
+            }
+            if (conCifra) {
+                BloqueEsqueleto(
+                    alto = altoDeUnRenglon(Movi.textos.monto),
+                    ancho = 96.dp,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
             }
         }
     }

@@ -34,6 +34,7 @@ import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.accounts.AccountsScreen
 import com.jvillada.movi.ui.accounts.TAG_GRUPO_DE_CUENTAS
@@ -238,6 +239,11 @@ class LaFormaRecordadaEnPantallaTest {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> =
                 if (lecturas++ == 0) CUENTAS_DEL_DUENO else puerta.await()
+            // Ola C, tarea 4: «Deudas» y «Te deben» leen lo suyo aparte — vacíos acá, esta prueba
+            // mide la forma de la tarjeta del patrimonio y los grupos, no esas dos tarjetas.
+            override suspend fun getCredits(): List<CreditSummary> = emptyList()
+            override suspend fun getCards(): List<CardSummary> = emptyList()
+            override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
         }
         montar { AccountsScreen(onNavigate = {}) }
 
@@ -272,6 +278,9 @@ class LaFormaRecordadaEnPantallaTest {
     fun `Cuentas sin nada recordado usa el esqueleto de siempre`() {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = CompletableDeferred<List<Account>>().await()
+            override suspend fun getCredits(): List<CreditSummary> = emptyList()
+            override suspend fun getCards(): List<CardSummary> = emptyList()
+            override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
         }
         montar { AccountsScreen(onNavigate = {}) }
 
