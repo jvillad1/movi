@@ -22,10 +22,15 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
 /**
  * # Task 7 en Movimientos: filas esqueleto, no una rueda, en la primera carga
+ *
+ * Ola B, tarea 9: la tarjeta única de 6 filas sueltas se convirtió en tres grupos de 3 + 2 + 2
+ * filas (7 en total) — la forma real de Movimientos, agrupada por día. Los números de abajo
+ * cambiaron con ella; ver el KDoc de `movimientosEsqueleto` en `TransactionsScreen.kt`.
  *
  * Mismo mecanismo que `EsqueletoDeCuentasTest`: [puerta] mantiene `getEventsByDay()` colgada.
  * `getUserProfile()` está resuelta (no es lo que esta prueba mira, y sin ella el snackbar de
@@ -33,7 +38,11 @@ import kotlin.test.assertEquals
  * `getCardPaymentCandidates()` y `getMovimientosRechazados()` son lecturas secundarias que
  * `RepositorioDePrueba` u observa el propio código de la pantalla como opcionales.
  */
+// `h2400dp`: como en `EsqueletoDeCuentasTest`, alto de sobra para que `LazyColumn` COMPONGA los
+// tres grupos de una — sin esto, la virtualización deja el tercer grupo fuera del viewport por
+// default de Robolectric y una prueba que cuenta tags ve 2 en vez de 3.
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "w390dp-h2400dp-xhdpi")
 class EsqueletoDeMovimientosTest {
 
     @get:Rule val composeRule = createComposeRule()
@@ -52,7 +61,7 @@ class EsqueletoDeMovimientosTest {
     }
 
     @Test
-    fun `sin un dia pintado todavia, se ven 6 filas esqueleto y no la rueda`() {
+    fun `sin un dia pintado todavia, se ven 3 grupos y 7 filas esqueleto, y no la rueda`() {
         Repositories.sustitutoDePrueba = repositorio()
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
@@ -60,7 +69,8 @@ class EsqueletoDeMovimientosTest {
         }
         composeRule.mainClock.advanceTimeByFrame()
 
-        assertEquals(6, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(3, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(7, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
     }
 
     @Test
@@ -70,7 +80,8 @@ class EsqueletoDeMovimientosTest {
             MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
         }
         composeRule.waitForIdle()
-        assertEquals(6, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(3, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(7, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
 
         val evento = FinancialEvent(
             id = "e1",
@@ -84,8 +95,32 @@ class EsqueletoDeMovimientosTest {
         puerta.complete(listOf(EventDay(date = "2026-09-20", total = 25_000L, items = listOf(evento))))
         composeRule.waitForIdle()
 
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
         composeRule.onNodeWithText("Almuerzo", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /**
+     * Ola B, tarea 9: la tercera fase de la regla compartida con las demás listas —«vacío de
+     * verdad solo con lista vacía»—. Una lectura que CONTESTA vacía (no colgada, no caída) tiene
+     * que mostrar «Sin movimientos aún» sin ningún tag de esqueleto de por medio.
+     */
+    @Test
+    fun `sin movimientos de verdad, el vacio de siempre y ningun esqueleto`() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getUserProfile(): UserProfile =
+                UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "morado")
+            override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+            override suspend fun getAccounts(): List<com.jvillada.movi.shared.model.Account> = emptyList()
+        }
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Sin movimientos aún", substring = true, useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
     }
 
     /**

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -70,6 +71,10 @@ import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.MinScreenHeader
+import com.jvillada.movi.ui.components.CirculoEsqueleto
+import com.jvillada.movi.ui.components.LineaEsqueleto
+import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
+import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
 import com.jvillada.movi.ui.components.columnasDeLaCuadricula
 import com.jvillada.movi.ui.components.leadingFor
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
@@ -286,7 +291,13 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (!leidas && !loading) {
+                if (loading && !leidas) {
+                    // Ola B, tarea 9: antes de la primera lectura buena la pantalla quedaba en
+                    // blanco entre los filtros/la búsqueda y la primera fila — ver
+                    // [categoriasEsqueleto]. Con `leidas` ya en `true` (una recarga con la lista
+                    // en pantalla) no vuelve a mostrarse: la lista de siempre sigue ahí.
+                    categoriasEsqueleto()
+                } else if (!leidas && !loading) {
                     item {
                         NoSePudoLeer(
                             "No pudimos cargar tus categorías",
@@ -777,6 +788,44 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
  * tiene que medir esto, y que lo importe de acá es menos frágil que duplicar el número.
  */
 internal val ALTO_DE_FILA_DE_CATEGORIA = 60.dp
+
+/** Cuántas filas pinta [categoriasEsqueleto] mientras la lista no llegó ni una vez. */
+private const val FILAS_DE_CATEGORIA_ESQUELETO = 6
+
+/**
+ * **Categorías mientras carga, con la forma de la fila compacta** (Ola B, tarea 9). Antes de esta
+ * tarea la pantalla quedaba en blanco entre los filtros/la búsqueda y la primera fila real — ni
+ * una rueda, nada. Esto imita [FilaDeCategoria]: mismo círculo de 36 dp
+ * ([TamanoDeIconoDeCategoria.Normal]), mismo alto mínimo ([ALTO_DE_FILA_DE_CATEGORIA]), mismo
+ * `Movi.textos.titulo` para el nombre y `Movi.textos.apoyo` para el resumen de uso — sin la cifra
+ * del mes, porque todavía no se sabe si esta categoría tuvo gasto este mes.
+ */
+private fun LazyListScope.categoriasEsqueleto() {
+    items(FILAS_DE_CATEGORIA_ESQUELETO) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = ALTO_DE_FILA_DE_CATEGORIA)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Movi.colores.tarjeta)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag(TAG_FILA_DE_LISTA_ESQUELETO),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CirculoEsqueleto(TamanoDeIconoDeCategoria.Normal.circulo)
+            Column(modifier = Modifier.weight(1f)) {
+                LineaEsqueleto(
+                    fraccionDelAncho = 0.5f,
+                    estilo = Movi.textos.titulo,
+                    modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
+                )
+                Spacer(Modifier.height(2.dp))
+                LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.apoyo)
+            }
+        }
+    }
+}
 
 // ── Las hojas ─────────────────────────────────────────────────────────────────
 

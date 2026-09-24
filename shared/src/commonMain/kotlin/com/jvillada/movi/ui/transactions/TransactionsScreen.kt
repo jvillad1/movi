@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -402,6 +403,60 @@ const val TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS: String = "barra-de-carga-de-movimie
  * medir el alto real del renglón para verificar que agregarle [IconoDeCategoria] no lo hizo crecer.
  */
 const val TAG_FILA_DE_MOVIMIENTO_SUELTO: String = "fila-de-movimiento-suelto"
+
+/**
+ * El tag del renglón de encabezado de un día esqueleto («HOY · Flujo del día …»), para contar
+ * cuántos GRUPOS pinta [movimientosEsqueleto] sin depender de ningún texto — no hay ninguno
+ * todavía, ver su KDoc.
+ */
+const val TAG_ENCABEZADO_DE_DIA_ESQUELETO: String = "encabezado-de-dia-esqueleto"
+
+/**
+ * **Movimientos mientras carga, con la forma de Movimientos** (Ola B, tarea 9).
+ *
+ * Task 7 (ola A) puso UNA tarjeta de 6 filas sueltas. La pantalla real no es una lista: son varios
+ * DÍAS, cada uno con su renglón de encabezado («HOY · Flujo del día −$250.100», ver más abajo en
+ * el `forEach` real) y su propia tarjeta — así que la tarjeta única se convertía en 2-3 tarjetas
+ * más chicas apenas llegaban los datos, el salto que reportó el dueño.
+ *
+ * [GRUPOS_DEL_ESQUELETO] imita eso con dos o tres grupos de tamaño distinto (ni todos los días
+ * tienen el mismo número de movimientos, y repetir la misma forma se lee más a rueda que a lista
+ * real). El encabezado usa [RenglonConCifraEsqueleto] —rótulo a la izquierda, cifra a la
+ * derecha, la misma pieza que ya arma el resto de esta ola— en vez de decir «HOY» o un total: ni
+ * la fecha ni el flujo del día se conocen todavía, y afirmar cualquiera de los dos sería la misma
+ * falla que la Task 8 le corrigió a Créditos y Presupuestos.
+ */
+private val GRUPOS_DEL_ESQUELETO = listOf(3, 2, 2)
+
+private fun LazyListScope.movimientosEsqueleto() {
+    GRUPOS_DEL_ESQUELETO.forEachIndexed { indice, filas ->
+        item {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(top = if (indice == 0) 0.dp else 20.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 8.dp)
+                        .testTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO),
+                ) {
+                    RenglonConCifraEsqueleto(fraccionDelRotulo = 0.2f, anchoDeLaCifra = 110.dp)
+                }
+                MinCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = MinCardVariant.Elevated,
+                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                ) {
+                    // El mismo círculo de 36 dp que `IconoDeCategoria` — ver el KDoc de
+                    // `FilaDeListaEsqueleto` (Task 3, fix round 1).
+                    repeat(filas) { i -> FilaDeListaEsqueleto(isLast = i == filas - 1, diametroIconoAlFrente = 36.dp) }
+                }
+            }
+        }
+    }
+}
 
 /** Los rótulos de los chips, en el orden de sus índices. */
 val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes")
@@ -1714,23 +1769,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 60.dp),
         ) {
-            // Task 7: primera carga de este chip, ni una fila pintada todavía — 5-6 filas con la
-            // forma de un día de movimientos. `hayListaDeDias` porque con «Recurrentes» esta lista
-            // no se pinta ni cargada ni cargando (ver arriba); el tablero de esa vista tiene su
-            // propio estado.
+            // Task 7 puso una tarjeta de 6 filas sueltas; la Task 9 (ola B) la cambia por la forma
+            // real — 2-3 DÍAS, cada uno con su encabezado y su propia tarjeta. `hayListaDeDias`
+            // porque con «Recurrentes» esta lista no se pinta ni cargada ni cargando (ver arriba);
+            // el tablero de esa vista tiene su propio estado. Ver [movimientosEsqueleto].
             if (loading && visibleDays.isEmpty() && hayListaDeDias) {
-                item {
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        // Ola B, tarea 3 (fix round 1): el círculo de 36 dp de `IconoDeCategoria`
-                        // —el mismo tamaño que ahora lleva `MovementSingleRow`— para que el
-                        // título no salte al llegar el dato. Ver `FilaDeListaEsqueleto`.
-                        repeat(6) { i -> FilaDeListaEsqueleto(isLast = i == 5, diametroIconoAlFrente = 36.dp) }
-                    }
-                }
+                movimientosEsqueleto()
             }
 
             // PR 2 del rediseño de Recurrentes: el resumen del filtro y lo que falta revisar.

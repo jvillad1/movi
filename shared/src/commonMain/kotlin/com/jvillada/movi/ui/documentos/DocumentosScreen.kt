@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +60,11 @@ import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NewItemButton
+import com.jvillada.movi.ui.components.BloqueEsqueleto
+import com.jvillada.movi.ui.components.LineaEsqueleto
+import com.jvillada.movi.ui.components.altoDeUnRenglon
+import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
+import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
 import com.jvillada.movi.ui.extractos.ImportCard
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
@@ -240,12 +246,13 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
+            // Ola B, tarea 9: la acción vive en el encabezado DESDE EL PRIMER CUADRO, como
+            // «+ Nuevo crédito» en Créditos (Task 8) — antes esperaba a que `documentos` no
+            // fuera nulo ni vacío, así que el título se corría apenas llegaba la lista.
             MinScreenHeader(
                 title = "Documentos",
                 leading = HeaderLeading.Back(fallback = Screen.Mas),
-                action = if (!documentos.isNullOrEmpty()) {
-                    { NewItemButton(label = "Subir archivo", onClick = elegirArchivo) }
-                } else null,
+                action = { NewItemButton(label = "Subir archivo", onClick = elegirArchivo) },
             )
             if (cargando || subiendo || importando != null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
@@ -256,7 +263,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 // Mientras lee, nada. Si ya terminó y sigue sin lista, la lectura falló: se dice eso
                 // con un reintento, en vez de dejar la pantalla en blanco sin salida (el snackbar
                 // del error se va solo). Ver [NoSePudoLeer].
-                lista == null && cargando -> Spacer(Modifier.height(1.dp))
+                lista == null && cargando -> DocumentosEsqueleto()
                 lista == null -> NoSePudoLeer(
                     "No pudimos cargar tus documentos",
                     onReintentar = { refreshKey++ },
@@ -439,6 +446,50 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
                         .clickable(onClick = onConfirmar)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 )
+            }
+        }
+    }
+}
+
+/** Cuántas filas pinta [DocumentosEsqueleto] mientras la lista no llegó ni una vez. */
+private const val FILAS_DE_DOCUMENTO_ESQUELETO = 4
+
+/**
+ * **Documentos mientras carga, con la forma de [FilaDeDocumento]** (Ola B, tarea 9). Antes de esta
+ * tarea el `when` de arriba pintaba un `Spacer` de 1 dp entre la barra de carga y la primera fila
+ * real — la pantalla se veía vacía con «+ Subir archivo» todavía sin aparecer (esa acción ya vive
+ * en el encabezado desde el primer cuadro, ver [DocumentosScreen]).
+ *
+ * Mismos rellenos que [FilaDeDocumento] (10/10/12/6 dp) y el mismo [Hairline] entre filas: el
+ * nombre con el alto de `Movi.textos.cuerpo`, el renglón de apoyo (cuenta · peso · fecha) más
+ * corto, y tres bloques cortos donde van «Abrir», «Editar», «Borrar».
+ */
+@Composable
+private fun DocumentosEsqueleto() {
+    Column(modifier = Modifier.padding(top = 14.dp)) {
+        // `Hairline()` en TODAS las filas, no solo entre ellas: es lo que hace `FilaDeDocumento`
+        // de verdad (su propio `Hairline()` va siempre, incluida la última fila de la lista).
+        repeat(FILAS_DE_DOCUMENTO_ESQUELETO) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 10.dp, end = 10.dp, top = 12.dp, bottom = 6.dp)
+                        .testTag(TAG_FILA_DE_LISTA_ESQUELETO),
+                ) {
+                    LineaEsqueleto(
+                        fraccionDelAncho = 0.6f,
+                        estilo = Movi.textos.cuerpo,
+                        modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        repeat(3) { BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 44.dp) }
+                    }
+                }
+                Hairline()
             }
         }
     }

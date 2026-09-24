@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
@@ -32,13 +34,18 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.HeaderLeading
+import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NewItemButton
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
+import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
+import com.jvillada.movi.ui.components.altoDeUnRenglon
 import com.jvillada.movi.ui.components.formatMoney
 
 /**
@@ -166,10 +173,18 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
                         }
                     }
                 }
-                items(destinos) { d ->
-                    Column {
-                        FichaDelDestino(d, onClick = { detalle = d })
-                        Spacer(Modifier.height(10.dp))
+                // Ola B, tarea 9: antes de la primera lectura buena la pantalla quedaba en
+                // blanco debajo de «Guardadas» — ni una ficha, ni una rueda. `!leidos` y no solo
+                // `cargando`: una recarga con destinos ya pintados (guardar uno, volver del
+                // detalle) sigue con `items(destinos)` de siempre.
+                if (cargando && !leidos) {
+                    destinosEsqueleto()
+                } else {
+                    items(destinos) { d ->
+                        Column {
+                            FichaDelDestino(d, onClick = { detalle = d })
+                            Spacer(Modifier.height(10.dp))
+                        }
                     }
                 }
                 item { Spacer(Modifier.height(80.dp)) }
@@ -273,6 +288,50 @@ internal fun TotalesEnColumna(totales: Map<String, Long>, alineadoAlFinal: Boole
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
             )
+        }
+    }
+}
+
+/** Cuántas fichas pinta [destinosEsqueleto] mientras la lista no llegó ni una vez. */
+private const val FICHAS_DE_DESTINO_ESQUELETO = 3
+
+/**
+ * **Cuentas de otros mientras carga, con la forma de [FichaDelDestino]** (Ola B, tarea 9). Antes
+ * de esta tarea la pantalla quedaba en blanco debajo de «Guardadas» hasta que los destinos
+ * contestaban. Mismo `MinCard` de 18 dp, mismo reparto 55/45 entre el nombre+número y los
+ * totales+conteo del lado derecho.
+ */
+private fun LazyListScope.destinosEsqueleto() {
+    items(FICHAS_DE_DESTINO_ESQUELETO) {
+        Column {
+            FichaDelDestinoEsqueleto()
+            Spacer(Modifier.height(10.dp))
+        }
+    }
+}
+
+@Composable
+private fun FichaDelDestinoEsqueleto() {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_LISTA_ESQUELETO),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(18.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.fillMaxWidth(0.55f)) {
+                LineaEsqueleto(
+                    fraccionDelAncho = 0.7f,
+                    estilo = Movi.textos.titulo,
+                    modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
+                )
+                Spacer(Modifier.height(4.dp))
+                LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
+            }
+            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+                BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.monto), ancho = 96.dp)
+                Spacer(Modifier.height(4.dp))
+                LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.apoyo)
+            }
         }
     }
 }
