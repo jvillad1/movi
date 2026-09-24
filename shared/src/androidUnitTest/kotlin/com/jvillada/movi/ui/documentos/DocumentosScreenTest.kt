@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -88,14 +89,16 @@ class DocumentosScreenTest {
 
     private val navegado = mutableListOf<Screen>()
 
-    private fun montar(docs: List<Documento>, falla: ApiException? = null): ConDocumentos {
-        val repo = ConDocumentos(docs, falla)
+    private fun <T : RepositorioDePrueba> montarConRepo(repo: T): T {
         Repositories.sustitutoDePrueba = repo
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { DocumentosScreen(onNavigate = { navegado += it }) } }
         }
         return repo
     }
+
+    private fun montar(docs: List<Documento>, falla: ApiException? = null): ConDocumentos =
+        montarConRepo(ConDocumentos(docs, falla))
 
     @After
     fun limpiar() {
@@ -159,5 +162,52 @@ class DocumentosScreenTest {
         // devuelve el cuerpo que escribió el server, no un genérico «Algo salió mal».
         esperarTexto(motivo)
         assertTrue(navegado.isEmpty(), "un extracto rechazado no navega a la revisión")
+    }
+
+    // ── «Importaciones»: el error se dice y «Reintentar» no revienta (fix round 2, hallazgo A) ──
+
+    private inner class FallaLuegoTraeImportaciones(private val docs: List<Documento>) : RepositorioDePrueba() {
+        var intento = 0
+        override suspend fun getDocuments(): List<Documento> = docs
+        override suspend fun getAccounts(): List<Account> = emptyList()
+        override suspend fun getStatementImports(): List<StatementImport> {
+            intento++
+            if (intento == 1) throw ApiException(500, null)
+            return listOf(
+                StatementImport(
+                    id = "imp1", accountId = "acc1", bankName = "Bancolombia",
+                    period = "agosto 2026", importedAt = 0L, importedCount = 3, reconciledCount = 1,
+                ),
+            )
+        }
+    }
+
+    /**
+     * `NoSePudoLeer` pone el `clickable` en un `Box` que ENVUELVE el texto «Reintentar», a
+     * diferencia de `AccionDeFila` (donde el `clickable` vive en el mismo `Text` — ver [tocar]).
+     */
+    private fun tocarBotonQueEnvuelveTexto(texto: String) {
+        composeRule.onNode(hasClickAction() and hasAnyChild(hasText(texto)), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun `una lectura de importaciones que falla se dice, y Reintentar la trae sin reventar`() {
+        // Antes del fix, tocar «Reintentar» ponía `importsError` en null mientras el `item` de
+        // error de la lista todavía podía volver a componerse leyendo ese estado directo con
+        // `!!` — este test ejercita exactamente esa transición error → éxito de punta a punta.
+        montarConRepo(FallaLuegoTraeImportaciones(listOf(elPdf)))
+        esperarTexto("No pude cargar el historial de importaciones")
+
+        tocarBotonQueEnvuelveTexto("Reintentar")
+
+        // «Importaciones» se pinta en mayúsculas (MinSectionHeader hace `.uppercase()`); lo que
+        // de verdad importa es que la fila de la importación llegó.
+        esperarTexto("BANCOLOMBIA")
+        // Y el aviso de error ya no está — no se puede afirmar «no pude leer» y a la vez
+        // mostrar la lista que sí llegó.
+        composeRule.onAllNodesWithText("No pude cargar el historial de importaciones", useUnmergedTree = true)
+            .fetchSemanticsNodes().let { assertTrue(it.isEmpty()) }
     }
 }

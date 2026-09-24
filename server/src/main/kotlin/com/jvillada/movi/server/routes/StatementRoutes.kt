@@ -111,29 +111,43 @@ internal fun fallaDeLaLectura(lectura: ClaudeStatementParser.Lectura, esImagen: 
             if (lectura.movimientos.isEmpty()) EXTRACTO_SIN_MOVIMIENTOS else null
     }
 
+/** Las extensiones que `StatementParser.extractText` sabe leer distinto — ver más abajo. */
+private val EXTENSIONES_RECONOCIDAS = setOf("pdf", "csv", "xls", "xlsx")
+
 /**
  * El nombre que decide CÓMO leer el archivo — `StatementParser.extractText` despacha por la
- * EXTENSIÓN del nombre, y el `mimeType` guardado es la señal más fuerte cuando las dos no
- * coinciden (mismo criterio que ya usa `isImage`, un poco más abajo, con `isImageMime`).
+ * EXTENSIÓN del nombre. El `mimeType` guardado solo entra a decidir cuando el nombre NO trae
+ * ninguna de las cuatro extensiones que esa función distingue; si ya trae una, el nombre manda.
  *
  * Ola B, tarea 7, fix round 1: un documento archivado como PDF y después renombrado desde
  * «Editar» (`Documento.nombre` es lo único editable — `mimeType` no) perdía la extensión, y
  * `extractText` caía al `else` genérico: `bytes.toString(UTF_8)` sobre bytes de un PDF real,
- * basura que viajaba a Claude como si fuera el texto del extracto. `Documents.mimeType` es el
- * dato que no miente —lo puso el server al subir, el dueño no lo toca— así que gana cuando el
- * nombre no trae la extensión que ese mime pide.
+ * basura que viajaba a Claude como si fuera el texto del extracto. Esta función usaba el
+ * `mimeType` para IMPONER una extensión distinta incluso cuando el nombre ya traía una
+ * reconocida.
+ *
+ * Fix round 2: esa versión rompía el caso contrario. Esta ruta también la usa
+ * `POST /api/statements/upload`, donde el `mimeType` lo manda el NAVEGADOR de quien sube —no el
+ * server— y un Excel/Windows reporta un `.csv` como `application/vnd.ms-excel`. Con la primera
+ * versión, `extracto.csv` con ese mime se convertía en `extracto.csv.xls`, y
+ * `WorkbookFactory.create` explotaba contra un archivo que en realidad es texto plano: un 500
+ * donde antes (antes de esta tarea) funcionaba. El `mimeType` es la señal más fuerte SOLO
+ * cuando el nombre no dice nada (`documento`, sin punto) — cuando el nombre ya trae una
+ * extensión que esta función entiende, esa extensión es la que el dueño (o quien subió el
+ * archivo) puso a propósito, y gana.
  */
 internal fun nombreParaExtraerTexto(fileName: String, mimeType: String): String {
+    val extensionActual = fileName.substringAfterLast('.', "").lowercase()
+    if (extensionActual in EXTENSIONES_RECONOCIDAS) return fileName
     val mime = mimeType.substringBefore(';').trim().lowercase()
-    val extensionEsperada = when (mime) {
+    val extensionDelMime = when (mime) {
         "application/pdf" -> "pdf"
         "application/vnd.ms-excel" -> "xls"
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> "xlsx"
         "text/csv" -> "csv"
         else -> return fileName
     }
-    val extensionActual = fileName.substringAfterLast('.', "").lowercase()
-    return if (extensionActual == extensionEsperada) fileName else "$fileName.$extensionEsperada"
+    return "$fileName.$extensionDelMime"
 }
 
 /**

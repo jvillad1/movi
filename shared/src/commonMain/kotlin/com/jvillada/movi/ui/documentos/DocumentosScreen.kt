@@ -308,11 +308,20 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     // importaciones» sobre un historial que en realidad no se pudo leer. Un
                     // historial vacío SIN error, en cambio, de verdad no merece encabezado
                     // propio, misma regla que el resto de esta pantalla (ver `porTipo`).
+                    //
+                    // Fix round 2: `errorDeImports` se captura ACÁ, fuera del `item { }`. El
+                    // contenido de un `item` es un lambda que Compose guarda y ejecuta después —
+                    // leer `importsError!!` ADENTRO de ese lambda apostaba a que el estado
+                    // mutable siguiera sin cambiar entre el `when` de arriba y esa ejecución
+                    // diferida; tocar «Reintentar» lo pone en `null` antes de que ese `item` se
+                    // descarte, y ese `!!` explota. Un `val` local es un valor fijo de ESTA
+                    // composición, no una referencia viva al estado.
+                    val errorDeImports = importsError
                     when {
-                        importsError != null -> item(key = "importaciones-error") {
+                        errorDeImports != null -> item(key = "importaciones-error") {
                             Column(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 4.dp)) {
                                 NoSePudoLeer(
-                                    importsError!!,
+                                    errorDeImports,
                                     onReintentar = { refreshKey++ },
                                 )
                             }

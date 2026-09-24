@@ -707,6 +707,29 @@ class DocumentRoutesTest {
         assertTrue("resumen de crédito" in cuerpo, cuerpo)
     }
 
+    // ── Una extensión reconocida en el nombre gana (fix round 2, hallazgo B) ────────────
+
+    @Test
+    fun `un csv que el navegador reporto como Excel se sigue leyendo como texto, no como xls binario`() = testApplication {
+        // El caso real: Excel en Windows sube un .csv con Content-Type
+        // application/vnd.ms-excel. La versión anterior de nombreParaExtraerTexto le imponía la
+        // extensión del mime (".csv.xls") y WorkbookFactory.create explotaba contra un archivo
+        // que en realidad es texto plano — un 500. Acá el nombre YA trae ".csv", una extensión
+        // reconocida, así que gana: se lee como texto y llega limpio hasta detectDocumentType
+        // (422 LOAN_SUMMARY, no un 500 de POI tratando de abrir un binario que no lo es).
+        wireApp()
+        val id = subir(
+            duenoId, nombre = "movimientos.csv", contenido = textoDeResumenDeCredito,
+            mime = "application/vnd.ms-excel",
+        )
+
+        val res = leerExtracto(duenoId, id)
+        val cuerpo = res.bodyAsText()
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status, cuerpo)
+        assertTrue("resumen de crédito" in cuerpo, cuerpo)
+    }
+
     // ── No duplica el archivo al leerlo (fix round 1, hallazgo 4) ───────────────────────
 
     /**
