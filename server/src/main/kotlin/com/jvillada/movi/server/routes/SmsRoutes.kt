@@ -50,8 +50,10 @@ import org.jetbrains.exposed.sql.update
 private val amountRegex = Regex("""(\$|\bCOP|\bUSD)\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
 /** «Recibimos pago por 9.809.799 a tu tarjeta»: sin prefijo, pero con separador de miles. */
 private val amountPorRegex = Regex("""\bpor\s+([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
+/** «Recibiste 300.000,00 en tu cuenta» (Nu): sin prefijo ni «por», pero con separador de miles. */
+private val amountRecibisteRegex = Regex("""\brecibiste\s+([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
 private val merchantInRegex = Regex("""\ben\s+(.+?)(?:\s+el\s|\s+a\s+las|\s+con\s+tu\s|\s+de\s+tu\s|,|\.|$)""", RegexOption.IGNORE_CASE)
-private val merchantOfRegex = Regex("""\bde\s+(.+?)(?:\s+por\s|\.|$)""", RegexOption.IGNORE_CASE)
+private val merchantOfRegex = Regex("""\bde\s+(.+?)(?:\s+por\s|\s+con\s+tu\s|\.|$)""", RegexOption.IGNORE_CASE)
 /**
  * **La compra de Nu**: «Tu compra en CREPES Y WAFFLES LEMON por $130.200,00 con tu tarjeta terminada
  * en 1336 ha sido APROBADA.» El comercio va entre «compra en» y «por $…». [merchantInRegex] no
@@ -117,18 +119,26 @@ private val NU_NO_SON_MOVIMIENTOS = listOf(
 private val pagoDeNu = Regex("""recibimos tu pago|\bpago\b.*\b(recibido|aplicado|abonado)\b""", RegexOption.IGNORE_CASE)
 
 /**
- * **De Nu solo se lee lo que es una compra aprobada o un pago.** Desde #346 el teléfono sube TODAS
+ * «Recibiste 300.000,00 en tu cuenta: Te llegó dinero de …»: plata que entra a la cuenta de Nu.
+ * Hasta el 23-sep esto no era «la forma de un movimiento» y el dueño lo veía en «Reconciliar
+ * movimiento» sin que Movi lo pudiera leer. Lo que rinde la Cajita también dice «recibiste», pero
+ * [NU_NO_SON_MOVIMIENTOS] lo saca antes.
+ */
+private val plataQueLlegaANu = Regex("""te lleg[oó] dinero|\brecibiste\s+\$?\s*[0-9]""", RegexOption.IGNORE_CASE)
+
+/**
+ * **De Nu solo se lee lo que es una compra aprobada, un pago o plata que llega.** Desde #346 el teléfono sube TODAS
  * las notificaciones de `com.nu.production`, y el lector genérico convierte en gasto cualquier
  * texto con un monto: la factura del mes, una promoción, lo que rindió la Cajita. En vez de ir
  * tachando avisos a medida que aparecen, con Nu se pide la forma de un movimiento: la compra que
- * dice «aprobada» o el pago recibido. Lo demás no es un movimiento.
+ * dice «aprobada», el pago recibido o la plata que llega a la cuenta. Lo demás no es un movimiento.
  *
  * Solo aplica cuando el origen dice Nu: un SMS de Bancolombia no pasa por acá.
  */
 private fun loDeNuEsUnMovimiento(minusculas: String): Boolean {
     if (NU_NO_SON_MOVIMIENTOS.any { it in minusculas }) return false
     val esCompra = "compra" in minusculas && ("aprobada" in minusculas || "aprobado" in minusculas)
-    return esCompra || pagoDeNu.containsMatchIn(minusculas)
+    return esCompra || pagoDeNu.containsMatchIn(minusculas) || plataQueLlegaANu.containsMatchIn(minusculas)
 }
 
 /**
@@ -194,7 +204,10 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     if (NO_PASARON.any { it in minusculas }) return null
     if (origen != null && origenNu.containsMatchIn(origen) && !loDeNuEsUnMovimiento(minusculas)) return null
     val conPrefijo = amountRegex.find(text)
-    val rawAmount = conPrefijo?.groupValues?.get(2) ?: amountPorRegex.find(text)?.groupValues?.get(1) ?: return null
+    val rawAmount = conPrefijo?.groupValues?.get(2)
+        ?: amountPorRegex.find(text)?.groupValues?.get(1)
+        ?: amountRecibisteRegex.find(text)?.groupValues?.get(1)
+        ?: return null
     val amount = montoDelSms(rawAmount) ?: return null
     val currency = if (conPrefijo?.groupValues?.get(1)?.equals("USD", ignoreCase = true) == true) "USD" else "COP"
 

@@ -66,6 +66,28 @@ class ElTextoDeUnaNotificacionSeParseaTest {
         assertEquals("GOOGLE *MINTROCKET", google.merchant)
     }
 
+    /**
+     * **La plata que le llega a la cuenta de Nu**, tal como la tenía el dueño en «Reconciliar
+     * movimiento» el 23-sep: la pantalla se quedaba en «Parseando…» con «Algo salió mal», porque la
+     * regla de Nu solo aceptaba compras y pagos, y porque el monto no trae ni «$» ni «por».
+     */
+    private val RECIBISTE_NU =
+        "Recibiste 300.000,00 en tu cuenta: Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave."
+
+    @Test
+    fun `la plata que llega a Nu se lee como ingreso con quien la mandó`() {
+        val parsed = assertNotNull(parseSms(RECIBISTE_NU, "Notificación · Nu"), "no parseó: $RECIBISTE_NU")
+        assertEquals(300_000.0, parsed.amount)
+        assertEquals("COP", parsed.currency)
+        assertEquals(TransactionType.INCOME, parsed.type)
+        assertEquals("CAROLINA RESTREPO SALAZAR", parsed.merchant)
+    }
+
+    @Test
+    fun `lo que rindió la Cajita de Nu sigue sin ser un movimiento`() {
+        assertNull(parseSms("Recibiste tu rendimiento: Tu Cajita generó \$1.234,00 hoy.", "Notificación · Nu"))
+    }
+
     @Test
     fun `la compra de Nu no se confunde con un pago de tarjeta`() {
         // «con tu tarjeta» está en el texto: no puede caer en la regla de plata del abono a la tarjeta.

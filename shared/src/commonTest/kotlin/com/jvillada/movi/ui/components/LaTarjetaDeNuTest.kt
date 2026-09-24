@@ -87,4 +87,31 @@ class LaTarjetaDeNuTest {
         assertEquals(ahorros, resuelta.cuenta)
         assertEquals(OrigenDeLaCuentaDelBanco.POR_EL_BANCO, resuelta.origen)
     }
+
+    /** La del 23-sep: «Reconciliar movimiento» la ponía en Bancolombia Ahorros («La puso Movi»). */
+    private val llegoANu =
+        "Recibiste 300.000,00 en tu cuenta: Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave."
+
+    @Test
+    fun `la plata que llega a Nu cae en la cuenta Nu`() {
+        val resuelta = resolverCuentaDelBanco(
+            accounts = todas,
+            uso = UsoDeCuenta.DESTINO_DE_INGRESO,
+            banco = "Notificación · Nu",
+            textoDelMensaje = llegoANu,
+        )
+        assertEquals(nuAhorros, resuelta.cuenta)
+        assertEquals(OrigenDeLaCuentaDelBanco.POR_EL_BANCO, resuelta.origen)
+    }
+
+    @Test
+    fun `con dos cuentas Nu que no son tarjeta no se elige ninguna por Nu`() {
+        val otraNu = Account("a9", "Nu Cajita", AccountType.SAVINGS, 0)
+        assertNull(cuentaDeNu("Notificación · Nu", llegoANu, todas + otraNu))
+    }
+
+    @Test
+    fun `un SMS que no viene de Nu no cae en la cuenta Nu`() {
+        assertNull(cuentaDeNu("85540", llegoANu, todas))
+    }
 }

@@ -289,8 +289,16 @@ class WalletRepositoryImpl(
     override suspend fun getSms(id: String): SmsMessage =
         client.get("$baseUrl/api/sms/$id").body()
 
-    override suspend fun parseSms(id: String): ParsedSms =
-        client.get("$baseUrl/api/sms/$id/parse").body()
+    // Mira el status antes de deserializar, como `registerPayrollDeduction`: el 422 trae en el
+    // cuerpo por qué ese mensaje no se puede anotar, y con `.body()` a secas ese texto se perdía y
+    // «Reconciliar movimiento» quedaba en «Parseando…» con «Algo salió mal».
+    override suspend fun parseSms(id: String): ParsedSms {
+        val response = client.get("$baseUrl/api/sms/$id/parse")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
 
     override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> =
         client.get("$baseUrl/api/sms/$id/coincidencias").body()
