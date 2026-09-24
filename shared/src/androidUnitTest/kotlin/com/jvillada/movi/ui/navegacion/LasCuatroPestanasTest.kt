@@ -64,11 +64,11 @@ class LasCuatroPestanasTest {
     private var elegida: NavTab? = null
 
     /** La barra del teléfono como la pinta App.kt: al pie, con la letra de la app. */
-    private fun montarBarra(activa: NavTab? = NavTab.HOY) {
+    private fun montarBarra(activa: NavTab? = NavTab.HOY, letraDelSistema: Float = 1f) {
         composeRule.setContent {
             val base = LocalDensity.current
             CompositionLocalProvider(
-                LocalDensity provides Density(base.density, base.fontScale * 1.12f),
+                LocalDensity provides Density(base.density, base.fontScale * letraDelSistema * 1.12f),
                 LocalWindowWidthClass provides WindowWidthClass.Compact,
             ) {
                 MoviTheme {
@@ -123,6 +123,31 @@ class LasCuatroPestanasTest {
             assertEquals(1, texto.lineCount, "«$rotulo» en un renglón")
             assertFalse(texto.multiParagraph.didExceedMaxLines, "«$rotulo» sin partirse")
             // Y el nodo mide al menos lo que mide el texto: la fila no lo apretó.
+            val anchoDelTexto = texto.getLineRight(0) - texto.getLineLeft(0)
+            val anchoDelNodo = composeRule.onNodeWithText(rotulo, useUnmergedTree = true)
+                .fetchSemanticsNode().boundsInRoot.width
+            assertTrue(anchoDelNodo + 0.5f >= anchoDelTexto, "«$rotulo» entero: $anchoDelNodo < $anchoDelTexto")
+        }
+        val ancho = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.right
+        val patrimonio = composeRule.onNodeWithText("Patrimonio", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(patrimonio.right <= ancho, "el último rótulo termina adentro de la pantalla")
+    }
+
+    /**
+     * **Con la letra del sistema más grande (1,3×, y encima el 1,12× de la app) ningún rótulo sale
+     * cortado.** Con `maxLines = 1`, una palabra que no entra se parte por la mitad y se ve
+     * «Movimie». Medido: a 390 dp «Movimientos» ocupa ~95 dp y la fila entera ~323 dp, así que entra
+     * entero y no hace falta volver a «Movs». Si algún día deja de entrar, esta prueba lo dice.
+     */
+    @Test
+    fun `con la letra del sistema al 130 por ciento ningun rotulo sale cortado`() {
+        montarBarra(letraDelSistema = 1.3f)
+
+        rotulos.forEach { rotulo ->
+            val texto = layoutDelTexto(rotulo)
+            assertEquals(1, texto.lineCount, "«$rotulo» en un renglón")
+            assertFalse(texto.multiParagraph.didExceedMaxLines, "«$rotulo» sin partirse")
             val anchoDelTexto = texto.getLineRight(0) - texto.getLineLeft(0)
             val anchoDelNodo = composeRule.onNodeWithText(rotulo, useUnmergedTree = true)
                 .fetchSemanticsNode().boundsInRoot.width
