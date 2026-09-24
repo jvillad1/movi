@@ -62,6 +62,7 @@ import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NewItemButton
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.LineaEsqueleto
+import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
 import com.jvillada.movi.ui.components.altoDeUnRenglon
 import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
@@ -254,9 +255,15 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 leading = HeaderLeading.Back(fallback = Screen.Mas),
                 action = { NewItemButton(label = "Subir archivo", onClick = elegirArchivo) },
             )
-            if (cargando || subiendo || importando != null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-
             val lista = documentos
+            // Fix round 1: con nada pintado todavía (`lista == null && cargando`) el esqueleto de
+            // más abajo ya dice «cargando» con la forma de lo que viene — la barra sería la misma
+            // señal dos veces, Y además desaparecía apenas llegaban los datos y corría la primera
+            // fila 16,5 dp hacia arriba. Mismo criterio que Cuentas (Task 8) y Movimientos: la
+            // barra queda para una recarga con algo ya en pantalla (reintentar, subir un archivo).
+            if ((cargando && lista != null) || subiendo || importando != null) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
             when {
                 // «Todavía no guardaste nada» es una afirmación sobre lo que el dueño tiene, y no
                 // se hace antes de que la lectura conteste. Misma regla que el Inicio.
@@ -455,6 +462,12 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
 private const val FILAS_DE_DOCUMENTO_ESQUELETO = 4
 
 /**
+ * El tag de una fila REAL de [FilaDeDocumento]. Ola B, tarea 9 (fix round 1): sin él, una prueba
+ * no tenía forma de medir su TOP contra el de la primera fila esqueleto.
+ */
+internal const val TAG_FILA_DE_DOCUMENTO: String = "fila-de-documento"
+
+/**
  * **Documentos mientras carga, con la forma de [FilaDeDocumento]** (Ola B, tarea 9). Antes de esta
  * tarea el `when` de arriba pintaba un `Spacer` de 1 dp entre la barra de carga y la primera fila
  * real — la pantalla se veía vacía con «+ Subir archivo» todavía sin aparecer (esa acción ya vive
@@ -467,6 +480,14 @@ private const val FILAS_DE_DOCUMENTO_ESQUELETO = 4
 @Composable
 private fun DocumentosEsqueleto() {
     Column(modifier = Modifier.padding(top = 14.dp)) {
+        // Fix round 1: la lista real arranca con un `MinSectionHeader` por tipo («Extractos · 3»)
+        // ANTES de la primera fila — sin este renglón acá, la primera fila esqueleto quedaba más
+        // arriba que la primera fila real y todo bajaba de golpe al llegar los datos.
+        // `RotuloDeSeccionEsqueleto` ya copia el relleno y el estilo exactos de `MinSectionHeader`
+        // (Task 8), así que alcanza con ponerlo en el mismo `Column(padding horizontal 16.dp)`.
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            RotuloDeSeccionEsqueleto()
+        }
         // `Hairline()` en TODAS las filas, no solo entre ellas: es lo que hace `FilaDeDocumento`
         // de verdad (su propio `Hairline()` va siempre, incluida la última fila de la lista).
         repeat(FILAS_DE_DOCUMENTO_ESQUELETO) {
@@ -474,8 +495,11 @@ private fun DocumentosEsqueleto() {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 10.dp, end = 10.dp, top = 12.dp, bottom = 6.dp)
-                        .testTag(TAG_FILA_DE_LISTA_ESQUELETO),
+                        // El tag va ANTES del `padding` — mismo lugar en la cadena que
+                        // `TAG_FILA_DE_DOCUMENTO` en la fila real (fix round 1: los dos tienen
+                        // que medir el mismo punto, el borde exterior de la fila).
+                        .testTag(TAG_FILA_DE_LISTA_ESQUELETO)
+                        .padding(start = 10.dp, end = 10.dp, top = 12.dp, bottom = 6.dp),
                 ) {
                     LineaEsqueleto(
                         fraccionDelAncho = 0.6f,
@@ -517,6 +541,11 @@ private fun FilaDeDocumento(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Ola B, tarea 9 (fix round 1): el tag va ANTES de `clip`/`clickable`/`padding`
+                // — mismo lugar en la cadena que `TAG_FILA_DE_LISTA_ESQUELETO` en el esqueleto,
+                // para que los dos midan el mismo punto (el borde exterior de la fila) en vez de
+                // que uno mida adentro del relleno y el otro no.
+                .testTag(TAG_FILA_DE_DOCUMENTO)
                 .clip(RoundedCornerShape(10.dp))
                 .clickable(onClick = onAbrir)
                 .padding(start = 10.dp, end = 10.dp, top = 12.dp, bottom = 6.dp),

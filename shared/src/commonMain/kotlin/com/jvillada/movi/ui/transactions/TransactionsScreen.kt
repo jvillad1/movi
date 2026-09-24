@@ -412,6 +412,14 @@ const val TAG_FILA_DE_MOVIMIENTO_SUELTO: String = "fila-de-movimiento-suelto"
 const val TAG_ENCABEZADO_DE_DIA_ESQUELETO: String = "encabezado-de-dia-esqueleto"
 
 /**
+ * El tag del renglón de encabezado de un día REAL («HOY · Flujo del día …», el que pliega y
+ * despliega el día). Ola B, tarea 9 (fix round 1): sin él, una prueba no tenía cómo comparar el
+ * TOP de este renglón contra el del encabezado esqueleto de arriba y verificar que el primer
+ * grupo no salta al llegar los datos.
+ */
+const val TAG_ENCABEZADO_DE_DIA: String = "encabezado-de-dia"
+
+/**
  * **Movimientos mientras carga, con la forma de Movimientos** (Ola B, tarea 9).
  *
  * Task 7 (ola A) puso UNA tarjeta de 6 filas sueltas. La pantalla real no es una lista: son varios
@@ -429,18 +437,24 @@ const val TAG_ENCABEZADO_DE_DIA_ESQUELETO: String = "encabezado-de-dia-esqueleto
 private val GRUPOS_DEL_ESQUELETO = listOf(3, 2, 2)
 
 private fun LazyListScope.movimientosEsqueleto() {
-    GRUPOS_DEL_ESQUELETO.forEachIndexed { indice, filas ->
+    GRUPOS_DEL_ESQUELETO.forEach { filas ->
         item {
+            // `top = 20.dp` SIEMPRE, sin excepción para el primer grupo — fix round 1. El
+            // `Column` de cada día real (más abajo, en el `forEach` de `visibleDays`) usa
+            // `padding(top = 20.dp)` para TODOS los días, primero incluido: el `contentPadding`
+            // de esta `LazyColumn` no trae ningún `top`, así que ese es el único aire arriba del
+            // primer renglón. Un `0.dp` acá adelantaba el primer grupo 20 dp contra el primer día
+            // real y la lista saltaba hacia abajo apenas llegaban los datos.
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
-                    .padding(top = if (indice == 0) 0.dp else 20.dp),
+                    .padding(top = 20.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 8.dp)
-                        .testTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO),
+                        .testTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO)
+                        .padding(horizontal = 4.dp, vertical = 8.dp),
                 ) {
                     RenglonConCifraEsqueleto(fraccionDelRotulo = 0.2f, anchoDeLaCifra = 110.dp)
                 }
@@ -2094,6 +2108,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                // Ola B, tarea 9 (fix round 1): el tag va ANTES de `clip`/
+                                // `clickable`/`padding` — mismo lugar en la cadena que
+                                // `TAG_ENCABEZADO_DE_DIA_ESQUELETO` en el esqueleto — para que
+                                // los dos midan el mismo punto (el borde exterior del renglón,
+                                // no adentro del relleno). Sin este orden, una prueba medía el
+                                // esqueleto 8 dp más abajo que el real sin que el padding de
+                                // ninguno de los dos hubiera cambiado.
+                                .testTag(TAG_ENCABEZADO_DE_DIA)
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable { diasPlegados = DiasPlegadosStore.alternar(day.date) }
                                 .padding(horizontal = 4.dp, vertical = 8.dp),

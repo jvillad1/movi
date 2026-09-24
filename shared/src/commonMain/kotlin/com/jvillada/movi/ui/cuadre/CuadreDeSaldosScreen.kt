@@ -45,6 +45,7 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MoneyField
+import com.jvillada.movi.ui.components.altoDeMoneyFieldConRotulo
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
@@ -379,9 +380,11 @@ private fun FilaDeCuadreEsqueleto() {
             }
         }
         Spacer(Modifier.height(12.dp))
-        // El campo «LO QUE DICE EL BANCO»: un bloque a todo el ancho de la altura de un campo de
-        // texto (rótulo + caja), sin abrir el teclado que un `MoneyField` de verdad ofrecería.
-        BloqueEsqueleto(alto = 48.dp)
+        // El campo «LO QUE DICE EL BANCO»: un bloque a todo el ancho, sin abrir el teclado que un
+        // `MoneyField` de verdad ofrecería. Fix round 1: el alto sale de `altoDeMoneyFieldConRotulo`
+        // —los mismos tokens que arma el campo real, no un número puesto a ojo— para que no se
+        // desalinee en silencio si `Movi.textos.apoyo`/`.monto` cambian.
+        BloqueEsqueleto(alto = altoDeMoneyFieldConRotulo())
         Spacer(Modifier.height(8.dp))
         LineaEsqueleto(fraccionDelAncho = 0.85f, estilo = Movi.textos.apoyo)
         Spacer(Modifier.height(6.dp))

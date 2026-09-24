@@ -4,9 +4,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -22,6 +25,7 @@ import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import com.jvillada.movi.ui.cuadre.CuadreDeSaldosScreen
 import com.jvillada.movi.ui.destinos.DestinosScreen
 import com.jvillada.movi.ui.documentos.DocumentosScreen
+import com.jvillada.movi.ui.documentos.TAG_FILA_DE_DOCUMENTO
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
@@ -29,6 +33,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -49,8 +55,12 @@ import kotlin.test.assertTrue
  * `Movimientos` tiene su propia clase (`EsqueletoDeMovimientosTest`, en `ui.transactions`) porque
  * ya existía desde la ola A; acá van las cuatro que esta tarea deja con esqueleto por primera vez.
  */
+// `@GraphicsMode(NATIVE)` + `sdk = [34]` (fix round 1): hace falta el motor de texto real para
+// medir el Y de una fila contra otra — ver el KDoc de `Esqueleto.kt`. Las pruebas que solo cuentan
+// tags o buscan texto siguen andando igual bajo NATIVE (mismo criterio que `EsqueletoDeCuentasTest`).
 @RunWith(RobolectricTestRunner::class)
-@Config(qualifiers = "w411dp-h731dp-xhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w411dp-h731dp-xhdpi")
 class EsqueletosDeListasTest {
 
     @get:Rule val composeRule = createComposeRule()
@@ -158,6 +168,51 @@ class EsqueletosDeListasTest {
         // línea invisible después del `.`, y buscar el nombre entero con ese caracter en el medio
         // no encuentra nada. Lo que importa es que el título real (no un bloque) esté en pantalla.
         composeRule.onNodeWithText("Cedula", substring = true, useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /**
+     * **Fix round 1, hallazgo 2.** La lista real arranca con un `MinSectionHeader` por tipo
+     * («Contratos · 1») ANTES de la primera fila; el esqueleto original no lo tenía, así que la
+     * primera fila esqueleto quedaba más arriba que la primera fila real y todo bajaba de golpe
+     * al llegar los datos. Se agregó `RotuloDeSeccionEsqueleto()` arriba de las filas; esta
+     * prueba mide el TOP de la primera fila esqueleto (`TAG_FILA_DE_LISTA_ESQUELETO`) contra el
+     * de la primera fila real (`TAG_FILA_DE_DOCUMENTO`).
+     */
+    @Test
+    fun `Documentos — la primera fila esqueleto arranca en el mismo Y que la primera fila real`() {
+        val puerta = CompletableDeferred<List<Documento>>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getDocuments(): List<Documento> = puerta.await()
+        }
+        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { DocumentosScreen(onNavigate = {}) } } }
+        composeRule.waitForIdle()
+
+        val yEsqueleto = composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO, useUnmergedTree = true)
+            .onFirst().getUnclippedBoundsInRoot().top
+
+        puerta.complete(
+            listOf(
+                Documento(
+                    id = "doc1",
+                    nombre = "Cedula.pdf",
+                    tipo = TipoDeDocumento.CONTRATO,
+                    mimeType = "application/pdf",
+                    bytes = 1_024L,
+                    subidoEn = 1_758_326_400_000L,
+                ),
+            ),
+        )
+        composeRule.waitForIdle()
+
+        val yReal = composeRule.onNodeWithTag(TAG_FILA_DE_DOCUMENTO, useUnmergedTree = true)
+            .getUnclippedBoundsInRoot().top
+
+        val diferencia = abs(yReal.value - yEsqueleto.value)
+        assertTrue(
+            diferencia <= 2f,
+            "La fila esqueleto arrancaba en ${yEsqueleto.value} dp y la real en ${yReal.value} dp " +
+                "— diferencia de $diferencia dp, el máximo son 2 dp",
+        )
     }
 
     @Test
