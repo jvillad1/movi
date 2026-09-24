@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -14,7 +15,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CategoryPref
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.PAYROLL_DEDUCTION_CATEGORY
+import com.jvillada.movi.shared.model.THIRD_PARTY_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.theme.COLORES_DEL_CATALOGO
 import com.jvillada.movi.theme.COLOR_DE_CATEGORIA_RESPALDO
@@ -90,6 +99,9 @@ internal class PorNombre(val nombres: List<String>, val icono: String, val color
  * Además del catálogo de Movi están los nombres **reales** del dueño («Fútbol», «Hija»,
  * «Gardenera», «Mercado extra»…), y las categorías que Movi escribe sola (traspasos, saldos,
  * ajustes), en gris: no son un gasto con carácter propio y no deberían competir con uno.
+ *
+ * Las que Movi escribe sola van por su constante de `:core` y no por un texto copiado: si una
+ * cambia de nombre allá, su apariencia no se queda atrás en silencio.
  */
 internal val TABLA_POR_NOMBRE: List<PorNombre> = listOf(
     PorNombre(listOf("Comida"), "comida", "naranja"),
@@ -100,8 +112,8 @@ internal val TABLA_POR_NOMBRE: List<PorNombre> = listOf(
     PorNombre(listOf("Hija"), "hija", "rosa"),
     PorNombre(listOf("Familia"), "familia", "rosa"),
     PorNombre(listOf("Celular"), "celular", "azul"),
-    PorNombre(listOf("Cuota de crédito", "Crédito"), "credito", "violeta"),
-    PorNombre(listOf("Pago de tarjeta"), "tarjeta", "violeta"),
+    PorNombre(listOf(CUOTA_CATEGORY, "Crédito"), "credito", "violeta"),
+    PorNombre(listOf(CARD_PAYMENT_CATEGORY), "tarjeta", "violeta"),
     PorNombre(listOf("Comisiones del banco"), "banco", "gris"),
     PorNombre(listOf("Impuestos"), "impuestos", "gris"),
     PorNombre(listOf("Salud"), "salud", "rojo"),
@@ -118,14 +130,14 @@ internal val TABLA_POR_NOMBRE: List<PorNombre> = listOf(
     PorNombre(listOf("Arriendo recibido"), "arriendo", "verde"),
     PorNombre(listOf("Inversiones"), "inversiones", "verde"),
     PorNombre(
-        listOf("Otros ingresos", "Ingreso", "Transferencia", "Pago de un tercero"),
+        listOf("Otros ingresos", "Ingreso", "Transferencia", THIRD_PARTY_PAYMENT_CATEGORY),
         "ingreso",
         "verde",
     ),
     // Las que escribe Movi sola: neutras a propósito.
-    PorNombre(listOf("Traspaso", "Cuenta eliminada"), "transferencia", COLOR_DE_CATEGORIA_RESPALDO),
-    PorNombre(listOf("Saldo inicial", "Ajuste de saldo"), "banco", COLOR_DE_CATEGORIA_RESPALDO),
-    PorNombre(listOf("Descuento de nómina"), "salario", COLOR_DE_CATEGORIA_RESPALDO),
+    PorNombre(listOf(TRANSFER_CATEGORY, ORPHANED_LEG_CATEGORY), "transferencia", COLOR_DE_CATEGORIA_RESPALDO),
+    PorNombre(listOf(OPENING_CATEGORY, ADJUSTMENT_CATEGORY), "banco", COLOR_DE_CATEGORIA_RESPALDO),
+    PorNombre(listOf(PAYROLL_DEDUCTION_CATEGORY), "salario", COLOR_DE_CATEGORIA_RESPALDO),
 )
 
 /** [TABLA_POR_NOMBRE] indexada por nombre normalizado. */
@@ -357,7 +369,13 @@ fun IconoDeCategoria(
     modifier: Modifier = Modifier,
     tamano: TamanoDeIconoDeCategoria = TamanoDeIconoDeCategoria.Normal,
 ) {
-    IconoDeCategoria(apariencia = aparienciaDe(nombre), modifier = modifier, tamano = tamano)
+    // `remember` con las dos cosas de las que depende: el nombre y lo elegido por el dueño. Sin
+    // esto, cada recomposición de una fila de Movimientos normalizaba el nombre y recorría la
+    // tabla de nuevo. `UsedCategoriesCache.prefs` es estado de Compose, así que leerlo acá
+    // también suscribe: un cambio en «Categorías» invalida el recuerdo y se ve al instante.
+    val prefs = UsedCategoriesCache.prefs
+    val apariencia = remember(nombre, prefs) { aparienciaDe(nombre, prefDeCategoria(nombre, prefs)) }
+    IconoDeCategoria(apariencia = apariencia, modifier = modifier, tamano = tamano)
 }
 
 /**
@@ -389,4 +407,8 @@ fun IconoDeCategoria(
 
 /** El color de una categoría en el tema actual — para lo que se pinta de ella además del ícono. */
 @Composable
-fun colorDeCategoria(nombre: String): Color = Movi.colores.categoria(aparienciaDe(nombre).color)
+fun colorDeCategoria(nombre: String): Color {
+    val prefs = UsedCategoriesCache.prefs
+    val apariencia = remember(nombre, prefs) { aparienciaDe(nombre, prefDeCategoria(nombre, prefs)) }
+    return Movi.colores.categoria(apariencia.color)
+}
