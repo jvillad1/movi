@@ -111,4 +111,28 @@ class NombreParaExtraerTextoTest {
         // Ni con `mimeEsConfiable = true` hay nada que inventar si el mime no dice nada.
         assertEquals("documento", nombreParaExtraerTexto("documento", "application/octet-stream", mimeEsConfiable = true))
     }
+
+    // ── Foto o texto (revisión final de la Ola B) ─────────────────────────────
+
+    @Test
+    fun con_el_mime_confiable_un_pdf_renombrado_a_png_no_va_por_el_camino_de_la_foto() {
+        assertEquals(false, esImagenParaExtraer("extracto.png", "application/pdf", mimeEsConfiable = true))
+        assertEquals(false, esImagenParaExtraer("extracto.jpg", "text/plain", mimeEsConfiable = true))
+        // Y al revés: una foto guardada como tal sigue siendo foto aunque el nombre diga .pdf.
+        assertEquals(true, esImagenParaExtraer("extracto.pdf", "image/png", mimeEsConfiable = true))
+    }
+
+    @Test
+    fun con_el_mime_confiable_pero_generico_decide_el_nombre() {
+        assertEquals(true, esImagenParaExtraer("foto.png", "application/octet-stream", mimeEsConfiable = true))
+        assertEquals(false, esImagenParaExtraer("extracto.pdf", "application/octet-stream", mimeEsConfiable = true))
+    }
+
+    @Test
+    fun sin_mime_confiable_basta_con_que_el_mime_o_el_nombre_digan_imagen() {
+        // `POST /api/statements/upload`: el mime lo manda el navegador, así que no cambia nada.
+        assertEquals(true, esImagenParaExtraer("extracto.png", "application/pdf"))
+        assertEquals(true, esImagenParaExtraer("extracto", "image/jpeg"))
+        assertEquals(false, esImagenParaExtraer("extracto.pdf", "application/pdf"))
+    }
 }

@@ -167,6 +167,34 @@ internal fun nombreParaExtraerTexto(fileName: String, mimeType: String, mimeEsCo
     return if (extensionActual == extensionDelMime) fileName else "$fileName.$extensionDelMime"
 }
 
+/** Las extensiones de nombre que se leen como foto (el camino de visión de Claude). */
+private val EXTENSIONES_DE_IMAGEN = setOf("png", "jpg", "jpeg", "webp", "gif", "heic")
+
+/** Los `mimeType` que no dicen nada del contenido: con ellos decide el nombre, en los dos modos. */
+private val MIMES_GENERICOS = setOf("", "application/octet-stream", "binary/octet-stream")
+
+/**
+ * ¿El archivo va por el camino de la FOTO (visión de Claude) o por el de texto
+ * ([nombreParaExtraerTexto] + `StatementParser.extractText`)?
+ *
+ * Con [mimeEsConfiable] = `false` (`POST /api/statements/upload`, el mime lo manda el navegador)
+ * es lo de siempre: basta con que el mime O la extensión del nombre digan imagen.
+ *
+ * Revisión final de la Ola B: con [mimeEsConfiable] = `true` (`leer-extracto`, el mime lo guardó
+ * el server al subir y el nombre es texto libre que el dueño edita) el mime decide SOLO — la misma
+ * regla que ya seguía [nombreParaExtraerTexto]. Sin esto, un PDF renombrado a «extracto.png»
+ * pasaba esa función sin problema pero se desviaba ANTES, acá, hacia la lectura de fotos: bytes de
+ * PDF mandados a Claude como si fueran un PNG, una llamada paga para un error seguro. Solo un mime
+ * genérico ([MIMES_GENERICOS]) le devuelve la decisión al nombre, porque no hay nada mejor que
+ * consultar.
+ */
+internal fun esImagenParaExtraer(fileName: String, mimeType: String, mimeEsConfiable: Boolean = false): Boolean {
+    val porMime = ClaudeStatementParser.isImageMime(mimeType)
+    val mime = mimeType.substringBefore(';').trim().lowercase()
+    if (mimeEsConfiable && mime !in MIMES_GENERICOS) return porMime
+    return porMime || fileName.substringAfterLast('.', "").lowercase() in EXTENSIONES_DE_IMAGEN
+}
+
 /**
  * Una falla de [procesarExtracto], con el status HTTP que le corresponde.
  *
@@ -219,8 +247,7 @@ internal suspend fun procesarExtracto(
     // Para leerle los números de cuenta al armar la respuesta (ver `numerosDeCuenta`).
     var textoDelExtracto = ""
 
-    val isImage = ClaudeStatementParser.isImageMime(mimeType) ||
-        fileName.substringAfterLast('.', "").lowercase() in setOf("png", "jpg", "jpeg", "webp", "gif", "heic")
+    val isImage = esImagenParaExtraer(fileName, mimeType, mimeConfiable)
 
     val bankName: String
     val parsed: List<ParsedTransaction>

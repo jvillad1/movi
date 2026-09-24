@@ -727,6 +727,25 @@ class DocumentRoutesTest {
     }
 
     @Test
+    fun `un PDF renombrado a png se sigue leyendo como PDF, no como foto`() = testApplication {
+        // Revisión final de la Ola B: el mimeType guardado también decide foto-o-texto
+        // (`esImagenParaExtraer`), no solo la extensión que se le pasa a `extractText`. Sin eso,
+        // «Extracto agosto.png» con bytes de PDF se iba a la lectura de fotos de Claude — acá, en
+        // cambio, se lee como PDF y corta en `LOAN_SUMMARY` ANTES de Claude, como el resto del
+        // archivo.
+        wireApp()
+        val bytes = pdfDeResumenDeCredito()
+        val id = subir(duenoId, nombre = "Extracto agosto.pdf", contenido = bytes, mime = "application/pdf")
+        editar(duenoId, id, """{"nombre":"Extracto agosto.png"}""")
+
+        val res = leerExtracto(duenoId, id)
+        val cuerpo = res.bodyAsText()
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status, cuerpo)
+        assertTrue("resumen de crédito" in cuerpo, cuerpo)
+    }
+
+    @Test
     fun `un archivo basura al subir contesta 422 con el motivo, no un 500`() = testApplication {
         // Fix round 3, hallazgo 1: bytes que no son ni PDF ni el `.xls` que su nombre promete —
         // antes de este fix, `WorkbookFactory.create` explotaba fuera de FallaAlProcesarExtracto
