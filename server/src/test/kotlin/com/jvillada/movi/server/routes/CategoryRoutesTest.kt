@@ -18,6 +18,10 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CATEGORY_COLOR_MAX_LENGTH
+import com.jvillada.movi.shared.model.CATEGORY_COLOR_TOO_LONG
+import com.jvillada.movi.shared.model.CATEGORY_ICONO_MAX_LENGTH
+import com.jvillada.movi.shared.model.CATEGORY_ICONO_TOO_LONG
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -645,6 +649,25 @@ class CategoryRoutesTest {
     }
 
     /**
+     * El cuerpo que devuelve el PROPIO PUT — no un `GET /api/categories` después — también tiene
+     * que traer el ícono y el color. "Mercado" no tiene movimientos, presupuesto ni recurrente
+     * (`movements == 0`): sin la preferencia que este PUT acaba de escribir no existiría en
+     * ninguna lista, así que es el caso más ajustado de "categoría sin uso".
+     */
+    @Test
+    fun `la respuesta del propio PUT ya trae el icono y el color de una categoria sin uso`() = testApplication {
+        wireApp()
+        val respuesta = prefs("Mercado", icono = "restaurante", color = "naranja")
+        assertEquals(HttpStatusCode.OK, respuesta.status)
+
+        val cuerpo = Json.parseToJsonElement(respuesta.bodyAsText()).jsonObject
+        assertEquals("Mercado", cuerpo.nombre())
+        assertEquals(0, cuerpo.num("movements"))
+        assertEquals("restaurante", cuerpo.texto("icono"))
+        assertEquals("naranja", cuerpo.texto("color"))
+    }
+
+    /**
      * **El caso que motiva toda la regla.** Un APK viejo no sabe de ícono ni color, así que un
      * PUT suyo (esconder, fijar el tipo) no los manda — ni siquiera como `null` a propósito, es
      * que ni conoce el campo. Si ese PUT los borrara, instalar una versión vieja al lado de una
@@ -681,6 +704,50 @@ class CategoryRoutesTest {
         val mercado = categorias().porNombre("Mercado")
         assertNull(mercado.texto("icono"))
         assertNull(mercado.texto("color"))
+    }
+
+    /** Solo espacios es, a todos los efectos, lo mismo que la cadena vacía: también resetea. */
+    @Test
+    fun `mandar solo espacios tambien vuelve el icono y el color al default`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Mercado")
+        assertEquals(HttpStatusCode.OK, prefs("Mercado", icono = "restaurante", color = "naranja").status)
+        assertEquals(HttpStatusCode.OK, prefs("Mercado", icono = "   ", color = "  ").status)
+
+        val mercado = categorias().porNombre("Mercado")
+        assertNull(mercado.texto("icono"))
+        assertNull(mercado.texto("color"))
+    }
+
+    @Test
+    fun `un icono mas largo que la columna se rechaza con 400 y no se guarda nada`() = testApplication {
+        wireApp()
+        val largo = "x".repeat(CATEGORY_ICONO_MAX_LENGTH + 1)
+        val res = prefs("Mercado", icono = largo)
+        assertEquals(HttpStatusCode.BadRequest, res.status)
+        assertEquals(CATEGORY_ICONO_TOO_LONG, res.bodyAsText())
+        // No quedó ninguna fila: el rechazo es ANTES de tocar la base.
+        val filas = transaction { CategoryPrefs.selectAll().where { CategoryPrefs.name eq "Mercado" }.count() }
+        assertEquals(0L, filas)
+    }
+
+    @Test
+    fun `un color mas largo que la columna se rechaza con 400 y no se guarda nada`() = testApplication {
+        wireApp()
+        val largo = "x".repeat(CATEGORY_COLOR_MAX_LENGTH + 1)
+        val res = prefs("Mercado", color = largo)
+        assertEquals(HttpStatusCode.BadRequest, res.status)
+        assertEquals(CATEGORY_COLOR_TOO_LONG, res.bodyAsText())
+        val filas = transaction { CategoryPrefs.selectAll().where { CategoryPrefs.name eq "Mercado" }.count() }
+        assertEquals(0L, filas)
+    }
+
+    @Test
+    fun `un icono al limite exacto de la columna se acepta`() = testApplication {
+        wireApp()
+        val limite = "x".repeat(CATEGORY_ICONO_MAX_LENGTH)
+        assertEquals(HttpStatusCode.OK, prefs("Mercado", icono = limite).status)
+        assertEquals(limite, categorias().porNombre("Mercado").texto("icono"))
     }
 
     @Test

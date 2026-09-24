@@ -191,9 +191,9 @@ interface WalletRepository {
      * **Esconder no borra nada**: los movimientos viejos la siguen diciendo y siguen contando
      * donde contaban; lo único que cambia es que deja de ofrecerse al escribir.
      *
-     * `icono`/`color` en `null` significa "no cambiar" (el server conserva lo que había); la
-     * cadena vacía `""` es el pedido explícito de volver al default de Movi. Ver
-     * `CategoryPrefsRequest` en `:core` y el KDoc de `PUT /api/categories/prefs`.
+     * `icono`/`color` en `null` significa "no cambiar" (el server conserva lo que había); una
+     * cadena en blanco (`""` o solo espacios) es el pedido explícito de volver al default de
+     * Movi. Ver `CategoryPrefsRequest` en `:core` y el KDoc de `PUT /api/categories/prefs`.
      */
     suspend fun setCategoryPrefs(
         name: String,

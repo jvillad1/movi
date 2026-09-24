@@ -7,7 +7,6 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
 import com.jvillada.movi.server.balance.looksLikeCardPayment
-import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.Users
@@ -330,20 +329,11 @@ private fun Transaction.sumasAntesDe(
  * describe "¿la conozco?" sino "¿la sigue usando?", y ahí un movimiento borrado o de hace un año
  * no cuenta.
  */
-/** Una fila de `category_prefs`, ya leída — mismo propósito que `PrefRow` en `CategoryRoutes.kt`. */
-private data class PrefRowDelDashboard(val hidden: Boolean, val pinnedType: String?, val icono: String?, val color: String?)
-
 private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<String>): List<UsedCategory> {
-    val prefs = CategoryPrefs.selectAll()
-        .where { CategoryPrefs.userId eq uid }
-        .associate {
-            it[CategoryPrefs.name].trim() to PrefRowDelDashboard(
-                hidden = it[CategoryPrefs.hidden],
-                pinnedType = it[CategoryPrefs.pinnedType],
-                icono = it[CategoryPrefs.icono],
-                color = it[CategoryPrefs.color],
-            )
-        }
+    // Misma lectura de `category_prefs` que usa `GET /api/categories` (ver
+    // `CategoryRoutes.preferenciasDeCategorias`): una sola función para las dos rutas, para que
+    // no vuelvan a desincronizarse las columnas que acarrea cada una.
+    val prefs = preferenciasDeCategorias(uid)
 
     val porUso = Events.select(Events.category, Events.type)
         .where { Events.userId eq uid }

@@ -12,6 +12,10 @@ import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.time.cutoffDayOf
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.shared.model.CATEGORY_CATALOG_RENAME_BLOCKED
+import com.jvillada.movi.shared.model.CATEGORY_COLOR_MAX_LENGTH
+import com.jvillada.movi.shared.model.CATEGORY_COLOR_TOO_LONG
+import com.jvillada.movi.shared.model.CATEGORY_ICONO_MAX_LENGTH
+import com.jvillada.movi.shared.model.CATEGORY_ICONO_TOO_LONG
 import com.jvillada.movi.shared.model.CATEGORY_MERGE_SAME
 import com.jvillada.movi.shared.model.CATEGORY_NAME_MAX_LENGTH
 import com.jvillada.movi.shared.model.CATEGORY_NAME_REQUIRED
@@ -202,9 +206,9 @@ fun Route.categoryRoutes() {
      * COMPLETO de esas dos — se reemplazan tal cual vengan, incluso a `false`/`null`. Pero un APK
      * viejo que todavía no sabe de ícono ni color solo manda `hidden`/`pinnedType`, y con la misma
      * regla le borraría el ícono al dueño en cuanto tocara «esconder». Por eso acá `icono`/`color`
-     * en `null` significa "este cliente no dice nada" y **conserva** lo que ya había guardado; la
-     * cadena vacía `""` es el pedido explícito de "volver al default de Movi" y se guarda como
-     * `NULL`. Ver [CategoryPrefsRequest].
+     * en `null` significa "este cliente no dice nada" y **conserva** lo que ya había guardado; una
+     * cadena en blanco (`""` o solo espacios) es el pedido explícito de "volver al default de
+     * Movi" y se guarda como `NULL`. Ver [CategoryPrefsRequest].
      */
     put("/api/categories/prefs") {
         val uid = call.userId()
@@ -224,26 +228,37 @@ fun Route.categoryRoutes() {
         if (pinned != null && pinned !in CATEGORY_TYPE_VALUES) {
             return@put call.respond(HttpStatusCode.BadRequest, "Tipo desconocido: ${body.pinnedType}")
         }
+        // Copiados a variables locales porque el smart-cast de un `val` de otro módulo (el
+        // request viene de `:core`) no se confía solo con el `== null`/`isBlank()` de acá abajo.
+        // Validado ANTES del `dbQuery`: sin esto, un ícono/color más largo que la columna
+        // (`varchar(40)`/`varchar(20)`, ver `Tables.kt`) llegaba al `INSERT` y reventaba con un
+        // 500 de la base en vez de un 400 con motivo.
+        val iconoPedido = body.icono
+        val colorPedido = body.color
+        val iconoTrim = iconoPedido?.trim()
+        if (!iconoTrim.isNullOrEmpty() && iconoTrim.length > CATEGORY_ICONO_MAX_LENGTH) {
+            return@put call.respond(HttpStatusCode.BadRequest, CATEGORY_ICONO_TOO_LONG)
+        }
+        val colorTrim = colorPedido?.trim()
+        if (!colorTrim.isNullOrEmpty() && colorTrim.length > CATEGORY_COLOR_MAX_LENGTH) {
+            return@put call.respond(HttpStatusCode.BadRequest, CATEGORY_COLOR_TOO_LONG)
+        }
 
         val (iconoGuardado, colorGuardado) = dbQuery {
             val existente = CategoryPrefs.selectAll()
                 .where { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq name) }
                 .firstOrNull()
-            // Ver el KDoc de la ruta: `null` conserva, `""` vuelve al default (NULL), cualquier
-            // otra cosa reemplaza. Copiados a variables locales porque el smart-cast de un `val`
-            // de otro módulo (el request viene de `:core`) no se confía solo con el `== null` del
-            // `when`.
-            val iconoPedido = body.icono
-            val colorPedido = body.color
+            // Ver el KDoc de la ruta: `null` conserva, en blanco (`""` o solo espacios) vuelve al
+            // default (NULL), cualquier otra cosa reemplaza (ya validada arriba).
             val iconoNuevo = when {
                 iconoPedido == null -> existente?.get(CategoryPrefs.icono)
-                iconoPedido.isEmpty() -> null
-                else -> iconoPedido.trim()
+                iconoPedido.isBlank() -> null
+                else -> iconoTrim
             }
             val colorNuevo = when {
                 colorPedido == null -> existente?.get(CategoryPrefs.color)
-                colorPedido.isEmpty() -> null
-                else -> colorPedido.trim()
+                colorPedido.isBlank() -> null
+                else -> colorTrim
             }
             CategoryPrefs.deleteWhere { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq name) }
             // Una fila que no dice nada distinto del default no se guarda: así esta tabla solo
@@ -456,8 +471,37 @@ internal fun Transaction.rewriteCategory(
     )
 }
 
-/** Una fila de `category_prefs`, ya leída — para no acarrear cuatro `Pair` anidados. */
-private data class PrefRow(val hidden: Boolean, val pinnedType: String?, val icono: String?, val color: String?)
+/**
+ * Una fila de `category_prefs`, ya leída — para no acarrear cuatro `Pair` anidados.
+ *
+ * `internal` y no `private`: [preferenciasDeCategorias] la comparten esta ruta ([categoryUsage],
+ * para `GET /api/categories`) y `DashboardRoutes.usedCategories` (para el resumen del Inicio).
+ * Antes cada una leía `CategoryPrefs` por su cuenta con su propia forma de acarrear las cuatro
+ * columnas — dos copias de la misma lectura que ya se habían desincronizado una vez (ver el KDoc
+ * de [rewriteCategory] sobre cómo "escondida"/tipo fijado viajan) y podían volver a hacerlo.
+ */
+internal data class PreferenciaDeCategoria(
+    val hidden: Boolean,
+    val pinnedType: String?,
+    val icono: String?,
+    val color: String?,
+)
+
+/**
+ * Todas las preferencias del usuario, por nombre de categoría — una sola consulta a
+ * `category_prefs`, reusada por [categoryUsage] y por `DashboardRoutes.usedCategories`.
+ */
+internal fun Transaction.preferenciasDeCategorias(uid: String): Map<String, PreferenciaDeCategoria> =
+    CategoryPrefs.selectAll()
+        .where { CategoryPrefs.userId eq uid }
+        .associate {
+            it[CategoryPrefs.name].trim() to PreferenciaDeCategoria(
+                hidden = it[CategoryPrefs.hidden],
+                pinnedType = it[CategoryPrefs.pinnedType],
+                icono = it[CategoryPrefs.icono],
+                color = it[CategoryPrefs.color],
+            )
+        }
 
 /** Acumulador mutable del recorrido — solo vive dentro de [categoryUsage]. */
 private class UsageAcc {
@@ -535,16 +579,7 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
         if (nombre.isNotEmpty()) acc.getOrPut(nombre) { UsageAcc() }.recurrentes++
     }
 
-    val prefs = CategoryPrefs.selectAll()
-        .where { CategoryPrefs.userId eq uid }
-        .associate {
-            it[CategoryPrefs.name] to PrefRow(
-                hidden = it[CategoryPrefs.hidden],
-                pinnedType = it[CategoryPrefs.pinnedType],
-                icono = it[CategoryPrefs.icono],
-                color = it[CategoryPrefs.color],
-            )
-        }
+    val prefs = preferenciasDeCategorias(uid)
 
     // El catálogo entra completo aunque no se haya usado nunca: esconder «Freelance» sin haberla
     // usado es un caso normal, y para eso tiene que estar en la lista.

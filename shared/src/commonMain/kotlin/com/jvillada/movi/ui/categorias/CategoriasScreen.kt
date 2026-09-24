@@ -261,7 +261,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                             )
                         }.onSuccess {
                             UsedCategoriesCache.applyPref(
-                                it.name, CategoryPref(it.hidden, it.pinnedType),
+                                it.name, CategoryPref(it.hidden, it.pinnedType, it.icono, it.color),
                             )
                             confirmacion = if (escondida)
                                 "«${h.categoria.name}» ya no se te va a sugerir. Sus movimientos siguen ahí."
@@ -277,7 +277,9 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                         runCatching {
                             Repositories.wallets.setCategoryPrefs(h.categoria.name, h.categoria.hidden, tipo)
                         }.onSuccess {
-                            UsedCategoriesCache.applyPref(it.name, CategoryPref(it.hidden, it.pinnedType))
+                            UsedCategoriesCache.applyPref(
+                                it.name, CategoryPref(it.hidden, it.pinnedType, it.icono, it.color),
+                            )
                             error = null
                             recargar()
                             // La hoja se queda abierta con el dato fresco: fijar el tipo es un

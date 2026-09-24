@@ -160,8 +160,9 @@ data class CategoryPref(
     val pinnedType: String? = null,
     /**
      * Ícono elegido a mano (clave de texto, p. ej. `"restaurante"`). `null` = el que Movi le
-     * asigna por defecto — ver `PUT /api/categories/prefs`: mandar la cadena vacía `""` vuelve a
-     * este default; `null` en el request de ida **no** borra lo que ya había guardado.
+     * asigna por defecto — ver `PUT /api/categories/prefs`: mandar una cadena en blanco (`""` o
+     * solo espacios) vuelve a este default; `null` en el request de ida **no** borra lo que ya
+     * había guardado.
      */
     val icono: String? = null,
     /** Color elegido a mano (clave de texto, p. ej. `"naranja"`). Misma regla que [icono]. */
@@ -214,8 +215,8 @@ data class MergeCategoryRequest(val from: String, val into: String)
  * COMPLETO de `hidden` y `pinnedType` — el PUT los reemplaza tal cual vengan. `icono` y `color`
  * no: `null` significa "este cliente no sabe de ícono/color" y el server **conserva** lo que ya
  * había guardado (un APK viejo que solo manda `hidden`/`pinnedType` no puede borrarle el ícono al
- * dueño). Para volver al default de Movi hay que mandar la cadena vacía `""`, que el server guarda
- * como `NULL`.
+ * dueño). Para volver al default de Movi hay que mandar una cadena en blanco (`""` o solo
+ * espacios), que el server guarda como `NULL`.
  */
 @Serializable
 data class CategoryPrefsRequest(
@@ -294,6 +295,22 @@ const val CATEGORY_NAME_MAX_LENGTH: Int = 60
 
 const val CATEGORY_NAME_TOO_LONG: String =
     "El nombre de una categoría no puede pasar de $CATEGORY_NAME_MAX_LENGTH caracteres."
+
+/**
+ * El mismo tope de la columna `category_prefs.icono` (`varchar(40)`, ver `Tables.kt`). Mandar más
+ * que esto no debería llegar nunca a un `INSERT` — sin esta guarda en la ruta, un valor más largo
+ * revienta el PUT con un 500 de la base en vez de un 400 con un motivo.
+ */
+const val CATEGORY_ICONO_MAX_LENGTH: Int = 40
+
+const val CATEGORY_ICONO_TOO_LONG: String =
+    "El ícono de una categoría no puede pasar de $CATEGORY_ICONO_MAX_LENGTH caracteres."
+
+/** El mismo tope de `category_prefs.color` (`varchar(20)`). Ver [CATEGORY_ICONO_MAX_LENGTH]. */
+const val CATEGORY_COLOR_MAX_LENGTH: Int = 20
+
+const val CATEGORY_COLOR_TOO_LONG: String =
+    "El color de una categoría no puede pasar de $CATEGORY_COLOR_MAX_LENGTH caracteres."
 
 fun categoriaDestinoOcupadoMensaje(name: String): String =
     "Ya tienes una categoría «$name». Si quieres juntar las dos, usa Unificar en vez de renombrar."

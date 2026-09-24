@@ -1,5 +1,8 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -189,5 +192,46 @@ class CategoryAdminTest {
     fun `ninguna categoria del catalogo se llama igual que otra`() {
         val nombres = PREDEFINED_CATEGORIES.map { it.name.lowercase() }
         assertEquals(nombres.size, nombres.distinct().size)
+    }
+
+    // ── Ola B: icono y color no le rompen la lectura a nadie que escribió antes ──────
+
+    /**
+     * `UsedCategoriesCache` persiste `Map<String, CategoryPref>` como JSON en `Settings` (ver su
+     * KDoc) y sobrevive entre versiones de la app. Antes de esta ola, `CategoryPref` no tenía
+     * `icono` ni `color`, así que el teléfono de cualquier dueño que ya usó «Más → Categorías»
+     * tiene guardado exactamente este formato: sin esas dos claves. Con default `null` en las dos
+     * (regla del proyecto para campos nuevos en un modelo `@Serializable`, ver CLAUDE.md), el
+     * `Json` estándar de kotlinx —sin necesitar `ignoreUnknownKeys`, que es para claves DE MÁS, no
+     * para las que faltan— tiene que poder decodificar ese JSON viejo igual.
+     */
+    @Test
+    fun `un CategoryPref guardado antes de icono y color se sigue leyendo`() {
+        val json = Json { ignoreUnknownKeys = true }
+        val viejo = """{"hidden":true,"pinnedType":"BOTH"}"""
+
+        val leido = json.decodeFromString(CategoryPref.serializer(), viejo)
+
+        assertEquals(CategoryPref(hidden = true, pinnedType = "BOTH", icono = null, color = null), leido)
+    }
+
+    /** El mapa completo que `UsedCategoriesCache` guarda bajo una sola clave — mismo caso, en mapa. */
+    @Test
+    fun `un mapa de CategoryPref guardado antes de icono y color se sigue leyendo`() {
+        val json = Json { ignoreUnknownKeys = true }
+        // Mismo serializador que arma `UsedCategoriesCache.kt` (`prefsSerializer`): explícito y no
+        // reificado, porque la sobrecarga reificada de `MapSerializer` es ambigua acá.
+        val serializador = MapSerializer(String.serializer(), CategoryPref.serializer())
+        val viejo = """{"Ropa":{"hidden":true},"Otros":{"pinnedType":"BOTH"}}"""
+
+        val leido = json.decodeFromString(serializador, viejo)
+
+        assertEquals(
+            mapOf(
+                "Ropa" to CategoryPref(hidden = true),
+                "Otros" to CategoryPref(pinnedType = "BOTH"),
+            ),
+            leido,
+        )
     }
 }

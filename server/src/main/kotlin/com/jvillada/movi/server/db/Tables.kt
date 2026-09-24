@@ -367,7 +367,7 @@ object Budgets : Table("budgets") {
  * EXISTS), sin migración ni DDL que pueda tumbar el arranque.
  *
  * Ola B: [icono] y [color], por el mismo motivo que [pinnedType] — no son datos, son cómo el
- * dueño quiere VER la categoría. Column nuevas → van también en `createMissingTablesAndColumns`
+ * dueño quiere VER la categoría. Columnas nuevas → van también en `createMissingTablesAndColumns`
  * (`DatabaseFactory.kt`), porque esta tabla ya existe en producción desde Ola 10 y un
  * `SchemaUtils.create` sobre una tabla que ya está no emite ningún `ALTER`.
  */
