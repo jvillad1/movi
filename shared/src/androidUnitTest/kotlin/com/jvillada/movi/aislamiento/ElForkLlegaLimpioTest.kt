@@ -2,6 +2,11 @@ package com.jvillada.movi.aislamiento
 
 import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.DiasPlegadosStore
+import com.jvillada.movi.data.FormaDeCategorias
+import com.jvillada.movi.data.FormaDeCreditos
+import com.jvillada.movi.data.FormaDeCuentas
+import com.jvillada.movi.data.FormaRecordada
+import com.jvillada.movi.data.formaEnMemoria
 import com.jvillada.movi.data.LastAccountStore
 import com.jvillada.movi.data.MemoriaDeCategoriasCache
 import com.jvillada.movi.data.PropuestasDescartadasStore
@@ -114,6 +119,12 @@ class ElForkLlegaLimpioTest {
         InstantaneaDelInicio.sustitutoDePrueba = instantaneaEnMemoria(ALMACEN_DE_LA_INSTANTANEA)
         InstantaneaDelInicio.delAparato.guardarDatos("u1", DashboardData(pendingSms = 1))
         InstantaneaDelInicio.delAparato.guardarDefinicion("u1", DEFINICION_DE_OTRA_PRUEBA)
+        // La forma recordada de Créditos/Categorías/Cuentas: mismo caso que la instantánea — vive
+        // en el aparato, con clave por id, y la borra el logout.
+        FormaRecordada.sustitutoDePrueba = formaEnMemoria(ALMACEN_DE_LA_FORMA)
+        FormaRecordada.delAparato.guardarCreditos("u1", FormaDeCreditos(renglonesDelAvisoRojo = 2, prestamos = 12))
+        FormaRecordada.delAparato.guardarCategorias("u1", FormaDeCategorias(renglonesDeLaTarjetaDeOrden = 1, filas = 20))
+        FormaRecordada.delAparato.guardarCuentas("u1", FormaDeCuentas(renglonesDelPatrimonio = 4, filasPorGrupo = listOf(5, 2)))
 
         // No se afirma «quedó sucio» por prolijidad: si alguno de estos setters dejara de escribir,
         // el método de abajo pasaría sin ejercitar nada y esta clase sería decorativa.
@@ -135,6 +146,9 @@ class ElForkLlegaLimpioTest {
         assertTrue("«Entrar con huella» no quedó prendida", SessionManager.huellaActivada)
         assertNotNull("La instantánea del Inicio no quedó guardada", InstantaneaDelInicio.delAparato.datos("u1"))
         assertNotNull("La definición del Inicio no quedó guardada", InstantaneaDelInicio.delAparato.definicion("u1"))
+        assertNotNull("La forma de Créditos no quedó guardada", FormaRecordada.delAparato.creditos("u1"))
+        assertNotNull("La forma de Categorías no quedó guardada", FormaRecordada.delAparato.categorias("u1"))
+        assertNotNull("La forma de Cuentas no quedó guardada", FormaRecordada.delAparato.cuentas("u1"))
     }
 
     @Test
@@ -166,6 +180,8 @@ class ElForkLlegaLimpioTest {
         assertFalse("«Entrar con huella» trae la resaca del método anterior", SessionManager.huellaActivada)
         assertEquals("La instantánea del Inicio de otra prueba sigue guardada", emptyMap<String, String>(), ALMACEN_DE_LA_INSTANTANEA)
         assertNull("El almacén de mentira de la instantánea sigue enchufado", InstantaneaDelInicio.sustitutoDePrueba)
+        assertEquals("La forma recordada de otra prueba sigue guardada", emptyMap<String, String>(), ALMACEN_DE_LA_FORMA)
+        assertNull("El almacén de mentira de la forma sigue enchufado", FormaRecordada.sustitutoDePrueba)
 
         // El estado de `RecurringOfferGate` es privado; lo único que lo delata es lo que ofrece.
         // Sin repositorio enchufado, limpio devuelve dos listas vacías; sucio devolvería la regla
@@ -179,6 +195,8 @@ class ElForkLlegaLimpioTest {
 private val DEFINICION_DE_OTRA_PRUEBA = defaultDashboardDefinition()
 
 private val ALMACEN_DE_LA_INSTANTANEA = mutableMapOf<String, String>()
+
+private val ALMACEN_DE_LA_FORMA = mutableMapOf<String, String>()
 
 private val LECTOR_DE_OTRA_PRUEBA = object : HuellaDelAparato {
     override fun estado() = EstadoDeHuella.LISTA

@@ -286,6 +286,10 @@ object SessionManager {
         // esto, el próximo que entre en este aparato no la vería (es de otra clave), pero la plata
         // del anterior seguiría escrita acá.
         InstantaneaDelInicio.delAparato.borrar(userId)
+        // Y la forma de la última carga de Créditos, Categorías y Cuentas (ver FormaRecordada):
+        // solo números, pero son SUS números — cuántos préstamos tiene, cuántas cuentas. Misma
+        // clave por id, así que también va antes de soltarlo.
+        FormaRecordada.delAparato.borrar(userId)
         // «Entrar con huella» se apaga al cerrar sesión. Sin esto, el token vencido dejaba un
         // bucle: `clear()` también corre cuando el servidor contesta 401 tres veces seguidas, y
         // con el interruptor prendido el próximo arranque pediría el dedo para abrir una app que

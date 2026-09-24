@@ -745,3 +745,22 @@ fun montosSugeridosDeAbono(saldo: Long, cuota: Long, abonoMinimo: Long?): List<M
     val vistos = mutableSetOf<Long>()
     return sugeridos.filter { it.monto in 1L..saldo && vistos.add(it.monto) }
 }
+
+// ---------------------------------------------------------------- la forma que se recuerda
+
+/**
+ * **Cuántas filas tiene cada grupo del resumen de lo que cuesta la deuda**, en orden y solo los que
+ * se dibujan: lo que `FormaRecordada` guarda para que el esqueleto de Créditos reserve lo mismo.
+ *
+ * Copia, condición por condición, lo que decide `LoQueCuestaLaDeuda` en `CreditosScreen.kt`:
+ * los intereses del mes siempre (la fila propia, más la ajena si hay), los que faltan si alguno es
+ * mayor que cero, y la última cuota si hay fecha o hay deuda que no se termina. Si una de las dos
+ * cambia, `LaFormaRecordadaEnPantallaTest` lo nota: mide el esqueleto que sale de acá contra la
+ * tarjeta real.
+ */
+fun gruposDelResumen(resumen: ResumenDeDeudas): List<Int> = buildList {
+    add(1 + (if (resumen.interesMensualAjeno > 0L) 1 else 0))
+    val porPagar = (if (resumen.interesPorPagarPropio > 0L) 1 else 0) + (if (resumen.interesPorPagarAjeno > 0L) 1 else 0)
+    if (porPagar > 0) add(porPagar)
+    if (resumen.mesesHastaLaUltimaCuota != null || resumen.creditosQueNoSeTerminan > 0) add(1)
+}
