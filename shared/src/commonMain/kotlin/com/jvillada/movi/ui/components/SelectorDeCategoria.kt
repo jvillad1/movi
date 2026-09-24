@@ -369,8 +369,11 @@ fun SelectorDeCategoria(
 internal fun esLaCeldaElegida(celda: CeldaDeCategoria, elegida: String): Boolean =
     celda is CeldaDeCategoria.Existente && normalizarParaBuscar(celda.nombre) == normalizarParaBuscar(elegida)
 
+// `internal` y no `private`: fix round 1 de la tarea 4 — una prueba NATIVE arma una fila con dos
+// celdas a mano (`CeldaDeCategoria.Existente` sueltas) para medir que las dos midan lo mismo, sin
+// pasar por todo `contenidoDelSelectorDeCategoria` para conseguir que caigan en la misma fila.
 @Composable
-private fun CuadriculaDeCategorias(
+internal fun CuadriculaDeCategorias(
     celdas: List<CeldaDeCategoria>,
     elegida: String,
     prefs: Map<String, CategoryPref>,
@@ -472,8 +475,17 @@ private fun CeldaDeLaCuadricula(
         val estiloDelRotulo = Movi.textos.apoyo
         val anchoDisponiblePx = with(densidad) { (anchoDeCelda - Movi.espacios.minimo * 2).toPx() }
         val palabraLarga = remember(rotulo) { palabraMasLargaDe(rotulo) }
-        val modo = remember(palabraLarga, anchoDisponiblePx, estiloDelRotulo) {
-            val anchoDeLaPalabra = medidor.measure(palabraLarga, estiloDelRotulo, softWrap = false, maxLines = 1).size.width.toFloat()
+        // Fix round 1, hallazgo 1: se medía con el peso NORMAL siempre, pero la celda elegida (y
+        // «Crear»/«Usar») se dibuja en Medium — más ancho. La categoría puesta es justo la que el
+        // dueño ve cada vez que reabre el selector, así que medir con el peso que de verdad se va
+        // a pintar no es un detalle: es el caso que más se ve.
+        val modo = remember(palabraLarga, anchoDisponiblePx, estiloDelRotulo, pesoDelRotulo) {
+            val anchoDeLaPalabra = medidor.measure(
+                palabraLarga,
+                estiloDelRotulo.copy(fontWeight = pesoDelRotulo),
+                softWrap = false,
+                maxLines = 1,
+            ).size.width.toFloat()
             modoDelRotulo(anchoDeLaPalabra, anchoDisponiblePx)
         }
         when (modo) {
@@ -489,15 +501,24 @@ private fun CeldaDeLaCuadricula(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            ModoDelRotulo.ACHICADO -> BasicText(
-                text = rotulo,
-                style = estiloDelRotulo.copy(color = colorDelRotulo, fontWeight = pesoDelRotulo, textAlign = TextAlign.Center),
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                autoSize = TextAutoSize.StepBased(minFontSize = TAMANO_MINIMO_DEL_ROTULO, maxFontSize = estiloDelRotulo.fontSize, stepSize = 0.5.sp),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // Fix round 1, hallazgo 2: un solo renglón sin alto reservado dejaba esta celda más
+            // baja que sus vecinas NORMAL (que sí reservan dos con `minLines = 2`) cuando las dos
+            // conviven en la misma fila. El `Box` reserva el mismo alto de dos renglones del
+            // tamaño base y centra adentro el renglón único, ya achicado.
+            ModoDelRotulo.ACHICADO -> Box(
+                modifier = Modifier.fillMaxWidth().height(altoDeUnRenglon(estiloDelRotulo) * 2),
+                contentAlignment = Alignment.Center,
+            ) {
+                BasicText(
+                    text = rotulo,
+                    style = estiloDelRotulo.copy(color = colorDelRotulo, fontWeight = pesoDelRotulo, textAlign = TextAlign.Center),
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    autoSize = TextAutoSize.StepBased(minFontSize = TAMANO_MINIMO_DEL_ROTULO, maxFontSize = estiloDelRotulo.fontSize, stepSize = 0.5.sp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
