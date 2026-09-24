@@ -13,8 +13,6 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.RequestQuote
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
@@ -143,34 +141,19 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
             // F60: encabezado único — esta pantalla es la raíz de la pestaña Patrimonio (Ola C),
             // así que lleva avatar y el MISMO rótulo que la pestaña.
             //
-            // «Cuadrar» y «Nueva cuenta» como texto (con o sin «+») NO entran a 390 dp sin
-            // recortar el título — medido con `TarjetaDeDeudasYTeDebenTest`, «Patrimonio» se
-            // ganaba «…» con las dos al lado. Por eso las dos van como ícono solo, sin rótulo:
-            // el mismo patrón que ya usa el Inicio para dos acciones en el encabezado
-            // (compartir + campana, ver `DashboardScreen`), y no la píldora `NewItemButton` de
-            // «+ Nueva cuenta» que usan las pantallas con una sola acción.
+            // Fix round 1: «Cuadrar» SALIÓ del encabezado. Iba ahí como ícono solo (sin
+            // rótulo, tras medir que el texto no entraba a 390 dp sin recortar el título) pero
+            // eso era peor en dos frentes a la vez: le quitaba el rótulo a «Nueva cuenta» —la
+            // única puerta permanente para crear una cuenta una vez que los grupos ya tienen
+            // alguna— y un chequecito suelto para «Cuadrar» era ambiguo, y redundante con la
+            // tarjeta «Cuadre de saldos» de más abajo, que YA abre la misma pantalla con su
+            // propio rótulo. El brief pide «Cuadrar» como acción de Patrimonio; esa tarjeta ya
+            // lo cumple, así que el encabezado vuelve a ser el de siempre: título + «+ Nueva
+            // cuenta».
             MinScreenHeader(
                 title = "Patrimonio",
                 leading = HeaderLeading.Avatar(onNavigate),
-                action = {
-                    Icon(
-                        Icons.Rounded.CheckCircle,
-                        contentDescription = "Cuadrar saldos",
-                        tint = Movi.colores.texto,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clickable { onNavigate(Screen.CuadreDeSaldos) }
-                            .testTag(TAG_ACCION_CUADRAR),
-                    )
-                    Icon(
-                        Icons.Rounded.Add,
-                        contentDescription = "Nueva cuenta",
-                        tint = Movi.colores.texto,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clickable { showCreateSheet = true },
-                    )
-                },
+                action = { NewItemButton(label = "Nueva cuenta", onClick = { showCreateSheet = true }) },
             )
 
             // Task 7: la primera carga (sin una sola cuenta pintada todavía) ya no dice «cargando»
@@ -375,35 +358,18 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         Spacer(Modifier.height(20.dp))
                         val ahora = remember(cuentas) { Clock.System.now().toEpochMilliseconds() }
                         val atrasadas = cuentasSinCuadrar(cuentas, ahora)
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                        // Fix round 1: comparte `FilaDeResumenPatrimonio` con «Deudas» y «Te
+                        // deben» — las tres filas eran el mismo `Row` copiado tres veces. Esta
+                        // es también la forma en que el brief pide «Cuadrar» como acción de
+                        // Patrimonio (ver el header, más arriba: ya no repite la puerta acá).
+                        FilaDeResumenPatrimonio(
+                            titulo = "Cuadre de saldos",
+                            subtitulo = textoDelAvisoDeCuadre(atrasadas)
+                                ?: "Compara con lo que dice tu banco y anota la diferencia",
+                            colorSubtitulo = if (atrasadas.isEmpty()) Movi.colores.textoMedio else Movi.colores.aviso,
                             onClick = { onNavigate(Screen.CuadreDeSaldos) },
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Cuadre de saldos",
-                                        style = Movi.textos.cuerpo,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Movi.colores.texto,
-                                    )
-                                    Spacer(Modifier.height(3.dp))
-                                    Text(
-                                        text = textoDelAvisoDeCuadre(atrasadas)
-                                            ?: "Compara con lo que dice tu banco y anota la diferencia",
-                                        style = Movi.textos.apoyo,
-                                        color = if (atrasadas.isEmpty()) Movi.colores.textoMedio else Movi.colores.aviso,
-                                    )
-                                }
-                                ChevronRight()
-                            }
-                        }
+                            testTag = TAG_TARJETA_DE_CUADRE,
+                        )
                     }
 
                     // **La plata que se movió entre estas cuentas**, que hasta acá era un chip en
@@ -888,8 +854,12 @@ const val TAG_TARJETA_DE_DEUDAS: String = "tarjeta-de-deudas"
 /** La tarjeta de «Te deben», cargando o cargada: el mismo tag en las dos. */
 const val TAG_TARJETA_DE_TE_DEBEN: String = "tarjeta-de-te-deben"
 
-/** La acción «Cuadrar» del encabezado, para tocarla desde una prueba. */
-const val TAG_ACCION_CUADRAR: String = "accion-cuadrar"
+/**
+ * La tarjeta de «Cuadre de saldos» — ya existía antes de esta tarea; el tag es nuevo (Fix round
+ * 1, al pasarla por `FilaDeResumenPatrimonio`) para poder tocarla desde una prueba sin depender
+ * de su texto, que cambia si hay cuentas atrasadas.
+ */
+const val TAG_TARJETA_DE_CUADRE: String = "tarjeta-de-cuadre"
 
 /**
  * **«Deudas»**: la puerta a Créditos desde Patrimonio, con el mismo total y el mismo conteo que
@@ -982,6 +952,9 @@ private fun FilaDeResumenPatrimonio(
     testTag: String,
     cifra: String? = null,
     colorCifra: Color = Movi.colores.texto,
+    // Fix round 1: el cuadre lo necesita para el aviso ámbar de «llevas más de un período sin
+    // cuadrar» (ver `textoDelAvisoDeCuadre`) — el resto de las filas usan el default.
+    colorSubtitulo: Color = Movi.colores.textoMedio,
 ) {
     MinCard(
         modifier = Modifier.fillMaxWidth().testTag(testTag),
@@ -997,7 +970,7 @@ private fun FilaDeResumenPatrimonio(
             Column(modifier = Modifier.weight(1f)) {
                 Text(titulo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                 Spacer(Modifier.height(3.dp))
-                Text(subtitulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Text(subtitulo, style = Movi.textos.apoyo, color = colorSubtitulo)
             }
             if (cifra != null) {
                 Text(

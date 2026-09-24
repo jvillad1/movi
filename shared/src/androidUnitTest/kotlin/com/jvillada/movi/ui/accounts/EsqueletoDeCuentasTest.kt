@@ -11,7 +11,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.height
@@ -120,9 +119,7 @@ class EsqueletoDeCuentasTest {
         assertTrue(!hay("\$0"))
         assertTrue(!hay("Sin cuentas"))
         assertTrue(!hay("No pudimos cargar"), "el primer cuadro no puede decir que falló una lectura que ni empezó")
-        // Ola C, tarea 4: «Nueva cuenta» del encabezado es ícono solo (sin rótulo, ver
-        // `TarjetaDeDeudasYTeDebenTest`), así que se busca por su descripción y no por texto.
-        composeRule.onNodeWithContentDescription("Nueva cuenta", useUnmergedTree = true).assertExists()
+        assertTrue(hay("Nueva cuenta"))
     }
 
     @Test

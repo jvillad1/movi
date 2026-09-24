@@ -12,7 +12,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -43,17 +42,24 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * # Patrimonio: «Deudas», «Te deben» y «Cuadrar» (Ola C, tarea 4)
+ * # Patrimonio: «Deudas», «Te deben» y «Cuadre de saldos» (Ola C, tarea 4)
  *
  * `AccountsScreen` pasó de ser solo Cuentas a ser Patrimonio: debajo de los grupos de cuentas
  * gana dos tarjetas nuevas —«Deudas» (el mismo total que el encabezado de Créditos, ver
  * [com.jvillada.movi.ui.credits.totalDebtCop]) y «Te deben» (la puerta que le faltaba a
- * `DestinosScreen`)— y el encabezado gana la acción «Cuadrar». Las tres lecturas (cuentas,
- * créditos+tarjetas, destinos) son independientes, así que se prueban por separado.
+ * `DestinosScreen`)—. Las tres lecturas (cuentas, créditos+tarjetas, destinos) son independientes,
+ * así que se prueban por separado.
+ *
+ * Fix round 1: «Cuadrar» NO es una acción nueva del encabezado — se probó así (ícono solo) y se
+ * revirtió: le quitaba el rótulo a «+ Nueva cuenta» (la única puerta permanente para crear una
+ * cuenta) y era redundante con la tarjeta «Cuadre de saldos», que ya existía y ya abre
+ * `Screen.CuadreDeSaldos` con su propio rótulo. Esa tarjeta ahora comparte `FilaDeResumenPatrimonio`
+ * con «Deudas» y «Te deben» (antes era su propio `Row`), así que entra en el alcance de esta
+ * prueba aunque no sea código nuevo de esta tarea.
  *
  * `@GraphicsMode(NATIVE)` y `sdk = [34]` para medir la tarjeta del patrimonio con el motor de
  * texto real (mismo criterio que `EsqueletoDeCuentasTest`); la pantalla es alta para que la
- * `LazyColumn` componga las dos tarjetas nuevas sin desplazar.
+ * `LazyColumn` componga las tres tarjetas sin desplazar.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -210,44 +216,45 @@ class TarjetaDeDeudasYTeDebenTest {
         assertEquals(Screen.Destinos, navegoA)
     }
 
-    // ── «Cuadrar» abre el cuadre de saldos ───────────────────────────────────────
+    // ── «Cuadrar» es la tarjeta «Cuadre de saldos», no una acción del encabezado ─────
 
     @Test
-    fun `Cuadrar abre el cuadre de saldos`() {
-        montar()
+    fun `tocar Cuadre de saldos abre el cuadre`() {
+        // «Cuadre de saldos» vive dentro del bloque de cuentas cargadas (con al menos una): sin
+        // eso la pantalla está en el vacío de siempre y esa tarjeta no se dibuja.
+        montar(cuentas = { listOf(nu) })
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag(TAG_ACCION_CUADRAR, useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag(TAG_TARJETA_DE_CUADRE, useUnmergedTree = true).performClick()
 
         assertEquals(Screen.CuadreDeSaldos, navegoA)
     }
 
     /**
-     * Medido con texto: «Cuadrar» junto a «+ Nueva cuenta» (con rótulo) le comían tanto ancho al
-     * encabezado que «Patrimonio» se recortaba con «…» a 390 dp — de ahí que las dos acciones
-     * sean solo ícono (ver el brief: «medirlo»), el mismo patrón que ya usa el Inicio para dos
-     * acciones en el encabezado (compartir + campana). Acá se confirma que el título ya no se
-     * recorta con las dos al lado.
+     * El encabezado volvió a ser el de siempre —título + «+ Nueva cuenta», con rótulo— así que
+     * «Patrimonio» no tiene motivo para recortarse a 390 dp. Sigue siendo una prueba de
+     * regresión útil: si algún día se le agrega otra acción, esto avisa si vuelve a apretar.
      */
     @Test
-    fun `Patrimonio no se recorta a 390 dp con las dos acciones del encabezado al lado`() {
+    fun `Patrimonio no se recorta a 390 dp junto a Nueva cuenta`() {
         montar()
         composeRule.waitForIdle()
 
         val titulo = layoutDelTexto("Patrimonio")
         assertFalse(
             titulo.multiParagraph.didExceedMaxLines,
-            "«Patrimonio» se recortó a 390 dp con «Cuadrar» y «Nueva cuenta» al lado",
+            "«Patrimonio» se recortó a 390 dp junto a «+ Nueva cuenta»",
         )
     }
 
     @Test
-    fun `Cuadrar y Nueva cuenta del encabezado son alcanzables por su descripcion`() {
+    fun `Nueva cuenta del encabezado tiene su rotulo de siempre`() {
         montar()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithContentDescription("Cuadrar saldos", useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithContentDescription("Nueva cuenta", useUnmergedTree = true).assertExists()
+        // Con rótulo — `NewItemButton`, no un ícono solo — porque es la única puerta permanente
+        // para crear una cuenta una vez que los grupos ya tienen alguna.
+        composeRule.onNodeWithText("Nueva cuenta", useUnmergedTree = true).assertExists()
     }
 
     // ── Error con reintento ───────────────────────────────────────────────────
