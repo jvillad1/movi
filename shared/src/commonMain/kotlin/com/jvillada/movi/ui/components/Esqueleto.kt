@@ -154,6 +154,55 @@ fun LineaEsqueleto(fraccionDelAncho: Float, modifier: Modifier = Modifier, estil
 }
 
 /**
+ * El alto de UN renglón de [estilo], en dp: su `lineHeight`. Es el número del que salen todos los
+ * bloques de esta familia, así que una pantalla que arma su propio esqueleto (Créditos,
+ * Presupuestos, Cuentas) lo pide acá en vez de repetir la cuenta de densidad.
+ */
+@Composable
+fun altoDeUnRenglon(estilo: TextStyle): Dp = with(LocalDensity.current) { estilo.lineHeight.toDp() }
+
+/**
+ * **Un renglón «rótulo … cifra» que todavía no llegó**: una línea a la izquierda con el alto de
+ * [estiloDelRotulo] y un bloque a la derecha, de [anchoDeLaCifra], con el alto de
+ * [estiloDeLaCifra]. Es la forma de «Tu plata $…», «Intereses este mes $…», «Cuota · día 15 $…»:
+ * la fila más repetida de las pantallas de plata. El `Row` se alinea al centro, igual que los
+ * reales, así que mide lo que mide el más alto de los dos — lo mismo que la fila de verdad.
+ */
+@Composable
+fun RenglonConCifraEsqueleto(
+    modifier: Modifier = Modifier,
+    fraccionDelRotulo: Float = 0.5f,
+    anchoDeLaCifra: Dp = 88.dp,
+    estiloDelRotulo: TextStyle = Movi.textos.apoyo,
+    estiloDeLaCifra: TextStyle = Movi.textos.monto,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+    ) {
+        Box(Modifier.weight(1f)) { LineaEsqueleto(fraccionDelAncho = fraccionDelRotulo, estilo = estiloDelRotulo) }
+        BloqueEsqueleto(alto = altoDeUnRenglon(estiloDeLaCifra), ancho = anchoDeLaCifra)
+    }
+}
+
+/**
+ * El encabezado de una sección que todavía no llegó, con la forma de [MinSectionHeader]: mismos
+ * rellenos y el alto de `Movi.textos.rotulo`. No dice «PRÉSTAMOS · 12» porque ni el título ni la
+ * cuenta se saben todavía — un título sin sus filas ya es una afirmación («tienes préstamos»).
+ */
+@Composable
+fun RotuloDeSeccionEsqueleto(fraccionDelAncho: Float = 0.3f) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = Movi.espacios.corto, end = Movi.espacios.corto, bottom = Movi.espacios.medio),
+    ) {
+        LineaEsqueleto(fraccionDelAncho = fraccionDelAncho, estilo = Movi.textos.rotulo)
+    }
+}
+
+/**
  * El tag de cada [FilaDeListaEsqueleto], para contarlas en una prueba sin depender de ningún
  * texto (no tienen — son bloques).
  */
@@ -165,9 +214,12 @@ const val TAG_FILA_DE_LISTA_ESQUELETO: String = "fila-de-lista-esqueleto"
  * usan las dos pantallas donde hoy se ve una rueda antes de la primera lista (ver sus KDoc): mismo
  * relleno vertical (14 dp) y el mismo hairline entre filas que [CardRow], para que la lista no
  * salte de alto cuando la rueda se convierte en filas de verdad.
+ *
+ * [conIcono] agrega el ícono de 20 dp que Cuentas pone delante del nombre (ola B): sin él, el
+ * esqueleto de Cuentas decía «una lista» cuando la pantalla real dice «una lista de cuentas».
  */
 @Composable
-fun FilaDeListaEsqueleto(isLast: Boolean = false) {
+fun FilaDeListaEsqueleto(isLast: Boolean = false, conIcono: Boolean = false) {
     Column {
         Row(
             modifier = Modifier
@@ -178,7 +230,20 @@ fun FilaDeListaEsqueleto(isLast: Boolean = false) {
             horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                LineaEsqueleto(fraccionDelAncho = 0.55f, estilo = Movi.textos.titulo)
+                if (conIcono) {
+                    // El ícono de 20 dp de la fila de una cuenta, a 8 dp del nombre: los dos
+                    // valores de `AccountsGroup`. El renglón mide el más alto de los dos, como el
+                    // real.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        BloqueEsqueleto(alto = 20.dp, ancho = 20.dp)
+                        LineaEsqueleto(fraccionDelAncho = 0.55f, estilo = Movi.textos.titulo)
+                    }
+                } else {
+                    LineaEsqueleto(fraccionDelAncho = 0.55f, estilo = Movi.textos.titulo)
+                }
                 Spacer(Modifier.height(2.dp))
                 LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.apoyo)
             }
