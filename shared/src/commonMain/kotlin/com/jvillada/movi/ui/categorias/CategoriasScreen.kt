@@ -205,6 +205,10 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
         loading = false
     }
 
+    // Ola B, tarea 2: el título contaba TODAS las que trae el server, reservadas incluidas —
+    // «35 categorías» cuando la lista de abajo (que ya las saca, ver `filtrarCategorias`) muestra
+    // menos. Cuenta lo que la pantalla de verdad enumera.
+    val categoriasVisibles = categorias.count { !it.reserved }
     val escondidas = categorias.count { it.hidden }
     // Destapar la ÚLTIMA escondida hacía desaparecer su pastilla y dejaba el filtro apuntando a
     // un conjunto vacío: «17 categorías» arriba, «Nada por aquí todavía» abajo y ninguna pastilla
@@ -258,9 +262,9 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 ),
                 subtitle = when {
                     loading || !leidas -> null
-                    escondidas == 1 -> "${categorias.size} categorías · 1 escondida"
-                    escondidas > 1 -> "${categorias.size} categorías · $escondidas escondidas"
-                    else -> "${categorias.size} categorías"
+                    escondidas == 1 -> "$categoriasVisibles categorías · 1 escondida"
+                    escondidas > 1 -> "$categoriasVisibles categorías · $escondidas escondidas"
+                    else -> "$categoriasVisibles categorías"
                 },
             )
 
