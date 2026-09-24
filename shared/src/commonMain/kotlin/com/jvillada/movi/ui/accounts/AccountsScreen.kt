@@ -649,6 +649,7 @@ private fun AccountsGroup(
                     isLast = index == accounts.size - 1,
                     showChevron = true,
                     onClick = { onNavigate(Screen.AccountDetail(account.id, account.type.group)) },
+                    modifier = Modifier.testTag(TAG_FILA_DE_CUENTA),
                 )
             }
         }
@@ -680,6 +681,13 @@ private const val MAX_FILAS_DEL_GRUPO_ESQUELETO = 12
 
 /** Cada grupo de cuentas («Dinero», «Inversión»), cargando o cargado: el mismo tag en los dos. */
 const val TAG_GRUPO_DE_CUENTAS: String = "grupo-de-cuentas"
+
+/**
+ * Cada fila de cuenta real, para medirla contra `FilaDeListaEsqueleto(conIcono = true)` — Ola B,
+ * tarea 2: la fila real medía más alto que la esqueleto y la lista bajaba un poco al llegar los
+ * datos. Antes de `clickable`/`padding`, como pide la convención de medir posiciones.
+ */
+const val TAG_FILA_DE_CUENTA: String = "fila-de-cuenta"
 
 /** Las cuentas del grupo «Dinero». */
 internal fun cuentasDeDinero(cuentas: List<Account>): List<Account> =
