@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.categorias
 
 import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
 import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
+import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
@@ -261,3 +262,168 @@ fun rotuloDeColor(clave: String): String = COLORES_DEL_CATALOGO.firstOrNull { it
  * `normalizeForMatch`), y **distinta de [CATEGORY_NAME_ORDER] en un solo punto**: para BUSCAR, la
  * `ñ` se aplasta contra la `n`; para ORDENAR va justo después de la n.
  */
+
+// ── Ola B · tarea 6: «Ordena tus categorías» ────────────────────────────────────
+
+/**
+ * Una propuesta de la tarjeta «Movi encontró N cosas para ordenar». Cada variante ya trae **todo
+ * resuelto** —quién es el origen y quién el destino, o cuál categoría— así que la hoja de revisión
+ * no vuelve a decidir nada: el dueño solo toca un botón o «Ahora no». Ver [propuestasDeOrden].
+ */
+sealed class PropuestaDeOrden {
+    /**
+     * Dos categorías no reservadas cuyo nombre normalizado de una está contenido como palabra
+     * completa en el de la otra, y que comparten tipo efectivo (regla 1). [origen] es la de menos
+     * movimientos — la que desaparece — y [destino] la de más — la que se queda.
+     */
+    data class UnificarParecidas(val origen: CategoryUsage, val destino: CategoryUsage) : PropuestaDeOrden()
+
+    /**
+     * Una categoría **propia** con un solo movimiento en toda su historia, sin presupuesto ni
+     * recurrente (regla 3). Se ofrece «Unificar con…» —el dueño elige el destino en la
+     * cuadrícula de [com.jvillada.movi.ui.components.SelectorDeCategoria]— o «Ahora no».
+     */
+    data class UnUso(val categoria: CategoryUsage) : PropuestaDeOrden()
+
+    /**
+     * Una categoría **del catálogo** que el dueño nunca usó: sin movimientos, presupuesto ni
+     * recurrente, y todavía no escondida (regla 2).
+     */
+    data class EsconderNuncaUsada(val categoria: CategoryUsage) : PropuestaDeOrden()
+}
+
+/** Cuántos movimientos lleva [c] **en total**, mezclando COP y otra moneda — solo para contar, no para sumar plata. Mismo criterio que [resumenDeUsoCorto] y [avisoDeUnificacion]. */
+private fun totalMovimientos(c: CategoryUsage): Int = c.movements + c.otherCurrencyMovements
+
+/**
+ * ¿El nombre normalizado de [corto] aparece como una secuencia de **palabras completas y
+ * consecutivas** dentro del de [largo]? («Crédito» ⊂ «Cuota de crédito»: sí, es la última
+ * palabra; «Cine» NO estaría contenido en «Cocina», porque ahí ni siquiera son palabras
+ * separadas — [normalizarParaBuscar] ya partió por espacios antes de llegar acá.)
+ */
+private fun contenidoComoPalabras(corto: List<String>, largo: List<String>): Boolean {
+    if (corto.isEmpty() || corto.size >= largo.size) return false
+    for (i in 0..(largo.size - corto.size)) {
+        if (largo.subList(i, i + corto.size) == corto) return true
+    }
+    return false
+}
+
+/**
+ * ¿[a] y [b] son «parecidas» para la regla 1? El nombre normalizado de una contenido como
+ * palabra(s) completa(s) en el de la otra, en cualquiera de los dos sentidos.
+ */
+private fun nombresParecidos(a: String, b: String): Boolean {
+    val palabrasA = normalizarParaBuscar(a).split(' ').filter { it.isNotEmpty() }
+    val palabrasB = normalizarParaBuscar(b).split(' ').filter { it.isNotEmpty() }
+    return contenidoComoPalabras(palabrasA, palabrasB) || contenidoComoPalabras(palabrasB, palabrasA)
+}
+
+/** «Comparten tipo efectivo»: la intersección no es vacía, o a alguna no se le conoce ninguno. */
+private fun comparteTipoEfectivo(a: CategoryUsage, b: CategoryUsage): Boolean {
+    val tiposA = tiposEfectivos(a)
+    val tiposB = tiposEfectivos(b)
+    return tiposA.isEmpty() || tiposB.isEmpty() || tiposA.intersect(tiposB).isNotEmpty()
+}
+
+/** El máximo de propuestas que ofrece la tarjeta a la vez — para que no se vuelva una lista sin fin. */
+const val MAX_PROPUESTAS_DE_ORDEN: Int = 12
+
+/**
+ * **Las propuestas de orden**, ya resueltas y en el orden en que se muestran. Pura — sin red, sin
+ * `Settings`; lo que el dueño ya descartó con «Ahora no» lo filtra quien llama
+ * ([com.jvillada.movi.data.PropuestasDescartadasStore]), no esta función.
+ *
+ * Tres reglas, en este orden (1, 3, 2 — así lo pidió la tarea, no es un accidente de escritura):
+ *
+ * 1. **Unificar parecidas**: ver [nombresParecidos] y [comparteTipoEfectivo]. No propone un par
+ *    donde las DOS tienen 5 movimientos o más — a esa altura de uso es más probable que sean
+ *    categorías distintas a propósito («Mercado» y «Mercado extra», las dos vivas) que un
+ *    duplicado por descuido.
+ * 2. **Un solo uso**: propias, exactamente 1 movimiento en toda su historia, sin presupuesto ni
+ *    recurrente.
+ * 3. **Esconder nunca usadas**: del catálogo, sin movimientos, sin presupuesto, sin recurrente, y
+ *    todavía no escondida.
+ *
+ * Las reservadas nunca entran (se sacan antes de aplicar ninguna regla) — no se pueden tocar. Una
+ * categoría del catálogo con uso (como «Tecnología» con 1 movimiento) no cae en la regla 3 —no es
+ * propia— ni en la 2 —tiene uso—, y eso es a propósito: no hay nada que ordenar ahí.
+ *
+ * **Una categoría que ya entró en la regla 1 no vuelve a proponerse en la 2 ni en la 3.** «Crédito»
+ * con 1 movimiento cumple también el criterio de «un solo uso» —propia, 1 movimiento, sin
+ * presupuesto ni recurrente— pero ya tiene una propuesta concreta («unificar en Cuota de
+ * crédito»): repetirla como «un solo uso, elige destino» sería preguntar dos veces lo mismo con
+ * dos botones distintos.
+ */
+fun propuestasDeOrden(categorias: List<CategoryUsage>): List<PropuestaDeOrden> {
+    val utiles = categorias.filterNot { it.reserved }
+
+    val unificarParecidas = mutableListOf<PropuestaDeOrden.UnificarParecidas>()
+    for (i in utiles.indices) {
+        for (j in (i + 1) until utiles.size) {
+            val a = utiles[i]
+            val b = utiles[j]
+            if (!nombresParecidos(a.name, b.name)) continue
+            if (!comparteTipoEfectivo(a, b)) continue
+            val movA = totalMovimientos(a)
+            val movB = totalMovimientos(b)
+            if (movA >= 5 && movB >= 5) continue
+            val (origen, destino) = if (movA <= movB) a to b else b to a
+            unificarParecidas += PropuestaDeOrden.UnificarParecidas(origen, destino)
+        }
+    }
+    unificarParecidas.sortWith(compareBy(CATEGORY_NAME_ORDER) { it.origen.name })
+
+    val yaPropuestas = unificarParecidas
+        .flatMap { listOf(normalizarParaBuscar(it.origen.name), normalizarParaBuscar(it.destino.name)) }
+        .toSet()
+
+    val unUso = utiles
+        .filter {
+            it.scope == CategoryScope.CUSTOM && totalMovimientos(it) == 1 &&
+                it.budgets == 0 && it.recurringRules == 0 &&
+                normalizarParaBuscar(it.name) !in yaPropuestas
+        }
+        .sortedWith(compareBy(CATEGORY_NAME_ORDER) { it.name })
+        .map { PropuestaDeOrden.UnUso(it) }
+
+    val esconderNuncaUsadas = utiles
+        .filter {
+            it.scope == CategoryScope.PREDEFINED && !it.hidden && !it.enUso &&
+                normalizarParaBuscar(it.name) !in yaPropuestas
+        }
+        .sortedWith(compareBy(CATEGORY_NAME_ORDER) { it.name })
+        .map { PropuestaDeOrden.EsconderNuncaUsada(it) }
+
+    return (unificarParecidas + unUso + esconderNuncaUsadas).take(MAX_PROPUESTAS_DE_ORDEN)
+}
+
+/**
+ * La clave estable con la que se recuerda un «Ahora no» ([com.jvillada.movi.data.PropuestasDescartadasStore]):
+ * tipo de regla + nombres, **normalizados** — así sigue reconociendo la misma propuesta aunque el
+ * dueño la vuelva a ver con otro caso o tildes.
+ */
+fun claveDePropuesta(p: PropuestaDeOrden): String = when (p) {
+    is PropuestaDeOrden.UnificarParecidas ->
+        "unificar:${normalizarParaBuscar(p.origen.name)}>${normalizarParaBuscar(p.destino.name)}"
+    is PropuestaDeOrden.UnUso -> "unUso:${normalizarParaBuscar(p.categoria.name)}"
+    is PropuestaDeOrden.EsconderNuncaUsada -> "esconder:${normalizarParaBuscar(p.categoria.name)}"
+}
+
+/** La explicación en una línea que acompaña a cada propuesta en la hoja de revisión. */
+fun explicacionDePropuesta(p: PropuestaDeOrden): String = when (p) {
+    is PropuestaDeOrden.UnificarParecidas -> {
+        val movOrigen = totalMovimientos(p.origen)
+        val movDestino = totalMovimientos(p.destino)
+        val dichoOrigen = if (movOrigen == 1) "1 movimiento" else "$movOrigen movimientos"
+        "«${p.origen.name}» tiene $dichoOrigen; «${p.destino.name}» tiene $movDestino."
+    }
+    is PropuestaDeOrden.UnUso ->
+        "«${p.categoria.name}» tiene un solo movimiento, sin presupuesto ni recurrente."
+    is PropuestaDeOrden.EsconderNuncaUsada ->
+        "«${p.categoria.name}» es del catálogo de Movi y nunca la usaste."
+}
+
+/** El texto de la tarjeta de arriba, con singular/plural (nunca «1 cosas»). */
+fun textoDeLaTarjetaDeOrden(cantidad: Int): String =
+    "Movi encontró $cantidad ${if (cantidad == 1) "cosa" else "cosas"} para ordenar"

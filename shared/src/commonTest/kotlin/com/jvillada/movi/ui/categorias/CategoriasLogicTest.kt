@@ -350,4 +350,163 @@ class CategoriasLogicTest {
         // Una clave desconocida (de una versión más nueva) se muestra tal cual, no revienta.
         assertEquals("no-existe", rotuloDeIcono("no-existe"))
     }
+
+    // ── «Ordena tus categorías» (Ola B, tarea 6) ─────────────────────────────
+
+    @Test
+    fun `Credito con 1 movimiento se propone unificar en Cuota de credito con 10`() {
+        val credito = cat("Crédito", movements = 1)
+        val cuotaDeCredito = cat("Cuota de crédito", movements = 10)
+        val propuestas = propuestasDeOrden(listOf(credito, cuotaDeCredito))
+        val unificar = propuestas.filterIsInstance<PropuestaDeOrden.UnificarParecidas>().single()
+        assertEquals("Crédito", unificar.origen.name)
+        assertEquals("Cuota de crédito", unificar.destino.name)
+        assertEquals(
+            "«Crédito» tiene 1 movimiento; «Cuota de crédito» tiene 10.",
+            explicacionDePropuesta(unificar),
+        )
+    }
+
+    @Test
+    fun `Mercado de 1 movimiento se propone unificar en Mercado extra de 7`() {
+        val mercado = cat("Mercado", movements = 1)
+        val mercadoExtra = cat("Mercado extra", movements = 7)
+        val propuestas = propuestasDeOrden(listOf(mercado, mercadoExtra))
+        val unificar = propuestas.filterIsInstance<PropuestaDeOrden.UnificarParecidas>().single()
+        assertEquals("Mercado", unificar.origen.name)
+        assertEquals("Mercado extra", unificar.destino.name)
+    }
+
+    @Test
+    fun `no propone unificar si las dos tienen 5 movimientos o mas`() {
+        // Ambas bien usadas: lo más probable es que sean categorías distintas a propósito, como
+        // «Mercado» y «Mercado extra» cuando las dos siguen vivas.
+        val mercado = cat("Mercado", movements = 5)
+        val mercadoExtra = cat("Mercado extra", movements = 7)
+        val propuestas = propuestasDeOrden(listOf(mercado, mercadoExtra))
+        assertTrue(propuestas.filterIsInstance<PropuestaDeOrden.UnificarParecidas>().isEmpty())
+    }
+
+    @Test
+    fun `no propone unificar si no comparten tipo efectivo`() {
+        val a = cat("Regalo", usedTypes = listOf(TransactionType.EXPENSE), movements = 1)
+        val b = cat("Regalo recibido", usedTypes = listOf(TransactionType.INCOME), movements = 2)
+        val propuestas = propuestasDeOrden(listOf(a, b))
+        assertTrue(propuestas.filterIsInstance<PropuestaDeOrden.UnificarParecidas>().isEmpty())
+    }
+
+    @Test
+    fun `no propone unificar si el nombre no esta contenido como palabras completas`() {
+        // «Cine» no es una palabra completa dentro de «Cocina» — no hay espacio de por medio.
+        val a = cat("Cine", movements = 1)
+        val b = cat("Cocina", movements = 2)
+        val propuestas = propuestasDeOrden(listOf(a, b))
+        assertTrue(propuestas.filterIsInstance<PropuestaDeOrden.UnificarParecidas>().isEmpty())
+    }
+
+    @Test
+    fun `Arriendo recibido sin uso se propone esconder`() {
+        val arriendoRecibido = cat("Arriendo recibido", scope = CategoryScope.PREDEFINED)
+        val propuestas = propuestasDeOrden(listOf(arriendoRecibido))
+        val esconder = propuestas.filterIsInstance<PropuestaDeOrden.EsconderNuncaUsada>().single()
+        assertEquals("Arriendo recibido", esconder.categoria.name)
+    }
+
+    @Test
+    fun `una del catalogo ya escondida no se vuelve a proponer`() {
+        val yaEscondida = cat("Freelance", scope = CategoryScope.PREDEFINED, hidden = true)
+        val propuestas = propuestasDeOrden(listOf(yaEscondida))
+        assertTrue(propuestas.filterIsInstance<PropuestaDeOrden.EsconderNuncaUsada>().isEmpty())
+    }
+
+    @Test
+    fun `Tecnologia del catalogo con 1 movimiento no entra en un solo uso ni en esconder`() {
+        // Es del catálogo, así que no es «propia» (regla 3); y tiene uso, así que no es «nunca la
+        // usaste» (regla 2). No hay nada que ordenar ahí.
+        val tecnologia = cat("Tecnología", scope = CategoryScope.PREDEFINED, movements = 1)
+        val propuestas = propuestasDeOrden(listOf(tecnologia))
+        assertTrue(propuestas.isEmpty())
+    }
+
+    @Test
+    fun `una propia con un solo movimiento se propone como un solo uso`() {
+        val unaVez = cat("Ñoquis", movements = 1)
+        val propuestas = propuestasDeOrden(listOf(unaVez))
+        val unUso = propuestas.filterIsInstance<PropuestaDeOrden.UnUso>().single()
+        assertEquals("Ñoquis", unUso.categoria.name)
+    }
+
+    @Test
+    fun `una propia con un solo movimiento pero con presupuesto no es un solo uso`() {
+        val conPresupuesto = cat("Ñoquis", movements = 1, budgets = 1)
+        val propuestas = propuestasDeOrden(listOf(conPresupuesto))
+        assertTrue(propuestas.filterIsInstance<PropuestaDeOrden.UnUso>().isEmpty())
+    }
+
+    @Test
+    fun `las reservadas nunca entran en ninguna propuesta`() {
+        val reservada = cat("Cuenta eliminada", reserved = true, scope = CategoryScope.PREDEFINED)
+        val comoPareja = cat("Cuenta eliminada extra", movements = 1)
+        val propuestas = propuestasDeOrden(listOf(reservada, comoPareja))
+        assertTrue(propuestas.none { it is PropuestaDeOrden.EsconderNuncaUsada && it.categoria.reserved })
+        assertTrue(
+            propuestas.none {
+                it is PropuestaDeOrden.UnificarParecidas &&
+                    (it.origen.reserved || it.destino.reserved)
+            },
+        )
+    }
+
+    @Test
+    fun `una categoria ya propuesta para unificar no se repite como un solo uso`() {
+        // «Crédito» con 1 movimiento también cumple el criterio de «un solo uso», pero ya tiene
+        // una propuesta concreta (unificar en Cuota de crédito) — no hace falta preguntar dos
+        // veces lo mismo con dos botones distintos.
+        val credito = cat("Crédito", movements = 1)
+        val cuotaDeCredito = cat("Cuota de crédito", movements = 10)
+        val propuestas = propuestasDeOrden(listOf(credito, cuotaDeCredito))
+        assertTrue(propuestas.filterIsInstance<PropuestaDeOrden.UnUso>().isEmpty())
+        assertEquals(1, propuestas.size)
+    }
+
+    @Test
+    fun `el orden es unificar parecidas, un solo uso y despues esconder nunca usadas`() {
+        val credito = cat("Crédito", movements = 1)
+        val cuotaDeCredito = cat("Cuota de crédito", movements = 10)
+        val soloUnaVez = cat("Ñoquis", movements = 1)
+        val nuncaUsada = cat("Freelance", scope = CategoryScope.PREDEFINED)
+        val propuestas = propuestasDeOrden(listOf(credito, cuotaDeCredito, soloUnaVez, nuncaUsada))
+        assertEquals(
+            listOf(
+                PropuestaDeOrden.UnificarParecidas::class,
+                PropuestaDeOrden.UnUso::class,
+                PropuestaDeOrden.EsconderNuncaUsada::class,
+            ),
+            propuestas.map { it::class },
+        )
+    }
+
+    @Test
+    fun `no pasa de 12 propuestas`() {
+        val muchas = (1..20).map { cat("Solo uso $it", movements = 1) }
+        val propuestas = propuestasDeOrden(muchas)
+        assertEquals(MAX_PROPUESTAS_DE_ORDEN, propuestas.size)
+    }
+
+    @Test
+    fun `la clave de la propuesta normaliza los nombres`() {
+        val unificar = PropuestaDeOrden.UnificarParecidas(cat("Crédito"), cat("Cuota de Crédito"))
+        assertEquals("unificar:credito>cuota de credito", claveDePropuesta(unificar))
+        assertEquals("unUso:noquis", claveDePropuesta(PropuestaDeOrden.UnUso(cat("Ñoquis"))))
+        assertEquals(
+            "esconder:freelance",
+            claveDePropuesta(PropuestaDeOrden.EsconderNuncaUsada(cat("Freelance"))),
+        )
+    }
+
+    @Test
+    fun `el texto de la tarjeta usa singular con una sola propuesta`() {
+        assertEquals("Movi encontró 1 cosa para ordenar", textoDeLaTarjetaDeOrden(1))
+        assertEquals("Movi encontró 3 cosas para ordenar", textoDeLaTarjetaDeOrden(3))
+    }
 }

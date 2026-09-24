@@ -4,6 +4,7 @@ import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.LastAccountStore
 import com.jvillada.movi.data.MemoriaDeCategoriasCache
+import com.jvillada.movi.data.PropuestasDescartadasStore
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.Repositories
@@ -95,6 +96,8 @@ class ElForkLlegaLimpioTest {
         runBlocking { ReminderChannelsCache.cargar() }
         runBlocking { MemoriaDeCategoriasCache.cargarSiHaceFalta() }
         DiasPlegadosStore.alternar("2024-03-15")
+        // Ola B · tarea 6: un «Ahora no» de otra prueba.
+        PropuestasDescartadasStore.marcar("unificar:otra>prueba")
         RecurringOfferGate.recordarLoQueYaHay(listOf(ARRIENDO), emptyList())
         Huella.sustitutoDePrueba = LECTOR_DE_OTRA_PRUEBA
         SessionManager.huellaActivada = true
@@ -118,6 +121,10 @@ class ElForkLlegaLimpioTest {
         assertTrue("Los usos recientes no quedaron cargados", UsedCategoriesCache.usosRecientes.isNotEmpty())
         assertTrue("La sesión no quedó puesta", SessionManager.loggedIn)
         assertTrue("El día no quedó plegado", "2024-03-15" in DiasPlegadosStore.plegados())
+        assertTrue(
+            "El «Ahora no» no quedó guardado",
+            PropuestasDescartadasStore.estaDescartada("unificar:otra>prueba"),
+        )
         assertNotNull("Los canales de aviso no quedaron cargados", ReminderChannelsCache.canales)
         assertTrue("La memoria de categorías no quedó cargada", MemoriaDeCategoriasCache.recuerdos.isNotEmpty())
         assertNotNull("La última cuenta no quedó guardada", LastAccountStore.lastAccountId)
@@ -147,6 +154,11 @@ class ElForkLlegaLimpioTest {
         assertNull("LastAccountStore trae el origen de otra prueba", LastAccountStore.lastTransferFromId)
         assertNull("LastAccountStore trae el destino de otra prueba", LastAccountStore.lastTransferToId)
         assertEquals("DiasPlegadosStore trae los días de otra prueba", emptySet<String>(), DiasPlegadosStore.plegados())
+        assertEquals(
+            "PropuestasDescartadasStore trae los «Ahora no» de otra prueba",
+            emptySet<String>(),
+            PropuestasDescartadasStore.descartadas(),
+        )
         assertFalse("La sesión de otra prueba sigue abierta", SessionManager.loggedIn)
         assertNull("El token de otra prueba sigue puesto", SessionManager.token)
         assertNull("El repositorio de prueba de otra clase sigue enchufado", Repositories.sustitutoDePrueba)
