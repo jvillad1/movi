@@ -75,13 +75,21 @@ class CategoriasLogicTest {
     }
 
     @Test
-    fun `las reservadas quedan al final aunque el alfabeto las pusiera antes`() {
-        // No se pueden tocar: intercaladas serían renglones muertos en medio de la lista.
+    fun `las reservadas no aparecen en ninguna lista`() {
+        // Ola B, tarea 5: no se pueden tocar (ni renombrar, ni unificar, ni esconder), así que se
+        // sacan de raíz en vez de mostrarse como renglones muertos — en cualquier filtro.
         val lista = listOf(cat("Vivienda"), cat("Cuenta eliminada", reserved = true), cat("Comida"))
         assertEquals(
-            listOf("Comida", "Vivienda", "Cuenta eliminada"),
+            listOf("Comida", "Vivienda"),
             filtrarCategorias(lista, CategoryFilter.TODAS).map { it.name },
         )
+        assertEquals(emptyList(), filtrarCategorias(lista, CategoryFilter.ESCONDIDAS).map { it.name })
+    }
+
+    @Test
+    fun `una reservada escondida tampoco aparece en Escondidas`() {
+        val lista = listOf(cat("Cuenta eliminada", reserved = true, hidden = true), cat("Comida"))
+        assertEquals(emptyList(), filtrarCategorias(lista, CategoryFilter.ESCONDIDAS).map { it.name })
     }
 
     @Test
@@ -167,7 +175,9 @@ class CategoriasLogicTest {
 
     @Test
     fun `la etiqueta de tipo dice lo fijado, no lo del catalogo`() {
-        assertEquals("Ambos", etiquetaDeTipo(cat("Otros", scope = CategoryScope.PREDEFINED, pinnedType = CATEGORY_TYPE_BOTH)))
+        // Ola B, tarea 5: «Gasto e ingreso» y no «Ambos» — la palabra que ahora se dice, y solo
+        // en la hoja de detalle, nunca en la fila.
+        assertEquals("Gasto e ingreso", etiquetaDeTipo(cat("Otros", scope = CategoryScope.PREDEFINED, pinnedType = CATEGORY_TYPE_BOTH)))
         assertEquals("Gasto", etiquetaDeTipo(cat("Comida", scope = CategoryScope.PREDEFINED)))
         assertEquals("Ingreso", etiquetaDeTipo(cat("Salario", scope = CategoryScope.PREDEFINED)))
         assertEquals("Sin usar", etiquetaDeTipo(cat("Colegio")))
@@ -288,5 +298,48 @@ class CategoriasLogicTest {
         assertEquals("Gasto", etiquetaDeTipoFijado("EXPENSE"))
         assertEquals("Ingreso", etiquetaDeTipoFijado("INCOME"))
         assertEquals("Ambos", etiquetaDeTipoFijado(CATEGORY_TYPE_BOTH))
+    }
+
+    // ── La fila compacta (Ola B, tarea 5) ────────────────────────────────────
+
+    @Test
+    fun `el resumen corto solo cuenta movimientos, sin plata ni presupuesto`() {
+        assertEquals("12 movimientos", resumenDeUsoCorto(cat("Comida", movements = 12, total = 450_000, budgets = 1)))
+        assertEquals("1 movimiento", resumenDeUsoCorto(cat("Comida", movements = 1)))
+        assertEquals("Sin movimientos", resumenDeUsoCorto(cat("Comida")))
+    }
+
+    @Test
+    fun `el resumen corto cuenta tambien los de otra moneda`() {
+        assertEquals("5 movimientos", resumenDeUsoCorto(cat("Tecnología", movements = 2, otherCurrencyMovements = 3)))
+    }
+
+    @Test
+    fun `una categoria con presupuesto pero sin movimientos dice Sin movimientos en el resumen corto`() {
+        // El resumen corto es de MOVIMIENTOS: tener un presupuesto sin haber anotado nada todavía
+        // sigue siendo, literalmente, no tener movimientos.
+        assertEquals("Sin movimientos", resumenDeUsoCorto(cat("Colegio", budgets = 1)))
+    }
+
+    @Test
+    fun `la cifra del mes es null si no la uso este mes`() {
+        assertEquals(null, cifraDelMes(cat("Comida", movements = 12, total = 450_000)))
+    }
+
+    @Test
+    fun `la cifra del mes separa gasto de ingreso, sin la oracion completa`() {
+        val cifra = cifraDelMes(cat("Otros", monthMovements = 2, monthTotal = 10_000, monthIncomeTotal = 5_000))!!
+        assertTrue(cifra.contains("10.000"), cifra)
+        assertTrue(cifra.contains("5.000"), cifra)
+        assertFalse(cifra.contains("Este mes"), cifra)
+        assertFalse(cifra.contains("movimiento"), cifra)
+    }
+
+    @Test
+    fun `los rotulos del catalogo se leen para la vista previa de la hoja de detalle`() {
+        assertEquals("Restaurante", rotuloDeIcono("restaurante"))
+        assertEquals("Naranja", rotuloDeColor("naranja"))
+        // Una clave desconocida (de una versión más nueva) se muestra tal cual, no revienta.
+        assertEquals("no-existe", rotuloDeIcono("no-existe"))
     }
 }
