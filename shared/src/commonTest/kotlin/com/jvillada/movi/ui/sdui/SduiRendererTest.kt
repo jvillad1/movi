@@ -1,7 +1,8 @@
 package com.jvillada.movi.ui.sdui
 
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -28,8 +29,22 @@ class SduiRendererTest {
     @Test
     fun los_remapeos_anteriores_siguen_igual() {
         assertEquals(Screen.Accounts, screenForTarget("investments"))
-        assertEquals(Screen.Transactions(CHIP_RECURRENTES), screenForTarget("subscriptions"))
-        assertEquals(Screen.Transactions(CHIP_RECURRENTES), screenForTarget("recurrentes"))
+    }
+
+    /**
+     * Ola C: los targets no cambian (viajan en definiciones guardadas) — cambia adónde llevan. Los
+     * recurrentes y las suscripciones son Plan · Pagos del mes, Presupuestos es su otro segmento, y
+     * «Más» es Ajustes (la misma `Screen.Mas`).
+     */
+    @Test
+    fun los_destinos_de_la_ola_C() {
+        assertEquals(Screen.Plan(SEGMENTO_PRESUPUESTOS), screenForTarget("budgets"))
+        assertEquals(Screen.Plan(SEGMENTO_PAGOS), screenForTarget("recurrentes"))
+        assertEquals(Screen.Plan(SEGMENTO_PAGOS), screenForTarget("subscriptions"))
+        assertEquals(Screen.Accounts, screenForTarget("accounts"))
+        assertEquals(Screen.Accounts, screenForTarget("investments"))
+        assertEquals(Screen.Credits, screenForTarget("credits"))
+        assertEquals(Screen.Mas, screenForTarget("mas"))
     }
 
     @Test

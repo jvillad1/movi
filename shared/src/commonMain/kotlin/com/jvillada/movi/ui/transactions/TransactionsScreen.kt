@@ -53,7 +53,6 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -77,8 +76,8 @@ import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
-import com.jvillada.movi.ui.recurrentes.Recurrente
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
+import com.jvillada.movi.ui.plan.rememberMarcasDeRecurrentes
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
@@ -92,9 +91,6 @@ import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.shared.model.normalizarParaBuscar
-import com.jvillada.movi.ui.plan.HojasDelTableroDeRecurrentes
-import com.jvillada.movi.ui.plan.rememberEstadoDelTableroDeRecurrentes
-import com.jvillada.movi.ui.plan.tableroDeRecurrentes
 
 /**
  * F13: filtro puro detrás de la búsqueda de Movimientos, separado del `@Composable` para poder
@@ -172,18 +168,11 @@ fun isTransferLeg(event: FinancialEvent): Boolean =
  *
  * Un día que se queda sin filas se descarta entero (encabezado incluido): un día vacío con su
  * «Flujo del día» no le dice nada a nadie.
- *
- * @param reglas y @param nombresDeSuscripcionesActivas: lo que hace falta para el chip
- *   [CHIP_RECURRENTES] (ver [matchesChip] y [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe]).
- *   Vacíos por defecto — ningún otro chip los necesita, y así los tests de los chips que ya
- *   existían no tienen que cambiar una línea.
  */
 fun diasVisibles(
     days: List<EventDay>,
     chip: Int,
     query: String,
-    reglas: List<RecurringRule> = emptyList(),
-    nombresDeSuscripcionesActivas: List<String> = emptyList(),
 ): List<EventDay> =
     days.mapNotNull { day ->
         val filtered = day.items
@@ -191,7 +180,7 @@ fun diasVisibles(
             // [showsInMovements], que también explica por qué el filtro vive acá y no en
             // `/by-day` ni en `LocalRepository`.
             .filter { showsInMovements(it, query) }
-            .filter { matchesChip(it, chip, reglas, nombresDeSuscripcionesActivas) }
+            .filter { matchesChip(it, chip) }
             .filter { matchesQuery(it, query) }
         if (filtered.isEmpty()) null
         else day.copy(
@@ -343,17 +332,19 @@ const val CHIP_INGRESOS = 2
 const val CHIP_POR_CONFIRMAR = 3
 const val CHIP_ENTRE_CUENTAS = 4
 /**
- * PR 1 del rediseño de Recurrentes (2026-09): el dueño pidió, palabra por palabra, poder «en esa
- * página revisar cuáles de todos los gastos por filtro o lo que sea son recurrentes» — este es
- * ese filtro. Ver [matchesChip] y [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe].
+ * PR 1 del rediseño de Recurrentes (2026-09) lo puso como chip; la ola C lo sacó de Movimientos:
+ * el tablero de lo que se repite es ahora **Plan · Pagos del mes**, y lo que queda acá de esa idea
+ * es el ícono de repetición de cada fila (ver [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe]).
+ *
+ * **El índice no se borra ni se reusa**: viaja adentro de `Screen.Transactions`, y quien todavía
+ * lo pida —un enlace viejo, una pila— termina en Plan (ver `destinoVigente` en Navigation.kt). Si
+ * aun así llegara a Movimientos, [chipInicialDeMovimientos] lo trata como «Todo».
  */
 const val CHIP_RECURRENTES = 5
 
 /**
- * El tag de la barra de carga de Movimientos (Task 7, fix round 1): con «Recurrentes» la lista de
- * días nunca se pinta (ni cargada ni cargando, ver [mostrarLaListaDeDias]), así que esta barra es
- * la ÚNICA señal de carga que le queda a ese chip en su primera vez — sin tag, una prueba no tiene
- * cómo verificar que sigue ahí.
+ * El tag de la barra de carga de Movimientos (Task 7, fix round 1): la que se pinta cuando se
+ * recarga con la lista ya en pantalla — sin tag, una prueba no tiene cómo distinguirla.
  */
 const val TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS: String = "barra-de-carga-de-movimientos"
 
@@ -447,7 +438,10 @@ private fun LazyListScope.movimientosEsqueleto() {
     }
 }
 
-/** Los rótulos de los chips, en el orden de sus índices. */
+/**
+ * Los rótulos de los chips, en el orden de sus índices. «Recurrentes» ya no se dibuja (ver
+ * [CHIP_RECURRENTES]) pero su rótulo se queda en su lugar: sacarlo correría los índices.
+ */
 val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes")
 
 /**
@@ -479,8 +473,14 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
  * sí: un traspaso, una cuota o un pago de tarjeta son hechos **entre dos cuentas suyas**, no una
  * forma de mirar sus gastos. La lista sigue existiendo igual —el mismo filtro, la misma pantalla—
  * pero se entra desde Cuentas, que es de lo que habla. Ver `AccountsScreen`.
+ *
+ * ### «Recurrentes» se mudó a Plan (ola C)
+ *
+ * El tablero que ese chip mostraba —qué vence, qué ya ocurrió, qué falta confirmar— no es una forma
+ * de mirar movimientos sino la respuesta a «¿qué me falta pagar?», que es la pregunta de la pestaña
+ * Plan. Ahí vive ahora, como «Pagos del mes». Ver [CHIP_RECURRENTES].
  */
-val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_RECURRENTES)
+val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS)
 
 /**
  * **Cuántos movimientos entraron solos y esperan confirmación** — los que llegaron por SMS, por
@@ -547,40 +547,6 @@ fun tituloDelModoSinChip(chip: Int): String? = when (chip) {
 }
 
 /**
- * PR 2 del rediseño de Recurrentes (2026-09): ¿se pinta el card de «Flujo libre» y la sección de
- * candidatas por confirmar?
- *
- * Solo con el chip «Recurrentes» activo — en «Todo» o «Gastos» esas dos piezas hablan de una cosa
- * que no tiene nada que ver con lo que el chip pidió ver, y encima duplicarían el «Flujo libre»
- * que ya existía en la pantalla vieja: acá es un resumen DEL FILTRO, no un segundo total suelto
- * en medio de la lista. Función aparte (en vez de comparar `chip == CHIP_RECURRENTES` en el
- * `@Composable`) para poder testear la decisión sin montar Compose.
- */
-fun mostrarResumenDeRecurrentes(chip: Int): Boolean = chip == CHIP_RECURRENTES
-
-/**
- * **¿Se pinta la lista de movimientos agrupada por día?**
- *
- * Con el chip «Recurrentes» activo, no. El dueño: *«Me gusta lo de Ya ocurrieron pero se repiten
- * más abajo agrupando por día, creo que esto no tiene mucho sentido: solo debería tener pendientes
- * y ya ocurrieron, nada más»*.
- *
- * Tiene razón, y el motivo es que esa lista **no agrega nada acá**: arriba ya está el mismo hecho
- * dicho mejor. «Ya ocurrieron» no es una lista de movimientos, es la respuesta a «¿este mes ya
- * pagaste el arriendo?» — con el pago que lo prueba y un «Deshacer» si no era ese. Repetir abajo
- * los mismos pagos, ahora sueltos y sin esa pregunta encima, obliga a leer dos veces para
- * enterarse de lo mismo.
- *
- * Con eso, «Recurrentes» deja de ser una lista filtrada y pasa a ser lo que el dueño usa: el
- * **tablero de lo que se repite** — qué vence, qué ya ocurrió, qué falta confirmar y cuánto suma.
- * Los movimientos siguen enteros en «Todo» y en «Gastos», que es donde se leen como movimientos.
- *
- * **Buscar es la excepción**, por tercera vez en esta pantalla y por el mismo motivo que las otras
- * dos (`showsInMovements`, `agruparAjustesDeSaldo`): escribir una consulta es pedir explícitamente
- * que aparezca algo, y una lista que esconde justo lo que acabás de buscar es peor que una que
- * muestra de más.
- */
-/**
  * **Los días que caen adentro de un período**, para que Movimientos muestre el mes que el dueño
  * vive y no el del calendario.
  *
@@ -613,27 +579,21 @@ fun diasDelPeriodo(
 fun puedeAvanzarDePeriodo(visible: PeriodoFinanciero, actual: PeriodoFinanciero): Boolean =
     visible.prefijo < actual.prefijo
 
-fun mostrarLaListaDeDias(chip: Int, query: String): Boolean =
-    chip != CHIP_RECURRENTES || query.isNotBlank()
-
 /**
  * PR 3 del rediseño de Recurrentes (2026-09): **con qué chip arranca Movimientos** cuando alguien
- * la abrió pidiendo uno.
- *
- * Existe porque los enlaces que antes llevaban a la pantalla de Recurrentes ahora llevan acá (el
- * «Ver todos» de Próximos pagos del Inicio, la campana, «Anota tus gastos recurrentes», los
- * targets SDUI). Si esos enlaces cayeran en Movimientos sin filtro, el dueño tocaría un pago que
- * vence y llegaría a la lista completa de sus movimientos, sin ninguna relación visible con lo que
- * acaba de tocar: el destino tiene que responder a lo que se tocó, no solo estar cerca.
+ * la abrió pidiendo uno — hoy, los modos sin chip («Por confirmar» desde su aviso, «Entre cuentas»
+ * desde Cuentas).
  *
  * `null` —el caso normal, entrar por la pestaña— es «Todo». Un índice fuera de rango también cae
  * en «Todo» y no explota: el valor viaja adentro de [com.jvillada.movi.ui.Screen.Transactions], y
  * una pila restaurada o una definición SDUI vieja podrían traer un número que hoy no existe.
  * Arrancar en «Todo» ahí es la caída correcta — es la pantalla completa, no un filtro que esconde
- * cosas sin decirlo.
+ * cosas sin decirlo. [CHIP_RECURRENTES] cae igual: ese filtro ya no existe acá (ola C, se mudó a
+ * Plan) y la navegación lo desvía antes de llegar; si aun así llegara, «Todo» es lo honesto.
  */
 fun chipInicialDeMovimientos(pedido: Int?): Int =
-    if (pedido != null && pedido in CHIPS_DE_MOVIMIENTOS.indices) pedido else CHIP_TODO
+    if (pedido != null && pedido in CHIPS_DE_MOVIMIENTOS.indices && pedido != CHIP_RECURRENTES) pedido
+    else CHIP_TODO
 
 /**
  * ¿Este movimiento entra en el chip [chip]?
@@ -659,38 +619,18 @@ fun chipInicialDeMovimientos(pedido: Int?): Int =
  * «Entre cuentas» es el cuarto filtro: los tres pares y el pago de tarjeta suelto, ver
  * [esEntreCuentas]. Las dos patas de cada par pasan, así que [collapseTransfers] las junta.
  *
- * «Recurrentes» es el quinto: lo que ya reconocemos como una regla o una suscripción confirmada,
- * ver [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe] — con las mismas dos listas ya
- * cargadas, sin ningún viaje de red por fila (ese es el precio, y está documentado ahí) — **más lo
- * que el dueño ya pagó contra una deuda suya**, que no se reconoce por nombre sino por su forma:
- * la cuota de un crédito ([com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada]) y el pago de una
- * tarjeta ([com.jvillada.movi.ui.recurrentes.nombreDePagoDeTarjeta]). De cada par entra **solo la
- * pata del dinero**: la de la deuda es el otro lado del mismo hecho, y con las dos el chip
- * mostraría dos filas por cada pago en la lista que el dueño lee para sumar lo que sale al mes.
- * Como la hermana no pasa el filtro, [collapseTransfers] la deja suelta — la cuota se ve como el
- * gasto que es (rojo, con signo) y el pago de tarjeta como lo que es (gris, sin signo, fuera del
- * «Flujo del día»), que es el mismo camino que ya tenían, por el mismo motivo.
- *
- * **Que el pago de una tarjeta se vea acá no lo convierte en un gasto**: `countsAsCashFlow` sigue
- * diciendo `false` y ni «Gastos del mes» ni el total de «Flujo libre» lo suman. El dueño pidió las
- * dos cosas a la vez — verlo y que no cuente — y el porqué está en
- * [com.jvillada.movi.ui.recurrentes.nombreDePagoDeTarjeta].
- *
- * @param reglas y @param nombresDeSuscripcionesActivas solo los usa [CHIP_RECURRENTES]; el resto
- *   de los chips ni los mira, así que quedan con default vacío y no rompen ningún llamado viejo.
+ * «Recurrentes» fue el quinto hasta la ola C, cuando su tablero se mudó a Plan (ver
+ * [CHIP_RECURRENTES]); lo que queda de él en esta pantalla es el ícono de repetición de cada fila.
  */
 fun matchesChip(
     event: FinancialEvent,
     chip: Int,
-    reglas: List<RecurringRule> = emptyList(),
-    nombresDeSuscripcionesActivas: List<String> = emptyList(),
 ): Boolean = when (chip) {
     CHIP_GASTOS -> event.type == TransactionType.EXPENSE && cuentaEnGastosEIngresos(event)
     // Igual que Gastos: lo que entró solo espera en «Por confirmar» y no se suma hasta confirmarlo.
     CHIP_INGRESOS -> event.type == TransactionType.INCOME && cuentaEnGastosEIngresos(event)
     CHIP_POR_CONFIRMAR -> esperaEnPorConfirmar(event.reconciliationStatus)
     CHIP_ENTRE_CUENTAS -> esEntreCuentas(event)
-    CHIP_RECURRENTES -> nombreRecurrenteDe(event, reglas, nombresDeSuscripcionesActivas) != null
     else -> true
 }
 
@@ -738,12 +678,6 @@ fun vacioDeMovimientos(chip: Int, hayMovimientos: Boolean): VacioDeMovimientos =
         titulo = "Nada entre cuentas",
         detalle = "Aquí van los traspasos, las cuotas de crédito y los pagos de tarjeta: plata que " +
             "fue de una cuenta tuya a otra.",
-        ofreceRegistrar = false,
-    )
-    chip == CHIP_RECURRENTES -> VacioDeMovimientos(
-        titulo = "Nada recurrente",
-        detalle = "Aquí aparecen los movimientos que ya reconocemos como un recurrente que tienes " +
-            "anotado o una suscripción confirmada.",
         ofreceRegistrar = false,
     )
     else -> VacioDeMovimientos("Sin movimientos aún", null, ofreceRegistrar = true)
@@ -1055,19 +989,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             .onSuccess { candidates = it }
     }
 
-    // El tablero de Recurrentes —lo que pinta el chip «Recurrentes»—: su carga, su estado y sus
-    // acciones viven en [EstadoDelTableroDeRecurrentes] (ola C: `ui/plan/TableroDeRecurrentes.kt`).
-    // Se crea siempre, no solo con el chip activo, porque sus reglas y los nombres de las
-    // suscripciones activas son también lo que esta pantalla usa para el filtro del chip y para la
-    // marca de repetición de cada fila, en todos los chips. Sus errores caen en el mismo aviso
-    // con «Reintentar» que los de esta pantalla, y ese «Reintentar» (`refreshKey`) lo recarga.
-    val tablero = rememberEstadoDelTableroDeRecurrentes(
-        activo = activeFilter == CHIP_RECURRENTES,
-        recarga = refreshKey,
-        error = errorDeLaPantalla,
-    )
-    val reglasRecurrentes = tablero.reglasRecurrentes
-    val nombresDeSuscripcionesActivas = tablero.nombresDeSuscripcionesActivas
+    // Lo que hace falta para el ícono de repetición de cada fila. Ola C: el tablero de Recurrentes
+    // se mudó a Plan y esta pantalla ya no lo pinta; de él solo lee estas dos listas (ver
+    // [MarcasDeRecurrentes]). Su «Reintentar» (`refreshKey`) también las vuelve a leer.
+    val marcas = rememberMarcasDeRecurrentes(recarga = refreshKey)
+    val reglasRecurrentes = marcas.reglas
+    val nombresDeSuscripcionesActivas = marcas.nombresDeSuscripcionesActivas
     // Para guardar el arranque propio de un período (ver [InicioDelPeriodoSheet]).
     val alcanceDeLaPantalla = rememberCoroutineScope()
 
@@ -1100,25 +1027,21 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
      */
     var periodoVisible by remember(periodoDeHoy) { mutableStateOf(periodoDeHoy) }
 
-    val visibleDays = remember(activeFilter, allDays, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas, periodoVisible, ajustesDelPeriodo) {
-        val filtrados = diasVisibles(allDays, activeFilter, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas)
+    val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo) {
+        val filtrados = diasVisibles(allDays, activeFilter, searchQuery)
         // **Buscar atraviesa los períodos**, por cuarta vez en esta pantalla y por el mismo motivo
         // que las otras tres: escribir una consulta es pedir que algo aparezca, y encontrarlo solo
         // si además caía en el mes que estabas mirando es la peor forma de no encontrarlo.
         if (searchQuery.isNotBlank()) filtrados
         else diasDelPeriodo(filtrados, periodoVisible, ajustesDelPeriodo)
     }
-    // Con «Recurrentes» la lista de días no se pinta (ver [mostrarLaListaDeDias]): ni su vacío real
-    // más abajo ni —Task 7— sus filas esqueleto tienen sentido debajo de un tablero que ya cubre
-    // ese chip por su cuenta.
-    val hayListaDeDias = mostrarLaListaDeDias(activeFilter, searchQuery)
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
     Column(modifier = Modifier.fillMaxSize()) {
         // F60: encabezado único — Movimientos es raíz: avatar + rótulo del menú + la lupa.
         MinScreenHeader(
             title = "Movimientos",
-            leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+            leading = HeaderLeading.Avatar(onNavigate),
             action = {
                 Icon(
                     imageVector = Icons.Filled.Search,
@@ -1393,10 +1316,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         // Task 7, fix round 1: con algo ya pintado (volver a este chip, un reintento con la lista
         // de antes en pantalla) la barra de siempre; sin nada pintado todavía, las filas esqueleto
         // de más abajo ya dicen «cargando» con la forma de lo que viene, y la barra sería la misma
-        // señal dos veces — PERO con «Recurrentes» esas filas nunca se pintan (`!hayListaDeDias`,
-        // ver más abajo), así que sin este `||` la primera carga de ese chip se quedaba SIN
-        // ninguna señal de carga: ni barra ni esqueleto. La barra vuelve a cubrir ese caso.
-        if (loading && (visibleDays.isNotEmpty() || !hayListaDeDias)) {
+        // señal dos veces.
+        if (loading && visibleDays.isNotEmpty()) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().testTag(TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS))
         }
 
@@ -1406,33 +1327,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             contentPadding = PaddingValues(bottom = 60.dp),
         ) {
             // Task 7 puso una tarjeta de 6 filas sueltas; la Task 9 (ola B) la cambia por la forma
-            // real — 2-3 DÍAS, cada uno con su encabezado y su propia tarjeta. `hayListaDeDias`
-            // porque con «Recurrentes» esta lista no se pinta ni cargada ni cargando (ver arriba);
-            // el tablero de esa vista tiene su propio estado. Ver [movimientosEsqueleto].
-            if (loading && visibleDays.isEmpty() && hayListaDeDias) {
+            // real — 2-3 DÍAS, cada uno con su encabezado y su propia tarjeta. Ver
+            // [movimientosEsqueleto].
+            if (loading && visibleDays.isEmpty()) {
                 movimientosEsqueleto()
             }
 
-            // PR 2 del rediseño de Recurrentes: el resumen del filtro y lo que falta revisar.
-            // Solo con el chip activo — ver [mostrarResumenDeRecurrentes] — y ARRIBA de la lista
-            // de días (que acá abajo son los movimientos que YA se reconocen como recurrentes;
-            // esto es lo que resume ese total y lo que todavía no se confirmó ni descartó).
-            if (mostrarResumenDeRecurrentes(activeFilter)) {
-                // El tablero vive en `ui/plan/TableroDeRecurrentes.kt` desde la ola C: ver
-                // [tableroDeRecurrentes] para el orden de sus secciones y el porqué.
-                tableroDeRecurrentes(
-                    estado = tablero,
-                    periodoVisible = periodoVisible,
-                    periodoDeHoy = periodoDeHoy,
-                    ajustesDelPeriodo = ajustesDelPeriodo,
-                    accountNames = accountNames,
-                    onNavigate = onNavigate,
-                )
-            }
-
-            // Su vacío real (ver [hayListaDeDias] arriba): decir «no hay movimientos recurrentes»
-            // debajo de un tablero lleno de vencimientos sería contradecirse en la misma pantalla.
-            if (!loading && visibleDays.isEmpty() && hayListaDeDias) {
+            if (!loading && visibleDays.isEmpty()) {
                 item {
                     if (!diasLeidos) {
                         NoSePudoLeer(
@@ -1500,7 +1401,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 }
             }
 
-            (if (hayListaDeDias) visibleDays else emptyList()).forEach { day ->
+            visibleDays.forEach { day ->
                 // Sin `key`: con la fecha como clave, `LazyColumn` ancla el primer día visible al
                 // cambiar de chip, y pasar de «Gastos» a «Todo» dejaba el día nuevo de arriba
                 // escondido por encima del tope (visto a ojo en la web). Posicional, como antes.
@@ -1651,8 +1552,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         hostState = snackbarHostState,
         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
     )
-
-    HojasDelTableroDeRecurrentes(tablero)
 
     selectedEvent?.let { event ->
         // El mismo juego de hojas que abre el detalle de la cuenta — categoría, fecha, monto,

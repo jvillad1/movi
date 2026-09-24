@@ -39,7 +39,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 // Alta a propósito: debajo del aviso viene la sección «Captura en este teléfono» y la bandeja
-// entera. Ver el mismo criterio en `SuscripcionesActivasEnMovimientosTest`.
+// entera. Ver el mismo criterio en `SuscripcionesActivasEnElTableroTest`.
 @Config(qualifiers = "w411dp-h1200dp-xhdpi")
 class CapturaDeSmsEnLaBandejaTest {
 

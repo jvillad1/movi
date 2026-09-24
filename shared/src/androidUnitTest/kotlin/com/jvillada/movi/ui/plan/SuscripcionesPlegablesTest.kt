@@ -1,4 +1,4 @@
-package com.jvillada.movi.ui.transactions
+package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +22,7 @@ import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.UpcomingPayment
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Before
@@ -43,7 +44,7 @@ import org.robolectric.annotation.Config
  * información, solo filas**. La cifra que se mira de reojo —cuánto suman al mes— sigue a la vista.
  * Sin eso, plegar convertiría a la sección en un cartel mudo.
  *
- * `SuscripcionesActivasEnMovimientosTest` prueba las filas y las abre en su `@Before`; esta clase
+ * `SuscripcionesActivasEnElTableroTest` prueba las filas y las abre en su `@Before`; esta clase
  * prueba justamente lo contrario, que por defecto no estén.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -88,10 +89,8 @@ class SuscripcionesPlegablesTest {
             override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
         }
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
-        esperarTexto("Sin movimientos aún")
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
         esperarTexto("SUSCRIPCIONES ACTIVAS")
     }
 

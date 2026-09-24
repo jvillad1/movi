@@ -1,7 +1,12 @@
 package com.jvillada.movi.ui.dashboard
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.SessionManager
@@ -219,6 +224,24 @@ class InicioConInstantaneaTest {
         assertEquals(0L, DashboardDataCache.cargadoEn, "una carga que no trajo nada no sella")
         assertEquals(deAyer, InstantaneaDelInicio.delAparato.datos("u1"))
         assertTrue(cuantas("\$558.350") > 0, "y lo de ayer sigue a la vista")
+    }
+
+    /**
+     * Ola C: el Inicio se llama **«Hoy»** —el título del encabezado vive en el binario, no en la
+     * definición SDUI— y su avatar abre **Ajustes**, no Perfil.
+     */
+    @Test
+    fun `el encabezado dice Hoy y el avatar abre Ajustes`() {
+        var navegoA: Screen? = null
+        composeRule.setContent { MoviTheme { DashboardScreen(onNavigate = { navegoA = it }) } }
+        composeRule.waitForIdle()
+
+        assertEquals("Hoy", TITULO_DEL_HOY)
+        composeRule.onAllNodesWithText(TITULO_DEL_HOY, useUnmergedTree = true).onFirst().assertIsDisplayed()
+        assertEquals(0, cuantas("Inicio"))
+
+        composeRule.onNodeWithText("J", useUnmergedTree = true).performClick()
+        assertEquals(Screen.Mas, navegoA)
     }
 
     @Test

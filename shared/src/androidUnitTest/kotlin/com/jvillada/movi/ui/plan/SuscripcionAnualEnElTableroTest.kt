@@ -1,4 +1,4 @@
-package com.jvillada.movi.ui.transactions
+package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +24,7 @@ import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.UpcomingPayment
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Before
@@ -34,8 +35,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Ola 16 — **un cobro anual pintado de verdad**, con [TransactionsScreen] montada y el chip
- * «Recurrentes» activo.
+ * Ola 16 — **un cobro anual pintado de verdad**, con el tablero de Recurrentes montado. *
+ * Ola C: el tablero salió del chip «Recurrentes» de Movimientos a Plan · Pagos del mes; esta prueba
+ * lo monta solo ([TableroDeRecurrentes]) y afirma lo mismo que afirmaba adentro de Movimientos.
  *
  * Lo que una función pura no alcanza a probar es justamente lo que más importa acá: que las tres
  * cifras que la pantalla muestra a la vez —el cobro real de la fila, lo que esa fila aporta, y el
@@ -46,12 +48,12 @@ import org.robolectric.annotation.Config
  * Los montos son los cobros reales que él está por cargar: NBA League Pass ($112.900 al año), HBO
  * Max Platinum ($369.900 al año) y Google One ($79.000 al mes).
  *
- * Mismo patrón de montaje y misma altura de ventana que [SuscripcionesActivasEnMovimientosTest]:
+ * Mismo patrón de montaje y misma altura de ventana que [SuscripcionesActivasEnElTableroTest]:
  * la sección va debajo del «Flujo libre» y en 731dp la última fila queda bajo el pliegue.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h1200dp-xhdpi")
-class SuscripcionAnualEnMovimientosTest {
+class SuscripcionAnualEnElTableroTest {
 
     @get:Rule val composeRule = createComposeRule()
 
@@ -100,10 +102,8 @@ class SuscripcionAnualEnMovimientosTest {
         RecurringOfferGate.clear()
         Repositories.sustitutoDePrueba = Repo()
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
-        esperarTexto("Sin movimientos aún")
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
         esperarTexto("SUSCRIPCIONES ACTIVAS")
         // La sección arranca plegada (ver `SuscripcionesPlegablesTest`); todo lo que esta clase
         // afirma es sobre las FILAS, así que se abre una vez acá.

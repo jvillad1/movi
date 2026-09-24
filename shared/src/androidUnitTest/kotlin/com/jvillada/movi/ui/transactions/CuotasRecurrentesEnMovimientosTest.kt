@@ -4,14 +4,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -30,7 +26,9 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.time.epochMillisToAppDate
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.plan.TableroDeRecurrentes
 import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Before
@@ -41,7 +39,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * **Las cuotas pagadas de los créditos, en Movimientos y montado de verdad.**
+ * **Las cuotas pagadas de los créditos, montadas de verdad: en Movimientos y en el tablero.**
  *
  * El dueño: *«en recurrentes no estoy viendo los pagos de cuota realizados para mis créditos,
  * considero que esto es importante verlo porque me permite entender mi flujo de caja mensual»*.
@@ -50,21 +48,18 @@ import org.robolectric.annotation.Config
  *
  * Lo que una función pura no alcanza a probar y esta prueba sí:
  *
- * 1. Que con el chip «Recurrentes» la cuota se **pinte**, y como UNA fila (la del dinero), no dos.
- * 2. Que en «Todo» —donde las dos patas sí están y se pliegan en un solo renglón— ese renglón
- *    lleve la misma marca de repetición, en vez de leerse distinto según el filtro.
- * 3. Que el **pago de una tarjeta**, que tiene exactamente la misma forma, se vea y se marque
- *    igual —*«en recurrentes no veo el pago de la cuota de las tarjetas de crédito, deberían
- *    estar»*— pero **sin signo y sin sumar**: las compras ya contaron cuando se hicieron, y esa es
- *    la parte que cuesta plata si se rompe. Que las dos filas convivan diciendo cosas distintas es
- *    justamente lo que una función pura no alcanza a probar.
- * 4. Que el card de «Flujo libre» cuente las cuotas —el dueño lo decidió después del PR anterior— y
- *    que diga cuánto, con qué queda afuera y por qué; y que el pago de la tarjeta, visible en la
- *    lista de abajo, **no** aparezca en ninguna de esas cifras.
+ * 1. Que en Movimientos —donde las dos patas de cada par están y se pliegan en un solo renglón—
+ *    la cuota y el **pago de una tarjeta** lleven la marca de repetición, y que el título los
+ *    distinga. Ola C: el chip «Recurrentes» se fue a Plan, pero esta marca se queda.
+ * 2. Que el card de «Flujo libre» del tablero (Plan · Pagos del mes) cuente las cuotas —el dueño lo
+ *    decidió después del PR anterior— y que diga cuánto, con qué queda afuera y por qué.
  *
- * Mismo patrón de montaje que [ResumenRecurrentesEnMovimientosTest] y
- * [SuscripcionesActivasEnMovimientosTest], y con la ventana alta de esta última por el mismo
- * motivo: el card de «Flujo libre» va al final del chip y en 731dp queda bajo el pliegue.
+ * (Hasta la ola C también probaba el chip «Recurrentes» de Movimientos: una fila por cuota y el pago
+ * de la tarjeta sin signo. El chip ya no existe; qué pata se reconoce lo sigue fijando
+ * `NombreRecurrenteDeTest`, y el tono de un pago de tarjeta, `ColorYEntreCuentasTest`.)
+ *
+ * Ventana alta, como `SuscripcionesActivasEnElTableroTest`: el card de «Flujo libre» va al final
+ * del tablero y en 731dp queda bajo el pliegue.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h1200dp-xhdpi")
@@ -170,14 +165,29 @@ class CuotasRecurrentesEnMovimientosTest {
     }
 
     @Before
-    fun montar() {
+    fun preparar() {
         RecurringOfferGate.clear()
         Repositories.sustitutoDePrueba = Repo()
+    }
+
+    private fun montarMovimientos() {
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
         }
         // Chip «Todo» de arranque: el par de la cuota ya plegado en un solo renglón.
         esperarTexto("Cuota de crédito")
+    }
+
+    /** El tablero de Plan · Pagos del mes, solo: ahí vive el card de «Flujo libre» desde la ola C. */
+    private fun montarTablero() {
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {})
+                }
+            }
+        }
+        esperarTexto("Flujo libre")
     }
 
     @After
@@ -206,103 +216,13 @@ class CuotasRecurrentesEnMovimientosTest {
      */
     @Test
     fun `en Todo los dos pares van marcados, y el titulo los distingue`() {
+        montarMovimientos()
         composeRule.onNodeWithText("Cuota de crédito", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("Pago de tarjeta", useUnmergedTree = true).assertExists()
         marcasDeRecurrente().assertCountEquals(2)
     }
 
-    // ── Chip «Recurrentes»: lo que el dueño vino a ver ───────────────────────
-
-    /**
-     * Entra a «Recurrentes» y **escribe una búsqueda**, que es donde la lista por día se pinta
-     * desde que el dueño pidió que ese chip dejara de repetir abajo lo que ya dice arriba
-     * (*«solo debería tener pendientes y ya ocurrieron, nada más»*, ver [mostrarLaListaDeDias]).
-     *
-     * Lo que estas pruebas afirman **no cambió**: que con el filtro puesto pasa una sola pata de
-     * cada par, y cómo se ve esa fila. La búsqueda es solo por dónde se llega a verla — filtra por
-     * texto encima del chip, no en lugar de él, así que el filtro sigue siendo lo que decide.
-     *
-     * **El texto que se escribe no es el que después se cuenta**, a propósito: el campo de
-     * búsqueda es un nodo de texto más, así que buscar «Cuota de Vehículo» y contar los nodos que
-     * dicen «Cuota de Vehículo» encontraría dos —la fila y el campo— y la prueba fallaría por su
-     * propia herramienta.
-     */
-    private fun buscarEnRecurrentes(texto: String) {
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("Buscar", useUnmergedTree = true).performClick()
-        composeRule.waitForIdle()
-        composeRule.onNode(hasSetTextAction(), useUnmergedTree = true).performTextReplacement(texto)
-        composeRule.waitForIdle()
-    }
-
-    /**
-     * Con el filtro puesto pasa **solo la pata del dinero**, así que la cuota se ve suelta, con el
-     * concepto que ya nombra el crédito y por el monto que de verdad salió de la cuenta. La pata
-     * de la deuda («Abono a capital desde…») no está: con las dos, cada cuota ocuparía dos filas
-     * en la lista que él lee justamente para sumar lo que le sale al mes.
-     */
-    @Test
-    fun `el chip Recurrentes muestra la cuota una sola vez, con el nombre del credito`() {
-        buscarEnRecurrentes("Vehíc")
-        esperarTexto("Cuota de Vehículo")
-
-        composeRule.onAllNodesWithText("Cuota de Vehículo", useUnmergedTree = true).assertCountEquals(1)
-        composeRule.onAllNodesWithText("Abono a capital desde Bancolombia", useUnmergedTree = true)
-            .assertCountEquals(0)
-        // Por el monto completo de la cuota (la plata que salió), no por el capital que abonó.
-        // Por subcadena para no depender de qué signo «menos» exacto usa `formatCOP`.
-        //
-        // Son CINCO nodos y las cinco veces es la misma cuota — que sea la misma cifra en todas
-        // es la aserción, porque es la pantalla entera diciendo lo mismo de una sola plata:
-        //   1. «Flujo libre» del card (−$4.215.223: no hay ingresos recurrentes)
-        //   2. «Gastos recurrentes» del card
-        //   3. la línea que dice cuánto de ese total son cuotas
-        //   4. el «Flujo del día» del encabezado del día
-        //   5. la fila de la cuota
-        // Si la pata de la deuda también hubiera pasado el filtro, 4 y 5 dejarían de coincidir; y
-        // si el total no contara la cuota, 1-3 tampoco.
-        composeRule.onAllNodesWithText("4.215.223", substring = true, useUnmergedTree = true)
-            .assertCountEquals(5)
-    }
-
-    /**
-     * **Y el pago de la tarjeta también se ve**, que es lo que el dueño vino a pedir esta vez, y
-     * también una sola vez: la pata de la deuda («Pago desde Bancolombia») no pasa el filtro.
-     */
-    @Test
-    fun `el chip Recurrentes muestra el pago de la tarjeta una sola vez`() {
-        buscarEnRecurrentes("Nubank")
-        esperarTexto("Pago de Nubank")
-
-        composeRule.onAllNodesWithText("Pago de Nubank", useUnmergedTree = true).assertCountEquals(1)
-        composeRule.onAllNodesWithText("Pago desde Bancolombia", useUnmergedTree = true)
-            .assertCountEquals(0)
-        // «Y los dos pares quedan marcados» ya no se afirma acá: la búsqueda deja una sola fila a
-        // la vista, así que contar marcas mediría el filtro de texto y no el chip. Eso lo prueba
-        // `en Todo los dos pares van marcados, y el titulo los distingue`, donde las dos filas
-        // están.
-    }
-
-    /**
-     * **Verse no es contar, y la pantalla lo dice sola.** El monto del pago aparece UNA vez —la
-     * fila— y **sin el signo menos**: es el idioma que la app ya usa para «esto no movió plata de
-     * tu bolsillo». La cuota, tres filas más arriba, sí lleva su «−».
-     *
-     * Que el monto salga una sola vez es además la prueba de que no se coló en ninguna cifra de
-     * arriba: si «Flujo libre», «Gastos recurrentes» o el «Flujo del día» lo hubieran sumado, este
-     * número aparecería más de una vez o cambiaría el de la cuota.
-     */
-    @Test
-    fun `el pago de la tarjeta se ve sin signo y no entra a ninguna cifra`() {
-        buscarEnRecurrentes("Nubank")
-        esperarTexto("Pago de Nubank")
-
-        composeRule.onAllNodesWithText("1.200.000", substring = true, useUnmergedTree = true)
-            .assertCountEquals(1)
-        composeRule.onAllNodesWithText("−$1.200.000", substring = true, useUnmergedTree = true)
-            .assertCountEquals(0)
-    }
+    // ── El tablero (Plan · Pagos del mes): el card de «Flujo libre» ───────────
 
     /**
      * **Y el total de arriba las cuenta.** El PR anterior dejó acá una línea que admitía que
@@ -314,8 +234,7 @@ class CuotasRecurrentesEnMovimientosTest {
      */
     @Test
     fun `el card de Flujo libre cuenta las cuotas y dice cuanto`() {
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
-        esperarTexto("Flujo libre")
+        montarTablero()
 
         composeRule.onAllNodesWithText(
             "Las cuotas de tus créditos entran en este total: $4.215.223 al mes.",
@@ -330,8 +249,7 @@ class CuotasRecurrentesEnMovimientosTest {
     /** Y el pago único queda afuera **diciéndolo**: es plata que vence, solo que una sola vez. */
     @Test
     fun `el card explica el credito que se paga de una sola vez`() {
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
-        esperarTexto("Flujo libre")
+        montarTablero()
 
         composeRule.onAllNodesWithText(
             "Un crédito tuyo se paga de una sola vez", substring = true, useUnmergedTree = true,

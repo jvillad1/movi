@@ -27,32 +27,31 @@ import com.jvillada.movi.ui.screenForTab
 
 /**
  * Qué va a la izquierda del título (F60):
- * - [Avatar] en las pantallas RAÍZ (las de la barra/rail: Inicio, Movimientos, Cuentas, Más,
- *   y Presupuestos) — abre Perfil, como siempre.
+ * - [Avatar] en las pantallas RAÍZ (las cuatro pestañas: Hoy, Movimientos, Plan y Patrimonio).
  * - [Back] en las SUBPANTALLAS (todo lo que se abre desde una raíz): la flecha usa la pila
  *   real (F22) y cae a [fallback] si no hay historial (deep link, recarga de la web).
  */
 sealed class HeaderLeading {
-    data class Avatar(val onClick: () -> Unit) : HeaderLeading()
+    /**
+     * El avatar **abre Ajustes** (`Screen.Mas`), siempre. Ola C: «Más» dejó de ser pestaña y el
+     * avatar pasó a ser su puerta — Perfil, Categorías, Documentos, Compartir, Movi AI y los
+     * mensajes del banco se alcanzan desde ahí. Por eso recibe el `onNavigate` de la pantalla y no
+     * un `onClick` suelto: no hay forma de armar un avatar que lleve a otro lado, y las cuatro
+     * pestañas no pueden volver a discrepar sobre adónde lleva (antes cada una decía Perfil a mano).
+     */
+    data class Avatar(val onNavigate: (Screen) -> Unit) : HeaderLeading()
     data class Back(val fallback: Screen) : HeaderLeading()
 }
 
 /**
- * Regla única para el leading (revisión Ola 7): una pantalla lleva avatar solo cuando ES un
- * destino que el layout actual pinta como pestaña propia — en pantalla ancha, las entradas
- * del rail ([railDestinations]); en el teléfono, las de la barra (`asBottomBarTab()` no la
- * funde en Más). Si no, flecha atrás hacia [fallback]. Así Créditos y Presupuestos llevan
- * avatar en ancho (están en el rail) y flecha a Más en el teléfono (se llega por Más).
+ * Regla única para el leading (revisión Ola 7): una pantalla lleva avatar solo cuando ES la
+ * pantalla principal de una pestaña; si no, flecha atrás hacia [fallback]. Ola C: la barra del
+ * teléfono y el rail muestran las mismas cuatro pestañas, así que la regla ya no depende del ancho
+ * — Presupuestos (Plan) y Créditos (Patrimonio) llevan flecha en los dos.
  */
-@Composable
-fun leadingFor(screen: Screen, onProfile: () -> Unit, fallback: Screen): HeaderLeading {
+fun leadingFor(screen: Screen, onNavigate: (Screen) -> Unit, fallback: Screen): HeaderLeading {
     val tab = navTabFor(screen) ?: return HeaderLeading.Back(fallback)
-    if (screenForTab(tab) != screen) return HeaderLeading.Back(fallback)
-    val shownAsOwnTab = when (LocalWindowWidthClass.current) {
-        WindowWidthClass.Expanded -> railDestinations.any { it.tab == tab }
-        WindowWidthClass.Compact -> tab.asBottomBarTab() == tab
-    }
-    return if (shownAsOwnTab) HeaderLeading.Avatar(onProfile) else HeaderLeading.Back(fallback)
+    return if (screenForTab(tab) == screen) HeaderLeading.Avatar(onNavigate) else HeaderLeading.Back(fallback)
 }
 
 /**
@@ -84,7 +83,7 @@ fun MinScreenHeader(
         horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
     ) {
         when (leading) {
-            is HeaderLeading.Avatar -> AvatarButton(onClick = leading.onClick)
+            is HeaderLeading.Avatar -> AvatarButton(onClick = { leading.onNavigate(Screen.Mas) })
             is HeaderLeading.Back -> {
                 val goBack = LocalGoBack.current
                 Icon(

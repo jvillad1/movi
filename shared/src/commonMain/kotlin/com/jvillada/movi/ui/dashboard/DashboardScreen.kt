@@ -33,7 +33,7 @@ import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.notifications.NotificationsPanel
@@ -167,6 +167,12 @@ fun debeRecargarElInicio(
     // gastar diez llamadas.
     else -> (ahora - cargadoEn) !in 0..TTL_DEL_INICIO_MS
 }
+
+/**
+ * El título del Inicio y el rótulo de su pestaña. Ola C: «Hoy» — contesta «¿cómo estoy? ¿qué
+ * viene?», y así se lee junto a Movimientos, Plan y Patrimonio.
+ */
+const val TITULO_DEL_HOY: String = "Hoy"
 
 @Composable
 fun DashboardScreen(
@@ -465,12 +471,13 @@ fun DashboardScreen(
             .background(Movi.colores.fondo)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // F60: encabezado único — Inicio es raíz: avatar + el rótulo del menú + la campana.
+            // F60: encabezado único — el Hoy es raíz: avatar + el rótulo del menú + la campana.
             // F5: la campana tiene contenido real — el punto solo aparece cuando `notifications`
-            // no está vacío.
+            // no está vacío. Ola C: se llama «Hoy», igual que su pestaña. El título vive en el
+            // binario, no en la definición SDUI, así que cambiarlo no pide otra generación.
             MinScreenHeader(
-                title = "Inicio",
-                leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+                title = TITULO_DEL_HOY,
+                leading = HeaderLeading.Avatar(onNavigate),
                 action = {
                     // Recargando con cifras ya pintadas (la caché o la instantánea): una línea
                     // discreta en vez de la barra de ancho completo. Va en la cabecera, cuyo alto
@@ -625,9 +632,8 @@ internal fun PrimerosPasosCard(
             done = data.hasRecurringRule,
             title = "Anota tus gastos recurrentes",
             subtitle = "Colegio, arriendo, gimnasio, cuotas",
-            // PR 3 del rediseño de Recurrentes: los recurrentes se anotan y se revisan en
-            // Movimientos, con su chip puesto. La pantalla aparte dejó de tener entradas.
-            onClick = { onNavigate(Screen.Transactions(CHIP_RECURRENTES)) },
+            // Ola C: los recurrentes se anotan y se revisan en Plan · Pagos del mes.
+            onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
         )
         Hairline()
         PasoRow(done = data.hasCredit, title = "Si tienes préstamos o tarjetas, cárgalos", onClick = { onNavigate(Screen.Credits) })

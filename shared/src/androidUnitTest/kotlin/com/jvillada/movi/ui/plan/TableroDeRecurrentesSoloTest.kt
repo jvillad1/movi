@@ -45,15 +45,15 @@ import kotlin.test.assertFalse
  *
  * Hasta la ola C el tablero solo existía adentro de `TransactionsScreen`, colgado de SU carga: el
  * aviso de error, el «Reintentar», las cuentas y el período eran de la pantalla. Las pruebas que ya
- * había (`*EnMovimientosTest`) lo siguen probando ahí; esta fija lo que la pestaña «Plan» va a
- * necesitar de él: que **se basta solo** — lee lo suyo, se equivoca en voz alta, se recupera con su
+ * había (hoy `*EnElTableroTest`, que desde la Task 3 lo montan solo) prueban cada sección; esta fija
+ * lo que la pestaña «Plan» necesita de él: que **se basta solo** — lee lo suyo, se equivoca en voz alta, se recupera con su
  * propio «Reintentar» y sus acciones escriben — y que para eso no le pide los movimientos a nadie.
  *
- * Mismo cuidado con las fechas que `ChecklistDelPeriodoEnMovimientosTest`: el vencimiento se ancla
+ * Mismo cuidado con las fechas que `ChecklistDelPeriodoEnElTableroTest`: el vencimiento se ancla
  * al día 1 del mes en curso, porque el checklist solo enumera el período de hoy.
  */
 @RunWith(RobolectricTestRunner::class)
-// Alta a propósito, como `SuscripcionesActivasEnMovimientosTest`: las suscripciones van al final
+// Alta a propósito, como `SuscripcionesActivasEnElTableroTest`: las suscripciones van al final
 // del tablero y lo que se prueba es la carga, no el scroll.
 @Config(qualifiers = "w411dp-h1200dp-xhdpi")
 class TableroDeRecurrentesSoloTest {

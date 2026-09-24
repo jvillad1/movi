@@ -1,4 +1,4 @@
-package com.jvillada.movi.ui.transactions
+package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +27,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Before
@@ -51,7 +52,7 @@ import kotlin.test.assertEquals
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h731dp-xhdpi")
-class CuotaPagadaEnMovimientosTest {
+class CuotaPagadaEnElTableroTest {
 
     @get:Rule val composeRule = createComposeRule()
 
@@ -127,7 +128,7 @@ class CuotaPagadaEnMovimientosTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    TransactionsScreen(onNavigate = {}, chipInicial = CHIP_RECURRENTES)
+                    TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {})
                 }
             }
         }
@@ -150,7 +151,7 @@ class CuotaPagadaEnMovimientosTest {
         montar()
         esperarTexto("YA OCURRIERON")
 
-        // `onAllNodes` y no `onNode`: desde que el chip encabeza con el checklist del período, una
+        // `onAllNodes` y no `onNode`: desde que el tablero encabeza con el checklist del período, una
         // cuota pagada dentro del período en curso se nombra dos veces —tildada arriba y con su
         // explicación acá—. Cuántas veces salga el nombre depende del calendario del día en que
         // corra la prueba; lo que esta prueba afirma es que la fila de «Ya ocurrieron» está.

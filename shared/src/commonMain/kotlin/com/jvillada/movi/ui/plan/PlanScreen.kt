@@ -129,7 +129,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             // así que ponerlo o sacarlo no mueve nada.
             MinScreenHeader(
                 title = "Plan",
-                leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+                leading = HeaderLeading.Avatar(onNavigate),
                 action = {
                     // Va en la cabecera, cuyo alto fija el avatar: aparecer y desaparecer no mueve
                     // nada de lo de abajo. Mismo texto y estilo que el Inicio.

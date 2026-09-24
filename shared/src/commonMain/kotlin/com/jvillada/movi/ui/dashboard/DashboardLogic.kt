@@ -37,7 +37,8 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.components.isDebtAccount
@@ -526,8 +527,9 @@ fun dashboardAlerts(
 ): List<DashboardAlert> = buildList {
     when (overBudget.size) {
         0 -> Unit
-        1 -> add(DashboardAlert("Presupuesto de ${overBudget[0]} superado", Screen.Budgets))
-        else -> add(DashboardAlert("${overBudget.size} presupuestos superados", Screen.Budgets))
+        // Ola C: Presupuestos es un segmento de Plan — la alerta abre Plan con ese segmento puesto.
+        1 -> add(DashboardAlert("Presupuesto de ${overBudget[0]} superado", Screen.Plan(SEGMENTO_PRESUPUESTOS)))
+        else -> add(DashboardAlert("${overBudget.size} presupuestos superados", Screen.Plan(SEGMENTO_PRESUPUESTOS)))
     }
     if (cardCandidates > 0) {
         add(DashboardAlert(plural(cardCandidates, "pago de tarjeta", "pagos de tarjeta") + " por confirmar", Screen.Transactions()))
@@ -746,13 +748,12 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
         // F20: las cuotas de crédito y los pagos de tarjeta son sintéticos (UpcomingPayment
         // generado por el server, no una regla que viva en Recurrentes) — se resuelven en
         // Créditos, no en Recurrentes.
-        // PR 3 del rediseño de Recurrentes: una regla se resuelve en Movimientos con el chip
-        // «Recurrentes» puesto — ahí está su «¿ya ocurrió?». Con el chip y no sin él: la campana
-        // habla de UN pago, y caer en la lista completa de movimientos no responde nada.
+        // Ola C: una regla se resuelve en Plan · Pagos del mes — ahí está su «¿ya ocurrió?». La
+        // campana habla de UN pago, y caer en la lista completa de movimientos no responde nada.
         val target = if (p.rule.id.startsWith(CREDIT_RULE_PREFIX) || p.rule.id.startsWith(CARD_RULE_PREFIX)) {
             Screen.Credits
         } else {
-            Screen.Transactions(CHIP_RECURRENTES)
+            Screen.Plan(SEGMENTO_PAGOS)
         }
         add(NotificationRow("${p.rule.name} · ${dueLabel(p.daysUntil)}", target))
     }

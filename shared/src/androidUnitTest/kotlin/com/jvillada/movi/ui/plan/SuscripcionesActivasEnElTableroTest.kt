@@ -1,4 +1,4 @@
-package com.jvillada.movi.ui.transactions
+package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +32,7 @@ import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -44,8 +45,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * PR 5 del rediseño de Recurrentes (2026-09): [TransactionsScreen] montada de verdad, con el chip
- * «Recurrentes» activo, para lo que una función pura no alcanza a probar — que las suscripciones
+ * PR 5 del rediseño de Recurrentes (2026-09): el tablero de Recurrentes montado de verdad, para lo
+ * que una función pura no alcanza a probar — que las suscripciones
  * ACTIVAS se pinten (entre el PR 2 y el PR 4 no tenían ninguna superficie, aunque seguían sumando
  * en «Flujo libre») y que «Quitar» de verdad escriba, y escriba **lo que corresponde según de
  * quién sea la suscripción**: borrar la que escribió el dueño, marcar DISMISSED la que encontró
@@ -54,16 +55,18 @@ import org.robolectric.annotation.Config
  * Esa última distinción es la parte sutil y la que más vale fijar: las dos ramas se ven idénticas
  * en pantalla (la fila desaparece) y solo se distinguen por a qué endpoint le pegaron.
  *
- * Mismo patrón de montaje que [ResumenRecurrentesEnMovimientosTest].
+ * Mismo patrón de montaje que [ResumenRecurrentesEnElTableroTest]. *
+ * Ola C: el tablero salió del chip «Recurrentes» de Movimientos a Plan · Pagos del mes; esta prueba
+ * lo monta solo ([TableroDeRecurrentes]) y afirma lo mismo que afirmaba adentro de Movimientos.
  */
 @RunWith(RobolectricTestRunner::class)
 // Más alta que los 731dp del resto de las pruebas de esta pantalla, a propósito: la sección va al
-// final del chip —debajo del «Flujo libre», ver `SeccionSuscripcionesActivas`— y en 731dp la última
+// final del tablero —debajo del «Flujo libre», ver `SeccionSuscripcionesActivas`— y en 731dp la última
 // fila queda bajo el pliegue. Ahí sigue componiéndose (el card entero es UN item del LazyColumn) así
 // que `onAllNodesWithText` la ve, pero un toque en sus coordenadas no llega a nada. Una ventana alta
 // es más honesta que scrollear a ciegas: lo que se prueba es la acción, no el scroll.
 @Config(qualifiers = "w411dp-h1200dp-xhdpi")
-class SuscripcionesActivasEnMovimientosTest {
+class SuscripcionesActivasEnElTableroTest {
 
     @get:Rule val composeRule = createComposeRule()
 
@@ -156,10 +159,8 @@ class SuscripcionesActivasEnMovimientosTest {
         RecurringOfferGate.clear()
         Repositories.sustitutoDePrueba = Repo()
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
-        esperarTexto("Sin movimientos aún")
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
         esperarTexto("SUSCRIPCIONES ACTIVAS")
         // La sección **arranca plegada** desde que el dueño pidió que no ocupara la pantalla
         // entera («que suscripciones sea una opción de filtro o de menú colapsable dentro de

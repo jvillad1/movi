@@ -110,7 +110,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
             // lleva avatar y el MISMO rótulo que el menú («Cuentas», ya no «Mis cuentas»).
             MinScreenHeader(
                 title = "Cuentas",
-                leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+                leading = HeaderLeading.Avatar(onNavigate),
                 action = { NewItemButton(label = "Nueva cuenta", onClick = { showCreateSheet = true }) },
             )
 

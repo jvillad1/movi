@@ -18,7 +18,7 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.sdui.ChecklistDelPeriodoSection
-import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -123,14 +123,14 @@ class ChecklistEnInicioTest {
         composeRule.onNodeWithText("Falta $192.900", useUnmergedTree = true).assertIsDisplayed()
     }
 
-    /** «Ver todos» aterriza en el checklist: Movimientos con el chip «Recurrentes» puesto. */
+    /** «Ver todos» aterriza en el checklist completo: Plan · Pagos del mes (ola C). */
     @Test
     fun `Ver todos lleva al checklist completo`() {
         montar(conTresPagosYUnoMarcado())
 
         composeRule.onNodeWithText("Ver todos", useUnmergedTree = true).performClick()
 
-        assertEquals(Screen.Transactions(CHIP_RECURRENTES), navegoA)
+        assertEquals(Screen.Plan(SEGMENTO_PAGOS), navegoA)
     }
 
     /** Con todo marcado la tarjeta no miente al revés: lo dice, y no manda a ninguna parte. */

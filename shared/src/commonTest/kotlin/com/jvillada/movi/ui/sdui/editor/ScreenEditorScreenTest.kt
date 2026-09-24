@@ -27,4 +27,20 @@ class ScreenEditorScreenTest {
     fun el_resto_de_los_targets_se_sigue_ofreciendo() {
         assertEquals(ScreenTaxonomy.NAVIGATE_TARGETS.filterNot { it == "goals" }, NAVEGABLES_DESDE_EL_EDITOR)
     }
+
+    /**
+     * Ola C: el selector nombra el LUGAR al que se llega hoy. «Presupuestos», «Cuentas» y «Más»
+     * dejaron de ser pestañas: son Plan, Patrimonio y Ajustes.
+     */
+    @Test
+    fun los_rotulos_nombran_los_lugares_de_la_ola_C() {
+        assertEquals("Hoy", NAVIGATE_TARGET_LABELS["dashboard"])
+        assertEquals("Ajustes", NAVIGATE_TARGET_LABELS["mas"])
+        assertEquals("Patrimonio", NAVIGATE_TARGET_LABELS["accounts"])
+        assertTrue(NAVIGATE_TARGET_LABELS.getValue("budgets").startsWith("Plan"))
+        assertTrue(NAVIGATE_TARGET_LABELS.getValue("recurrentes").startsWith("Plan"))
+        assertTrue(NAVIGATE_TARGET_LABELS.getValue("subscriptions").startsWith("Plan"))
+        // Y todo target que el Editor ofrece tiene rótulo propio.
+        NAVEGABLES_DESDE_EL_EDITOR.forEach { assertTrue(it in NAVIGATE_TARGET_LABELS, it) }
+    }
 }

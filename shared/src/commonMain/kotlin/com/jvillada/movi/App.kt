@@ -43,6 +43,7 @@ import com.jvillada.movi.ui.hayAdondeVolver
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.navTabFor
+import com.jvillada.movi.ui.muestraLaNavegacion
 import com.jvillada.movi.ui.opensAsOverlay
 import com.jvillada.movi.ui.screenForTab
 import com.jvillada.movi.ui.auth.LoginScreen
@@ -252,8 +253,11 @@ fun App() {
             ) {
                 val widthClass = if (maxWidth < 840.dp) WindowWidthClass.Compact else WindowWidthClass.Expanded
                 val activeTab = navTabFor(currentScreen)
-                val showRail = widthClass == WindowWidthClass.Expanded && activeTab != null
-                val showBottomNav = widthClass == WindowWidthClass.Compact && activeTab != null
+                // Ola C: Ajustes y lo que cuelga de ahí no marcan pestaña pero sí llevan la
+                // barra — ver [muestraLaNavegacion].
+                val conNavegacion = muestraLaNavegacion(currentScreen)
+                val showRail = widthClass == WindowWidthClass.Expanded && conNavegacion
+                val showBottomNav = widthClass == WindowWidthClass.Compact && conNavegacion
                 val tecladoALaVista = elTecladoEstaALaVista()
                 val onTabSelected: (NavTab) -> Unit = { tab -> navigate(screenForTab(tab)) }
 

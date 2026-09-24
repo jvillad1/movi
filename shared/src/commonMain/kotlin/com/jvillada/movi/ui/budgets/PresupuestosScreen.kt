@@ -38,6 +38,7 @@ import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
@@ -521,13 +522,13 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // F60: encabezado único — avatar en ancho (Presupuestos está en el rail), flecha a
-            // Más en el teléfono (se llega por Más). Con presupuestos ya creados, el alta
+            // F60: encabezado único. Ola C: Presupuestos es un segmento de Plan, así que esta
+            // pantalla suelta lleva flecha y vuelve a Plan · Presupuestos. Con presupuestos ya creados, el alta
             // compacta a la derecha (F18), desde el primer cuadro (ver
             // [EstadoDePresupuestos.nuevoEnElEncabezado]).
             MinScreenHeader(
                 title = "Presupuestos",
-                leading = leadingFor(Screen.Budgets, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
+                leading = leadingFor(Screen.Budgets, onNavigate, fallback = Screen.Plan(SEGMENTO_PRESUPUESTOS)),
                 action = if (estado.nuevoEnElEncabezado) {
                     // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la
                     // pantalla quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En esta

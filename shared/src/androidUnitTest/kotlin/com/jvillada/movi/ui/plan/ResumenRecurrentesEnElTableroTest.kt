@@ -1,4 +1,4 @@
-package com.jvillada.movi.ui.transactions
+package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +23,7 @@ import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Before
@@ -33,16 +34,18 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * PR 2 del rediseño de Recurrentes (2026-09): [TransactionsScreen] montada de verdad, con el chip
- * «Recurrentes» activo, para probar lo que una función pura no puede — que el card de «Flujo
- * libre» y la sección de candidatas «por confirmar» solo aparezcan con ESE chip (ver
- * [mostrarResumenDeRecurrentes]) y que «Confirmar» de verdad mueva la candidata, no solo cambie
- * un texto en pantalla. Mismo patrón de montaje que [MovimientosPlegablesTest] y
- * [ChipRecurrentesTest] (la parte pura de este mismo cambio).
+ * PR 2 del rediseño de Recurrentes (2026-09): el tablero de Recurrentes montado de verdad, para
+ * probar lo que una función pura no puede — que el card de «Flujo libre» y la sección de
+ * candidatas «por confirmar» se pinten, y que «Confirmar» de verdad mueva la candidata, no solo
+ * cambie un texto en pantalla. *
+ * Ola C: el tablero salió del chip «Recurrentes» de Movimientos a Plan · Pagos del mes; esta prueba
+ * lo monta solo ([TableroDeRecurrentes]) y afirma lo mismo que afirmaba adentro de Movimientos.
+ *
+ * Que Movimientos ya NO los pinte lo prueba `MovimientosSinTableroTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h731dp-xhdpi")
-class ResumenRecurrentesEnMovimientosTest {
+class ResumenRecurrentesEnElTableroTest {
 
     @get:Rule val composeRule = createComposeRule()
 
@@ -96,11 +99,11 @@ class ResumenRecurrentesEnMovimientosTest {
         RecurringOfferGate.clear()
         Repositories.sustitutoDePrueba = Repo()
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
-        // Chip «Todo» de arranque, sin movimientos: es el primer texto garantizado una vez que
-        // las cargas iniciales (todas async) terminaron.
-        esperarTexto("Sin movimientos aún")
+        // El card de «Flujo libre» espera a sus dos lecturas: es la señal de que las cargas
+        // iniciales (todas async) terminaron.
+        esperarTexto("Flujo libre")
     }
 
     @After
@@ -123,12 +126,7 @@ class ResumenRecurrentesEnMovimientosTest {
     }
 
     @Test
-    fun `el flujo libre y las candidatas solo aparecen con el chip Recurrentes activo`() {
-        composeRule.onNodeWithText("Flujo libre", useUnmergedTree = true).assertDoesNotExist()
-
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
-        esperarTexto("Flujo libre")
-
+    fun `el flujo libre y las candidatas aparecen en el tablero`() {
         composeRule.onNodeWithText("Flujo libre", useUnmergedTree = true).assertIsDisplayed()
         esperarTexto("Disney+")
         composeRule.onNodeWithText("Disney+", useUnmergedTree = true).assertIsDisplayed()
@@ -144,7 +142,6 @@ class ResumenRecurrentesEnMovimientosTest {
      */
     @Test
     fun `buscar cobros corre el detector y muestra lo que encuentra`() {
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
         esperarTexto("Flujo libre")
         composeRule.onNodeWithText("Spotify", useUnmergedTree = true).assertDoesNotExist()
 
@@ -156,7 +153,6 @@ class ResumenRecurrentesEnMovimientosTest {
 
     @Test
     fun `confirmar una candidata la saca de detectadas por confirmar`() {
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
         esperarTexto("Disney+")
 
         composeRule.onNodeWithText("Confirmar", useUnmergedTree = true).performClick()

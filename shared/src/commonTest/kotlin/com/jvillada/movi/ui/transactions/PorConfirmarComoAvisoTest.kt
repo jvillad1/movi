@@ -46,7 +46,8 @@ class PorConfirmarComoAvisoTest {
         // «Recurrentes» del 5 al 3 haría que un 3 viejo signifique otra cosa, en silencio.
         assertEquals(3, CHIP_POR_CONFIRMAR)
         assertEquals(5, CHIP_RECURRENTES)
-        assertEquals(listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_RECURRENTES), CHIPS_VISIBLES)
+        // Ola C: «Recurrentes» también salió de la fila (se mudó a Plan) y tampoco se renumeró.
+        assertEquals(listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS), CHIPS_VISIBLES)
     }
 
     @Test
@@ -81,7 +82,7 @@ class PorConfirmarComoAvisoTest {
         // decir la verdad esté donde esté parado el dueño.
         assertTrue(avisoDePorConfirmar(CHIP_TODO, 3))
         assertTrue(avisoDePorConfirmar(CHIP_GASTOS, 3))
-        assertTrue(avisoDePorConfirmar(CHIP_RECURRENTES, 3))
+        assertTrue(avisoDePorConfirmar(CHIP_INGRESOS, 3))
         // Adentro sería un botón que lleva a donde uno ya está.
         assertFalse(avisoDePorConfirmar(CHIP_POR_CONFIRMAR, 3))
     }

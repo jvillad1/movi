@@ -184,8 +184,8 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
         Column(
             modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)
         ) {
-            // F60: encabezado único — avatar en ancho (Créditos está en el rail), flecha a Más
-            // en el teléfono (se llega por Más; F22: reserva si no hay historial). Con deudas ya
+            // F60: encabezado único. Ola C: Créditos es el detalle de las deudas de Patrimonio,
+            // así que lleva flecha y vuelve ahí (F22: reserva si no hay historial). Con deudas ya
             // creadas, el alta compacta a la derecha (F18).
             //
             // Ola B: el alta compacta está **desde el primer cuadro**, también mientras carga. Antes
@@ -194,7 +194,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             // duplicar) y el vacío de verdad (el botón ancho de abajo).
             MinScreenHeader(
                 title = "Créditos",
-                leading = leadingFor(Screen.Credits, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
+                leading = leadingFor(Screen.Credits, onNavigate, fallback = Screen.Accounts),
                 action = if (!isEmpty && !noSeLeyo) {
                     { NewItemButton(label = "Nuevo crédito", onClick = { showTypeChooser = true }) }
                 } else null,

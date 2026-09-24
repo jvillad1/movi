@@ -85,16 +85,17 @@ import kotlinx.datetime.Clock
  *
  * Qué vence, qué ya ocurrió, qué falta confirmar y cuánto suma lo que se repite. Nació como el chip
  * «Recurrentes» de Movimientos (el rediseño de 2026-09 disolvió ahí la pantalla vieja) y se sacó a
- * este archivo en la ola C para que la pestaña «Plan» lo pueda mostrar como «Pagos del mes» sin
- * copiar una línea: la misma carga, las mismas reglas de «no afirmar vacío», las mismas acciones.
+ * este archivo en la ola C para que la pestaña «Plan» lo muestre como «Pagos del mes»: la misma
+ * carga, las mismas reglas de «no afirmar vacío», las mismas acciones. Desde la Task 3 de esa ola
+ * Movimientos ya no lo pinta; solo lee sus [MarcasDeRecurrentes] para el ícono de cada fila.
  *
- * Se arma con tres piezas porque tiene que poder vivir en dos lugares con formas distintas:
+ * Se arma con tres piezas para poder montarse dentro de una lista ajena (Plan) o solo:
  *
  * - [EstadoDelTableroDeRecurrentes] (con [rememberEstadoDelTableroDeRecurrentes]): lo que el tablero
  *   lee del server y lo que el dueño le hace. Carga lo suyo.
- * - [tableroDeRecurrentes]: sus renglones, como extensión de `LazyListScope`. Movimientos lo pinta
- *   adentro de SU `LazyColumn` —con la búsqueda escrita, el tablero y la lista de días comparten un
- *   solo scroll, y eso no puede cambiar—.
+ * - [tableroDeRecurrentes]: sus renglones, como extensión de `LazyListScope`. Plan lo pinta adentro
+ *   de SU `LazyColumn`, debajo de la tarjeta del disponible y del selector de segmento, en un solo
+ *   scroll.
  * - [HojasDelTableroDeRecurrentes]: las hojas que abren sus filas (editar un recurrente o una
  *   suscripción, confirmar «Quitar»). Van afuera de la lista, como toda hoja.
  *
@@ -106,10 +107,10 @@ import kotlinx.datetime.Clock
  * **Lo que el tablero lee y lo que el dueño le hace.** Estaba suelto adentro de `TransactionsScreen`
  * como dos docenas de `remember`; se juntó acá sin cambiar ni una clave ni un orden de lectura.
  *
- * Los errores no viven acá: se escriben en el [MutableState] que pasa quien lo monta. Movimientos le
- * pasa el suyo porque así fue siempre —un solo aviso con un solo «Reintentar» para toda la
- * pantalla— y porque dos lecturas se miran entre sí (`if (error == null)`, y «Buscar cobros» limpia
- * el aviso antes de empezar). Con dos estados separados esas dos decisiones cambiarían en silencio.
+ * Los errores no viven acá: se escriben en el [MutableState] que pasa quien lo monta (ver
+ * [TableroMontadoSolo]) — un solo aviso con un solo «Reintentar», porque dos lecturas se miran entre
+ * sí (`if (error == null)`, y «Buscar cobros» limpia el aviso antes de empezar). Con dos estados
+ * separados esas dos decisiones cambiarían en silencio.
  */
 @Stable
 class EstadoDelTableroDeRecurrentes internal constructor(
@@ -120,14 +121,9 @@ class EstadoDelTableroDeRecurrentes internal constructor(
         get() = errorDeLaPantalla.value
         set(valor) { errorDeLaPantalla.value = valor }
 
-    // PR 1 del rediseño de Recurrentes: lo que hace falta para el chip «Recurrentes» y la marca
-    // en cada fila (ver [nombreRecurrenteDe]). Sale del MISMO cache que ya usa la barra de
-    // «¿esto se repite?» de después de guardar — ver [RecurringOfferGate.listasParaMovimientos]:
-    // si esta pantalla es la primera en pedirlas esta sesión, las carga UNA vez; si ya las cargó
-    // otra pantalla (o esta misma en una visita anterior), no hay ningún viaje de red de más.
-    //
-    // Ola C: viven acá y no en Movimientos porque las acciones del tablero son las que las
-    // invalidan (ver [recargas]), pero Movimientos las sigue leyendo para su filtro y sus marcas.
+    // PR 1 del rediseño de Recurrentes: las reglas y los nombres de las suscripciones activas (ver
+    // [MarcasDeRecurrentes]). El tablero las usa para decidir qué candidata ya tiene regla; se
+    // vuelven a leer cuando una acción del tablero las invalida (ver [recargas]).
     var reglasRecurrentes by mutableStateOf<List<RecurringRule>>(emptyList())
         internal set
     var nombresDeSuscripcionesActivas by mutableStateOf<List<String>>(emptyList())
@@ -425,9 +421,9 @@ class EstadoDelTableroDeRecurrentes internal constructor(
      * sobre algo que se va a borrar de verdad.
      *
      * Después de escribir, lo mismo que hace `confirmarCandidata`: el gate se olvida de lo
-     * cacheado y `recargas` vuelve a traer las listas. Sin eso, la marca de cada fila de
-     * Movimientos, el filtro del chip y el «Flujo libre» se quedan mostrando una suscripción que
-     * ya no está.
+     * cacheado y `recargas` vuelve a traer las listas. Sin eso, el «Flujo libre» se queda
+     * mostrando una suscripción que ya no está (y la marca de las filas de Movimientos, que lee
+     * del mismo cache, también).
      */
     internal fun quitarSuscripcion(sub: Subscription) {
         if (sub.id in suscripcionesEnVuelo) return
@@ -449,23 +445,60 @@ class EstadoDelTableroDeRecurrentes internal constructor(
 }
 
 /**
+ * **Lo que hace falta para reconocer un movimiento como recurrente**: las reglas del dueño y los
+ * nombres de sus suscripciones que ya suman (ver [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe]).
+ *
+ * Ola C: el tablero salió de Movimientos, pero Movimientos sigue pintando el ícono de repetición en
+ * cada fila que se reconoce — y para eso necesita estas dos listas y nada más del tablero. Por eso
+ * la lectura vive aparte ([rememberMarcasDeRecurrentes]) y el tablero usa la misma
+ * ([leerMarcasDeRecurrentes]): una sola forma de armarlas, dos lugares que las leen.
+ */
+@Immutable
+data class MarcasDeRecurrentes(
+    val reglas: List<RecurringRule> = emptyList(),
+    val nombresDeSuscripcionesActivas: List<String> = emptyList(),
+)
+
+/**
+ * Lee las [MarcasDeRecurrentes] del MISMO cache que ya usa la barra de «¿esto se repite?» de después
+ * de guardar — ver [RecurringOfferGate.listasParaMovimientos]: si esta pantalla es la primera en
+ * pedirlas esta sesión, las carga UNA vez; si ya las cargó otra, no hay ningún viaje de red de más.
+ * Una lista que no se pudo leer vuelve vacía: sin marcas, no sin pantalla.
+ */
+internal suspend fun leerMarcasDeRecurrentes(): MarcasDeRecurrentes {
+    val (reglas, cobros) = RecurringOfferGate.listasParaMovimientos()
+    return MarcasDeRecurrentes(reglas, nombresDeSuscripcionesQueYaSuman(cobros))
+}
+
+/**
+ * Las [MarcasDeRecurrentes] atadas a la composición, para quien solo quiere **marcar filas** y no
+ * pintar el tablero (Movimientos). Se vuelven a leer con [recarga] (el «Reintentar», anular o editar
+ * un movimiento) y con [LocalRefreshTick] (algo guardado desde la hoja de Agregar).
+ */
+@Composable
+fun rememberMarcasDeRecurrentes(recarga: Int): MarcasDeRecurrentes {
+    val refreshTick = LocalRefreshTick.current
+    var marcas by remember { mutableStateOf(MarcasDeRecurrentes()) }
+    LaunchedEffect(recarga, refreshTick) { marcas = leerMarcasDeRecurrentes() }
+    return marcas
+}
+
+/**
  * El estado del tablero, atado a la composición, **con sus lecturas corriendo**.
  *
  * @param activo si el tablero se está mostrando. Todo lo que es SOLO del tablero —suscripciones,
  *   vencimientos, ocurrencias, planes de crédito, el sondeo del permiso de push— se pide únicamente
- *   con esto en `true`: en Movimientos era `activeFilter == CHIP_RECURRENTES`, y en «Todo» o
- *   «Gastos» ninguna de esas lecturas tiene a quién servir. Las reglas y los nombres de las
- *   suscripciones activas se leen siempre, porque Movimientos las usa para marcar filas en todos
- *   los chips.
- * @param recarga la clave de «volver a leer todo» de quien lo monta (el `refreshKey` de
- *   Movimientos: su «Reintentar», anular o editar un movimiento). Además de esta, el tablero
+ *   con esto en `true`: en Plan es el segmento «Pagos del mes», y con «Presupuestos» a la vista
+ *   ninguna de esas lecturas tiene a quién servir. Las reglas y los nombres de las suscripciones
+ *   activas se leen siempre (ver [MarcasDeRecurrentes]).
+ * @param recarga la clave de «volver a leer todo» de quien lo monta (su «Reintentar»). Además de esta, el tablero
  *   escucha [LocalRefreshTick] y su propia [EstadoDelTableroDeRecurrentes.recargas].
  * @param error dónde escribir lo que falló. Ver [EstadoDelTableroDeRecurrentes].
  * @param vencimientosSiempre lee los vencimientos y las ocurrencias aunque el tablero no se vea.
  *   Ola C: en Plan la tarjeta del disponible saca sus fijos de esas MISMAS dos listas (ver
  *   `rememberDisponibleDelPlan`), con cualquiera de los dos segmentos a la vista; leerlas acá una
  *   sola vez evita pedirlas dos veces y que la tarjeta y el checklist digan cosas distintas del
- *   mismo período. Movimientos lo deja en `false`: ahí nadie más las usa.
+ *   mismo período. [TableroDeRecurrentes] lo deja en `false`: ahí nadie más las usa.
  */
 @Composable
 fun rememberEstadoDelTableroDeRecurrentes(
@@ -483,9 +516,9 @@ fun rememberEstadoDelTableroDeRecurrentes(
     // [nombreRecurrenteDe]). Sin esta clave, el dueño confirmaba «Netflix» y sus movimientos
     // seguían sin reconocerse hasta salir de la pantalla y volver a entrar.
     LaunchedEffect(recarga, refreshTick, estado.recargas) {
-        val (reglas, cobros) = RecurringOfferGate.listasParaMovimientos()
-        estado.reglasRecurrentes = reglas
-        estado.nombresDeSuscripcionesActivas = nombresDeSuscripcionesQueYaSuman(cobros)
+        val marcas = leerMarcasDeRecurrentes()
+        estado.reglasRecurrentes = marcas.reglas
+        estado.nombresDeSuscripcionesActivas = marcas.nombresDeSuscripcionesActivas
     }
 
     // `recarga` también: es la clave del «Reintentar» del snackbar y de anular/editar un
@@ -549,8 +582,8 @@ fun rememberEstadoDelTableroDeRecurrentes(
 
     // El flujo de permisos del navegador es async (moviPush.js): tras pedirlo se refresca unas
     // veces para que el aviso desaparezca sin reabrir la app. Solo donde el push existe Y con el
-    // tablero a la vista — en Android/iOS `status()` es una constante, y en el resto de
-    // Movimientos este bucle no tendría a quién servir.
+    // tablero a la vista — en Android/iOS `status()` es una constante, y con otro segmento de
+    // Plan a la vista este bucle no tendría a quién servir.
     if (PushOptIn.supported) {
         LaunchedEffect(estado.pushRefreshTick, activo) {
             if (!activo) return@LaunchedEffect
@@ -567,10 +600,9 @@ fun rememberEstadoDelTableroDeRecurrentes(
 /**
  * **Los renglones del tablero**, para pintarlos dentro de una `LazyColumn` ajena.
  *
- * Es una extensión de `LazyListScope` y no un `@Composable` con su propio scroll porque en
- * Movimientos, con una búsqueda escrita, el tablero y la lista de días van en el MISMO scroll (ver
- * `mostrarLaListaDeDias`): dos listas anidadas no se pueden, y dos scrolls apilados partirían la
- * pantalla en dos.
+ * Es una extensión de `LazyListScope` y no un `@Composable` con su propio scroll porque en Plan
+ * va en el MISMO scroll que la tarjeta del disponible de arriba: dos listas anidadas no se pueden,
+ * y dos scrolls apilados partirían la pantalla en dos.
  *
  * ── El orden: primero lo que pide algo, después lo que solo informa ──────
  *
@@ -586,8 +618,7 @@ fun rememberEstadoDelTableroDeRecurrentes(
  *
  * @param periodoVisible el período que se está mirando; el checklist solo se pinta si es
  *   [periodoDeHoy] (ver adentro).
- * @param accountNames los nombres de las cuentas, para decir con qué se paga cada cobro. En
- *   Movimientos es el mismo mapa que usan sus filas, no una lectura nueva.
+ * @param accountNames los nombres de las cuentas, para decir con qué se paga cada cobro.
  */
 fun LazyListScope.tableroDeRecurrentes(
     estado: EstadoDelTableroDeRecurrentes,
@@ -625,7 +656,7 @@ fun LazyListScope.tableroDeRecurrentes(
     // cosa (qué movimiento fue cada pago, qué quedó sin confirmar, de dónde salió cada
     // sello). Ver [SeccionChecklistDelPeriodo].
     //
-    // **Solo para el período en curso.** Movimientos deja navegar a meses anteriores, pero
+    // **Solo para el período en curso.** Quien lo monta podría mirar meses anteriores, pero
     // `/api/payments/upcoming` y `/api/payments/occurrences` contestan sobre HOY: pintar sus filas
     // bajo el rótulo de agosto sería afirmar sobre un mes cerrado con los datos de otro. En un
     // período que no es el de hoy, el checklist no se pinta.
@@ -893,10 +924,9 @@ fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes) {
 }
 
 /**
- * **Lo que el tablero necesita cuando no lo monta Movimientos**: su propio aviso de error con
- * «Reintentar», su propia recarga y los nombres de las cuentas. Movimientos le da los suyos (un
- * solo aviso para toda la pantalla, las cuentas que ya lee para sus filas); montado solo —en
- * [TableroDeRecurrentes] o en la pestaña Plan— los pone esto, una vez, para que ninguno de los dos
+ * **Lo que el tablero necesita para montarse**: su propio aviso de error con «Reintentar», su
+ * propia recarga y los nombres de las cuentas. Hasta la ola C se los daba Movimientos; ahora los
+ * pone esto, una vez —en [TableroDeRecurrentes] y en la pestaña Plan—, para que ninguno de los dos
  * lo copie.
  *
  * El aviso va en [aviso]: quien lo monta pone un `SnackbarHost` con ese estado donde le quede bien.
@@ -954,7 +984,7 @@ const val TAG_ESQUELETO_DEL_TABLERO: String = "esqueleto-del-tablero"
  * una tarjeta vacía ya diría que hay (o que no hay) pagos.
  *
  * Mismos rellenos que las secciones reales (16 dp a los lados y abajo) y la fila de siempre
- * ([FilaDeListaEsqueleto]). Lo pinta Plan; Movimientos sigue con su barra de carga.
+ * ([FilaDeListaEsqueleto]). Lo pinta Plan.
  */
 fun LazyListScope.tableroDeRecurrentesEsqueleto() {
     listOf(4, 2).forEach { filas ->
@@ -982,10 +1012,9 @@ fun LazyListScope.tableroDeRecurrentesEsqueleto() {
  * su propia lectura de cuentas. Siempre sobre el período en curso — el único del que
  * `/api/payments/upcoming` y `/api/payments/occurrences` saben contestar.
  *
- * Carga lo mismo que carga dentro de Movimientos, salvo los movimientos: el tablero no los
- * necesita (lo que cada pago tiene detrás llega adentro de las ocurrencias). Las cuentas sí, para
- * decir con qué se paga cada cobro; si esa lectura falla, las filas simplemente no nombran la
- * cuenta, igual que en Movimientos.
+ * No lee los movimientos: el tablero no los necesita (lo que cada pago tiene detrás llega adentro de
+ * las ocurrencias). Las cuentas sí, para decir con qué se paga cada cobro; si esa lectura falla, las
+ * filas simplemente no nombran la cuenta.
  *
  * @param ajustesDelPeriodo el corte del dueño, para que el checklist enumere SU mes y no el del
  *   calendario. Lo lee quien lo monta (del perfil), porque también lo necesita para su encabezado.
@@ -1047,9 +1076,8 @@ fun resumenPlegadoDeSuscripciones(cuantas: Int, totalMensual: Long): String {
 
 /**
  * PR 2 del rediseño de Recurrentes (2026-09): el card de «Flujo libre», mudado de la pantalla
- * «Recurrentes» (ya borrada) a Movimientos —solo visible con el chip «Recurrentes» activo, ver
- * [com.jvillada.movi.ui.transactions.mostrarResumenDeRecurrentes]— y de ahí, con el resto del
- * tablero, a este archivo. Las cifras salen de [resumenRecurrentes], la misma función
+ * «Recurrentes» (ya borrada) a Movimientos —solo visible con el chip «Recurrentes» activo— y de
+ * ahí, con el resto del tablero, a este archivo y a Plan. Las cifras salen de [resumenRecurrentes], la misma función
  * pura que ya usaba esa pantalla y el acceso «Recurrentes» del Inicio: mudar DÓNDE se muestra
  * no puede hacer que el número discrepe de los demás lugares que cuentan lo mismo.
  *

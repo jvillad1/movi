@@ -28,7 +28,8 @@ import com.jvillada.movi.ui.dashboard.ANCHO_DE_UNA_COLUMNA
 import com.jvillada.movi.ui.dashboard.columnasDelInicio
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.components.CardRow
 import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.Hairline
@@ -176,7 +177,8 @@ internal fun screenForTarget(target: String): Screen? = when (target) {
     "dashboard" -> Screen.Dashboard
     "transactions" -> Screen.Transactions()
     "quickadd" -> Screen.QuickAdd()
-    "budgets" -> Screen.Budgets
+    // Ola C: Presupuestos es un segmento de Plan.
+    "budgets" -> Screen.Plan(SEGMENTO_PRESUPUESTOS)
     "mas" -> Screen.Mas
     "accounts" -> Screen.Accounts
     "credits" -> Screen.Credits
@@ -194,13 +196,12 @@ internal fun screenForTarget(target: String): Screen? = when (target) {
     // sobrevive (el acceso «Suscripciones» del Inicio ya está guardado en la DB de cada
     // instalación) y se manda a donde ahora viven las suscripciones.
     //
-    // PR 3 del rediseño de Recurrentes (2026-09): ese «donde» ya no es una pantalla aparte sino
-    // Movimientos con el chip «Recurrentes» puesto. Los dos targets **siguen existiendo** —el
-    // editor de pantallas los ofrece y hay definiciones guardadas que los usan— y por eso se
-    // remapean en vez de borrarse: un target que deja de resolver es un acceso del Inicio que no
-    // hace nada al tocarlo.
-    "subscriptions" -> Screen.Transactions(CHIP_RECURRENTES)
-    "recurrentes" -> Screen.Transactions(CHIP_RECURRENTES)
+    // Ola C: ese «donde» es Plan · Pagos del mes (antes Movimientos con el chip «Recurrentes»).
+    // Los dos targets **siguen existiendo** —el editor de pantallas los ofrece y hay definiciones
+    // guardadas que los usan— y por eso se remapean en vez de borrarse: un target que deja de
+    // resolver es un acceso del Inicio que no hace nada al tocarlo.
+    "subscriptions" -> Screen.Plan(SEGMENTO_PAGOS)
+    "recurrentes" -> Screen.Plan(SEGMENTO_PAGOS)
     "categorias" -> Screen.Categorias
     // Ola B, tarea 7: Extractos se unió a Documentos («Importar movimientos» vive en cada fila
     // de PDF o imagen). Mismo trato que "goals": el target sobrevive y se manda a donde el papel
@@ -233,10 +234,10 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
         MinSectionHeader(
             title = section.title ?: "Próximos pagos",
             action = "Ver todos",
-            // PR 3: «todos» ahora son los de Movimientos bajo el chip «Recurrentes» — con el
-            // filtro puesto, no la lista completa: quien toca esto viene de mirar un pago que
-            // vence y tiene que aterrizar en algo que hable de eso.
-            onAction = { onNavigate(Screen.Transactions(CHIP_RECURRENTES)) },
+            // Ola C: «todos» son los de Plan · Pagos del mes — no la lista completa de
+            // movimientos: quien toca esto viene de mirar un pago que vence y tiene que aterrizar
+            // en algo que hable de eso.
+            onAction = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
         )
         MinCard(
             modifier = Modifier.fillMaxWidth(),
@@ -265,10 +266,10 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
                         }
                     },
                     isLast = i == rows.lastIndex,
-                    // Una cuota de crédito se gestiona en Créditos; una regla, en Movimientos con
-                    // el chip «Recurrentes» — que es donde ahora vive su «¿ya ocurrió?».
+                    // Una cuota de crédito se gestiona en Créditos; una regla, en Plan · Pagos del
+                    // mes — que es donde ahora vive su «¿ya ocurrió?».
                     onClick = {
-                        onNavigate(if (isCredit) Screen.Credits else Screen.Transactions(CHIP_RECURRENTES))
+                        onNavigate(if (isCredit) Screen.Credits else Screen.Plan(SEGMENTO_PAGOS))
                     },
                 )
             }

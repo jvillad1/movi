@@ -1,4 +1,4 @@
-package com.jvillada.movi.ui.transactions
+package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +30,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import kotlinx.datetime.Clock
@@ -48,8 +49,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * El checklist del período, montado de verdad dentro de [TransactionsScreen] bajo el chip
- * «Recurrentes» — que es donde aterriza el «Ver todos» del Inicio.
+ * El checklist del período, montado de verdad en el tablero de Recurrentes ([TableroDeRecurrentes])
+ * — ola C: Plan · Pagos del mes, que es donde aterriza el «Ver todos» del Hoy.
  *
  * Lo que prueba no es que un texto aparezca: es que **la casilla dejó de ser un control**, y que lo
  * que la reemplazó hace lo que dice. El dueño lo pidió así —*«no me debería dejar hacer check sin
@@ -69,7 +70,7 @@ import kotlin.test.assertTrue
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h731dp-xhdpi")
-class ChecklistDelPeriodoEnMovimientosTest {
+class ChecklistDelPeriodoEnElTableroTest {
 
     @get:Rule val composeRule = createComposeRule()
 
@@ -195,7 +196,7 @@ class ChecklistDelPeriodoEnMovimientosTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    TransactionsScreen(onNavigate = { navegoA = it }, chipInicial = CHIP_RECURRENTES)
+                    TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = { navegoA = it })
                 }
             }
         }
@@ -230,14 +231,14 @@ class ChecklistDelPeriodoEnMovimientosTest {
         ).fetchSemanticsNodes().size
 
     @Test
-    fun `el checklist del periodo encabeza el chip Recurrentes, con su fecha y su monto`() {
+    fun `el checklist del periodo encabeza el tablero, con su fecha y su monto`() {
         montar()
 
         esperarTexto("CHECKLIST DEL PERÍODO")
         composeRule.onNodeWithText("Falta por pagar", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText(subtitulo, useUnmergedTree = true).assertIsDisplayed()
         // El monto va entero, no abreviado: es la lista donde se compara lo que se debe. Hay más de
-        // un «$1.800.000» en pantalla (el chip también lo pinta en «Próximos» y en el flujo libre),
+        // un «$1.800.000» en pantalla (el tablero también lo pinta en «Próximos» y en el flujo libre),
         // así que se pide que exista, no que sea el único.
         assertEquals(
             true,
@@ -337,7 +338,7 @@ class ChecklistDelPeriodoEnMovimientosTest {
         assertEquals(1, desmarcadas)
     }
 
-    /** El chip sigue siendo el de siempre: el checklist se suma arriba, no reemplaza nada. */
+    /** El tablero sigue siendo el de siempre: el checklist se suma arriba, no reemplaza nada. */
     @Test
     fun `las secciones de siempre siguen debajo del checklist`() {
         montar()
@@ -355,19 +356,5 @@ class ChecklistDelPeriodoEnMovimientosTest {
             composeRule.onAllNodesWithText("Ya lo pagué", useUnmergedTree = true)
                 .fetchSemanticsNodes().isEmpty(),
         )
-    }
-
-    /** Tocar el chip «Todo» apaga todo esto: es el resumen de un filtro, no una caja suelta. */
-    @Test
-    fun `con otro chip el checklist no se pinta`() {
-        montar()
-        esperarTexto("CHECKLIST DEL PERÍODO")
-
-        composeRule.onNodeWithText("Todo", useUnmergedTree = true).performClick()
-
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("CHECKLIST DEL PERÍODO", useUnmergedTree = true)
-                .fetchSemanticsNodes().isEmpty()
-        }
     }
 }

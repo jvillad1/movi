@@ -6,13 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CreditCard
-import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.PieChart
-import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,32 +20,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 
-/** Un destino del rail: pestaña + rótulo + ícono. */
-data class RailDestination(val tab: NavTab, val label: String, val icon: ImageVector)
-
 /**
- * Lo que el rail muestra, en orden. Es la ÚNICA fuente: el rail la pinta y Más (F59) la usa
- * para no repetir en pantalla ancha los destinos que ya están a la izquierda. Agregar una
- * entrada acá alcanza para que aparezca en el rail y desaparezca de Más.
- */
-val railDestinations: List<RailDestination> = listOf(
-    RailDestination(NavTab.HOME, "Inicio", Icons.Rounded.Home),
-    RailDestination(NavTab.TRANSACTIONS, "Movimientos", Icons.Rounded.SwapVert),
-    RailDestination(NavTab.ACCOUNTS, "Cuentas", Icons.Rounded.AccountBalanceWallet),
-    RailDestination(NavTab.CREDITS, "Créditos", Icons.Rounded.CreditCard),
-    RailDestination(NavTab.BUDGETS, "Presupuestos", Icons.Rounded.PieChart),
-    // Rediseño de Recurrentes (2026-09): Recurrentes dejó de ser un destino propio del rail —
-    // «Flujo libre», las candidatas por confirmar y los próximos pagos viven ahora en
-    // Movimientos (chip «Recurrentes»), y editar un recurrente existente se hace desde el
-    // detalle de un movimiento. Ya no hay `NavTab.RECURRING` ni `Screen.Recurrentes`: quien
-    // quiera llevar ahí navega a `Screen.Transactions(CHIP_RECURRENTES)`.
-    RailDestination(NavTab.MORE, "Más", Icons.Rounded.GridView),
-)
-
-/**
- * Wide-window counterpart of MinBottomNav: a left rail rendered once at the
- * App root. Same active-pill language; en pantalla ancha hay lugar para mostrar
- * además Créditos y Presupuestos como entradas propias (en el teléfono viven en Más).
+ * Contraparte de [MinBottomNav] en pantalla ancha: un rail a la izquierda, pintado una vez en la
+ * raíz de App.kt. Ola C: muestra **las mismas cuatro pestañas** que la barra del teléfono
+ * ([destinosPrincipales]) y debajo «Agregar» — sin Créditos, Presupuestos ni Más, que ahora viven
+ * adentro de Patrimonio, de Plan y del avatar.
  */
 @Composable
 fun MinNavRail(
@@ -76,7 +49,7 @@ fun MinNavRail(
             modifier = Modifier.padding(start = 12.dp, bottom = 16.dp),
         )
 
-        railDestinations.forEach { dest ->
+        destinosPrincipales.forEach { dest ->
             RailItem(dest.tab, dest.label, dest.icon, active, onTabSelected)
         }
 

@@ -35,8 +35,9 @@ class EntreCuentasFueraDeLosChipsTest {
     )
 
     @Test
-    fun `la fila de filtros quedo en cuatro`() {
-        assertEquals(listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_RECURRENTES), CHIPS_VISIBLES)
+    fun `la fila de filtros quedo en tres`() {
+        // Ola C: «Recurrentes» se mudó a Plan.
+        assertEquals(listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS), CHIPS_VISIBLES)
         assertFalse(CHIP_ENTRE_CUENTAS in CHIPS_VISIBLES)
         assertFalse(CHIP_POR_CONFIRMAR in CHIPS_VISIBLES)
     }
@@ -59,6 +60,5 @@ class EntreCuentasFueraDeLosChipsTest {
         // Y los que sí tienen chip no lo llevan: ahí el chip marcado ya lo dice.
         assertNull(tituloDelModoSinChip(CHIP_TODO))
         assertNull(tituloDelModoSinChip(CHIP_GASTOS))
-        assertNull(tituloDelModoSinChip(CHIP_RECURRENTES))
     }
 }

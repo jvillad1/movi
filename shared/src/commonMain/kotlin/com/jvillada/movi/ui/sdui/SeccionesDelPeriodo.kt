@@ -50,7 +50,8 @@ import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.pieDeLoYaPagado
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
 import com.jvillada.movi.ui.recurrentes.CasillaDeChecklist
-import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.categorias.colorDeCategoria
@@ -241,7 +242,8 @@ internal fun ChecklistDelPeriodoSection(
         MinSectionHeader(
             title = TITULO_FALTA_POR_PAGAR,
             action = "Ver todos",
-            onAction = { onNavigate(Screen.Transactions(CHIP_RECURRENTES)) },
+            // Ola C: «todos» son los del checklist de Plan · Pagos del mes.
+            onAction = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
         )
         MinCard(
             modifier = Modifier.fillMaxWidth(),
@@ -266,7 +268,7 @@ internal fun ChecklistDelPeriodoSection(
             if (pendientes.isNotEmpty()) {
                 Spacer(Modifier.height(Movi.espacios.medio))
                 pendientes.forEachIndexed { i, pago ->
-                    FilaDelChecklist(pago) { onNavigate(Screen.Transactions(CHIP_RECURRENTES)) }
+                    FilaDelChecklist(pago) { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) }
                     if (i < pendientes.lastIndex) Hairline()
                 }
             }
@@ -407,10 +409,10 @@ private fun FilaParaRevisar(cosa: CosaParaRevisar, onClick: () -> Unit) {
 
 private fun pantallaDe(destino: DestinoDeRevision): Screen = when (destino) {
     DestinoDeRevision.MOVIMIENTOS -> Screen.Transactions()
-    DestinoDeRevision.RECURRENTES -> Screen.Transactions(CHIP_RECURRENTES)
-    DestinoDeRevision.PRESUPUESTOS -> Screen.Budgets
+    DestinoDeRevision.RECURRENTES -> Screen.Plan(SEGMENTO_PAGOS)
+    DestinoDeRevision.PRESUPUESTOS -> Screen.Plan(SEGMENTO_PRESUPUESTOS)
     DestinoDeRevision.CREDITOS -> Screen.Credits
     DestinoDeRevision.SMS -> Screen.SMSInbox
-    DestinoDeRevision.SUSCRIPCIONES -> Screen.Transactions(CHIP_RECURRENTES)
+    DestinoDeRevision.SUSCRIPCIONES -> Screen.Plan(SEGMENTO_PAGOS)
     DestinoDeRevision.CUADRE -> Screen.CuadreDeSaldos
 }

@@ -1,4 +1,4 @@
-package com.jvillada.movi.ui.transactions
+package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +22,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Rule
@@ -44,7 +45,7 @@ import kotlin.test.assertEquals
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h731dp-xhdpi")
-class MinimoDeTarjetaEnMovimientosTest {
+class MinimoDeTarjetaEnElTableroTest {
 
     @get:Rule val composeRule = createComposeRule()
 
@@ -86,17 +87,15 @@ class MinimoDeTarjetaEnMovimientosTest {
             override suspend fun getSubscriptions(): SubscriptionsResult =
                 SubscriptionsResult(emptyList(), monthlyTotalCop = 0L)
             // Como el server: TODAS las reglas —las del dueño y las sintéticas (cuotas de sus
-            // créditos y el pago de la tarjeta)—. El «Flujo libre» del chip sale de esta lista, igual
+            // créditos y el pago de la tarjeta)—. El «Flujo libre» del tablero sale de esta lista, igual
             // que el del Inicio.
             override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
                 listOf(vence(sueldo), vence(arriendo), vence(vehiculo), vence(libreInversion), vence(masterBlack(minimoDelMaster)))
             override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
         }
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentes(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
-        esperarTexto("Sin movimientos")
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
         esperarTexto("Flujo libre")
     }
 

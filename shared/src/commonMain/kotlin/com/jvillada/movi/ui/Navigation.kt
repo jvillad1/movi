@@ -5,6 +5,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 
 sealed class Screen {
     data object Login            : Screen()
@@ -25,6 +26,10 @@ sealed class Screen {
      * pantallas distintas para [NavStack.shouldPush] y para el `SaveableStateProvider` de
      * App.kt — volver desde Recurrentes-filtrado a la pestaña deja Movimientos sin filtro, que
      * es lo correcto.
+     *
+     * Ola C: el chip «Recurrentes» ya no existe en Movimientos, y pedir
+     * `Transactions(CHIP_RECURRENTES)` lleva a [Plan] (ver [destinoVigente]). El parámetro sigue
+     * sirviendo para los modos sin chip («Por confirmar», «Entre cuentas»).
      */
     data class Transactions(val chipInicial: Int? = null) : Screen()
     /**
@@ -82,9 +87,10 @@ sealed class Screen {
     data object Goals : Screen()
     /**
      * Presupuestos suelto. Ola C: su cuerpo es el mismo que el segmento «Presupuestos» de [Plan]
-     * (ver `rememberEstadoDePresupuestos`); la pantalla sigue existiendo para las puertas que ya
-     * llevan acá (el destino SDUI `"budgets"`, pilas restauradas) hasta que la Task 3 las mande a
-     * Plan.
+     * (ver `rememberEstadoDePresupuestos`), y todas las puertas que llevaban acá —el destino SDUI
+     * `"budgets"`, las alertas de presupuesto superado, la revisión del período— llevan ahora a
+     * `Plan(SEGMENTO_PRESUPUESTOS)`. Se conserva para una pila que todavía la traiga; marca la
+     * pestaña Plan y su flecha vuelve ahí.
      */
     data object Budgets : Screen()
     /**
@@ -171,45 +177,52 @@ sealed class Screen {
 }
 
 /**
- * A qué destino de la navegación principal pertenece cada pantalla; null = sin chrome de
- * navegación (auth, flujos a pantalla completa). App.kt lo usa para resaltar el
- * ítem activo en la barra (teléfono) y en el rail (pantalla ancha), que son los únicos
+ * A qué pestaña pertenece cada pantalla; `null` = ninguna pestaña marcada. App.kt lo usa para
+ * resaltar el ítem activo en la barra (teléfono) y en el rail (pantalla ancha), que son los únicos
  * lugares donde se pinta la navegación — ninguna pantalla arma su propia barra.
  *
- * Ola 4: Cuentas marca la pestaña Cuentas (antes, Inicio); el detalle de una cuenta marca la
- * pestaña de donde vive esa cuenta (Créditos si es deuda, ver [homeScreenFor]);
- * Presupuestos y Créditos tienen destino propio (en el teléfono se resaltan como Más, que es
- * por donde se llega a ellos ahí).
- * F61: Inversiones dejó de ser pantalla — las cuentas de inversión se ven en Cuentas.
- * PR 4 del rediseño de Recurrentes (2026-09): ídem Recurrentes (y las suscripciones, que ya
- * vivían adentro) — todo eso es hoy Movimientos con el chip «Recurrentes» puesto, así que marca
- * TRANSACTIONS como cualquier otra entrada a Movimientos.
+ * Ola C (2026-09): cuatro lugares, los mismos en el teléfono y en la web — **Hoy** (¿cómo estoy?),
+ * **Movimientos** (¿qué pasó?), **Plan** (¿cuánto puedo gastar y qué me falta pagar?) y
+ * **Patrimonio** (¿cuánto tengo y cuánto debo?). Cada pantalla marca la pestaña de la pregunta que
+ * contesta: Presupuestos es Plan; Créditos, el cuadre, «Cuentas de otros» y el detalle de cualquier
+ * cuenta son Patrimonio.
+ *
+ * «Más» dejó de ser pestaña: Ajustes y lo que se abre desde ahí (Perfil, Categorías, Documentos,
+ * Compartir, Movi AI, los mensajes del banco…) se alcanzan tocando el avatar, así que no marcan
+ * ninguna — pero **la barra sigue pintada** (ver [muestraLaNavegacion]): ninguna pestaña marcada
+ * no es lo mismo que sin navegación.
  */
 fun navTabFor(screen: Screen): NavTab? = when (screen) {
-    Screen.Dashboard -> NavTab.HOME
-    is Screen.Transactions -> NavTab.TRANSACTIONS
-    Screen.Accounts -> NavTab.ACCOUNTS
-    // El cuadre habla de las cuentas y se vuelve a Cuentas: marca esa pestaña, igual que el
-    // detalle de una cuenta de dinero. Llegar por Más o por el aviso del Inicio no cambia de qué
-    // es la pantalla.
-    Screen.CuadreDeSaldos -> NavTab.ACCOUNTS
+    Screen.Dashboard -> NavTab.HOY
+    is Screen.Transactions -> NavTab.MOVIMIENTOS
+    is Screen.Plan, Screen.Budgets -> NavTab.PLAN
+    Screen.Accounts, Screen.Credits, Screen.CuadreDeSaldos, Screen.Destinos -> NavTab.PATRIMONIO
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
-    // «volver» no pueden contradecirse (una tarjeta abierta desde Créditos marca Créditos).
+    // «volver» no pueden contradecirse. Hoy las dos (Cuentas y Créditos) son Patrimonio.
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))
-    Screen.Credits -> NavTab.CREDITS
-    Screen.Budgets -> NavTab.BUDGETS
-    Screen.Mas, Screen.Profile, Screen.Goals,
-    Screen.Extractos, is Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile,
-    // Ola 10: Categorías vive en Más y no tiene destino propio — es una pantalla de
-    // mantenimiento, no un lugar al que se vuelva todos los días.
-    // Ola 14: la guía de arranque se abre desde Más y se vuelve a Más — no es un destino de
-    // todos los días, es un sitio al que se va a mirar si quedó algo pendiente.
-    // Ola 24: «Cuentas de otros» igual — se abre desde Más y se vuelve a Más.
-    // «Compartir» también: se abre desde Más o desde el Inicio, y vive con las fichas de Más.
-    Screen.Categorias, Screen.PrimerosPasos, Screen.Documentos, Screen.Destinos,
-    Screen.Compartir -> NavTab.MORE
     else -> null
 }
+
+/**
+ * **Ajustes y lo que se abre desde ahí** — las pantallas a las que se llega por el avatar.
+ *
+ * Ola C: son las que hasta acá marcaban la pestaña «Más». No marcan ninguna pestaña (ver
+ * [navTabFor]), pero siguen siendo pantallas de todos los días con la barra abajo: esconderla al
+ * entrar a Perfil dejaría al dueño sin forma de saltar a Movimientos que no sea volver dos veces.
+ */
+fun esDeAjustes(screen: Screen): Boolean = when (screen) {
+    Screen.Mas, Screen.Profile, Screen.Goals, Screen.Extractos, is Screen.AIChat,
+    Screen.SMSInbox, is Screen.SMSReconcile, Screen.Categorias, Screen.PrimerosPasos,
+    Screen.Documentos, Screen.Compartir -> true
+    else -> false
+}
+
+/**
+ * ¿Se pinta la barra (o el rail) debajo de esta pantalla? Sí en las cuatro pestañas y en Ajustes
+ * ([esDeAjustes]); no en la autenticación ni en los flujos a pantalla completa (escanear un recibo,
+ * revisar un extracto, el editor de pantallas).
+ */
+fun muestraLaNavegacion(screen: Screen): Boolean = navTabFor(screen) != null || esDeAjustes(screen)
 
 /**
  * ¿Esta pantalla se abre como **ventana modal encima** de la actual, en vez de reemplazarla?
@@ -241,14 +254,25 @@ fun homeScreenFor(group: AccountGroup): Screen =
 
 /** Pantalla principal de cada destino de la barra/rail (inversa de [navTabFor]). */
 fun screenForTab(tab: NavTab): Screen = when (tab) {
-    NavTab.HOME -> Screen.Dashboard
-    NavTab.TRANSACTIONS -> Screen.Transactions()
+    NavTab.HOY -> Screen.Dashboard
+    NavTab.MOVIMIENTOS -> Screen.Transactions()
     NavTab.ADD -> Screen.QuickAdd()
-    NavTab.ACCOUNTS -> Screen.Accounts
-    NavTab.CREDITS -> Screen.Credits
-    NavTab.BUDGETS -> Screen.Budgets
-    NavTab.MORE -> Screen.Mas
+    NavTab.PLAN -> Screen.Plan()
+    NavTab.PATRIMONIO -> Screen.Accounts
 }
+
+/**
+ * **Adónde se va de verdad** cuando se pide [screen].
+ *
+ * Ola C: el tablero de Recurrentes salió de Movimientos a Plan. `Screen.Transactions(CHIP_RECURRENTES)`
+ * sigue pudiendo pedirse —el índice del chip no se renumera ni se reusa, y una pila vieja, un aviso
+ * o un enlace que nadie actualizó lo pueden traer— y cae en **Plan · Pagos del mes**, que es donde
+ * vive ahora lo que ese chip mostraba. Se resuelve acá, una vez, y no en cada llamador: [NavStack.navegar]
+ * pasa todo destino por esta función antes de apilarlo.
+ */
+fun destinoVigente(screen: Screen): Screen =
+    if (screen is Screen.Transactions && screen.chipInicial == CHIP_RECURRENTES) Screen.Plan(SEGMENTO_PAGOS)
+    else screen
 
 /**
  * Reglas puras de la pila de navegación (sin Compose), extraídas para poder
@@ -288,7 +312,10 @@ object NavStack {
      * (ver [shouldPush]) o no hacer nada. App.kt la llama sobre su `SnapshotStateList`, que es
      * un `MutableList` como cualquier otro — y así la regla se puede probar sin Compose.
      */
-    fun navegar(stack: MutableList<Screen>, screen: Screen) {
+    fun navegar(stack: MutableList<Screen>, pedido: Screen) {
+        // Un destino que se mudó se resuelve ANTES de mirar la pila: si no, `shouldPush`
+        // compararía contra lo pedido y no contra lo que de verdad se apila. Ver [destinoVigente].
+        val screen = destinoVigente(pedido)
         when {
             shouldReplaceAll(stack, screen) -> {
                 stack.clear()
