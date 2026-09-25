@@ -14,6 +14,7 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
@@ -144,6 +145,12 @@ interface WalletRepository {
      */
     suspend fun getDashboardSummary(scope: Scope): DashboardSummary
     suspend fun getBudgets(): List<Budget>
+    /**
+     * Lo que Movi propone presupuestar a quien no tiene ninguno (`GET /api/budgets/propuestas`):
+     * las categorías de más gasto del período anterior, con un tope sugerido. Ver
+     * [PropuestaDePresupuesto]. Solo la pide Presupuestos vacío.
+     */
+    suspend fun getPropuestasDePresupuesto(): List<PropuestaDePresupuesto>
     suspend fun createBudget(budget: Budget): Budget
     suspend fun updateBudget(category: String, budget: Budget): Budget
     suspend fun deleteBudget(category: String)

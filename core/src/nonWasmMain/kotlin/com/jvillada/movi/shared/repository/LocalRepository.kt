@@ -30,6 +30,7 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
@@ -1971,6 +1972,9 @@ class LocalRepository(
     /** Con caché. El GASTO contra el presupuesto sale de los eventos, que ya tienen espejo propio. */
     override suspend fun getBudgets(): List<Budget> =
         leerConCache("budgets") { remote.getBudgets() }
+    // Sin caché: es una sugerencia que solo el server sabe armar, y sin red el vacío de
+    // Presupuestos se queda con su «Nuevo presupuesto» de siempre.
+    override suspend fun getPropuestasDePresupuesto(): List<PropuestaDePresupuesto> = remote.getPropuestasDePresupuesto()
     override suspend fun createBudget(budget: Budget): Budget = remote.createBudget(budget)
     override suspend fun updateBudget(category: String, budget: Budget): Budget = remote.updateBudget(category, budget)
     override suspend fun deleteBudget(category: String) = remote.deleteBudget(category)

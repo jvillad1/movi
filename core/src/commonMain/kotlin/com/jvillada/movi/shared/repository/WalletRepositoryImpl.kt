@@ -16,6 +16,7 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import com.jvillada.movi.shared.model.CategoryPrefsRequest
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
@@ -319,6 +320,9 @@ class WalletRepositoryImpl(
 
     override suspend fun getBudgets(): List<Budget> =
         client.get("$baseUrl/api/budgets").body()
+
+    override suspend fun getPropuestasDePresupuesto(): List<PropuestaDePresupuesto> =
+        client.get("$baseUrl/api/budgets/propuestas").body()
 
     override suspend fun createBudget(budget: Budget): Budget =
         client.post("$baseUrl/api/budgets") {

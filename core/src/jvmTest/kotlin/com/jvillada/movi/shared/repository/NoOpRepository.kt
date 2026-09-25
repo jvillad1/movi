@@ -215,6 +215,7 @@ open class NoOpRepository(
     override suspend fun getFinanceSummary(scope: Scope) = error("stub")
     override suspend fun getDashboardSummary(scope: Scope) = error("stub")
     override suspend fun getBudgets() = emptyList<Budget>()
+    override suspend fun getPropuestasDePresupuesto() = emptyList<PropuestaDePresupuesto>()
     override suspend fun createBudget(budget: Budget) = budget
     override suspend fun updateBudget(category: String, budget: Budget) = budget
     override suspend fun deleteBudget(category: String) {}
