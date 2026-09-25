@@ -220,7 +220,7 @@ internal fun Transaction.pagosFijosDelPeriodo(
     val lectura = leerOcurrenciasDe(uid, primero + resto, ajustes)
     val resueltas = resolverOcurrencias(primero, lectura, hoy, ajustes) + resolverOcurrencias(resto, lectura, hoy, ajustes)
     val delPeriodoResueltas = resueltas.filter { it.due in dias }
-        .let { if (enCurso) it else existiaEnElPeriodo(uid, it, lectura, ventana.last, inicioDeLaHistoria, dias.start, hoy, ajustes) }
+        .let { if (enCurso) it else existiaEnElPeriodo(uid, it, lectura, inicioDeLaHistoria, dias.start, hoy, ajustes) }
 
     // Lo que se movió de verdad en un pago sellado a mano con su movimiento: ese movimiento puede
     // estar fuera de la franja leída (el dueño eligió uno a mano), así que se busca por id.
@@ -268,8 +268,10 @@ private fun Transaction.leerOcurrenciasDe(
  * afirma «no lo pagaste»; afirmarlo de un mes en que la regla no existía es falso, y el dueño
  * escribió casi todas sus reglas después de tener meses de movimientos (SMS, extractos).
  *
- * - Con fecha de creación (`recurring_rules.created_at`): la regla sale si nació antes de que el
- *   período terminara ([finDelPeriodo], el último milisegundo incluido).
+ * - Con fecha de creación (`recurring_rules.created_at`): se mira **cada ocurrencia**, no el
+ *   período. Una que vence antes del día en que la regla nació se calla, salvo que deje evidencia
+ *   (LISTO o CON DUDAS): la regla creada el 20-sep que vence el 10 no debe el 10-sep, pero la creada
+ *   el 2-oct a partir del sueldo de septiembre sí muestra ese sueldo como su septiembre.
  * - Con un arranque declarado (`activeFrom`): ya lo respeta `ruleIsActiveOn`, así que sale.
  * - Sin ninguna de las dos (las reglas de antes de la columna), sale solo con **evidencia de vida**
  *   hasta este período, y si no, se calla — el lado seguro es el silencio, no un hecho falso:
@@ -286,16 +288,15 @@ private fun Transaction.existiaEnElPeriodo(
     uid: String,
     resueltas: List<OcurrenciaResuelta>,
     lectura: LecturaDeOcurrencias,
-    finDelPeriodo: Long,
     inicioDeLaHistoria: LocalDate,
     inicioDelPeriodo: LocalDate,
     hoy: LocalDate,
     ajustes: PeriodSettings,
 ): List<OcurrenciaResuelta> {
     if (resueltas.isEmpty()) return resueltas
-    val creadas: Map<String, Long?> = RecurringRules.select(RecurringRules.id, RecurringRules.createdAt)
+    val creadas: Map<String, LocalDate?> = RecurringRules.select(RecurringRules.id, RecurringRules.createdAt)
         .where { RecurringRules.userId eq uid }
-        .associate { it[RecurringRules.id] to it[RecurringRules.createdAt] }
+        .associate { it[RecurringRules.id] to it[RecurringRules.createdAt]?.let(::epochMillisToAppDate) }
     val porRegla = resueltas.groupBy { it.rule.id }
 
     val sinDecidir = mutableListOf<RecurringRule>()
@@ -305,7 +306,8 @@ private fun Transaction.existiaEnElPeriodo(
         val creada = creadas[ruleId]
         val ultimaClave = ocurrencias.maxOf { periodOf(it.due) }
         when {
-            creada != null -> if (creada <= finDelPeriodo) existian += ruleId
+            // Se decide por ocurrencia, abajo.
+            creada != null -> existian += ruleId
             arranqueDeLaRegla(regla, ajustes) != null -> existian += ruleId
             lectura.sellos.keys.any { (r, clave) -> r == ruleId && clave <= ultimaClave } -> existian += ruleId
             ocurrencias.any { it.resolucion.dejaEvidencia() } -> existian += ruleId
@@ -313,7 +315,11 @@ private fun Transaction.existiaEnElPeriodo(
         }
     }
     if (sinDecidir.isNotEmpty()) existian += conPagoAutomaticoAntes(uid, sinDecidir, inicioDeLaHistoria, inicioDelPeriodo, hoy, ajustes)
-    return resueltas.filter { it.rule.id in existian }
+    return resueltas.filter { ocurrencia ->
+        val creada = creadas[ocurrencia.rule.id]
+        ocurrencia.rule.id in existian &&
+            (creada == null || !ocurrencia.due.isBefore(creada) || ocurrencia.resolucion.dejaEvidencia())
+    }
 }
 
 /** LISTO (sellada o emparejada) o CON DUDAS: algo en la base dice que la regla estaba viva. */

@@ -575,6 +575,29 @@ class TusPeriodosTest {
     }
 
     /**
+     * **La fecha de creación se mira por ocurrencia, no por período.**
+     * - Una regla creada el 20-sep que vence el 10: su 10-sep es anterior a ella y nadie lo pagó;
+     *   decir «pendiente» sería el «no lo pagaste» falso que este filtro existe para evitar.
+     * - Una regla creada el 2-oct a partir del sueldo de septiembre: ese sueldo es su ocurrencia de
+     *   septiembre, LISTO con evidencia, y sale aunque la regla haya nacido después.
+     */
+    @Test
+    fun `en un periodo cerrado la fecha de creacion se mira por ocurrencia`() {
+        val ahora = dia(2026, 10, 5)
+        regla("rr-creada-el-20", "Gimnasio", dia = 10, monto = 180_000, categoria = "Deporte", creada = dia(2026, 9, 20))
+        regla("rr-salario", "Salario", dia = 15, monto = 20_000_000, categoria = "Salario", tipo = "INCOME", creada = dia(2026, 10, 2))
+        movimiento("ev-salario", dia(2026, 9, 14), 20_308_659, tipo = "INCOME", categoria = "Salario", descripcion = "Salario Septiembre 2026")
+
+        val septiembre = assertNotNull(detalle("2026-09", ahora)).pagosFijos
+
+        assertTrue(septiembre.none { it.ruleId == "rr-creada-el-20" }, "El 10-sep es de antes de que la regla existiera")
+        septiembre.de("rr-salario").let {
+            assertEquals(PAGO_FIJO_LISTO, it.estado)
+            assertEquals("ev-salario", it.eventId)
+        }
+    }
+
+    /**
      * **«Tu plata» no se afirma antes de que Movi conozca el saldo de todas sus cuentas**, con la
      * forma real de producción: Glim abrió el 13-ago, Bancolombia Ahorros no tiene «Saldo inicial» y
      * su primer movimiento es del 25-ago, Nu abrió el 31-ago (con un gasto anterior traído de un
