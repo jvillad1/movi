@@ -436,13 +436,23 @@ fun avanceDelChecklist(checklist: List<PagoDelPeriodo>): Pair<Int, Int> {
  * El reclamo del dueño, textual: *«solo muestra los faltantes, no muestra todos; debería indicar
  * que esos son los faltantes nada más»*. La tarjeta no pasa a listarlo todo —para eso está el
  * checklist completo, a un toque— pero deja de presentar una parte como si fuera el total.
+ *
+ * **Sin nada pendiente y con ingresos, la línea cuenta las dos cosas.** «Ya salieron los 12
+ * pagos» junto a [tituloDeLosListos] diciendo «Listos · 14 de 14» dejaba sin explicar los otros
+ * dos: el grupo de abajo lista pagos E ingresos, y esta línea solo hablaba de pagos. Sin ingresos
+ * en el checklist no hay nada que agregar, y sigue diciendo lo de siempre.
  */
 fun lineaDeLoQueFalta(checklist: List<PagoDelPeriodo>): String {
     val (pagados, total) = avanceDelChecklist(checklist)
     val faltan = total - pagados
     val pagos = if (total == 1) "pago" else "pagos"
+    val totalIngresos = checklist.count { it.esIngreso }
     return when {
         total == 0 -> "Este período no tiene pagos anotados"
+        faltan == 0 && totalIngresos > 0 -> {
+            val ingresos = if (totalIngresos == 1) "ingreso" else "ingresos"
+            "Ya está todo lo de este período: $total $pagos y $totalIngresos $ingresos"
+        }
         faltan == 0 && total == 1 -> "Ya salió el único pago de este período"
         faltan == 0 -> "Ya salieron los $total pagos de este período"
         else -> "Te ${if (faltan == 1) "falta" else "faltan"} $faltan de $total $pagos de este período"
