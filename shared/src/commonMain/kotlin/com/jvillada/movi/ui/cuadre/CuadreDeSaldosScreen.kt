@@ -38,6 +38,7 @@ import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
@@ -45,6 +46,7 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MoneyField
+import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.altoDeMoneyFieldConRotulo
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
@@ -92,6 +94,9 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
     var guardando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var resultado by remember { mutableStateOf<String?>(null) }
+    // Ola D, Task 2: la hoja de crear cuenta de siempre — el vacío de esta pantalla («Todavía no
+    // hay nada que cuadrar») abre la MISMA hoja que «Nueva cuenta» en Patrimonio, no una copia.
+    var showCreateSheet by remember { mutableStateOf(false) }
 
     // Lo que el dueño va escribiendo, por cuenta. `null` (o ausente) = campo vacío = no la cuadró.
     val escrito = remember { mutableStateMapOf<String, Long?>() }
@@ -182,11 +187,14 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
                         Text(QUE_ES_EL_CUADRE, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     }
                     Spacer(Modifier.height(16.dp))
+                    // Ola D, Task 2: reemplaza al «Todavía no tienes cuentas…» de siempre.
                     if (cuentas.isEmpty() && !cargando) {
-                        Text(
-                            "Todavía no tienes cuentas de Dinero ni de Inversión.",
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.textoMedio,
+                        VacioQueEnsena(
+                            titulo = "Todavía no hay nada que cuadrar",
+                            detalle = "El cuadre compara el saldo de cada cuenta de Dinero o Inversión con el " +
+                                "que te dice tu banco. Crea una cuenta para empezar.",
+                            accion = "Crear una cuenta",
+                            onAccion = { showCreateSheet = true },
                         )
                     }
                 }
@@ -244,6 +252,13 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
                     )
                 }
             }
+        }
+
+        if (showCreateSheet) {
+            CreateAccountSheet(
+                onDismiss = { showCreateSheet = false },
+                onAccountCreated = { showCreateSheet = false; loadKey++ },
+            )
         }
     }
 }

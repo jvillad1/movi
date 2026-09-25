@@ -240,14 +240,32 @@ class DocumentosScreenTest {
         assertEquals(Screen.ImportDetail("imp1"), navegado.single())
     }
 
+    /**
+     * Ola D, Task 2: ahora hay DOS puertas a subir un archivo — la del encabezado («Subir
+     * archivo», desde el primer cuadro) y la del vacío que enseña («Subir un archivo», junto con
+     * la explicación de qué se guarda acá). Cuenta el texto EXACTO de cada una (no `substring`):
+     * son rótulos distintos y cada uno tiene que aparecer una sola vez.
+     */
     @Test
-    fun `sin documentos hay un solo Subir archivo, el del encabezado`() {
+    fun `sin documentos hay dos puertas a subir un archivo, el encabezado y el vacio que ensena`() {
         montarConRepo(SinDocumentosConUnaImportacion())
         esperarTexto("Aquí se guardan tus extractos")
+
         assertEquals(
             1,
-            composeRule.onAllNodesWithText("Subir archivo", substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().size,
+            composeRule.onAllNodesWithText("Subir archivo", useUnmergedTree = true).fetchSemanticsNodes().size,
         )
+        assertEquals(
+            1,
+            composeRule.onAllNodesWithText("Subir un archivo", useUnmergedTree = true).fetchSemanticsNodes().size,
+        )
+    }
+
+    /** El vacío que enseña también dice qué va a aparecer acá, con el mismo texto de siempre. */
+    @Test
+    fun `el vacio que ensena de Documentos explica que se guarda alli`() {
+        montarConRepo(SinDocumentosConUnaImportacion())
+        esperarTexto("Aquí se guardan tus extractos")
+        esperarTexto("Los extractos que importes se archivan solos")
     }
 }

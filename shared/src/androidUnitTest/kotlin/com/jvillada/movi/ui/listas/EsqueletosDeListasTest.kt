@@ -261,15 +261,16 @@ class EsqueletosDeListasTest {
         composeRule.onNodeWithText("Nu", useUnmergedTree = true).assertIsDisplayed()
     }
 
+    /** Ola D, Task 2: el vacío que enseña, con el mismo texto de siempre. */
     @Test
-    fun `Cuadre — sin cuentas de verdad, el vacio de siempre y ningun esqueleto`() {
+    fun `Cuadre — sin cuentas de verdad, el vacio que ensena y ningun esqueleto`() {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = emptyList()
         }
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { CuadreDeSaldosScreen(onNavigate = {}) } } }
         composeRule.waitForIdle()
 
-        assertTrue(hay("Todavía no tienes cuentas"))
+        assertTrue(hay("Todavía no hay nada que cuadrar"))
         assertEquals(0, contarEsqueletos())
     }
 

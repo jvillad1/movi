@@ -1,5 +1,6 @@
 package com.jvillada.movi.data
 
+import com.jvillada.movi.shared.repository.CompartirRepository
 import com.jvillada.movi.shared.repository.EnlacesCompartidosApi
 import com.jvillada.movi.shared.repository.WalletRepository
 
@@ -35,10 +36,19 @@ object Repositories {
     /** El repositorio que usa toda la app. Ver [sustitutoDePrueba]. */
     val wallets: WalletRepository get() = sustitutoDePrueba ?: real
 
+    private val compartirReal: CompartirRepository by lazy { EnlacesCompartidosApi(createHttpClient(), apiBaseUrl) }
+
+    /**
+     * Ola D, Task 2: la misma costura que [sustitutoDePrueba], para «Compartir» — sin ella
+     * `CompartirScreen` no se podía montar en una prueba con datos de verdad, porque [compartir]
+     * apuntaba siempre al cliente HTTP real. `null` por defecto: en la app no cambia nada.
+     */
+    internal var sustitutoDeCompartirDePrueba: CompartirRepository? = null
+
     /**
      * Los enlaces de solo lectura para un tercero (pantalla «Compartir»). Aparte de [wallets] a
      * propósito: no tienen espejo local ni mueven plata — ver el KDoc de [EnlacesCompartidosApi].
      * Perezoso, igual que [real]: una prueba que nunca abre esa pantalla no construye el cliente.
      */
-    val compartir: EnlacesCompartidosApi by lazy { EnlacesCompartidosApi(createHttpClient(), apiBaseUrl) }
+    val compartir: CompartirRepository get() = sustitutoDeCompartirDePrueba ?: compartirReal
 }

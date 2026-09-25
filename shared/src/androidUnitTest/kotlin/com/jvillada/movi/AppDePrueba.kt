@@ -71,6 +71,9 @@ class AppDePrueba : Application(), TestLifecycleApplication {
     override fun beforeTest(method: Method) {
         SessionManager.clear()
         Repositories.sustitutoDePrueba = null
+        // Ola D, Task 2: la costura de «Compartir» — mismo motivo que la de arriba, un olvido
+        // ajeno no tiene por qué cobrarse en la clase siguiente.
+        Repositories.sustitutoDeCompartirDePrueba = null
         // Andamio también, y DESPUÉS del logout de arriba: ese logout es el que vacía la
         // instantánea del Inicio que una prueba haya dejado en el almacén de mentira. Soltarlo antes
         // dejaría esa limpieza hablándole al `Settings` real, que en Robolectric no guarda nada.

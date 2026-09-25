@@ -16,6 +16,19 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 
 /**
+ * La forma de [EnlacesCompartidosApi], separada de la clase que pega al server — Ola D, Task 2:
+ * sin esto, `CompartirScreen` no tenía forma de montarse en una prueba con datos de verdad (el
+ * mismo problema que ya resolvió [WalletRepository] con su doble de prueba), porque abajo hay un
+ * cliente HTTP apuntando a producción. La interfaz es la costura; la única implementación real
+ * sigue siendo la misma clase de siempre.
+ */
+interface CompartirRepository {
+    suspend fun listar(): List<EnlaceCompartido>
+    suspend fun crear(pedido: NuevoEnlaceCompartido): EnlaceCompartidoCreado
+    suspend fun revocar(id: String)
+}
+
+/**
  * # Los enlaces que el dueño comparte con un tercero
  *
  * **Una clase aparte y no tres métodos más en [WalletRepository]**, a propósito. Esa interfaz tiene
@@ -34,9 +47,9 @@ import io.ktor.http.isSuccess
 class EnlacesCompartidosApi(
     private val client: HttpClient,
     private val baseUrl: String,
-) {
+) : CompartirRepository {
     /** Los vigentes del dueño, el más nuevo primero. **Sin token**: ver `EnlaceCompartido`. */
-    suspend fun listar(): List<EnlaceCompartido> =
+    override suspend fun listar(): List<EnlaceCompartido> =
         client.get("$baseUrl/api/enlaces-compartidos").exigirExito().body()
 
     /**
@@ -46,7 +59,7 @@ class EnlacesCompartidosApi(
      * acá se le antepone el `baseUrl`, que en la web es el propio origen y en el teléfono el de
      * producción. Mismo trato que `getDocumentLink`.
      */
-    suspend fun crear(pedido: NuevoEnlaceCompartido): EnlaceCompartidoCreado {
+    override suspend fun crear(pedido: NuevoEnlaceCompartido): EnlaceCompartidoCreado {
         val creado: EnlaceCompartidoCreado = client.post("$baseUrl/api/enlaces-compartidos") {
             contentType(ContentType.Application.Json)
             setBody(pedido)
@@ -55,7 +68,7 @@ class EnlacesCompartidosApi(
     }
 
     /** Lo corta en el acto: quien lo tenga deja de ver los datos al recargar. */
-    suspend fun revocar(id: String) {
+    override suspend fun revocar(id: String) {
         client.delete("$baseUrl/api/enlaces-compartidos/$id").exigirExito()
     }
 

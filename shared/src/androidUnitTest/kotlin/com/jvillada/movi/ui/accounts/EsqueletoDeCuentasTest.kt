@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.height
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -118,6 +119,7 @@ class EsqueletoDeCuentasTest {
         assertEquals(4, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
         assertTrue(!hay("\$0"))
         assertTrue(!hay("Sin cuentas"))
+        assertTrue(!hay("Aquí vive lo que tienes y lo que debes"))
         assertTrue(!hay("No pudimos cargar"), "el primer cuadro no puede decir que falló una lectura que ni empezó")
         assertTrue(hay("Nueva cuenta"))
     }
@@ -134,6 +136,7 @@ class EsqueletoDeCuentasTest {
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_PATRIMONIO))
         assertEquals(0, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
         composeRule.onNodeWithText("Nu", useUnmergedTree = true).assertIsDisplayed()
+        assertTrue(!hay("Aquí vive lo que tienes y lo que debes"), "con cuentas no hay vacío que enseñar")
 
         val altoCargado = composeRule.onNodeWithTag(TAG_TARJETA_DEL_PATRIMONIO).getUnclippedBoundsInRoot().height
         val diferencia = abs(altoCargado.value - altoCargando.value)
@@ -144,17 +147,41 @@ class EsqueletoDeCuentasTest {
         )
     }
 
+    /** Ola D, Task 2: el vacío que enseña, con la misma hoja de «Nueva cuenta» de siempre. */
     @Test
-    fun `sin cuentas de verdad, el vacio de siempre`() {
+    fun `sin cuentas de verdad, el vacio que ensena`() {
         montar()
         composeRule.waitForIdle()
 
         puerta.complete(emptyList())
         composeRule.waitForIdle()
 
-        assertTrue(hay("Sin cuentas aún"))
+        assertTrue(hay("Aquí vive lo que tienes y lo que debes"))
+        assertTrue(hay("Crear mi primera cuenta"))
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_PATRIMONIO))
         assertEquals(0, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
+
+        composeRule.onNodeWithText("Crear mi primera cuenta", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        // La misma hoja que «Nueva cuenta» del encabezado: pide el nombre antes de guardar.
+        assertTrue(hay("Falta el nombre"))
+    }
+
+    /**
+     * Ola D, Task 2: «Cuadre de saldos» y «Movimientos entre cuentas» seguían apareciendo cuando
+     * Patrimonio tenía cuentas; ahora también cuando la lectura contestó vacía — cada una enseña o
+     * navega por su cuenta, y no dependen de que haya una sola cuenta creada.
+     */
+    @Test
+    fun `sin cuentas, Cuadre y Movimientos entre cuentas siguen apareciendo`() {
+        montar()
+        composeRule.waitForIdle()
+
+        puerta.complete(emptyList())
+        composeRule.waitForIdle()
+
+        assertTrue(hay("Cuadre de saldos"))
+        assertTrue(hay("Movimientos entre cuentas"))
     }
 
     @Test

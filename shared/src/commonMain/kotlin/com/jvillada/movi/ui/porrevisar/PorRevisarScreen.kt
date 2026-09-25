@@ -31,9 +31,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
+import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
@@ -49,6 +51,7 @@ import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
+import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.sms.TarjetaDeMensajeDelBanco
 import com.jvillada.movi.ui.transactions.CardPaymentCandidatesSheet
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
@@ -190,6 +193,15 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
 
             if (bandejaAlDia(mensajes, dias, candidatos)) {
                 item { TodoAlDia() }
+                // Ola D, Task 2: `mensajes` no es `null` acá —[bandejaAlDia] lo exige— y contestó
+                // vacía de verdad: nunca llegó un mensaje del banco a esta cuenta. Es la misma
+                // condición que [avisoDeCapturaEnLaBandeja] usa arriba, pero SIN mirar si el dueño
+                // la silenció: ese renglón es un reclamo que se puede apagar, este es una
+                // invitación a configurar algo que todavía no existe, y silenciar el reclamo no
+                // debería apagar también la invitación.
+                if (mensajes != null && capturaDeSms(mensajes.map { it.time }).nuncaLlegoNada) {
+                    item { VacioDeLaCapturaEnLaBandeja(onNavigate) }
+                }
                 return@LazyColumn
             }
 
@@ -375,6 +387,34 @@ private fun TodoAlDia() {
             textAlign = TextAlign.Center,
         )
     }
+}
+
+/**
+ * Ola D, Task 2: debajo de [TodoAlDia], cuando además nunca llegó un mensaje del banco —ver el
+ * llamador—, invita a configurar la captura en vez de dejar la bandeja vacía sin explicar por qué
+ * ese mensaje nunca va a entrar solo.
+ *
+ * **El texto cambia por plataforma, con la MISMA señal que [tituloDeCapturaDelBanco]**: en Android
+ * la captura lee SMS y notificaciones del banco; en la web y en iOS —que no leen nada del
+ * teléfono— lo único que llega son los correos que reenvía el banco (ver
+ * `CorreoEntranteRoutes.kt`), así que prometer «mensajes» ahí sería prometer algo que ese aparato
+ * no hace.
+ */
+@Composable
+private fun VacioDeLaCapturaEnLaBandeja(onNavigate: (Screen) -> Unit) {
+    VacioQueEnsena(
+        titulo = "Que tus movimientos entren solos",
+        detalle = if (isAndroid) {
+            "Movi puede leer los mensajes y avisos de tu banco y dejarlos aquí para que los revises. " +
+                "Así no tienes que anotar cada compra."
+        } else {
+            "Movi puede leer los correos de tu banco y dejarlos aquí para que los revises. Así no " +
+                "tienes que anotar cada compra."
+        },
+        accion = "Configurar la captura",
+        onAccion = { onNavigate(Screen.CapturaDelBanco) },
+        modifier = Modifier.padding(top = 16.dp),
+    )
 }
 
 /**

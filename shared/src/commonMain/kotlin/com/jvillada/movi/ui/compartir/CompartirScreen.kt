@@ -53,6 +53,7 @@ import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -178,10 +179,15 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
                             "No pudimos cargar tus enlaces",
                             onReintentar = { loadKey++ },
                         )
-                        enlaces.isEmpty() && !cargando -> Text(
-                            "No tienes enlaces activos. Los que crees aparecerán aquí hasta que venzan o los revoques.",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
+                        // Ola D, Task 2: reemplaza al texto suelto de siempre. «Crear un enlace»
+                        // llama a la MISMA `crear()` que ofrece la sección de arriba — no duplica
+                        // la lógica de creación, solo le da una segunda puerta a quien llegó
+                        // hasta acá sin haber leído la explicación.
+                        enlaces.isEmpty() && !cargando -> VacioQueEnsena(
+                            titulo = "No tienes enlaces activos",
+                            detalle = "Los que crees aparecerán aquí hasta que venzan o los revoques.",
+                            accion = "Crear un enlace",
+                            onAccion = ::crear,
                             modifier = Modifier.padding(horizontal = Movi.espacios.corto),
                         )
                     }

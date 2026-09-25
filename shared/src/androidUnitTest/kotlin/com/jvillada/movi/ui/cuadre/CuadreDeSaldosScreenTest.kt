@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
 import com.jvillada.movi.theme.MoviTheme
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -107,6 +108,10 @@ class CuadreDeSaldosScreenTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
     }
+
+    private fun hay(texto: String): Boolean =
+        composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
 
     private fun tocar(texto: String) {
         composeRule.onNode(hasClickAction() and hasAnyChild(hasText(texto)), useUnmergedTree = true)
@@ -198,6 +203,47 @@ class CuadreDeSaldosScreenTest {
         composeRule.waitForIdle()
 
         assertTrue(anotados.isEmpty(), "no había diferencia: $anotados")
+    }
+
+    // ── Ola D, Task 2: el vacío que enseña ──────────────────────────────────────
+
+    /** Con datos, no hay vacío que enseñar: ya hay algo que cuadrar. */
+    @Test
+    fun `con cuentas, no aparece el vacio que ensena`() {
+        montar()
+        esperarTexto("Nu")
+
+        assertTrue(!hay("Todavía no hay nada que cuadrar"))
+    }
+
+    /** Mientras la lectura no contestó, ni el vacío ni el «Sin cuentas» de antes: nada se afirma. */
+    @Test
+    fun `mientras la lectura esta en vuelo, no hay vacio`() {
+        val puerta = CompletableDeferred<List<Account>>()
+        montar(object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = puerta.await()
+        })
+        composeRule.waitForIdle()
+
+        assertTrue(!hay("Todavía no hay nada que cuadrar"))
+    }
+
+    /**
+     * Sin una sola cuenta de Dinero o Inversión, el vacío que enseña — título, detalle y el botón
+     * que abre la MISMA hoja de crear cuenta que «Nueva cuenta» en Patrimonio.
+     */
+    @Test
+    fun `sin cuentas, el vacio que ensena con su boton`() {
+        montar(object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = emptyList()
+        })
+        esperarTexto("Todavía no hay nada que cuadrar")
+
+        assertTrue(hay("El cuadre compara el saldo de cada cuenta de Dinero o Inversión"))
+        assertTrue(hay("Crear una cuenta"))
+
+        tocar("Crear una cuenta")
+        esperarTexto("Falta el nombre")
     }
 }
 

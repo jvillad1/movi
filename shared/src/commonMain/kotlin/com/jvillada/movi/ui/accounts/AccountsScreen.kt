@@ -1,11 +1,9 @@
 package com.jvillada.movi.ui.accounts
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
@@ -22,7 +20,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -77,7 +74,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     var showCreateSheet by remember { mutableStateOf(false) }
     // La hoja de un bien abierta: `existente = null` es uno nuevo (desde «Nueva cuenta» → «Bien»).
     var bienAbierto by remember { mutableStateOf<BienAbierto?>(null) }
-    // «Sin cuentas aún» es una afirmación sobre la plata del dueño, así que solo se hace cuando
+    // El vacío que enseña es una afirmación sobre la plata del dueño, así que solo se hace cuando
     // una lectura DE VERDAD contestó y contestó vacío (`accounts` no nulo y vacío). Antes bastaba
     // una lectura fallida: el snackbar de error se autodescartaba y abajo quedaba el estado vacío
     // invitando a «crear tu primera cuenta» a alguien que ya tiene tres. Mismo criterio que
@@ -194,40 +191,22 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         NoSePudoLeer("No pudimos cargar tus cuentas", onReintentar = { refreshKey++ })
                     }
                 } else if (cuentas.isEmpty()) {
+                    // Ola D, Task 2: sin una sola cuenta, ni un bien ni una deuda —una cuenta LOAN
+                    // o CREDIT_CARD también está en `cuentas`, así que vacía de verdad implica las
+                    // tres— no hay «Patrimonio neto» que mostrar. Reemplaza al «Sin cuentas aún»
+                    // de siempre por el vacío que enseña, con la misma hoja que ya abre «Nueva
+                    // cuenta» — no dos vacíos juntos en la misma pantalla. «Cuadre de saldos» y
+                    // «Movimientos entre cuentas», debajo (fuera de este `if`), siguen apareciendo
+                    // igual: cada uno enseña o navega por su cuenta aunque Patrimonio esté vacío.
                     item {
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(32.dp),
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                            ) {
-                                Text(
-                                    text = "Sin cuentas aún",
-                                    style = Movi.textos.titulo,
-                                    color = Movi.colores.textoMedio,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(Movi.colores.marca.copy(alpha = 0.16f))
-                                        .clickable { showCreateSheet = true }
-                                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = "Crear primera cuenta",
-                                        style = Movi.textos.cuerpo,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Movi.colores.marca,
-                                    )
-                                }
-                            }
-                        }
+                        VacioQueEnsena(
+                            titulo = "Aquí vive lo que tienes y lo que debes",
+                            detalle = "Tus cuentas de banco, tus inversiones, tu casa o tu carro, y tus créditos. " +
+                                "Empieza por la cuenta donde te llega el sueldo.",
+                            accion = "Crear mi primera cuenta",
+                            onAccion = { showCreateSheet = true },
+                        )
+                        Spacer(Modifier.height(20.dp))
                     }
                 } else {
                     // Total assets card
@@ -350,6 +329,15 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             )
                         }
                     }
+                }
+
+                // **La puerta al cuadre de saldos** y **la plata que se movió entre cuentas**:
+                // Ola D, Task 2 las saca del `else` de arriba (antes solo aparecían con al menos
+                // una cuenta) para que sigan estando aunque Patrimonio esté vacío — cada una
+                // enseña o navega por su cuenta, y Cuadre de saldos tiene su propio vacío que
+                // enseña cuando no hay nada que comparar. Van juntas y fuera del `if` de arriba
+                // porque las dos solo necesitan que `cuentas` haya contestado, vacía o no.
+                if (cuentas != null) {
                     // **La puerta al cuadre de saldos**, justo debajo de las cuentas cuyo saldo
                     // se acaba de leer: si alguno de esos números está corrido, esta es la fila
                     // que lo arregla. Cuando hay cuentas que llevan más de un período sin

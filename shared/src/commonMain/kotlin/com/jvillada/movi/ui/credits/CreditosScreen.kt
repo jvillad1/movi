@@ -249,19 +249,17 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 if (isEmpty) {
                     item {
                         Spacer(Modifier.height(20.dp))
-                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            MinSectionHeader(title = "Mis créditos")
-                            MinCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                variant = MinCardVariant.Elevated,
-                                padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-                            ) {
-                                Text(
-                                    "Sin créditos registrados",
-                                    style = Movi.textos.cuerpo, color = Movi.colores.textoMedio,
-                                )
-                            }
-                        }
+                        // Ola D, Task 2: reemplaza al «Sin créditos registrados» de siempre — el
+                        // botón hace lo mismo que «Nuevo crédito» del encabezado (ambos ponen
+                        // `showTypeChooser = true`, la misma hoja de elegir préstamo o tarjeta).
+                        VacioQueEnsena(
+                            titulo = "Aquí van tus créditos y tarjetas",
+                            detalle = "Carga un préstamo o una tarjeta y Movi te dice cuánto pagas de intereses, " +
+                                "cuándo terminas y si la cuota alcanza.",
+                            accion = "Agregar un crédito",
+                            onAccion = { showTypeChooser = true },
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
                     }
                 }
 
