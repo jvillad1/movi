@@ -60,9 +60,12 @@ import kotlin.test.assertTrue
  *  2. **«Gimnasio Cami»** con DOS pagos de gimnasio iguales en la ventana → Movi **pregunta**. No
  *     puede saber cuál es cuál, y elegir uno quemaría el otro (un id emparejado no se vuelve a
  *     proponer). Este caso es el que define el techo de toda esta rama.
- *  3. **«Salario»** contra «Salario Septiembre 2026» → empareja solo por las tres circunstancias
- *     juntas (categoría + cuenta + monto exacto), mientras que una recarga con la MISMA categoría
- *     pero en otra cuenta no es concluyente y por lo tanto no genera ambigüedad.
+ *  3. **«Salario»** contra «Salario Septiembre 2026» → empareja solo porque el nombre pega
+ *     (`nombreDeMovimientoPegaConRegla` en `:core` perdona el mes y el año), y eso ni siquiera
+ *     necesita el monto exacto. Una consignación que NO repite el nombre de la regla sigue
+ *     necesitando las tres circunstancias juntas (categoría + cuenta + monto exacto), y una
+ *     recarga con la MISMA categoría pero en otra cuenta no es concluyente y por lo tanto no
+ *     genera ambigüedad.
  *
  * Y lo que sostiene que un emparejamiento automático sea reversible: el rechazo persistido.
  */
@@ -305,16 +308,65 @@ class MoviEmparejaSoloTest {
     // ── Caso 3: «Salario» ─────────────────────────────────────────────────────
 
     /**
-     * **El nombre NO pega y se empareja igual**: «Salario Septiembre 2026» no es «Salario», pero
-     * comparte categoría, cuenta y el monto exacto ($20.308.659). Las tres juntas describen un
-     * hecho demasiado específico como para ser otra cosa.
+     * **«Salario Septiembre 2026» pega con la regla «Salario» por el nombre**, no por el monto:
+     * antes esto solo emparejaba si además el monto daba exacto (ver el commit que agregó
+     * `nombreDeMovimientoPegaConRegla` en `:core`), y el monto de un sueldo varía mes a mes por
+     * retenciones. Con $20.500.000 en vez de los $20.038.658 anotados en la regla, sigue siendo
+     * concluyente — es el caso real del dueño.
+     */
+    @Test
+    fun `Salario Octubre 2026 se empareja por el nombre, sin exigir el monto`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        regla(
+            id = "rr-salario", nombre = "Salario", categoria = "Salario",
+            monto = 20_038_658L, tipo = "INCOME",
+        )
+        movimiento(
+            id = "ev-salario", nota = "Salario Octubre 2026", categoria = "Salario",
+            monto = 20_500_000L, tipo = "INCOME",
+        )
+
+        val estado = client.ocurrencias().first { it.ruleId == "rr-salario" }
+        assertTrue(estado.occurred, "El nombre pega aunque el monto no sea el mismo")
+        assertEquals("ev-salario", estado.eventId)
+        assertTrue(estado.automatica)
+        assertEquals(20_500_000L, estado.montoDelPago)
+    }
+
+    /** Con dos movimientos que dicen «Salario …» en la ventana, Movi no sabe cuál es cuál y pregunta. */
+    @Test
+    fun `dos Salario en la ventana siguen preguntando`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        regla(
+            id = "rr-salario", nombre = "Salario", categoria = "Salario",
+            monto = 20_038_658L, tipo = "INCOME",
+        )
+        movimiento(
+            id = "ev-salario-1", nota = "Salario Octubre 2026", categoria = "Salario",
+            monto = 20_038_658L, tipo = "INCOME",
+        )
+        movimiento(
+            id = "ev-salario-2", nota = "Salario", categoria = "Salario",
+            monto = 20_038_658L, tipo = "INCOME",
+        )
+
+        val estado = client.ocurrencias().first { it.ruleId == "rr-salario" }
+        assertFalse(estado.occurred, "Dos concluyentes por nombre: Movi pregunta, no elige")
+    }
+
+    /**
+     * **Sin que el nombre repita el de la regla**, sigue haciendo falta la puerta de siempre: las
+     * tres circunstancias juntas (categoría + cuenta + monto exacto). «Consignación nómina» no
+     * empieza con «Salario», así que `nombreDeMovimientoPegaConRegla` no perdona nada acá.
      *
      * Y la recarga de $621.788 —misma categoría «Salario», pero en la cuenta Glim y con otro
      * monto— **no** es concluyente, así que no genera la ambigüedad que apagaría el emparejamiento.
      * Es la parte que prueba que las tres circunstancias tienen que darse **juntas**.
      */
     @Test
-    fun `Salario se empareja por categoria cuenta y monto exacto`() = testApplication {
+    fun `sin que el nombre pegue, empareja por categoria cuenta y monto exacto`() = testApplication {
         application { testModule() }
         val client = createClient { install(ContentNegotiation) { json() } }
         regla(
@@ -322,7 +374,7 @@ class MoviEmparejaSoloTest {
             monto = 20_308_659L, tipo = "INCOME",
         )
         movimiento(
-            id = "ev-salario", nota = "Salario Septiembre 2026", categoria = "Salario",
+            id = "ev-salario", nota = "Consignación nómina", categoria = "Salario",
             monto = 20_308_659L, tipo = "INCOME",
         )
         movimiento(
@@ -338,12 +390,13 @@ class MoviEmparejaSoloTest {
     }
 
     /**
-     * **«Monto exacto» es exacto.** Un peso de diferencia y ya no hay las tres circunstancias: el
-     * movimiento vuelve a ser una propuesta, que es lo que corresponde. Nada de márgenes elegidos
-     * a ojo — el KDoc de `OccurrenceMatching` argumenta largo contra los ±10 %.
+     * **«Monto exacto» es exacto.** Sin que el nombre pegue, un peso de diferencia y ya no hay las
+     * tres circunstancias: el movimiento vuelve a ser una propuesta, que es lo que corresponde.
+     * Nada de márgenes elegidos a ojo — el KDoc de `OccurrenceMatching` argumenta largo contra los
+     * ±10 %.
      */
     @Test
-    fun `un peso de diferencia deja de ser concluyente`() = testApplication {
+    fun `sin que el nombre pegue, un peso de diferencia deja de ser concluyente`() = testApplication {
         application { testModule() }
         val client = createClient { install(ContentNegotiation) { json() } }
         regla(
@@ -351,7 +404,7 @@ class MoviEmparejaSoloTest {
             monto = 20_308_659L, tipo = "INCOME",
         )
         movimiento(
-            id = "ev-salario", nota = "Salario Septiembre 2026", categoria = "Salario",
+            id = "ev-salario", nota = "Consignación nómina", categoria = "Salario",
             monto = 20_308_658L, tipo = "INCOME",
         )
 

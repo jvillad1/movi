@@ -12,6 +12,7 @@ import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -266,5 +267,92 @@ class OccurrenceMatchingTest {
         // Regresión: el barrido solo mira gastos. Cerrar el salario no debe cambiar eso.
         val pares = listOf(regla() to null)
         assertFalse(selectDueForReminder(pares, LocalDate.of(2026, 8, 26), 3).any { it.id == "rr_1" })
+    }
+
+    // ── El nombre con el mes/año adentro ──────────────────────────────────────
+
+    /**
+     * **El caso real del dueño.** La regla se llama «Salario»; el movimiento, como lo anota el
+     * banco, «Salario Octubre 2026». Antes de `nombreDeMovimientoPegaConRegla` esto solo se
+     * emparejaba si el monto también daba exacto — y el monto de un sueldo varía mes a mes.
+     */
+    @Test fun `Salario Octubre 2026 es la ocurrencia solo, sin exigir el monto`() {
+        val reglaDelDueno = regla(
+            name = "Salario",
+            category = "Salario",
+            amount = 20_038_658,
+            accountId = "acc_1",
+        )
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val elSueldo = evento(
+            id = "ev_salario",
+            day = 24,
+            month = 9,
+            amount = 20_038_658,
+            category = "Salario",
+            description = "Salario Octubre 2026",
+            accountId = "acc_1",
+        )
+        assertEquals(
+            "ev_salario",
+            ocurrenciaConcluyente(reglaDelDueno, vencimiento, listOf(elSueldo))?.id,
+        )
+    }
+
+    /**
+     * La variante que de verdad prueba que fue el NOMBRE el que emparejó: el monto no da exacto
+     * (así que la puerta de «las tres circunstancias» no aplica), y aun así se empareja solo.
+     */
+    @Test fun `con monto distinto tambien se empareja solo por el nombre`() {
+        val reglaDelDueno = regla(
+            name = "Salario",
+            category = "Salario",
+            amount = 20_038_658,
+            accountId = "acc_1",
+        )
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val elSueldo = evento(
+            id = "ev_salario",
+            day = 24,
+            month = 9,
+            amount = 20_500_000,
+            category = "Salario",
+            description = "Salario Octubre 2026",
+            accountId = "acc_1",
+        )
+        assertEquals(
+            "ev_salario",
+            ocurrenciaConcluyente(reglaDelDueno, vencimiento, listOf(elSueldo))?.id,
+        )
+    }
+
+    /** Con dos movimientos que dicen «Salario …», Movi no puede saber cuál es cuál: pregunta. */
+    @Test fun `con dos Salario en la ventana sigue preguntando`() {
+        val reglaDelDueno = regla(
+            name = "Salario",
+            category = "Salario",
+            amount = 20_038_658,
+            accountId = "acc_1",
+        )
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val primero = evento(
+            id = "ev_salario_1",
+            day = 24,
+            month = 9,
+            amount = 20_038_658,
+            category = "Salario",
+            description = "Salario Octubre 2026",
+            accountId = "acc_1",
+        )
+        val segundo = evento(
+            id = "ev_salario_2",
+            day = 20,
+            month = 9,
+            amount = 20_038_658,
+            category = "Salario",
+            description = "Salario",
+            accountId = "acc_1",
+        )
+        assertNull(ocurrenciaConcluyente(reglaDelDueno, vencimiento, listOf(primero, segundo)))
     }
 }
