@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.jvillada.movi.data.FormaDeMovimientos
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
@@ -292,5 +293,65 @@ class EsqueletoDeMovimientosTest {
         composeRule.onNodeWithText("Sin movimientos aún", substring = true, useUnmergedTree = true).assertIsDisplayed()
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
+    }
+
+    // ── Ola D, Task 1: el mismo vacío, dibujado con VacioQueEnsena ──────────────────────────
+
+    /**
+     * Sin cuentas Y sin movimientos: el vacío ofrece «Crear una cuenta primero» — no hay dónde
+     * anotar todavía — y tocarlo abre la misma hoja de crear cuenta que «Primeros pasos» (acá
+     * se verifica por un campo de la hoja: «NOMBRE» es su primera sección).
+     */
+    @Test
+    fun `sin cuentas, el vacio ofrece crear una cuenta primero y abre la hoja al tocarlo`() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getUserProfile(): UserProfile =
+                UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "morado")
+            override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+            override suspend fun getAccounts(): List<com.jvillada.movi.shared.model.Account> = emptyList()
+        }
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Crear una cuenta primero", substring = true, useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Crear una cuenta primero", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("NOMBRE", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /**
+     * Con cuenta pero sin movimientos: el vacío ofrece «Registrar el primero» — ya hay dónde
+     * anotar — y tocarlo navega a Agregar, en vez de abrir la hoja de crear cuenta.
+     */
+    @Test
+    fun `con cuenta pero sin movimientos, el vacio ofrece registrar el primero y navega a Agregar`() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getUserProfile(): UserProfile =
+                UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "morado")
+            override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+            override suspend fun getAccounts(): List<com.jvillada.movi.shared.model.Account> = listOf(
+                com.jvillada.movi.shared.model.Account(
+                    id = "a1",
+                    name = "Ahorros",
+                    type = com.jvillada.movi.shared.model.AccountType.SAVINGS,
+                    balance = 0L,
+                ),
+            )
+        }
+        var navegoA: com.jvillada.movi.ui.Screen? = null
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = { navegoA = it }) } }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Registrar el primero", substring = true, useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Registrar el primero", useUnmergedTree = true).performClick()
+
+        assertTrue(navegoA is com.jvillada.movi.ui.Screen.QuickAdd)
     }
 }

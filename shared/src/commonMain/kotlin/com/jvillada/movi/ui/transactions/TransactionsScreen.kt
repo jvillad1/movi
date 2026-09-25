@@ -1285,44 +1285,30 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         // anotar, crear una cuenta primero si no. Pero solo cuando el vacío es
                         // «no hay nada anotado»: si es un chip el que dejó la lista vacía, se
                         // dice eso y no se ofrece nada (ver [vacioDeMovimientos]).
+                        //
+                        // Ola D, Task 1: el mismo vacío de siempre, dibujado con [VacioQueEnsena]
+                        // en vez de con su propia Column — la prueba de que el componente sirve
+                        // para lo que ya estaba bien. El texto del botón perdió el «+ » a mano
+                        // (el componente ya pone su propio ícono de más; con los dos se leía
+                        // «+ + Registrar el primero») pero la condición y el destino son los de
+                        // siempre.
                         val hayMovimientos = allDays.any { d -> d.items.any { !isOpeningBalance(it) } }
                         val vacio = vacioDeMovimientos(activeFilter, hayMovimientos)
-                        Column(
-                            modifier = Modifier.fillParentMaxWidth().padding(top = 80.dp).padding(horizontal = 32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text(vacio.titulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                            vacio.detalle?.let {
-                                Text(
-                                    text = it,
-                                    style = Movi.textos.apoyo,
-                                    color = Movi.colores.textoApagado,
-                                    textAlign = TextAlign.Center,
-                                    lineHeight = 17.sp,
-                                )
-                            }
-                            if (vacio.ofreceRegistrar) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(Movi.colores.marca.copy(alpha = 0.16f))
-                                        .clickable {
-                                            if (accounts.isNotEmpty() || !accountsLoaded) onNavigate(Screen.QuickAdd())
-                                            else showCreateSheet = true
-                                        }
-                                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = if (accounts.isNotEmpty() || !accountsLoaded) "+ Registrar el primero" else "Crear una cuenta primero",
-                                        style = Movi.textos.cuerpo,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Movi.colores.marca,
-                                    )
+                        val hayCuentaParaRegistrar = accounts.isNotEmpty() || !accountsLoaded
+                        VacioQueEnsena(
+                            titulo = vacio.titulo,
+                            detalle = vacio.detalle,
+                            accion = if (vacio.ofreceRegistrar) {
+                                if (hayCuentaParaRegistrar) "Registrar el primero" else "Crear una cuenta primero"
+                            } else null,
+                            onAccion = if (vacio.ofreceRegistrar) {
+                                {
+                                    if (hayCuentaParaRegistrar) onNavigate(Screen.QuickAdd())
+                                    else showCreateSheet = true
                                 }
-                            }
-                        }
+                            } else null,
+                            modifier = Modifier.padding(horizontal = 16.dp).padding(top = 40.dp),
+                        )
                     }
                 }
             }

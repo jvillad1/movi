@@ -555,6 +555,9 @@ fun DashboardScreen(
                             )
                         }
                     } else null,
+                    // Ola D, Task 1: el hero vacío abre la MISMA hoja que «Primeros pasos» —
+                    // mismo estado, un solo `CreateAccountSheet` en esta pantalla.
+                    onShowCreateSheet = { showCreateSheet = true },
                 )
             }
         }

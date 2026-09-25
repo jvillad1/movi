@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.height
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -299,5 +300,60 @@ class EsqueletosDelInicioTest {
         preguntasSugeridas(datosCargados).forEach { pregunta ->
             composeRule.onNodeWithText(pregunta, useUnmergedTree = true).assertIsDisplayed()
         }
+    }
+
+    // ── Ola D, Task 1: el hero, vacío, enseña ───────────────────────────────────────────────
+
+    /**
+     * `accounts` CONTESTÓ vacía (no `null` — ese es el esqueleto, cubierto en las pruebas de
+     * arriba). El hero no puede decir «$0»: eso sería la afirmación más fuerte de la pantalla,
+     * y sería falsa para quien todavía no anotó ni una cuenta.
+     */
+    @Test
+    fun `con cuentas vacias, el hero no dice dollar cero y muestra el vacio que ensena`() {
+        montarHero(DashboardData(accounts = emptyList()), cargando = false)
+
+        composeRule.onNodeWithText("\$0", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Aquí vas a ver tu plata", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Crea la cuenta donde te llega la plata y Movi te muestra cuánto tienes, cuánto " +
+                "entra y cuánto sale en tu período.",
+            useUnmergedTree = true,
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Crear mi primera cuenta", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /** Tocar el botón del vacío abre la MISMA hoja de crear cuenta que «Primeros pasos». */
+    @Test
+    fun `tocar el boton del hero vacio abre la hoja de crear cuenta`() {
+        var seAbrioLaHoja = false
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    SduiRenderer(
+                        definition = defaultDashboardDefinition(),
+                        data = DashboardData(accounts = emptyList()),
+                        modifier = Modifier.fillMaxSize(),
+                        onNavigate = {},
+                        onShowCreateSheet = { seAbrioLaHoja = true },
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Crear mi primera cuenta", useUnmergedTree = true).performClick()
+
+        assertTrue(seAbrioLaHoja)
+    }
+
+    /** Con `accounts == null` (todavía no contestó), el hero sigue de esqueleto: nada de vacío. */
+    @Test
+    fun `con accounts null el hero sigue de esqueleto, no el vacio`() {
+        montarHero(DashboardData(), cargando = true)
+
+        assertEquals(1, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
+        composeRule.onNodeWithText("Aquí vas a ver tu plata", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Crear mi primera cuenta", useUnmergedTree = true).assertDoesNotExist()
     }
 }

@@ -49,6 +49,7 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.StatusDot
+import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -110,8 +111,26 @@ internal fun HeroDeUnVistazo(
     data: DashboardData,
     conPatrimonio: Boolean,
     onNavigate: (Screen) -> Unit,
+    onShowCreateSheet: () -> Unit = {},
     hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
 ) {
+    // Ola D, Task 1: `accounts` CONTESTÓ vacía (no `null` — eso sigue siendo el esqueleto de
+    // siempre, más abajo). Un «$0» de 42 sp acá sería la afirmación más fuerte de la pantalla, y
+    // sería falsa para quien todavía no tiene ni una cuenta — así que el hero entero se vuelve el
+    // vacío que enseña, con la misma acción que «Primeros pasos» ya ofrece. Con cuentas, nada
+    // cambia: se sigue de largo al resto de esta función.
+    if (data.accounts != null && data.accounts.isEmpty()) {
+        VacioQueEnsena(
+            titulo = "Aquí vas a ver tu plata",
+            detalle = "Crea la cuenta donde te llega la plata y Movi te muestra cuánto tienes, " +
+                "cuánto entra y cuánto sale en tu período.",
+            accion = "Crear mi primera cuenta",
+            onAccion = onShowCreateSheet,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Movi.espacios.amplio),
+        )
+        return
+    }
+
     val balance = heroBalance(data.accounts.orEmpty())
     val entradaDeLaCifra = rememberProgresoDeEntrada("hero.cifra", listo = data.accounts != null)
     val entradaDeLaBarra = rememberProgresoDeEntrada("hero.barra", listo = data.summary != null)
