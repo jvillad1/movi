@@ -145,7 +145,12 @@ fun parteFijaDelChecklist(
     reglas.filter { it.type == TransactionType.EXPENSE }.forEach { regla ->
         val sellados = ocurridos[regla.id].orEmpty()
         val vence = vencimientoEnElChecklist(regla, hoy, settings, sellados, zone) ?: return@forEach
-        val sello = sellos.firstOrNull { it.ruleId == regla.id && it.period == periodOf(vence) }
+        // Un sello a mano cuyo movimiento se anuló sigue en la tabla, y Movi pudo emparejar solo el
+        // pago que lo reemplazó para el mismo ítem: gana la fila cuyo movimiento está vivo en el
+        // período. Si ganara el sello muerto, el ítem quedaría completo sin sacar el pago del
+        // variable, y el cliente lo restaría además como fijo.
+        val delItem = sellos.filter { it.ruleId == regla.id && it.period == periodOf(vence) }
+        val sello = (delItem.firstOrNull { it.eventId != null && it.eventId in porId } ?: delItem.firstOrNull())
             ?.takeIf { periodOf(vence) in sellados }
         val eventoDelSello = sello?.eventId
         val yaPagado = when {

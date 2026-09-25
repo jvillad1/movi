@@ -453,6 +453,36 @@ class PagoTardioPasadaLaGraciaTest {
         assertEquals(b - 50_000L - agua - v, loQueQueda(pasadaLaGracia, f))
     }
 
+    /**
+     * **Un sello a mano cuyo movimiento murió no tapa al emparejamiento que lo reemplazó.** El dueño
+     * selló el Celular a un SMS duplicado, lo anuló, y Movi emparejó solo el pago de verdad de
+     * $60.000. El cliente resta esa fila como fijo por lo pagado; si el server se quedaba con el
+     * sello muerto, daba el ítem por completo sin sacar el pago del variable, y los $60.000 contaban
+     * dos veces.
+     */
+    @Test
+    fun `un sello a mano anulado no tapa al emparejamiento automatico que lo reemplazo`() {
+        celularPagadoCon(60_000L)
+        movimiento("ev-duplicado", "Celular", LocalDate.of(2026, 9, 26), 53_077L, "Servicios")
+        sellar(celular, "2026-09", "ev-duplicado")
+        transaction {
+            VoidEvents.insert {
+                it[id] = "void-duplicado"
+                it[userId] = uid
+                it[originalEventId] = "ev-duplicado"
+                it[timestamp] = 1L
+            }
+        }
+
+        val estado = estadoDelCelular()
+        assertTrue(
+            estado.occurred && estado.automatica && estado.eventId == "ev-celular" && estado.montoDelPago == 60_000L,
+            "Movi lo empareja solo con el pago vivo; llegó $estado",
+        )
+        val f = fijos(pasadaLaGracia, mapOf(celular to (LocalDate.of(2026, 9, 26) to 60_000L)))
+        assertEquals(b - f - v, loQueQueda(pasadaLaGracia, f))
+    }
+
     // ── «Próximos» no retrocede ──────────────────────────────────────────────
 
     /**
