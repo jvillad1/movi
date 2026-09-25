@@ -355,4 +355,34 @@ class OccurrenceMatchingTest {
         )
         assertNull(ocurrenciaConcluyente(reglaDelDueno, vencimiento, listOf(primero, segundo)))
     }
+
+    // ── Palabras pegadas o separadas ──────────────────────────────────────────
+
+    /**
+     * El banco escribe el comercio con las palabras pegadas: la regla «Smart Fit» contra el
+     * `SMARTFIT` del SMS. Pegaba por la clave comparable antes de que el nombre perdonara el
+     * mes/año, y tiene que seguir pegando — en las dos direcciones — con un monto que no da exacto,
+     * para que sea el NOMBRE el que empareja.
+     */
+    @Test fun `Smart Fit y SMARTFIT se emparejan solos en las dos direcciones`() {
+        val gimnasio = regla(name = "Smart Fit", category = "Deporte", amount = 120_000,
+            type = TransactionType.EXPENSE)
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val delBanco = evento(id = "ev_gym", day = 24, month = 9, amount = 125_000, category = "Deporte",
+            description = "Compra", merchant = "SMARTFIT", type = TransactionType.EXPENSE)
+        assertEquals("ev_gym", ocurrenciaConcluyente(gimnasio, vencimiento, listOf(delBanco))?.id)
+
+        val pegada = regla(name = "SmartFit", category = "Deporte", amount = 120_000,
+            type = TransactionType.EXPENSE)
+        val separado = delBanco.copy(merchant = "SMART FIT")
+        assertEquals("ev_gym", ocurrenciaConcluyente(pegada, vencimiento, listOf(separado))?.id)
+    }
+
+    @Test fun `Gimnasio Caro sigue sin ser la ocurrencia de Gimnasio`() {
+        val gimnasio = regla(name = "Gimnasio", category = "Deporte", amount = 120_000,
+            type = TransactionType.EXPENSE)
+        val deOtro = evento(id = "ev_otro", day = 24, month = 9, amount = 125_000, category = "Deporte",
+            description = "Gimnasio Caro", type = TransactionType.EXPENSE)
+        assertNull(ocurrenciaConcluyente(gimnasio, LocalDate.of(2026, 9, 25), listOf(deOtro)))
+    }
 }

@@ -63,10 +63,17 @@ private fun palabrasClave(nombre: String): List<String> =
  * movimiento diga «junio». Por eso el nombre de la regla nunca se toca: solo se mira si el
  * movimiento lo dice completo y punto, y lo único que se le perdona es la cola con la fecha.
  *
+ * Antes que todo eso, la igualdad de [claveComparableDeNombre] sigue valiendo sola: los bancos pegan
+ * las palabras del comercio (`SMARTFIT` contra la regla «Smart Fit», o al revés), y comparar
+ * palabra por palabra no vería que son el mismo nombre. La cola de fecha se suma a esa igualdad;
+ * no la reemplaza.
+ *
  * Vacío no pega con nada: una regla sin ninguna palabra de identidad no puede ganarle a un
  * movimiento por descarte.
  */
 fun nombreDeMovimientoPegaConRegla(nombreRegla: String, nombreMovimiento: String): Boolean {
+    val claveRegla = claveComparableDeNombre(nombreRegla)
+    if (claveRegla.isNotEmpty() && claveRegla == claveComparableDeNombre(nombreMovimiento)) return true
     val clavesRegla = palabrasClave(nombreRegla)
     if (clavesRegla.isEmpty()) return false
     val clavesMovimiento = palabrasClave(nombreMovimiento)

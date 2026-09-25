@@ -63,4 +63,25 @@ class NameKeyTest {
     fun `un conector suelto sin fecha al lado no se perdona`() {
         assertFalse(nombreDeMovimientoPegaConRegla("Salario", "Salario de"))
     }
+
+    /**
+     * Los bancos pegan las palabras del comercio (`SMARTFIT`, `DIDIFOOD`, `CLAROHOGAR`), y antes de
+     * perdonar el mes/año esto pegaba por la clave comparable completa. Comparar palabra por
+     * palabra no puede reemplazar eso: tiene que sumarse a él.
+     */
+    @Test
+    fun `las palabras pegadas o separadas siguen pegando como antes`() {
+        assertTrue(nombreDeMovimientoPegaConRegla("Smart Fit", "SMARTFIT"))
+        assertTrue(nombreDeMovimientoPegaConRegla("SmartFit", "SMART FIT"))
+        assertTrue(nombreDeMovimientoPegaConRegla("Salario", "Salario Octubre 2026"))
+        assertFalse(nombreDeMovimientoPegaConRegla("Gimnasio", "Gimnasio Caro"))
+    }
+
+    /** Las abreviaturas de tres letras solo se perdonan como palabra entera, nunca como pedazo. */
+    @Test
+    fun `una abreviatura de mes solo cuenta como palabra completa`() {
+        assertFalse(nombreDeMovimientoPegaConRegla("Salario", "Salario Sepultura"))
+        assertFalse(nombreDeMovimientoPegaConRegla("Salario", "Salario Mercado"))
+        assertTrue(nombreDeMovimientoPegaConRegla("Arriendo", "Arriendo Mar 2026"))
+    }
 }
