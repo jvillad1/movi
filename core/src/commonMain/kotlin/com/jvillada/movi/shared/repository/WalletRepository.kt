@@ -18,6 +18,8 @@ import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
+import com.jvillada.movi.shared.model.DetalleDePeriodo
+import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
@@ -144,6 +146,13 @@ interface WalletRepository {
      * enteras. Ver [DashboardSummary].
      */
     suspend fun getDashboardSummary(scope: Scope): DashboardSummary
+    /**
+     * **«Tus períodos»** (`GET /api/periodos`): un [ResumenDePeriodo] por período, del en curso al
+     * más viejo. Siempre trae al menos el en curso, con `enCurso = true`.
+     */
+    suspend fun getPeriodos(): List<ResumenDePeriodo>
+    /** El detalle de un período (`GET /api/periodos/{id}`), `id` = su prefijo («2026-09»). */
+    suspend fun getDetalleDePeriodo(id: String): DetalleDePeriodo
     suspend fun getBudgets(): List<Budget>
     /**
      * Lo que Movi propone presupuestar a quien no tiene ninguno (`GET /api/budgets/propuestas`):

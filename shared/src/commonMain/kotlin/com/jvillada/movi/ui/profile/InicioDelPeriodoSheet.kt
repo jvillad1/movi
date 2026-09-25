@@ -66,6 +66,9 @@ fun InicioDelPeriodoSheet(
     onSave: (String?) -> Unit,
     saving: Boolean = false,
     error: String? = null,
+    // Ola E, tarea 4: `null` cuando quien monta la hoja no ofrece la puerta a «Tus períodos» — hoy
+    // solo Movimientos la pasa. Sin ella, esta hoja sigue siendo la de siempre.
+    onVerPeriodos: (() -> Unit)? = null,
 ) {
     val natural = remember(periodo, ajustes.cutoffDay) {
         inicioDelPeriodo(periodo, ajustes.copy(iniciosPropios = emptyMap()))
@@ -193,6 +196,20 @@ fun InicioDelPeriodoSheet(
                         fontWeight = FontWeight.Medium,
                         color = if (saving) Movi.colores.textoApagado else Movi.colores.marca,
                         modifier = Modifier.clickable(enabled = !saving) { onSave(null) },
+                    )
+                }
+
+                // Ola E, tarea 4: quien se pregunta «¿de cuándo a cuándo va este mes?» —la
+                // pregunta que abrió esta hoja— es quien más puede querer comparar con los
+                // anteriores.
+                if (onVerPeriodos != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "Ver tus períodos",
+                        style = Movi.textos.apoyo,
+                        fontWeight = FontWeight.Medium,
+                        color = Movi.colores.marca,
+                        modifier = Modifier.clickable(enabled = !saving, onClick = onVerPeriodos),
                     )
                 }
                 Spacer(Modifier.height(24.dp))

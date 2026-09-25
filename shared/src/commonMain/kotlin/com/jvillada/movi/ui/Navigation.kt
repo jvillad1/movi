@@ -202,6 +202,23 @@ sealed class Screen {
     data class StatementReview(val resultJson: String) : Screen()
     data class ImportDetail(val importId: String) : Screen()
     data object ScreenEditor : Screen()
+
+    /**
+     * Ola E, tarea 4: **«Tus períodos»** — cómo le fue al dueño en cada ciclo (entró, salió, te
+     * quedó), del en curso hacia atrás. Se llega desde el rango del hero del Inicio (que se vuelve
+     * tocable), desde una fila propia en Plan y desde «Ver tus períodos» en la hoja de Movimientos
+     * que explica el rango del mes ([com.jvillada.movi.ui.profile.InicioDelPeriodoSheet]) — las
+     * tres puertas donde el dueño ya está mirando SU período y puede querer comparar con otros.
+     * Marca la pestaña Plan (ver [navTabFor]): es la pregunta «¿cómo me fue?», la misma que
+     * contesta esa pestaña.
+     */
+    data object Periodos : Screen()
+
+    /**
+     * El detalle de un período (Ola E, tarea 5), [id] = su prefijo («2026-09»). Misma pestaña que
+     * [Periodos]: se llega tocando una fila suya.
+     */
+    data class DetalleDePeriodo(val id: String) : Screen()
 }
 
 /**
@@ -225,7 +242,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     // «Por revisar» y el detalle de un mensaje se abren desde Movimientos (su renglón «N por
     // revisar»): marcan esa pestaña, no Ajustes.
     is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile -> NavTab.MOVIMIENTOS
-    is Screen.Plan, Screen.Budgets -> NavTab.PLAN
+    is Screen.Plan, Screen.Budgets, Screen.Periodos, is Screen.DetalleDePeriodo -> NavTab.PLAN
     Screen.Accounts, Screen.Credits, Screen.CuadreDeSaldos, Screen.Destinos -> NavTab.PATRIMONIO
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse. Hoy las dos (Cuentas y Créditos) son Patrimonio.

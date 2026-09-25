@@ -21,6 +21,8 @@ import com.jvillada.movi.shared.model.CategoryPrefsRequest
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
+import com.jvillada.movi.shared.model.DetalleDePeriodo
+import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.MergeCategoryRequest
 import com.jvillada.movi.shared.model.RenameCategoryRequest
 import com.jvillada.movi.shared.model.CardSummary
@@ -317,6 +319,25 @@ class WalletRepositoryImpl(
 
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary =
         client.get("$baseUrl/api/dashboard/summary?scope=${scope.name}").body()
+
+    // Mismo chequeo de status que `createBudget`: sin `expectSuccess` en el cliente, un 4xx/5xx no
+    // lanza solo — se intentaría deserializar el cuerpo de error como la lista/el detalle y
+    // reventaría con un error de serialización que no dice nada del status real.
+    override suspend fun getPeriodos(): List<ResumenDePeriodo> {
+        val response = client.get("$baseUrl/api/periodos")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun getDetalleDePeriodo(id: String): DetalleDePeriodo {
+        val response = client.get("$baseUrl/api/periodos/$id")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
 
     override suspend fun getBudgets(): List<Budget> =
         client.get("$baseUrl/api/budgets").body()

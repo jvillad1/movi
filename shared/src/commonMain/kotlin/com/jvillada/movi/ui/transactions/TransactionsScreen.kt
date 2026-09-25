@@ -1495,6 +1495,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             saving = guardandoInicio,
             error = errorDelInicio,
             onDismiss = { editandoElInicio = false; errorDelInicio = null },
+            onVerPeriodos = { editandoElInicio = false; onNavigate(Screen.Periodos) },
             onSave = { inicio ->
                 if (!guardandoInicio) {
                     guardandoInicio = true

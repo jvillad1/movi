@@ -34,6 +34,8 @@ import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
+import com.jvillada.movi.shared.model.DetalleDePeriodo
+import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
@@ -1969,6 +1971,12 @@ class LocalRepository(
     // Presupuestos usa esta misma fuente para que las dos pantallas coincidan; el cálculo local
     // queda solo como fallback sin red.
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = remote.getDashboardSummary(scope)
+    // Igual que getFinanceSummary/getDashboardSummary: la ventana de cada período (el corte, los
+    // inicios propios) y sus cifras salen de TODO lo que el server sabe, no solo de este
+    // dispositivo — sin red falla y «Tus períodos» lo dice con «Reintentar», no con una cuenta
+    // local que discreparía con la que el dueño ve en el otro aparato.
+    override suspend fun getPeriodos(): List<ResumenDePeriodo> = remote.getPeriodos()
+    override suspend fun getDetalleDePeriodo(id: String): DetalleDePeriodo = remote.getDetalleDePeriodo(id)
     /** Con caché. El GASTO contra el presupuesto sale de los eventos, que ya tienen espejo propio. */
     override suspend fun getBudgets(): List<Budget> =
         leerConCache("budgets") { remote.getBudgets() }
