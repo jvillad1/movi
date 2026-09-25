@@ -151,16 +151,26 @@ class PresupuestosNoAfirmanMientrasCarganTest {
         assertEquals(tituloCargando, composeRule.onNodeWithText("Presupuestos", useUnmergedTree = true).getUnclippedBoundsInRoot())
     }
 
+    /** Ola D, Task 3: el vacío que enseña, con el mismo `abrirNuevo()` que «Nuevo» del encabezado. */
     @Test
-    fun `sin presupuestos de verdad, el vacio de siempre`() {
+    fun `sin presupuestos de verdad, el vacio que ensena`() {
         montar(budgets = emptyList())
 
         puertaDelGasto.complete(gastoDelServer)
         composeRule.waitForIdle()
 
+        assertTrue(hay("Ponle un tope a lo que más gastas"))
         assertTrue(hay("Nuevo presupuesto"))
+        // La tarjeta de siempre decía «$0 de $0»: un hecho inventado sobre categorías que no existen.
+        assertTrue(!hay("Gastado en"))
+        assertTrue(!hay("\$0"))
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO))
         assertEquals(0, contarTag(TAG_ESQUELETO_FILA_DE_PRESUPUESTO))
+
+        composeRule.onNodeWithText("Nuevo presupuesto", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        // La misma hoja que «Nuevo» del encabezado: el título de la hoja de alta.
+        assertTrue(hay("Guardar"))
     }
 
     @Test
@@ -191,15 +201,17 @@ class PresupuestosNoAfirmanMientrasCarganTest {
 
     /** El vacío no necesita el gasto: sin presupuestos no hay categoría a la que ponerle una cifra. */
     @Test
-    fun `sin presupuestos y sin gasto, el vacio de siempre y no el error`() {
+    fun `sin presupuestos y sin gasto, el vacio que ensena y no el error`() {
         montarCon(object : RepositorioDePrueba() {
             override suspend fun getBudgets(): List<Budget> = emptyList()
             override suspend fun getEventsByDay(): List<EventDay> = throw caida
             override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = throw caida
         })
 
+        assertTrue(hay("Ponle un tope a lo que más gastas"))
         assertTrue(hay("Nuevo presupuesto"))
         assertTrue(!hay("No pudimos cargar"))
+        assertTrue(!hay("Gastado en"))
         sinEsqueletos()
     }
 

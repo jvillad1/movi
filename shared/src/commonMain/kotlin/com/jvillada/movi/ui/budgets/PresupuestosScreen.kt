@@ -341,8 +341,31 @@ fun rememberEstadoDePresupuestos(activo: Boolean = true): EstadoDePresupuestos {
 }
 
 /**
+ * **El vacío que enseña de Presupuestos**: sin ninguno creado, explica qué hace un presupuesto y
+ * ofrece la MISMA hoja «Nuevo presupuesto» que ya abre el «Nuevo» del encabezado — ver
+ * [EstadoDePresupuestos.abrirNuevo]. No hay lógica de alta nueva acá, solo el botón que la dispara.
+ *
+ * [contenidoExtra] es el gancho para la Task 4 de esta ola, que le agrega propuestas de presupuesto
+ * armadas con lo que el dueño ya gasta: se pinta debajo del texto, adentro del mismo `Column`, para
+ * no tener que tocar este composable ni quien lo llama cuando esas propuestas lleguen.
+ */
+@Composable
+internal fun VacioDePresupuestos(estado: EstadoDePresupuestos, contenidoExtra: (@Composable () -> Unit)? = null) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+        VacioQueEnsena(
+            titulo = "Ponle un tope a lo que más gastas",
+            detalle = "Elige una categoría y cuánto quieres gastar como máximo en cada período. Movi te avisa " +
+                "cuando te acerques.",
+            accion = "Nuevo presupuesto",
+            onAccion = { estado.abrirNuevo() },
+        )
+        contenidoExtra?.invoke()
+    }
+}
+
+/**
  * **Los renglones de Presupuestos**, para pintarlos dentro de una `LazyColumn` ajena: el aviso de
- * que no se pudo leer (o el botón ancho del vacío), y después el esqueleto o la tarjeta de «Gastado
+ * que no se pudo leer (o el vacío que enseña), y después el esqueleto o la tarjeta de «Gastado
  * en …» con sus categorías.
  */
 fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
@@ -355,20 +378,18 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         } else if (estado.sinPresupuestos) {
-            NewItemButton(
-                label = "Nuevo presupuesto",
-                onClick = { estado.abrirNuevo() },
-                modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
-                full = true,
-            )
+            VacioDePresupuestos(estado)
         } else {
             Spacer(Modifier.height(14.dp))
         }
     }
 
+    // Ola D, Task 3: la tarjeta «Gastado en …» es un hecho sobre categorías que no existen sin
+    // presupuestos — hasta acá se pintaba igual, y con `totalSpent`/`totalLimit` en cero decía
+    // «$0 de $0», justo el «$0 presentado como un hecho» que el vacío de arriba vino a evitar.
     if (estado.cargando) {
         presupuestosEsqueleto()
-    } else if (estado.listo) {
+    } else if (estado.listo && !estado.sinPresupuestos) {
         item {
             MinCard(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),

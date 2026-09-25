@@ -205,8 +205,10 @@ class PlanScreenTest {
         montar()
 
         assertTrue(hay("Plan"))
-        assertTrue(hay(tituloDelChecklist), "el checklist del período es lo primero de Pagos del mes")
-        assertTrue(hay("Este período no tiene pagos anotados"))
+        // Ola D, Task 3: sin reglas, sin suscripciones y sin candidatas, el tablero ya no pinta el
+        // checklist vacío ni «Flujo libre» en $0 — un solo vacío que enseña los reemplaza.
+        assertTrue(hay("Aquí van tus pagos fijos"))
+        assertTrue(!hay(tituloDelChecklist))
         assertTrue(!hay("Gastado en", substring = true), "Presupuestos no se pinta con Pagos elegido")
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_TABLERO))
     }
@@ -290,7 +292,7 @@ class PlanScreenTest {
         puerta.complete(Unit)
         montar(segmento = 7)
 
-        assertTrue(hay(tituloDelChecklist))
+        assertTrue(hay("Aquí van tus pagos fijos"))
     }
 
     @Test
@@ -308,7 +310,7 @@ class PlanScreenTest {
 
         composeRule.onNodeWithText("Pagos del mes", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
-        assertTrue(hay(tituloDelChecklist))
+        assertTrue(hay("Aquí van tus pagos fijos"))
         assertTrue(!hay("Gastado en", substring = true))
     }
 
@@ -349,7 +351,9 @@ class PlanScreenTest {
         assertEquals(0, contarTag(TAG_LINEA_DEL_PERIODO_DE_PLAN_ESQUELETO))
         assertEquals(1, contarTag(TAG_LINEA_DEL_PERIODO_DE_PLAN))
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_TABLERO))
-        assertTrue(hay(tituloDelChecklist))
+        // Ola D, Task 3: sin nada anotado, el esqueleto del tablero da paso al vacío que enseña,
+        // no al checklist vacío de antes.
+        assertTrue(hay("Aquí van tus pagos fijos"))
 
         val altoCargado = composeRule.onNodeWithTag(TAG_TARJETA_DEL_DISPONIBLE).getUnclippedBoundsInRoot().height
         val diferencia = abs(altoCargado.value - altoCargando.value)
