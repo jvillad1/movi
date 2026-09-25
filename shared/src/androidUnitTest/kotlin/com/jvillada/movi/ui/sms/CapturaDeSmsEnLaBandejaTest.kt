@@ -152,7 +152,7 @@ class CapturaDeSmsEnLaBandejaTest {
 
         esperarTexto("ÚLTIMO MENSAJE RECIBIDO")
         composeRule.onNodeWithText(
-            "El último de los 3 mensajes de tu banco llegó el 2026-09-03 07:15",
+            "El último de los 3 mensajes de tu banco llegó el 3 de septiembre a las 7:15 a. m.",
             substring = true, useUnmergedTree = true,
         ).assertExists()
         // Y no se ofrece callar un aviso que no existe.

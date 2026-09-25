@@ -80,10 +80,16 @@ fun capturaDeSms(tiempos: List<String>): CapturaDeSms = CapturaDeSms(
 )
 
 /**
- * El `time` guardado, en la forma en que se lee en pantalla: `"2026-08-01 10:00"`.
+ * El `time` guardado, en la forma en que se lee en pantalla: `"23 de septiembre a las 7:52 p. m."`.
  *
- * Un `time` que no tenga esa forma se devuelve tal cual, recortado. Es un varchar libre: antes
- * que inventar una fecha o mostrar un guion, se muestra lo que la fila dice.
+ * Antes se mostraba el varchar crudo (`"2026-09-23 19:52"`) — legible para quien escribió el
+ * parser, no para el dueño. Se reusa [diaLegible] (`PeriodoFinanciero.kt`) para el mes en español y
+ * se arma la hora en formato de 12 con «a. m.»/«p. m.», como se dice hablando: 19:52 es «7:52 p.
+ * m.», medianoche es «12:00 a. m.» y mediodía «12:00 p. m.» (las doce, no las cero).
+ *
+ * Un `time` que no se pueda leer como fecha se devuelve **tal cual** (recortado a lo sumo por
+ * [claveDeTiempoDeSms]), nunca lanza: es un varchar libre, y antes que inventar una fecha se
+ * muestra lo que la fila dice.
  */
 /**
  * **Cuándo se movió la plata de un SMS**, en epoch-ms — no cuándo el dueño lo confirmó.
@@ -126,8 +132,24 @@ fun inicioDeLaCuentaSiElSmsEsAnterior(momentoDelSms: Long, eventosDeLaCuenta: Li
 }
 
 fun fechaLegibleDeSms(time: String): String {
-    val normalizado = time.trim().replace('T', ' ')
-    return if (normalizado.length >= 16) normalizado.take(16) else normalizado
+    val normalizado = claveDeTiempoDeSms(time)
+    val completo = if (normalizado.length == 16) "$normalizado:00" else normalizado
+    val fecha = runCatching { LocalDateTime.parse(completo) }.getOrNull() ?: return time.trim()
+    return "${diaLegible(fecha.date)} a las ${horaLegibleDeLasDoce(fecha.hour, fecha.minute)}"
+}
+
+/**
+ * «7:52 p. m.» — la hora de 24 en la forma de 12 que se dice hablando. Las 0 horas son «las doce»
+ * de la madrugada, no «las cero»: `hour == 0` se muestra como `12`, no como `0`.
+ */
+private fun horaLegibleDeLasDoce(hour: Int, minute: Int): String {
+    val amPm = if (hour < 12) "a. m." else "p. m."
+    val hora12 = when {
+        hour == 0 -> 12
+        hour > 12 -> hour - 12
+        else -> hour
+    }
+    return "$hora12:${minute.toString().padStart(2, '0')} $amPm"
 }
 
 /**
@@ -159,7 +181,7 @@ fun avisoDeCaptura(captura: CapturaDeSms): AvisoDeCaptura = when {
 
     captura.total == 1 -> AvisoDeCaptura(
         rotulo = "ÚLTIMO MENSAJE RECIBIDO",
-        detalle = "El único mensaje de tu banco que ha llegado a Movi es del " +
+        detalle = "El único mensaje de tu banco llegó el " +
             "${fechaLegibleDeSms(captura.ultimo.orEmpty())}. Esto dice lo que llegó, no que la " +
             "captura siga andando.",
         esAlerta = false,
