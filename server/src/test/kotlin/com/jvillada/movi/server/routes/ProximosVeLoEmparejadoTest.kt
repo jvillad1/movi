@@ -1,7 +1,5 @@
 package com.jvillada.movi.server.routes
 
-import com.auth0.jwt.JWT
-import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
@@ -11,28 +9,12 @@ import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
-import com.jvillada.movi.server.plugins.configureRouting
-import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.server.reminders.queAvisarle
-import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.UpcomingPayment
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.application.Application
-import io.ktor.server.auth.authentication
-import io.ktor.server.auth.jwt.JWTPrincipal
-import io.ktor.server.auth.jwt.jwt
-import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -42,7 +24,6 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
-import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -65,10 +46,6 @@ import kotlin.test.assertTrue
  * barrido de recordatorios no avisa por correo algo que ya está pagado.
  */
 class ProximosVeLoEmparejadoTest {
-
-    private val testSecret = "test-secret-para-proximos-emparejados-32-ch"
-    private val issuer = "movi"
-    private val audience = "movi-client"
 
     private val uid = "user-proximos-emparejado"
     private val email = "proximos@emparejado.test"
@@ -152,71 +129,25 @@ class ProximosVeLoEmparejadoTest {
         estadosDeLasOcurrenciasReales(uid, hoy, ajustesDelPeriodoSinSuspender(uid))
     }.firstOrNull { it.ruleId == celular }
 
-    private fun mintToken(): String =
-        JWT.create()
-            .withIssuer(issuer)
-            .withAudience(audience)
-            .withClaim("userId", uid)
-            .withClaim("email", email)
-            .withExpiresAt(Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
-            .sign(Algorithm.HMAC256(testSecret))
-
-    private fun Application.testModule() {
-        configureSerialization()
-        val verifier = JWT.require(Algorithm.HMAC256(testSecret))
-            .withIssuer(issuer)
-            .withAudience(audience)
-            .build()
-        authentication {
-            jwt("jwt") {
-                this.verifier(verifier)
-                validate { credential ->
-                    if (credential.payload.getClaim("userId").asString() != null) JWTPrincipal(credential.payload)
-                    else null
-                }
-            }
-        }
-        configureRouting()
-    }
-
-    private suspend fun HttpClient.upcoming(): List<UpcomingPayment> {
-        val resp = get("/api/payments/upcoming") { header(HttpHeaders.Authorization, "Bearer ${mintToken()}") }
-        assertEquals(HttpStatusCode.OK, resp.status)
-        return resp.body()
-    }
-
-    private suspend fun HttpClient.ocurrencias(): List<OccurrenceState> {
-        val resp = get("/api/payments/occurrences") { header(HttpHeaders.Authorization, "Bearer ${mintToken()}") }
-        assertEquals(HttpStatusCode.OK, resp.status)
-        return resp.body()
-    }
-
-    // ── El endpoint, con el día de hoy ───────────────────────────────────────
+    // ── Un mes cualquiera, con corte 1 ───────────────────────────────────────
 
     /**
-     * Por HTTP y con el reloj de verdad, para probar el cableado de la ruta: un pago de hace dos
-     * días que el checklist empareja solo **no sale vencido** en «Próximos», y su vencimiento rueda
-     * al mes siguiente. Hace dos días está siempre dentro de la gracia, así que sin el arreglo sale
-     * OVERDUE cualquier día que corra.
+     * Un pago de hace dos días que el checklist empareja solo **no sale vencido** en «Próximos», y
+     * su vencimiento rueda al mes siguiente. Hace dos días está dentro de la gracia: sin el arreglo
+     * sale OVERDUE. Con un día fijo y no con el reloj, para no depender de la medianoche de Bogotá.
      */
     @Test
-    fun `un pago emparejado solo no sale vencido y su vencimiento rueda`() = testApplication {
-        application { testModule() }
-        val client = createClient { install(ContentNegotiation) { json() } }
-        val hoy = AppClock.today()
-        val haceDos = hoy.minusDays(2)
-        reglaCelular(dia = haceDos.dayOfMonth)
-        pagoCelular("ev-celular", haceDos)
+    fun `un pago emparejado solo no sale vencido y su vencimiento rueda`() {
+        val hoy = LocalDate.of(2026, 9, 15)
+        reglaCelular(dia = 13)
+        pagoCelular("ev-celular", LocalDate.of(2026, 9, 13))
 
-        val estado = client.ocurrencias().first { it.ruleId == celular }
-        assertTrue(estado.occurred && estado.automatica, "El checklist lo da por pagado, emparejado solo")
+        val estado = checklistDelCelular(hoy)
+        assertTrue(estado != null && estado.occurred && estado.automatica, "El checklist lo da por pagado, emparejado solo")
 
-        val pago = client.upcoming().first { it.rule.id == celular }
+        val pago = proximoDelCelular(hoy)
         assertNotEquals(PaymentStatus.OVERDUE, pago.status, "Pagado y emparejado: no está vencido")
-        assertTrue(
-            LocalDate.parse(pago.dueDate).isAfter(hoy),
-            "El vencimiento rueda al siguiente, como con un sello; llegó ${pago.dueDate}",
-        )
+        assertEquals("2026-10-13", pago.dueDate, "El vencimiento rueda al siguiente, como con un sello")
         assertEquals(0L, transaction { RecurringOccurrences.selectAll().count() }, "Rodar no escribe sellos")
     }
 
