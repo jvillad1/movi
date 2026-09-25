@@ -9,6 +9,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.push.buildPushPayload
+import com.jvillada.movi.server.routes.ocurridosDeLosVencimientos
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.RecurringRule
@@ -197,21 +198,16 @@ internal suspend fun queAvisarle(userId: String, today: LocalDate, leadDays: Int
     // `dueDateFor`. El sello de `lastRemindedPeriod` de más abajo usa el MISMO conjunto, porque
     // si sellara el periodo viejo y el filtro mirara el nuevo volverían a divergir — que es el
     // bug que este archivo ya arregló una vez.
-    // Y una cuota que ya está PAGADA tampoco vuelve a avisar, por el mismo camino: el pago que
-    // bajó la deuda vale como «ya ocurrió» para su regla sintética (ver `PagosDeDeuda.kt`).
-    // Mandarle «tu cuota vence» por correo a alguien que ya pagó es la misma mentira que decirle
-    // «Vencido hace 5 días» en la pantalla, y sale del mismo agujero: el hecho estaba anotado y
-    // nadie lo leía. Va en el MISMO mapa —no en un filtro nuevo— para que el sello de
-    // `lastRemindedPeriod` de más abajo, que lo relee, no pueda divergir del filtro.
+    // Y una cuota que ya está PAGADA tampoco vuelve a avisar, ni un recurrente que Movi emparejó
+    // solo con su movimiento: mandarle «vence» por correo a alguien que ya pagó es la misma
+    // mentira que decirle «Vencido hace 2 días» en la pantalla, y sale del mismo agujero. Por eso
+    // el mapa es el MISMO que el de «Próximos» (ver `ocurridosDeLosVencimientos`) —no un filtro
+    // nuevo— y el sello de `lastRemindedPeriod` de más abajo, que lo relee, no puede divergir.
     val sinteticasSolas = sinteticas.map { it.first }
     // El período de ESTE usuario: qué vencimiento está en juego depende de su corte (ver
     // `dueDateFor`). El filtro, el texto y el sello de abajo usan el mismo, o volverían a divergir.
     val periodo = ajustesDePeriodoDe(userId)
-    val occurredBy = unirOcurridos(
-        dbQuery { loadOccurredBy(userId) },
-        if (sinteticasSolas.isEmpty()) emptyMap()
-        else periodosSaldados(sinteticasSolas, cargarPagosDeDeuda(userId, today), settings = periodo),
-    )
+    val occurredBy = ocurridosDeLosVencimientos(userId, today, periodo, sinteticasSolas)
 
     return LoQueSeAvisa(selectDueForReminder(allPairs, today, leadDays, occurredBy, periodo), occurredBy, periodo)
 }
