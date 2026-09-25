@@ -54,7 +54,7 @@ fun avisoDeCategoria(
     val gastado = gastoPorCategoria[escrita] ?: 0L
     if (gastado > 0L) {
         return AvisoDeCategoria(
-            texto = "Ya llevas ${formatear(gastado)} gastados en \"$escrita\" este mes.",
+            texto = "Ya llevas ${formatear(gastado)} gastados en \"$escrita\" este período.",
             esAdvertencia = false,
         )
     }
@@ -69,15 +69,15 @@ fun avisoDeCategoria(
 
     if (conGasto.isEmpty()) {
         return AvisoDeCategoria(
-            texto = "Todavía no tienes gastos registrados este mes.",
+            texto = "Todavía no tienes gastos registrados este período.",
             esAdvertencia = false,
         )
     }
 
     return AvisoDeCategoria(
-        texto = "No tienes gastos en \"$escrita\" este mes. " +
+        texto = "No tienes gastos en \"$escrita\" este período. " +
             "El gasto se cruza por nombre de categoría, así que este presupuesto no vigilaría nada. " +
-            "Con gasto este mes: " + conGasto.joinToString(" · ") { "${it.key} ${formatear(it.value)}" } + ".",
+            "Con gasto este período: " + conGasto.joinToString(" · ") { "${it.key} ${formatear(it.value)}" } + ".",
         esAdvertencia = true,
         sugerencias = conGasto.map { it.key },
     )

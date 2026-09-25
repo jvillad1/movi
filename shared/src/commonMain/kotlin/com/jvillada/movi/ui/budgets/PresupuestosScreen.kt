@@ -123,6 +123,18 @@ private fun Month.spanishName(): String = when (this) {
     Month.DECEMBER -> "diciembre"
 }
 
+/**
+ * **La única función que decide entre «Gastado en septiembre» y «Gastado en este período».**
+ *
+ * Con corte 1 el período ES el mes de calendario ([PeriodSettings.esMesDeCalendario]) y nombrarlo
+ * es exacto y más corto. Con cualquier otro corte —el dueño tiene 25— el período no coincide con
+ * el mes: «septiembre» son en realidad el 26 de agosto al 25 de septiembre, y ese rango exacto ya
+ * se lee arriba, en Plan ([rangoLegibleDe]). Repetir el nombre del mes ahí abajo no aclaraba nada
+ * y, peor, sonaba a que el gasto era SOLO de septiembre.
+ */
+internal fun tituloDelGastoDelPeriodo(settings: PeriodSettings, monthName: String): String =
+    if (settings.esMesDeCalendario) "Gastado en $monthName" else "Gastado en este período"
+
 internal sealed class Sheet {
     data class Edit(val current: Budget) : Sheet()
     data object Add : Sheet()
@@ -331,6 +343,14 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
         Month(periodoDe(Clock.System.now().toEpochMilliseconds(), settings).month).spanishName()
     }
 
+    // Ola D, Task 5: el dueño ve «Gastado en septiembre» con un período que va del 25 de agosto al
+    // 24 de septiembre — septiembre no es lo que se contó. [tituloDelGastoDelPeriodo] decide, con
+    // la misma regla que ya usa el resto de la app ([PeriodSettings.esMesDeCalendario]), si el
+    // nombre del mes sigue siendo honesto o si hay que hablar de «este período» en general.
+    internal val tituloDelGasto: String by derivedStateOf {
+        tituloDelGastoDelPeriodo(PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios), monthName)
+    }
+
     /**
      * **Ola B: nada se pinta hasta que se sabe lo gastado.** Los presupuestos llegan primero y el
      * gasto después, y en ese medio la pantalla decía «$0» gastado y cada categoría «$0 … 0 % …
@@ -468,7 +488,7 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
                 variant = MinCardVariant.Elevated,
                 padding = PaddingValues(22.dp),
             ) {
-                Text("Gastado en ${estado.monthName}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                Text(estado.tituloDelGasto, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(10.dp))
                 // La protagonista de esta pantalla, como «Tu plata» en el Inicio y la deuda
                 // total en Créditos: misma letra y un renglón siempre.
@@ -753,16 +773,21 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // F16: "de $2.000.000 este mes" en vez de "/ $2.000.000" — deja explícito que el
-            // límite es mensual sin depender solo del texto chico bajo el monto en la hoja.
+            // F16: "de $2.000.000" en vez de "/ $2.000.000" — deja explícito que el límite es del
+            // período sin depender solo del texto chico bajo el monto en la hoja.
+            //
+            // Ola D, Task 5: sin el «este mes» final. Con corte 25 la fila decía «$290.340 de
+            // $200.000 este mes» sobre un período que va del 25 de agosto al 24 de septiembre —
+            // ninguno de los dos es «este mes». El rango exacto ya está arriba, en el título de la
+            // tarjeta ([tituloDelGastoDelPeriodo]) y en Plan ([rangoLegibleDe]); acá alcanza con
+            // el límite solo.
             Text(
                 text = buildAnnotatedString {
                     withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = Movi.colores.texto)) {
                         append(formatCOP(p.spent))
                     }
-                    // Espacios que no cortan: si hace falta partir, se parte antes de «de» y no
-                    // entre «este» y «mes», que quedaba «este» arriba y «mes» solo abajo.
-                    append(" de\u00A0${formatCOP(p.budget.monthlyLimit)} este\u00A0mes")
+                    // Espacio que no corta: si hace falta partir, se parte antes de «de».
+                    append(" de\u00A0${formatCOP(p.budget.monthlyLimit)}")
                 },
                 style = Movi.textos.monto,
                 color = Movi.colores.textoMedio,
