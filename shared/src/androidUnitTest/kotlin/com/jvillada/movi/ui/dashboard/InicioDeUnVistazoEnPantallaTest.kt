@@ -15,6 +15,8 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.FinanceSummary
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.theme.MoviTheme
@@ -144,6 +146,25 @@ class InicioDeUnVistazoEnPantallaTest {
         primero("\$2.191M").assertIsDisplayed()
         composeRule.onNodeWithText("Deudas", useUnmergedTree = true).performClick()
         assertEquals(Screen.Credits, navegoA)
+    }
+
+    /**
+     * Ola E, tarea 4: la línea del rango del período («Del 25 de agosto al 24 de septiembre · …»)
+     * se volvió la puerta a «Tus períodos» — mismo criterio que «Deudas» más arriba: el dueño que
+     * ya está mirando su período está a un toque de preguntarse por los anteriores. Solo existe con
+     * un corte distinto de 1 ([PeriodSettings.esMesDeCalendario]); con el corte de siempre la línea
+     * ni se pinta.
+     */
+    @Test
+    @Config(qualifiers = "w390dp-h2400dp-xhdpi")
+    fun `el rango del periodo es tocable y lleva a Tus periodos`() {
+        val ajustes = PeriodSettings(cutoffDay = 25)
+        val conRangoDePeriodo = datos.copy(ajustesDePeriodo = ajustes, periodoActual = PeriodoFinanciero(2026, 9))
+        montar(conRangoDePeriodo)
+
+        composeRule.onNodeWithText("Del 25 de agosto al 24 de septiembre", substring = true, useUnmergedTree = true)
+            .performClick()
+        assertEquals(Screen.Periodos, navegoA)
     }
 
     /**

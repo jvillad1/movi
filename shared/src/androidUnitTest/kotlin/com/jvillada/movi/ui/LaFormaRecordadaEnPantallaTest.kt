@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.height
 import com.jvillada.movi.data.FormaDeCategorias
 import com.jvillada.movi.data.FormaDeCreditos
 import com.jvillada.movi.data.FormaDeCuentas
+import com.jvillada.movi.data.FormaDePeriodos
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -35,6 +36,7 @@ import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.accounts.AccountsScreen
 import com.jvillada.movi.ui.accounts.TAG_GRUPO_DE_CUENTAS
@@ -47,6 +49,9 @@ import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.credits.TAG_ESQUELETO_DE_AVISO
 import com.jvillada.movi.ui.credits.TAG_ESQUELETO_TARJETA_DE_PRESTAMO
 import com.jvillada.movi.ui.credits.TAG_TARJETA_DEL_RESUMEN_DE_DEUDA
+import com.jvillada.movi.ui.periodos.PeriodosScreen
+import com.jvillada.movi.ui.periodos.TAG_FILA_DE_PERIODO
+import com.jvillada.movi.ui.periodos.TAG_FILA_DE_PERIODO_ESQUELETO
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Before
 import org.junit.Rule
@@ -288,6 +293,45 @@ class LaFormaRecordadaEnPantallaTest {
         assertEquals(4, contarTag(TAG_FILA_DE_LISTA_ESQUELETO))
     }
 
+    // ── Períodos (Ola E, tarea 4) ────────────────────────────────────────────────
+
+    @Test
+    fun `Periodos reserva las filas de la ultima carga`() {
+        val puerta = CompletableDeferred<List<ResumenDePeriodo>>()
+        var lecturas = 0
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getPeriodos(): List<ResumenDePeriodo> =
+                if (lecturas++ == 0) PERIODOS_DEL_DUENO else puerta.await()
+        }
+        montar { PeriodosScreen(onNavigate = {}) }
+
+        assertEquals(FormaDePeriodos(filas = PERIODOS_DEL_DUENO.size), FormaRecordada.delAparato.periodos(USUARIO))
+        val primeraCargada = caja(composeRule.onAllNodesWithTag(TAG_FILA_DE_PERIODO).onFirst())
+
+        abrirDeNuevo()
+        assertEquals(PERIODOS_DEL_DUENO.size, contarTag(TAG_FILA_DE_PERIODO_ESQUELETO), "una fila esqueleto por período de la última vez")
+        val primeraCargando = caja(composeRule.onAllNodesWithTag(TAG_FILA_DE_PERIODO_ESQUELETO).onFirst())
+
+        puerta.complete(PERIODOS_DEL_DUENO)
+        composeRule.waitForIdle()
+        assertEquals(0, contarTag(TAG_FILA_DE_PERIODO_ESQUELETO))
+        val primeraCargadaDeNuevo = caja(composeRule.onAllNodesWithTag(TAG_FILA_DE_PERIODO).onFirst())
+
+        casiIgual(primeraCargando.height.value, primeraCargadaDeNuevo.height.value, "La primera fila (\"En curso\")")
+        casiIgual(primeraCargada.height.value, primeraCargadaDeNuevo.height.value, "La misma fila con los mismos datos")
+    }
+
+    @Test
+    fun `Periodos sin nada recordado usa el esqueleto de siempre, tres filas`() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getPeriodos(): List<ResumenDePeriodo> = CompletableDeferred<List<ResumenDePeriodo>>().await()
+        }
+        montar { PeriodosScreen(onNavigate = {}) }
+
+        assertNull(FormaRecordada.delAparato.periodos(USUARIO))
+        assertEquals(3, contarTag(TAG_FILA_DE_PERIODO_ESQUELETO))
+    }
+
     @Test
     fun `cerrar sesion se lleva la forma`() {
         FormaRecordada.delAparato.guardarCreditos(USUARIO, FormaDeCreditos(prestamos = 12))
@@ -352,5 +396,21 @@ private val CUENTAS_DEL_DUENO = listOf(
     Account(
         "acc-casa", "Casa Almendros", AccountType.INVESTMENT, 0L,
         bien = Bien(CLASE_DE_BIEN_INMUEBLE, 1_411_903_920L, valorAl = "2026-08-28", deudaId = "acc-1254"),
+    ),
+)
+
+/** El en curso (con marca), uno del medio y uno sin nada de flujo (solo traspasos). */
+private val PERIODOS_DEL_DUENO = listOf(
+    ResumenDePeriodo(
+        id = "2026-09", nombre = "Septiembre 2026", desde = "2026-08-25", hasta = "2026-09-24",
+        enCurso = true, entradas = 5_000_000L, salidas = 3_000_000L, movimientos = 10,
+    ),
+    ResumenDePeriodo(
+        id = "2026-08", nombre = "Agosto 2026", desde = "2026-07-26", hasta = "2026-08-24",
+        entradas = 4_000_000L, salidas = 4_500_000L, movimientos = 8,
+    ),
+    ResumenDePeriodo(
+        id = "2026-07", nombre = "Julio 2026", desde = "2026-06-26", hasta = "2026-07-25",
+        entradas = 0L, salidas = 0L, movimientos = 0,
     ),
 )

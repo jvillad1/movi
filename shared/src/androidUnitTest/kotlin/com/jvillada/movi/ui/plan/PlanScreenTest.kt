@@ -49,6 +49,7 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.budgets.TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO
 import com.jvillada.movi.ui.budgets.TAG_TARJETA_DEL_GASTO_DEL_PERIODO
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -187,10 +188,12 @@ class PlanScreenTest {
         )
     }
 
-    private fun montar(segmento: Int = SEGMENTO_PAGOS) {
+    private val navegado = mutableListOf<Screen>()
+
+    private fun montar(segmento: Int = SEGMENTO_PAGOS, onNavigate: (Screen) -> Unit = {}) {
         composeRule.setContent {
             MoviTheme {
-                Box(Modifier.fillMaxSize()) { PlanScreen(onNavigate = {}, segmento = segmento) }
+                Box(Modifier.fillMaxSize()) { PlanScreen(onNavigate = onNavigate, segmento = segmento) }
             }
         }
         composeRule.waitForIdle()
@@ -477,6 +480,23 @@ class PlanScreenTest {
         assertTrue(hay("No pudimos calcular cuánto puedes gastar"))
         assertTrue(!hay("\$5M"), "las cifras de la instantánea no se pueden dar por actuales")
         assertTrue(!hay("Actualizando…"))
+    }
+
+    /**
+     * Ola E, tarea 4: «Tus períodos» está SIEMPRE, en las dos pestañas de Plan — no pide nada,
+     * es un enlace fijo, así que no depende de ninguna de las puertas cerradas de este test.
+     */
+    @Test
+    fun `Tus periodos esta debajo de Cuanto puedes gastar y lleva a Screen Periodos`() {
+        puerta.complete(Unit)
+        montar(onNavigate = { navegado += it })
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_FILA_DE_TUS_PERIODOS) == 1 }
+
+        assertTrue(hay("Tus períodos"))
+        assertTrue(hay("Cómo te fue en cada ciclo"))
+
+        composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true).performClick()
+        assertEquals(Screen.Periodos, navegado.single())
     }
 
     @Test
