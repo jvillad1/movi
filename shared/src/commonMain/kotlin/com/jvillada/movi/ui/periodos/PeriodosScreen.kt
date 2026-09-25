@@ -31,16 +31,15 @@ import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.intentar
-import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.diaLegible
+import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.tituloDelPeriodo
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.Cifra
-import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
@@ -232,26 +231,35 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, onClick: () -> Unit) {
             }
             ChevronRight()
         }
-        val fraccion = fraccionQueEntro(resumen.entradas, resumen.salidas)
-        if (fraccion == null) {
-            Spacer(Modifier.height(10.dp))
-            Text(text = "Sin movimientos de flujo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        } else {
-            Spacer(Modifier.height(14.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                ParDeCifraDePeriodo("Entró", formatMoneyCompact(resumen.entradas), Movi.colores.entra)
-                ParDeCifraDePeriodo("Salió", formatMoneyCompact(resumen.salidas), Movi.colores.sale)
-                val teQuedo = teQuedoDe(resumen)
-                ParDeCifraDePeriodo("Te quedó", textoDeTeQuedo(teQuedo), colorDeTeQuedo(teQuedo), alFinal = true)
-            }
-            Spacer(Modifier.height(8.dp))
-            BarraDeDosTramos(
-                fraccionIzquierda = fraccion,
-                colorIzquierda = Movi.colores.entra,
-                colorDerecha = Movi.colores.sale,
-                entrada = 1f,
-            )
+        CifrasDelPeriodo(resumen)
+    }
+}
+
+/**
+ * Entró / salió / te quedó con la barra de dos tramos, o «Sin movimientos de flujo» con palabras.
+ * La misma pieza en la fila de la lista y arriba del detalle: un período se lee igual en los dos.
+ */
+@Composable
+internal fun CifrasDelPeriodo(resumen: ResumenDePeriodo) {
+    val fraccion = fraccionQueEntro(resumen.entradas, resumen.salidas)
+    if (fraccion == null) {
+        Spacer(Modifier.height(10.dp))
+        Text(text = "Sin movimientos de flujo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+    } else {
+        Spacer(Modifier.height(14.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            ParDeCifraDePeriodo("Entró", formatMoneyCompact(resumen.entradas), Movi.colores.entra)
+            ParDeCifraDePeriodo("Salió", formatMoneyCompact(resumen.salidas), Movi.colores.sale)
+            val teQuedo = teQuedoDe(resumen)
+            ParDeCifraDePeriodo("Te quedó", textoDeTeQuedo(teQuedo), colorDeTeQuedo(teQuedo), alFinal = true)
         }
+        Spacer(Modifier.height(8.dp))
+        BarraDeDosTramos(
+            fraccionIzquierda = fraccion,
+            colorIzquierda = Movi.colores.entra,
+            colorDerecha = Movi.colores.sale,
+            entrada = 1f,
+        )
     }
 }
 
@@ -286,38 +294,25 @@ private fun FilaDePeriodoEsqueleto(conMarca: Boolean) {
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            repeat(3) {
-                Column {
-                    LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
-                    LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.titulo)
-                }
+        CifrasDelPeriodoEsqueleto()
+    }
+}
+
+/** [CifrasDelPeriodo] mientras no llegó: los tres pares y la barra, sin una sola cifra. */
+@Composable
+internal fun CifrasDelPeriodoEsqueleto() {
+    Spacer(Modifier.height(14.dp))
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        repeat(3) {
+            Column {
+                LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
+                LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.titulo)
             }
         }
-        Spacer(Modifier.height(8.dp))
-        BloqueEsqueleto(alto = Movi.espacios.corto)
     }
+    Spacer(Modifier.height(8.dp))
+    BloqueEsqueleto(alto = Movi.espacios.corto)
 }
 
-/** [id] es el prefijo del período («2026-09»); `null` si no se pudo leer. */
-internal fun nombreDelId(id: String): String? {
-    val partes = id.split("-")
-    if (partes.size != 2) return null
-    val year = partes[0].toIntOrNull() ?: return null
-    val month = partes[1].toIntOrNull() ?: return null
-    return runCatching { tituloDelPeriodo(PeriodoFinanciero(year, month)) }.getOrNull()
-}
-
-/**
- * El detalle de un período — por ahora un marcador mínimo con su nombre, para que la navegación
- * desde [PeriodosScreen] sea probable de punta a punta. La tarea 5 lo reemplaza por el detalle de
- * verdad (categorías, pagos fijos, presupuestos, los gastos más grandes).
- */
-@Composable
-fun DetalleDePeriodoScreen(onNavigate: (Screen) -> Unit, id: String) {
-    val nombre = remember(id) { nombreDelId(id) ?: id }
-    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
-        MinScreenHeader(title = nombre, leading = HeaderLeading.Back(fallback = Screen.Periodos))
-    }
-}
+/** [id] es el prefijo del período («2026-09») → «Septiembre 2026»; `null` si no se pudo leer. */
+internal fun nombreDelId(id: String): String? = periodoDelPrefijo(id)?.let { tituloDelPeriodo(it) }

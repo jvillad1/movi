@@ -31,8 +31,13 @@ sealed class Screen {
      * Ola C: el chip «Recurrentes» ya no existe en Movimientos, y pedir
      * `Transactions(CHIP_RECURRENTES)` lleva a [Plan] (ver [destinoVigente]). El parámetro sigue
      * sirviendo para los modos sin chip («Por confirmar», «Entre cuentas»).
+     *
+     * [periodoInicial] es el prefijo («2026-09») del período con el que arranca la lista; `null`
+     * —lo normal— es el período de hoy. Lo pide «Ver los movimientos de este período» del detalle
+     * de un período, que sin él aterrizaba en el mes en curso y obligaba a volver a buscar el que
+     * se estaba mirando con las flechas. Un prefijo que no se entiende también cae en el de hoy.
      */
-    data class Transactions(val chipInicial: Int? = null) : Screen()
+    data class Transactions(val chipInicial: Int? = null, val periodoInicial: String? = null) : Screen()
     /**
      * La hoja de «Agregar», opcionalmente **prellenada**.
      *

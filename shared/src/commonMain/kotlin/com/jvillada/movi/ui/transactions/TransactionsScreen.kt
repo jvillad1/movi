@@ -46,6 +46,7 @@ import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -60,11 +61,12 @@ import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.periodoAnterior
 import com.jvillada.movi.shared.model.periodoDeLaFecha
+import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.periodoSiguiente
 import com.jvillada.movi.shared.model.rangoLegibleDe
-import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.showsInMovements
 import com.jvillada.movi.ui.profile.InicioDelPeriodoSheet
+import com.jvillada.movi.ui.profile.guardarInicioDelPeriodo
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -806,7 +808,7 @@ fun transferRowTitle(row: MovementRow.Transfer, accountTypes: Map<String, Accoun
  */
 
 @Composable
-fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
+fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, periodoInicial: String? = null) {
     // Con qué chip arranca — ver [chipInicialDeMovimientos]. `remember(chipInicial)` y no
     // `remember { }` a secas: si se vuelve a entrar pidiendo otro filtro, el estado tiene que
     // rearrancar en el que se pidió, no quedarse con el de la visita anterior.
@@ -974,8 +976,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
      * Qué período se está mirando. `remember(periodoDeHoy)` y no `remember { }` a secas: si el
      * dueño cambia su día de corte en Perfil y vuelve, el mes que se ve tiene que rearrancar en el
      * que corresponde al corte nuevo, no quedarse en el que nombraba el viejo.
+     *
+     * Arranca en [periodoInicial] cuando alguien lo pidió (ver [Screen.Transactions]). El prefijo
+     * nombra el período sin depender del corte, así que sigue siendo el mismo cuando el perfil
+     * contesta y `periodoDeHoy` cambia.
      */
-    var periodoVisible by remember(periodoDeHoy) { mutableStateOf(periodoDeHoy) }
+    var periodoVisible by remember(periodoDeHoy, periodoInicial) {
+        mutableStateOf(periodoInicial?.let { periodoDelPrefijo(it) } ?: periodoDeHoy)
+    }
 
     val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo) {
         val filtrados = diasVisibles(allDays, activeFilter, searchQuery)
@@ -1500,13 +1508,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 if (!guardandoInicio) {
                     guardandoInicio = true
                     errorDelInicio = null
-                    // `null` = quitar la excepción. El mapa viaja entero, que es cómo la ruta
-                    // distingue «no tocar» (no mandarlo) de «ninguno» (mandarlo vacío).
-                    val nuevo =
-                        if (inicio == null) iniciosPropios - periodoVisible.prefijo
-                        else iniciosPropios + (periodoVisible.prefijo to inicio)
+                    // `null` = quitar la excepción. Ver [guardarInicioDelPeriodo].
+                    val periodo = periodoVisible
                     alcanceDeLaPantalla.launch {
-                        runCatching { Repositories.wallets.updateUserProfile(UpdateProfileRequest(periodStarts = nuevo)) }
+                        intentar { guardarInicioDelPeriodo(ajustesDelPeriodo, periodo, inicio) }
                             .onSuccess {
                                 iniciosPropios = it.periodStarts
                                 editandoElInicio = false

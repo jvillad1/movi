@@ -691,40 +691,30 @@ private fun AlertBadge(label: String, count: Int, color: Color) {
     }
 }
 
+/**
+ * El semáforo de un presupuesto, tal como lo pidió el dueño: «verde si estoy igual o por debajo,
+ * amarillo si superé un poco y rojo si superé mucho». Lo usan la tarjeta de Presupuestos y el
+ * detalle de un período, para que el mismo estado se lea del mismo color en los dos.
+ *
+ * Los TRES estados de «por debajo o igual» son verdes, DENTRO incluido. La primera versión lo
+ * dejaba caer en un `else` gris, y quedaba al revés de lo pedido: 40 % gris, 85 % verde, 100 %
+ * verde. El presupuesto menos gastado se veía menos verde que el que estaba justo en el límite.
+ *
+ * Sin `else`: así el `when` es exhaustivo y un estado nuevo no puede colarse sin color.
+ */
+@Composable
+internal fun colorDelEstadoDePresupuesto(estado: EstadoDePresupuesto): Color = when (estado) {
+    EstadoDePresupuesto.EXCEDIDO_MUCHO -> Movi.colores.sale
+    EstadoDePresupuesto.EXCEDIDO_POCO -> Movi.colores.aviso
+    EstadoDePresupuesto.AL_LIMITE -> Movi.colores.entra
+    EstadoDePresupuesto.CERCA -> Movi.colores.entra
+    EstadoDePresupuesto.DENTRO -> Movi.colores.entra
+}
+
 @Composable
 private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
-    val barColor = when (p.state) {
-        // El semáforo, tal como lo pidió el dueño: «verde si estoy igual o por debajo, amarillo
-        // si superé un poco y rojo si superé mucho».
-        //
-        // Los TRES estados de «por debajo o igual» son verdes, DENTRO incluido. La primera
-        // versión lo dejaba caer en un `else` gris, y quedaba al revés de lo pedido: 40 % gris,
-        // 85 % verde, 100 % verde. El presupuesto menos gastado se veía menos verde que el que
-        // estaba justo en el límite.
-        //
-        // Sin `else`: así el `when` es exhaustivo y un estado nuevo no puede colarse sin color.
-        EstadoDePresupuesto.EXCEDIDO_MUCHO -> Movi.colores.sale
-        EstadoDePresupuesto.EXCEDIDO_POCO -> Movi.colores.aviso
-        EstadoDePresupuesto.AL_LIMITE -> Movi.colores.entra
-        EstadoDePresupuesto.CERCA -> Movi.colores.entra
-        EstadoDePresupuesto.DENTRO -> Movi.colores.entra
-    }
-    val pctColor = when (p.state) {
-        // El semáforo, tal como lo pidió el dueño: «verde si estoy igual o por debajo, amarillo
-        // si superé un poco y rojo si superé mucho».
-        //
-        // Los TRES estados de «por debajo o igual» son verdes, DENTRO incluido. La primera
-        // versión lo dejaba caer en un `else` gris, y quedaba al revés de lo pedido: 40 % gris,
-        // 85 % verde, 100 % verde. El presupuesto menos gastado se veía menos verde que el que
-        // estaba justo en el límite.
-        //
-        // Sin `else`: así el `when` es exhaustivo y un estado nuevo no puede colarse sin color.
-        EstadoDePresupuesto.EXCEDIDO_MUCHO -> Movi.colores.sale
-        EstadoDePresupuesto.EXCEDIDO_POCO -> Movi.colores.aviso
-        EstadoDePresupuesto.AL_LIMITE -> Movi.colores.entra
-        EstadoDePresupuesto.CERCA -> Movi.colores.entra
-        EstadoDePresupuesto.DENTRO -> Movi.colores.entra
-    }
+    val barColor = colorDelEstadoDePresupuesto(p.state)
+    val pctColor = barColor
     MinCard(
         modifier = Modifier.fillMaxWidth(),
         variant = MinCardVariant.Elevated,

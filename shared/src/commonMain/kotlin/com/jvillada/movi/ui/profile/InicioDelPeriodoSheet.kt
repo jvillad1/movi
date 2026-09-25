@@ -31,13 +31,31 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.UpdateProfileRequest
+import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.conInicioPropio
 import com.jvillada.movi.shared.model.inicioDelPeriodo
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.rangoLegibleDe
+import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
+
+/**
+ * **La única escritura de un arranque propio**: declara (o quita, con [inicio] `null`) el arranque
+ * de [periodo] y manda el mapa entero con `PUT /api/users/me` — así es cómo la ruta distingue «no
+ * tocar» (no mandarlo) de «ninguno» (mandarlo vacío). Las demás excepciones de [ajustes] viajan
+ * como estaban.
+ *
+ * La usan esta hoja (desde Movimientos) y «Empezar un período nuevo hoy» del detalle de un
+ * período: son la misma decisión tomada desde dos lugares.
+ */
+suspend fun guardarInicioDelPeriodo(ajustes: PeriodSettings, periodo: PeriodoFinanciero, inicio: String?): UserProfile =
+    Repositories.wallets.updateUserProfile(
+        UpdateProfileRequest(periodStarts = ajustes.conInicioPropio(periodo, inicio).iniciosPropios),
+    )
 
 /**
  * **«Este mes no empezó cuando siempre.»**
@@ -89,10 +107,7 @@ fun InicioDelPeriodoSheet(
     }
     /** El rango que quedaría, calculado con la misma función que después lo pinta en Movimientos. */
     val previsualizacion = remember(elegido, periodo, ajustes) {
-        rangoLegibleDe(
-            periodo,
-            ajustes.copy(iniciosPropios = ajustes.iniciosPropios + (periodo.prefijo to elegido.toString())),
-        )
+        rangoLegibleDe(periodo, ajustes.conInicioPropio(periodo, elegido.toString()))
     }
 
     Column(
