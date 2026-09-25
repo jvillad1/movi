@@ -134,6 +134,40 @@ fun ocurrenciaPorPreguntar(
 }
 
 /**
+ * **La ocurrencia de [rule] justo antes del período que contiene [hoy], mientras su pago todavía
+ * pueda caer adentro de ese período**; `null` si no hay.
+ *
+ * Existe por el pago tardío que cruza el corte. Con corte 25, el arriendo del 23-sep pagado el 26
+ * es de la ocurrencia del 23-sep, pero el movimiento cae en el período que arrancó el 25. Mientras
+ * dura la gracia [ocurrenciaPorPreguntar] sigue preguntando por el 23-sep y el checklist empareja
+ * ese pago; pasada la gracia pregunta por el 23-oct y nadie más miraba el 23-sep, así que el pago
+ * volvía al gasto variable del período por el resto del mes. Esta es la ocurrencia que hay que
+ * seguir mirando: la anterior al período, **solo si su ventana de emparejamiento
+ * ([occurrenceWindow]) pisa el período en curso** — si no lo pisa, ningún pago suyo puede estar
+ * en este período y no hay nada que derivar.
+ *
+ * En la gracia puede coincidir con la de [ocurrenciaPorPreguntar]; quien llama la descarta ahí,
+ * porque esa ya la resuelve el checklist.
+ */
+fun ocurrenciaAnteriorQuePisaElPeriodo(
+    hoy: LocalDate,
+    rule: RecurringRule,
+    settings: PeriodSettings,
+    zone: ZoneId = AppClock.zone,
+): LocalDate? {
+    val inicio = diasDelPeriodo(hoy, settings, zone).start
+    val ultimoDiaAntes = inicio.minusDays(1)
+    val enEseMes = occurrenceInMonth(YearMonth.from(ultimoDiaAntes), rule.dayOfMonth)
+    val anterior = if (enEseMes.isAfter(ultimoDiaAntes)) {
+        occurrenceInMonth(YearMonth.from(ultimoDiaAntes).minusMonths(1), rule.dayOfMonth)
+    } else {
+        enEseMes
+    }
+    if (occurrenceWindow(anterior, settings = settings).endInclusive.isBefore(inicio)) return null
+    return anterior.takeIf { ruleIsActiveOn(rule, it, settings, zone) }
+}
+
+/**
  * Clave de dedupe del vencimiento actual de una regla.
  *
  * Es el periodo del vencimiento vigente (no el de hoy), calculado con la misma [dueDateFor] que

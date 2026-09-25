@@ -253,4 +253,16 @@ class DueDatesTest {
             assertEquals(dueDateFor(rule(dia), hoy), dueDateFor(rule(dia), hoy, settings = cal), "día $dia hoy $hoy")
         }
     }
+
+    @Test fun `la ocurrencia anterior sale solo si su ventana pisa el periodo`() {
+        val hoy = LocalDate.of(2026, 9, 30) // período 25-sep..24-oct
+        // Día 23: su ventana llega hasta el 3-oct, así que un pago tardío puede caer en el período.
+        assertEquals(LocalDate.of(2026, 9, 23), ocurrenciaAnteriorQuePisaElPeriodo(hoy, rule(23), corte25))
+        // Día 15: la ventana del 15-sep termina el 25-sep, justo el arranque — todavía lo pisa.
+        assertEquals(LocalDate.of(2026, 9, 15), ocurrenciaAnteriorQuePisaElPeriodo(hoy, rule(15), corte25))
+        // Día 14: termina el 24-sep, un día antes. Ningún pago suyo puede estar en este período.
+        assertEquals(null, ocurrenciaAnteriorQuePisaElPeriodo(hoy, rule(14), corte25))
+        // Día 28: la anterior al 25-sep es la del 28-ago, no la del 28-sep (que es de este período).
+        assertEquals(null, ocurrenciaAnteriorQuePisaElPeriodo(hoy, rule(28), corte25))
+    }
 }

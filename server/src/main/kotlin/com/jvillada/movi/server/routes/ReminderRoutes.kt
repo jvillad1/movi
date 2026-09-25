@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.reminders.periodoDelDueno
 import com.jvillada.movi.server.reminders.ocurrenciaEnJuego
 import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
+import com.jvillada.movi.server.reminders.ocurrenciaAnteriorQuePisaElPeriodo
 import com.jvillada.movi.server.reminders.DEFAULT_GRACE_DAYS
 import com.jvillada.movi.server.reminders.diasDelPeriodo
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
@@ -775,7 +776,30 @@ internal fun org.jetbrains.exposed.sql.Transaction.estadosDeLasOcurrenciasReales
     uid: String,
     today: java.time.LocalDate,
     periodo: com.jvillada.movi.shared.model.PeriodSettings,
-): List<OccurrenceState> {
+): List<OccurrenceState> = ocurrenciasReales(uid, today, periodo).estados
+
+/**
+ * Lo que deriva una lectura de los recurrentes reales: la respuesta del checklist y, aparte, lo que
+ * Movi emparejó solo en la ocurrencia ANTERIOR al período que el checklist ya no pregunta.
+ */
+internal class OcurrenciasReales(
+    /** La respuesta de `GET /api/payments/occurrences` sin sintéticas; ver [estadosDeLasOcurrenciasReales]. */
+    val estados: List<OccurrenceState>,
+    /**
+     * El pago tardío que cruzó el corte, emparejado con su ocurrencia ([ocurrenciaAnteriorQuePisaElPeriodo])
+     * después de que la gracia se acabó y el checklist pasó a la siguiente. Con la forma de un sello,
+     * igual que `emparejadasComoSellos`, que es quien lo lee. No entra en [estados]: el checklist no
+     * vuelve a mostrar una ocurrencia que ya dejó atrás.
+     */
+    val anterioresEmparejadas: List<RecurringOccurrence>,
+)
+
+/** El cuerpo de [estadosDeLasOcurrenciasReales], con las ocurrencias anteriores emparejadas aparte. */
+internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
+    uid: String,
+    today: java.time.LocalDate,
+    periodo: com.jvillada.movi.shared.model.PeriodSettings,
+): OcurrenciasReales {
     val diasDelPeriodoEnCurso = diasDelPeriodo(today, periodo)
     // Solo reglas REALES. La cuota de un crédito y el pago de una tarjeta son reglas
     // sintéticas derivadas de `credit_terms`/`card_terms`, con su propia pantalla y su
@@ -788,7 +812,7 @@ internal fun org.jetbrains.exposed.sql.Transaction.estadosDeLasOcurrenciasReales
     val rules = RecurringRules.selectAll()
         .where { RecurringRules.userId eq uid }
         .map { it.toRule() }
-    if (rules.isEmpty()) return emptyList()
+    if (rules.isEmpty()) return OcurrenciasReales(emptyList(), emptyList())
 
     val ocurrencias = loadOccurrenceRows(uid).associateBy { it.ruleId to it.period }
     val ocurridos = loadOccurredBy(uid)
@@ -803,9 +827,13 @@ internal fun org.jetbrains.exposed.sql.Transaction.estadosDeLasOcurrenciasReales
     // El piso baja también hasta la ventana de una ocurrencia del período ANTERIOR que
     // sigue en gracia (ver `ocurrenciaPorPreguntar`): sus candidatos caen antes del corte.
     val pisoDeLaGracia = today.minusDays(DEFAULT_GRACE_DAYS + OCCURRENCE_WINDOW_DAYS)
+    // Y hasta la ventana de la ocurrencia anterior al período (ver
+    // `ocurrenciaAnteriorQuePisaElPeriodo`): solo cuenta si su ventana termina dentro del período,
+    // así que vence como mucho 10 días antes del arranque y su ventana empieza 10 días antes de eso.
+    val pisoDeLaAnterior = diasDelPeriodoEnCurso.start.minusDays(2 * OCCURRENCE_WINDOW_DAYS)
     val eventos = loadEventsBetween(
         uid = uid,
-        desde = appDateToEpochMillis(minOf(diasDelPeriodoEnCurso.start, pisoDeLaGracia)),
+        desde = appDateToEpochMillis(minOf(diasDelPeriodoEnCurso.start, pisoDeLaGracia, pisoDeLaAnterior)),
         hastaExclusivo = appDateToEpochMillis(
             diasDelPeriodoEnCurso.endInclusive.plusDays(OCCURRENCE_WINDOW_DAYS + 1),
         ),
@@ -865,22 +893,29 @@ internal fun org.jetbrains.exposed.sql.Transaction.estadosDeLasOcurrenciasReales
     // el «marcar de más» que este archivo evita). Se recorre en orden de id de regla, que
     // es estable, así que ante un empate imposible —el mismo movimiento concluyente para
     // dos reglas distintas— gana siempre la misma y la respuesta no baila entre recargas.
-    val automaticas = mutableMapOf<String, FinancialEvent>()
     val reservados = usados.toMutableSet()
-    enJuego.forEach { (rule, due) ->
-        if (periodOf(due) in ocurridos[rule.id].orEmpty()) return@forEach
-        // El día todavía no llegó: no se empareja nada, igual que no se pregunta nada.
-        if (due.isAfter(today)) return@forEach
-        val sinRechazados = eventos.filterNot { (rule.id to it.id) in rechazados }
-        val concluyente =
-            ocurrenciaConcluyente(rule, due, sinRechazados, reservados, settings = periodo)
-                ?: return@forEach
-        automaticas[rule.id] = concluyente
-        reservados += concluyente.id
+    // Una sola forma de emparejar, para las dos pasadas que la usan (esta y la de la ocurrencia
+    // anterior, al final): lo sellado no se deriva, lo que no llegó no se empareja, lo rechazado no
+    // es candidato y cada movimiento emparejado queda reservado para el resto de la respuesta.
+    fun emparejarSolas(pares: List<Pair<RecurringRule, java.time.LocalDate>>): Map<String, FinancialEvent> {
+        val emparejadas = mutableMapOf<String, FinancialEvent>()
+        pares.forEach { (rule, due) ->
+            if (periodOf(due) in ocurridos[rule.id].orEmpty()) return@forEach
+            // El día todavía no llegó: no se empareja nada, igual que no se pregunta nada.
+            if (due.isAfter(today)) return@forEach
+            val sinRechazados = eventos.filterNot { (rule.id to it.id) in rechazados }
+            val concluyente =
+                ocurrenciaConcluyente(rule, due, sinRechazados, reservados, settings = periodo)
+                    ?: return@forEach
+            emparejadas[rule.id] = concluyente
+            reservados += concluyente.id
+        }
+        return emparejadas
     }
+    val automaticas = emparejarSolas(enJuego)
 
     // ── Pasada 2: la respuesta ───────────────────────────────────────────────
-    return enJuego.mapNotNull { (rule, due) ->
+    val estados = enJuego.mapNotNull { (rule, due) ->
         // La clave del sello sigue siendo el mes del vencimiento (ver `periodOf`): estable
         // aunque el dueño cambie su corte. El nombre que se muestra es el del período.
         val periodoEnCurso = periodOf(due)
@@ -942,4 +977,29 @@ internal fun org.jetbrains.exposed.sql.Transaction.estadosDeLasOcurrenciasReales
             )
         }
     }
+
+    // ── Pasada 3: el pago tardío de la ocurrencia anterior ───────────────────
+    //
+    // Pasada la gracia, el checklist ya pregunta por la ocurrencia siguiente y el emparejamiento
+    // del pago tardío que cruzó el corte dejaba de salir: ese pago volvía al gasto variable del
+    // período. Se deriva acá con las mismas reglas —concluyente o nada, sellos y rechazos
+    // respetados— y **después** de la respuesta: lo que el checklist ya emparejó o propone queda
+    // igual, y lo que emparejó está en `reservados`, así que un movimiento no cierra dos
+    // ocurrencias. La que el checklist todavía pregunta (en gracia) no se repite.
+    val anteriores = rules.sortedBy { it.id }.mapNotNull { rule ->
+        val anterior = ocurrenciaAnteriorQuePisaElPeriodo(today, rule, periodo) ?: return@mapNotNull null
+        if (enJuego.any { (r, due) -> r.id == rule.id && due == anterior }) return@mapNotNull null
+        rule to anterior
+    }
+    val vencimientoDe = anteriores.associate { (rule, due) -> rule.id to due }
+    val anterioresEmparejadas = emparejarSolas(anteriores).map { (ruleId, evento) ->
+        RecurringOccurrence(
+            ruleId = ruleId,
+            period = periodOf(vencimientoDe.getValue(ruleId)),
+            eventId = evento.id,
+            // Como en la pasada 1: nadie confirmó nada, lo más cierto es la fecha del movimiento.
+            confirmedAt = evento.timestamp,
+        )
+    }
+    return OcurrenciasReales(estados, anterioresEmparejadas)
 }
