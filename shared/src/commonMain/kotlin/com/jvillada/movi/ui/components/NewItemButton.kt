@@ -28,6 +28,10 @@ import com.jvillada.movi.theme.Movi
  * [full] cuando la lista está vacía (es cuando más falta la acción, así que va abajo del
  * encabezado, a todo el ancho) y compacto (ícono + texto) arriba a la derecha cuando ya hay
  * elementos. (Metas lo recibió en F26; Inversiones dejó de existir como pantalla en la Ola 7.)
+ *
+ * [enabled] apaga el botón cuando la acción no tiene sobre qué obrar (Presupuestos vacío: «Crear
+ * estos 0» con todas las propuestas desmarcadas). Apagado pierde el lavanda —fondo de tarjeta y
+ * texto apagado, como el botón de las hojas de Categorías— para que no se lea como tocable.
  */
 @Composable
 fun NewItemButton(
@@ -35,14 +39,15 @@ fun NewItemButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     full: Boolean = false,
+    enabled: Boolean = true,
 ) {
     if (full) {
         Row(
             modifier = modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(Movi.formas.amplia))
-                .background(Movi.colores.marca)
-                .clickable(onClick = onClick)
+                .background(if (enabled) Movi.colores.marca else Movi.colores.tarjeta)
+                .clickable(enabled = enabled, onClick = onClick)
                 .padding(vertical = 14.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
@@ -53,22 +58,23 @@ fun NewItemButton(
             Icon(
                 Icons.Rounded.Add,
                 contentDescription = null,
-                tint = Movi.colores.sobreMarca,
+                tint = if (enabled) Movi.colores.sobreMarca else Movi.colores.textoApagado,
                 modifier = Modifier.size(18.dp).padding(end = Movi.espacios.minimo + 2.dp),
             )
-            Text(label, style = Movi.textos.cuerpo, color = Movi.colores.sobreMarca)
+            Text(label, style = Movi.textos.cuerpo, color = if (enabled) Movi.colores.sobreMarca else Movi.colores.textoApagado)
         }
     } else {
         Row(
             modifier = modifier
                 .clip(RoundedCornerShape(Movi.formas.pleno))
-                .clickable(onClick = onClick)
+                .clickable(enabled = enabled, onClick = onClick)
                 .padding(horizontal = Movi.espacios.minimo, vertical = Movi.espacios.minimo),
             horizontalArrangement = Arrangement.spacedBy(Movi.espacios.minimo),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Rounded.Add, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))
-            Text(label, style = Movi.textos.cuerpo, color = Movi.colores.marca)
+            val color = if (enabled) Movi.colores.marca else Movi.colores.textoApagado
+            Icon(Icons.Rounded.Add, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+            Text(label, style = Movi.textos.cuerpo, color = color)
         }
     }
 }

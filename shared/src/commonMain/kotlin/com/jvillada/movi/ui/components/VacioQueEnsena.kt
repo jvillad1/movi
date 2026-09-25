@@ -44,6 +44,11 @@ const val TAG_VACIO_QUE_ENSENA: String = "vacio-que-ensena"
  *
  * [icono] también es opcional: no todo vacío tenía uno antes de esta tarea (Movimientos no lo
  * traía) y agregarle un ícono nuevo a un vacío existente no era parte de lo que esta tarea pedía.
+ *
+ * [contenido] va entre el detalle y el botón, adentro de la misma tarjeta: para el vacío que además
+ * de explicar ya trae algo armado (Presupuestos propone categorías con lo que el dueño gastó) y
+ * cuyas acciones van después de eso. Quien lo usa suele pasar `accion = null` y poner sus botones
+ * ahí adentro.
  */
 @Composable
 fun VacioQueEnsena(
@@ -53,6 +58,7 @@ fun VacioQueEnsena(
     onAccion: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     icono: ImageVector? = null,
+    contenido: (@Composable () -> Unit)? = null,
 ) {
     MinCard(
         modifier = modifier.fillMaxWidth().testTag(TAG_VACIO_QUE_ENSENA),
@@ -88,6 +94,10 @@ fun VacioQueEnsena(
                     color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                 )
+            }
+            if (contenido != null) {
+                Spacer(Modifier.height(Movi.espacios.amplio))
+                contenido()
             }
             if (accion != null && onAccion != null) {
                 Spacer(Modifier.height(Movi.espacios.amplio))

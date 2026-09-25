@@ -1,7 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,9 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +29,7 @@ import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.shared.model.ReminderChannels
+import com.jvillada.movi.ui.components.CasillaDeSeleccion
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 
@@ -215,7 +212,7 @@ fun ReminderOptInField(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            CheckBox(checked = checked)
+            CasillaDeSeleccion(marcada = checked)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Recordarme unos días antes",
@@ -249,31 +246,6 @@ fun ReminderOptInField(
                     pushRefreshTick++
                 },
                 source = ReminderWarningSource.OPT_IN_CHECKBOX,
-            )
-        }
-    }
-}
-
-/** Casilla cuadrada, dibujada a mano para no arrastrar el Checkbox de Material a estas hojas. */
-@Composable
-private fun CheckBox(checked: Boolean) {
-    androidx.compose.foundation.layout.Box(
-        modifier = Modifier
-            .size(20.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (checked) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-            .then(if (checked) Modifier else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(6.dp))),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (checked) {
-            // Ícono, no el carácter "✓": la fuente del canvas no lo trae y en el navegador la
-            // casilla marcada se veía como un cuadradito vacío — o sea, justo lo contrario de
-            // lo que quiere decir. (Se vio en la PWA, en «Nuevo recurrente».)
-            Icon(
-                imageVector = Icons.Rounded.Check,
-                contentDescription = null,
-                tint = Movi.colores.marca,
-                modifier = Modifier.size(14.dp),
             )
         }
     }

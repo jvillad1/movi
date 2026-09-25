@@ -33,6 +33,8 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.PropuestaDePresupuesto
+import kotlin.math.roundToLong
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
@@ -179,6 +181,63 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     // Hasta entonces, cualquier gasto que se pintara podía cambiar —el del aparato por el del
     // server, o el mes de calendario por el período del dueño— y con él el ORDEN de la lista.
     internal var gastoYPeriodoContestaron by mutableStateOf(false)
+
+    // ── Lo que Movi propone presupuestar (solo sin presupuestos) ──────────────────────────────
+    //
+    // `null` = no llegaron (todavía, o la lectura falló): el vacío de siempre, con su «Nuevo
+    // presupuesto». Una sugerencia caída no es un error de pantalla — no hay nada que el dueño haya
+    // perdido — y no le puede tapar crear a mano. Ver [VacioDePresupuestos].
+    internal var propuestas by mutableStateOf<List<PropuestaDePresupuesto>?>(null)
+        private set
+    // Las que el dueño desmarcó, por nombre. Se guarda lo desmarcado y no lo marcado porque todas
+    // nacen marcadas: una propuesta que llega en una recarga entra marcada sin que nadie la toque.
+    internal var desmarcadas by mutableStateOf(emptySet<String>())
+        private set
+    // Un «Crear estos N» en vuelo: el segundo toque no manda los POST otra vez.
+    internal var creandoPropuestas by mutableStateOf(false)
+        private set
+    // Las que el server no aceptó en el último intento, para decir cuáles y reintentar solo esas.
+    internal var propuestasQueFallaron by mutableStateOf(emptyList<PropuestaDePresupuesto>())
+        private set
+
+    internal val propuestasMarcadas: List<PropuestaDePresupuesto>
+        get() = propuestas.orEmpty().filter { it.category !in desmarcadas }
+
+    internal fun recibirPropuestas(nuevas: List<PropuestaDePresupuesto>) {
+        propuestas = nuevas
+        // Lo desmarcado de una categoría que ya no se propone no tiene a quién aplicarse.
+        desmarcadas = desmarcadas.filterTo(mutableSetOf()) { c -> nuevas.any { it.category == c } }
+    }
+
+    internal fun alternarPropuesta(categoria: String) {
+        desmarcadas = if (categoria in desmarcadas) desmarcadas - categoria else desmarcadas + categoria
+    }
+
+    /**
+     * Crea [lista] con el MISMO `createBudget` de la hoja «Nuevo presupuesto», una por una.
+     *
+     * Una que falla no deshace las demás: lo creado es del dueño y ya está en el server. Las que no
+     * entraron quedan en [propuestasQueFallaron], y la pantalla dice cuáles con «Reintentar». Si
+     * alguna entró se recarga, y la pantalla pasa sola del vacío a la lista.
+     */
+    internal fun crearPropuestas(lista: List<PropuestaDePresupuesto> = propuestasMarcadas) {
+        if (creandoPropuestas || lista.isEmpty()) return
+        creandoPropuestas = true
+        alcance.launch {
+            try {
+                val fallaron = lista.filter { p ->
+                    intentar { Repositories.wallets.createBudget(Budget(p.category, p.amount.roundToLong())) }.isFailure
+                }
+                propuestasQueFallaron = fallaron
+                if (fallaron.size < lista.size) reload()
+            } finally {
+                creandoPropuestas = false
+            }
+        }
+    }
+
+    /** El «Reintentar» de las propuestas que no se pudieron crear: solo esas. */
+    internal fun reintentarPropuestas() = crearPropuestas(propuestasQueFallaron)
 
     internal suspend fun reload() {
         // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
@@ -337,30 +396,13 @@ fun rememberEstadoDePresupuestos(activo: Boolean = true): EstadoDePresupuestos {
         estado.gastoYPeriodoContestaron = true
         estado.loading = false
     }
-    return estado
-}
-
-/**
- * **El vacío que enseña de Presupuestos**: sin ninguno creado, explica qué hace un presupuesto y
- * ofrece la MISMA hoja «Nuevo presupuesto» que ya abre el «Nuevo» del encabezado — ver
- * [EstadoDePresupuestos.abrirNuevo]. No hay lógica de alta nueva acá, solo el botón que la dispara.
- *
- * [contenidoExtra] es el gancho para la Task 4 de esta ola, que le agrega propuestas de presupuesto
- * armadas con lo que el dueño ya gasta: se pinta debajo del texto, adentro del mismo `Column`, para
- * no tener que tocar este composable ni quien lo llama cuando esas propuestas lleguen.
- */
-@Composable
-internal fun VacioDePresupuestos(estado: EstadoDePresupuestos, contenidoExtra: (@Composable () -> Unit)? = null) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        VacioQueEnsena(
-            titulo = "Ponle un tope a lo que más gastas",
-            detalle = "Elige una categoría y cuánto quieres gastar como máximo en cada período. Movi te avisa " +
-                "cuando te acerques.",
-            accion = "Nuevo presupuesto",
-            onAccion = { estado.abrirNuevo() },
-        )
-        contenidoExtra?.invoke()
+    // Las propuestas se piden SOLO sin presupuestos: a quien ya tiene no le cuestan ni una llamada.
+    // Una lectura caída deja lo que había (nada, la primera vez): el vacío de siempre.
+    LaunchedEffect(estado.sinPresupuestos, refreshTick, estado.refreshKeyLocal, activo) {
+        if (!activo || !estado.sinPresupuestos) return@LaunchedEffect
+        intentar { Repositories.wallets.getPropuestasDePresupuesto() }.onSuccess { estado.recibirPropuestas(it) }
     }
+    return estado
 }
 
 /**
@@ -381,6 +423,11 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
             VacioDePresupuestos(estado)
         } else {
             Spacer(Modifier.height(14.dp))
+        }
+        // Va afuera del vacío: si alguna propuesta sí se creó, la pantalla ya pasó a la lista y el
+        // aviso de las que faltan tiene que seguir ahí, arriba de ella.
+        if (estado.propuestasQueFallaron.isNotEmpty() && !estado.noSeLeyo) {
+            AvisoDePropuestasQueFallaron(estado)
         }
     }
 

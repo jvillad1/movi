@@ -269,9 +269,18 @@ fun rangoLegibleDe(periodo: PeriodoFinanciero, settings: PeriodSettings): String
     val inicio = Instant.fromEpochMilliseconds(v.first).toLocalDateTime(zona).date
     // El último día incluido es el anterior al arranque del siguiente.
     val ultimo = Instant.fromEpochMilliseconds(v.last).toLocalDateTime(zona).date
-    return "Del ${inicio.dayOfMonth} de ${MESES[inicio.month.number - 1]} " +
-        "al ${ultimo.dayOfMonth} de ${MESES[ultimo.month.number - 1]}"
+    return "Del ${diaLegible(inicio)} al ${diaLegible(ultimo)}"
 }
+
+/**
+ * «25 de julio»: un día como se dice, sin año. Es la mitad de [rangoLegibleDe], suelta para quien
+ * tiene los dos bordes por separado (las propuestas de presupuesto traen `desde` y `hasta`) y
+ * quiere que las fechas se lean igual que el rango del período.
+ */
+fun diaLegible(fecha: LocalDate): String = "${fecha.dayOfMonth} de ${MESES[fecha.month.number - 1]}"
+
+/** Lo mismo desde un `"AAAA-MM-DD"`; `null` si la cadena no es una fecha. */
+fun diaLegible(iso: String): String? = runCatching { LocalDate.parse(iso) }.getOrNull()?.let { diaLegible(it) }
 
 /**
  * **Desde cuándo recupera el teléfono los SMS del banco**: el arranque del período ANTERIOR al que

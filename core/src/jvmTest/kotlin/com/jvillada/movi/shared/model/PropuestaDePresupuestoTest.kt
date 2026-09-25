@@ -55,4 +55,11 @@ class PropuestaDePresupuestoTest {
         assertEquals(emptyList(), propuestasDePresupuesto(gasto, emptySet(), "2026-07-25", "2026-08-24"))
         assertEquals(emptyList(), propuestasDePresupuesto(emptyMap(), emptySet(), "2026-07-25", "2026-08-24"))
     }
+
+    @Test
+    fun `las fechas de la propuesta se leen como el rango del periodo`() {
+        assertEquals("25 de julio", diaLegible("2026-07-25"))
+        assertEquals("24 de agosto", diaLegible("2026-08-24"))
+        assertEquals(null, diaLegible("no es fecha"))
+    }
 }
