@@ -85,6 +85,7 @@ fun Application.configureRouting() {
             financeRoutes()
             categoryRoutes()
             dashboardRoutes()
+            periodosRoutes()
             creditRoutes()
             cardRoutes()
             subscriptionRoutes()

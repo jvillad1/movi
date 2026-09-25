@@ -310,13 +310,43 @@ internal fun Transaction.monthCashFlow(
     monthEnd: Long,
     voidedIds: Set<String>,
     accountTypeById: Map<String, AccountType>,
-): Pair<Long, Map<String, Long>> {
-    val rows = Events.select(Events.id, Events.accountId, Events.type, Events.amount, Events.category, Events.reconciliationStatus)
+): Pair<Long, Map<String, Long>> = flujoDeCaja(movimientosDeFlujo(uid, monthStart, monthEnd, voidedIds, accountTypeById))
+
+/**
+ * Un movimiento que suma en «Ingresos» o en «Gastos», con lo que esas sumas necesitan de él. Ver
+ * [movimientosDeFlujo].
+ */
+internal class MovimientoDeFlujo(
+    val id: String,
+    val timestamp: Long,
+    val type: TransactionType,
+    val amount: Long,
+    val category: String,
+)
+
+/**
+ * **Los movimientos que cuentan en el flujo de caja de `[desde, hastaExclusivo)`**: en pesos, vivos,
+ * fuera de «Por confirmar» y que `isCashFlow` deja pasar (sin traspasos, pagos de tarjeta ni
+ * asientos internos). Es la regla de [monthCashFlow], suelta de la suma para quien necesita las
+ * filas: «Tus períodos» lee una franja de varios períodos de una vez y la reparte, y saca de acá
+ * mismo los gastos más grandes, sin una segunda definición de qué es un gasto.
+ */
+internal fun Transaction.movimientosDeFlujo(
+    uid: String,
+    desde: Long,
+    hastaExclusivo: Long,
+    voidedIds: Set<String>,
+    accountTypeById: Map<String, AccountType>,
+): List<MovimientoDeFlujo> =
+    Events.select(
+        Events.id, Events.accountId, Events.type, Events.amount, Events.category,
+        Events.reconciliationStatus, Events.timestamp,
+    )
         .where {
             (Events.userId eq uid) and
                 (Events.currency eq "COP") and
-                (Events.timestamp greaterEq monthStart) and
-                (Events.timestamp less monthEnd)
+                (Events.timestamp greaterEq desde) and
+                (Events.timestamp less hastaExclusivo)
         }
         .filterNot { it[Events.id] in voidedIds }
         // Lo que espera en «Por confirmar» no suma — ni en el Inicio ni en las barras de
@@ -328,15 +358,27 @@ internal fun Transaction.monthCashFlow(
             accountType == null ||
                 isCashFlow(accountType, TransactionType.valueOf(row[Events.type]), row[Events.category])
         }
-    val income = rows.filter { it[Events.type] == TransactionType.INCOME.name }.sumOf { it[Events.amount] }
-    val spentByCategory = rows.filter { it[Events.type] == TransactionType.EXPENSE.name }
-        .groupBy { it[Events.category] }
-        .mapValues { (_, r) -> r.sumOf { it[Events.amount] } }
+        .map { row ->
+            MovimientoDeFlujo(
+                id = row[Events.id],
+                timestamp = row[Events.timestamp],
+                type = TransactionType.valueOf(row[Events.type]),
+                amount = row[Events.amount],
+                category = row[Events.category],
+            )
+        }
+
+/** Ingresos y gasto por categoría de [movimientos] — la suma de [monthCashFlow]. */
+internal fun flujoDeCaja(movimientos: List<MovimientoDeFlujo>): Pair<Long, Map<String, Long>> {
+    val income = movimientos.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+    val spentByCategory = movimientos.filter { it.type == TransactionType.EXPENSE }
+        .groupBy { it.category }
+        .mapValues { (_, r) -> r.sumOf { it.amount } }
     return income to spentByCategory
 }
 
 /** Todas las cuentas del usuario con lo que el Disponible necesita saber de cada una. Una consulta. */
-private fun Transaction.cuentasDelDisponible(uid: String): Map<String, CuentaDelDisponible> =
+internal fun Transaction.cuentasDelDisponible(uid: String): Map<String, CuentaDelDisponible> =
     Accounts.select(Accounts.id, Accounts.type, Accounts.conditionedTo, Accounts.assetKind)
         .where { Accounts.userId eq uid }
         .mapNotNull { row ->
@@ -362,23 +404,58 @@ private fun Transaction.sumasAntesDe(
     antesDe: Long,
     voidedIds: Set<String>,
     cuentas: Map<String, CuentaDelDisponible>,
-): List<SumaDeMovimientos> {
+): List<SumaDeMovimientos> = sumasDeTuPlataAntesDe(uid, antesDe, voidedIds, cuentas).enPesos
+
+/**
+ * Las sumas de [sumasAntesDe], y además si alguna cuenta de «Tu plata» tuvo movimientos en otra
+ * moneda antes de ese instante — en la MISMA consulta, agrupando también por moneda.
+ */
+private class SumasDeTuPlata(val enPesos: List<SumaDeMovimientos>, val hayOtraMoneda: Boolean)
+
+private fun Transaction.sumasDeTuPlataAntesDe(
+    uid: String,
+    antesDe: Long,
+    voidedIds: Set<String>,
+    cuentas: Map<String, CuentaDelDisponible>,
+): SumasDeTuPlata {
     val deTuPlata = cuentas.filterValues { it.esTuPlata }.keys.toList()
-    if (deTuPlata.isEmpty()) return emptyList()
+    if (deTuPlata.isEmpty()) return SumasDeTuPlata(emptyList(), hayOtraMoneda = false)
     val total = Events.amount.sum()
-    return Events.select(Events.accountId, Events.type, total)
+    val filas = Events.select(Events.accountId, Events.type, Events.currency, total)
         .where {
             val base = (Events.userId eq uid) and
-                (Events.currency eq "COP") and
                 (Events.timestamp less antesDe) and
                 (Events.accountId inList deTuPlata)
             if (voidedIds.isEmpty()) base else base and (Events.id notInList voidedIds.toList())
         }
-        .groupBy(Events.accountId, Events.type)
+        .groupBy(Events.accountId, Events.type, Events.currency)
+        .toList()
+    val enPesos = filas
+        .filter { it[Events.currency] == "COP" }
         .mapNotNull { row ->
             val tipo = runCatching { TransactionType.valueOf(row[Events.type]) }.getOrNull() ?: return@mapNotNull null
             SumaDeMovimientos(row[Events.accountId], tipo, row[total] ?: 0L)
         }
+    return SumasDeTuPlata(enPesos, hayOtraMoneda = filas.any { it[Events.currency] != "COP" })
+}
+
+/**
+ * **El saldo de «Tu plata» justo antes de [antesDe]**: las mismas cuentas que suma «Tu plata» del
+ * Inicio y la misma regla de signo que el «lo que tenías al empezar» del Disponible
+ * ([saldoDeTuPlata] sobre [sumasAntesDe]).
+ *
+ * `null` cuando no se puede decir sin mentir: si una cuenta de Tu plata tuvo movimientos en otra
+ * moneda, una suma en pesos la dejaría afuera en silencio (el Inicio la cuenta convertida, con la
+ * tasa de hoy, que no es la de ese día).
+ */
+internal fun Transaction.saldoDeTuPlataAntesDe(
+    uid: String,
+    antesDe: Long,
+    voidedIds: Set<String>,
+    cuentas: Map<String, CuentaDelDisponible>,
+): Long? {
+    val sumas = sumasDeTuPlataAntesDe(uid, antesDe, voidedIds, cuentas)
+    return if (sumas.hayOtraMoneda) null else saldoDeTuPlata(sumas.enPesos, cuentas)
 }
 
 /**
