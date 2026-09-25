@@ -332,5 +332,22 @@ class PagosDelChecklistTest {
         // El variable no cambia: la cuota ya salía entera por su categoría.
         assertEquals(45_000L, gastoTotal(eventos, parte))
     }
-}
 
+    /**
+     * **Un sello de OTRA ocurrencia no saca su movimiento del variable.** El arriendo del 23-sep,
+     * pagado el 26 —ya en el período de octubre (25-sep a 24-oct)— y sellado: el checklist de este
+     * período resta como fijo el 23-oct, no el 23-sep, y el Disponible arranca de un saldo que
+     * todavía tenía esa plata. Si saliera del variable no se contaría en ningún lado. El sello sí lo
+     * reserva: el 23-oct pendiente no lo toma como su pago.
+     */
+    @Test
+    fun `el sello de una ocurrencia de otro periodo no saca su pago del variable`() {
+        val arriendo = regla("rr_arriendo", "Arriendo", "Vivienda", 1_000_000, 23)
+        val pago = evento("ev_0926", "Arriendo", 1_000_000, "2026-09-26", "Vivienda")
+        val sellos = listOf(sello("rr_arriendo", "2026-09", "ev_0926"))
+
+        val parte = parteFija(listOf(arriendo), sellos, listOf(pago), hoy = LocalDate.of(2026, 9, 30))
+        assertNull(parte["ev_0926"])
+        assertEquals(1_000_000, gastoTotal(listOf(pago), parte))
+    }
+}

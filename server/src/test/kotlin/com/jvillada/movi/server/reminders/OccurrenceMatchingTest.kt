@@ -12,6 +12,7 @@ import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -266,5 +267,122 @@ class OccurrenceMatchingTest {
         // Regresión: el barrido solo mira gastos. Cerrar el salario no debe cambiar eso.
         val pares = listOf(regla() to null)
         assertFalse(selectDueForReminder(pares, LocalDate.of(2026, 8, 26), 3).any { it.id == "rr_1" })
+    }
+
+    // ── El nombre con el mes/año adentro ──────────────────────────────────────
+
+    /**
+     * **El caso real del dueño.** La regla se llama «Salario»; el movimiento, como lo anota el
+     * banco, «Salario Octubre 2026». Antes de `nombreDeMovimientoPegaConRegla` esto solo se
+     * emparejaba si el monto también daba exacto — y el monto de un sueldo varía mes a mes.
+     */
+    @Test fun `Salario Octubre 2026 es la ocurrencia solo, sin exigir el monto`() {
+        val reglaDelDueno = regla(
+            name = "Salario",
+            category = "Salario",
+            amount = 20_038_658,
+            accountId = "acc_1",
+        )
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val elSueldo = evento(
+            id = "ev_salario",
+            day = 24,
+            month = 9,
+            amount = 20_038_658,
+            category = "Salario",
+            description = "Salario Octubre 2026",
+            accountId = "acc_1",
+        )
+        assertEquals(
+            "ev_salario",
+            ocurrenciaConcluyente(reglaDelDueno, vencimiento, listOf(elSueldo))?.id,
+        )
+    }
+
+    /**
+     * La variante que de verdad prueba que fue el NOMBRE el que emparejó: el monto no da exacto
+     * (así que la puerta de «las tres circunstancias» no aplica), y aun así se empareja solo.
+     */
+    @Test fun `con monto distinto tambien se empareja solo por el nombre`() {
+        val reglaDelDueno = regla(
+            name = "Salario",
+            category = "Salario",
+            amount = 20_038_658,
+            accountId = "acc_1",
+        )
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val elSueldo = evento(
+            id = "ev_salario",
+            day = 24,
+            month = 9,
+            amount = 20_500_000,
+            category = "Salario",
+            description = "Salario Octubre 2026",
+            accountId = "acc_1",
+        )
+        assertEquals(
+            "ev_salario",
+            ocurrenciaConcluyente(reglaDelDueno, vencimiento, listOf(elSueldo))?.id,
+        )
+    }
+
+    /** Con dos movimientos que dicen «Salario …», Movi no puede saber cuál es cuál: pregunta. */
+    @Test fun `con dos Salario en la ventana sigue preguntando`() {
+        val reglaDelDueno = regla(
+            name = "Salario",
+            category = "Salario",
+            amount = 20_038_658,
+            accountId = "acc_1",
+        )
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val primero = evento(
+            id = "ev_salario_1",
+            day = 24,
+            month = 9,
+            amount = 20_038_658,
+            category = "Salario",
+            description = "Salario Octubre 2026",
+            accountId = "acc_1",
+        )
+        val segundo = evento(
+            id = "ev_salario_2",
+            day = 20,
+            month = 9,
+            amount = 20_038_658,
+            category = "Salario",
+            description = "Salario",
+            accountId = "acc_1",
+        )
+        assertNull(ocurrenciaConcluyente(reglaDelDueno, vencimiento, listOf(primero, segundo)))
+    }
+
+    // ── Palabras pegadas o separadas ──────────────────────────────────────────
+
+    /**
+     * El banco escribe el comercio con las palabras pegadas: la regla «Smart Fit» contra el
+     * `SMARTFIT` del SMS. Pegaba por la clave comparable antes de que el nombre perdonara el
+     * mes/año, y tiene que seguir pegando — en las dos direcciones — con un monto que no da exacto,
+     * para que sea el NOMBRE el que empareja.
+     */
+    @Test fun `Smart Fit y SMARTFIT se emparejan solos en las dos direcciones`() {
+        val gimnasio = regla(name = "Smart Fit", category = "Deporte", amount = 120_000,
+            type = TransactionType.EXPENSE)
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val delBanco = evento(id = "ev_gym", day = 24, month = 9, amount = 125_000, category = "Deporte",
+            description = "Compra", merchant = "SMARTFIT", type = TransactionType.EXPENSE)
+        assertEquals("ev_gym", ocurrenciaConcluyente(gimnasio, vencimiento, listOf(delBanco))?.id)
+
+        val pegada = regla(name = "SmartFit", category = "Deporte", amount = 120_000,
+            type = TransactionType.EXPENSE)
+        val separado = delBanco.copy(merchant = "SMART FIT")
+        assertEquals("ev_gym", ocurrenciaConcluyente(pegada, vencimiento, listOf(separado))?.id)
+    }
+
+    @Test fun `Gimnasio Caro sigue sin ser la ocurrencia de Gimnasio`() {
+        val gimnasio = regla(name = "Gimnasio", category = "Deporte", amount = 120_000,
+            type = TransactionType.EXPENSE)
+        val deOtro = evento(id = "ev_otro", day = 24, month = 9, amount = 125_000, category = "Deporte",
+            description = "Gimnasio Caro", type = TransactionType.EXPENSE)
+        assertNull(ocurrenciaConcluyente(gimnasio, LocalDate.of(2026, 9, 25), listOf(deOtro)))
     }
 }

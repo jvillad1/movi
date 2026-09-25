@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.reminders.periodoDelDueno
 import com.jvillada.movi.server.reminders.ocurrenciaEnJuego
 import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
+import com.jvillada.movi.server.reminders.ocurrenciaAnteriorQuePisaElPeriodo
 import com.jvillada.movi.server.reminders.DEFAULT_GRACE_DAYS
 import com.jvillada.movi.server.reminders.diasDelPeriodo
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
@@ -26,9 +27,8 @@ import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.server.reminders.loadOccurredBy
 import com.jvillada.movi.server.reminders.loadOccurrenceRows
 import com.jvillada.movi.server.reminders.loadRejectedPairs
-import com.jvillada.movi.server.reminders.loadUsedOccurrenceEventIds
 import com.jvillada.movi.server.reminders.occurrenceCandidatesFor
-import com.jvillada.movi.server.reminders.ocurrenciaConcluyente
+import com.jvillada.movi.server.reminders.ocurrenciasConcluyentes
 import com.jvillada.movi.server.reminders.occurrenceInMonth
 import com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo
 import com.jvillada.movi.server.reminders.plataQueSalio
@@ -166,6 +166,9 @@ fun Route.reminderRoutes() {
                 // formado se guarda como NULL —«desde siempre»—, que es como nacen las reglas
                 // escritas a mano.
                 it[activeFrom] = fechaIsoValida(body.activeFrom)
+                // Solo del server (ver la columna): un PUT no la toca, así que la regla conserva
+                // el día en que nació aunque se le corrija el monto.
+                it[createdAt] = System.currentTimeMillis()
             }
             safeAccountId
         }
@@ -775,7 +778,31 @@ internal fun org.jetbrains.exposed.sql.Transaction.estadosDeLasOcurrenciasReales
     uid: String,
     today: java.time.LocalDate,
     periodo: com.jvillada.movi.shared.model.PeriodSettings,
-): List<OccurrenceState> {
+): List<OccurrenceState> = ocurrenciasReales(uid, today, periodo).estados
+
+/**
+ * Lo que deriva una lectura de los recurrentes reales: la respuesta del checklist y, aparte, lo que
+ * Movi emparejó solo en la ocurrencia ANTERIOR al período que el checklist ya no pregunta.
+ */
+internal class OcurrenciasReales(
+    /** La respuesta de `GET /api/payments/occurrences` sin sintéticas; ver [estadosDeLasOcurrenciasReales]. */
+    val estados: List<OccurrenceState>,
+    /**
+     * El pago tardío que cruzó el corte, emparejado con su ocurrencia ([ocurrenciaAnteriorQuePisaElPeriodo])
+     * después de que la gracia se acabó y el checklist pasó a la siguiente. Con la forma de un sello,
+     * igual que `emparejadasComoSellos`, que es quien lo lee y donde está qué hace y qué no (no saca
+     * plata del variable; reserva el movimiento). No entra en [estados]: el checklist no vuelve a
+     * mostrar una ocurrencia que ya dejó atrás.
+     */
+    val anterioresEmparejadas: List<RecurringOccurrence>,
+)
+
+/** El cuerpo de [estadosDeLasOcurrenciasReales], con las ocurrencias anteriores emparejadas aparte. */
+internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
+    uid: String,
+    today: java.time.LocalDate,
+    periodo: com.jvillada.movi.shared.model.PeriodSettings,
+): OcurrenciasReales {
     val diasDelPeriodoEnCurso = diasDelPeriodo(today, periodo)
     // Solo reglas REALES. La cuota de un crédito y el pago de una tarjeta son reglas
     // sintéticas derivadas de `credit_terms`/`card_terms`, con su propia pantalla y su
@@ -785,64 +812,26 @@ internal fun org.jetbrains.exposed.sql.Transaction.estadosDeLasOcurrenciasReales
     // Siguen sin entrar por acá: lo que se agregó abajo NO sella nada — lee el pago que
     // ya está registrado y lo reporta. Es la otra mitad de este mismo argumento, la que
     // faltaba: el hecho más fuerte existía y nadie lo leía.
-    val rules = RecurringRules.selectAll()
-        .where { RecurringRules.userId eq uid }
-        .map { it.toRule() }
-    if (rules.isEmpty()) return emptyList()
+    val rules = reglasRealesDe(uid)
+    if (rules.isEmpty()) return OcurrenciasReales(emptyList(), emptyList())
 
-    val ocurrencias = loadOccurrenceRows(uid).associateBy { it.ruleId to it.period }
-    val ocurridos = loadOccurredBy(uid)
-    val usados = loadUsedOccurrenceEventIds(uid)
-    // Los «no fue este» guardados: se excluyen de las propuestas Y del emparejamiento
-    // automático. Sin esto, rechazar algo que Movi emparejó solo no serviría de nada —
-    // la lectura siguiente lo volvería a emparejar, para siempre.
-    val rechazados = loadRejectedPairs(uid)
     // Solo la franja donde puede haber candidatos, no todos los movimientos de la vida
     // del usuario: desde el primero del mes (el piso del emparejador) hasta la ventana
     // por delante del vencimiento más tardío posible.
     // El piso baja también hasta la ventana de una ocurrencia del período ANTERIOR que
     // sigue en gracia (ver `ocurrenciaPorPreguntar`): sus candidatos caen antes del corte.
     val pisoDeLaGracia = today.minusDays(DEFAULT_GRACE_DAYS + OCCURRENCE_WINDOW_DAYS)
-    val eventos = loadEventsBetween(
+    // Y hasta la ventana de la ocurrencia anterior al período (ver
+    // `ocurrenciaAnteriorQuePisaElPeriodo`): solo cuenta si su ventana termina dentro del período,
+    // así que vence como mucho 10 días antes del arranque y su ventana empieza 10 días antes de eso.
+    val pisoDeLaAnterior = diasDelPeriodoEnCurso.start.minusDays(2 * OCCURRENCE_WINDOW_DAYS)
+    val lectura = leerOcurrencias(
         uid = uid,
-        desde = appDateToEpochMillis(minOf(diasDelPeriodoEnCurso.start, pisoDeLaGracia)),
-        hastaExclusivo = appDateToEpochMillis(
-            diasDelPeriodoEnCurso.endInclusive.plusDays(OCCURRENCE_WINDOW_DAYS + 1),
-        ),
+        desde = minOf(diasDelPeriodoEnCurso.start, pisoDeLaGracia, pisoDeLaAnterior),
+        hasta = diasDelPeriodoEnCurso.endInclusive.plusDays(OCCURRENCE_WINDOW_DAYS),
     )
 
-    // **Qué reglas tienen algo que decir, y con qué vencimiento.** Se calcula una vez y lo
-    // usan las dos pasadas de abajo. El orden es por id de regla y no el que devolvió la
-    // base: la pasada 1 reserva ids a medida que empareja, así que un orden que cambiara
-    // entre recargas haría que dos reglas se turnaran el mismo movimiento. Ver ahí.
-    val enJuego = rules.sortedBy { it.id }.mapNotNull { rule ->
-        // **La unidad es la ocurrencia del MES EN CURSO**, y punto.
-        //
-        // Antes se usaba `dueDateFor`, o sea la fecha ya rodada por la ventana de gracia,
-        // y ahí estaba el agujero: para una regla de día 1 o 2, durante los últimos días
-        // del mes el vencimiento vigente ya es el del mes SIGUIENTE. La app terminaba
-        // preguntando «¿ya lo pagaste?» sobre septiembre el 27 de agosto y ofreciendo
-        // como respuesta el pago de agosto — con el monto exacto, así que ni siquiera
-        // salía el aviso de monto distinto. El rodado de la gracia sigue viviendo en
-        // `/api/payments/upcoming`, que es donde tiene sentido; acá estorbaba.
-        //
-        // Además, mirar el mes en curso mantiene el «Ya ocurrió» y su «Deshacer» a la
-        // vista TODO el mes, en vez de hacerlos desaparecer a los pocos días.
-        // La del PERÍODO en curso (ver arriba). Un período acortado a mano que no alcanza a
-        // contener el día de la regla no tiene nada que preguntar.
-        //
-        // Salvo la del período ANTERIOR mientras siga en gracia: con corte 25, el pago
-        // del 24 sin marcar se sigue ofreciendo («Ya lo pagué») del 25 al 29, en vez de
-        // desaparecer al día siguiente de vencer. Ver `ocurrenciaPorPreguntar`.
-        val due = ocurrenciaPorPreguntar(today, rule, periodo) ?: return@mapNotNull null
-        // Una regla no tiene ocurrencia antes de su arranque: un crédito desembolsado
-        // este mes no debe cuotas de los meses de antes, y su primera cuota cae DESPUÉS
-        // del desembolso, no el mismo día. En cambio el período del movimiento que originó
-        // un recurrente sí tiene ocurrencia — son dos semánticas distintas y las dos viven
-        // en `arranqueDeLaRegla`; ver `RecurringRule.arranqueEsDesembolso`.
-        if (!ruleIsActiveOn(rule, due, periodo)) return@mapNotNull null
-        rule to due
-    }
+    val enJuego = ocurrenciasPorPreguntar(rules, today, periodo)
 
     // ── Pasada 1: lo que Movi empareja SOLO ──────────────────────────────────
     //
@@ -851,95 +840,262 @@ internal fun org.jetbrains.exposed.sql.Transaction.estadosDeLasOcurrenciasReales
     // del dueño quedaron tres sellos así cuyo movimiento SÍ existía, con el nombre casi
     // calcado. Ahora, cuando hay un único movimiento concluyente (ver
     // `ocurrenciaConcluyente`), la fila sale ya emparejada; con cero o con dos, se
-    // pregunta como siempre.
-    //
-    // **Y no se escribe nada en `recurring_occurrences`.** Esto se DERIVA en cada lectura,
-    // igual que las sintéticas de abajo y por el mismo motivo: un sello sobrevive a que su
-    // evidencia cambie, una derivación no. Si el movimiento se anula, se borra, se le
-    // corrige la fecha o se le cambia el monto, la marca desaparece sola sin que ningún
-    // camino de borrado tenga que acordarse de esta tabla.
-    //
-    // **La reserva de ids.** `reservados` arranca con los ya sellados y va creciendo: un
-    // movimiento que la regla A emparejó no puede ser además el candidato de la regla B en
-    // la misma respuesta (una sola entrada de plata cerrando dos periodos es exactamente
-    // el «marcar de más» que este archivo evita). Se recorre en orden de id de regla, que
-    // es estable, así que ante un empate imposible —el mismo movimiento concluyente para
-    // dos reglas distintas— gana siempre la misma y la respuesta no baila entre recargas.
-    val automaticas = mutableMapOf<String, FinancialEvent>()
-    val reservados = usados.toMutableSet()
-    enJuego.forEach { (rule, due) ->
-        if (periodOf(due) in ocurridos[rule.id].orEmpty()) return@forEach
-        // El día todavía no llegó: no se empareja nada, igual que no se pregunta nada.
-        if (due.isAfter(today)) return@forEach
-        val sinRechazados = eventos.filterNot { (rule.id to it.id) in rechazados }
-        val concluyente =
-            ocurrenciaConcluyente(rule, due, sinRechazados, reservados, settings = periodo)
-                ?: return@forEach
-        automaticas[rule.id] = concluyente
-        reservados += concluyente.id
-    }
+    // pregunta como siempre. El cómo vive en [resolverOcurrencias].
+    val resueltas = resolverOcurrencias(enJuego, lectura, today, periodo)
 
     // ── Pasada 2: la respuesta ───────────────────────────────────────────────
-    return enJuego.mapNotNull { (rule, due) ->
+    val estados = resueltas.mapNotNull { (rule, due, resolucion) ->
         // La clave del sello sigue siendo el mes del vencimiento (ver `periodOf`): estable
         // aunque el dueño cambie su corte. El nombre que se muestra es el del período.
         val periodoEnCurso = periodOf(due)
         val nombreDelPeriodo = periodoDelDueno(due, periodo)
-        val cerrado = periodoEnCurso in ocurridos[rule.id].orEmpty()
-        val automatica = automaticas[rule.id]
-        when {
-            cerrado -> {
-                val fila = ocurrencias[rule.id to periodoEnCurso]
-                OccurrenceState(
-                    ruleId = rule.id,
-                    period = periodoEnCurso,
-                    dueDate = due.toString(),
-                    occurred = true,
-                    eventId = fila?.eventId,
-                    confirmedAt = fila?.confirmedAt ?: 0L,
-                    periodoDelDueno = nombreDelPeriodo,
-                )
-            }
-            automatica != null -> OccurrenceState(
+        when (resolucion) {
+            is Resolucion.Sellada -> OccurrenceState(
                 ruleId = rule.id,
                 period = periodoEnCurso,
                 dueDate = due.toString(),
                 occurred = true,
-                eventId = automatica.id,
+                eventId = resolucion.fila?.eventId,
+                confirmedAt = resolucion.fila?.confirmedAt ?: 0L,
+                periodoDelDueno = nombreDelPeriodo,
+            )
+            is Resolucion.Emparejada -> OccurrenceState(
+                ruleId = rule.id,
+                period = periodoEnCurso,
+                dueDate = due.toString(),
+                occurred = true,
+                eventId = resolucion.evento.id,
                 // No hubo confirmación que fechar —nadie tildó nada—, así que lo más cierto
                 // que se puede decir es cuándo ocurrió el movimiento que la prueba. Mismo
                 // criterio que las sintéticas de abajo.
-                confirmedAt = automatica.timestamp,
+                confirmedAt = resolucion.evento.timestamp,
                 // Las dos marcas, y significan cosas distintas: `derivada` = «no hay sello
                 // que borrar, no le ofrezcas Deshacer»; `automatica` = «además, esto lo
                 // dedujo Movi y se puede rechazar». Ver el KDoc de `OccurrenceState`.
                 derivadaDeUnMovimiento = true,
                 automatica = true,
-                montoDelPago = automatica.amount,
-                monedaDelPago = automatica.currency,
+                montoDelPago = resolucion.evento.amount,
+                monedaDelPago = resolucion.evento.currency,
                 periodoDelDueno = nombreDelPeriodo,
             )
             // El día todavía no llegó: no se pregunta nada. Preguntar «¿ya ocurrió?» por
             // algo que vence dentro de tres semanas es ruido, y peor: invita a cerrar un
             // periodo antes de que pase.
-            due.isAfter(today) -> null
-            else -> OccurrenceState(
+            Resolucion.PorLlegar -> null
+            is Resolucion.Abierta -> OccurrenceState(
                 ruleId = rule.id,
                 period = periodoEnCurso,
                 dueDate = due.toString(),
                 occurred = false,
-                // `reservados` y no `usados`: lo que otra regla ya emparejó sola no se
-                // vuelve a ofrecer acá. Y lo rechazado se saca antes de puntuar, para que
+                // `reservados` y no los sellados solos: lo que otra regla ya emparejó sola no
+                // se vuelve a ofrecer acá. Y lo rechazado se saca antes de puntuar, para que
                 // un «no fue este» no se gaste uno de los tres lugares de la propuesta.
                 candidates = occurrenceCandidatesFor(
                     rule,
                     due,
-                    eventos.filterNot { (rule.id to it.id) in rechazados },
-                    reservados,
+                    lectura.sinRechazados(rule),
+                    lectura.reservados,
                     settings = periodo,
                 ),
                 periodoDelDueno = nombreDelPeriodo,
             )
         }
     }
+
+    // ── Pasada 3: el pago tardío de la ocurrencia anterior ───────────────────
+    //
+    // Pasada la gracia, el checklist ya pregunta por la ocurrencia siguiente y el pago tardío que
+    // cruzó el corte quedaba sin emparejar, libre para que otro ítem pendiente lo reclamara (ver
+    // `emparejadasComoSellos`). Se deriva acá con las mismas reglas —concluyente o nada, sellos y
+    // rechazos respetados— y **después** de la respuesta: lo que el checklist ya emparejó o propone
+    // queda igual, y lo que emparejó está en `reservados`, así que un movimiento no cierra dos
+    // ocurrencias. La que el checklist todavía pregunta (en gracia) no se repite.
+    val anteriores = rules.mapNotNull { rule ->
+        val anterior = ocurrenciaAnteriorQuePisaElPeriodo(today, rule, periodo) ?: return@mapNotNull null
+        if (enJuego.any { (r, due) -> r.id == rule.id && due == anterior }) return@mapNotNull null
+        rule to anterior
+    }
+    val anterioresEmparejadas = resolverOcurrencias(anteriores, lectura, today, periodo)
+        .mapNotNull { (rule, due, resolucion) ->
+            val evento = (resolucion as? Resolucion.Emparejada)?.evento ?: return@mapNotNull null
+            RecurringOccurrence(
+                ruleId = rule.id,
+                period = periodOf(due),
+                eventId = evento.id,
+                // Como en la pasada 1: nadie confirmó nada, lo más cierto es la fecha del movimiento.
+                confirmedAt = evento.timestamp,
+            )
+        }
+    return OcurrenciasReales(estados, anterioresEmparejadas)
+}
+
+/**
+ * Las reglas REALES de [uid] (las de `recurring_rules`, sin las sintéticas de crédito y tarjeta),
+ * **en orden de id**. El orden no es cosmético: [resolverOcurrencias] reserva movimientos a medida
+ * que empareja, así que un orden que cambiara entre recargas haría que dos reglas se turnaran el
+ * mismo movimiento.
+ */
+internal fun org.jetbrains.exposed.sql.Transaction.reglasRealesDe(uid: String): List<RecurringRule> =
+    RecurringRules.selectAll()
+        .where { RecurringRules.userId eq uid }
+        .map { it.toRule() }
+        .sortedBy { it.id }
+
+/**
+ * **Qué reglas tienen algo que decir hoy en el checklist, y con qué vencimiento.**
+ *
+ * **La unidad es la ocurrencia del PERÍODO en curso**, y punto. Antes se usaba `dueDateFor`, o sea
+ * la fecha ya rodada por la ventana de gracia, y ahí estaba el agujero: para una regla de día 1 o
+ * 2, durante los últimos días del mes el vencimiento vigente ya es el del mes SIGUIENTE. La app
+ * terminaba preguntando «¿ya lo pagaste?» sobre septiembre el 27 de agosto y ofreciendo como
+ * respuesta el pago de agosto — con el monto exacto, así que ni siquiera salía el aviso de monto
+ * distinto. El rodado de la gracia sigue viviendo en `/api/payments/upcoming`, que es donde tiene
+ * sentido; acá estorbaba. Además, mirar el período en curso mantiene el «Ya ocurrió» y su
+ * «Deshacer» a la vista TODO el período, en vez de hacerlos desaparecer a los pocos días. Un
+ * período acortado a mano que no alcanza a contener el día de la regla no tiene nada que preguntar.
+ *
+ * Salvo la del período ANTERIOR mientras siga en gracia: con corte 25, el pago del 24 sin marcar se
+ * sigue ofreciendo («Ya lo pagué») del 25 al 29, en vez de desaparecer al día siguiente de vencer.
+ * Ver `ocurrenciaPorPreguntar`.
+ *
+ * Una regla no tiene ocurrencia antes de su arranque: un crédito desembolsado este mes no debe
+ * cuotas de los meses de antes, y su primera cuota cae DESPUÉS del desembolso, no el mismo día. En
+ * cambio el período del movimiento que originó un recurrente sí tiene ocurrencia — son dos
+ * semánticas distintas y las dos viven en `arranqueDeLaRegla`; ver `RecurringRule.arranqueEsDesembolso`.
+ */
+internal fun ocurrenciasPorPreguntar(
+    rules: List<RecurringRule>,
+    today: java.time.LocalDate,
+    periodo: PeriodSettings,
+): List<Pair<RecurringRule, java.time.LocalDate>> = rules.mapNotNull { rule ->
+    val due = ocurrenciaPorPreguntar(today, rule, periodo) ?: return@mapNotNull null
+    if (!ruleIsActiveOn(rule, due, periodo)) return@mapNotNull null
+    rule to due
+}
+
+/**
+ * Lo que se lee **una vez por respuesta** para decidir cómo quedó cada ocurrencia: los sellos, los
+ * «no fue este» y los movimientos vivos de la franja donde puede haber candidatos.
+ */
+internal class LecturaDeOcurrencias(
+    /** Las filas de `recurring_occurrences`, por `(regla, período)`. */
+    val sellos: Map<Pair<String, String>, RecurringOccurrence>,
+    /** Los sellos que siguen valiendo (su movimiento vive), como los quiere `dueDateFor`. */
+    val ocurridos: Map<String, Set<String>>,
+    /**
+     * Los «no fue este» guardados: se excluyen de las propuestas Y del emparejamiento automático.
+     * Sin esto, rechazar algo que Movi emparejó solo no serviría de nada — la lectura siguiente lo
+     * volvería a emparejar, para siempre.
+     */
+    val rechazados: Set<Pair<String, String>>,
+    /** Los movimientos vivos de la franja leída. */
+    val eventos: List<FinancialEvent>,
+    /**
+     * **La reserva de ids.** Arranca con los ya sellados y va creciendo: un movimiento que la regla
+     * A emparejó no puede ser además el candidato de la regla B en la misma respuesta (una sola
+     * entrada de plata cerrando dos periodos es exactamente el «marcar de más» que este archivo
+     * evita).
+     */
+    val reservados: MutableSet<String>,
+) {
+    /** Los movimientos de la franja sin los que el dueño ya rechazó para [rule]. */
+    fun sinRechazados(rule: RecurringRule): List<FinancialEvent> =
+        eventos.filterNot { (rule.id to it.id) in rechazados }
+}
+
+/** Arma la [LecturaDeOcurrencias] con los movimientos vivos de `[desde, hasta]` (días incluidos). */
+internal fun org.jetbrains.exposed.sql.Transaction.leerOcurrencias(
+    uid: String,
+    desde: java.time.LocalDate,
+    hasta: java.time.LocalDate,
+): LecturaDeOcurrencias {
+    val filas = loadOccurrenceRows(uid)
+    return LecturaDeOcurrencias(
+        sellos = filas.associateBy { it.ruleId to it.period },
+        ocurridos = loadOccurredBy(uid, filas),
+        rechazados = loadRejectedPairs(uid),
+        eventos = loadEventsBetween(
+            uid = uid,
+            desde = appDateToEpochMillis(desde),
+            hastaExclusivo = appDateToEpochMillis(hasta.plusDays(1)),
+        ),
+        // Los ids de TODOS los sellos, también los de un movimiento que murió: proponer un
+        // movimiento anulado no tendría sentido de todas formas, y esto solo se cruza contra
+        // movimientos vivos. Un movimiento sellado no vuelve a proponerse (cuarta puerta de
+        // `occurrenceCandidatesFor`).
+        reservados = filas.mapNotNull { it.eventId }.toMutableSet(),
+    )
+}
+
+/** Cómo quedó una ocurrencia después de [resolverOcurrencias]. */
+internal sealed interface Resolucion {
+    /** Sellada en `recurring_occurrences` y el sello sigue valiendo. [fila] trae su movimiento, si tiene. */
+    data class Sellada(val fila: RecurringOccurrence?) : Resolucion
+
+    /** Movi la emparejó sola: [evento] es el único concluyente (ver `ocurrenciaConcluyente`). */
+    data class Emparejada(val evento: FinancialEvent) : Resolucion
+
+    /** El vencimiento todavía no llegó: no se empareja nada, igual que no se pregunta nada. */
+    data object PorLlegar : Resolucion
+
+    /**
+     * Llegó y no hay nada concluyente: con [concluyentes] en cero no hay evidencia; con dos o más
+     * Movi no puede saber cuál es cuál y lo pregunta (ver `ocurrenciaConcluyente`).
+     */
+    data class Abierta(val concluyentes: Int) : Resolucion
+}
+
+/** Una ocurrencia —regla y vencimiento— con cómo quedó. */
+internal data class OcurrenciaResuelta(
+    val rule: RecurringRule,
+    val due: java.time.LocalDate,
+    val resolucion: Resolucion,
+)
+
+/**
+ * **La única forma de decidir cómo quedó una ocurrencia**, para todo lo que lo pregunta: el
+ * checklist del período en curso, el pago tardío de la ocurrencia anterior y los pagos fijos de
+ * cualquier período en «Tus períodos». Lo sellado no se deriva, lo que no llegó no se empareja, lo
+ * rechazado no es candidato y cada movimiento emparejado queda reservado en [lectura] para el resto
+ * de la respuesta.
+ *
+ * **Y no se escribe nada en `recurring_occurrences`.** Esto se DERIVA en cada lectura, por el mismo
+ * motivo que las sintéticas: un sello sobrevive a que su evidencia cambie, una derivación no. Si el
+ * movimiento se anula, se borra, se le corrige la fecha o se le cambia el monto, la marca desaparece
+ * sola sin que ningún camino de borrado tenga que acordarse de esta tabla.
+ *
+ * Se recorre [pares] en su orden —el de id de regla, que es estable—, así que ante un empate
+ * imposible (el mismo movimiento concluyente para dos reglas distintas) gana siempre la misma y la
+ * respuesta no baila entre recargas.
+ *
+ * La clave del sello es el mes del VENCIMIENTO ([periodOf]), no el del período del dueño.
+ */
+internal fun resolverOcurrencias(
+    pares: List<Pair<RecurringRule, java.time.LocalDate>>,
+    lectura: LecturaDeOcurrencias,
+    today: java.time.LocalDate,
+    periodo: PeriodSettings,
+): List<OcurrenciaResuelta> = pares.map { (rule, due) ->
+    val clave = periodOf(due)
+    val resolucion = when {
+        clave in lectura.ocurridos[rule.id].orEmpty() -> Resolucion.Sellada(lectura.sellos[rule.id to clave])
+        due.isAfter(today) -> Resolucion.PorLlegar
+        else -> {
+            val concluyentes = ocurrenciasConcluyentes(
+                rule,
+                due,
+                lectura.sinRechazados(rule),
+                lectura.reservados,
+                settings = periodo,
+            )
+            val unico = concluyentes.singleOrNull()
+            if (unico != null) {
+                lectura.reservados += unico.id
+                Resolucion.Emparejada(unico)
+            } else {
+                Resolucion.Abierta(concluyentes.size)
+            }
+        }
+    }
+    OcurrenciaResuelta(rule, due, resolucion)
 }

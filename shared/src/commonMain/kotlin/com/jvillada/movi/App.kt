@@ -51,6 +51,8 @@ import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.ai.AIChatScreen
 import com.jvillada.movi.ui.plan.PlanScreen
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
+import com.jvillada.movi.ui.periodos.PeriodosScreen
+import com.jvillada.movi.ui.periodos.DetalleDePeriodoScreen
 import com.jvillada.movi.ui.categorias.CategoriasScreen
 import com.jvillada.movi.ui.destinos.DestinosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
@@ -300,7 +302,11 @@ fun App() {
                 Screen.Login             -> LoginScreen(navigate)
                 Screen.Register          -> RegisterScreen(navigate)
                 Screen.Dashboard         -> DashboardScreen(navigate)
-                is Screen.Transactions   -> TransactionsScreen(navigate, chipInicial = currentScreen.chipInicial)
+                is Screen.Transactions   -> TransactionsScreen(
+                    navigate,
+                    chipInicial = currentScreen.chipInicial,
+                    periodoInicial = currentScreen.periodoInicial,
+                )
                 // Inalcanzable: `navigate` desvía QuickAdd al overlay de más abajo antes de que
                 // llegue a la pila (ver [opensAsOverlay]). La rama existe para que el `when` siga
                 // siendo exhaustivo sobre `Screen` — con un `else` perdería el chequeo que avisa
@@ -347,6 +353,8 @@ fun App() {
                     importId = currentScreen.importId,
                 )
                 Screen.ScreenEditor      -> ScreenEditorScreen(navigate)
+                Screen.Periodos          -> PeriodosScreen(navigate)
+                is Screen.DetalleDePeriodo -> DetalleDePeriodoScreen(navigate, currentScreen.id)
                 }
                 } // CompositionLocalProvider(LocalGoBack)
                 } // SaveableStateProvider

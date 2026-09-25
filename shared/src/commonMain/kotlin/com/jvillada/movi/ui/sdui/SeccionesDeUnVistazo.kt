@@ -198,7 +198,17 @@ internal fun HeroDeUnVistazo(
         Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         val rangoDelPeriodo = encabezadoDelPeriodo(data)
         if (rangoDelPeriodo != null) {
-            Text(text = rangoDelPeriodo, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+            // La línea que explica el rango del período es también la puerta a
+            // «Tus períodos» — el dueño que se pregunta «¿de cuándo a cuándo va este mes?» está a
+            // un toque de preguntarse «¿y los anteriores?».
+            Text(
+                text = rangoDelPeriodo,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoApagado,
+                modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Ver tus períodos") {
+                    onNavigate(Screen.Periodos)
+                },
+            )
         } else if (data.periodoActual == null && hayCargaEnVuelo) {
             // Reservado SOLO mientras se sabe que el perfil (de donde sale el período) todavía
             // viene en camino: si no, esta línea aparecía de golpe cuando el perfil contestaba y

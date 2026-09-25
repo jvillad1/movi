@@ -181,4 +181,12 @@ class PeriodoFinancieroTest {
         // Calendario: el 1 del mes pasado.
         assertEquals(bogota(2026, 8, 1, 0, 0), desdeDondeRecuperarSms(bogota(2026, 9, 14), calendario))
     }
+
+    /** «Octubre 2026»: el mes que le da nombre, con mayúscula, y el año — enero y diciembre incluidos. */
+    @Test
+    fun el_titulo_de_un_periodo_es_el_mes_con_mayuscula_y_el_anio() {
+        assertEquals("Octubre 2026", tituloDelPeriodo(PeriodoFinanciero(2026, 10)))
+        assertEquals("Enero 2027", tituloDelPeriodo(PeriodoFinanciero(2027, 1)))
+        assertEquals("Diciembre 2025", tituloDelPeriodo(PeriodoFinanciero(2025, 12)))
+    }
 }

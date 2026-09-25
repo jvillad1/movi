@@ -101,11 +101,14 @@ fun ocurrenciaEnJuego(hoy: LocalDate, dayOfMonth: Int, settings: PeriodSettings,
  * No mira el período a propósito: la gracia se cuenta en días desde el vencimiento, y un
  * recurrente mensual tiene a lo sumo una ocurrencia dentro de cinco días hacia atrás.
  */
-fun ocurrenciaEnGracia(hoy: LocalDate, dayOfMonth: Int, graceDays: Int = DEFAULT_GRACE_DAYS): LocalDate? {
-    val mes = YearMonth.from(hoy)
-    val enEsteMes = occurrenceInMonth(mes, dayOfMonth)
-    val ultima = if (enEsteMes.isAfter(hoy)) occurrenceInMonth(mes.minusMonths(1), dayOfMonth) else enEsteMes
-    return ultima.takeIf { ChronoUnit.DAYS.between(it, hoy) <= graceDays }
+fun ocurrenciaEnGracia(hoy: LocalDate, dayOfMonth: Int, graceDays: Int = DEFAULT_GRACE_DAYS): LocalDate? =
+    ultimaOcurrenciaHasta(hoy, dayOfMonth).takeIf { ChronoUnit.DAYS.between(it, hoy) <= graceDays }
+
+/** La última ocurrencia de [dayOfMonth] que cae en [fecha] o antes: la de ese mes, o la del anterior. */
+fun ultimaOcurrenciaHasta(fecha: LocalDate, dayOfMonth: Int): LocalDate {
+    val mes = YearMonth.from(fecha)
+    val enEseMes = occurrenceInMonth(mes, dayOfMonth)
+    return if (enEseMes.isAfter(fecha)) occurrenceInMonth(mes.minusMonths(1), dayOfMonth) else enEseMes
 }
 
 /**
@@ -131,6 +134,34 @@ fun ocurrenciaPorPreguntar(
         ruleIsActiveOn(rule, enGracia, settings, zone) &&
         (enJuego == null || (enGracia.isBefore(enJuego) && enJuego.isAfter(hoy)))
     return if (usarLaDeGracia) enGracia else enJuego
+}
+
+/**
+ * **La ocurrencia de [rule] justo antes del período que contiene [hoy], mientras su pago todavía
+ * pueda caer adentro de ese período**; `null` si no hay.
+ *
+ * Existe por el pago tardío que cruza el corte. Con corte 25, el arriendo del 23-sep pagado el 26
+ * es de la ocurrencia del 23-sep, pero el movimiento cae en el período que arrancó el 25. Mientras
+ * dura la gracia [ocurrenciaPorPreguntar] sigue preguntando por el 23-sep y el checklist empareja
+ * ese pago; pasada la gracia pregunta por el 23-oct y nadie más miraba el 23-sep, así que el pago
+ * quedaba suelto y otro ítem pendiente del período (la administración, en la misma categoría) lo
+ * podía reclamar como su pago. Esta es la ocurrencia que hay que seguir mirando: la anterior al
+ * período, **solo si su ventana de emparejamiento ([occurrenceWindow]) pisa el período en curso**
+ * — si no lo pisa, ningún pago suyo puede estar en este período y no hay nada que derivar.
+ *
+ * En la gracia puede coincidir con la de [ocurrenciaPorPreguntar]; quien llama la descarta ahí,
+ * porque esa ya la resuelve el checklist.
+ */
+fun ocurrenciaAnteriorQuePisaElPeriodo(
+    hoy: LocalDate,
+    rule: RecurringRule,
+    settings: PeriodSettings,
+    zone: ZoneId = AppClock.zone,
+): LocalDate? {
+    val inicio = diasDelPeriodo(hoy, settings, zone).start
+    val anterior = ultimaOcurrenciaHasta(inicio.minusDays(1), rule.dayOfMonth)
+    if (occurrenceWindow(anterior, settings = settings).endInclusive.isBefore(inicio)) return null
+    return anterior.takeIf { ruleIsActiveOn(rule, it, settings, zone) }
 }
 
 /**

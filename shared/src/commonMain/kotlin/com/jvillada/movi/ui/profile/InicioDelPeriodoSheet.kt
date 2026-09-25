@@ -31,13 +31,46 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.UpdateProfileRequest
+import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
+import com.jvillada.movi.shared.model.conInicioPropio
 import com.jvillada.movi.shared.model.inicioDelPeriodo
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.rangoLegibleDe
+import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
+
+/**
+ * **La única escritura de los arranques propios**: vuelve a leer el perfil, le aplica [cambio] a
+ * sus ajustes **recién leídos** y manda el mapa entero con `PUT /api/users/me` — así es cómo la
+ * ruta distingue «no tocar» (no mandarlo) de «ninguno» (mandarlo vacío).
+ *
+ * Por qué se relee justo antes de escribir: el mapa viaja entero y reemplaza al que había. Armado
+ * sobre los ajustes que la pantalla tenía —leídos hace rato en otro aparato, o que no se pudieron
+ * leer y quedaron vacíos— borraría las excepciones que la pantalla no conocía, y `periodStarts`
+ * decide la ventana de todo (el Inicio, Movimientos, el Disponible, «Tus períodos»). Si esa lectura
+ * falla, la excepción sube y no se escribe nada. Si [cambio] ya no acepta lo recién leído
+ * (devuelve `null`), tampoco: se lanza [LosPeriodosCambiaron].
+ *
+ * La usan la hoja de abajo (desde Movimientos) y «Empezar un período nuevo hoy» del detalle de un
+ * período: son la misma decisión tomada desde dos lugares.
+ */
+suspend fun cambiarLosIniciosPropios(cambio: (PeriodSettings) -> PeriodSettings?): UserProfile {
+    val recienLeidos = Repositories.wallets.getUserProfile().ajustesDelPeriodo()
+    val nuevos = cambio(recienLeidos) ?: throw LosPeriodosCambiaron()
+    return Repositories.wallets.updateUserProfile(UpdateProfileRequest(periodStarts = nuevos.iniciosPropios))
+}
+
+/** Declara (o quita, con [inicio] `null`) el arranque de [periodo]. Ver [cambiarLosIniciosPropios]. */
+suspend fun guardarInicioDelPeriodo(periodo: PeriodoFinanciero, inicio: String?): UserProfile =
+    cambiarLosIniciosPropios { it.conInicioPropio(periodo, inicio) }
+
+/** Lo recién leído ya no admite el cambio que se pidió (otro aparato escribió en el medio). */
+class LosPeriodosCambiaron : IllegalStateException("Tus períodos cambiaron mientras tanto. Revísalos y vuelve a intentarlo.")
 
 /**
  * **«Este mes no empezó cuando siempre.»**
@@ -66,6 +99,9 @@ fun InicioDelPeriodoSheet(
     onSave: (String?) -> Unit,
     saving: Boolean = false,
     error: String? = null,
+    // `null` cuando quien monta la hoja no ofrece la puerta a «Tus períodos» — hoy
+    // solo Movimientos la pasa. Sin ella, esta hoja sigue siendo la de siempre.
+    onVerPeriodos: (() -> Unit)? = null,
 ) {
     val natural = remember(periodo, ajustes.cutoffDay) {
         inicioDelPeriodo(periodo, ajustes.copy(iniciosPropios = emptyMap()))
@@ -86,10 +122,7 @@ fun InicioDelPeriodoSheet(
     }
     /** El rango que quedaría, calculado con la misma función que después lo pinta en Movimientos. */
     val previsualizacion = remember(elegido, periodo, ajustes) {
-        rangoLegibleDe(
-            periodo,
-            ajustes.copy(iniciosPropios = ajustes.iniciosPropios + (periodo.prefijo to elegido.toString())),
-        )
+        rangoLegibleDe(periodo, ajustes.conInicioPropio(periodo, elegido.toString()))
     }
 
     Column(
@@ -193,6 +226,20 @@ fun InicioDelPeriodoSheet(
                         fontWeight = FontWeight.Medium,
                         color = if (saving) Movi.colores.textoApagado else Movi.colores.marca,
                         modifier = Modifier.clickable(enabled = !saving) { onSave(null) },
+                    )
+                }
+
+                // Quien se pregunta «¿de cuándo a cuándo va este mes?» —la
+                // pregunta que abrió esta hoja— es quien más puede querer comparar con los
+                // anteriores.
+                if (onVerPeriodos != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "Ver tus períodos",
+                        style = Movi.textos.apoyo,
+                        fontWeight = FontWeight.Medium,
+                        color = Movi.colores.marca,
+                        modifier = Modifier.clickable(enabled = !saving, onClick = onVerPeriodos),
                     )
                 }
                 Spacer(Modifier.height(24.dp))

@@ -8,6 +8,7 @@ import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.routes.estadosDeLasOcurrenciasReales
+import com.jvillada.movi.server.routes.ocurrenciasReales
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.RecurringOccurrence
@@ -106,16 +107,6 @@ fun Transaction.loadEventsBetween(uid: String, desde: Long, hastaExclusivo: Long
 }
 
 /**
- * Los movimientos que ya están sellados como ocurrencia de algún recurrente — no vuelven a
- * proponerse (cuarta puerta de [occurrenceCandidatesFor]).
- *
- * Se incluyen también los de filas cuyo evento murió: proponer un movimiento anulado no tendría
- * sentido de todas formas, y quien llama solo cruza esto contra movimientos vivos.
- */
-fun Transaction.loadUsedOccurrenceEventIds(uid: String): Set<String> =
-    loadOccurrenceRows(uid).mapNotNull { it.eventId }.toSet()
-
-/**
  * Los «no fue este» de [uid], como pares `(ruleId, eventId)`.
  *
  * **El par, no el movimiento solo**, y es la parte que importa: con «Agua», «Gas» e «Internet»
@@ -146,19 +137,38 @@ fun Transaction.loadRejectedPairs(uid: String): Set<Pair<String, String>> =
  * Solo lo concluyente: con dos candidatos el checklist pregunta (`occurred = false`) y acá no sale
  * nada. Lo ya sellado tampoco: está en [loadOccurrenceRows].
  *
- * **Límite conocido.** El checklist solo deriva la ocurrencia por la que está preguntando: pasada
- * la gracia pasa a la siguiente y el emparejamiento de la anterior deja de salir. Un pago tardío
- * que cruzó el corte vuelve entonces al gasto variable por el resto del período; arreglarlo pide
- * derivar también la ocurrencia anterior cuando su ventana pisa el período en curso.
+ * **Y la ocurrencia anterior al período, que el checklist ya dejó atrás.** El checklist solo deriva
+ * la ocurrencia por la que pregunta: pasada la gracia pasa a la siguiente, y el arriendo del 23
+ * pagado el 26 —ya en el período que arrancó el 25— quedaba sin emparejar. Mientras la ventana de
+ * esa ocurrencia pise el período en curso, su emparejamiento sale acá también
+ * (`OcurrenciasReales.anterioresEmparejadas`), en la misma lectura y con las mismas guardas: solo
+ * con un único concluyente, sin lo sellado ni lo rechazado, y con la misma reserva de movimientos.
+ * Qué hace y qué no:
+ *
+ * - **No saca plata del gasto variable.** Esa ocurrencia no está en los fijos de este período, así
+ *   que su pago sigue contando una vez, como variable (ver `PagosDelChecklist.kt`).
+ * - **Reserva el movimiento**: en el Disponible no puede pasar por el pago de otro ítem pendiente
+ *   —la administración, en la misma categoría—, que lo sacaría del variable mientras el fijo de
+ *   ese ítem sigue esperando: el Disponible se vería mejor de lo que es.
+ * - **A «Próximos» y al barrido no les cambia nada**: pasada la gracia, `dueDateFor` ya rodó ese
+ *   vencimiento, pagado o no, y un período ocurrido de más atrás solo hace rodar hacia adelante.
+ *
+ * Por eso no tiene dónde mostrarse ni un «no fue este»: un emparejamiento equivocado acá no puede
+ * callar ningún aviso (a lo sumo sería el de una ocurrencia que ya pasó, y esa ya rodó) ni mover
+ * plata; lo único que hace es dejar ese movimiento como gasto variable en vez de ofrecerlo como
+ * pago de otro ítem, que es el lado conservador.
  */
 internal fun Transaction.emparejadasComoSellos(
     uid: String,
     hoy: LocalDate,
     periodo: PeriodSettings,
-): List<RecurringOccurrence> =
-    estadosDeLasOcurrenciasReales(uid, hoy, periodo)
+): List<RecurringOccurrence> {
+    val lectura = ocurrenciasReales(uid, hoy, periodo)
+    return lectura.estados
         .filter { it.occurred && it.automatica && it.eventId != null }
-        .map { RecurringOccurrence(ruleId = it.ruleId, period = it.period, eventId = it.eventId, confirmedAt = it.confirmedAt) }
+        .map { RecurringOccurrence(ruleId = it.ruleId, period = it.period, eventId = it.eventId, confirmedAt = it.confirmedAt) } +
+        lectura.anterioresEmparejadas
+}
 
 /** regla → períodos, el mapa `occurredPeriods` con el que [dueDateFor] rueda un vencimiento. */
 internal fun List<RecurringOccurrence>.periodosPorRegla(): Map<String, Set<String>> =

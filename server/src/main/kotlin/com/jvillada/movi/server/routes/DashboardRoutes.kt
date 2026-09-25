@@ -31,6 +31,8 @@ import com.jvillada.movi.shared.model.CuentaDelDisponible
 import com.jvillada.movi.shared.model.SumaDeMovimientos
 import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.shared.model.plataDelPeriodo
+import com.jvillada.movi.shared.model.PlataDelPeriodo
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.pagosDeDeudaFueraDelChecklist
 import com.jvillada.movi.shared.model.saldoDeTuPlata
 import com.jvillada.movi.shared.model.AccountType
@@ -59,6 +61,8 @@ import java.time.LocalDate
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.sum
+import org.jetbrains.exposed.sql.min
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
@@ -155,18 +159,16 @@ fun Route.dashboardRoutes() {
                 .where { SmsMessages.userId eq uid }
                 .map { it[SmsMessages.time] to it[SmsMessages.state] }
             val captura = capturaDeSms(filasDeSms.map { it.first })
-            val eventosDelPeriodo = loadEventsBetween(uid, monthStart, monthEnd)
-            // La tarjeta «Disponible» cuenta lo que había en «Tu plata» al empezar el período y lo
-            // que le entró de afuera (un préstamo, un ahorro). Ver `PlataDelPeriodo.kt` en :core.
-            val cuentas = cuentasDelDisponible(uid)
-            val plata = plataDelPeriodo(
-                saldoAlInicio = saldoDeTuPlata(sumasAntesDe(uid, monthStart, voidedIds, cuentas), cuentas),
-                eventos = eventosDelPeriodo,
-                cuentas = cuentas,
+            val disponible = disponibleDelServidor(
+                uid = uid,
+                hoy = epochMillisToAppDate(ahora),
+                periodo = periodo,
+                monthStart = monthStart,
+                monthEnd = monthEnd,
+                voidedIds = voidedIds,
+                reglasDeCredito = reglasDeCredito,
             )
-
-            val hoy = epochMillisToAppDate(ahora)
-            val parteFija = parteFijaDelDisponible(uid, hoy, periodo, eventosDelPeriodo)
+            val plata = disponible.plata
 
             DashboardSummary(
                 scope = scope,
@@ -182,27 +184,11 @@ fun Route.dashboardRoutes() {
                     .where { Users.id eq uid }
                     .firstOrNull()?.get(Users.smsAlertMuted) ?: false,
                 usedCategories = usedCategories(uid, ahora, voidedIds),
-                // La tarjeta «Disponible»: el gasto variable del período, día por día. Los mismos
-                // movimientos que suman «Gastos» (vivos, flujo de caja, sin «Por confirmar», en
-                // pesos) menos las cuotas de crédito y la parte de cada movimiento que paga un
-                // ítem del checklist (`PagosDelChecklist.kt`). La regla vive en :core
-                // (`gastoVariablePorDia`).
-                gastoVariablePorDia = gastoVariablePorDia(
-                    eventos = eventosDelPeriodo,
-                    parteFija = parteFija,
-                    diaDe = { epochMillisToAppDateString(it) },
-                ),
+                gastoVariablePorDia = disponible.gastoVariablePorDia,
                 saldoTuPlataAlInicio = plata.saldoAlInicio,
                 entradasDelPeriodo = plata.entradas,
                 guardadoDelPeriodo = plata.guardado,
-                // Lo que salió de Tu plata a una deuda sin que los fijos ni el variable lo cuenten
-                // (ver `pagosDeDeudaFueraDelChecklist` en :core). Lo que ya está en los fijos: la
-                // parte que un recurrente reclamó y la cuota de un crédito del checklist.
-                pagosDeDeudaFueraDelChecklist = pagosDeDeudaFueraDelChecklist(
-                    eventos = eventosDelPeriodo,
-                    cuentas = cuentas,
-                    enLosFijos = parteFija + cuotasDelChecklistPagadas(reglasDeCredito, eventosDelPeriodo, hoy, periodo),
-                ),
+                pagosDeDeudaFueraDelChecklist = disponible.pagosDeDeudaFueraDelChecklist,
                 // **El patrimonio honesto**, con la casa y el carro adentro: la MISMA regla que usa
                 // el cliente sobre la lista de cuentas (`patrimonioDe`, en :core), sobre los mismos
                 // saldos que esa lista (ver `cuentasConSaldo`). No hay una segunda cuenta acá.
@@ -214,6 +200,63 @@ fun Route.dashboardRoutes() {
         }
         call.respond(summary)
     }
+}
+
+/**
+ * **Lo que el server manda para la tarjeta «Disponible»**, fuera de la ruta para poder probar la
+ * identidad entera con un «hoy» fijo (`AppClock` no se mueve desde una prueba). El cliente le suma
+ * los fijos del checklist (ver `disponibleDelPeriodo` en la UI): lo que queda = saldo al inicio +
+ * entradas − guardado − otros pagos de deuda − fijos − gasto variable.
+ */
+internal class DisponibleDelServidor(
+    /** Lo que había en «Tu plata» al empezar el período y lo que le entró de afuera. Ver `PlataDelPeriodo.kt`. */
+    val plata: PlataDelPeriodo,
+    /**
+     * El gasto variable del período, día por día: los mismos movimientos que suman «Gastos» (vivos,
+     * flujo de caja, sin «Por confirmar», en pesos) menos las cuotas de crédito y la parte de cada
+     * movimiento que paga un ítem del checklist (`PagosDelChecklist.kt`). La regla vive en :core
+     * (`gastoVariablePorDia`).
+     */
+    val gastoVariablePorDia: Map<String, Long>,
+    /**
+     * Lo que salió de Tu plata a una deuda sin que los fijos ni el variable lo cuenten (ver
+     * `pagosDeDeudaFueraDelChecklist` en :core). Lo que ya está en los fijos: la parte que un
+     * recurrente reclamó y la cuota de un crédito del checklist.
+     */
+    val pagosDeDeudaFueraDelChecklist: Long,
+)
+
+/** Arma [DisponibleDelServidor] para el período `[monthStart, monthEnd)` que contiene [hoy]. */
+internal fun Transaction.disponibleDelServidor(
+    uid: String,
+    hoy: LocalDate,
+    periodo: PeriodSettings,
+    monthStart: Long,
+    monthEnd: Long,
+    voidedIds: Set<String>,
+    reglasDeCredito: List<RecurringRule>,
+): DisponibleDelServidor {
+    val eventosDelPeriodo = loadEventsBetween(uid, monthStart, monthEnd)
+    val cuentas = cuentasDelDisponible(uid)
+    val plata = plataDelPeriodo(
+        saldoAlInicio = saldoDeTuPlata(sumasAntesDe(uid, monthStart, voidedIds, cuentas), cuentas),
+        eventos = eventosDelPeriodo,
+        cuentas = cuentas,
+    )
+    val parteFija = parteFijaDelDisponible(uid, hoy, periodo, eventosDelPeriodo)
+    return DisponibleDelServidor(
+        plata = plata,
+        gastoVariablePorDia = gastoVariablePorDia(
+            eventos = eventosDelPeriodo,
+            parteFija = parteFija,
+            diaDe = { epochMillisToAppDateString(it) },
+        ),
+        pagosDeDeudaFueraDelChecklist = pagosDeDeudaFueraDelChecklist(
+            eventos = eventosDelPeriodo,
+            cuentas = cuentas,
+            enLosFijos = parteFija + cuotasDelChecklistPagadas(reglasDeCredito, eventosDelPeriodo, hoy, periodo),
+        ),
+    )
 }
 
 /**
@@ -231,10 +274,15 @@ internal fun Transaction.parteFijaDelDisponible(
     eventosDelPeriodo: List<FinancialEvent>,
 ): Map<String, Long> {
     val sellos = loadOccurrenceRows(uid)
-    // Lo que el checklist dio por pagado sin sello cuenta como un sello con su movimiento: sale del
-    // variable hasta el monto de la regla y rueda el vencimiento igual que en `/upcoming`. Sin esto
-    // el arriendo pagado tarde, ya en el período siguiente, seguía como gasto variable, y en la
-    // gracia el server no listaba el vencimiento que el cliente sí resta como fijo.
+    // Lo que Movi emparejó solo cuenta como un sello con su movimiento, por dos cosas:
+    //  - rueda el vencimiento igual que en `/upcoming`, que es de donde el cliente saca su
+    //    checklist: sin esto, en la gracia el server no listaba el vencimiento que el cliente sí
+    //    resta como fijo;
+    //  - reserva el movimiento: el arriendo de septiembre pagado tarde no pasa a ser el pago de
+    //    otro ítem pendiente del período.
+    // Sacarlo del variable solo lo hace si es el sello del ítem de ESTE período —y entonces por su
+    // monto entero, que es el que el cliente resta como fijo—: el pago de una ocurrencia anterior no
+    // está en los fijos de este Disponible (ver `PagosDelChecklist.kt`).
     val emparejadas = emparejadasComoSellos(uid, hoy, periodo)
     return parteFijaDelChecklist(
         reglas = RecurringRules.selectAll()
@@ -245,6 +293,7 @@ internal fun Transaction.parteFijaDelDisponible(
         eventos = eventosDelPeriodo,
         hoy = hoy,
         settings = periodo,
+        automaticas = emparejadas.map { it.ruleId to it.period }.toSet(),
     )
 }
 
@@ -263,33 +312,76 @@ internal fun Transaction.monthCashFlow(
     monthEnd: Long,
     voidedIds: Set<String>,
     accountTypeById: Map<String, AccountType>,
-): Pair<Long, Map<String, Long>> {
-    val rows = Events.select(Events.id, Events.accountId, Events.type, Events.amount, Events.category, Events.reconciliationStatus)
+): Pair<Long, Map<String, Long>> = flujoDeCaja(movimientosDeFlujo(uid, monthStart, monthEnd, voidedIds, accountTypeById))
+
+/**
+ * Un movimiento que suma en «Ingresos» o en «Gastos», con lo que esas sumas necesitan de él. Ver
+ * [movimientosDeFlujo].
+ */
+internal class MovimientoDeFlujo(
+    val id: String,
+    val timestamp: Long,
+    val type: TransactionType,
+    val amount: Long,
+    val category: String,
+)
+
+/**
+ * **Los movimientos que cuentan en el flujo de caja de `[desde, hastaExclusivo)`**: en pesos, vivos,
+ * fuera de «Por confirmar» y que `isCashFlow` deja pasar (sin traspasos, pagos de tarjeta ni
+ * asientos internos). Es la regla de [monthCashFlow], suelta de la suma para quien necesita las
+ * filas: «Tus períodos» lee una franja de varios períodos de una vez y la reparte, y saca de acá
+ * mismo los gastos más grandes, sin una segunda definición de qué es un gasto.
+ */
+internal fun Transaction.movimientosDeFlujo(
+    uid: String,
+    desde: Long,
+    hastaExclusivo: Long,
+    voidedIds: Set<String>,
+    accountTypeById: Map<String, AccountType>,
+): List<MovimientoDeFlujo> =
+    Events.select(
+        Events.id, Events.accountId, Events.type, Events.amount, Events.category,
+        Events.reconciliationStatus, Events.timestamp,
+    )
         .where {
             (Events.userId eq uid) and
                 (Events.currency eq "COP") and
-                (Events.timestamp greaterEq monthStart) and
-                (Events.timestamp less monthEnd)
+                (Events.timestamp greaterEq desde) and
+                (Events.timestamp less hastaExclusivo)
         }
         .filterNot { it[Events.id] in voidedIds }
         // Lo que espera en «Por confirmar» no suma — ni en el Inicio ni en las barras de
         // Presupuestos, que leen este mismo `spentByCategory`. Misma regla que el chip «Gastos» y
         // que `spentByCategoryForPeriod` del cliente: las dos mitades tienen que coincidir.
         .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
-        .filter { row ->
+        .mapNotNull { row ->
+            // Una fila con un tipo que no se entiende no es ingreso ni gasto: se salta en vez de
+            // tumbar el Inicio entero (antes, una así sin cuenta conocida no sumaba en ningún lado,
+            // y con cuenta conocida reventaba acá).
+            val tipo = runCatching { TransactionType.valueOf(row[Events.type]) }.getOrNull() ?: return@mapNotNull null
             val accountType = accountTypeById[row[Events.accountId]]
-            accountType == null ||
-                isCashFlow(accountType, TransactionType.valueOf(row[Events.type]), row[Events.category])
+            if (accountType != null && !isCashFlow(accountType, tipo, row[Events.category])) return@mapNotNull null
+            MovimientoDeFlujo(
+                id = row[Events.id],
+                timestamp = row[Events.timestamp],
+                type = tipo,
+                amount = row[Events.amount],
+                category = row[Events.category],
+            )
         }
-    val income = rows.filter { it[Events.type] == TransactionType.INCOME.name }.sumOf { it[Events.amount] }
-    val spentByCategory = rows.filter { it[Events.type] == TransactionType.EXPENSE.name }
-        .groupBy { it[Events.category] }
-        .mapValues { (_, r) -> r.sumOf { it[Events.amount] } }
+
+/** Ingresos y gasto por categoría de [movimientos] — la suma de [monthCashFlow]. */
+internal fun flujoDeCaja(movimientos: List<MovimientoDeFlujo>): Pair<Long, Map<String, Long>> {
+    val income = movimientos.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+    val spentByCategory = movimientos.filter { it.type == TransactionType.EXPENSE }
+        .groupBy { it.category }
+        .mapValues { (_, r) -> r.sumOf { it.amount } }
     return income to spentByCategory
 }
 
 /** Todas las cuentas del usuario con lo que el Disponible necesita saber de cada una. Una consulta. */
-private fun Transaction.cuentasDelDisponible(uid: String): Map<String, CuentaDelDisponible> =
+internal fun Transaction.cuentasDelDisponible(uid: String): Map<String, CuentaDelDisponible> =
     Accounts.select(Accounts.id, Accounts.type, Accounts.conditionedTo, Accounts.assetKind)
         .where { Accounts.userId eq uid }
         .mapNotNull { row ->
@@ -315,23 +407,103 @@ private fun Transaction.sumasAntesDe(
     antesDe: Long,
     voidedIds: Set<String>,
     cuentas: Map<String, CuentaDelDisponible>,
-): List<SumaDeMovimientos> {
+): List<SumaDeMovimientos> = sumasDeTuPlataAntesDe(uid, antesDe, voidedIds, cuentas).enPesos
+
+/**
+ * Las sumas de [sumasAntesDe], y además si alguna cuenta de «Tu plata» tuvo movimientos en otra
+ * moneda antes de ese instante — en la MISMA consulta, agrupando también por moneda.
+ */
+private class SumasDeTuPlata(val enPesos: List<SumaDeMovimientos>, val hayOtraMoneda: Boolean)
+
+private fun Transaction.sumasDeTuPlataAntesDe(
+    uid: String,
+    antesDe: Long,
+    voidedIds: Set<String>,
+    cuentas: Map<String, CuentaDelDisponible>,
+): SumasDeTuPlata {
     val deTuPlata = cuentas.filterValues { it.esTuPlata }.keys.toList()
-    if (deTuPlata.isEmpty()) return emptyList()
+    if (deTuPlata.isEmpty()) return SumasDeTuPlata(emptyList(), hayOtraMoneda = false)
     val total = Events.amount.sum()
-    return Events.select(Events.accountId, Events.type, total)
+    val filas = Events.select(Events.accountId, Events.type, Events.currency, total)
         .where {
             val base = (Events.userId eq uid) and
-                (Events.currency eq "COP") and
                 (Events.timestamp less antesDe) and
                 (Events.accountId inList deTuPlata)
             if (voidedIds.isEmpty()) base else base and (Events.id notInList voidedIds.toList())
         }
-        .groupBy(Events.accountId, Events.type)
+        .groupBy(Events.accountId, Events.type, Events.currency)
+        .toList()
+    val enPesos = filas
+        .filter { it[Events.currency] == "COP" }
         .mapNotNull { row ->
             val tipo = runCatching { TransactionType.valueOf(row[Events.type]) }.getOrNull() ?: return@mapNotNull null
             SumaDeMovimientos(row[Events.accountId], tipo, row[total] ?: 0L)
         }
+    return SumasDeTuPlata(enPesos, hayOtraMoneda = filas.any { it[Events.currency] != "COP" })
+}
+
+/**
+ * **El saldo de «Tu plata» justo antes de cada uno de [instantes]**: las mismas cuentas que suma
+ * «Tu plata» del Inicio y la misma regla de signo que el «lo que tenías al empezar» del Disponible
+ * ([saldoDeTuPlata] sobre [sumasAntesDe]).
+ *
+ * `null` en un instante donde no se puede decir sin mentir:
+ * - **Antes de que Movi conozca el saldo de todas las cuentas de Tu plata** ([desdeCuandoSeConoceTuPlata]).
+ *   El «Saldo inicial» de una cuenta se fecha el día en que se creó en Movi, pero antes pueden
+ *   caer movimientos suyos traídos de SMS o de un extracto: sumar solo esos da $0 o un negativo
+ *   donde el dueño tenía plata, y una cuenta abierta a mitad de período aparece en «al cerrar» y no
+ *   en «al empezar», como si la plata hubiera entrado.
+ * - **Con movimientos en otra moneda** en una cuenta de Tu plata antes de ese instante: una suma en
+ *   pesos la dejaría afuera en silencio (el Inicio la cuenta convertida, con la tasa de hoy).
+ *
+ * El Disponible no pasa por acá: `PlataDelPeriodo` ya cuenta las aperturas y los ajustes que caen
+ * dentro del período como «lo que tenías».
+ */
+internal fun Transaction.saldosDeTuPlataAntesDe(
+    uid: String,
+    instantes: List<Long>,
+    voidedIds: Set<String>,
+    cuentas: Map<String, CuentaDelDisponible>,
+): List<Long?> {
+    val seConoceDesde = desdeCuandoSeConoceTuPlata(uid, voidedIds, cuentas)
+    return instantes.map { antesDe ->
+        // El saldo antes de `antesDe` deja afuera lo que ocurre en ese mismo instante: si la
+        // apertura cae justo ahí, todavía no se conoce.
+        if (seConoceDesde != null && antesDe <= seConoceDesde) return@map null
+        val sumas = sumasDeTuPlataAntesDe(uid, antesDe, voidedIds, cuentas)
+        if (sumas.hayOtraMoneda) null else saldoDeTuPlata(sumas.enPesos, cuentas)
+    }
+}
+
+/**
+ * **Desde cuándo Movi conoce el saldo de TODAS las cuentas de Tu plata**: el más tardío, entre esas
+ * cuentas, de su «Saldo inicial» vivo — o, si una no tiene, de su primer movimiento vivo (una cuenta
+ * que se empezó a llevar sin apertura se conoce desde que tiene historia). `null` si ninguna cuenta
+ * de Tu plata tiene movimientos: ahí el saldo es cero, y eso sí es cierto.
+ *
+ * Una consulta: el primer instante por cuenta y categoría, unas pocas filas.
+ */
+private fun Transaction.desdeCuandoSeConoceTuPlata(
+    uid: String,
+    voidedIds: Set<String>,
+    cuentas: Map<String, CuentaDelDisponible>,
+): Long? {
+    val deTuPlata = cuentas.filterValues { it.esTuPlata }.keys.toList()
+    if (deTuPlata.isEmpty()) return null
+    val primero = Events.timestamp.min()
+    val filas = Events.select(Events.accountId, Events.category, primero)
+        .where {
+            val base = (Events.userId eq uid) and (Events.accountId inList deTuPlata)
+            if (voidedIds.isEmpty()) base else base and (Events.id notInList voidedIds.toList())
+        }
+        .groupBy(Events.accountId, Events.category)
+        .mapNotNull { row -> row[primero]?.let { Triple(row[Events.accountId], row[Events.category], it) } }
+    return filas.groupBy { it.first }
+        .map { (_, deLaCuenta) ->
+            deLaCuenta.filter { it.second == OPENING_CATEGORY }.minOfOrNull { it.third }
+                ?: deLaCuenta.minOf { it.third }
+        }
+        .maxOrNull()
 }
 
 /**

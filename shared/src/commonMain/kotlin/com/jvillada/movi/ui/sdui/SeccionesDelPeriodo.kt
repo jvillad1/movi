@@ -127,8 +127,9 @@ internal fun GastoPorCategoriaSection(
     }
 }
 
+/** Una categoría con su barra. `internal` porque el detalle de un período la reusa tal cual. */
 @Composable
-private fun FilaDeCategoria(categoria: CategoriaDelPeriodo, entrada: Float) {
+internal fun FilaDeCategoria(categoria: CategoriaDelPeriodo, entrada: Float) {
     // El color se decide una vez acá y no dentro del Canvas de la barra: una lambda de dibujo no
     // puede leer un CompositionLocal.
     //

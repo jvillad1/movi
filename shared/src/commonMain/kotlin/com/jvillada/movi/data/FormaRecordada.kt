@@ -76,6 +76,13 @@ class FormaRecordada(
     fun guardarCuentas(userId: String?, forma: FormaDeCuentas) =
         guardarForma(userId, PANTALLA_CUENTAS, forma, FormaDeCuentas.serializer())
 
+    /** Cuántas filas tenía «Tus períodos» la última carga que salió bien. */
+    fun periodos(userId: String?): FormaDePeriodos? =
+        leerForma(userId, PANTALLA_PERIODOS, FormaDePeriodos.serializer())?.takeIf { it.esValida() }
+
+    fun guardarPeriodos(userId: String?, forma: FormaDePeriodos) =
+        guardarForma(userId, PANTALLA_PERIODOS, forma, FormaDePeriodos.serializer())
+
     /**
      * Ola B, tarea 2 (whole-branch review, final fix wave): si la última carga que salió bien
      * mostraba la línea del rango del período debajo del mes, o no —con corte 1 (mes de
@@ -146,7 +153,9 @@ class FormaRecordada(
         private const val PANTALLA_CATEGORIAS = "categorias"
         private const val PANTALLA_CUENTAS = "cuentas"
         private const val PANTALLA_MOVIMIENTOS = "movimientos"
-        private val PANTALLAS = listOf(PANTALLA_CREDITOS, PANTALLA_CATEGORIAS, PANTALLA_CUENTAS, PANTALLA_MOVIMIENTOS)
+        private const val PANTALLA_PERIODOS = "periodos"
+        private val PANTALLAS =
+            listOf(PANTALLA_CREDITOS, PANTALLA_CATEGORIAS, PANTALLA_CUENTAS, PANTALLA_MOVIMIENTOS, PANTALLA_PERIODOS)
 
         private fun clave(pantalla: String, userId: String) = "forma_${pantalla}_$userId"
     }
@@ -221,6 +230,16 @@ data class FormaDeCuentas(
 data class FormaDeMovimientos(
     val lineaDePeriodo: Boolean = true,
 )
+
+/**
+ * Lo que decide el alto de «Tus períodos» por encima de su lista.
+ *
+ * @property filas cuántos períodos trajo `GET /api/periodos` la última vez que contestó bien.
+ */
+@Serializable
+data class FormaDePeriodos(val filas: Int = 0) {
+    internal fun esValida(): Boolean = filas in 0..MAX_ELEMENTOS
+}
 
 /** Topes de cordura: un número por encima de esto no lo escribió esta app, y se trata como corrupto. */
 private const val MAX_RENGLONES = 12

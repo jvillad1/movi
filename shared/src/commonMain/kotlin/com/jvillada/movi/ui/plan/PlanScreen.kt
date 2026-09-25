@@ -1,9 +1,11 @@
 package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.SessionManager
@@ -31,6 +34,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.budgets.HojasDePresupuestos
 import com.jvillada.movi.ui.budgets.presupuestos
 import com.jvillada.movi.ui.budgets.rememberEstadoDePresupuestos
+import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinCard
@@ -163,6 +167,9 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                         onReintentar = { pagos.estado.recargar() },
                     )
                 }
+                item(key = "tus-periodos") {
+                    FilaDeTusPeriodos(onClick = { onNavigate(Screen.Periodos) })
+                }
                 item(key = "segmentos") {
                     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
                         Spacer(Modifier.height(Movi.espacios.seccion))
@@ -279,5 +286,38 @@ private fun NoSePudoLeerElDisponible(onReintentar: () -> Unit) {
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         MinSectionHeader(title = TITULO_CUANTO_PUEDES_GASTAR)
         NoSePudoLeer("No pudimos calcular cuánto puedes gastar", onReintentar = onReintentar)
+    }
+}
+
+/** El tag de la fila «Tus períodos», para encontrarla sin depender de su texto en una prueba. */
+const val TAG_FILA_DE_TUS_PERIODOS: String = "fila-de-tus-periodos"
+
+/**
+ * **«Tus períodos»**: la puerta a la lista de `Screen.Periodos` desde Plan, la
+ * pestaña que ya contesta «¿cómo me fue?». No pide nada (no tiene número que mostrar, es un enlace
+ * fijo), así que no tiene esqueleto ni error propios — siempre está, desde el primer cuadro.
+ */
+@Composable
+private fun FilaDeTusPeriodos(onClick: () -> Unit) {
+    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
+        MinCard(
+            modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_TUS_PERIODOS),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+            onClick = onClick,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text("Tus períodos", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                    Spacer(Modifier.height(3.dp))
+                    Text("Cómo te fue en cada ciclo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                }
+                ChevronRight()
+            }
+        }
     }
 }

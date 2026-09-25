@@ -9,6 +9,7 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.AvatarPalette
 import com.jvillada.movi.shared.model.ChangePasswordRequest
+import com.jvillada.movi.shared.model.MAX_INICIOS_PROPIOS
 import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
@@ -232,9 +233,6 @@ private val PERIODO_VALIDO = Regex("""\d{4}-(0[1-9]|1[0-2])""")
 
 /** Y su arranque, «AAAA-MM-DD». El día real lo valida :core al calcular la ventana. */
 private val FECHA_VALIDA = Regex("""\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])""")
-
-/** Diez años de excepciones mensuales. Nadie declara más, y el tope evita que la columna crezca sola. */
-private const val MAX_INICIOS_PROPIOS = 120
 
 /**
  * El JSON de la columna, o un mapa vacío si no se entiende.

@@ -253,4 +253,36 @@ class DueDatesTest {
             assertEquals(dueDateFor(rule(dia), hoy), dueDateFor(rule(dia), hoy, settings = cal), "día $dia hoy $hoy")
         }
     }
+
+    @Test fun `la ocurrencia anterior sale solo si su ventana pisa el periodo`() {
+        val hoy = LocalDate.of(2026, 9, 30) // período 25-sep..24-oct
+        // Día 23: su ventana llega hasta el 3-oct, así que un pago tardío puede caer en el período.
+        assertEquals(LocalDate.of(2026, 9, 23), ocurrenciaAnteriorQuePisaElPeriodo(hoy, rule(23), corte25))
+        // Día 15: la ventana del 15-sep termina el 25-sep, justo el arranque — todavía lo pisa.
+        assertEquals(LocalDate.of(2026, 9, 15), ocurrenciaAnteriorQuePisaElPeriodo(hoy, rule(15), corte25))
+        // Día 14: termina el 24-sep, un día antes. Ningún pago suyo puede estar en este período.
+        assertEquals(null, ocurrenciaAnteriorQuePisaElPeriodo(hoy, rule(14), corte25))
+        // Día 28: la anterior al 25-sep es la del 28-ago, no la del 28-sep (que es de este período).
+        assertEquals(null, ocurrenciaAnteriorQuePisaElPeriodo(hoy, rule(28), corte25))
+    }
+
+    @Test fun `la ocurrencia anterior con el periodo real del duenho`() {
+        // Corte 25 y octubre arrancando el 24-sep por excepción: octubre va del 24-sep al 24-oct.
+        val delDueno = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25, iniciosPropios = mapOf("2026-10" to "2026-09-24"))
+        val hoy = LocalDate.of(2026, 9, 30)
+        // Día 23: la última antes del 24-sep es el 23-sep, y su ventana llega al 3-oct.
+        assertEquals(LocalDate.of(2026, 9, 23), ocurrenciaAnteriorQuePisaElPeriodo(hoy, rule(23), delDueno))
+        // Día 24: el 24-sep ya es de este período; la anterior es el 24-ago, cuya ventana murió el 3-sep.
+        assertEquals(null, ocurrenciaAnteriorQuePisaElPeriodo(hoy, rule(24), delDueno))
+        // En noviembre (25-oct..24-nov), la anterior del día 24 es el segundo 24 del octubre alargado.
+        assertEquals(LocalDate.of(2026, 10, 24), ocurrenciaAnteriorQuePisaElPeriodo(LocalDate.of(2026, 10, 30), rule(24), delDueno))
+    }
+
+    @Test fun `la ultima ocurrencia hasta una fecha`() {
+        assertEquals(LocalDate.of(2026, 9, 23), ultimaOcurrenciaHasta(LocalDate.of(2026, 9, 24), 23))
+        assertEquals(LocalDate.of(2026, 9, 24), ultimaOcurrenciaHasta(LocalDate.of(2026, 9, 24), 24))
+        assertEquals(LocalDate.of(2026, 8, 25), ultimaOcurrenciaHasta(LocalDate.of(2026, 9, 24), 25))
+        // Recortada al largo del mes: el «31» de septiembre es el 30.
+        assertEquals(LocalDate.of(2026, 9, 30), ultimaOcurrenciaHasta(LocalDate.of(2026, 10, 1), 31))
+    }
 }

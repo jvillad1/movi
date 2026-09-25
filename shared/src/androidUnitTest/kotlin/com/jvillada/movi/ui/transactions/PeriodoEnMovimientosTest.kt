@@ -3,12 +3,17 @@ package com.jvillada.movi.ui.transactions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -26,6 +31,7 @@ import com.jvillada.movi.shared.model.periodoAnterior
 import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.Screen
 import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Before
@@ -33,6 +39,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import kotlin.test.assertEquals
 import org.robolectric.annotation.Config
 
 /**
@@ -73,6 +80,8 @@ class PeriodoEnMovimientosTest {
         countsAsCashFlow = true,
     )
 
+    private val navegado = mutableListOf<Screen>()
+
     @Before
     fun montar() {
         DiasPlegadosStore.clear()
@@ -95,7 +104,7 @@ class PeriodoEnMovimientosTest {
             )
         }
         composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = { navegado += it }) } }
         }
         esperarTexto("Carnes y Legumbres")
     }
@@ -145,6 +154,33 @@ class PeriodoEnMovimientosTest {
         composeRule.onAllNodesWithText("Carnes y Legumbres Santa Elena", useUnmergedTree = true)
             .fetchSemanticsNodes()
             .also { check(it.isEmpty()) { "el gasto es del período de hoy, no del anterior" } }
+    }
+
+    /**
+     * Ola E, tarea 4: la hoja que abre tocar el nombre del mes gana «Ver tus períodos» — la
+     * tercera puerta a `Screen.Periodos`, junto al rango del hero del Inicio y la fila de Plan.
+     *
+     * `performSemanticsAction(OnClick)` en vez de `performClick()`: el `clickable` de esta hoja
+     * vive DENTRO de una hoja que dibuja su propio fondo oscuro «cerrable» detrás — mismo motivo
+     * que documenta `DocumentosScreenTest.tocar`, el click por coordenadas es menos fiable ahí que
+     * invocar la acción de semántica directamente.
+     */
+    @Test
+    fun `Ver tus periodos en la hoja del mes navega y la cierra`() {
+        // El `clickable` que abre la hoja vive en la Column que ENVUELVE el nombre del mes, no en
+        // el `Text` mismo — a diferencia de «Ver tus períodos» más abajo, que sí lo lleva puesto.
+        composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText(rotulo(hoy))), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Ver tus períodos", useUnmergedTree = true).assertIsDisplayed()
+
+        composeRule.onNode(hasClickAction() and hasText("Ver tus períodos"), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+
+        assertEquals(Screen.Periodos, navegado.single())
+        composeRule.onAllNodesWithText("Ver tus períodos", useUnmergedTree = true)
+            .fetchSemanticsNodes().also { check(it.isEmpty()) { "la hoja se tiene que cerrar al navegar" } }
     }
 
     @Test

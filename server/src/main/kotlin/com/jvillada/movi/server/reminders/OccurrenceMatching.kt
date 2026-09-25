@@ -7,6 +7,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.nombreDeMovimientoPegaConRegla
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -183,6 +184,17 @@ fun occurrenceCandidatesFor(
  * seña de un candidato en una regla contra la del mismo movimiento en otra: el «Crédito Papá»
  * dicho por su nombre le gana al «Crédito Mamá» que solo comparte la categoría.
  */
+/**
+ * **El nombre pega**, para las dos puertas de este archivo ([candidatosPuntuados] y
+ * [esConcluyente]): la nota del movimiento o el comercio que dijo el banco coincide con el nombre
+ * de la regla, perdonando que el movimiento agregue el mes/año («Salario Octubre 2026» pega con
+ * «Salario» — ver [nombreDeMovimientoPegaConRegla] en `:core`). Una sola definición para que las
+ * dos puertas nunca puedan leer «pega» distinto para el mismo par regla/movimiento.
+ */
+private fun nombrePegaCon(rule: RecurringRule, event: FinancialEvent): Boolean =
+    nombreDeMovimientoPegaConRegla(rule.name, event.description) ||
+        nombreDeMovimientoPegaConRegla(rule.name, event.merchant.orEmpty())
+
 fun candidatosPuntuados(
     rule: RecurringRule,
     dueDate: LocalDate,
@@ -192,7 +204,6 @@ fun candidatosPuntuados(
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
     settings: PeriodSettings = PeriodSettings(),
 ): List<CandidatoPuntuado> {
-    val claveRegla = claveComparableDeNombre(rule.name)
     val claveCategoria = claveComparableDeNombre(rule.category)
     // La ventana (con su piso en el primer día del mes del vencimiento) sale de
     // [occurrenceWindow]: es la MISMA que decide si un sello ya puesto sigue teniendo evidencia.
@@ -215,9 +226,7 @@ fun candidatosPuntuados(
             val fecha = epochMillisToAppDate(event.timestamp, zone)
             if (fecha !in ventana) return@mapNotNull null
             val dias = ChronoUnit.DAYS.between(dueDate, fecha)
-            val nombrePega = claveRegla.isNotEmpty() &&
-                (claveComparableDeNombre(event.description) == claveRegla ||
-                    claveComparableDeNombre(event.merchant.orEmpty()) == claveRegla)
+            val nombrePega = nombrePegaCon(rule, event)
             val categoriaPega = claveCategoria.isNotEmpty() &&
                 claveComparableDeNombre(event.category) == claveCategoria
             // La seña mínima es el NOMBRE o la CATEGORÍA. La cuenta no basta sola: no dice nada
@@ -282,14 +291,18 @@ data class CandidatoPuntuado(
  * Un candidato lo es cuando pasa **una** de estas dos puertas:
  *
  *  1. **El nombre pega**: la clave comparable de la nota del movimiento (o del comercio que dijo
- *     el banco) es idéntica a la de la regla. Decirle «Mercado» a un gasto en el mes en que vence
- *     el recurrente «Mercado» no es una coincidencia que valga la pena poner en duda.
+ *     el banco) es idéntica a la de la regla — o el movimiento dice el nombre de la regla y le
+ *     agrega solo el mes o el año (`nombreDeMovimientoPegaConRegla` en `:core`), que es como el
+ *     dueño anota su sueldo: «Salario Octubre 2026» pega con la regla «Salario». Decirle «Mercado»
+ *     a un gasto en el mes en que vence el recurrente «Mercado» no es una coincidencia que valga
+ *     la pena poner en duda.
  *  2. **Pegan las tres circunstancias a la vez**: la categoría, la cuenta y el **monto exacto**.
  *     Ninguna de las tres sola dice nada (el KDoc de arriba cuenta cómo la cuenta sola proponía el
  *     mercado del Éxito como el arriendo), pero las tres juntas describen un hecho muy específico:
  *     tanta plata, esa cifra y no otra, saliendo de esa cuenta, anotada en esa categoría, en la
- *     ventana del vencimiento. Es lo que hace que «Salario Septiembre 2026» sea el salario aunque
- *     no se llame «Salario».
+ *     ventana del vencimiento. Es lo que hace que un movimiento que no repite ni el nombre ni el
+ *     mes de la regla —«Reintegro» contra la regla «Salario», digamos— siga contando como la
+ *     ocurrencia si el monto es exacto.
  *
  * **«Monto exacto» es exacto.** El KDoc de arriba argumenta contra los márgenes de ±10 % elegidos
  * a ojo, y ese argumento vale doblemente acá: si el monto de un recurrente es un estimado, un
@@ -319,16 +332,33 @@ fun ocurrenciaConcluyente(
     zone: ZoneId = AppClock.zone,
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
     settings: PeriodSettings = PeriodSettings(),
-): FinancialEvent? {
+): FinancialEvent? =
+    // `singleOrNull`: cero o dos es lo mismo acá — no hay nada que afirmar, se pregunta.
+    ocurrenciasConcluyentes(rule, dueDate, events, usedEventIds, zone, windowDays, settings).singleOrNull()
+
+/**
+ * **Todos los candidatos que pasan una de las dos puertas de [ocurrenciaConcluyente]**, sin elegir.
+ *
+ * Es el cuerpo de [ocurrenciaConcluyente], que se queda con el único; suelto porque «Tus períodos»
+ * necesita distinguir los dos `null` que ella junta: con cero concluyentes el pago está pendiente,
+ * con dos o más Movi tiene dudas. La decisión de emparejar sigue siendo una sola.
+ */
+fun ocurrenciasConcluyentes(
+    rule: RecurringRule,
+    dueDate: LocalDate,
+    events: List<FinancialEvent>,
+    usedEventIds: Set<String> = emptySet(),
+    zone: ZoneId = AppClock.zone,
+    windowDays: Long = OCCURRENCE_WINDOW_DAYS,
+    settings: PeriodSettings = PeriodSettings(),
+): List<FinancialEvent> =
     // **Sobre los candidatos SIN recortar**, no sobre los tres que se muestran. Si se mirara la
     // lista recortada, un cuarto concluyente quedaría invisible y los tres de arriba parecerían
     // «exactamente uno»: la ambigüedad se taparía justo cuando más movimientos parecidos hay, que
     // es cuando más caro sale equivocarse.
-    val concluyentes = candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings)
+    candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings)
         .filter { esConcluyente(rule, it.event) }
-    // `singleOrNull`: cero o dos es lo mismo acá — no hay nada que afirmar, se pregunta.
-    return concluyentes.singleOrNull()?.event
-}
+        .map { it.event }
 
 /**
  * Las dos puertas de [ocurrenciaConcluyente], aplicadas a un candidato que ya pasó todos los
@@ -340,11 +370,7 @@ fun ocurrenciaConcluyente(
  * diría lo mismo hoy y mentiría mañana, apenas alguien toque un peso para mejorar el orden.
  */
 private fun esConcluyente(rule: RecurringRule, event: FinancialEvent): Boolean {
-    val claveRegla = claveComparableDeNombre(rule.name)
-    val nombrePega = claveRegla.isNotEmpty() &&
-        (claveComparableDeNombre(event.description) == claveRegla ||
-            claveComparableDeNombre(event.merchant.orEmpty()) == claveRegla)
-    if (nombrePega) return true
+    if (nombrePegaCon(rule, event)) return true
     val claveCategoria = claveComparableDeNombre(rule.category)
     val categoriaPega = claveCategoria.isNotEmpty() &&
         claveComparableDeNombre(event.category) == claveCategoria

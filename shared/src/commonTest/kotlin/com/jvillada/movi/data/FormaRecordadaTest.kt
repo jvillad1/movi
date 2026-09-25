@@ -24,6 +24,7 @@ class FormaRecordadaTest {
     private val categorias = FormaDeCategorias(renglonesDeLaTarjetaDeOrden = 2, filas = 23)
     private val cuentas = FormaDeCuentas(renglonesDelPatrimonio = 4, filasPorGrupo = listOf(5, 2))
     private val movimientos = FormaDeMovimientos(lineaDePeriodo = false)
+    private val periodos = FormaDePeriodos(filas = 6)
 
     @Test
     fun `lo que se guarda vuelve igual, pantalla por pantalla`() {
@@ -31,11 +32,13 @@ class FormaRecordadaTest {
         forma.guardarCategorias("u1", categorias)
         forma.guardarCuentas("u1", cuentas)
         forma.guardarMovimientos("u1", movimientos)
+        forma.guardarPeriodos("u1", periodos)
 
         assertEquals(creditos, forma.creditos("u1"))
         assertEquals(categorias, forma.categorias("u1"))
         assertEquals(cuentas, forma.cuentas("u1"))
         assertEquals(movimientos, forma.movimientos("u1"))
+        assertEquals(periodos, forma.periodos("u1"))
     }
 
     @Test
@@ -52,11 +55,13 @@ class FormaRecordadaTest {
         forma.guardarCategorias("u1", categorias)
         forma.guardarCuentas("u1", cuentas)
         forma.guardarMovimientos("u1", movimientos)
+        forma.guardarPeriodos("u1", periodos)
 
         assertNull(forma.creditos("u2"))
         assertNull(forma.categorias("u2"))
         assertNull(forma.cuentas("u2"))
         assertNull(forma.movimientos("u2"))
+        assertNull(forma.periodos("u2"))
     }
 
     @Test
@@ -65,12 +70,14 @@ class FormaRecordadaTest {
         forma.guardarCategorias("  ", categorias)
         forma.guardarCuentas(null, cuentas)
         forma.guardarMovimientos(null, movimientos)
+        forma.guardarPeriodos(null, periodos)
 
         assertTrue(guardado.isEmpty(), "sin usuario no hay clave a la que escribir")
         assertNull(forma.creditos(null))
         assertNull(forma.categorias(null))
         assertNull(forma.cuentas(" "))
         assertNull(forma.movimientos(null))
+        assertNull(forma.periodos(null))
     }
 
     @Test
@@ -93,6 +100,7 @@ class FormaRecordadaTest {
         forma.guardarCategorias("u1", categorias)
         forma.guardarCuentas("u1", cuentas)
         forma.guardarMovimientos("u1", movimientos)
+        forma.guardarPeriodos("u1", periodos)
         forma.guardarCuentas("u2", cuentas)
 
         forma.borrar("u1")
@@ -101,6 +109,7 @@ class FormaRecordadaTest {
         assertNull(forma.categorias("u1"))
         assertNull(forma.cuentas("u1"))
         assertNull(forma.movimientos("u1"))
+        assertNull(forma.periodos("u1"))
         assertEquals(cuentas, forma.cuentas("u2"))
     }
 
@@ -110,12 +119,14 @@ class FormaRecordadaTest {
         forma.guardarCategorias("u1", categorias)
         forma.guardarCuentas("u1", cuentas)
         forma.guardarMovimientos("u1", movimientos)
+        forma.guardarPeriodos("u1", periodos)
         guardado.keys.toList().forEach { guardado[it] = "{esto no es json" }
 
         assertNull(forma.creditos("u1"))
         assertNull(forma.categorias("u1"))
         assertNull(forma.cuentas("u1"))
         assertNull(forma.movimientos("u1"))
+        assertNull(forma.periodos("u1"))
     }
 
     /**
@@ -154,6 +165,13 @@ class FormaRecordadaTest {
         assertNull(forma.creditos("u1"))
         assertNull(forma.categorias("u1"))
         assertNull(forma.cuentas("u1"))
+    }
+
+    @Test
+    fun `periodos recuerda cuantas filas trajo la ultima carga que salio bien`() {
+        assertNull(forma.periodos("u1"), "sin nada recordado, nada")
+        forma.guardarPeriodos("u1", FormaDePeriodos(filas = 4))
+        assertEquals(FormaDePeriodos(filas = 4), forma.periodos("u1"))
     }
 
     @Test
