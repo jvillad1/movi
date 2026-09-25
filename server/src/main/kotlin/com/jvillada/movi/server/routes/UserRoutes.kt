@@ -234,7 +234,6 @@ private val PERIODO_VALIDO = Regex("""\d{4}-(0[1-9]|1[0-2])""")
 /** Y su arranque, «AAAA-MM-DD». El día real lo valida :core al calcular la ventana. */
 private val FECHA_VALIDA = Regex("""\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])""")
 
-
 /**
  * El JSON de la columna, o un mapa vacío si no se entiende.
  *

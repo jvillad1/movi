@@ -714,7 +714,6 @@ internal fun colorDelEstadoDePresupuesto(estado: EstadoDePresupuesto): Color = w
 @Composable
 private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
     val barColor = colorDelEstadoDePresupuesto(p.state)
-    val pctColor = barColor
     MinCard(
         modifier = Modifier.fillMaxWidth(),
         variant = MinCardVariant.Elevated,
@@ -751,7 +750,7 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
                     text = "${p.pct}%",
                     // Dato de apoyo junto al chevron: la talla del apoyo, tabular como un monto.
                     style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
-                    color = pctColor,
+                    color = barColor,
                     fontWeight = FontWeight.Medium,
                 )
                 ChevronRight()
@@ -799,7 +798,7 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
             Text(
                 tail,
                 style = Movi.textos.apoyo,
-                color = pctColor,
+                color = barColor,
                 textAlign = TextAlign.End,
                 modifier = Modifier.weight(1f),
             )
