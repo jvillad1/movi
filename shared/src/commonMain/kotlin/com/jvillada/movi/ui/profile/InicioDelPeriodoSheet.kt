@@ -66,7 +66,7 @@ fun InicioDelPeriodoSheet(
     onSave: (String?) -> Unit,
     saving: Boolean = false,
     error: String? = null,
-    // Ola E, tarea 4: `null` cuando quien monta la hoja no ofrece la puerta a «Tus períodos» — hoy
+    // `null` cuando quien monta la hoja no ofrece la puerta a «Tus períodos» — hoy
     // solo Movimientos la pasa. Sin ella, esta hoja sigue siendo la de siempre.
     onVerPeriodos: (() -> Unit)? = null,
 ) {
@@ -199,7 +199,7 @@ fun InicioDelPeriodoSheet(
                     )
                 }
 
-                // Ola E, tarea 4: quien se pregunta «¿de cuándo a cuándo va este mes?» —la
+                // Quien se pregunta «¿de cuándo a cuándo va este mes?» —la
                 // pregunta que abrió esta hoja— es quien más puede querer comparar con los
                 // anteriores.
                 if (onVerPeriodos != null) {

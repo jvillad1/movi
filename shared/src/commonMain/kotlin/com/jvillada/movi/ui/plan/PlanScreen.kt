@@ -293,7 +293,7 @@ private fun NoSePudoLeerElDisponible(onReintentar: () -> Unit) {
 const val TAG_FILA_DE_TUS_PERIODOS: String = "fila-de-tus-periodos"
 
 /**
- * **«Tus períodos»** — Ola E, tarea 4: la puerta a la lista de `Screen.Periodos` desde Plan, la
+ * **«Tus períodos»**: la puerta a la lista de `Screen.Periodos` desde Plan, la
  * pestaña que ya contesta «¿cómo me fue?». No pide nada (no tiene número que mostrar, es un enlace
  * fijo), así que no tiene esqueleto ni error propios — siempre está, desde el primer cuadro.
  */

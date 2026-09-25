@@ -76,7 +76,7 @@ class FormaRecordada(
     fun guardarCuentas(userId: String?, forma: FormaDeCuentas) =
         guardarForma(userId, PANTALLA_CUENTAS, forma, FormaDeCuentas.serializer())
 
-    /** Ola E, tarea 4: cuántas filas tenía «Tus períodos» la última carga que salió bien. */
+    /** Cuántas filas tenía «Tus períodos» la última carga que salió bien. */
     fun periodos(userId: String?): FormaDePeriodos? =
         leerForma(userId, PANTALLA_PERIODOS, FormaDePeriodos.serializer())?.takeIf { it.esValida() }
 

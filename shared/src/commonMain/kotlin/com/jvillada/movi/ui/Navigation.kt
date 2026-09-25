@@ -204,7 +204,7 @@ sealed class Screen {
     data object ScreenEditor : Screen()
 
     /**
-     * Ola E, tarea 4: **«Tus períodos»** — cómo le fue al dueño en cada ciclo (entró, salió, te
+     * **«Tus períodos»** — cómo le fue al dueño en cada ciclo (entró, salió, te
      * quedó), del en curso hacia atrás. Se llega desde el rango del hero del Inicio (que se vuelve
      * tocable), desde una fila propia en Plan y desde «Ver tus períodos» en la hoja de Movimientos
      * que explica el rango del mes ([com.jvillada.movi.ui.profile.InicioDelPeriodoSheet]) — las
@@ -215,7 +215,7 @@ sealed class Screen {
     data object Periodos : Screen()
 
     /**
-     * El detalle de un período (Ola E, tarea 5), [id] = su prefijo («2026-09»). Misma pestaña que
+     * El detalle de un período, [id] = su prefijo («2026-09»). Misma pestaña que
      * [Periodos]: se llega tocando una fila suya.
      */
     data class DetalleDePeriodo(val id: String) : Screen()

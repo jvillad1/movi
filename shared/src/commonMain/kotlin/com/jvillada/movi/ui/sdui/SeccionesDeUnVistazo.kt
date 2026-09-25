@@ -198,7 +198,7 @@ internal fun HeroDeUnVistazo(
         Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         val rangoDelPeriodo = encabezadoDelPeriodo(data)
         if (rangoDelPeriodo != null) {
-            // Ola E, tarea 4: la línea que explica el rango del período es también la puerta a
+            // La línea que explica el rango del período es también la puerta a
             // «Tus períodos» — el dueño que se pregunta «¿de cuándo a cuándo va este mes?» está a
             // un toque de preguntarse «¿y los anteriores?».
             Text(

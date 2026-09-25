@@ -58,7 +58,7 @@ import kotlinx.datetime.LocalDate
 /**
  * # «Tus períodos»: cómo le fue al dueño en cada ciclo
  *
- * Ola E, tarea 4. Lista uno por uno los períodos que trae `GET /api/periodos` (del en curso hacia
+ * Lista uno por uno los períodos que trae `GET /api/periodos` (del en curso hacia
  * atrás), con las mismas cifras que ya usa el resto de la app — nada nuevo se calcula acá, es una
  * lectura del server. Tres puertas llevan hasta acá: el rango del hero del Inicio (que se vuelve
  * tocable), una fila en Plan, y «Ver tus períodos» en la hoja que explica el rango del mes en
