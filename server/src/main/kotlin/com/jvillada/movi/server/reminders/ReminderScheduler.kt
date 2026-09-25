@@ -112,37 +112,7 @@ private suspend fun processUser(
 ) {
     val logger = org.slf4j.LoggerFactory.getLogger("ReminderScheduler")
 
-    // Load this user's rules WITH lastRemindedPeriod (server-only column)
-    val rulePairs: List<Pair<RecurringRule, String?>> = dbQuery {
-        RecurringRules.selectAll()
-            .where { RecurringRules.userId eq userId }
-            .map { row -> row.toRulePair() }
-    }
-    val sinteticas = loadCreditRulePairs(userId) + loadCardRulePairs(userId)
-    val allPairs = rulePairs + sinteticas
-    // Lo que el dueño ya dio por ocurrido no vuelve a avisar ESTE mes (y sí el que viene): el
-    // filtro no necesita un `if` nuevo — el vencimiento vigente de una regla cerrada ya rodó al
-    // mes siguiente, así que cae en UPCOMING y sale por el criterio que ya estaba. Ver
-    // `dueDateFor`. El sello de `lastRemindedPeriod` de más abajo usa el MISMO conjunto, porque
-    // si sellara el periodo viejo y el filtro mirara el nuevo volverían a divergir — que es el
-    // bug que este archivo ya arregló una vez.
-    // Y una cuota que ya está PAGADA tampoco vuelve a avisar, por el mismo camino: el pago que
-    // bajó la deuda vale como «ya ocurrió» para su regla sintética (ver `PagosDeDeuda.kt`).
-    // Mandarle «tu cuota vence» por correo a alguien que ya pagó es la misma mentira que decirle
-    // «Vencido hace 5 días» en la pantalla, y sale del mismo agujero: el hecho estaba anotado y
-    // nadie lo leía. Va en el MISMO mapa —no en un filtro nuevo— para que el sello de
-    // `lastRemindedPeriod` de más abajo, que lo relee, no pueda divergir del filtro.
-    val sinteticasSolas = sinteticas.map { it.first }
-    // El período de ESTE usuario: qué vencimiento está en juego depende de su corte (ver
-    // `dueDateFor`). El filtro, el texto y el sello de abajo usan el mismo, o volverían a divergir.
-    val periodo = ajustesDePeriodoDe(userId)
-    val occurredBy = unirOcurridos(
-        dbQuery { loadOccurredBy(userId) },
-        if (sinteticasSolas.isEmpty()) emptyMap()
-        else periodosSaldados(sinteticasSolas, cargarPagosDeDeuda(userId, today), settings = periodo),
-    )
-
-    val selected = selectDueForReminder(allPairs, today, leadDays, occurredBy, periodo)
+    val (selected, occurredBy, periodo) = queAvisarle(userId, today, leadDays)
 
     if (selected.isEmpty()) return
 
@@ -193,6 +163,57 @@ private suspend fun processUser(
                 "for period(s) ${periods.joinToString(", ")}",
         )
     }
+}
+
+/**
+ * Lo que el barrido decidió avisarle a un usuario, con el mapa de ocurridos y el período con que lo
+ * decidió: el texto del correo, el del push y el sello de `lastRemindedPeriod` tienen que usar los
+ * MISMOS, o volverían a hablar de fechas distintas.
+ */
+internal data class LoQueSeAvisa(
+    val reglas: List<RecurringRule>,
+    val ocurridos: Map<String, Set<String>>,
+    val periodo: PeriodSettings,
+)
+
+/**
+ * **Qué pagos se le avisan a [userId] en [today]**, sin mandar nada.
+ *
+ * Separado del envío para poder probarlo con un día fijo: la pregunta «¿se avisa algo que ya está
+ * pagado?» depende de la fecha, y `AppClock` no se mueve desde una prueba.
+ */
+internal suspend fun queAvisarle(userId: String, today: LocalDate, leadDays: Int): LoQueSeAvisa {
+    // Load this user's rules WITH lastRemindedPeriod (server-only column)
+    val rulePairs: List<Pair<RecurringRule, String?>> = dbQuery {
+        RecurringRules.selectAll()
+            .where { RecurringRules.userId eq userId }
+            .map { row -> row.toRulePair() }
+    }
+    val sinteticas = loadCreditRulePairs(userId) + loadCardRulePairs(userId)
+    val allPairs = rulePairs + sinteticas
+    // Lo que el dueño ya dio por ocurrido no vuelve a avisar ESTE mes (y sí el que viene): el
+    // filtro no necesita un `if` nuevo — el vencimiento vigente de una regla cerrada ya rodó al
+    // mes siguiente, así que cae en UPCOMING y sale por el criterio que ya estaba. Ver
+    // `dueDateFor`. El sello de `lastRemindedPeriod` de más abajo usa el MISMO conjunto, porque
+    // si sellara el periodo viejo y el filtro mirara el nuevo volverían a divergir — que es el
+    // bug que este archivo ya arregló una vez.
+    // Y una cuota que ya está PAGADA tampoco vuelve a avisar, por el mismo camino: el pago que
+    // bajó la deuda vale como «ya ocurrió» para su regla sintética (ver `PagosDeDeuda.kt`).
+    // Mandarle «tu cuota vence» por correo a alguien que ya pagó es la misma mentira que decirle
+    // «Vencido hace 5 días» en la pantalla, y sale del mismo agujero: el hecho estaba anotado y
+    // nadie lo leía. Va en el MISMO mapa —no en un filtro nuevo— para que el sello de
+    // `lastRemindedPeriod` de más abajo, que lo relee, no pueda divergir del filtro.
+    val sinteticasSolas = sinteticas.map { it.first }
+    // El período de ESTE usuario: qué vencimiento está en juego depende de su corte (ver
+    // `dueDateFor`). El filtro, el texto y el sello de abajo usan el mismo, o volverían a divergir.
+    val periodo = ajustesDePeriodoDe(userId)
+    val occurredBy = unirOcurridos(
+        dbQuery { loadOccurredBy(userId) },
+        if (sinteticasSolas.isEmpty()) emptyMap()
+        else periodosSaldados(sinteticasSolas, cargarPagosDeDeuda(userId, today), settings = periodo),
+    )
+
+    return LoQueSeAvisa(selectDueForReminder(allPairs, today, leadDays, occurredBy, periodo), occurredBy, periodo)
 }
 
 // ── HTML builder ─────────────────────────────────────────────────────────────
