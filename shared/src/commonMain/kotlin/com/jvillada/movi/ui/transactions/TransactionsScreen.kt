@@ -1285,7 +1285,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         // «no hay nada anotado»: si es un chip el que dejó la lista vacía, se
                         // dice eso y no se ofrece nada (ver [vacioDeMovimientos]).
                         //
-                        // Ola D, Task 1: el mismo vacío de siempre, dibujado con [VacioQueEnsena]
+                        // El mismo vacío de siempre, dibujado con [VacioQueEnsena]
                         // en vez de con su propia Column — la prueba de que el componente sirve
                         // para lo que ya estaba bien. El texto del botón perdió el «+ » a mano
                         // (el componente ya pone su propio ícono de más; con los dos se leía

@@ -125,7 +125,7 @@ internal fun HeroDeUnVistazo(
     onShowCreateSheet: () -> Unit = {},
     hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
 ) {
-    // Ola D, Task 1: `accounts` CONTESTÓ vacía (no `null` — eso sigue siendo el esqueleto de
+    // `accounts` CONTESTÓ vacía (no `null` — eso sigue siendo el esqueleto de
     // siempre, más abajo). Un «$0» de 42 sp acá sería la afirmación más fuerte de la pantalla, y
     // sería falsa para quien todavía no tiene ni una cuenta — así que el hero entero se vuelve el
     // vacío que enseña, con la misma acción que «Primeros pasos» ya ofrece. Con cuentas, nada

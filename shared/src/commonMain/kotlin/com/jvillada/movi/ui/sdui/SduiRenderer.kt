@@ -77,7 +77,7 @@ fun SduiRenderer(
     modifier: Modifier = Modifier,
     onNavigate: (Screen) -> Unit,
     header: (@Composable () -> Unit)? = null,
-    // Ola D, Task 1: el hero, vacío, abre la MISMA hoja de crear cuenta que «Primeros pasos» —
+    // El hero, vacío, abre la MISMA hoja de crear cuenta que «Primeros pasos» —
     // ese estado (`showCreateSheet`) vive en `DashboardScreen`, no acá, así que solo se pasa el
     // callback. Default sin operación: el resto de las pantallas que montan `SduiRenderer` en las
     // pruebas no necesitan wirearlo.

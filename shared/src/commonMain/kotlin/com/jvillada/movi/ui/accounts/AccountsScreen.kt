@@ -191,7 +191,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         NoSePudoLeer("No pudimos cargar tus cuentas", onReintentar = { refreshKey++ })
                     }
                 } else if (cuentas.isEmpty()) {
-                    // Ola D, Task 2: sin una sola cuenta, ni un bien ni una deuda —una cuenta LOAN
+                    // Sin una sola cuenta, ni un bien ni una deuda —una cuenta LOAN
                     // o CREDIT_CARD también está en `cuentas`, así que vacía de verdad implica las
                     // tres— no hay «Patrimonio neto» que mostrar. Reemplaza al «Sin cuentas aún»
                     // de siempre por el vacío que enseña, con la misma hoja que ya abre «Nueva
@@ -332,7 +332,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 }
 
                 // **La puerta al cuadre de saldos** y **la plata que se movió entre cuentas**:
-                // Ola D, Task 2 las saca del `else` de arriba (antes solo aparecían con al menos
+                // viven fuera del `else` de arriba (antes solo aparecían con al menos
                 // una cuenta) para que sigan estando aunque Patrimonio esté vacío — cada una
                 // enseña o navega por su cuenta, y Cuadre de saldos tiene su propio vacío que
                 // enseña cuando no hay nada que comparar. Van juntas y fuera del `if` de arriba

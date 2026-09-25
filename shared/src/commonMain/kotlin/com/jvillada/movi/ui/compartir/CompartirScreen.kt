@@ -179,7 +179,7 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
                             "No pudimos cargar tus enlaces",
                             onReintentar = { loadKey++ },
                         )
-                        // Ola D, Task 2: reemplaza al texto suelto de siempre. «Crear un enlace»
+                        // Reemplaza al texto suelto de siempre. «Crear un enlace»
                         // llama a la MISMA `crear()` que ofrece la sección de arriba — no duplica
                         // la lógica de creación, solo le da una segunda puerta a quien llegó
                         // hasta acá sin haber leído la explicación.

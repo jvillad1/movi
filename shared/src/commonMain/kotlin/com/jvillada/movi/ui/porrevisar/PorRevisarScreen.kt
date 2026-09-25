@@ -193,7 +193,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
 
             if (bandejaAlDia(mensajes, dias, candidatos)) {
                 item { TodoAlDia() }
-                // Ola D, Task 2: `mensajes` no es `null` acá —[bandejaAlDia] lo exige— y contestó
+                // `mensajes` no es `null` acá —[bandejaAlDia] lo exige— y contestó
                 // vacía de verdad: nunca llegó un mensaje del banco a esta cuenta. Es la misma
                 // condición que [avisoDeCapturaEnLaBandeja] usa arriba, pero SIN mirar si el dueño
                 // la silenció: ese renglón es un reclamo que se puede apagar, este es una
@@ -390,7 +390,7 @@ private fun TodoAlDia() {
 }
 
 /**
- * Ola D, Task 2: debajo de [TodoAlDia], cuando además nunca llegó un mensaje del banco —ver el
+ * Debajo de [TodoAlDia], cuando además nunca llegó un mensaje del banco —ver el
  * llamador—, invita a configurar la captura en vez de dejar la bandeja vacía sin explicar por qué
  * ese mensaje nunca va a entrar solo.
  *

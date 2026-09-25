@@ -283,7 +283,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 // documentos es justamente haber borrado los PDF de una importación que salió mal:
                 // esconderla ahí dejaba esa importación sin forma de deshacerse.
                 //
-                // Ola D, Task 2: el vacío de acá abajo ahora TAMBIÉN trae su botón («Subir un
+                // El vacío de acá abajo TAMBIÉN trae su botón («Subir un
                 // archivo», la misma `elegirArchivo` del encabezado) — el vacío que enseña explica
                 // qué va a aparecer y ofrece la acción en el mismo lugar, en vez de obligar a subir
                 // la vista hasta el encabezado. El del encabezado sigue estando (es la puerta de
@@ -293,8 +293,9 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 20.dp).padding(top = 14.dp)) {
                         VacioQueEnsena(
-                            titulo = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel que quieras tener a mano",
-                            detalle = "Los extractos que importes se archivan solos.",
+                            titulo = "Tus papeles, a mano",
+                            detalle = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel que quieras " +
+                                "tener a mano. Los extractos que importes se archivan solos.",
                             accion = "Subir un archivo",
                             onAccion = elegirArchivo,
                         )

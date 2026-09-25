@@ -94,7 +94,7 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
     var guardando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var resultado by remember { mutableStateOf<String?>(null) }
-    // Ola D, Task 2: la hoja de crear cuenta de siempre — el vacío de esta pantalla («Todavía no
+    // La hoja de crear cuenta de siempre — el vacío de esta pantalla («Todavía no
     // hay nada que cuadrar») abre la MISMA hoja que «Nueva cuenta» en Patrimonio, no una copia.
     var showCreateSheet by remember { mutableStateOf(false) }
 
@@ -187,7 +187,7 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
                         Text(QUE_ES_EL_CUADRE, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     }
                     Spacer(Modifier.height(16.dp))
-                    // Ola D, Task 2: reemplaza al «Todavía no tienes cuentas…» de siempre.
+                    // Reemplaza al «Todavía no tienes cuentas…» de siempre.
                     if (cuentas.isEmpty() && !cargando) {
                         VacioQueEnsena(
                             titulo = "Todavía no hay nada que cuadrar",

@@ -16,7 +16,7 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 
 /**
- * La forma de [EnlacesCompartidosApi], separada de la clase que pega al server — Ola D, Task 2:
+ * La forma de [EnlacesCompartidosApi], separada de la clase que pega al server:
  * sin esto, `CompartirScreen` no tenía forma de montarse en una prueba con datos de verdad (el
  * mismo problema que ya resolvió [WalletRepository] con su doble de prueba), porque abajo hay un
  * cliente HTTP apuntando a producción. La interfaz es la costura; la única implementación real

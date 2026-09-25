@@ -249,7 +249,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 if (isEmpty) {
                     item {
                         Spacer(Modifier.height(20.dp))
-                        // Ola D, Task 2: reemplaza al «Sin créditos registrados» de siempre — el
+                        // Reemplaza al «Sin créditos registrados» de siempre — el
                         // botón hace lo mismo que «Nuevo crédito» del encabezado (ambos ponen
                         // `showTypeChooser = true`, la misma hoja de elegir préstamo o tarjeta).
                         VacioQueEnsena(

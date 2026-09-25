@@ -39,7 +39,7 @@ object Repositories {
     private val compartirReal: CompartirRepository by lazy { EnlacesCompartidosApi(createHttpClient(), apiBaseUrl) }
 
     /**
-     * Ola D, Task 2: la misma costura que [sustitutoDePrueba], para «Compartir» — sin ella
+     * La misma costura que [sustitutoDePrueba], para «Compartir» — sin ella
      * `CompartirScreen` no se podía montar en una prueba con datos de verdad, porque [compartir]
      * apuntaba siempre al cliente HTTP real. `null` por defecto: en la app no cambia nada.
      */
