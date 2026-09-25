@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.MAX_ACCOUNT_BALANCE_COP
 import com.jvillada.movi.shared.model.groupLabel
@@ -105,7 +106,10 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
     val refreshTick = LocalRefreshTick.current
     LaunchedEffect(loadKey, refreshTick) {
         cargando = true
-        runCatching { Repositories.wallets.getAccounts() }
+        // `intentar` y no `runCatching`: una lectura cancelada (el refresco que reinicia este
+        // efecto a mitad de camino) no puede escribir «No pudimos cargar» ni `cargando = false`
+        // encima de la lectura que la reemplaza.
+        intentar { Repositories.wallets.getAccounts() }
             .onSuccess { cuentas = cuentasParaCuadrar(it); leidas = true }
             .onFailure { e -> error = e.toUserMessage() }
         cargando = false

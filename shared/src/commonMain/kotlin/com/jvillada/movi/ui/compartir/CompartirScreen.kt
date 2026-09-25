@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.platform.hojaDeCompartirDeLaPlataforma
 import com.jvillada.movi.shared.model.EnlaceCompartido
 import com.jvillada.movi.shared.model.NuevoEnlaceCompartido
@@ -106,7 +107,9 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
     val refreshTick = LocalRefreshTick.current
     LaunchedEffect(loadKey, refreshTick) {
         cargando = true
-        runCatching { Repositories.compartir.listar() }
+        // `intentar` y no `runCatching`: una lectura cancelada por el refresco no puede apagar
+        // `cargando` encima de la lectura que la reemplaza (ver `data/Intentar.kt`).
+        intentar { Repositories.compartir.listar() }
             .onSuccess { enlaces = it; leidos = true }
         cargando = false
     }
