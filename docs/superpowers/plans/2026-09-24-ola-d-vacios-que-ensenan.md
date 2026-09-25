@@ -169,3 +169,32 @@ Cada uno con `VacioQueEnsena`, solo con lectura contestada y vacía:
    12 horas con «a. m.»/«p. m.», medianoche «12:05 a. m.», mediodía «12:30 p. m.»); si el texto no se puede
    leer, se devuelve tal cual (nunca lanza). Revisar las dos frases de `avisoDeCaptura` para que lean bien
    («llegó el 23 de septiembre a las 7:52 p. m.»). Pruebas en `:core:jvmTest`.
+
+### Task 6: «Próximos» no ve lo que Movi emparejó solo
+
+Visto en el teléfono del dueño el 24-sep (después de declarar que octubre arranca el 24-sep): Plan ·
+Próximos dice **«Celular · Vencido hace 2 días · −$53.077»**, pero el movimiento «Celular» de $52.990 del
+22-sep existe, está vivo, y el checklist del período (que sale de `/api/payments/occurrences`) sí lo da por
+pagado: el nombre pega, así que `ocurrenciaConcluyente` lo empareja **derivado**, sin sello en
+`recurring_occurrences`.
+
+Causa: `GET /api/payments/upcoming` (`server/.../routes/ReminderRoutes.kt` ~330) arma los períodos ya
+ocurridos con `loadOccurredBy(uid)` (**solo sellos**) + `derivadas` **solo de reglas sintéticas** (créditos
+y tarjetas). Las reglas **reales** emparejadas solas (#362, `estadosDeLasOcurrenciasReales`) no entran, así
+que su vencimiento no rueda y quedan «vencidas» con el pago hecho.
+
+- Hacer que `/api/payments/upcoming` sume, por el **mismo** parámetro `occurredPeriods` (vía `unirOcurridos`),
+  los períodos que las reglas reales tienen saldados **por emparejamiento concluyente derivado**, usando la
+  misma función que usa `/api/payments/occurrences` (`estadosDeLasOcurrenciasReales` u otra que ya exponga
+  «regla → período saldado → evento»). Nada de una segunda regla de emparejamiento: si hace falta, extraer la
+  parte común una vez y llamarla desde los dos endpoints.
+- El resultado tiene que coincidir con el checklist: toda regla que el checklist da por lista en un período, en
+  «Próximos» rueda al siguiente vencimiento. Un emparejamiento **con dudas** (dos candidatos concluyentes) NO
+  cuenta como ocurrido.
+- Revisar si el barrido de recordatorios (`startReminderScheduler`) y la campana usan el mismo `occurredBy`
+  incompleto: si sí, que usen la misma unión (un aviso de «vence» por algo pagado es el mismo bug por email).
+- Sin campos nuevos ni valores de enum nuevos en la respuesta (el APK instalado la deserializa).
+- Pruebas del server: regla real con movimiento que pega por nombre sin sello → no sale vencida y su vencimiento
+  rueda; con dos candidatos concluyentes → sigue como hoy; con período que arranca por excepción
+  (`iniciosPropios`, p. ej. octubre desde el 24-sep y corte 25) y el pago del 22-sep → no vencida;
+  el recordatorio del barrido no se dispara por una regla ya emparejada.
