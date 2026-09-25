@@ -86,6 +86,16 @@ import kotlinx.datetime.LocalDate
 // ── ¿Cómo estoy? ─────────────────────────────────────────────────────────────
 
 /**
+ * El alto mínimo del hero cuando `accounts` contestó vacía, para que
+ * la transición esqueleto → vacío no salte. Medido con `@GraphicsMode(NATIVE)` + `sdk = 34` (el
+ * motor de texto real, ×1.12 de escala de letra de la app): el esqueleto (cifra + veredicto +
+ * barra + fila) da ~242dp y el vacío por sí solo (título + detalle + botón, sin esas cuatro
+ * piezas) da ~207dp — 238dp deja los ±8dp de `EsqueletosDelInicioTest` con margen de sobra sin
+ * ser el número exacto medido, así que una fuente ligeramente distinta no tira la prueba.
+ */
+private val ALTO_MINIMO_DEL_HERO_VACIO = 238.dp
+
+/**
  * **El hero: Tu plata, un veredicto y la barra de lo que entró contra lo que salió. Nada más.**
  *
  * Antes esta tarjeta tenía Tu plata, el uso condicionado, la lista de cuentas, el patrimonio neto
@@ -106,17 +116,6 @@ import kotlinx.datetime.LocalDate
  * (ver [visibleSections] y `DASHBOARD_LAYOUT_VERSION`). Para que en esa ventana el patrimonio no se
  * pierda del Inicio, el hero lo dice en una línea —la de siempre, con su resta escrita—.
  */
-
-/**
- * Fix round 1 (Ola D, Task 1): el alto mínimo del hero cuando `accounts` contestó vacía, para que
- * la transición esqueleto → vacío no salte. Medido con `@GraphicsMode(NATIVE)` + `sdk = 34` (el
- * motor de texto real, ×1.12 de escala de letra de la app): el esqueleto (cifra + veredicto +
- * barra + fila) da ~242dp y el vacío por sí solo (título + detalle + botón, sin esas cuatro
- * piezas) da ~207dp — 238dp deja los ±8dp de `EsqueletosDelInicioTest` con margen de sobra sin
- * ser el número exacto medido, así que una fuente ligeramente distinta no tira la prueba.
- */
-private val ALTO_MINIMO_DEL_HERO_VACIO = 238.dp
-
 @Composable
 internal fun HeroDeUnVistazo(
     section: ScreenSection,
@@ -132,7 +131,7 @@ internal fun HeroDeUnVistazo(
     // vacío que enseña, con la misma acción que «Primeros pasos» ya ofrece. Con cuentas, nada
     // cambia: se sigue de largo al resto de esta función.
     if (data.accounts != null && data.accounts.isEmpty()) {
-        // Fix round 1: envuelto en un `Box` con [TAG_TARJETA_DEL_HERO] —el mismo tag que lleva la
+        // Envuelto en un `Box` con [TAG_TARJETA_DEL_HERO] —el mismo tag que lleva la
         // tarjeta de siempre unas líneas más abajo— para que `EsqueletosDelInicioTest` pueda medir
         // esta transición con el mismo patrón de altura (±8dp) que ya prueba esqueleto→cargado.
         // `VacioQueEnsena` ya pone su propio [TAG_VACIO_QUE_ENSENA] adentro; los dos tags
