@@ -871,11 +871,15 @@ private fun SeccionDeDeudas(
             NoSePudoLeer("No pudimos cargar tus deudas", onReintentar = onReintentar)
         }
     } else {
+        // Sin un crédito ni una tarjeta no hay cifra que mostrar — «Sin deudas registradas»
+        // ya lo dice, y un «$0» al lado lo presenta como un hecho en vez de la ausencia de datos
+        // que es. Con cualquier crédito o tarjeta, la cifra sigue apareciendo igual que siempre.
+        val hayDeuda = creditos.isNotEmpty() || tarjetas.isNotEmpty()
         val total = totalDebtCop(creditos, tarjetas)
         FilaDeResumenPatrimonio(
             titulo = "Deudas",
             subtitulo = resumenDeDeudas(creditos, tarjetas),
-            cifra = formatCOP(total),
+            cifra = if (hayDeuda) formatCOP(total) else null,
             // Sin deudas, un «$0» en rojo parece una alarma: el rojo es para lo que se debe.
             colorCifra = if (total == 0L) Movi.colores.texto else Movi.colores.sale,
             onClick = onClick,

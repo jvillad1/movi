@@ -182,15 +182,13 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
                             "No pudimos cargar tus enlaces",
                             onReintentar = { loadKey++ },
                         )
-                        // Reemplaza al texto suelto de siempre. «Crear un enlace»
-                        // llama a la MISMA `crear()` que ofrece la sección de arriba — no duplica
-                        // la lógica de creación, solo le da una segunda puerta a quien llegó
-                        // hasta acá sin haber leído la explicación.
+                        // Reemplaza al texto suelto de siempre, sin botón propio — el botón
+                        // «Crear enlace» de la sección de arriba ya está a la vista en esta misma
+                        // pantalla, y repetirlo acá abajo le mostraba a quien recién llega dos
+                        // botones idénticos al mismo tiempo.
                         enlaces.isEmpty() && !cargando -> VacioQueEnsena(
                             titulo = "No tienes enlaces activos",
                             detalle = "Los que crees aparecerán aquí hasta que venzan o los revoques.",
-                            accion = "Crear un enlace",
-                            onAccion = ::crear,
                             modifier = Modifier.padding(horizontal = Movi.espacios.corto),
                         )
                     }

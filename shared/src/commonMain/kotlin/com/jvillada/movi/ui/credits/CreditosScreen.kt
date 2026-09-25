@@ -220,29 +220,34 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             if (cargando) {
                 CreditosEsqueleto(forma = formaRecordada, modifier = Modifier.weight(1f))
             } else if (creditosListos != null && tarjetasListas != null) LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
-                item {
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(22.dp),
-                    ) {
-                        Text("Deuda total", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                        Spacer(Modifier.height(10.dp))
-                        // F20: préstamos + tarjetas — la MISMA función que usa el Inicio.
-                        // La protagonista de esta pantalla, igual que «Tu plata» en el Inicio: misma
-                        // letra, mismo tamaño, y un renglón siempre. Ver [CifraProtagonista].
-                        CifraProtagonista(formatCOP(totalDebtCop(creditosListos, tarjetasListas)), color = Movi.colores.texto)
-                        // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
-                        // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
-                        // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
-                        // [saleDeTuBolsillo].
-                        LoQueCuestaLaDeuda(
-                            planes.values.filterNotNull(),
-                            periodoActual,
-                            quienesPaganLoQueNoSaleDeTuBolsillo(creditosListos.mapNotNull { it.terms }),
-                            onRenglonesDelAvisoAmbar = { renglonesDelAvisoAmbar = it },
-                            onRenglonesDelAvisoRojo = { renglonesDelAvisoRojo = it },
-                        )
+                // Sin un solo crédito ni tarjeta no hay deuda que resumir — «Deuda total $0»
+                // arriba del vacío que enseña presentaba un cero como si fuera un hecho. Con
+                // cualquier crédito o tarjeta, esta tarjeta sigue apareciendo igual que siempre.
+                if (!isEmpty) {
+                    item {
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(22.dp),
+                        ) {
+                            Text("Deuda total", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                            Spacer(Modifier.height(10.dp))
+                            // F20: préstamos + tarjetas — la MISMA función que usa el Inicio.
+                            // La protagonista de esta pantalla, igual que «Tu plata» en el Inicio: misma
+                            // letra, mismo tamaño, y un renglón siempre. Ver [CifraProtagonista].
+                            CifraProtagonista(formatCOP(totalDebtCop(creditosListos, tarjetasListas)), color = Movi.colores.texto)
+                            // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
+                            // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
+                            // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
+                            // [saleDeTuBolsillo].
+                            LoQueCuestaLaDeuda(
+                                planes.values.filterNotNull(),
+                                periodoActual,
+                                quienesPaganLoQueNoSaleDeTuBolsillo(creditosListos.mapNotNull { it.terms }),
+                                onRenglonesDelAvisoAmbar = { renglonesDelAvisoAmbar = it },
+                                onRenglonesDelAvisoRojo = { renglonesDelAvisoRojo = it },
+                            )
+                        }
                     }
                 }
 
