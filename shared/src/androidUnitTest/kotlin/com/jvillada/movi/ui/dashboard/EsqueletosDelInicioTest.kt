@@ -356,4 +356,55 @@ class EsqueletosDelInicioTest {
         composeRule.onNodeWithText("Aquí vas a ver tu plata", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Crear mi primera cuenta", useUnmergedTree = true).assertDoesNotExist()
     }
+
+    /**
+     * **Fix round 1.** Mismo patrón que «el hero cargando mide lo mismo que el hero cargado» de
+     * más arriba, ahora entre el esqueleto (todavía no se sabe si hay cuentas) y el vacío que
+     * enseña (contestó que no hay ninguna): el dueño ve una transición, no un salto. El vacío
+     * quedó envuelto en un `Box` con [TAG_TARJETA_DEL_HERO] (ver `HeroDeUnVistazo`) justo para que
+     * este test pueda reusar el mismo tag.
+     *
+     * El lado esqueleto fija el período (como el primer test de esta clase) para no mezclar la
+     * línea reservada del período con la comparación — acá interesa solo cifra + veredicto +
+     * barra + fila contra el vacío.
+     */
+    @Test
+    fun `el hero cargando mide lo mismo que el hero vacio, sin cuentas`() {
+        composeRule.setContent {
+            MoviTheme {
+                Column(Modifier.fillMaxSize()) {
+                    CompositionLocalProvider(LocalCargandoElInicio provides true) {
+                        Box(Modifier.fillMaxWidth().weight(1f)) {
+                            SduiRenderer(
+                                definition = defaultDashboardDefinition(),
+                                data = DashboardData(ajustesDePeriodo = ajustesDelPeriodo, periodoActual = periodoDePrueba),
+                                modifier = Modifier.fillMaxSize(),
+                                onNavigate = {},
+                            )
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().weight(1f)) {
+                        SduiRenderer(
+                            definition = defaultDashboardDefinition(),
+                            data = DashboardData(accounts = emptyList()),
+                            modifier = Modifier.fillMaxSize(),
+                            onNavigate = {},
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        val tarjetas = composeRule.onAllNodesWithTag(TAG_TARJETA_DEL_HERO)
+        val altoCargando = tarjetas[0].getUnclippedBoundsInRoot().height
+        val altoVacio = tarjetas[1].getUnclippedBoundsInRoot().height
+
+        val diferencia = abs(altoVacio.value - altoCargando.value)
+        assertTrue(
+            diferencia <= 8f,
+            "El hero cargando mide ${altoCargando.value} dp y el vacío (sin cuentas) mide " +
+                "${altoVacio.value} dp — diferencia de $diferencia dp, el máximo son 8 dp",
+        )
+    }
 }

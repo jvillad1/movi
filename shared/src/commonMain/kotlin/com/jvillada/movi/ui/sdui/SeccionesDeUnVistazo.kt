@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -105,6 +106,17 @@ import kotlinx.datetime.LocalDate
  * (ver [visibleSections] y `DASHBOARD_LAYOUT_VERSION`). Para que en esa ventana el patrimonio no se
  * pierda del Inicio, el hero lo dice en una línea —la de siempre, con su resta escrita—.
  */
+
+/**
+ * Fix round 1 (Ola D, Task 1): el alto mínimo del hero cuando `accounts` contestó vacía, para que
+ * la transición esqueleto → vacío no salte. Medido con `@GraphicsMode(NATIVE)` + `sdk = 34` (el
+ * motor de texto real, ×1.12 de escala de letra de la app): el esqueleto (cifra + veredicto +
+ * barra + fila) da ~242dp y el vacío por sí solo (título + detalle + botón, sin esas cuatro
+ * piezas) da ~207dp — 238dp deja los ±8dp de `EsqueletosDelInicioTest` con margen de sobra sin
+ * ser el número exacto medido, así que una fuente ligeramente distinta no tira la prueba.
+ */
+private val ALTO_MINIMO_DEL_HERO_VACIO = 238.dp
+
 @Composable
 internal fun HeroDeUnVistazo(
     section: ScreenSection,
@@ -120,14 +132,34 @@ internal fun HeroDeUnVistazo(
     // vacío que enseña, con la misma acción que «Primeros pasos» ya ofrece. Con cuentas, nada
     // cambia: se sigue de largo al resto de esta función.
     if (data.accounts != null && data.accounts.isEmpty()) {
-        VacioQueEnsena(
-            titulo = "Aquí vas a ver tu plata",
-            detalle = "Crea la cuenta donde te llega la plata y Movi te muestra cuánto tienes, " +
-                "cuánto entra y cuánto sale en tu período.",
-            accion = "Crear mi primera cuenta",
-            onAccion = onShowCreateSheet,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Movi.espacios.amplio),
-        )
+        // Fix round 1: envuelto en un `Box` con [TAG_TARJETA_DEL_HERO] —el mismo tag que lleva la
+        // tarjeta de siempre unas líneas más abajo— para que `EsqueletosDelInicioTest` pueda medir
+        // esta transición con el mismo patrón de altura (±8dp) que ya prueba esqueleto→cargado.
+        // `VacioQueEnsena` ya pone su propio [TAG_VACIO_QUE_ENSENA] adentro; los dos tags
+        // conviven porque son nodos de semántica distintos (el `Box` de afuera, la tarjeta de
+        // adentro), no el mismo `testTag` pisado dos veces.
+        //
+        // `heightIn(min = ALTO_MINIMO_DEL_HERO_VACIO)`: medido, el vacío por sí solo (título +
+        // detalle + botón) da ~207dp contra los ~242dp del esqueleto (cifra + veredicto + barra +
+        // fila) — sin este mínimo, ver que las cuentas contestaron vacías ACHICABA el hero, el
+        // mismo salto que esta ola entera vino a sacar. `contentAlignment = Center` reparte el
+        // espacio de sobra arriba y abajo de la tarjeta en vez de dejarlo todo pegado abajo.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Movi.espacios.amplio)
+                .heightIn(min = ALTO_MINIMO_DEL_HERO_VACIO)
+                .testTag(TAG_TARJETA_DEL_HERO),
+            contentAlignment = Alignment.Center,
+        ) {
+            VacioQueEnsena(
+                titulo = "Aquí vas a ver tu plata",
+                detalle = "Crea la cuenta donde te llega la plata y Movi te muestra cuánto tienes, " +
+                    "cuánto entra y cuánto sale en tu período.",
+                accion = "Crear mi primera cuenta",
+                onAccion = onShowCreateSheet,
+            )
+        }
         return
     }
 
