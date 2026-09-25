@@ -61,6 +61,8 @@ import java.time.LocalDate
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.sum
+import org.jetbrains.exposed.sql.min
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
@@ -353,16 +355,17 @@ internal fun Transaction.movimientosDeFlujo(
         // Presupuestos, que leen este mismo `spentByCategory`. Misma regla que el chip «Gastos» y
         // que `spentByCategoryForPeriod` del cliente: las dos mitades tienen que coincidir.
         .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
-        .filter { row ->
+        .mapNotNull { row ->
+            // Una fila con un tipo que no se entiende no es ingreso ni gasto: se salta en vez de
+            // tumbar el Inicio entero (antes, una así sin cuenta conocida no sumaba en ningún lado,
+            // y con cuenta conocida reventaba acá).
+            val tipo = runCatching { TransactionType.valueOf(row[Events.type]) }.getOrNull() ?: return@mapNotNull null
             val accountType = accountTypeById[row[Events.accountId]]
-            accountType == null ||
-                isCashFlow(accountType, TransactionType.valueOf(row[Events.type]), row[Events.category])
-        }
-        .map { row ->
+            if (accountType != null && !isCashFlow(accountType, tipo, row[Events.category])) return@mapNotNull null
             MovimientoDeFlujo(
                 id = row[Events.id],
                 timestamp = row[Events.timestamp],
-                type = TransactionType.valueOf(row[Events.type]),
+                type = tipo,
                 amount = row[Events.amount],
                 category = row[Events.category],
             )
@@ -440,22 +443,67 @@ private fun Transaction.sumasDeTuPlataAntesDe(
 }
 
 /**
- * **El saldo de «Tu plata» justo antes de [antesDe]**: las mismas cuentas que suma «Tu plata» del
- * Inicio y la misma regla de signo que el «lo que tenías al empezar» del Disponible
+ * **El saldo de «Tu plata» justo antes de cada uno de [instantes]**: las mismas cuentas que suma
+ * «Tu plata» del Inicio y la misma regla de signo que el «lo que tenías al empezar» del Disponible
  * ([saldoDeTuPlata] sobre [sumasAntesDe]).
  *
- * `null` cuando no se puede decir sin mentir: si una cuenta de Tu plata tuvo movimientos en otra
- * moneda, una suma en pesos la dejaría afuera en silencio (el Inicio la cuenta convertida, con la
- * tasa de hoy, que no es la de ese día).
+ * `null` en un instante donde no se puede decir sin mentir:
+ * - **Antes de que Movi conozca el saldo de todas las cuentas de Tu plata** ([desdeCuandoSeConoceTuPlata]).
+ *   El «Saldo inicial» de una cuenta se fecha el día en que se creó en Movi, pero antes pueden
+ *   caer movimientos suyos traídos de SMS o de un extracto: sumar solo esos da $0 o un negativo
+ *   donde el dueño tenía plata, y una cuenta abierta a mitad de período aparece en «al cerrar» y no
+ *   en «al empezar», como si la plata hubiera entrado.
+ * - **Con movimientos en otra moneda** en una cuenta de Tu plata antes de ese instante: una suma en
+ *   pesos la dejaría afuera en silencio (el Inicio la cuenta convertida, con la tasa de hoy).
+ *
+ * El Disponible no pasa por acá: `PlataDelPeriodo` ya cuenta las aperturas y los ajustes que caen
+ * dentro del período como «lo que tenías».
  */
-internal fun Transaction.saldoDeTuPlataAntesDe(
+internal fun Transaction.saldosDeTuPlataAntesDe(
     uid: String,
-    antesDe: Long,
+    instantes: List<Long>,
+    voidedIds: Set<String>,
+    cuentas: Map<String, CuentaDelDisponible>,
+): List<Long?> {
+    val seConoceDesde = desdeCuandoSeConoceTuPlata(uid, voidedIds, cuentas)
+    return instantes.map { antesDe ->
+        // El saldo antes de `antesDe` deja afuera lo que ocurre en ese mismo instante: si la
+        // apertura cae justo ahí, todavía no se conoce.
+        if (seConoceDesde != null && antesDe <= seConoceDesde) return@map null
+        val sumas = sumasDeTuPlataAntesDe(uid, antesDe, voidedIds, cuentas)
+        if (sumas.hayOtraMoneda) null else saldoDeTuPlata(sumas.enPesos, cuentas)
+    }
+}
+
+/**
+ * **Desde cuándo Movi conoce el saldo de TODAS las cuentas de Tu plata**: el más tardío, entre esas
+ * cuentas, de su «Saldo inicial» vivo — o, si una no tiene, de su primer movimiento vivo (una cuenta
+ * que se empezó a llevar sin apertura se conoce desde que tiene historia). `null` si ninguna cuenta
+ * de Tu plata tiene movimientos: ahí el saldo es cero, y eso sí es cierto.
+ *
+ * Una consulta: el primer instante por cuenta y categoría, unas pocas filas.
+ */
+private fun Transaction.desdeCuandoSeConoceTuPlata(
+    uid: String,
     voidedIds: Set<String>,
     cuentas: Map<String, CuentaDelDisponible>,
 ): Long? {
-    val sumas = sumasDeTuPlataAntesDe(uid, antesDe, voidedIds, cuentas)
-    return if (sumas.hayOtraMoneda) null else saldoDeTuPlata(sumas.enPesos, cuentas)
+    val deTuPlata = cuentas.filterValues { it.esTuPlata }.keys.toList()
+    if (deTuPlata.isEmpty()) return null
+    val primero = Events.timestamp.min()
+    val filas = Events.select(Events.accountId, Events.category, primero)
+        .where {
+            val base = (Events.userId eq uid) and (Events.accountId inList deTuPlata)
+            if (voidedIds.isEmpty()) base else base and (Events.id notInList voidedIds.toList())
+        }
+        .groupBy(Events.accountId, Events.category)
+        .mapNotNull { row -> row[primero]?.let { Triple(row[Events.accountId], row[Events.category], it) } }
+    return filas.groupBy { it.first }
+        .map { (_, deLaCuenta) ->
+            deLaCuenta.filter { it.second == OPENING_CATEGORY }.minOfOrNull { it.third }
+                ?: deLaCuenta.minOf { it.third }
+        }
+        .maxOrNull()
 }
 
 /**

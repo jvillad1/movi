@@ -3,6 +3,13 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Budgets
+import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.server.reminders.arranqueDeLaRegla
+import com.jvillada.movi.server.reminders.ocurrenciaAnteriorQuePisaElPeriodo
+import com.jvillada.movi.server.reminders.periodOf
+import com.jvillada.movi.server.reminders.primeraOcurrenciaDesde
+import com.jvillada.movi.server.time.appDateToEpochMillis
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
@@ -10,7 +17,6 @@ import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.reminders.MONEDA_DE_LAS_REGLAS
 import com.jvillada.movi.server.reminders.occurrenceWindow
-import com.jvillada.movi.server.reminders.ocurrenciaEnJuego
 import com.jvillada.movi.server.reminders.ruleIsActiveOn
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
@@ -58,7 +64,7 @@ import java.time.LocalDate
  * **Nada acá es una regla nueva.** Las entradas y salidas son las de «Gastos» y las barras de
  * Presupuestos ([movimientosDeFlujo]); los pagos fijos salen del mismo [resolverOcurrencias] que el
  * checklist; «Tu plata» es el mismo saldo que el Disponible cuenta al empezar el período
- * ([saldoDeTuPlataAntesDe]). Y cada ventana sale de [ventanaDe] con el corte y los inicios propios
+ * ([saldosDeTuPlataAntesDe]). Y cada ventana sale de [ventanaDe] con el corte y los inicios propios
  * del dueño: el período que se lista es el mismo que cuenta Movimientos.
  */
 fun Route.periodosRoutes() {
@@ -92,8 +98,8 @@ internal fun Transaction.resumenesDePeriodos(uid: String, ahora: Long, ajustes: 
     val periodos = periodosDelUsuario(uid, ahora, ajustes, anulados)
     val enCurso = periodos.first()
     // **Una sola lectura de movimientos** para toda la lista, y no una por período: la franja que va
-    // del arranque del más viejo al final del en curso, repartida después por [periodoDe] — la misma
-    // función que decide en qué período cae un movimiento en Movimientos.
+    // del arranque del más viejo al final del en curso, repartida después entre las ventanas de
+    // [ventanaDe] — las mismas que usa [periodoDe] para decidir en qué período cae un movimiento.
     val movimientos = movimientosDeFlujo(
         uid = uid,
         desde = ventanaDe(periodos.last(), ajustes).first,
@@ -101,7 +107,8 @@ internal fun Transaction.resumenesDePeriodos(uid: String, ahora: Long, ajustes: 
         voidedIds = anulados,
         accountTypeById = accountTypesFor(uid),
     )
-    val porPeriodo = movimientos.groupBy { periodoDe(it.timestamp, ajustes) }
+    val ventanas = periodos.map { it to ventanaDe(it, ajustes) }
+    val porPeriodo = movimientos.groupBy { m -> ventanas.firstOrNull { (_, v) -> m.timestamp in v }?.first }
     return periodos.map { resumenDe(it, ajustes, enCurso, porPeriodo[it].orEmpty()) }
 }
 
@@ -120,21 +127,35 @@ internal fun Transaction.detalleDePeriodo(
     val periodos = periodosDelUsuario(uid, ahora, ajustes, anulados)
     if (periodo !in periodos) return null
 
+    val hoy = epochMillisToAppDate(ahora)
     val ventana = ventanaDe(periodo, ajustes)
     val desde = ventana.first
     // `ventanaDe` incluye su último milisegundo; las consultas de acá usan fin exclusivo.
     val hasta = ventana.last + 1
-    val tipos = accountTypesFor(uid)
+    val cuentas = cuentasDelDisponible(uid)
+    // Los tipos salen de la misma lectura de cuentas (`accountTypesFor` da el mismo mapa: las dos
+    // descartan un tipo que no se entiende).
+    val tipos = cuentas.mapValues { it.value.tipo }
     val movimientos = movimientosDeFlujo(uid, desde, hasta, anulados, tipos)
     val (_, gastoPorCategoria) = flujoDeCaja(movimientos)
-    val cuentas = cuentasDelDisponible(uid)
+    val enCurso = periodo == periodos.first()
+    // «Al cerrar» en el período en curso es lo que hay hoy (hasta el final del día), no lo que habría
+    // al final de una ventana que todavía no llegó.
+    val cierre = if (enCurso) minOf(hasta, appDateToEpochMillis(hoy.plusDays(1))) else hasta
+    val (alEmpezar, alCerrar) = saldosDeTuPlataAntesDe(uid, listOf(desde, cierre), anulados, cuentas)
 
     return DetalleDePeriodo(
         resumen = resumenDe(periodo, ajustes, periodos.first(), movimientos),
         porCategoria = gastoPorCategoria.entries
             .sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key })
             .map { GastoDeCategoria(it.key, it.value) },
-        pagosFijos = pagosFijosDelPeriodo(uid, periodo, epochMillisToAppDate(ahora), ajustes),
+        pagosFijos = pagosFijosDelPeriodo(
+            uid = uid,
+            periodo = periodo,
+            hoy = hoy,
+            ajustes = ajustes,
+            inicioDeLaHistoria = epochMillisToAppDate(ventanaDe(periodos.last(), ajustes).first),
+        ),
         // Los presupuestos de HOY: no hay historia de cuánto valía un tope antes. Lo gastado cruza por
         // nombre de categoría, como las barras de Presupuestos (`spentByCategory[category]`).
         presupuestos = Budgets.selectAll()
@@ -142,53 +163,63 @@ internal fun Transaction.detalleDePeriodo(
             .map { PresupuestoDelPeriodo(it[Budgets.category], it[Budgets.monthlyLimit], gastoPorCategoria[it[Budgets.category]] ?: 0L) }
             .sortedBy { it.category.lowercase() },
         masGrandes = losMasGrandes(uid, movimientos, tipos),
-        tuPlataAlEmpezar = saldoDeTuPlataAntesDe(uid, desde, anulados, cuentas),
-        tuPlataAlCerrar = saldoDeTuPlataAntesDe(uid, hasta, anulados, cuentas),
+        tuPlataAlEmpezar = alEmpezar,
+        tuPlataAlCerrar = alCerrar,
     )
 }
 
 /**
- * **Los pagos fijos de [periodo]**: cada recurrente real con el vencimiento que cae adentro y cómo
- * quedó — sellado o emparejado por Movi ([PAGO_FIJO_LISTO]), con dos o más movimientos concluyentes
- * ([PAGO_FIJO_CON_DUDAS]), o sin nada ([PAGO_FIJO_PENDIENTE], también si todavía no llegó).
+ * **Los pagos fijos de [periodo]**: cada ocurrencia de cada recurrente real que vence adentro —con el
+ * corte 25 y octubre arrancando el 24-sep, una regla de día 24 vence dos veces en octubre: el 24-sep
+ * y el 24-oct— y cómo quedó: sellada o emparejada por Movi ([PAGO_FIJO_LISTO]), con dos o más
+ * movimientos concluyentes ([PAGO_FIJO_CON_DUDAS]), o sin nada ([PAGO_FIJO_PENDIENTE], también si
+ * todavía no llegó). Cada ocurrencia cae en exactamente un período.
  *
- * Decide [resolverOcurrencias], el mismo que arma el checklist: no hay un tercer emparejador. Y en
- * el **período en curso** se resuelve primero exactamente lo que el checklist pregunta hoy
- * ([ocurrenciasPorPreguntar]), en su orden: así la reserva de movimientos entre reglas es la misma y
- * cada pago dice lo mismo que `/api/payments/occurrences`. Lo único que el checklist no pregunta es
- * la ocurrencia de este período de una regla cuya anterior sigue en gracia; esa todavía no llegó
- * (por eso el checklist pregunta por la otra) y se resuelve después, con la reserva ya hecha.
+ * Decide [resolverOcurrencias], el mismo que arma el checklist: no hay un tercer emparejador. Lo que
+ * cambia es qué se resuelve PRIMERO, porque eso decide la reserva de movimientos entre reglas:
+ *
+ * - **En el período en curso**, exactamente lo que el checklist pregunta hoy
+ *   ([ocurrenciasPorPreguntar]), en su orden: así cada pago dice lo mismo que
+ *   `/api/payments/occurrences`. Lo que el checklist no pregunta —la ocurrencia de este período de
+ *   una regla cuya anterior sigue en gracia, o la segunda del período— todavía no llegó y se resuelve
+ *   después. Hereda del checklist su debilidad pasada la gracia (un pago tardío de la ocurrencia
+ *   anterior se ofrece a otra regla), a propósito: acá no puede decir otra cosa que el checklist.
+ * - **En un período cerrado**, las ocurrencias ANTERIORES cuya ventana pisa este período
+ *   (`ocurrenciaAnteriorQuePisaElPeriodo` desde su arranque): el arriendo del 23-sep pagado el 25-sep
+ *   es del arriendo, y la administración del 25 —misma categoría, cuenta y monto— no puede darse por
+ *   pagada con ese mismo movimiento.
+ *
+ * En un período cerrado, además, **una regla no aparece antes de existir** ([existiaEnElPeriodo]).
  *
  * La clave de cada sello es el mes del vencimiento (`periodOf`), así que un pago de un período
- * pasado se lee con los mismos sellos que puso el checklist cuando ese período estaba en curso. Lo
- * que Movi emparejó solo en ese entonces se vuelve a derivar igual, porque la evidencia es la misma.
+ * pasado se lee con los mismos sellos que puso el checklist cuando ese período estaba en curso.
  */
 internal fun Transaction.pagosFijosDelPeriodo(
     uid: String,
     periodo: PeriodoFinanciero,
     hoy: LocalDate,
     ajustes: PeriodSettings,
+    inicioDeLaHistoria: LocalDate,
 ): List<PagoFijoDelPeriodo> {
     val reglas = reglasRealesDe(uid)
     if (reglas.isEmpty()) return emptyList()
     val ventana = ventanaDe(periodo, ajustes)
     val dias = epochMillisToAppDate(ventana.first)..epochMillisToAppDate(ventana.last)
+    val enCurso = hoy in dias
 
-    val delPeriodo = reglas.mapNotNull { regla ->
-        val vencimiento = ocurrenciaEnJuego(dias.start, regla.dayOfMonth, ajustes) ?: return@mapNotNull null
-        if (!ruleIsActiveOn(regla, vencimiento, ajustes)) return@mapNotNull null
-        regla to vencimiento
-    }
+    val delPeriodo = reglas.flatMap { regla -> ocurrenciasEntre(regla, dias, ajustes).map { regla to it } }
     if (delPeriodo.isEmpty()) return emptyList()
-    val primero = if (hoy in dias) ocurrenciasPorPreguntar(reglas, hoy, ajustes) else delPeriodo
+    val primero = if (enCurso) {
+        ocurrenciasPorPreguntar(reglas, hoy, ajustes)
+    } else {
+        reglas.mapNotNull { regla -> ocurrenciaAnteriorQuePisaElPeriodo(dias.start, regla, ajustes)?.let { regla to it } }
+    }
     val resto = delPeriodo.filterNot { it in primero }
 
-    // Solo la franja donde puede haber candidatos: las ventanas de emparejamiento de lo que se va a
-    // resolver (fuera de ellas `candidatosPuntuados` no mira nada).
-    val ventanas = (primero + resto).map { (_, vencimiento) -> occurrenceWindow(vencimiento, settings = ajustes) }
-    val lectura = leerOcurrencias(uid, ventanas.minOf { it.start }, ventanas.maxOf { it.endInclusive })
+    val lectura = leerOcurrenciasDe(uid, primero + resto, ajustes)
     val resueltas = resolverOcurrencias(primero, lectura, hoy, ajustes) + resolverOcurrencias(resto, lectura, hoy, ajustes)
     val delPeriodoResueltas = resueltas.filter { it.due in dias }
+        .let { if (enCurso) it else existiaEnElPeriodo(uid, it, lectura, ventana.last, inicioDeLaHistoria, dias.start, hoy, ajustes) }
 
     // Lo que se movió de verdad en un pago sellado a mano con su movimiento: ese movimiento puede
     // estar fuera de la franja leída (el dueño eligió uno a mano), así que se busca por id.
@@ -205,6 +236,113 @@ internal fun Transaction.pagosFijosDelPeriodo(
     return delPeriodoResueltas
         .map { (regla, vencimiento, resolucion) -> pagoFijo(regla, vencimiento, resolucion, montoDe) }
         .sortedWith(compareBy({ it.vencimiento }, { it.nombre.lowercase() }, { it.ruleId }))
+}
+
+/** Todas las ocurrencias de [regla] en [dias] en las que ya corría, de la más vieja a la más nueva. */
+private fun ocurrenciasEntre(regla: RecurringRule, dias: ClosedRange<LocalDate>, ajustes: PeriodSettings): List<LocalDate> {
+    val ocurrencias = mutableListOf<LocalDate>()
+    var vencimiento = primeraOcurrenciaDesde(dias.start, regla.dayOfMonth)
+    while (vencimiento in dias) {
+        if (ruleIsActiveOn(regla, vencimiento, ajustes)) ocurrencias += vencimiento
+        vencimiento = primeraOcurrenciaDesde(vencimiento.plusDays(1), regla.dayOfMonth)
+    }
+    return ocurrencias
+}
+
+/**
+ * La [LecturaDeOcurrencias] justa para resolver [pares]: los movimientos de la unión de sus ventanas
+ * de emparejamiento (fuera de ellas `candidatosPuntuados` no mira nada).
+ */
+private fun Transaction.leerOcurrenciasDe(
+    uid: String,
+    pares: List<Pair<RecurringRule, LocalDate>>,
+    ajustes: PeriodSettings,
+): LecturaDeOcurrencias {
+    val ventanas = pares.map { (_, vencimiento) -> occurrenceWindow(vencimiento, settings = ajustes) }
+    return leerOcurrencias(uid, ventanas.minOf { it.start }, ventanas.maxOf { it.endInclusive })
+}
+
+/**
+ * **En un período cerrado, solo las reglas que ya existían.** Un «pendiente» en un período cerrado
+ * afirma «no lo pagaste»; afirmarlo de un mes en que la regla no existía es falso, y el dueño
+ * escribió casi todas sus reglas después de tener meses de movimientos (SMS, extractos).
+ *
+ * - Con fecha de creación (`recurring_rules.created_at`): la regla sale si nació antes de que el
+ *   período terminara ([finDelPeriodo], el último milisegundo incluido).
+ * - Con un arranque declarado (`activeFrom`): ya lo respeta `ruleIsActiveOn`, así que sale.
+ * - Sin ninguna de las dos (las reglas de antes de la columna), sale solo con **evidencia de vida**
+ *   hasta este período, y si no, se calla — el lado seguro es el silencio, no un hecho falso:
+ *   1. un sello de la regla en este período o antes (aunque su movimiento haya muerto: prueba que
+ *      la regla existía, no que se pagó);
+ *   2. algo en este período: una ocurrencia LISTO o CON DUDAS;
+ *   3. una ocurrencia anterior (desde [inicioDeLaHistoria]) que Movi emparejó solo. Sin esto, una
+ *      regla que nadie tilda a mano —casi todas, desde que Movi empareja solo— escondería justo el
+ *      mes que se saltó entre dos pagados, que es lo más útil que esta pantalla puede decir.
+ *
+ * Lo que queda escondido es un primer mes de verdad sin pagar, antes de cualquier pago registrado.
+ */
+private fun Transaction.existiaEnElPeriodo(
+    uid: String,
+    resueltas: List<OcurrenciaResuelta>,
+    lectura: LecturaDeOcurrencias,
+    finDelPeriodo: Long,
+    inicioDeLaHistoria: LocalDate,
+    inicioDelPeriodo: LocalDate,
+    hoy: LocalDate,
+    ajustes: PeriodSettings,
+): List<OcurrenciaResuelta> {
+    if (resueltas.isEmpty()) return resueltas
+    val creadas: Map<String, Long?> = RecurringRules.select(RecurringRules.id, RecurringRules.createdAt)
+        .where { RecurringRules.userId eq uid }
+        .associate { it[RecurringRules.id] to it[RecurringRules.createdAt] }
+    val porRegla = resueltas.groupBy { it.rule.id }
+
+    val sinDecidir = mutableListOf<RecurringRule>()
+    val existian = mutableSetOf<String>()
+    porRegla.forEach { (ruleId, ocurrencias) ->
+        val regla = ocurrencias.first().rule
+        val creada = creadas[ruleId]
+        val ultimaClave = ocurrencias.maxOf { periodOf(it.due) }
+        when {
+            creada != null -> if (creada <= finDelPeriodo) existian += ruleId
+            arranqueDeLaRegla(regla, ajustes) != null -> existian += ruleId
+            lectura.sellos.keys.any { (r, clave) -> r == ruleId && clave <= ultimaClave } -> existian += ruleId
+            ocurrencias.any { it.resolucion.dejaEvidencia() } -> existian += ruleId
+            else -> sinDecidir += regla
+        }
+    }
+    if (sinDecidir.isNotEmpty()) existian += conPagoAutomaticoAntes(uid, sinDecidir, inicioDeLaHistoria, inicioDelPeriodo, hoy, ajustes)
+    return resueltas.filter { it.rule.id in existian }
+}
+
+/** LISTO (sellada o emparejada) o CON DUDAS: algo en la base dice que la regla estaba viva. */
+private fun Resolucion.dejaEvidencia(): Boolean = when (this) {
+    is Resolucion.Sellada, is Resolucion.Emparejada -> true
+    is Resolucion.Abierta -> concluyentes >= 2
+    Resolucion.PorLlegar -> false
+}
+
+/**
+ * Las [reglas] con alguna ocurrencia entre [desde] y el día antes de [antesDe] que Movi emparejó solo.
+ * Con el mismo [resolverOcurrencias] y una lectura propia, en orden de vencimiento: esto no decide el
+ * estado de nada que se muestre, solo si la regla ya estaba viva.
+ */
+private fun Transaction.conPagoAutomaticoAntes(
+    uid: String,
+    reglas: List<RecurringRule>,
+    desde: LocalDate,
+    antesDe: LocalDate,
+    hoy: LocalDate,
+    ajustes: PeriodSettings,
+): Set<String> {
+    if (!desde.isBefore(antesDe)) return emptySet()
+    val pares = reglas
+        .flatMap { regla -> ocurrenciasEntre(regla, desde..antesDe.minusDays(1), ajustes).map { regla to it } }
+        .sortedWith(compareBy({ it.second }, { it.first.id }))
+    if (pares.isEmpty()) return emptySet()
+    return resolverOcurrencias(pares, leerOcurrenciasDe(uid, pares, ajustes), hoy, ajustes)
+        .filter { it.resolucion is Resolucion.Emparejada }
+        .mapTo(mutableSetOf()) { it.rule.id }
 }
 
 private fun pagoFijo(
@@ -293,7 +431,7 @@ private fun resumenDe(
 private fun Transaction.losMasGrandes(
     uid: String,
     movimientos: List<MovimientoDeFlujo>,
-    tipos: Map<String, com.jvillada.movi.shared.model.AccountType>,
+    tipos: Map<String, AccountType>,
 ): List<FinancialEvent> {
     val ids = movimientos
         .filter { it.type == TransactionType.EXPENSE }

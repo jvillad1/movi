@@ -25,6 +25,13 @@ import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.periodoDe
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.server.application.Application
+import com.jvillada.movi.shared.model.RecurringRule
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
@@ -164,6 +171,7 @@ class TusPeriodosTest {
         tipo: String = "EXPENSE",
         cuenta: String? = ahorros,
         desde: String? = null,
+        creada: LocalDate? = null,
     ) = transaction {
         RecurringRules.insert {
             it[RecurringRules.id] = id
@@ -175,6 +183,7 @@ class TusPeriodosTest {
             it[type] = tipo
             it[accountId] = cuenta
             it[activeFrom] = desde
+            it[createdAt] = creada?.let { instante(it) }
         }
     }
 
@@ -194,7 +203,9 @@ class TusPeriodosTest {
     private fun detalle(id: String, ahora: LocalDate): DetalleDePeriodo? =
         transaction { detalleDePeriodo(uid, id, instante(ahora), delDueno) }
 
-    private fun List<PagoFijoDelPeriodo>.de(ruleId: String) = single { it.ruleId == ruleId }
+    /** El pago de [ruleId]; con [vencimiento] cuando la regla vence dos veces en el período. */
+    private fun List<PagoFijoDelPeriodo>.de(ruleId: String, vencimiento: String? = null) =
+        single { it.ruleId == ruleId && (vencimiento == null || it.vencimiento == vencimiento) }
 
     // ── La lista ─────────────────────────────────────────────────────────────
 
@@ -370,7 +381,8 @@ class TusPeriodosTest {
         movimiento("ev-pension", dia(2026, 9, 5), 300_000, tipo = "INCOME", cuenta = pension)
         movimiento("ev-del-otro", dia(2026, 8, 1), 5_000_000, tipo = "INCOME", cuenta = cuentaDelOtro, usuario = otro)
         movimiento("ev-despues", dia(2026, 10, 1), 50_000)
-        movimiento("ev-dolares", dia(2026, 10, 2), 100, tipo = "INCOME", cuenta = dolares, moneda = "USD")
+        // Una compra en dólares con la tarjeta débito de la misma cuenta.
+        movimiento("ev-dolares", dia(2026, 10, 2), 12, cuenta = ahorros, moneda = "USD")
 
         val septiembre = assertNotNull(detalle("2026-09", ahora = dia(2026, 10, 5)))
         assertEquals(900_000, septiembre.tuPlataAlEmpezar)
@@ -401,7 +413,7 @@ class TusPeriodosTest {
         movimiento("ev-gym-1", dia(2026, 9, 9), 180_000, categoria = "Deporte", descripcion = "Gimnasio")
         movimiento("ev-gym-2", dia(2026, 9, 11), 180_000, categoria = "Deporte", descripcion = "Gimnasio")
 
-        regla("rr-celular", "Celular", dia = 20, monto = 53_077, categoria = "Celular")
+        regla("rr-celular", "Celular", dia = 20, monto = 53_077, categoria = "Celular", creada = dia(2026, 8, 1))
         regla("rr-nuevo", "Seguro nuevo", dia = 1, monto = 90_000, categoria = "Seguros", desde = "2026-10-01")
 
         val pagos = assertNotNull(detalle("2026-09", ahora = dia(2026, 10, 5))).pagosFijos
@@ -457,18 +469,22 @@ class TusPeriodosTest {
         val delPeriodo = checklist.filter { LocalDate.parse(it.dueDate) in diasDeOctubre }
         assertEquals(4, delPeriodo.size, "Administración, celular, gimnasio y seguro vencen en octubre y ya llegaron")
         delPeriodo.forEach { estado ->
-            val pago = pagos.de(estado.ruleId)
+            val pago = pagos.de(estado.ruleId, estado.dueDate)
             assertEquals(estado.dueDate, pago.vencimiento, estado.ruleId)
             assertEquals(estado.occurred, pago.estado == PAGO_FIJO_LISTO, estado.ruleId)
             if (estado.occurred) assertEquals(estado.eventId, pago.eventId, estado.ruleId)
         }
 
         assertEquals(PAGO_FIJO_PENDIENTE, pagos.de("rr-b-administracion").estado, "El pago del arriendo es del arriendo")
-        assertEquals(PAGO_FIJO_LISTO, pagos.de("rr-c-celular").estado)
-        assertEquals(52_990, pagos.de("rr-c-celular").montoReal)
+        assertEquals(PAGO_FIJO_LISTO, pagos.de("rr-c-celular", "2026-09-24").estado)
+        assertEquals(52_990, pagos.de("rr-c-celular", "2026-09-24").montoReal)
+        // La regla de día 24 vence dos veces en este octubre (24-sep y 24-oct): la segunda también
+        // está, todavía por llegar.
+        assertEquals(PAGO_FIJO_PENDIENTE, pagos.de("rr-c-celular", "2026-10-24").estado)
         assertEquals(PAGO_FIJO_CON_DUDAS, pagos.de("rr-d-gimnasio").estado)
-        assertEquals(PAGO_FIJO_LISTO, pagos.de("rr-e-seguro").estado)
-        assertNull(pagos.de("rr-e-seguro").eventId, "«Ya lo pagué» sin movimiento")
+        assertEquals(PAGO_FIJO_LISTO, pagos.de("rr-e-seguro", "2026-09-24").estado)
+        assertNull(pagos.de("rr-e-seguro", "2026-09-24").eventId, "«Ya lo pagué» sin movimiento")
+        assertEquals(PAGO_FIJO_PENDIENTE, pagos.de("rr-e-seguro", "2026-10-24").estado)
         // El arriendo de octubre (23-oct) y la luz (3-oct) todavía no llegan; el checklist no los
         // pregunta, y acá están pendientes.
         assertEquals("2026-10-23", pagos.de("rr-a-arriendo").vencimiento)
@@ -476,6 +492,125 @@ class TusPeriodosTest {
         assertEquals(PAGO_FIJO_PENDIENTE, pagos.de("rr-f-luz").estado)
         // Y el arriendo del 23-sep, que el checklist dio por pagado, es de septiembre.
         assertTrue(checklist.single { it.ruleId == "rr-a-arriendo" }.let { it.occurred && it.eventId == "ev-arriendo" })
+    }
+
+    /**
+     * **Cada ocurrencia cae en exactamente un período.** Con octubre del 24-sep al 24-oct, una regla
+     * de día 24 vence dos veces adentro; cerrado octubre, las dos salen, cada una con su pago.
+     */
+    @Test
+    fun `una regla que vence dos veces en el periodo sale dos veces`() {
+        regla("rr-celular", "Celular", dia = 24, monto = 53_077, categoria = "Celular")
+        movimiento("ev-agosto", dia(2026, 8, 10), 10_000)
+        movimiento("ev-celular-sep", dia(2026, 9, 24), 52_990, categoria = "Celular", descripcion = "Celular")
+        movimiento("ev-celular-oct", dia(2026, 10, 24), 53_500, categoria = "Celular", descripcion = "Celular")
+
+        val pagos = assertNotNull(detalle("2026-10", ahora = dia(2026, 11, 5))).pagosFijos
+
+        assertEquals(listOf("2026-09-24", "2026-10-24"), pagos.map { it.vencimiento })
+        assertEquals("ev-celular-sep", pagos.de("rr-celular", "2026-09-24").eventId)
+        assertEquals("ev-celular-oct", pagos.de("rr-celular", "2026-10-24").eventId)
+        assertTrue(pagos.all { it.estado == PAGO_FIJO_LISTO })
+        // Y ni septiembre (termina el 23) ni noviembre (empieza el 25-oct) las repiten.
+        assertTrue(assertNotNull(detalle("2026-09", ahora = dia(2026, 11, 5))).pagosFijos.none { it.ruleId == "rr-celular" })
+    }
+
+    /**
+     * **En un período cerrado, el pago tardío de la ocurrencia anterior es de ella.** El arriendo del
+     * 23-sep pagado el 25-sep (ya en octubre): cerrado octubre, la administración del 25 —misma
+     * categoría, cuenta y monto exacto— no se da por pagada con ese movimiento, que septiembre ya le
+     * dio al arriendo.
+     */
+    @Test
+    fun `en un periodo cerrado el pago tardio de la ocurrencia anterior no paga otra regla`() {
+        val ahora = dia(2026, 11, 5)
+        regla("rr-a-arriendo", "Arriendo", dia = 23, monto = 1_800_000, categoria = "Vivienda", creada = dia(2026, 8, 1))
+        regla("rr-b-administracion", "Administración", dia = 25, monto = 1_800_000, categoria = "Vivienda", creada = dia(2026, 8, 1))
+        movimiento("ev-arriendo", dia(2026, 9, 25), 1_800_000, categoria = "Vivienda", descripcion = "Arriendo")
+        movimiento("ev-agosto", dia(2026, 8, 10), 10_000)
+
+        val septiembre = assertNotNull(detalle("2026-09", ahora)).pagosFijos
+        assertEquals("ev-arriendo", septiembre.de("rr-a-arriendo").eventId)
+
+        val octubre = assertNotNull(detalle("2026-10", ahora)).pagosFijos
+        assertEquals(PAGO_FIJO_PENDIENTE, octubre.de("rr-b-administracion").estado)
+        assertNull(octubre.de("rr-b-administracion").eventId)
+    }
+
+    /**
+     * **En un período cerrado una regla no aparece antes de existir**; en el en curso, siempre.
+     * Septiembre cerrado (hoy 5-oct), con historia desde julio:
+     * - creada después de que septiembre terminó → no sale; creada antes → sale pendiente;
+     * - sin fecha de creación: sale con un arranque declarado, con un sello de antes, o con un pago
+     *   que Movi emparejó solo en agosto; sin nada de eso, no sale.
+     */
+    @Test
+    fun `en un periodo cerrado una regla no aparece antes de existir`() {
+        val ahora = dia(2026, 10, 5)
+        movimiento("ev-julio", dia(2026, 7, 10), 10_000)
+        regla("rr-creada-despues", "Creada después", dia = 10, monto = 1_000, categoria = "A", creada = dia(2026, 9, 30))
+        regla("rr-creada-antes", "Creada antes", dia = 10, monto = 1_000, categoria = "B", creada = dia(2026, 9, 1))
+        regla("rr-con-arranque", "Con arranque", dia = 10, monto = 1_000, categoria = "C", desde = "2026-08-26")
+        regla("rr-con-sello", "Con sello", dia = 10, monto = 1_000, categoria = "D")
+        sello("rr-con-sello", "2026-08", evento = null)
+        regla("rr-pagada-en-agosto", "Internet", dia = 10, monto = 90_000, categoria = "Servicios")
+        movimiento("ev-internet-agosto", dia(2026, 8, 10), 90_000, categoria = "Servicios", descripcion = "Internet")
+        regla("rr-sin-nada", "Sin nada", dia = 10, monto = 1_000, categoria = "E")
+
+        val septiembre = assertNotNull(detalle("2026-09", ahora)).pagosFijos
+        assertEquals(
+            setOf("rr-creada-antes", "rr-con-arranque", "rr-con-sello", "rr-pagada-en-agosto"),
+            septiembre.map { it.ruleId }.toSet(),
+        )
+        assertTrue(septiembre.all { it.estado == PAGO_FIJO_PENDIENTE })
+
+        // Agosto: el pago de internet es su evidencia, y el sello de agosto la del sellado.
+        val agosto = assertNotNull(detalle("2026-08", ahora)).pagosFijos
+        assertEquals(PAGO_FIJO_LISTO, agosto.de("rr-pagada-en-agosto").estado)
+        assertTrue(agosto.none { it.ruleId == "rr-sin-nada" || it.ruleId == "rr-creada-antes" })
+
+        // El período en curso no se filtra: ahí el checklist pregunta por todas.
+        val octubre = assertNotNull(detalle("2026-10", ahora)).pagosFijos
+        assertTrue(octubre.any { it.ruleId == "rr-sin-nada" } && octubre.any { it.ruleId == "rr-creada-despues" })
+    }
+
+    /**
+     * **«Tu plata» no se afirma antes de que Movi conozca el saldo de todas sus cuentas**, con la
+     * forma real de producción: Glim abrió el 13-ago, Bancolombia Ahorros no tiene «Saldo inicial» y
+     * su primer movimiento es del 25-ago, Nu abrió el 31-ago (con un gasto anterior traído de un
+     * SMS), la AFC el 8-sep y Ahorros 0031 el 21-sep. Septiembre arranca el 25-ago: `null`. Octubre
+     * arranca el 24-sep, con todas conocidas: un número.
+     */
+    @Test
+    fun `tu plata es null antes de conocer el saldo inicial de todas las cuentas`() {
+        transaction {
+            listOf("acc-glim", "acc-bancolombia", "acc-nu", "acc-afc", "acc-0031").forEach { cuenta(it, "SAVINGS") }
+        }
+        movimiento("ev-glim", dia(2026, 8, 13), 100_000, tipo = "INCOME", categoria = OPENING_CATEGORY, cuenta = "acc-glim")
+        movimiento("ev-banco-1", dia(2026, 8, 25), 50_000, cuenta = "acc-bancolombia")
+        movimiento("ev-banco-2", dia(2026, 8, 26), 1_000_000, tipo = "INCOME", categoria = "Salario", cuenta = "acc-bancolombia")
+        movimiento("ev-nu-sms", dia(2026, 8, 20), 10_000, cuenta = "acc-nu")
+        movimiento("ev-nu", dia(2026, 8, 31), 200_000, tipo = "INCOME", categoria = OPENING_CATEGORY, cuenta = "acc-nu")
+        movimiento("ev-afc", dia(2026, 9, 8), 300_000, tipo = "INCOME", categoria = OPENING_CATEGORY, cuenta = "acc-afc")
+        movimiento("ev-0031", dia(2026, 9, 21), 400_000, tipo = "INCOME", categoria = OPENING_CATEGORY, cuenta = "acc-0031")
+
+        val septiembre = assertNotNull(detalle("2026-09", ahora = dia(2026, 10, 5)))
+        assertNull(septiembre.tuPlataAlEmpezar, "El 25-ago Movi no conocía Bancolombia, Nu, la AFC ni la 0031")
+        assertEquals(1_940_000, septiembre.tuPlataAlCerrar)
+
+        val octubre = assertNotNull(detalle("2026-10", ahora = dia(2026, 10, 5)))
+        assertEquals(1_940_000, octubre.tuPlataAlEmpezar)
+    }
+
+    /** Una fila con un tipo que no se entiende se salta: no tumba la lista ni el detalle. */
+    @Test
+    fun `una fila con un tipo roto no tumba la cuenta`() {
+        movimiento("ev-bueno", dia(2026, 9, 10), 40_000)
+        movimiento("ev-roto", dia(2026, 9, 10), 99_000, tipo = "RARO")
+
+        val septiembre = lista(ahora = dia(2026, 10, 5)).single { it.id == "2026-09" }
+        assertEquals(40_000, septiembre.salidas)
+        assertEquals(1, septiembre.movimientos)
     }
 
     // ── La ruta ──────────────────────────────────────────────────────────────
@@ -490,20 +625,54 @@ class TusPeriodosTest {
         .withExpiresAt(Date(System.currentTimeMillis() + 60_000))
         .sign(Algorithm.HMAC256(secreto))
 
+    private fun Application.modulo() {
+        configureSerialization()
+        val verificador = JWT.require(Algorithm.HMAC256(secreto)).withIssuer("movi").withAudience("movi-client").build()
+        authentication {
+            jwt("jwt") {
+                verifier(verificador)
+                validate { JWTPrincipal(it.payload) }
+            }
+        }
+        configureRouting()
+    }
+
+    /**
+     * La fecha de creación la pone el alta y se queda en el server: la respuesta no la trae (el
+     * modelo del cable no cambia) y un PUT no la toca.
+     */
+    @Test
+    fun `el alta de una regla guarda cuando nacio sin mandarlo al cable`() = testApplication {
+        application { modulo() }
+        val antes = System.currentTimeMillis()
+        val alta = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"id":"","name":"Arriendo","category":"Vivienda","amount":1800000,"dayOfMonth":5,"type":"EXPENSE"}""")
+        }
+        assertEquals(HttpStatusCode.Created, alta.status)
+        assertTrue("created" !in alta.bodyAsText().lowercase(), alta.bodyAsText())
+        val id = Json.decodeFromString<RecurringRule>(alta.bodyAsText()).id
+        val creada = transaction {
+            RecurringRules.selectAll().where { RecurringRules.id eq id }.single()[RecurringRules.createdAt]
+        }
+        assertTrue(creada != null && creada >= antes, "Se guarda al crearla")
+
+        client.put("/api/recurring-rules/$id") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"id":"$id","name":"Arriendo","category":"Vivienda","amount":1900000,"dayOfMonth":5,"type":"EXPENSE"}""")
+        }
+        val despues = transaction {
+            RecurringRules.selectAll().where { RecurringRules.id eq id }.single()[RecurringRules.createdAt]
+        }
+        assertEquals(creada, despues, "Corregir el monto no la cambia")
+    }
+
     /** Autenticada, con el período del usuario leído de su fila, y 404 para lo que no es un período suyo. */
     @Test
     fun `la ruta pide sesion y contesta 404 fuera de la lista`() = testApplication {
-        application {
-            configureSerialization()
-            val verificador = JWT.require(Algorithm.HMAC256(secreto)).withIssuer("movi").withAudience("movi-client").build()
-            authentication {
-                jwt("jwt") {
-                    verifier(verificador)
-                    validate { JWTPrincipal(it.payload) }
-                }
-            }
-            configureRouting()
-        }
+        application { modulo() }
         val enCurso = periodoDe(System.currentTimeMillis(), delDueno).prefijo
 
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/periodos").status)

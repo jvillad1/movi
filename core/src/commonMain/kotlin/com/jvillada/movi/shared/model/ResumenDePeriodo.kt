@@ -50,11 +50,11 @@ data class DetalleDePeriodo(
     val masGrandes: List<FinancialEvent> = emptyList(),
     /**
      * Lo que había en «Tu plata» a las 00:00 del primer día. `null` cuando no se puede decir sin
-     * mentir: una cuenta de Tu plata con movimientos en otra moneda, que una suma en pesos
-     * dejaría afuera en silencio.
+     * mentir: antes de que Movi conociera el saldo inicial de todas las cuentas de Tu plata, o con
+     * movimientos en otra moneda en una de ellas, que una suma en pesos dejaría afuera en silencio.
      */
     val tuPlataAlEmpezar: Long? = null,
-    /** Lo mismo al cerrar el período (en el período en curso, lo que hay hoy). */
+    /** Lo mismo al cerrar el período; en el período en curso, lo que hay hoy (hasta el final del día). */
     val tuPlataAlCerrar: Long? = null,
 )
 
