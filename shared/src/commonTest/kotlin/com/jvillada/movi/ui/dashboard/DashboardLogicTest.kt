@@ -525,7 +525,7 @@ class DashboardLogicTest {
         assertEquals("1 crédito", quickLinkFigure("credits", data).sub)
         val b = quickLinkFigure("budgets", data)
         assertEquals("$250.000", b.value)
-        assertEquals("de $400.000 este mes", b.sub)
+        assertEquals("de $400.000", b.sub)
         assertEquals(false, b.isAlert)
         assertEquals("$1.200.000", quickLinkFigure("goals", data).value)
         assertEquals("1 meta", quickLinkFigure("goals", data).sub)

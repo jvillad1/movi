@@ -370,6 +370,22 @@ class ChecklistDelPeriodoTest {
         )
     }
 
+    /**
+     * Pagos todos salidos pero un ingreso sin entrar: «ya está todo» sería mentira al lado de
+     * «Listos · 13 de 14». La línea habla solo de los pagos, que es lo que sí es cierto.
+     */
+    @Test
+    fun con_un_ingreso_pendiente_no_dice_que_ya_esta_todo() {
+        val checklist = (1..12).map { i ->
+            PagoDelPeriodo("r$i", "Pago $i", 10_000, pagado = true, diasParaVencer = -1)
+        } + listOf(
+            PagoDelPeriodo("i1", "Sueldo", 9_000_000, pagado = true, diasParaVencer = -1, esIngreso = true),
+            PagoDelPeriodo("i2", "Arriendo que cobra", 1_200_000, pagado = false, diasParaVencer = 3, esIngreso = true),
+        )
+        assertEquals("Listos · 13 de 14", tituloDeLosListos(checklist))
+        assertEquals("Ya salieron los 12 pagos de este período", lineaDeLoQueFalta(checklist))
+    }
+
     /** Con un solo pago y un solo ingreso, habla en singular de los dos. */
     @Test
     fun sin_nada_pendiente_con_un_pago_y_un_ingreso_habla_en_singular() {

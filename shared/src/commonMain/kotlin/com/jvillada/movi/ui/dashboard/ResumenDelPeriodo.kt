@@ -440,7 +440,9 @@ fun avanceDelChecklist(checklist: List<PagoDelPeriodo>): Pair<Int, Int> {
  * **Sin nada pendiente y con ingresos, la línea cuenta las dos cosas.** «Ya salieron los 12
  * pagos» junto a [tituloDeLosListos] diciendo «Listos · 14 de 14» dejaba sin explicar los otros
  * dos: el grupo de abajo lista pagos E ingresos, y esta línea solo hablaba de pagos. Sin ingresos
- * en el checklist no hay nada que agregar, y sigue diciendo lo de siempre.
+ * en el checklist no hay nada que agregar, y sigue diciendo lo de siempre. Y «ya está todo» solo
+ * si TAMBIÉN entraron los ingresos: con uno pendiente, la línea habla solo de los pagos (que sí
+ * salieron todos) y no contradice al «Listos · 13 de 14» de abajo.
  */
 fun lineaDeLoQueFalta(checklist: List<PagoDelPeriodo>): String {
     val (pagados, total) = avanceDelChecklist(checklist)
@@ -449,7 +451,7 @@ fun lineaDeLoQueFalta(checklist: List<PagoDelPeriodo>): String {
     val totalIngresos = checklist.count { it.esIngreso }
     return when {
         total == 0 -> "Este período no tiene pagos anotados"
-        faltan == 0 && totalIngresos > 0 -> {
+        faltan == 0 && totalIngresos > 0 && ingresosPendientes(checklist).isEmpty() -> {
             val ingresos = if (totalIngresos == 1) "ingreso" else "ingresos"
             "Ya está todo lo de este período: $total $pagos y $totalIngresos $ingresos"
         }
