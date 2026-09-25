@@ -431,6 +431,20 @@ object RecurringRules : Table("recurring_rules") {
      * siempre, exactamente como se comportaban ayer.
      */
     val activeFrom         = varchar("active_from", 10).nullable()
+    /**
+     * **Cuándo se creó la regla** (epoch ms), solo del server: no viaja en `RecurringRule` ni en
+     * ninguna respuesta.
+     *
+     * La lee «Tus períodos»: un período que cerró antes de que la regla existiera no puede decir
+     * «pendiente» sobre ella, porque en ese período no había nada que pagar. [activeFrom] no
+     * sirve para esto — es el arranque del PLAN (y casi siempre NULL, «desde siempre»), no el día
+     * en que el dueño lo escribió.
+     *
+     * Nullable, y por eso es DDL seguro: `createMissingTablesAndColumns` emite `ADD COLUMN
+     * created_at BIGINT NULL` y las reglas que ya existían quedan en NULL — no se sabe cuándo
+     * nacieron, y «Tus períodos» lo deduce de su evidencia (ver `PeriodosRoutes`).
+     */
+    val createdAt          = long("created_at").nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_recurring_rules_user_id", false, userId) }
 }

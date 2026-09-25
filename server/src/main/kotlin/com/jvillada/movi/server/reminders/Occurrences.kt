@@ -107,16 +107,6 @@ fun Transaction.loadEventsBetween(uid: String, desde: Long, hastaExclusivo: Long
 }
 
 /**
- * Los movimientos que ya están sellados como ocurrencia de algún recurrente — no vuelven a
- * proponerse (cuarta puerta de [occurrenceCandidatesFor]).
- *
- * Se incluyen también los de filas cuyo evento murió: proponer un movimiento anulado no tendría
- * sentido de todas formas, y quien llama solo cruza esto contra movimientos vivos.
- */
-fun Transaction.loadUsedOccurrenceEventIds(uid: String): Set<String> =
-    loadOccurrenceRows(uid).mapNotNull { it.eventId }.toSet()
-
-/**
  * Los «no fue este» de [uid], como pares `(ruleId, eventId)`.
  *
  * **El par, no el movimiento solo**, y es la parte que importa: con «Agua», «Gas» e «Internet»

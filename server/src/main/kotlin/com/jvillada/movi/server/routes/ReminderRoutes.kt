@@ -166,6 +166,9 @@ fun Route.reminderRoutes() {
                 // formado se guarda como NULL —«desde siempre»—, que es como nacen las reglas
                 // escritas a mano.
                 it[activeFrom] = fechaIsoValida(body.activeFrom)
+                // Solo del server (ver la columna): un PUT no la toca, así que la regla conserva
+                // el día en que nació aunque se le corrija el monto.
+                it[createdAt] = System.currentTimeMillis()
             }
             safeAccountId
         }
@@ -1016,8 +1019,10 @@ internal fun org.jetbrains.exposed.sql.Transaction.leerOcurrencias(
             desde = appDateToEpochMillis(desde),
             hastaExclusivo = appDateToEpochMillis(hasta.plusDays(1)),
         ),
-        // Los ids de TODOS los sellos, también los de un movimiento que murió (ver
-        // `loadUsedOccurrenceEventIds`): quien llama solo cruza esto contra movimientos vivos.
+        // Los ids de TODOS los sellos, también los de un movimiento que murió: proponer un
+        // movimiento anulado no tendría sentido de todas formas, y esto solo se cruza contra
+        // movimientos vivos. Un movimiento sellado no vuelve a proponerse (cuarta puerta de
+        // `occurrenceCandidatesFor`).
         reservados = filas.mapNotNull { it.eventId }.toMutableSet(),
     )
 }
