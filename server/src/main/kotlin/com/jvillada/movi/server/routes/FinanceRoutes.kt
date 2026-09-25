@@ -113,7 +113,9 @@ fun Route.financeRoutes() {
                 .where { (Budgets.userId eq uid) and (Budgets.category eq body.category) }
                 .count() > 0
         }
-        if (exists) return@post call.respond(HttpStatusCode.Conflict, "Category exists: ${body.category}")
+        // En español y con el nombre, como el 409 de renombrar: el cliente muestra el cuerpo de un
+        // 4xx tal cual en la hoja «Nuevo presupuesto».
+        if (exists) return@post call.respond(HttpStatusCode.Conflict, "Ya existe un presupuesto llamado \"${body.category}\"")
         dbQuery {
             Budgets.insert {
                 it[userId]       = uid
