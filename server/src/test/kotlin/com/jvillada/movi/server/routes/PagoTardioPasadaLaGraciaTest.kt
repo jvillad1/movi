@@ -193,11 +193,11 @@ class PagoTardioPasadaLaGraciaTest {
             .toMap()
     }
 
-    /** Lo que queda según el server y el checklist: B + E − guardado − otros pagos de deuda − F − variable. */
-    private fun loQueQueda(hoy: LocalDate, fijos: Long): Long = transaction {
+    /** Lo que el server manda para el Disponible, con [hoy] fijo. */
+    private fun servidor(hoy: LocalDate): DisponibleDelServidor = transaction {
         val periodo = ajustesDelPeriodoSinSuspender(uid)
         val dias = diasDelPeriodo(hoy, periodo)
-        val d = disponibleDelServidor(
+        disponibleDelServidor(
             uid = uid,
             hoy = hoy,
             periodo = periodo,
@@ -206,7 +206,12 @@ class PagoTardioPasadaLaGraciaTest {
             voidedIds = emptySet(),
             reglasDeCredito = emptyList(),
         )
-        d.plata.saldoAlInicio + d.plata.entradas - d.plata.guardado - d.pagosDeDeudaFueraDelChecklist -
+    }
+
+    /** Lo que queda según el server y el checklist: B + E − guardado − otros pagos de deuda − F − variable. */
+    private fun loQueQueda(hoy: LocalDate, fijos: Long): Long {
+        val d = servidor(hoy)
+        return d.plata.saldoAlInicio + d.plata.entradas - d.plata.guardado - d.pagosDeDeudaFueraDelChecklist -
             fijos - d.gastoVariablePorDia.values.sum()
     }
 
@@ -265,15 +270,24 @@ class PagoTardioPasadaLaGraciaTest {
         assertEquals(emptyList(), emparejadas(pasadaLaGracia).filter { it.ruleId == arriendo }, "Lo sellado no se vuelve a derivar")
     }
 
-    /** Con el período real del dueño —octubre arrancando el 24-sep por excepción— la cuenta es la misma. */
+    /**
+     * Con el período real del dueño —octubre arrancando el 24-sep por excepción— la cuenta es la
+     * misma. La farmacia del 24-sep distingue la excepción: es del período (gasto variable), no de lo
+     * que había al empezar. Sin la excepción caería en B y la prueba lo notaría.
+     */
     @Test
     fun `con el periodo real del duenho cuenta una vez`() {
         transaction { Users.update({ Users.id eq uid }) { it[periodStarts] = """{"2026-10":"2026-09-24"}""" } }
         escenario()
+        val farmacia = 200_000L
+        movimiento("ev-farmacia", "Farmacia", LocalDate.of(2026, 9, 24), farmacia, "Salud")
 
         for (hoy in listOf(enLaGracia, pasadaLaGracia)) {
+            val d = servidor(hoy)
+            assertEquals(b, d.plata.saldoAlInicio, "El 24-sep ya es del período: B no lo incluye (hoy $hoy)")
+            assertEquals(farmacia, d.gastoVariablePorDia["2026-09-24"], "hoy $hoy")
             val f = fijos(hoy, checklistDelEscenario)
-            assertEquals(b + e - f - v - r, loQueQueda(hoy, f), "hoy $hoy")
+            assertEquals(b + e - f - v - r - farmacia, loQueQueda(hoy, f), "hoy $hoy")
         }
     }
 
@@ -366,6 +380,77 @@ class PagoTardioPasadaLaGraciaTest {
 
         val conEse = emparejadas(pasadaLaGracia).filter { it.eventId == "ev-0926" }
         assertEquals(1, conEse.size, "Un movimiento cierra una sola ocurrencia; llegó $conEse")
+    }
+
+    // ── El monto que no es el de la regla ────────────────────────────────────
+
+    private val celular = "rr-celular"
+
+    /**
+     * El Celular del dueño: regla de $53.077 el día 26, y un pago «Celular» de [monto] ese día —el
+     * nombre pega, así que Movi lo empareja solo aunque el monto no sea el de la regla—. Hoy 30-sep.
+     */
+    private fun celularPagadoCon(monto: Long) {
+        regla(celular, "Celular", dia = 26, monto = 53_077L, categoria = "Servicios")
+        movimiento("ev-sueldo", "Salario agosto", LocalDate.of(2026, 9, 1), b, "Salario", TransactionType.INCOME)
+        movimiento("ev-celular", "Celular", LocalDate.of(2026, 9, 26), monto, "Servicios")
+        movimiento("ev-mercado", "Mercado", LocalDate.of(2026, 9, 27), v, "Mercado")
+    }
+
+    private fun estadoDelCelular() = transaction {
+        estadosDeLasOcurrenciasReales(uid, pasadaLaGracia, ajustesDelPeriodoSinSuspender(uid))
+    }.single { it.ruleId == celular }
+
+    /**
+     * Pagado con $60.000: la fila del checklist resta $60.000 (`montoPagado`), así que salen $60.000
+     * del variable. Antes salían $53.077 y los $6.923 de más contaban dos veces.
+     */
+    @Test
+    fun `emparejado solo con mas que la regla el excedente no cuenta dos veces`() {
+        celularPagadoCon(60_000L)
+
+        val estado = estadoDelCelular()
+        assertTrue(estado.occurred && estado.automatica && estado.montoDelPago == 60_000L, "Emparejado solo, con lo pagado")
+        // F = lo que el cliente resta para esta fila: lo pagado, no la regla.
+        val f = fijos(pasadaLaGracia, mapOf(celular to (LocalDate.of(2026, 9, 26) to 60_000L)))
+        assertEquals(b - f - v, loQueQueda(pasadaLaGracia, f))
+    }
+
+    /**
+     * Pagado con $50.000 y un «Agua» de $40.000 en la misma categoría, dentro de la ventana: la fila
+     * resta $50.000, así que el ítem está completo con eso. Antes los $3.077 que faltaban para la
+     * regla se sacaban del agua, y esos $3.077 no quedaban contados en ningún lado.
+     */
+    @Test
+    fun `emparejado solo con menos que la regla el faltante no se saca de otro movimiento`() {
+        celularPagadoCon(50_000L)
+        val agua = 40_000L
+        movimiento("ev-agua", "Agua", LocalDate.of(2026, 9, 27), agua, "Servicios")
+
+        val estado = estadoDelCelular()
+        assertTrue(estado.occurred && estado.automatica && estado.montoDelPago == 50_000L, "Emparejado solo, con lo pagado")
+        val f = fijos(pasadaLaGracia, mapOf(celular to (LocalDate.of(2026, 9, 26) to 50_000L)))
+        assertEquals(b - f - v - agua, loQueQueda(pasadaLaGracia, f))
+        assertEquals(v + agua, servidor(pasadaLaGracia).gastoVariablePorDia["2026-09-27"], "El agua sigue entera como variable")
+    }
+
+    /**
+     * El control, sellado a mano: para esa fila el server no manda `montoPagado` y el cliente resta
+     * el monto de la regla ($53.077). Ahí sí se completa con el agua —los $3.077 que salen de ella
+     * están en ese fijo— y la cuenta también cierra.
+     */
+    @Test
+    fun `sellado a mano con menos que la regla se completa y cuenta una vez`() {
+        celularPagadoCon(50_000L)
+        val agua = 40_000L
+        movimiento("ev-agua", "Agua", LocalDate.of(2026, 9, 27), agua, "Servicios")
+        sellar(celular, "2026-09", "ev-celular")
+
+        val estado = estadoDelCelular()
+        assertTrue(estado.occurred && !estado.automatica && estado.montoDelPago == null, "Sellado a mano, sin lo pagado")
+        val f = fijos(pasadaLaGracia, mapOf(celular to (LocalDate.of(2026, 9, 26) to 53_077L)))
+        // Salió de verdad: $50.000 + $40.000 + el mercado. El fijo cuenta $53.077 y el variable el resto.
+        assertEquals(b - 50_000L - agua - v, loQueQueda(pasadaLaGracia, f))
     }
 
     // ── «Próximos» no retrocede ──────────────────────────────────────────────

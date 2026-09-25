@@ -278,8 +278,9 @@ internal fun Transaction.parteFijaDelDisponible(
     //    resta como fijo;
     //  - reserva el movimiento: el arriendo de septiembre pagado tarde no pasa a ser el pago de
     //    otro ítem pendiente del período.
-    // Sacarlo del variable solo lo hace si es el sello del ítem de ESTE período: el pago de una
-    // ocurrencia anterior no está en los fijos de este Disponible (ver `PagosDelChecklist.kt`).
+    // Sacarlo del variable solo lo hace si es el sello del ítem de ESTE período —y entonces por su
+    // monto entero, que es el que el cliente resta como fijo—: el pago de una ocurrencia anterior no
+    // está en los fijos de este Disponible (ver `PagosDelChecklist.kt`).
     val emparejadas = emparejadasComoSellos(uid, hoy, periodo)
     return parteFijaDelChecklist(
         reglas = RecurringRules.selectAll()
@@ -290,6 +291,7 @@ internal fun Transaction.parteFijaDelDisponible(
         eventos = eventosDelPeriodo,
         hoy = hoy,
         settings = periodo,
+        automaticas = emparejadas.map { it.ruleId to it.period }.toSet(),
     )
 }
 

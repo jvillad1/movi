@@ -43,6 +43,15 @@ import java.time.ZoneId
  * ya completa, sigue siendo variable; y un pago de $200.000 para un fijo de $180.000 saca $180.000
  * y deja $20.000 como variable. Así fijos + variable suman lo que de verdad salió.
  *
+ * **Salvo lo que Movi emparejó solo, que sale entero y cierra el ítem.** En esa fila el cliente
+ * resta como fijo lo que de verdad se pagó (`montoPagado`, el monto del movimiento), no el de la
+ * regla — el Celular del dueño no cuesta lo mismo cada mes. Así que el server saca del variable
+ * exactamente ese monto: con $60.000 contra una regla de $53.077, los $6.923 de más no pueden
+ * quedar además como variable (contarían dos veces); con $50.000, los $3.077 que faltan no se
+ * buscan en otro candidato (no están en los fijos de nadie, y ese candidato quedaría contado en
+ * ningún lado). Un sello a mano sí sigue con el monto de la regla: para esa fila el server no manda
+ * `montoPagado` y el cliente resta el de la regla, que es lo que se completa acá.
+ *
  * Un ítem **pendiente** también reclama su pago: los fijos ya lo cuentan por su monto entero, así
  * que un pago anotado sin marcar es exactamente el caso del doble descuento.
  *
@@ -107,6 +116,9 @@ fun vencimientoEnElChecklist(
  * @param ocurridos regla → períodos que de verdad valen (`loadOccurredBy`: un sello cuyo
  *   movimiento murió no cuenta).
  * @param eventos los movimientos vivos del período.
+ * @param automaticas los `(regla, período)` de [sellos] que Movi emparejó solo
+ *   (`emparejadasComoSellos`): su ítem sale por el monto entero del movimiento, ver el KDoc del
+ *   archivo.
  */
 fun parteFijaDelChecklist(
     reglas: List<RecurringRule>,
@@ -116,6 +128,7 @@ fun parteFijaDelChecklist(
     hoy: LocalDate,
     settings: PeriodSettings,
     zone: ZoneId = AppClock.zone,
+    automaticas: Set<Pair<String, String>> = emptySet(),
 ): Map<String, Long> {
     val porId = eventos.associateBy { it.id }
     val reglaPorId = reglas.associateBy { it.id }
@@ -140,6 +153,13 @@ fun parteFijaDelChecklist(
             // Sellado con un movimiento vivo que cae fuera del período: el pago no está acá, y no
             // hay nada más que buscarle en este período.
             eventoDelSello !in porId -> regla.amount
+            // Emparejado solo: el cliente resta el monto del movimiento, así que sale entero y el
+            // ítem queda completo — ni el excedente vuelve al variable ni el faltante se busca en
+            // otro movimiento.
+            (regla.id to periodOf(vence)) in automaticas -> {
+                parte[eventoDelSello] = porId.getValue(eventoDelSello).amount
+                regla.amount
+            }
             // El sello de ESTE ítem: su movimiento sale del variable hasta el monto de la regla,
             // que es lo que los fijos ya restaron. Solo este: el sello de otra ocurrencia de la
             // misma regla no está en los fijos de este período (ver el KDoc del archivo).

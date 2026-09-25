@@ -22,6 +22,8 @@ package com.jvillada.movi.shared.model
  *   colegio de $4.000.000 pagado con $3.000.000 + $1.000.000 saca los dos; un gimnasio de
  *   $180.000 pagado con un movimiento de $200.000 saca $180.000 y deja $20.000 como variable. Así
  *   fijos + variable suman siempre lo que de verdad salió, sin contar nada dos veces ni perderlo.
+ *   Lo que Movi emparejó solo sale por el monto entero del movimiento: esa fila resta como fijo
+ *   lo que de verdad se pagó (`montoPagado`), no el monto de la regla.
  *
  * **Fijos contra variable, la regla de oro:** los fijos del período son el monto de cada ítem del
  * checklist, pagado o pendiente (ver `fijosDelPeriodo` en la UI). Todo lo que acá se saca del
