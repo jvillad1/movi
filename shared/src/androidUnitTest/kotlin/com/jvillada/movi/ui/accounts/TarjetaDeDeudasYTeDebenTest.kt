@@ -177,6 +177,18 @@ class TarjetaDeDeudasYTeDebenTest {
         composeRule.onNodeWithText("Sin deudas registradas", useUnmergedTree = true).assertExists()
     }
 
+    /**
+     * Ola D, pulido: sin ningún crédito ni tarjeta tampoco hay cifra al lado — «Sin deudas
+     * registradas» ya lo dice, y un «$0» además lo presentaba como un hecho.
+     */
+    @Test
+    fun `Deudas sin ningun credito ni tarjeta no muestra la cifra`() {
+        montar()
+        composeRule.waitForIdle()
+
+        assertTrue(!hay("\$0"), "sin deudas no hay cifra que mostrar, solo el subtítulo")
+    }
+
     @Test
     fun `Te deben dice cuantas cuentas hay guardadas`() {
         montar(destinos = { listOf(destino) })

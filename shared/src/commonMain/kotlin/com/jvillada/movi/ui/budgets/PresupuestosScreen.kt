@@ -459,6 +459,10 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         } else if (estado.sinPresupuestos) {
+            // Ola D: en Plan, el segmento «Pagos del mes» siempre deja `Movi.espacios.amplio` de
+            // aire antes de su contenido («aire-de-pagos» en `PlanScreen`) — este vacío quedaba
+            // pegado al selector porque no traía ningún espaciador propio. Mismo token, mismo aire.
+            Spacer(Modifier.height(Movi.espacios.amplio))
             VacioDePresupuestos(estado)
         } else {
             Spacer(Modifier.height(14.dp))

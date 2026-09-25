@@ -5,9 +5,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.EnlaceCompartido
 import com.jvillada.movi.shared.model.EnlaceCompartidoCreado
@@ -62,37 +59,21 @@ class CompartirScreenTest {
         composeRule.waitUntil(timeoutMillis = 5_000) { hay(texto) }
     }
 
-    /** Sin enlaces, el vacío que enseña: título, detalle y el botón que crea uno. */
+    /**
+     * Sin enlaces, el vacío que enseña: título y detalle, SIN acción propia (Ola D, pulido).
+     *
+     * Antes traía su propio «Crear un enlace», que quedaba justo debajo del «Crear enlace» de la
+     * sección de arriba — a quien recién llega, sin ningún enlace todavía, la pantalla le mostraba
+     * dos botones que hacen exactamente lo mismo al mismo tiempo. El vacío ahora solo explica; la
+     * única puerta para crear un enlace es la de arriba.
+     */
     @Test
-    fun `sin enlaces, el vacio que ensena con su boton`() {
+    fun `sin enlaces, el vacio que ensena sin boton propio`() {
         montar()
         esperarTexto("No tienes enlaces activos")
 
         assertTrue(hay("Los que crees aparecerán aquí hasta que venzan o los revoques."))
-        assertTrue(hay("Crear un enlace"))
-    }
-
-    /** Tocar el botón del vacío crea un enlace — la MISMA acción que la sección de arriba. */
-    @Test
-    fun `tocar Crear un enlace del vacio crea el enlace`() {
-        var creado = false
-        montar(object : Repo() {
-            override suspend fun crear(pedido: NuevoEnlaceCompartido): EnlaceCompartidoCreado {
-                creado = true
-                return EnlaceCompartidoCreado(
-                    enlace = EnlaceCompartido(id = "e1", creadoEn = 0L, venceEn = 1L),
-                    ruta = "/compartido#token",
-                )
-            }
-        })
-        esperarTexto("Crear un enlace")
-
-        // El botón del vacío queda debajo del pliegue (la explicación de arriba es larga): sin
-        // `performScrollTo()` el toque cae fuera del recorte visible y no dispara nada.
-        composeRule.onNodeWithText("Crear un enlace", useUnmergedTree = true).performScrollTo().performClick()
-        composeRule.waitForIdle()
-
-        assertTrue(creado, "tocar el botón del vacío tiene que llamar a crear()")
+        assertTrue(!hay("Crear un enlace"), "el vacío no puede traer una segunda acción idéntica a la de arriba")
     }
 
     /** Mientras la lectura está en vuelo, no se afirma que no hay enlaces. */

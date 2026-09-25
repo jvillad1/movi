@@ -166,6 +166,25 @@ class CreditosNoAfirmanMientrasCarganTest {
         assertTrue(hay("¿Qué deuda quieres registrar?"))
     }
 
+    /**
+     * Ola D, pulido: sin un solo crédito ni tarjeta no hay «Deuda total» que resumir — antes esa
+     * tarjeta seguía dibujándose arriba del vacío con «$0», un cero presentado como un hecho.
+     */
+    @Test
+    fun `con la lista vacia de verdad, no se dibuja la tarjeta de deuda total`() {
+        montar()
+
+        puerta.complete(emptyList())
+        composeRule.waitForIdle()
+
+        assertEquals(0, contarTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA))
+        assertTrue(!hay("Deuda total"))
+        assertTrue(!hay("\$0"))
+        // El alta compacta del encabezado no aparece con la lista vacía (tiene su propio botón
+        // ancho abajo, «Nuevo crédito»), pero ese botón ancho sigue ahí.
+        assertTrue(hay("Nuevo crédito"))
+    }
+
     @Test
     fun `si la lectura falla, el esqueleto se va y queda el error de siempre`() {
         montar()

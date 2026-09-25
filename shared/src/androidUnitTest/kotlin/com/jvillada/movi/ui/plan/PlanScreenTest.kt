@@ -109,6 +109,9 @@ class PlanScreenTest {
     /** Sin red: todo lo que la tarjeta y el tablero leen falla. */
     private var sinRed = false
 
+    /** `true` para la prueba del aire del vacío: sin ningún presupuesto creado. */
+    private var sinPresupuestosDePrueba = false
+
     private fun cortar() {
         if (sinRed) error("sin red")
     }
@@ -147,7 +150,8 @@ class PlanScreenTest {
             if (suscripcionesFallan) error("sin señal")
             return SubscriptionsResult(emptyList(), monthlyTotalCop = 0)
         }
-        override suspend fun getBudgets(): List<Budget> = listOf(Budget("Comida", 1_000_000L))
+        override suspend fun getBudgets(): List<Budget> =
+            if (sinPresupuestosDePrueba) emptyList() else listOf(Budget("Comida", 1_000_000L))
         override suspend fun getEventsByDay(): List<EventDay> = emptyList()
     }
 
@@ -312,6 +316,39 @@ class PlanScreenTest {
         composeRule.waitForIdle()
         assertTrue(hay("Aquí van tus pagos fijos"))
         assertTrue(!hay("Gastado en", substring = true))
+    }
+
+    /**
+     * Ola D, pulido: el vacío de Presupuestos («Ponle un tope a lo que más gastas») quedaba pegado
+     * al selector, sin el aire (`Movi.espacios.amplio`) que el de Pagos del mes («Aquí van tus
+     * pagos fijos») ya traía por el Spacer «aire-de-pagos» de `PlanScreen`. Mismo selector arriba
+     * de los dos segmentos: el aire tiene que coincidir.
+     */
+    @Test
+    fun `el vacio de Presupuestos tiene el mismo aire que el de Pagos del mes, debajo del selector`() {
+        sinPresupuestosDePrueba = true
+        puerta.complete(Unit)
+        montar()
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Aquí van tus pagos fijos") }
+
+        val selector = composeRule.onNodeWithText("Pagos del mes", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val vacioDePagos = composeRule.onNodeWithText("Aquí van tus pagos fijos", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val aireDePagos = vacioDePagos.top - selector.bottom
+
+        composeRule.onNodeWithText("Presupuestos", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Ponle un tope a lo que más gastas") }
+
+        val vacioDePresupuestos = composeRule.onNodeWithText("Ponle un tope a lo que más gastas", useUnmergedTree = true)
+            .getUnclippedBoundsInRoot()
+        val aireDePresupuestos = vacioDePresupuestos.top - selector.bottom
+
+        val diferencia = abs(aireDePresupuestos.value - aireDePagos.value)
+        assertTrue(
+            diferencia <= 2f,
+            "El vacío de Presupuestos tiene ${aireDePresupuestos.value} dp de aire y el de Pagos del mes " +
+                "${aireDePagos.value} dp — el mismo selector arriba de los dos, deberían coincidir",
+        )
     }
 
     @Test
