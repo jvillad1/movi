@@ -221,6 +221,8 @@ class PorRevisarEnPantallaTest {
         assertTrue(!hay("ENTRARON SOLOS"))
         assertTrue(!hay("PAGOS DE TARJETA"))
         composeRule.onNodeWithTag(TAG_ESQUELETO_DE_POR_REVISAR, useUnmergedTree = true).assertDoesNotExist()
+        // Ya llegó un mensaje del banco (confirmado, pero llegó): no hay nada que enseñar acá.
+        assertTrue(!hay("Que tus movimientos entren solos"))
     }
 
     // ── Nada se afirma antes de leer ─────────────────────────────────────────────
@@ -244,6 +246,7 @@ class PorRevisarEnPantallaTest {
         composeRule.onNodeWithContentDescription("Actualizar", useUnmergedTree = true).assertExists()
         assertTrue(!hay(TODO_AL_DIA))
         assertTrue(!hay("No pudimos"))
+        assertTrue(!hay("Que tus movimientos entren solos"))
     }
 
     /** Con dos fuentes vacías y una en vuelo, todavía no se sabe: sigue el esqueleto. */
@@ -306,5 +309,35 @@ class PorRevisarEnPantallaTest {
         esperarTexto(TODO_AL_DIA)
 
         assertTrue(!hay("Movi nunca ha recibido"))
+    }
+
+    // ── Ola D, Task 2: el vacío que enseña bajo «Todo al día» ──────────────────────
+
+    /**
+     * Nunca llegó un mensaje del banco: debajo de «Todo al día» un vacío invita a configurar la
+     * captura. Silenciado a propósito —así no compite con el renglón rojo de arriba, que es un
+     * reclamo aparte (ver [avisoDeCapturaEnLaBandeja]) y no debería apagar esta invitación.
+     */
+    @Test
+    fun `si nunca llego nada, debajo de Todo al dia invita a configurar la captura`() {
+        montar(Repo(silenciada = true))
+        esperarTexto(TODO_AL_DIA)
+
+        assertTrue(hay("Que tus movimientos entren solos"))
+        assertTrue(hay("Movi puede leer los mensajes y avisos de tu banco"))
+        assertTrue(hay("Configurar la captura"))
+
+        composeRule.onNodeWithText("Configurar la captura", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf<Screen>(Screen.CapturaDelBanco), navegaciones)
+    }
+
+    /** Con un solo mensaje ya recibido, aunque todo lo demás esté vacío, no hay nada que enseñar. */
+    @Test
+    fun `con un mensaje ya recibido, no hay vacio que ensenar`() {
+        montar(Repo(mensajes = listOf(sms("s1", SMS_STATE_CONFIRMED)), silenciada = true))
+        esperarTexto(TODO_AL_DIA)
+
+        assertTrue(!hay("Que tus movimientos entren solos"))
     }
 }

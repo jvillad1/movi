@@ -16,6 +16,7 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import com.jvillada.movi.shared.model.CategoryPrefsRequest
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
@@ -320,11 +321,23 @@ class WalletRepositoryImpl(
     override suspend fun getBudgets(): List<Budget> =
         client.get("$baseUrl/api/budgets").body()
 
-    override suspend fun createBudget(budget: Budget): Budget =
-        client.post("$baseUrl/api/budgets") {
+    override suspend fun getPropuestasDePresupuesto(): List<PropuestaDePresupuesto> =
+        client.get("$baseUrl/api/budgets/propuestas").body()
+
+    // El estado se mira antes de leer el cuerpo: el 409 de «ya existe» llega en texto plano, y
+    // leerlo como `Budget` lo convertía en un error de deserialización. Las propuestas de
+    // Presupuestos cuentan justo ese 409 como «ya estaba creado» (el reintento de un POST cuya
+    // respuesta se perdió), y la hoja «Nuevo presupuesto» muestra el mensaje del server.
+    override suspend fun createBudget(budget: Budget): Budget {
+        val response = client.post("$baseUrl/api/budgets") {
             contentType(ContentType.Application.Json)
             setBody(budget)
-        }.body()
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
 
     // El nombre del presupuesto viaja en el CUERPO, nunca en la ruta — la misma regla que está
     // escrita unas líneas más abajo para Categorías, y por el mismo motivo: es texto libre del

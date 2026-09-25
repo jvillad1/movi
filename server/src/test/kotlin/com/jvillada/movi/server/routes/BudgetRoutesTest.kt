@@ -198,6 +198,20 @@ class BudgetRoutesTest {
         assertEquals(500_000L, list[0]["monthlyLimit"]!!.jsonPrimitive.long)
     }
 
+    /**
+     * El 409 del alta llega tal cual a la hoja «Nuevo presupuesto» (el cliente muestra el cuerpo
+     * de un 4xx), así que tiene que estar escrito para el dueño, en español.
+     */
+    @Test
+    fun `crear un presupuesto que ya existe es 409 y lo dice en espanol`() = testApplication {
+        wireApp()
+        postBudget("Comida", 500_000)
+
+        val res = postBudget("Comida", 300_000)
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        assertEquals("Ya existe un presupuesto llamado \"Comida\"", res.bodyAsText())
+    }
+
     @Test
     fun `rename de una categoria que no existe es 404`() = testApplication {
         wireApp()

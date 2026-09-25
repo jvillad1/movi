@@ -33,6 +33,9 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.PropuestaDePresupuesto
+import kotlin.math.roundToLong
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
@@ -120,6 +123,18 @@ private fun Month.spanishName(): String = when (this) {
     Month.DECEMBER -> "diciembre"
 }
 
+/**
+ * **La única función que decide entre «Gastado en septiembre» y «Gastado en este período».**
+ *
+ * Con corte 1 el período ES el mes de calendario ([PeriodSettings.esMesDeCalendario]) y nombrarlo
+ * es exacto y más corto. Con cualquier otro corte —el dueño tiene 25— el período no coincide con
+ * el mes: «septiembre» son en realidad el 26 de agosto al 25 de septiembre, y ese rango exacto ya
+ * se lee arriba, en Plan ([rangoLegibleDe]). Repetir el nombre del mes ahí abajo no aclaraba nada
+ * y, peor, sonaba a que el gasto era SOLO de septiembre.
+ */
+internal fun tituloDelGastoDelPeriodo(settings: PeriodSettings, monthName: String): String =
+    if (settings.esMesDeCalendario) "Gastado en $monthName" else "Gastado en este período"
+
 internal sealed class Sheet {
     data class Edit(val current: Budget) : Sheet()
     data object Add : Sheet()
@@ -179,6 +194,81 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     // Hasta entonces, cualquier gasto que se pintara podía cambiar —el del aparato por el del
     // server, o el mes de calendario por el período del dueño— y con él el ORDEN de la lista.
     internal var gastoYPeriodoContestaron by mutableStateOf(false)
+
+    // ── Lo que Movi propone presupuestar (solo sin presupuestos) ──────────────────────────────
+    //
+    // `null` = no llegaron (todavía, o la lectura falló): el vacío de siempre, con su «Nuevo
+    // presupuesto». Una sugerencia caída no es un error de pantalla — no hay nada que el dueño haya
+    // perdido — y no le puede tapar crear a mano. Ver [VacioDePresupuestos].
+    internal var propuestas by mutableStateOf<List<PropuestaDePresupuesto>?>(null)
+        private set
+    // Las que el dueño desmarcó, por nombre. Se guarda lo desmarcado y no lo marcado porque todas
+    // nacen marcadas: una propuesta que llega en una recarga entra marcada sin que nadie la toque.
+    internal var desmarcadas by mutableStateOf(emptySet<String>())
+        private set
+    // Un «Crear estos N» en vuelo: el segundo toque no manda los POST otra vez.
+    internal var creandoPropuestas by mutableStateOf(false)
+        private set
+    // Las que el server no aceptó en el último intento, para decir cuáles y reintentar solo esas.
+    internal var propuestasQueFallaron by mutableStateOf(emptyList<PropuestaDePresupuesto>())
+        private set
+    // Las que ya existen en el server desde esta pantalla. Salen de la lista: si la recarga de
+    // después falla, el vacío sigue ahí y un segundo «Crear estos N» no puede volver a mandarlas
+    // (el server contestaría 409 y el aviso nombraría como fallido un presupuesto que existe).
+    internal var creadas by mutableStateOf(emptySet<String>())
+        private set
+
+    /** Las que todavía se pueden crear: las propuestas menos las ya creadas. Lo que se pinta. */
+    internal val propuestasPendientes: List<PropuestaDePresupuesto>
+        get() = propuestas.orEmpty().filter { it.category !in creadas }
+
+    internal val propuestasMarcadas: List<PropuestaDePresupuesto>
+        get() = propuestasPendientes.filter { it.category !in desmarcadas }
+
+    internal fun recibirPropuestas(nuevas: List<PropuestaDePresupuesto>) {
+        propuestas = nuevas
+        // Lo desmarcado de una categoría que ya no se propone no tiene a quién aplicarse.
+        desmarcadas = desmarcadas.filterTo(mutableSetOf()) { c -> nuevas.any { it.category == c } }
+    }
+
+    internal fun alternarPropuesta(categoria: String) {
+        desmarcadas = if (categoria in desmarcadas) desmarcadas - categoria else desmarcadas + categoria
+    }
+
+    /**
+     * Crea [lista] con el MISMO `createBudget` de la hoja «Nuevo presupuesto», una por una.
+     *
+     * Una que falla no deshace las demás: lo creado es del dueño y ya está en el server. Las que no
+     * entraron quedan en [propuestasQueFallaron], y la pantalla dice cuáles con «Reintentar». Si
+     * alguna entró se recarga, y la pantalla pasa sola del vacío a la lista.
+     *
+     * **Un 409 cuenta como creado.** El server lo contesta cuando ese presupuesto ya existe, que es
+     * justo lo que se quería. Pasa de verdad: el POST llega y se guarda, pero la respuesta se pierde
+     * en una red mala; el reintento encuentra el presupuesto hecho. Contarlo como falla dejaba el
+     * aviso diciendo «No pudimos crear…» encima de la barra de ese mismo presupuesto.
+     */
+    internal fun crearPropuestas(lista: List<PropuestaDePresupuesto> = propuestasMarcadas) {
+        val aMandar = lista.filter { it.category !in creadas }
+        if (creandoPropuestas || aMandar.isEmpty()) return
+        creandoPropuestas = true
+        alcance.launch {
+            try {
+                val fallaron = aMandar.filter { p ->
+                    val resultado = intentar { Repositories.wallets.createBudget(Budget(p.category, p.amount.roundToLong())) }
+                    val existe = resultado.isSuccess || (resultado.exceptionOrNull() as? ApiException)?.status == 409
+                    if (existe) creadas = creadas + p.category
+                    !existe
+                }
+                propuestasQueFallaron = fallaron
+                if (fallaron.size < aMandar.size) reload()
+            } finally {
+                creandoPropuestas = false
+            }
+        }
+    }
+
+    /** El «Reintentar» de las propuestas que no se pudieron crear: solo esas. */
+    internal fun reintentarPropuestas() = crearPropuestas(propuestasQueFallaron)
 
     internal suspend fun reload() {
         // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
@@ -251,6 +341,14 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     internal val monthName: String by derivedStateOf {
         val settings = PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios)
         Month(periodoDe(Clock.System.now().toEpochMilliseconds(), settings).month).spanishName()
+    }
+
+    // Con corte 25 el dueño veía «Gastado en septiembre» con un período que va del 25 de agosto al
+    // 24 de septiembre — septiembre no es lo que se contó. [tituloDelGastoDelPeriodo] decide, con
+    // la misma regla que ya usa el resto de la app ([PeriodSettings.esMesDeCalendario]), si el
+    // nombre del mes sigue siendo honesto o si hay que hablar de «este período» en general.
+    internal val tituloDelGasto: String by derivedStateOf {
+        tituloDelGastoDelPeriodo(PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios), monthName)
     }
 
     /**
@@ -337,12 +435,18 @@ fun rememberEstadoDePresupuestos(activo: Boolean = true): EstadoDePresupuestos {
         estado.gastoYPeriodoContestaron = true
         estado.loading = false
     }
+    // Las propuestas se piden SOLO sin presupuestos: a quien ya tiene no le cuestan ni una llamada.
+    // Una lectura caída deja lo que había (nada, la primera vez): el vacío de siempre.
+    LaunchedEffect(estado.sinPresupuestos, refreshTick, estado.refreshKeyLocal, activo) {
+        if (!activo || !estado.sinPresupuestos) return@LaunchedEffect
+        intentar { Repositories.wallets.getPropuestasDePresupuesto() }.onSuccess { estado.recibirPropuestas(it) }
+    }
     return estado
 }
 
 /**
  * **Los renglones de Presupuestos**, para pintarlos dentro de una `LazyColumn` ajena: el aviso de
- * que no se pudo leer (o el botón ancho del vacío), y después el esqueleto o la tarjeta de «Gastado
+ * que no se pudo leer (o el vacío que enseña), y después el esqueleto o la tarjeta de «Gastado
  * en …» con sus categorías.
  */
 fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
@@ -355,27 +459,36 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         } else if (estado.sinPresupuestos) {
-            NewItemButton(
-                label = "Nuevo presupuesto",
-                onClick = { estado.abrirNuevo() },
-                modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
-                full = true,
-            )
+            VacioDePresupuestos(estado)
         } else {
             Spacer(Modifier.height(14.dp))
         }
+        // Con la lista ya pintada (alguna propuesta sí se creó), el aviso de las que faltan va
+        // arriba de ella, donde queda la vista al irse el vacío. Mientras el vacío sigue, el aviso va
+        // adentro de la tarjeta, junto al botón que se acaba de tocar (ver [VacioDePresupuestos]).
+        if (estado.propuestasQueFallaron.isNotEmpty() && !estado.noSeLeyo && !estado.sinPresupuestos) {
+            Spacer(Modifier.height(Movi.espacios.medio))
+            NoSePudoLeer(
+                texto = textoDePropuestasQueFallaron(estado.propuestasQueFallaron),
+                onReintentar = { estado.reintentarPropuestas() },
+                modifier = Modifier.padding(horizontal = Movi.espacios.amplio),
+            )
+        }
     }
 
+    // La tarjeta «Gastado en …» es un hecho sobre categorías que no existen sin
+    // presupuestos — hasta acá se pintaba igual, y con `totalSpent`/`totalLimit` en cero decía
+    // «$0 de $0», justo el «$0 presentado como un hecho» que el vacío de arriba vino a evitar.
     if (estado.cargando) {
         presupuestosEsqueleto()
-    } else if (estado.listo) {
+    } else if (estado.listo && !estado.sinPresupuestos) {
         item {
             MinCard(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
                 variant = MinCardVariant.Elevated,
                 padding = PaddingValues(22.dp),
             ) {
-                Text("Gastado en ${estado.monthName}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                Text(estado.tituloDelGasto, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(10.dp))
                 // La protagonista de esta pantalla, como «Tu plata» en el Inicio y la deuda
                 // total en Créditos: misma letra y un renglón siempre.
@@ -660,16 +773,21 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // F16: "de $2.000.000 este mes" en vez de "/ $2.000.000" — deja explícito que el
-            // límite es mensual sin depender solo del texto chico bajo el monto en la hoja.
+            // F16: "de $2.000.000" en vez de "/ $2.000.000" — deja explícito que el límite es del
+            // período sin depender solo del texto chico bajo el monto en la hoja.
+            //
+            // Sin el «este mes» final. Con corte 25 la fila decía «$290.340 de
+            // $200.000 este mes» sobre un período que va del 25 de agosto al 24 de septiembre —
+            // ninguno de los dos es «este mes». El rango exacto ya está arriba, en el título de la
+            // tarjeta ([tituloDelGastoDelPeriodo]) y en Plan ([rangoLegibleDe]); acá alcanza con
+            // el límite solo.
             Text(
                 text = buildAnnotatedString {
                     withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = Movi.colores.texto)) {
                         append(formatCOP(p.spent))
                     }
-                    // Espacios que no cortan: si hace falta partir, se parte antes de «de» y no
-                    // entre «este» y «mes», que quedaba «este» arriba y «mes» solo abajo.
-                    append(" de\u00A0${formatCOP(p.budget.monthlyLimit)} este\u00A0mes")
+                    // Espacio que no corta: si hace falta partir, se parte antes de «de».
+                    append(" de\u00A0${formatCOP(p.budget.monthlyLimit)}")
                 },
                 style = Movi.textos.monto,
                 color = Movi.colores.textoMedio,

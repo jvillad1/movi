@@ -66,6 +66,7 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary = noUsado("getFinanceSummary")
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = noUsado("getDashboardSummary")
     override suspend fun getBudgets(): List<Budget> = noUsado("getBudgets")
+    override suspend fun getPropuestasDePresupuesto(): List<PropuestaDePresupuesto> = noUsado("getPropuestasDePresupuesto")
     override suspend fun createBudget(budget: Budget): Budget = noUsado("createBudget")
     override suspend fun updateBudget(category: String, budget: Budget): Budget = noUsado("updateBudget")
     override suspend fun deleteBudget(category: String) = noUsado("deleteBudget")

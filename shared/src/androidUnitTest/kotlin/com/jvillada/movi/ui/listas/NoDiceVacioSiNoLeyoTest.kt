@@ -85,13 +85,13 @@ class NoDiceVacioSiNoLeyoTest {
         }) { CreditosScreen(onNavigate = {}) }
 
         esperar("No pudimos cargar tus créditos")
-        assertTrue(!hay("Sin créditos registrados"))
+        assertTrue(!hay("Aquí van tus créditos y tarjetas"))
         assertTrue(!hay("Nuevo crédito"))
         assertTrue(!hay("Deuda total"))
 
         hayRed = true
         reintentar()
-        esperar("Sin créditos registrados")
+        esperar("Aquí van tus créditos y tarjetas")
         assertTrue(!hay("No pudimos cargar"))
     }
 

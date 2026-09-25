@@ -17,6 +17,9 @@ import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.server.reminders.loadOccurredBy
 import com.jvillada.movi.server.reminders.loadOccurrenceRows
 import com.jvillada.movi.server.reminders.parteFijaDelChecklist
+import com.jvillada.movi.server.reminders.emparejadasComoSellos
+import com.jvillada.movi.server.reminders.periodosPorRegla
+import com.jvillada.movi.server.reminders.unirOcurridos
 import com.jvillada.movi.server.reminders.cuotasDelChecklistPagadas
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.db.RecurringRules
@@ -51,6 +54,8 @@ import com.jvillada.movi.shared.model.periodoDe
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import org.jetbrains.exposed.sql.Transaction
+import com.jvillada.movi.shared.model.FinancialEvent
+import java.time.LocalDate
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.sum
@@ -151,7 +156,6 @@ fun Route.dashboardRoutes() {
                 .map { it[SmsMessages.time] to it[SmsMessages.state] }
             val captura = capturaDeSms(filasDeSms.map { it.first })
             val eventosDelPeriodo = loadEventsBetween(uid, monthStart, monthEnd)
-            val sellos = loadOccurrenceRows(uid)
             // La tarjeta «Disponible» cuenta lo que había en «Tu plata» al empezar el período y lo
             // que le entró de afuera (un préstamo, un ahorro). Ver `PlataDelPeriodo.kt` en :core.
             val cuentas = cuentasDelDisponible(uid)
@@ -162,16 +166,7 @@ fun Route.dashboardRoutes() {
             )
 
             val hoy = epochMillisToAppDate(ahora)
-            val parteFija = parteFijaDelChecklist(
-                reglas = RecurringRules.selectAll()
-                    .where { RecurringRules.userId eq uid }
-                    .map { it.toRule() },
-                sellos = sellos,
-                ocurridos = loadOccurredBy(uid, sellos),
-                eventos = eventosDelPeriodo,
-                hoy = hoy,
-                settings = periodo,
-            )
+            val parteFija = parteFijaDelDisponible(uid, hoy, periodo, eventosDelPeriodo)
 
             DashboardSummary(
                 scope = scope,
@@ -222,11 +217,47 @@ fun Route.dashboardRoutes() {
 }
 
 /**
+ * **id de movimiento → la parte que paga un fijo del checklist**, para la tarjeta «Disponible» del
+ * Inicio (ver `PagosDelChecklist.kt`).
+ *
+ * Afuera de la ruta para poder probarla con un «hoy» fijo: lo que decide si un pago sale del
+ * variable depende del día (un vencimiento todavía en gracia, un período que arrancó por excepción)
+ * y `AppClock` no se puede mover desde una prueba.
+ */
+internal fun Transaction.parteFijaDelDisponible(
+    uid: String,
+    hoy: LocalDate,
+    periodo: PeriodSettings,
+    eventosDelPeriodo: List<FinancialEvent>,
+): Map<String, Long> {
+    val sellos = loadOccurrenceRows(uid)
+    // Lo que el checklist dio por pagado sin sello cuenta como un sello con su movimiento: sale del
+    // variable hasta el monto de la regla y rueda el vencimiento igual que en `/upcoming`. Sin esto
+    // el arriendo pagado tarde, ya en el período siguiente, seguía como gasto variable, y en la
+    // gracia el server no listaba el vencimiento que el cliente sí resta como fijo.
+    val emparejadas = emparejadasComoSellos(uid, hoy, periodo)
+    return parteFijaDelChecklist(
+        reglas = RecurringRules.selectAll()
+            .where { RecurringRules.userId eq uid }
+            .map { it.toRule() },
+        sellos = sellos + emparejadas,
+        ocurridos = unirOcurridos(loadOccurredBy(uid, sellos), emparejadas.periodosPorRegla()),
+        eventos = eventosDelPeriodo,
+        hoy = hoy,
+        settings = periodo,
+    )
+}
+
+/**
  * Ingresos del mes y egresos del mes por categoría, en COP y solo flujo de caja — la misma
  * regla que `finance-summary` (ingresos/egresos) y que `spentByCategoryForMonth` del cliente,
  * ahora sobre las filas del mes nada más. Solo se piden las columnas que la regla necesita.
+ *
+ * `internal` y no `private` porque las propuestas de presupuesto (`GET /api/budgets/propuestas`,
+ * en FinanceRoutes) suman el gasto del período ANTERIOR con esta misma regla: si tuvieran la
+ * suya, la propuesta y la barra del presupuesto recién creado podrían contar cosas distintas.
  */
-private fun Transaction.monthCashFlow(
+internal fun Transaction.monthCashFlow(
     uid: String,
     monthStart: Long,
     monthEnd: Long,

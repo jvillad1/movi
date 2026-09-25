@@ -7,7 +7,9 @@ import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.toFinancialEvent
+import com.jvillada.movi.server.routes.estadosDeLasOcurrenciasReales
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.RecurringOccurrence
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
@@ -16,6 +18,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
+import java.time.LocalDate
 
 /** Las filas crudas de `recurring_occurrences` de un usuario, sin filtrar por nada. */
 fun Transaction.loadOccurrenceRows(uid: String): List<RecurringOccurrence> =
@@ -129,3 +132,34 @@ fun Transaction.loadRejectedPairs(uid: String): Set<Pair<String, String>> =
         .where { OccurrenceRejections.userId eq uid }
         .map { it[OccurrenceRejections.ruleId] to it[OccurrenceRejections.eventId] }
         .toSet()
+
+/**
+ * **Lo que Movi emparejó solo, con la forma de un sello**: la misma respuesta del checklist
+ * ([estadosDeLasOcurrenciasReales]), no una segunda pasada del emparejador.
+ *
+ * El emparejamiento automático se deriva en cada lectura y no escribe fila en
+ * `recurring_occurrences`, así que todo lo que armaba sus períodos ocurridos solo con los sellos
+ * —«Próximos», el barrido de recordatorios, la tarjeta «Disponible»— no lo veía y contradecía al
+ * checklist. Pasarlo por acá hace que un emparejamiento se comporte exactamente como un sello a
+ * mano con su movimiento, en todos los que lo leen.
+ *
+ * Solo lo concluyente: con dos candidatos el checklist pregunta (`occurred = false`) y acá no sale
+ * nada. Lo ya sellado tampoco: está en [loadOccurrenceRows].
+ *
+ * **Límite conocido.** El checklist solo deriva la ocurrencia por la que está preguntando: pasada
+ * la gracia pasa a la siguiente y el emparejamiento de la anterior deja de salir. Un pago tardío
+ * que cruzó el corte vuelve entonces al gasto variable por el resto del período; arreglarlo pide
+ * derivar también la ocurrencia anterior cuando su ventana pisa el período en curso.
+ */
+internal fun Transaction.emparejadasComoSellos(
+    uid: String,
+    hoy: LocalDate,
+    periodo: PeriodSettings,
+): List<RecurringOccurrence> =
+    estadosDeLasOcurrenciasReales(uid, hoy, periodo)
+        .filter { it.occurred && it.automatica && it.eventId != null }
+        .map { RecurringOccurrence(ruleId = it.ruleId, period = it.period, eventId = it.eventId, confirmedAt = it.confirmedAt) }
+
+/** regla → períodos, el mapa `occurredPeriods` con el que [dueDateFor] rueda un vencimiento. */
+internal fun List<RecurringOccurrence>.periodosPorRegla(): Map<String, Set<String>> =
+    groupBy({ it.ruleId }, { it.period }).mapValues { (_, periodos) -> periodos.toSet() }

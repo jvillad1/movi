@@ -112,7 +112,7 @@ class CreditosNoAfirmanMientrasCarganTest {
         montar()
 
         assertTrue(!hay("\$0"), "cargando no puede decir \$0")
-        assertTrue(!hay("Sin créditos registrados"))
+        assertTrue(!hay("Aquí van tus créditos y tarjetas"))
         assertTrue(!hay("Deuda total"), "el rótulo de la cifra espera con la cifra")
         assertEquals(1, contarTag(TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA))
         assertEquals(3, contarTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO))
@@ -135,6 +135,7 @@ class CreditosNoAfirmanMientrasCarganTest {
         assertTrue(hay("Deuda total"))
         assertTrue(hay("Libre inversión 9695"))
         assertTrue(hay("\$40.104.518"))
+        assertTrue(!hay("Aquí van tus créditos y tarjetas"), "con datos no hay vacío que enseñar")
 
         val altoCargado = composeRule.onNodeWithTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA).getUnclippedBoundsInRoot().height
         val diferencia = abs(altoCargado.value - altoCargando.value)
@@ -146,16 +147,23 @@ class CreditosNoAfirmanMientrasCarganTest {
         assertEquals(tituloCargando, composeRule.onNodeWithText("Créditos", useUnmergedTree = true).getUnclippedBoundsInRoot())
     }
 
+    /** Ola D, Task 2: el vacío que enseña, con el mismo `showTypeChooser` que «Nuevo crédito». */
     @Test
-    fun `con la lista vacia de verdad, el vacio de siempre`() {
+    fun `con la lista vacia de verdad, el vacio que ensena`() {
         montar()
 
         puerta.complete(emptyList())
         composeRule.waitForIdle()
 
-        assertTrue(hay("Sin créditos registrados"))
+        assertTrue(hay("Aquí van tus créditos y tarjetas"))
+        assertTrue(hay("Agregar un crédito"))
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA))
         assertEquals(0, contarTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO))
+
+        composeRule.onNodeWithText("Agregar un crédito", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        // La misma hoja que «Nuevo crédito»: pregunta si es un préstamo o una tarjeta.
+        assertTrue(hay("¿Qué deuda quieres registrar?"))
     }
 
     @Test

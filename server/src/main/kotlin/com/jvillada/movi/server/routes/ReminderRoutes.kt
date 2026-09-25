@@ -34,6 +34,8 @@ import com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo
 import com.jvillada.movi.server.reminders.plataQueSalio
 import com.jvillada.movi.server.reminders.periodosSaldados
 import com.jvillada.movi.server.reminders.unirOcurridos
+import com.jvillada.movi.server.reminders.emparejadasComoSellos
+import com.jvillada.movi.server.reminders.periodosPorRegla
 import com.jvillada.movi.server.reminders.ruleIsActiveOn
 import com.jvillada.movi.server.reminders.ReminderConfig
 import com.jvillada.movi.server.reminders.periodOf
@@ -51,6 +53,7 @@ import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.ReminderChannels
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.rechazoDelMonto
 import io.ktor.http.HttpStatusCode
@@ -329,39 +332,7 @@ fun Route.reminderRoutes() {
 
     get("/api/payments/upcoming") {
         val uid = call.userId()
-        // Misma lectura que el barrido y que `/api/reminders/channels` — ver [ReminderConfig].
-        // Antes era un `System.getenv` suelto, que ignoraba `server/.env` y podía dar un número
-        // distinto al que de verdad usa el scheduler.
-        val leadDays = leadDaysOf(uid)
-        val hoy = AppClock.today()
-        // El período del dueño decide qué vencimiento está en juego (ver `dueDateFor`).
-        val periodo = ajustesDePeriodoDe(uid)
-        val (rules, occurredBy) = dbQuery {
-            val r = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
-            r to loadOccurredBy(uid)
-        }
-        val creditRules = loadCreditRulePairs(uid).map { it.first }
-        // F20: el pago de la tarjeta también es un próximo pago — con la deuda actual como monto.
-        val cardRules = loadCardRulePairs(uid).map { it.first }
-        val sinteticas = creditRules + cardRules
-        // **Y una cuota que YA ESTÁ PAGADA no está vencida.**
-        //
-        // Las reglas sintéticas no se sellan a mano —el POST de ocurrencias las rechaza a
-        // propósito, ver `/api/payments/occurrences`— así que hasta hoy su estado salía solo del
-        // calendario: la app decía «Vencido hace 5 días» sobre la cuota de Crediágil con el pago
-        // registrado, con sus dos patas, en la misma base. El hecho existía y nadie lo leía; ver
-        // `PagosDeDeuda.kt`.
-        //
-        // Entra por el MISMO parámetro que un sello a mano (`occurredPeriods`) y no por un `if`
-        // aparte: así el vencimiento vigente rueda al mes que viene una sola vez, en `dueDateFor`,
-        // y todo lo que deriva de él —el estado, el orden, la clave de dedupe de los avisos— lo
-        // hereda sin que nadie tenga que acordarse. Y el APK que el dueño tiene instalado no ve
-        // ningún campo nuevo ni ningún valor de enum que no conozca: ve la fecha correcta.
-        val derivadas = if (sinteticas.isEmpty()) emptyMap()
-            else periodosSaldados(sinteticas, cargarPagosDeDeuda(uid, hoy), settings = periodo)
-        call.respond(
-            upcomingPayments(rules + sinteticas, hoy, leadDays, unirOcurridos(occurredBy, derivadas), periodo),
-        )
+        call.respond(proximosPagos(uid, AppClock.today()))
     }
 
     // ── «Esto ya ocurrió» ─────────────────────────────────────────────────────
@@ -563,6 +534,71 @@ fun Route.reminderRoutes() {
         }
         if (borrados == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.NoContent)
     }
+}
+
+/**
+ * **La respuesta de `GET /api/payments/upcoming`** para [uid] en [hoy]: el vencimiento vigente de
+ * cada regla, real o sintética.
+ *
+ * Afuera de la ruta para poder probarla con un «hoy» fijo: los casos que importan dependen del día
+ * (un período que arrancó por excepción, un pago de hace dos días todavía en gracia) y `AppClock`
+ * no se puede mover desde una prueba.
+ */
+internal suspend fun proximosPagos(uid: String, hoy: java.time.LocalDate): List<UpcomingPayment> {
+    // Misma lectura que el barrido y que `/api/reminders/channels` — ver [ReminderConfig].
+    // Antes era un `System.getenv` suelto, que ignoraba `server/.env` y podía dar un número
+    // distinto al que de verdad usa el scheduler.
+    val leadDays = leadDaysOf(uid)
+    // El período del dueño decide qué vencimiento está en juego (ver `dueDateFor`).
+    val periodo = ajustesDePeriodoDe(uid)
+    val rules = dbQuery {
+        RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
+    }
+    val creditRules = loadCreditRulePairs(uid).map { it.first }
+    // F20: el pago de la tarjeta también es un próximo pago — con la deuda actual como monto.
+    val cardRules = loadCardRulePairs(uid).map { it.first }
+    val sinteticas = creditRules + cardRules
+    val ocurridos = ocurridosDeLosVencimientos(uid, hoy, periodo, sinteticas)
+    return upcomingPayments(rules + sinteticas, hoy, leadDays, ocurridos, periodo)
+}
+
+/**
+ * **regla → períodos que ya ocurrieron**, en el mapa `occurredPeriods` con el que `dueDateFor` rueda
+ * un vencimiento. Lo leen «Próximos» ([proximosPagos]) y el barrido de recordatorios
+ * (`queAvisarle`), y los dos tienen que ver lo mismo que el checklist del período.
+ *
+ * Son tres fuentes, y las tres entran por el MISMO parámetro que un sello a mano y no por un `if`
+ * aparte: así el vencimiento vigente rueda al mes que viene una sola vez, en `dueDateFor`, y todo lo
+ * que deriva de él —el estado, el orden, la clave de dedupe de los avisos— lo hereda sin que nadie
+ * tenga que acordarse. Y el APK que el dueño tiene instalado no ve ningún campo nuevo ni ningún valor
+ * de enum que no conozca: ve la fecha correcta.
+ *
+ *  1. **Los sellos** de `recurring_occurrences` que siguen valiendo (`loadOccurredBy`).
+ *  2. **Lo que Movi emparejó solo** en una regla real ([estadosDeLasOcurrenciasReales], la misma
+ *     respuesta del checklist, leída con `emparejadasComoSellos` como la lee también la tarjeta
+ *     «Disponible»). El 24-sep «Próximos» decía «Celular · Vencido hace 2 días» con el
+ *     pago «Celular» del 22 en la base y el checklist dándolo por hecho: el emparejamiento se
+ *     deriva en cada lectura y no escribe sello, así que un mapa armado solo con sellos no lo veía.
+ *     Se toma la respuesta del checklist entera y no una segunda pasada del emparejador: una sola
+ *     decisión, incluida la reserva de ids entre reglas y el «con dos candidatos, pregunto» — un
+ *     emparejamiento con dudas sale `occurred = false` y acá no cuenta.
+ *  3. **Las cuotas sintéticas ya pagadas.** Las reglas de crédito y tarjeta no se sellan a mano —el
+ *     POST de ocurrencias las rechaza a propósito— así que su estado salía solo del calendario: la
+ *     app decía «Vencido hace 5 días» sobre la cuota de Crediágil con el pago registrado, con sus
+ *     dos patas, en la misma base. Ver `PagosDeDeuda.kt`.
+ */
+internal suspend fun ocurridosDeLosVencimientos(
+    uid: String,
+    hoy: java.time.LocalDate,
+    periodo: PeriodSettings,
+    sinteticas: List<RecurringRule>,
+): Map<String, Set<String>> {
+    val reales = dbQuery {
+        unirOcurridos(loadOccurredBy(uid), emparejadasComoSellos(uid, hoy, periodo).periodosPorRegla())
+    }
+    val derivadas = if (sinteticas.isEmpty()) emptyMap()
+        else periodosSaldados(sinteticas, cargarPagosDeDeuda(uid, hoy), settings = periodo)
+    return unirOcurridos(reales, derivadas)
 }
 
 /** `"YYYY-MM"`, con mes real: `2026-13` no es un periodo. */

@@ -555,6 +555,9 @@ fun DashboardScreen(
                             )
                         }
                     } else null,
+                    // El hero vacío abre la MISMA hoja que «Primeros pasos» —
+                    // mismo estado, un solo `CreateAccountSheet` en esta pantalla.
+                    onShowCreateSheet = { showCreateSheet = true },
                 )
             }
         }

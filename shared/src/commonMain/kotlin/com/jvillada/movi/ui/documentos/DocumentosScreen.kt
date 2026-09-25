@@ -72,6 +72,7 @@ import com.jvillada.movi.ui.extractos.rememberFilePicker
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -280,20 +281,23 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 // Revisión final de la ola: sin documentos, «Importaciones» TAMBIÉN se pinta. Es el
                 // único camino a «Deshacer importación», y el caso típico de llegar acá sin
                 // documentos es justamente haber borrado los PDF de una importación que salió mal:
-                // esconderla ahí dejaba esa importación sin forma de deshacerse. Y un solo «Subir
-                // archivo» — el del encabezado, que está desde el primer cuadro; el segundo botón
-                // a lo ancho decía lo mismo dos veces en la misma pantalla.
+                // esconderla ahí dejaba esa importación sin forma de deshacerse.
+                //
+                // El vacío de acá abajo TAMBIÉN trae su botón («Subir un
+                // archivo», la misma `elegirArchivo` del encabezado) — el vacío que enseña explica
+                // qué va a aparecer y ofrece la acción en el mismo lugar, en vez de obligar a subir
+                // la vista hasta el encabezado. El del encabezado sigue estando (es la puerta de
+                // siempre, visible desde el primer cuadro); los dos llaman a la misma función.
                 lista.isEmpty() -> Column(
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                 ) {
-                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                        Spacer(Modifier.height(14.dp))
-                        Text(
-                            text = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel " +
-                                "que quieras tener a mano. Los extractos que importes se archivan solos.",
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.textoMedio,
-                            lineHeight = 18.sp,
+                    Column(modifier = Modifier.padding(horizontal = 20.dp).padding(top = 14.dp)) {
+                        VacioQueEnsena(
+                            titulo = "Tus papeles, a mano",
+                            detalle = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel que quieras " +
+                                "tener a mano. Los extractos que importes se archivan solos.",
+                            accion = "Subir un archivo",
+                            onAccion = elegirArchivo,
                         )
                     }
                     SeccionDeImportaciones(

@@ -83,8 +83,21 @@ class CapturaDeSmsTest {
 
     @Test
     fun `la fecha se lee igual venga con T o con espacio, y sin segundos`() {
-        assertEquals("2026-08-01 10:00", fechaLegibleDeSms("2026-08-01 10:00"))
-        assertEquals("2026-08-01 10:00", fechaLegibleDeSms("2026-08-01T10:00:00"))
+        assertEquals("1 de agosto a las 10:00 a. m.", fechaLegibleDeSms("2026-08-01 10:00"))
+        assertEquals("1 de agosto a las 10:00 a. m.", fechaLegibleDeSms("2026-08-01T10:00:00"))
+    }
+
+    /** El caso que sale crudo en el teléfono del dueño: «2026-09-23 19:52». */
+    @Test
+    fun `la tarde y la noche se dicen en formato de 12 horas`() {
+        assertEquals("23 de septiembre a las 7:52 p. m.", fechaLegibleDeSms("2026-09-23 19:52"))
+    }
+
+    /** Las doce del día y las doce de la noche no se dicen «las cero» ni «las trece menos una». */
+    @Test
+    fun `mediodia y medianoche se dicen las doce`() {
+        assertEquals("1 de agosto a las 12:05 a. m.", fechaLegibleDeSms("2026-08-01 00:05"))
+        assertEquals("1 de agosto a las 12:30 p. m.", fechaLegibleDeSms("2026-08-01 12:30"))
     }
 
     /** Un `time` con otra forma se muestra tal cual: antes eso que inventar una fecha. */
@@ -128,13 +141,13 @@ class CapturaDeSmsTest {
         val uno = avisoDeCaptura(CapturaDeSms(1, "2026-08-01T10:00:00"))
         assertFalse(uno.esAlerta)
         assertEquals("ÚLTIMO MENSAJE RECIBIDO", uno.rotulo)
-        assertTrue("2026-08-01 10:00" in uno.detalle, uno.detalle)
+        assertTrue("1 de agosto a las 10:00 a. m." in uno.detalle, uno.detalle)
         assertTrue("El único mensaje" in uno.detalle, uno.detalle)
 
         val varios = avisoDeCaptura(CapturaDeSms(12, "2026-09-03 07:15"))
         assertFalse(varios.esAlerta)
         assertTrue("los 12 mensajes" in varios.detalle, varios.detalle)
-        assertTrue("2026-09-03 07:15" in varios.detalle, varios.detalle)
+        assertTrue("3 de septiembre a las 7:15 a. m." in varios.detalle, varios.detalle)
     }
 
     // ── Cuándo aparece en el Inicio, y cuándo deja de aparecer ─────────────────

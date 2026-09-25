@@ -350,6 +350,55 @@ class ChecklistDelPeriodoTest {
         assertNull(pieDeLoYaPagado(checklist), "no hay nada escondido que valga la pena anunciar")
     }
 
+    /**
+     * El caso del dueño: «Listos · 14 de 14» junto a «Ya salieron los 12 pagos» — los 14 incluyen
+     * 2 ingresos que la línea nunca contaba. Sin nada pendiente y con ingresos en el checklist, la
+     * línea tiene que hablar de las dos cosas que «Listos» ya cuenta.
+     */
+    @Test
+    fun sin_nada_pendiente_y_con_ingresos_cuenta_las_dos_cosas() {
+        val checklist = (1..12).map { i ->
+            PagoDelPeriodo("r$i", "Pago $i", 10_000, pagado = true, diasParaVencer = -1)
+        } + listOf(
+            PagoDelPeriodo("i1", "Sueldo", 9_000_000, pagado = true, diasParaVencer = -1, esIngreso = true),
+            PagoDelPeriodo("i2", "Arriendo que cobra", 1_200_000, pagado = true, diasParaVencer = -1, esIngreso = true),
+        )
+        assertEquals("Listos · 14 de 14", tituloDeLosListos(checklist))
+        assertEquals(
+            "Ya está todo lo de este período: 12 pagos y 2 ingresos",
+            lineaDeLoQueFalta(checklist),
+        )
+    }
+
+    /**
+     * Pagos todos salidos pero un ingreso sin entrar: «ya está todo» sería mentira al lado de
+     * «Listos · 13 de 14». La línea habla solo de los pagos, que es lo que sí es cierto.
+     */
+    @Test
+    fun con_un_ingreso_pendiente_no_dice_que_ya_esta_todo() {
+        val checklist = (1..12).map { i ->
+            PagoDelPeriodo("r$i", "Pago $i", 10_000, pagado = true, diasParaVencer = -1)
+        } + listOf(
+            PagoDelPeriodo("i1", "Sueldo", 9_000_000, pagado = true, diasParaVencer = -1, esIngreso = true),
+            PagoDelPeriodo("i2", "Arriendo que cobra", 1_200_000, pagado = false, diasParaVencer = 3, esIngreso = true),
+        )
+        assertEquals("Listos · 13 de 14", tituloDeLosListos(checklist))
+        assertEquals("Ya salieron los 12 pagos de este período", lineaDeLoQueFalta(checklist))
+    }
+
+    /** Con un solo pago y un solo ingreso, habla en singular de los dos. */
+    @Test
+    fun sin_nada_pendiente_con_un_pago_y_un_ingreso_habla_en_singular() {
+        val checklist = listOf(
+            PagoDelPeriodo("r1", "Celular", 53_000, pagado = true, diasParaVencer = -2),
+            PagoDelPeriodo("i1", "Sueldo", 9_000_000, pagado = true, diasParaVencer = -1, esIngreso = true),
+        )
+        assertEquals(
+            "Ya está todo lo de este período: 1 pago y 1 ingreso",
+            lineaDeLoQueFalta(checklist),
+        )
+    }
+
     /** Un período con solo un sueldo anotado no tiene pagos: la línea no puede inventar ninguno. */
     @Test
     fun un_periodo_sin_pagos_lo_dice_sin_numeros() {

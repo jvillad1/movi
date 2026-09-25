@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.platform.hojaDeCompartirDeLaPlataforma
 import com.jvillada.movi.shared.model.EnlaceCompartido
 import com.jvillada.movi.shared.model.NuevoEnlaceCompartido
@@ -53,6 +54,7 @@ import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -105,7 +107,9 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
     val refreshTick = LocalRefreshTick.current
     LaunchedEffect(loadKey, refreshTick) {
         cargando = true
-        runCatching { Repositories.compartir.listar() }
+        // `intentar` y no `runCatching`: una lectura cancelada por el refresco no puede apagar
+        // `cargando` encima de la lectura que la reemplaza (ver `data/Intentar.kt`).
+        intentar { Repositories.compartir.listar() }
             .onSuccess { enlaces = it; leidos = true }
         cargando = false
     }
@@ -178,10 +182,15 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
                             "No pudimos cargar tus enlaces",
                             onReintentar = { loadKey++ },
                         )
-                        enlaces.isEmpty() && !cargando -> Text(
-                            "No tienes enlaces activos. Los que crees aparecerán aquí hasta que venzan o los revoques.",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
+                        // Reemplaza al texto suelto de siempre. «Crear un enlace»
+                        // llama a la MISMA `crear()` que ofrece la sección de arriba — no duplica
+                        // la lógica de creación, solo le da una segunda puerta a quien llegó
+                        // hasta acá sin haber leído la explicación.
+                        enlaces.isEmpty() && !cargando -> VacioQueEnsena(
+                            titulo = "No tienes enlaces activos",
+                            detalle = "Los que crees aparecerán aquí hasta que venzan o los revoques.",
+                            accion = "Crear un enlace",
+                            onAccion = ::crear,
                             modifier = Modifier.padding(horizontal = Movi.espacios.corto),
                         )
                     }

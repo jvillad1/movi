@@ -638,7 +638,7 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
             // se compensa con otro que sobró.
             LinkFigure(
                 formatCOP(spent),
-                "de ${formatCOP(limit)} este mes",
+                "de ${formatCOP(limit)}",
                 isAlert = overBudgetCategories(budgets, gastado).isNotEmpty(),
             )
         }

@@ -77,6 +77,11 @@ fun SduiRenderer(
     modifier: Modifier = Modifier,
     onNavigate: (Screen) -> Unit,
     header: (@Composable () -> Unit)? = null,
+    // El hero, vacío, abre la MISMA hoja de crear cuenta que «Primeros pasos» —
+    // ese estado (`showCreateSheet`) vive en `DashboardScreen`, no acá, así que solo se pasa el
+    // callback. Default sin operación: el resto de las pantallas que montan `SduiRenderer` en las
+    // pruebas no necesitan wirearlo.
+    onShowCreateSheet: () -> Unit = {},
 ) {
     val uriHandler = LocalUriHandler.current
     val sections = visibleSections(definition, data)
@@ -102,12 +107,12 @@ fun SduiRenderer(
             }
             if (columnas.sonDos) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                    ColumnaDeSecciones(columnas.izquierda, data, conPatrimonioEnElHero, onNavigate, uriHandler, Modifier.weight(1f))
-                    ColumnaDeSecciones(columnas.derecha, data, conPatrimonioEnElHero, onNavigate, uriHandler, Modifier.weight(1f))
+                    ColumnaDeSecciones(columnas.izquierda, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler, Modifier.weight(1f))
+                    ColumnaDeSecciones(columnas.derecha, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler, Modifier.weight(1f))
                 }
             } else {
                 ColumnaDeSecciones(
-                    columnas.izquierda, data, conPatrimonioEnElHero, onNavigate, uriHandler,
+                    columnas.izquierda, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler,
                     Modifier.fillMaxWidth().widthIn(max = ANCHO_DE_UNA_COLUMNA),
                 )
             }
@@ -122,13 +127,14 @@ private fun ColumnaDeSecciones(
     data: DashboardData,
     conPatrimonioEnElHero: Boolean,
     onNavigate: (Screen) -> Unit,
+    onShowCreateSheet: () -> Unit,
     uriHandler: UriHandler,
     modifier: Modifier,
 ) {
     Column(modifier = modifier) {
         sections.forEachIndexed { index, section ->
             if (index > 0) Spacer(Modifier.height(Movi.espacios.seccion))
-            SduiSection(section, data, conPatrimonioEnElHero, onNavigate, uriHandler)
+            SduiSection(section, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler)
         }
     }
 }
@@ -139,12 +145,13 @@ private fun SduiSection(
     data: DashboardData,
     conPatrimonioEnElHero: Boolean,
     onNavigate: (Screen) -> Unit,
+    onShowCreateSheet: () -> Unit,
     uriHandler: UriHandler,
 ) {
     when (section.type) {
         // Generación 8: el hero contesta «¿cómo estoy?» y nada más (ver `HeroDeUnVistazo`). El tipo
         // no cambia: es lo único que un APK viejo entiende, y él sigue pintando su hero de siempre.
-        "HERO_BALANCE" -> HeroDeUnVistazo(section, data, conPatrimonioEnElHero, onNavigate)
+        "HERO_BALANCE" -> HeroDeUnVistazo(section, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet)
         "PREGUNTALE_A_MOVI" -> PreguntaleAMoviSection(section, data, onNavigate)
         "PATRIMONIO" -> PatrimonioSection(section, data, onNavigate)
         "UPCOMING_PAYMENTS" -> UpcomingPaymentsSection(section, data, onNavigate)

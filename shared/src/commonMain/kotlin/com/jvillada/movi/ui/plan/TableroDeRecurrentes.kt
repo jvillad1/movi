@@ -229,6 +229,14 @@ class EstadoDelTableroDeRecurrentes internal constructor(
     /** La suscripción que el dueño tocó «Quitar» y todavía no confirmó. */
     internal var suscripcionPorQuitar by mutableStateOf<Subscription?>(null)
     /**
+     * **«Agregar un pago fijo»**, desde el vacío del tablero (ver [tableroDeRecurrentes]).
+     *
+     * No es una acción nueva: abre la MISMA [CreateRecurringRuleSheet] que ya usa este archivo para
+     * editar una regla o una suscripción, sin `existing` ni `existingSub` — su modo de alta. Un
+     * `Boolean` y no una tercera variable de edición porque acá no hay nada que prellenar.
+     */
+    internal var nuevoRecurrenteAbierto by mutableStateOf(false)
+    /**
      * ¿Está abierta la lista de suscripciones activas? **Arranca cerrada**, y por lo mismo que el
      * grupo de ajustes de Movimientos es transitorio: abrir el inventario es un vistazo, no una
      * preferencia. La cifra que se mira de reojo —cuánto suman al mes— sigue a la vista plegada,
@@ -663,6 +671,44 @@ fun LazyListScope.tableroDeRecurrentes(
         }
     }
 
+    // ── El vacío que enseña: nunca anotó un pago fijo ───────────────────────
+    //
+    // «Las reglas recurrentes contestaron vacías» se lee de `upcomingRecurrentes` —incluye las
+    // sintéticas de créditos, así que un crédito con cuota SÍ cuenta como «hay algo»— y no de
+    // `reglasRecurrentes` (el de las [MarcasDeRecurrentes]): esa lista sale del cache de
+    // `RecurringOfferGate` y, si su lectura falla, queda VACÍA EN SILENCIO (ver su propio KDoc);
+    // afirmar un vacío sobre eso sería mentir. Con una candidata «por confirmar» el vacío NO
+    // aparece —ya hay algo que revisar, y esa sección se sigue pintando como siempre.
+    //
+    // **`estado.candidatas` y `estado.activas`, no `subsParaRecurrentes.subscriptions` entera.**
+    // Esa lista trae TODO lo que el server tiene del dueño, `DISMISSED` incluido —un cobro que
+    // el dueño ya miró y descartó («Uber no es una suscripción»), que no es una candidata ni
+    // suma en ningún lado—, así que mirarla entera dejaba a alguien con cero reglas y un solo
+    // descarte sin ver nunca el vacío: caía de nuevo en el checklist/«Próximos»/«Flujo libre»
+    // en `$0` que este vacío existe para evitar. `candidatas` y `activas` ya filtran por estado (ver
+    // sus `derivedStateOf` más arriba) y son las mismas listas que las secciones de abajo usan
+    // para decidir si tienen algo que pintar.
+    //
+    // Reemplaza al checklist, a «Próximos» y al «Flujo libre» de abajo —los tres solo dirían
+    // «nada» o «$0», ver [ResumenFlujoLibreCard]— por una sola tarjeta. El resto de las secciones
+    // (sin confirmar, ya ocurrieron, suscripciones activas) ya se cuidan solas con este vacío: sin
+    // reglas ni suscripciones activas o candidatas no tienen nada que enumerar y no pintan nada.
+    val sinPagosFijos = estado.vencimientosOk && estado.subsParaRecurrentesOk &&
+        estado.upcomingRecurrentes.isEmpty() && estado.candidatas.isEmpty() && estado.activas.isEmpty()
+    if (sinPagosFijos) {
+        item {
+            VacioQueEnsena(
+                titulo = "Aquí van tus pagos fijos",
+                detalle = "Arriendo, colegio, cuotas, suscripciones: anótalos una vez y cada período Movi " +
+                    "te dice cuáles faltan y los marca solos cuando salen.",
+                accion = "Agregar un pago fijo",
+                onAccion = { estado.nuevoRecurrenteAbierto = true },
+                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+            )
+        }
+        return
+    }
+
     // ── El checklist del período ────────────────────────────────────────────
     //
     // Va PRIMERO, y es el destino del «Ver todos» del Inicio: el dueño llegaba acá
@@ -935,6 +981,19 @@ fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes) {
                 estado.recargar()
             },
             existingSub = suscripcion,
+        )
+    }
+
+    // «Agregar un pago fijo» del vacío que enseña — ver [EstadoDelTableroDeRecurrentes.nuevoRecurrenteAbierto].
+    // Sin `existing` ni `existingSub` ni `prefill`: la misma hoja, en su modo de alta.
+    if (estado.nuevoRecurrenteAbierto) {
+        CreateRecurringRuleSheet(
+            onDismiss = { estado.nuevoRecurrenteAbierto = false },
+            onSaved = {
+                estado.nuevoRecurrenteAbierto = false
+                RecurringOfferGate.olvidarLoCacheado()
+                estado.recargar()
+            },
         )
     }
 }

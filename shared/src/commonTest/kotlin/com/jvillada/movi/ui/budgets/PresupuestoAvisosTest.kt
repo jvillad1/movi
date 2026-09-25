@@ -38,7 +38,7 @@ class PresupuestoAvisosTest {
     fun una_categoria_con_gastos_muestra_cuanto_lleva() {
         val aviso = avisoDeCategoria("Comida", gastoDelMes, ::plata)!!
 
-        assertEquals("Ya llevas \$2113575 gastados en \"Comida\" este mes.", aviso.texto)
+        assertEquals("Ya llevas \$2113575 gastados en \"Comida\" este período.", aviso.texto)
         assertTrue(!aviso.esAdvertencia)
         assertTrue(aviso.sugerencias.isEmpty())
     }

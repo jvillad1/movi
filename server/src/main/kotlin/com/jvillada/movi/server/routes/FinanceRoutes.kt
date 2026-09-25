@@ -38,6 +38,12 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.time.cutoffDayOf
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.server.time.epochMillisToAppDateString
+import com.jvillada.movi.shared.model.periodoAnterior
+import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.model.propuestasDePresupuesto
+import com.jvillada.movi.shared.model.ventanaDe
 
 fun Route.financeRoutes() {
     // F50: ya no tiene consumidor — Inversiones (:shared) pasó a mostrar cuentas tipo
@@ -58,6 +64,43 @@ fun Route.financeRoutes() {
         call.respond(list)
     }
 
+    // **Lo que Movi propone a quien todavía no tiene presupuestos**: las cuatro categorías de más
+    // gasto del período ANTERIOR, cada una con un tope que ya la cubre (ver `propuestasDePresupuesto`
+    // en :core). El anterior y no el actual porque el actual está a medias: el día 3 del período
+    // proponer lo gastado sería proponer casi nada.
+    //
+    // El gasto se suma con `monthCashFlow`, la MISMA regla que «Gastos» y que las barras de
+    // Presupuestos (anulados, «Por confirmar», traspasos y pagos de tarjeta fuera; solo pesos): la
+    // propuesta dice «Gastaste $X» y la barra del presupuesto recién creado tiene que haber contado
+    // igual. El período es el del dueño entero —el corte y los meses que arrancaron otro día—,
+    // leído con `ajustesDePeriodoDe` como el resto del server.
+    get("/api/budgets/propuestas") {
+        val uid = call.userId()
+        val ajustes = ajustesDePeriodoDe(uid)
+        val ahora = AppClock.now().toInstant().toEpochMilli()
+        val ventana = ventanaDe(periodoAnterior(periodoDe(ahora, ajustes)), ajustes)
+        val propuestas = dbQuery {
+            val voidedIds = VoidEvents.selectAll()
+                .where { VoidEvents.userId eq uid }
+                .map { it[VoidEvents.originalEventId] }
+                .toSet()
+            // `ventanaDe` incluye su último milisegundo; `monthCashFlow` usa fin exclusivo.
+            val (_, gastoPorCategoria) =
+                monthCashFlow(uid, ventana.first, ventana.last + 1, voidedIds, accountTypesFor(uid))
+            val conPresupuesto = Budgets.selectAll()
+                .where { Budgets.userId eq uid }
+                .map { it[Budgets.category] }
+                .toSet()
+            propuestasDePresupuesto(
+                gastoPorCategoria = gastoPorCategoria,
+                conPresupuesto = conPresupuesto,
+                desde = epochMillisToAppDateString(ventana.first),
+                hasta = epochMillisToAppDateString(ventana.last),
+            )
+        }
+        call.respond(propuestas)
+    }
+
     post("/api/budgets") {
         val uid = call.userId()
         // Mismas reglas que renombrar (nombre recortado y no vacío) y que un movimiento (el
@@ -70,7 +113,9 @@ fun Route.financeRoutes() {
                 .where { (Budgets.userId eq uid) and (Budgets.category eq body.category) }
                 .count() > 0
         }
-        if (exists) return@post call.respond(HttpStatusCode.Conflict, "Category exists: ${body.category}")
+        // En español y con el nombre, como el 409 de renombrar: el cliente muestra el cuerpo de un
+        // 4xx tal cual en la hoja «Nuevo presupuesto».
+        if (exists) return@post call.respond(HttpStatusCode.Conflict, "Ya existe un presupuesto llamado \"${body.category}\"")
         dbQuery {
             Budgets.insert {
                 it[userId]       = uid
