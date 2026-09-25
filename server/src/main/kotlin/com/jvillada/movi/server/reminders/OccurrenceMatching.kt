@@ -332,16 +332,33 @@ fun ocurrenciaConcluyente(
     zone: ZoneId = AppClock.zone,
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
     settings: PeriodSettings = PeriodSettings(),
-): FinancialEvent? {
+): FinancialEvent? =
+    // `singleOrNull`: cero o dos es lo mismo acá — no hay nada que afirmar, se pregunta.
+    ocurrenciasConcluyentes(rule, dueDate, events, usedEventIds, zone, windowDays, settings).singleOrNull()
+
+/**
+ * **Todos los candidatos que pasan una de las dos puertas de [ocurrenciaConcluyente]**, sin elegir.
+ *
+ * Es el cuerpo de [ocurrenciaConcluyente], que se queda con el único; suelto porque «Tus períodos»
+ * necesita distinguir los dos `null` que ella junta: con cero concluyentes el pago está pendiente,
+ * con dos o más Movi tiene dudas. La decisión de emparejar sigue siendo una sola.
+ */
+fun ocurrenciasConcluyentes(
+    rule: RecurringRule,
+    dueDate: LocalDate,
+    events: List<FinancialEvent>,
+    usedEventIds: Set<String> = emptySet(),
+    zone: ZoneId = AppClock.zone,
+    windowDays: Long = OCCURRENCE_WINDOW_DAYS,
+    settings: PeriodSettings = PeriodSettings(),
+): List<FinancialEvent> =
     // **Sobre los candidatos SIN recortar**, no sobre los tres que se muestran. Si se mirara la
     // lista recortada, un cuarto concluyente quedaría invisible y los tres de arriba parecerían
     // «exactamente uno»: la ambigüedad se taparía justo cuando más movimientos parecidos hay, que
     // es cuando más caro sale equivocarse.
-    val concluyentes = candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings)
+    candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings)
         .filter { esConcluyente(rule, it.event) }
-    // `singleOrNull`: cero o dos es lo mismo acá — no hay nada que afirmar, se pregunta.
-    return concluyentes.singleOrNull()?.event
-}
+        .map { it.event }
 
 /**
  * Las dos puertas de [ocurrenciaConcluyente], aplicadas a un candidato que ya pasó todos los
