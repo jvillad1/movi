@@ -678,15 +678,23 @@ fun LazyListScope.tableroDeRecurrentes(
     // `reglasRecurrentes` (el de las [MarcasDeRecurrentes]): esa lista sale del cache de
     // `RecurringOfferGate` y, si su lectura falla, queda VACÍA EN SILENCIO (ver su propio KDoc);
     // afirmar un vacío sobre eso sería mentir. Con una candidata «por confirmar» el vacío NO
-    // aparece —ya hay algo que revisar, y esa sección se sigue pintando como siempre— y como toda
-    // candidata vive en `subsParaRecurrentes.subscriptions`, alcanza con mirar esa lista entera.
+    // aparece —ya hay algo que revisar, y esa sección se sigue pintando como siempre.
+    //
+    // **`estado.candidatas` y `estado.activas`, no `subsParaRecurrentes.subscriptions` entera.**
+    // Esa lista trae TODO lo que el server tiene del dueño, `DISMISSED` incluido —un cobro que
+    // el dueño ya miró y descartó («Uber no es una suscripción»), que no es una candidata ni
+    // suma en ningún lado—, así que mirarla entera dejaba a alguien con cero reglas y un solo
+    // descarte sin ver nunca el vacío: caía de nuevo en el checklist/«Próximos»/«Flujo libre»
+    // en `$0` que esta tarea vino a sacar. `candidatas` y `activas` ya filtran por estado (ver
+    // sus `derivedStateOf` más arriba) y son las mismas listas que las secciones de abajo usan
+    // para decidir si tienen algo que pintar.
     //
     // Reemplaza al checklist, a «Próximos» y al «Flujo libre» de abajo —los tres solo dirían
     // «nada» o «$0», ver [ResumenFlujoLibreCard]— por una sola tarjeta. El resto de las secciones
     // (sin confirmar, ya ocurrieron, suscripciones activas) ya se cuidan solas con este vacío: sin
-    // reglas ni suscripciones no tienen nada que enumerar y no pintan nada.
+    // reglas ni suscripciones activas o candidatas no tienen nada que enumerar y no pintan nada.
     val sinPagosFijos = estado.vencimientosOk && estado.subsParaRecurrentesOk &&
-        estado.upcomingRecurrentes.isEmpty() && estado.subsParaRecurrentes.subscriptions.isEmpty()
+        estado.upcomingRecurrentes.isEmpty() && estado.candidatas.isEmpty() && estado.activas.isEmpty()
     if (sinPagosFijos) {
         item {
             VacioQueEnsena(

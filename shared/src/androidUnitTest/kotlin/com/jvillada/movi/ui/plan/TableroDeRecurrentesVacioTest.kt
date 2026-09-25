@@ -130,4 +130,24 @@ class TableroDeRecurrentesVacioTest {
         assertTrue(!hay("Aquí van tus pagos fijos"), "con una candidata ya hay algo que revisar")
         assertTrue(hay("DETECTADAS · POR CONFIRMAR"))
     }
+
+    /**
+     * Fix round 1: una suscripción DESCARTADA («Uber no es una suscripción», una interacción
+     * corriente) no es una candidata ni una activa — no suma en ningún lado y no tiene fila en
+     * ninguna sección—, así que sigue siendo «nada anotado» y el vacío tiene que aparecer igual.
+     * Antes esto miraba `subsParaRecurrentes.subscriptions` ENTERA (que trae `DISMISSED` incluido)
+     * y un descarte solo, sin ninguna regla, dejaba a alguien sin ver nunca el vacío: volvía a caer
+     * en el checklist/«Próximos»/«Flujo libre» en `$0` que esta tarea existe para sacar.
+     */
+    @Test
+    fun `con una sola suscripcion descartada, el vacio igual aparece`() {
+        montar(Repo(suscripciones = listOf(sub("s_uber", "Uber", 25_000L, 3, SubStatus.DISMISSED))))
+        esperarTexto("Aquí van tus pagos fijos")
+
+        assertTrue(hay("Agregar un pago fijo"))
+        assertTrue(!hay("Flujo libre"), "una descartada no es un pago fijo anotado")
+        assertTrue(!hay("\$0"))
+        assertTrue(!hay("Este período no tiene pagos anotados"))
+        assertTrue(!hay("Nada vence en los próximos días"))
+    }
 }
