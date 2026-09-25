@@ -34,6 +34,8 @@ import com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo
 import com.jvillada.movi.server.reminders.plataQueSalio
 import com.jvillada.movi.server.reminders.periodosSaldados
 import com.jvillada.movi.server.reminders.unirOcurridos
+import com.jvillada.movi.server.reminders.emparejadasComoSellos
+import com.jvillada.movi.server.reminders.periodosPorRegla
 import com.jvillada.movi.server.reminders.ruleIsActiveOn
 import com.jvillada.movi.server.reminders.ReminderConfig
 import com.jvillada.movi.server.reminders.periodOf
@@ -573,7 +575,8 @@ internal suspend fun proximosPagos(uid: String, hoy: java.time.LocalDate): List<
  *
  *  1. **Los sellos** de `recurring_occurrences` que siguen valiendo (`loadOccurredBy`).
  *  2. **Lo que Movi emparejó solo** en una regla real ([estadosDeLasOcurrenciasReales], la misma
- *     respuesta del checklist). El 24-sep «Próximos» decía «Celular · Vencido hace 2 días» con el
+ *     respuesta del checklist, leída con `emparejadasComoSellos` como la lee también la tarjeta
+ *     «Disponible»). El 24-sep «Próximos» decía «Celular · Vencido hace 2 días» con el
  *     pago «Celular» del 22 en la base y el checklist dándolo por hecho: el emparejamiento se
  *     deriva en cada lectura y no escribe sello, así que un mapa armado solo con sellos no lo veía.
  *     Se toma la respuesta del checklist entera y no una segunda pasada del emparejador: una sola
@@ -591,11 +594,7 @@ internal suspend fun ocurridosDeLosVencimientos(
     sinteticas: List<RecurringRule>,
 ): Map<String, Set<String>> {
     val reales = dbQuery {
-        val emparejadas = estadosDeLasOcurrenciasReales(uid, hoy, periodo)
-            .filter { it.occurred }
-            .groupBy({ it.ruleId }, { it.period })
-            .mapValues { (_, periodos) -> periodos.toSet() }
-        unirOcurridos(loadOccurredBy(uid), emparejadas)
+        unirOcurridos(loadOccurredBy(uid), emparejadasComoSellos(uid, hoy, periodo).periodosPorRegla())
     }
     val derivadas = if (sinteticas.isEmpty()) emptyMap()
         else periodosSaldados(sinteticas, cargarPagosDeDeuda(uid, hoy), settings = periodo)

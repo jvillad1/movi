@@ -31,7 +31,8 @@ import java.time.ZoneId
  * se busca **quién lo pagó**, hasta completar el monto de la regla — que es lo que los fijos ya
  * restaron:
  *
- * 1. **el movimiento de su sello**, si lo tiene;
+ * 1. **el movimiento de su sello**, si lo tiene — y lo que Movi emparejó solo cuenta como un sello
+ *    (`emparejadasComoSellos`): el checklist ya lo da por pagado;
  * 2. si falta monto (sellado sin movimiento, sin sellar, o pagado en partes), **los candidatos del
  *    «¿Es este?»** — el mismo [candidatosPuntuados] que la pantalla de Recurrentes usa para
  *    proponer, con sus mismas cuatro puertas y la misma seña mínima (nombre o categoría). No hay
