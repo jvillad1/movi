@@ -259,6 +259,14 @@ fun nombreDe(periodo: PeriodoFinanciero): String =
     "${MESES[periodo.month - 1]} de ${periodo.year}"
 
 /**
+ * «Octubre 2026» — el título de un período como se lee en una lista de períodos: el mes que le da
+ * nombre con mayúscula inicial, y el año. Es la única forma de escribirlo, para que el server (que
+ * lo manda en `ResumenDePeriodo.nombre`) y cualquier pantalla que lo arme a mano digan lo mismo.
+ */
+fun tituloDelPeriodo(periodo: PeriodoFinanciero): String =
+    MESES[periodo.month - 1].replaceFirstChar { it.uppercase() } + " " + periodo.year
+
+/**
  * «Del 26 de agosto al 25 de septiembre» — la explicación que hace entendible un corte que no es
  * el 1. Con corte 1 devuelve `null`: no hay nada que aclarar sobre un mes de calendario.
  */
