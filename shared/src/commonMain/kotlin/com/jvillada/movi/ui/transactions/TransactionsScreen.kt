@@ -1508,11 +1508,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                 if (!guardandoInicio) {
                     guardandoInicio = true
                     errorDelInicio = null
-                    // `null` = quitar la excepción. Ver [guardarInicioDelPeriodo].
+                    // `null` = quitar la excepción. Ver [guardarInicioDelPeriodo]: relee el perfil
+                    // antes de escribir, así que un perfil que no se pudo leer al abrir la pantalla
+                    // no borra las demás excepciones.
                     val periodo = periodoVisible
                     alcanceDeLaPantalla.launch {
-                        intentar { guardarInicioDelPeriodo(ajustesDelPeriodo, periodo, inicio) }
+                        intentar { guardarInicioDelPeriodo(periodo, inicio) }
                             .onSuccess {
+                                cutoffDay = it.periodCutoffDay
                                 iniciosPropios = it.periodStarts
                                 editandoElInicio = false
                             }

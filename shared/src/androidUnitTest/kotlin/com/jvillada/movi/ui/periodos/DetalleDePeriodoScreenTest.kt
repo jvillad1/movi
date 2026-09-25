@@ -37,6 +37,8 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.datetime.LocalDate
 import org.junit.After
 import org.junit.Rule
@@ -257,6 +259,74 @@ class DetalleDePeriodoScreenTest {
         assertEquals(UpdateProfileRequest(periodStarts = repo.escrituras.single().periodStarts), repo.escrituras.single())
         assertEquals(listOf("2026-10", "2026-10"), repo.lecturas, "después de guardar vuelve a leer el detalle")
         assertTrue(!hay("Octubre termina hoy", substring = true), "la confirmación se cierra")
+    }
+
+    /**
+     * Otro aparato declaró diciembre mientras esta pantalla estaba abierta: la escritura relee el
+     * perfil y suma noviembre a lo recién leído, en vez de pisar diciembre con el mapa viejo.
+     */
+    @Test
+    fun `confirmar suma noviembre al perfil recien leido, no al que se leyo al abrir`() {
+        var otroAparatoEscribio = false
+        val conDiciembre = perfil.copy(periodStarts = perfil.periodStarts + ("2026-12" to "2026-11-24"))
+        val repo = object : ConDetalle(mapOf("2026-10" to octubre)) {
+            override suspend fun getUserProfile(): UserProfile = if (otroAparatoEscribio) conDiciembre else perfil
+        }
+        montar(repo, "2026-10")
+        esperarTexto("LOS MÁS GRANDES")
+
+        composeRule.onNodeWithTag(TAG_EMPEZAR_PERIODO_HOY, useUnmergedTree = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        otroAparatoEscribio = true
+        composeRule.onNodeWithTag(TAG_CONFIRMAR_PERIODO_HOY, useUnmergedTree = true).performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) { repo.escrituras.isNotEmpty() }
+
+        assertEquals(
+            mapOf("2026-10" to "2026-09-24", "2026-11" to "2026-10-20", "2026-12" to "2026-11-24"),
+            repo.escrituras.single().periodStarts,
+        )
+    }
+
+    @Test
+    fun `si guardar falla, la tarjeta dice por que y se puede volver a intentar`() {
+        val repo = object : ConDetalle(mapOf("2026-10" to octubre)) {
+            override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile {
+                escrituras += request
+                error("sin red")
+            }
+        }
+        montar(repo, "2026-10")
+        esperarTexto("LOS MÁS GRANDES")
+
+        composeRule.onNodeWithTag(TAG_EMPEZAR_PERIODO_HOY, useUnmergedTree = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_CONFIRMAR_PERIODO_HOY, useUnmergedTree = true).performScrollTo().performClick()
+        esperarTexto("Algo salió mal. Intenta de nuevo.")
+
+        assertEquals(1, repo.escrituras.size, "solo la escritura que falló")
+        assertTrue(hayTag(TAG_CONFIRMAR_PERIODO_HOY), "la confirmación sigue ahí para reintentar")
+        assertTrue(hay("Empezar Noviembre hoy"))
+        assertEquals(listOf("2026-10"), repo.lecturas, "sin guardar no se recarga")
+    }
+
+    /**
+     * La pantalla quedó abierta desde anoche: «hoy» se lee al confirmar, así que se guarda el día
+     * en que de verdad se confirmó y no el del montaje.
+     */
+    @Test
+    fun `hoy se lee al confirmar, no al montar la pantalla`() {
+        var reloj = LocalDate(2026, 10, 20)
+        val repo = ConDetalle(mapOf("2026-10" to octubre))
+        Repositories.sustitutoDePrueba = repo
+        val estado = EstadoDelDetalleDePeriodo(CoroutineScope(Dispatchers.Unconfined), "2026-10") { reloj }
+        estado.cargar()
+        estado.abrirConfirmacion()
+        assertEquals(LocalDate(2026, 10, 20), estado.hoyDeLaConfirmacion)
+
+        reloj = LocalDate(2026, 10, 21)
+        estado.confirmarEmpezarHoy()
+
+        assertEquals("2026-10-21", repo.escrituras.single().periodStarts?.get("2026-11"))
     }
 
     @Test

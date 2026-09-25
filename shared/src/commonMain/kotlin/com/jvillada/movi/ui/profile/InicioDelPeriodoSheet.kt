@@ -33,6 +33,7 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.conInicioPropio
 import com.jvillada.movi.shared.model.inicioDelPeriodo
 import com.jvillada.movi.shared.model.nombreDe
@@ -44,18 +45,32 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
 
 /**
- * **La única escritura de un arranque propio**: declara (o quita, con [inicio] `null`) el arranque
- * de [periodo] y manda el mapa entero con `PUT /api/users/me` — así es cómo la ruta distingue «no
- * tocar» (no mandarlo) de «ninguno» (mandarlo vacío). Las demás excepciones de [ajustes] viajan
- * como estaban.
+ * **La única escritura de los arranques propios**: vuelve a leer el perfil, le aplica [cambio] a
+ * sus ajustes **recién leídos** y manda el mapa entero con `PUT /api/users/me` — así es cómo la
+ * ruta distingue «no tocar» (no mandarlo) de «ninguno» (mandarlo vacío).
  *
- * La usan esta hoja (desde Movimientos) y «Empezar un período nuevo hoy» del detalle de un
+ * Por qué se relee justo antes de escribir: el mapa viaja entero y reemplaza al que había. Armado
+ * sobre los ajustes que la pantalla tenía —leídos hace rato en otro aparato, o que no se pudieron
+ * leer y quedaron vacíos— borraría las excepciones que la pantalla no conocía, y `periodStarts`
+ * decide la ventana de todo (el Inicio, Movimientos, el Disponible, «Tus períodos»). Si esa lectura
+ * falla, la excepción sube y no se escribe nada. Si [cambio] ya no acepta lo recién leído
+ * (devuelve `null`), tampoco: se lanza [LosPeriodosCambiaron].
+ *
+ * La usan la hoja de abajo (desde Movimientos) y «Empezar un período nuevo hoy» del detalle de un
  * período: son la misma decisión tomada desde dos lugares.
  */
-suspend fun guardarInicioDelPeriodo(ajustes: PeriodSettings, periodo: PeriodoFinanciero, inicio: String?): UserProfile =
-    Repositories.wallets.updateUserProfile(
-        UpdateProfileRequest(periodStarts = ajustes.conInicioPropio(periodo, inicio).iniciosPropios),
-    )
+suspend fun cambiarLosIniciosPropios(cambio: (PeriodSettings) -> PeriodSettings?): UserProfile {
+    val recienLeidos = Repositories.wallets.getUserProfile().ajustesDelPeriodo()
+    val nuevos = cambio(recienLeidos) ?: throw LosPeriodosCambiaron()
+    return Repositories.wallets.updateUserProfile(UpdateProfileRequest(periodStarts = nuevos.iniciosPropios))
+}
+
+/** Declara (o quita, con [inicio] `null`) el arranque de [periodo]. Ver [cambiarLosIniciosPropios]. */
+suspend fun guardarInicioDelPeriodo(periodo: PeriodoFinanciero, inicio: String?): UserProfile =
+    cambiarLosIniciosPropios { it.conInicioPropio(periodo, inicio) }
+
+/** Lo recién leído ya no admite el cambio que se pidió (otro aparato escribió en el medio). */
+class LosPeriodosCambiaron : IllegalStateException("Tus períodos cambiaron mientras tanto. Revísalos y vuelve a intentarlo.")
 
 /**
  * **«Este mes no empezó cuando siempre.»**

@@ -44,6 +44,7 @@ import com.jvillada.movi.shared.model.PAGO_FIJO_LISTO
 import com.jvillada.movi.shared.model.PAGO_FIJO_PENDIENTE
 import com.jvillada.movi.shared.model.PagoFijoDelPeriodo
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.PresupuestoDelPeriodo
 import com.jvillada.movi.shared.model.ResumenDePeriodo
@@ -76,7 +77,8 @@ import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.dashboard.categoriasDelPeriodo
-import com.jvillada.movi.ui.profile.guardarInicioDelPeriodo
+import com.jvillada.movi.ui.profile.LosPeriodosCambiaron
+import com.jvillada.movi.ui.profile.cambiarLosIniciosPropios
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.sdui.FilaDeCategoria
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
@@ -108,7 +110,8 @@ const val TAG_GASTO_GRANDE: String = "gasto-grande"
 internal class EstadoDelDetalleDePeriodo internal constructor(
     private val alcance: CoroutineScope,
     private val id: String,
-    private val hoy: LocalDate,
+    /** El día de hoy en la zona de la app, leído cada vez que se pregunta — no al montar. */
+    private val hoy: () -> LocalDate,
 ) {
     internal var detalle by mutableStateOf<DetalleDePeriodo?>(null)
     internal var loading by mutableStateOf(true)
@@ -125,6 +128,8 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
     internal var cuentas by mutableStateOf<List<Account>>(emptyList())
 
     internal var confirmando by mutableStateOf(false)
+    /** El día que dice la confirmación: el de cuando se abrió, y el de cuando se confirmó. */
+    internal var hoyDeLaConfirmacion by mutableStateOf<LocalDate?>(null)
     internal var guardando by mutableStateOf(false)
     internal var errorAlGuardar by mutableStateOf<String?>(null)
     internal var movimientoAbierto by mutableStateOf<FinancialEvent?>(null)
@@ -132,7 +137,12 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
 
     internal val noSeLeyo: Boolean get() = !loading && detalle == null
 
-    internal val periodo: PeriodoFinanciero? get() = periodoDelPrefijo(id)
+    /**
+     * El período en curso según lo que contestó el server, o `null` si este no lo es. Es el mismo
+     * para decidir si se ofrece empezar hoy y para guardarlo: nunca se revisa uno y se escribe otro.
+     */
+    internal val periodoEnCurso: PeriodoFinanciero?
+        get() = detalle?.resumen?.takeIf { it.enCurso }?.let { periodoDelPrefijo(it.id) }
 
     /**
      * Los ajustes que quedarían si el período siguiente empezara hoy, o `null` si no se ofrece:
@@ -141,11 +151,16 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
      */
     internal val empezarHoy: PeriodSettings?
         get() {
-            val resumen = detalle?.resumen?.takeIf { it.enCurso } ?: return null
-            val periodo = periodoDelPrefijo(resumen.id) ?: return null
+            val periodo = periodoEnCurso ?: return null
             val ajustes = ajustes ?: return null
-            return empezarElSiguienteHoy(periodo, hoy, ajustes)
+            return empezarElSiguienteHoy(periodo, hoy(), ajustes)
         }
+
+    internal fun abrirConfirmacion() {
+        errorAlGuardar = null
+        hoyDeLaConfirmacion = hoy()
+        confirmando = true
+    }
 
     internal fun reintentar() {
         refreshKey++
@@ -155,9 +170,7 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
         alcance.launch {
             loading = true
             intentar { Repositories.wallets.getDetalleDePeriodo(id) }.onSuccess { detalle = it }
-            intentar { Repositories.wallets.getUserProfile() }.onSuccess {
-                ajustes = PeriodSettings(cutoffDay = it.periodCutoffDay.coerceIn(1, 31), iniciosPropios = it.periodStarts)
-            }
+            intentar { Repositories.wallets.getUserProfile() }.onSuccess { ajustes = it.ajustesDelPeriodo() }
             loading = false
         }
         alcance.launch {
@@ -167,32 +180,34 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
 
     /**
      * Guarda el arranque del siguiente en hoy por el mismo camino que la hoja de Movimientos
-     * ([guardarInicioDelPeriodo]) y recarga. El Inicio se entera solo: toda escritura por
-     * `Repositories.wallets` invalida su caché (ver `InvalidaElInicioAlEscribir`), y «Tus
-     * períodos» vuelve a leer al entrar.
+     * ([cambiarLosIniciosPropios], que relee el perfil antes de escribir) y recarga. «Hoy» se lee
+     * al confirmar, no al montar: una pantalla abierta desde anoche no escribe la fecha de ayer.
+     * El Inicio se entera solo: toda escritura por `Repositories.wallets` invalida su caché (ver
+     * `InvalidaElInicioAlEscribir`), y «Tus períodos» vuelve a leer al entrar.
      */
     internal fun confirmarEmpezarHoy() {
         if (guardando) return
-        val ajustesActuales = ajustes ?: return
-        val periodo = periodo ?: return
-        if (empezarHoy == null) return
+        val periodo = periodoEnCurso ?: return
+        if (ajustes == null) return
+        val hoyAlConfirmar = hoy()
+        hoyDeLaConfirmacion = hoyAlConfirmar
         guardando = true
         errorAlGuardar = null
         alcance.launch {
-            intentar { guardarInicioDelPeriodo(ajustesActuales, periodoSiguiente(periodo), hoy.toString()) }
+            intentar { cambiarLosIniciosPropios { empezarElSiguienteHoy(periodo, hoyAlConfirmar, it) } }
                 .onSuccess {
-                    ajustes = PeriodSettings(cutoffDay = it.periodCutoffDay.coerceIn(1, 31), iniciosPropios = it.periodStarts)
+                    ajustes = it.ajustesDelPeriodo()
                     confirmando = false
                     reintentar()
                 }
-                .onFailure { errorAlGuardar = it.toUserMessage() }
+                .onFailure { errorAlGuardar = if (it is LosPeriodosCambiaron) it.message else it.toUserMessage() }
             guardando = false
         }
     }
 }
 
 @Composable
-internal fun rememberEstadoDelDetalleDePeriodo(id: String, hoy: LocalDate): EstadoDelDetalleDePeriodo {
+internal fun rememberEstadoDelDetalleDePeriodo(id: String, hoy: () -> LocalDate): EstadoDelDetalleDePeriodo {
     val alcance = rememberCoroutineScope()
     val estado = remember(alcance, id, hoy) { EstadoDelDetalleDePeriodo(alcance, id, hoy) }
     LaunchedEffect(estado, estado.refreshKey) { estado.cargar() }
@@ -205,8 +220,8 @@ internal fun rememberEstadoDelDetalleDePeriodo(id: String, hoy: LocalDate): Esta
  */
 @Composable
 fun DetalleDePeriodoScreen(onNavigate: (Screen) -> Unit, id: String, hoy: LocalDate? = null) {
-    val hoyEfectivo = remember(hoy) { hoy ?: epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()) }
-    val estado = rememberEstadoDelDetalleDePeriodo(id, hoyEfectivo)
+    val reloj: () -> LocalDate = remember(hoy) { { hoy ?: epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()) } }
+    val estado = rememberEstadoDelDetalleDePeriodo(id, reloj)
     val titulo = estado.detalle?.resumen?.nombre ?: nombreDelId(id) ?: id
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
@@ -224,7 +239,7 @@ fun DetalleDePeriodoScreen(onNavigate: (Screen) -> Unit, id: String, hoy: LocalD
                 when {
                     estado.noSeLeyo -> NoSePudoLeer("No pudimos cargar este período", onReintentar = { estado.reintentar() })
                     detalle == null -> DetalleEsqueleto()
-                    else -> DetalleCargado(detalle, estado, hoyEfectivo, onNavigate)
+                    else -> DetalleCargado(detalle, estado, onNavigate)
                 }
             }
         }
@@ -256,7 +271,6 @@ fun DetalleDePeriodoScreen(onNavigate: (Screen) -> Unit, id: String, hoy: LocalD
 private fun DetalleCargado(
     detalle: DetalleDePeriodo,
     estado: EstadoDelDetalleDePeriodo,
-    hoy: LocalDate,
     onNavigate: (Screen) -> Unit,
 ) {
     Cabecera(detalle, estado.ajustes)
@@ -275,15 +289,16 @@ private fun DetalleCargado(
         onClick = { onNavigate(Screen.Transactions(periodoInicial = detalle.resumen.id)) },
     )
 
-    val periodo = estado.periodo
+    val periodo = estado.periodoEnCurso
+    val hoyDeLaConfirmacion = estado.hoyDeLaConfirmacion
     if (periodo != null && estado.empezarHoy != null) {
-        if (estado.confirmando) {
-            ConfirmarEmpezarHoy(periodo, hoy, estado)
+        if (estado.confirmando && hoyDeLaConfirmacion != null) {
+            ConfirmarEmpezarHoy(periodo, hoyDeLaConfirmacion, estado)
         } else {
             FilaDeAccion(
                 texto = "Empezar un período nuevo hoy",
                 modifier = Modifier.testTag(TAG_EMPEZAR_PERIODO_HOY),
-                onClick = { estado.errorAlGuardar = null; estado.confirmando = true },
+                onClick = { estado.abrirConfirmacion() },
             )
         }
     }
