@@ -182,7 +182,7 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
                             "No pudimos cargar tus enlaces",
                             onReintentar = { loadKey++ },
                         )
-                        // Reemplaza al texto suelto de siempre. Ola D: sin botón propio — el botón
+                        // Reemplaza al texto suelto de siempre, sin botón propio — el botón
                         // «Crear enlace» de la sección de arriba ya está a la vista en esta misma
                         // pantalla, y repetirlo acá abajo le mostraba a quien recién llega dos
                         // botones idénticos al mismo tiempo.

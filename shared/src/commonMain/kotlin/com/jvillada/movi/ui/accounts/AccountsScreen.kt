@@ -871,7 +871,7 @@ private fun SeccionDeDeudas(
             NoSePudoLeer("No pudimos cargar tus deudas", onReintentar = onReintentar)
         }
     } else {
-        // Ola D: sin un crédito ni una tarjeta no hay cifra que mostrar — «Sin deudas registradas»
+        // Sin un crédito ni una tarjeta no hay cifra que mostrar — «Sin deudas registradas»
         // ya lo dice, y un «$0» al lado lo presenta como un hecho en vez de la ausencia de datos
         // que es. Con cualquier crédito o tarjeta, la cifra sigue apareciendo igual que siempre.
         val hayDeuda = creditos.isNotEmpty() || tarjetas.isNotEmpty()

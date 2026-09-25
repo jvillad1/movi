@@ -220,7 +220,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             if (cargando) {
                 CreditosEsqueleto(forma = formaRecordada, modifier = Modifier.weight(1f))
             } else if (creditosListos != null && tarjetasListas != null) LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
-                // Ola D: sin un solo crédito ni tarjeta no hay deuda que resumir — «Deuda total $0»
+                // Sin un solo crédito ni tarjeta no hay deuda que resumir — «Deuda total $0»
                 // arriba del vacío que enseña presentaba un cero como si fuera un hecho. Con
                 // cualquier crédito o tarjeta, esta tarjeta sigue apareciendo igual que siempre.
                 if (!isEmpty) {
