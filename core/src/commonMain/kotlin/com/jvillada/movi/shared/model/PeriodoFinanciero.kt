@@ -255,6 +255,14 @@ fun periodoDelPrefijo(prefijo: String): PeriodoFinanciero? {
 private val PREFIJO_DE_PERIODO = Regex("""^(\d{4})-(0[1-9]|1[0-2])$""")
 
 /**
+ * El corte y los arranques propios de este perfil, como los usa toda cuenta de períodos. Una sola
+ * construcción para que dos lugares que leen el mismo perfil no puedan terminar con ajustes
+ * distintos (el corte se acota a 1..31 igual que en todas las pantallas).
+ */
+fun UserProfile.ajustesDelPeriodo(): PeriodSettings =
+    PeriodSettings(cutoffDay = periodCutoffDay.coerceIn(1, 31), iniciosPropios = periodStarts)
+
+/**
  * Estos ajustes con el arranque de [periodo] declarado en [inicio] (ISO), o **quitado** si
  * [inicio] es `null` — el resto de las excepciones queda como estaba. Es el mapa que viaja entero
  * en `UpdateProfileRequest.periodStarts`.
@@ -276,7 +284,9 @@ fun PeriodSettings.conInicioPropio(periodo: PeriodoFinanciero, inicio: String?):
  * `null` en cuatro casos, y en ninguno se ofrece la acción:
  * - [hoy] no cae en [enCurso] con estos ajustes (el reloj del server y el del aparato no
  *   coinciden, o ya es otro período);
- * - hoy **ya es** el arranque del siguiente por la regla del corte, o ya se declaró así;
+ * - hoy **ya es** el arranque efectivo del siguiente (con sus excepciones). Solo cuenta el
+ *   efectivo: si el dueño había corrido el siguiente más tarde y el sueldo igual llegó el día del
+ *   corte, empezar hoy sí cambia algo;
  * - hoy no es un arranque válido para el siguiente: [inicioDelPeriodo] lo ignoraría por caer fuera
  *   del mes permitido (con corte 1, por ejemplo, el siguiente nunca puede arrancar dentro del mes
  *   en curso);
@@ -285,8 +295,7 @@ fun PeriodSettings.conInicioPropio(periodo: PeriodoFinanciero, inicio: String?):
 fun empezarElSiguienteHoy(enCurso: PeriodoFinanciero, hoy: LocalDate, settings: PeriodSettings): PeriodSettings? {
     if (periodoDeLaFecha(hoy.toString(), settings) != enCurso) return null
     val siguiente = periodoSiguiente(enCurso)
-    val porCorte = inicioDelPeriodo(siguiente, settings.copy(iniciosPropios = emptyMap()))
-    if (porCorte == hoy || inicioDelPeriodo(siguiente, settings) == hoy) return null
+    if (inicioDelPeriodo(siguiente, settings) == hoy) return null
     val nuevos = settings.conInicioPropio(siguiente, hoy.toString())
     // Se le pregunta a la misma regla que después calcula las ventanas: si ignoraría el valor,
     // guardarlo sería escribir una excepción que no hace nada.

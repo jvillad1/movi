@@ -47,11 +47,22 @@ class EmpezarElSiguienteHoyTest {
     }
 
     @Test
-    fun `si hoy ya es el inicio del siguiente por el corte, no hay nada que empezar`() {
-        // Noviembre se corrió al 27 a mano; el 25 sigue siendo octubre y el corte dice que
-        // noviembre arranca hoy.
+    fun `si hoy ya es el inicio efectivo del siguiente, no hay nada que empezar`() {
+        // Noviembre ya se declaró arrancando el 20: el 20 ya es noviembre.
+        val declarado = delDueno.conInicioPropio(PeriodoFinanciero(2026, 11), "2026-10-20")
+        assertNull(empezarElSiguienteHoy(PeriodoFinanciero(2026, 10), LocalDate(2026, 10, 20), declarado))
+    }
+
+    /**
+     * El día del corte no basta para esconder la acción: noviembre se corrió al 27 a mano, el 25
+     * sigue siendo octubre, y si el sueldo llegó ese 25 igual, empezar hoy es justo lo que hace
+     * falta — reemplaza el 27 por el 25.
+     */
+    @Test
+    fun `el dia del corte con el siguiente corrido mas tarde, empezar hoy si se ofrece`() {
         val corrido = PeriodSettings(cutoffDay = 25, iniciosPropios = mapOf("2026-11" to "2026-10-27"))
-        assertNull(empezarElSiguienteHoy(PeriodoFinanciero(2026, 10), LocalDate(2026, 10, 25), corrido))
+        val nuevos = empezarElSiguienteHoy(PeriodoFinanciero(2026, 10), LocalDate(2026, 10, 25), corrido)
+        assertEquals(mapOf("2026-11" to "2026-10-25"), nuevos?.iniciosPropios)
     }
 
     @Test
@@ -69,6 +80,28 @@ class EmpezarElSiguienteHoyTest {
         val ajustes = PeriodSettings(cutoffDay = 25, iniciosPropios = lleno)
         assertEquals(MAX_INICIOS_PROPIOS, lleno.size)
         assertNull(empezarElSiguienteHoy(PeriodoFinanciero(2026, 10), LocalDate(2026, 10, 20), ajustes))
+    }
+
+    @Test
+    fun `con una excepcion menos que el tope, llegar justo al tope se acepta`() {
+        val casiLleno = (1 until MAX_INICIOS_PROPIOS).associate { i ->
+            val periodo = PeriodoFinanciero(2000 + i / 12, i % 12 + 1)
+            periodo.prefijo to "${periodo.year}-${periodo.month.toString().padStart(2, '0')}-01"
+        }
+        val ajustes = PeriodSettings(cutoffDay = 25, iniciosPropios = casiLleno)
+        val nuevos = empezarElSiguienteHoy(PeriodoFinanciero(2026, 10), LocalDate(2026, 10, 20), ajustes)
+        assertEquals(MAX_INICIOS_PROPIOS, nuevos?.iniciosPropios?.size)
+        assertEquals("2026-10-20", nuevos?.iniciosPropios?.get("2026-11"))
+    }
+
+    @Test
+    fun `los ajustes de un perfil salen de su corte y sus arranques propios`() {
+        val perfil = UserProfile(
+            id = "u1", email = "a@b.c", name = "Juan", avatarColor = "#FF0000",
+            periodCutoffDay = 25, periodStarts = mapOf("2026-10" to "2026-09-24"),
+        )
+        assertEquals(delDueno, perfil.ajustesDelPeriodo())
+        assertEquals(31, perfil.copy(periodCutoffDay = 40).ajustesDelPeriodo().cutoffDay)
     }
 
     @Test
