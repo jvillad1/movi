@@ -35,6 +35,7 @@ import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import kotlin.math.roundToLong
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
@@ -199,9 +200,18 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     // Las que el server no aceptó en el último intento, para decir cuáles y reintentar solo esas.
     internal var propuestasQueFallaron by mutableStateOf(emptyList<PropuestaDePresupuesto>())
         private set
+    // Las que ya existen en el server desde esta pantalla. Salen de la lista: si la recarga de
+    // después falla, el vacío sigue ahí y un segundo «Crear estos N» no puede volver a mandarlas
+    // (el server contestaría 409 y el aviso nombraría como fallido un presupuesto que existe).
+    internal var creadas by mutableStateOf(emptySet<String>())
+        private set
+
+    /** Las que todavía se pueden crear: las propuestas menos las ya creadas. Lo que se pinta. */
+    internal val propuestasPendientes: List<PropuestaDePresupuesto>
+        get() = propuestas.orEmpty().filter { it.category !in creadas }
 
     internal val propuestasMarcadas: List<PropuestaDePresupuesto>
-        get() = propuestas.orEmpty().filter { it.category !in desmarcadas }
+        get() = propuestasPendientes.filter { it.category !in desmarcadas }
 
     internal fun recibirPropuestas(nuevas: List<PropuestaDePresupuesto>) {
         propuestas = nuevas
@@ -219,17 +229,26 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
      * Una que falla no deshace las demás: lo creado es del dueño y ya está en el server. Las que no
      * entraron quedan en [propuestasQueFallaron], y la pantalla dice cuáles con «Reintentar». Si
      * alguna entró se recarga, y la pantalla pasa sola del vacío a la lista.
+     *
+     * **Un 409 cuenta como creado.** El server lo contesta cuando ese presupuesto ya existe, que es
+     * justo lo que se quería. Pasa de verdad: el POST llega y se guarda, pero la respuesta se pierde
+     * en una red mala; el reintento encuentra el presupuesto hecho. Contarlo como falla dejaba el
+     * aviso diciendo «No pudimos crear…» encima de la barra de ese mismo presupuesto.
      */
     internal fun crearPropuestas(lista: List<PropuestaDePresupuesto> = propuestasMarcadas) {
-        if (creandoPropuestas || lista.isEmpty()) return
+        val aMandar = lista.filter { it.category !in creadas }
+        if (creandoPropuestas || aMandar.isEmpty()) return
         creandoPropuestas = true
         alcance.launch {
             try {
-                val fallaron = lista.filter { p ->
-                    intentar { Repositories.wallets.createBudget(Budget(p.category, p.amount.roundToLong())) }.isFailure
+                val fallaron = aMandar.filter { p ->
+                    val resultado = intentar { Repositories.wallets.createBudget(Budget(p.category, p.amount.roundToLong())) }
+                    val existe = resultado.isSuccess || (resultado.exceptionOrNull() as? ApiException)?.status == 409
+                    if (existe) creadas = creadas + p.category
+                    !existe
                 }
                 propuestasQueFallaron = fallaron
-                if (fallaron.size < lista.size) reload()
+                if (fallaron.size < aMandar.size) reload()
             } finally {
                 creandoPropuestas = false
             }
@@ -424,10 +443,16 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
         } else {
             Spacer(Modifier.height(14.dp))
         }
-        // Va afuera del vacío: si alguna propuesta sí se creó, la pantalla ya pasó a la lista y el
-        // aviso de las que faltan tiene que seguir ahí, arriba de ella.
-        if (estado.propuestasQueFallaron.isNotEmpty() && !estado.noSeLeyo) {
-            AvisoDePropuestasQueFallaron(estado)
+        // Con la lista ya pintada (alguna propuesta sí se creó), el aviso de las que faltan va
+        // arriba de ella, donde queda la vista al irse el vacío. Mientras el vacío sigue, el aviso va
+        // adentro de la tarjeta, junto al botón que se acaba de tocar (ver [VacioDePresupuestos]).
+        if (estado.propuestasQueFallaron.isNotEmpty() && !estado.noSeLeyo && !estado.sinPresupuestos) {
+            Spacer(Modifier.height(Movi.espacios.medio))
+            NoSePudoLeer(
+                texto = textoDePropuestasQueFallaron(estado.propuestasQueFallaron),
+                onReintentar = { estado.reintentarPropuestas() },
+                modifier = Modifier.padding(horizontal = Movi.espacios.amplio),
+            )
         }
     }
 

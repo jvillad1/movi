@@ -47,8 +47,10 @@ fun topeSugeridoPara(gasto: Long): Long {
  *   uno le ponga un tope — la cuota es la que es;
  * - las categorías reservadas ([isReservedCategory]), que nadie puede escribir a mano y por lo
  *   tanto tampoco presupuestar (el POST de crear las aceptaría y quedaría un presupuesto imposible);
- * - las que ya tienen presupuesto, comparadas sin mayúsculas: proponer «comida» a quien ya tiene
- *   «Comida» terminaría en el 409 del server;
+ * - las que ya tienen presupuesto, comparadas sin mayúsculas. El server solo rechaza (409) el
+ *   nombre EXACTO, así que proponer «comida» a quien ya tiene «Comida» no fallaría: crearía un
+ *   segundo presupuesto casi igual al que ya existe. Acá se es más estricto que el server a
+ *   propósito;
  * - los nombres en blanco, que el POST de crear rechaza.
  *
  * Empates por gasto se ordenan por nombre, para que la misma base proponga siempre lo mismo.

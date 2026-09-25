@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -30,8 +31,8 @@ import com.jvillada.movi.theme.Movi
  * elementos. (Metas lo recibió en F26; Inversiones dejó de existir como pantalla en la Ola 7.)
  *
  * [enabled] apaga el botón cuando la acción no tiene sobre qué obrar (Presupuestos vacío: «Crear
- * estos 0» con todas las propuestas desmarcadas). Apagado pierde el lavanda —fondo de tarjeta y
- * texto apagado, como el botón de las hojas de Categorías— para que no se lea como tocable.
+ * estos 0» con todas las propuestas desmarcadas). Apagado pierde el lavanda —fondo `hilo`, borde
+ * y texto apagado— para que se siga leyendo como botón, pero no como tocable.
  */
 @Composable
 fun NewItemButton(
@@ -46,7 +47,13 @@ fun NewItemButton(
             modifier = modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(Movi.formas.amplia))
-                .background(if (enabled) Movi.colores.marca else Movi.colores.tarjeta)
+                .background(if (enabled) Movi.colores.marca else Movi.colores.hilo)
+                // Apagado, con el fondo `hilo` y el borde: sobre una tarjeta (el vacío que enseña
+                // también es `tarjeta`) un fondo `tarjeta` dejaba el rótulo flotando, sin botón.
+                .then(
+                    if (enabled) Modifier
+                    else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.amplia)),
+                )
                 .clickable(enabled = enabled, onClick = onClick)
                 .padding(vertical = 14.dp),
             horizontalArrangement = Arrangement.Center,

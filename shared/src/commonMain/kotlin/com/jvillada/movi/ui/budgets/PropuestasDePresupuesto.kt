@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.PropuestaDePresupuesto
@@ -24,6 +25,7 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.components.CasillaDeSeleccion
 import com.jvillada.movi.ui.components.NewItemButton
+import com.jvillada.movi.ui.components.BotonReintentar
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.formatCOP
@@ -56,8 +58,10 @@ private const val TITULO_DEL_VACIO = "Ponle un tope a lo que más gastas"
  */
 @Composable
 internal fun VacioDePresupuestos(estado: EstadoDePresupuestos) {
-    val propuestas = estado.propuestas.orEmpty()
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    // Las ya creadas no se vuelven a ofrecer: si la recarga de después falló, el vacío sigue acá
+    // con las que faltan, y ninguna se manda dos veces.
+    val propuestas = estado.propuestasPendientes
+    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         if (propuestas.isEmpty()) {
             VacioQueEnsena(
                 titulo = TITULO_DEL_VACIO,
@@ -83,8 +87,15 @@ internal fun VacioDePresupuestos(estado: EstadoDePresupuestos) {
                         }
                     }
                     Spacer(Modifier.height(Movi.espacios.amplio))
+                    // Adentro de la tarjeta y junto al botón: con cuatro propuestas la tarjeta es
+                    // alta, y un aviso debajo de ella quedaba fuera de la pantalla justo cuando el
+                    // dueño acababa de tocar «Crear» — parecía que no había pasado nada.
+                    if (estado.propuestasQueFallaron.isNotEmpty()) {
+                        AvisoDePropuestasQueFallaron(estado)
+                        Spacer(Modifier.height(Movi.espacios.amplio))
+                    }
                     NewItemButton(
-                        label = "Crear estos $marcadas",
+                        label = rotuloDeCrearPropuestas(marcadas),
                         onClick = { estado.crearPropuestas() },
                         modifier = Modifier.testTag(TAG_CREAR_PROPUESTAS),
                         full = true,
@@ -150,21 +161,38 @@ private fun FilaDePropuesta(
 }
 
 /**
- * Las propuestas que el server no aceptó al crearlas, con «Reintentar» que manda solo esas. Va
- * arriba de la lista (o del vacío, si no entró ninguna); ver [presupuestos].
+ * «Crear este presupuesto» con una sola marcada; «Crear estos N» con varias (y con cero, apagado).
+ * «Crear estos 1» no se dice.
  */
-@Composable
-internal fun AvisoDePropuestasQueFallaron(estado: EstadoDePresupuestos) {
-    val nombres = estado.propuestasQueFallaron.map { it.category }
-    val texto = if (nombres.size == 1) {
+internal fun rotuloDeCrearPropuestas(marcadas: Int): String =
+    if (marcadas == 1) "Crear este presupuesto" else "Crear estos $marcadas"
+
+/** «No pudimos crear el presupuesto de Comida», o «los presupuestos de Comida, Hija y Mercado». */
+internal fun textoDePropuestasQueFallaron(fallaron: List<PropuestaDePresupuesto>): String {
+    val nombres = fallaron.map { it.category }
+    return if (nombres.size == 1) {
         "No pudimos crear el presupuesto de ${nombres.single()}"
     } else {
         "No pudimos crear los presupuestos de ${nombres.dropLast(1).joinToString(", ")} y ${nombres.last()}"
     }
-    Spacer(Modifier.height(14.dp))
-    NoSePudoLeer(
-        texto = texto,
-        onReintentar = { estado.reintentarPropuestas() },
-        modifier = Modifier.padding(horizontal = 16.dp),
-    )
+}
+
+/**
+ * Las propuestas que el server no aceptó, con «Reintentar» que manda solo esas, **adentro** de la
+ * tarjeta del vacío. Sin tarjeta propia: una tarjeta dentro de otra no se lee como aviso. Cuando
+ * alguna sí se creó y la pantalla ya pasó a la lista, el aviso es un [NoSePudoLeer] arriba de ella
+ * (ver [presupuestos]).
+ */
+@Composable
+private fun AvisoDePropuestasQueFallaron(estado: EstadoDePresupuestos) {
+    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            textoDePropuestasQueFallaron(estado.propuestasQueFallaron),
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.sale,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(Movi.espacios.corto))
+        BotonReintentar(onReintentar = { estado.reintentarPropuestas() })
+    }
 }

@@ -222,6 +222,32 @@ class PropuestasDePresupuestoRoutesTest {
         assertEquals(unDiaAntes.toString(), lista[0].desde)
     }
 
+    /**
+     * El caso de hoy del dueño: corte 25 y el período EN CURSO arrancó un día antes (declaró
+     * {"2026-10":"2026-09-24"}). El período anterior termina ese día, no el 25: el gasto del 24 ya
+     * es del período nuevo y no se propone, y `hasta` es el día anterior (el 23, en su caso).
+     */
+    @Test
+    fun `el periodo en curso que arranco antes acorta el anterior`() = testApplication {
+        val enCurso = periodoDe(AppClock.now().toInstant().toEpochMilli(), ajustes)
+        val inicioNatural = ventanaDe(enCurso, ajustes).first
+        val zona = AppClock.zone
+        val diaDeclarado = java.time.Instant.ofEpochMilli(inicioNatural).atZone(zona).toLocalDate().minusDays(1)
+        transaction {
+            Users.update({ Users.id eq userId }) { it[periodStarts] = """{"${enCurso.prefijo}":"$diaDeclarado"}""" }
+        }
+        val inicioDeclarado = diaDeclarado.atStartOfDay(zona).toInstant().toEpochMilli()
+        // El día declarado ya es del período en curso; el anterior a él, todavía del pasado.
+        event("e-dia-declarado", 700_000L, "Mercado", timestamp = inicioDeclarado + 60_000)
+        event("e-ultimo-dia", 50_000L, "Comida", timestamp = inicioDeclarado - 60_000)
+
+        wireApp()
+        val lista = propuestas()
+
+        assertEquals(listOf("Comida"), lista.map { it.category })
+        assertEquals(diaDeclarado.minusDays(1).toString(), lista[0].hasta)
+    }
+
     @Test
     fun `deja fuera anulados, traspasos, pagos de tarjeta, cuota, Por confirmar, otra moneda y lo que ya tiene presupuesto`() =
         testApplication {

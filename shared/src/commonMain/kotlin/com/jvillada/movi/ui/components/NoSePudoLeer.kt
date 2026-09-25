@@ -51,20 +51,30 @@ fun NoSePudoLeer(
                 style = Movi.textos.titulo,
                 color = Movi.colores.textoMedio,
             )
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Movi.colores.marca.copy(alpha = 0.16f))
-                    .clickable(onClick = onReintentar)
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "Reintentar",
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.marca,
-                )
-            }
+            BotonReintentar(onReintentar)
         }
+    }
+}
+
+/**
+ * El «Reintentar» de [NoSePudoLeer], suelto para un aviso que va adentro de otra tarjeta (las
+ * propuestas de Presupuestos que no se pudieron crear): una tarjeta dentro de otra no se lee como
+ * aviso, pero el botón tiene que ser el mismo.
+ */
+@Composable
+fun BotonReintentar(onReintentar: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Movi.colores.marca.copy(alpha = 0.16f))
+            .clickable(onClick = onReintentar)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "Reintentar",
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.marca,
+        )
     }
 }

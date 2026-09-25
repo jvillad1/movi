@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -64,21 +65,32 @@ class PropuestasDePresupuestoTest {
 
     /**
      * Un repositorio sin presupuestos que devuelve lo que ya se creó (así, al recargar después de
-     * crear, la pantalla ve los nuevos) y deja fallar el POST de las categorías de [fallanAhora].
+     * crear, la pantalla ve los nuevos) y deja fallar el POST de las categorías de [fallanCon] con
+     * ese código HTTP. Con [recargaFalla], toda lectura de presupuestos después de la primera falla.
      */
     private inner class SinPresupuestos(
         private val lasPropuestas: suspend () -> List<PropuestaDePresupuesto> = { propuestas },
-        var fallanAhora: Set<String> = emptySet(),
+        var fallanCon: Map<String, Int> = emptyMap(),
+        private val recargaFalla: Boolean = false,
+        private val yaTiene: List<Budget> = emptyList(),
     ) : RepositorioDePrueba() {
         val creados = mutableListOf<Budget>()
         val intentos = mutableListOf<Budget>()
-        override suspend fun getBudgets(): List<Budget> = creados.toList()
+        var lecturasDePropuestas = 0
+        private var lecturasDePresupuestos = 0
+        override suspend fun getBudgets(): List<Budget> {
+            if (recargaFalla && lecturasDePresupuestos++ > 0) throw ApiException(503)
+            return yaTiene + creados
+        }
         override suspend fun getEventsByDay(): List<EventDay> = emptyList()
         override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = DashboardSummary(scope = Scope.SELF)
-        override suspend fun getPropuestasDePresupuesto(): List<PropuestaDePresupuesto> = lasPropuestas()
+        override suspend fun getPropuestasDePresupuesto(): List<PropuestaDePresupuesto> {
+            lecturasDePropuestas++
+            return lasPropuestas()
+        }
         override suspend fun createBudget(budget: Budget): Budget {
             intentos += budget
-            if (budget.category in fallanAhora) throw ApiException(503)
+            fallanCon[budget.category]?.let { throw ApiException(it) }
             creados += budget
             return budget
         }
@@ -105,6 +117,7 @@ class PropuestasDePresupuestoTest {
         propuestas.forEach { composeRule.onNodeWithTag(tagDePropuestaDePresupuesto(it.category)).assertIsOn() }
         composeRule.onNodeWithTag(TAG_CREAR_PROPUESTAS).assertIsEnabled()
         assertTrue(hay("Crear estos 3"))
+        assertTrue(!hay("No pudimos crear"))
         assertTrue(hay("Crear uno a mano"))
         assertTrue(!hay("Nuevo presupuesto"), "con propuestas, crear a mano es la acción secundaria")
     }
@@ -118,6 +131,11 @@ class PropuestasDePresupuestoTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(tagDePropuestaDePresupuesto("Comida")).assertIsOff()
         assertTrue(hay("Crear estos 2"), "desmarcar baja la cuenta")
+        composeRule.onNodeWithTag(tagDePropuestaDePresupuesto("Mercado")).performClick()
+        composeRule.waitForIdle()
+        assertTrue(hay("Crear este presupuesto"), "con una sola, en singular: nada de «Crear estos 1»")
+        composeRule.onNodeWithTag(tagDePropuestaDePresupuesto("Mercado")).performClick()
+        composeRule.waitForIdle()
 
         composeRule.onNodeWithTag(TAG_CREAR_PROPUESTAS).performClick()
         composeRule.waitForIdle()
@@ -156,7 +174,7 @@ class PropuestasDePresupuestoTest {
      */
     @Test
     fun `si una falla, las otras quedan y se dice cual fallo, con reintento`() {
-        val repo = SinPresupuestos(fallanAhora = setOf("Comida"))
+        val repo = SinPresupuestos(fallanCon = mapOf("Comida" to 503))
         montar(repo)
 
         composeRule.onNodeWithTag(TAG_CREAR_PROPUESTAS).performClick()
@@ -166,12 +184,83 @@ class PropuestasDePresupuestoTest {
         assertTrue(hay("No pudimos crear el presupuesto de Comida"))
         assertTrue(hay("Gastado en"))
 
-        repo.fallanAhora = emptySet()
+        repo.fallanCon = emptyMap()
         composeRule.onNodeWithText("Reintentar", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
         assertEquals(listOf("Mercado", "Fútbol", "Comida"), repo.creados.map { it.category })
         assertTrue(!hay("No pudimos crear"))
+    }
+
+    /**
+     * El POST de Comida se guardó pero la respuesta se perdió: el reintento encuentra el
+     * presupuesto hecho y el server contesta 409. Eso es «creado», no una falla que nombrar.
+     */
+    @Test
+    fun `un 409 al reintentar cuenta como creado y el aviso se va`() {
+        val repo = SinPresupuestos(fallanCon = mapOf("Comida" to 503))
+        montar(repo)
+        composeRule.onNodeWithTag(TAG_CREAR_PROPUESTAS).performClick()
+        composeRule.waitForIdle()
+        assertTrue(hay("No pudimos crear el presupuesto de Comida"))
+
+        repo.fallanCon = mapOf("Comida" to 409)
+        composeRule.onNodeWithText("Reintentar", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(Budget("Comida", 820_000L), repo.intentos.last(), "el reintento sí se mandó")
+        assertTrue(!hay("No pudimos crear"), "no puede decir que no creó un presupuesto que existe")
+    }
+
+    /**
+     * Mercado y Fútbol se crean, Comida no, y la recarga de después también falla (la misma red
+     * mala): el vacío sigue. Ahí solo puede ofrecer Comida, y el segundo toque solo manda Comida.
+     */
+    @Test
+    fun `si la recarga falla, el segundo toque manda solo las que faltan`() {
+        val repo = SinPresupuestos(fallanCon = mapOf("Comida" to 503), recargaFalla = true)
+        montar(repo)
+        composeRule.onNodeWithTag(TAG_CREAR_PROPUESTAS).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(hay("Movi te propone 1 a partir"), "el vacío sigue, con la que falta")
+        assertEquals(0, composeRule.onAllNodesWithTag(tagDePropuestaDePresupuesto("Mercado")).fetchSemanticsNodes().size)
+        assertTrue(hay("Crear este presupuesto"))
+
+        repo.fallanCon = emptyMap()
+        composeRule.onNodeWithTag(TAG_CREAR_PROPUESTAS).performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("Mercado", "Comida", "Fútbol", "Comida"), repo.intentos.map { it.category })
+    }
+
+    /**
+     * Si no entra ninguna, el aviso va adentro de la tarjeta y arriba del botón que se acaba de
+     * tocar: con cuatro propuestas la tarjeta es alta, y un aviso debajo de ella quedaba fuera de
+     * la pantalla.
+     */
+    @Test
+    fun `si no entra ninguna, el aviso queda en la tarjeta, junto al boton`() {
+        montar(SinPresupuestos(fallanCon = propuestas.associate { it.category to 503 }))
+        composeRule.onNodeWithTag(TAG_CREAR_PROPUESTAS).performClick()
+        composeRule.waitForIdle()
+
+        val aviso = composeRule.onNodeWithText("No pudimos crear los presupuestos de Mercado, Comida y Fútbol")
+            .getUnclippedBoundsInRoot()
+        val tarjeta = composeRule.onNodeWithTag(TAG_VACIO_QUE_ENSENA).getUnclippedBoundsInRoot()
+        val boton = composeRule.onNodeWithTag(TAG_CREAR_PROPUESTAS).getUnclippedBoundsInRoot()
+        assertTrue(aviso.top >= tarjeta.top && aviso.bottom <= tarjeta.bottom, "adentro de la tarjeta")
+        assertTrue(aviso.bottom <= boton.top, "arriba del botón")
+    }
+
+    /** A quien ya tiene presupuestos, las propuestas no le cuestan ni una llamada. */
+    @Test
+    fun `con presupuestos no se piden las propuestas`() {
+        val repo = SinPresupuestos(yaTiene = listOf(Budget("Comida", 1_000_000L)))
+        montar(repo)
+
+        assertTrue(hay("Gastado en"))
+        assertEquals(0, repo.lecturasDePropuestas)
     }
 
     @Test
