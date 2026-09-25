@@ -37,6 +37,7 @@ import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.periodoAnterior
 import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.tituloDelPeriodo
 import com.jvillada.movi.shared.model.ventanaDe
 import io.ktor.http.HttpStatusCode
@@ -122,7 +123,7 @@ internal fun Transaction.detalleDePeriodo(
     ahora: Long,
     ajustes: PeriodSettings,
 ): DetalleDePeriodo? {
-    val periodo = periodoDelId(id) ?: return null
+    val periodo = periodoDelPrefijo(id) ?: return null
     val anulados = anuladosDe(uid)
     val periodos = periodosDelUsuario(uid, ahora, ajustes, anulados)
     if (periodo !in periodos) return null
@@ -453,10 +454,3 @@ private fun Transaction.anuladosDe(uid: String): Set<String> =
         .map { it[VoidEvents.originalEventId] }
         .toSet()
 
-/** `"2026-09"` → el período; cualquier otra cosa → `null` (y la ruta contesta 404). */
-private fun periodoDelId(id: String): PeriodoFinanciero? {
-    val partes = ID_DE_PERIODO.matchEntire(id)?.groupValues ?: return null
-    return PeriodoFinanciero(partes[1].toInt(), partes[2].toInt())
-}
-
-private val ID_DE_PERIODO = Regex("""^(\d{4})-(0[1-9]|1[0-2])$""")
