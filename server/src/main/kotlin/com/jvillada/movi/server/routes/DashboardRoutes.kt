@@ -225,8 +225,12 @@ fun Route.dashboardRoutes() {
  * Ingresos del mes y egresos del mes por categoría, en COP y solo flujo de caja — la misma
  * regla que `finance-summary` (ingresos/egresos) y que `spentByCategoryForMonth` del cliente,
  * ahora sobre las filas del mes nada más. Solo se piden las columnas que la regla necesita.
+ *
+ * `internal` y no `private` porque las propuestas de presupuesto (`GET /api/budgets/propuestas`,
+ * en FinanceRoutes) suman el gasto del período ANTERIOR con esta misma regla: si tuvieran la
+ * suya, la propuesta y la barra del presupuesto recién creado podrían contar cosas distintas.
  */
-private fun Transaction.monthCashFlow(
+internal fun Transaction.monthCashFlow(
     uid: String,
     monthStart: Long,
     monthEnd: Long,
