@@ -788,8 +788,9 @@ internal class OcurrenciasReales(
     /**
      * El pago tardío que cruzó el corte, emparejado con su ocurrencia ([ocurrenciaAnteriorQuePisaElPeriodo])
      * después de que la gracia se acabó y el checklist pasó a la siguiente. Con la forma de un sello,
-     * igual que `emparejadasComoSellos`, que es quien lo lee. No entra en [estados]: el checklist no
-     * vuelve a mostrar una ocurrencia que ya dejó atrás.
+     * igual que `emparejadasComoSellos`, que es quien lo lee y donde está qué hace y qué no (no saca
+     * plata del variable; reserva el movimiento). No entra en [estados]: el checklist no vuelve a
+     * mostrar una ocurrencia que ya dejó atrás.
      */
     val anterioresEmparejadas: List<RecurringOccurrence>,
 )
@@ -980,11 +981,11 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
 
     // ── Pasada 3: el pago tardío de la ocurrencia anterior ───────────────────
     //
-    // Pasada la gracia, el checklist ya pregunta por la ocurrencia siguiente y el emparejamiento
-    // del pago tardío que cruzó el corte dejaba de salir: ese pago volvía al gasto variable del
-    // período. Se deriva acá con las mismas reglas —concluyente o nada, sellos y rechazos
-    // respetados— y **después** de la respuesta: lo que el checklist ya emparejó o propone queda
-    // igual, y lo que emparejó está en `reservados`, así que un movimiento no cierra dos
+    // Pasada la gracia, el checklist ya pregunta por la ocurrencia siguiente y el pago tardío que
+    // cruzó el corte quedaba sin emparejar, libre para que otro ítem pendiente lo reclamara (ver
+    // `emparejadasComoSellos`). Se deriva acá con las mismas reglas —concluyente o nada, sellos y
+    // rechazos respetados— y **después** de la respuesta: lo que el checklist ya emparejó o propone
+    // queda igual, y lo que emparejó está en `reservados`, así que un movimiento no cierra dos
     // ocurrencias. La que el checklist todavía pregunta (en gracia) no se repite.
     val anteriores = rules.sortedBy { it.id }.mapNotNull { rule ->
         val anterior = ocurrenciaAnteriorQuePisaElPeriodo(today, rule, periodo) ?: return@mapNotNull null

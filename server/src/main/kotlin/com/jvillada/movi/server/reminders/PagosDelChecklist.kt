@@ -59,8 +59,17 @@ import java.time.ZoneId
  *   ver [vencimientoEnElChecklist]), y nunca más que su monto;
  * - un sello de una regla que **ya no existe** (quedó huérfano) no saca nada por sí solo: esa regla
  *   no está en los fijos. Su movimiento queda libre para que lo reclame una regla viva;
- * - un sello de una regla viva pero de OTRO período (el pago tardío del período anterior, anotado en
- *   este) sigue fuera del variable, como siempre: ya se contó en los fijos de su período.
+ * - **un sello de OTRA ocurrencia** —el arriendo del 23-sep pagado tarde el 26, ya en el período
+ *   que arrancó el 25— **no saca su movimiento del variable**, esté sellado a mano o emparejado
+ *   solo, en la gracia o después. El Disponible arranca de lo que había en Tu plata al empezar el
+ *   período, y ese saldo todavía tenía la plata del arriendo de septiembre; el checklist del cliente
+ *   solo resta como fijo lo que vence DENTRO del período, así que el 23-sep no está en los fijos de
+ *   nadie. Si además saliera del variable, esa plata no se contaría en ningún lado y el Disponible
+ *   se vería un arriendo entero mejor de lo que es. Cada peso cuenta exactamente una vez: un
+ *   movimiento solo sale del variable si su monto se resta como fijo en esta misma cuenta. (Hasta
+ *   el 22-sep el Disponible era «ingresos − fijos» y ese pago sí se había contado en los fijos de
+ *   su período; desde que parte del saldo al inicio, ya no.) El sello sí lo sigue reservando: no
+ *   puede pasar a ser el pago de otro ítem pendiente.
  *
  * Todo en memoria sobre lo que la ruta ya leyó: ninguna consulta por regla.
  */
@@ -112,16 +121,10 @@ fun parteFijaDelChecklist(
     val reglaPorId = reglas.associateBy { it.id }
     val parte = mutableMapOf<String, Long>()
 
-    // Los sellos con movimiento de reglas VIVAS salen del variable hasta el monto de su regla. Los
-    // de una regla borrada no: esa regla no está en los fijos de nadie.
-    val sellosVivos = sellos.filter { it.eventId != null && it.ruleId in reglaPorId }
-    sellosVivos.forEach { sello ->
-        val evento = porId[sello.eventId] ?: return@forEach
-        val regla = reglaPorId.getValue(sello.ruleId)
-        parte[evento.id] = minOf(evento.amount, regla.amount)
-    }
-    // La cuarta puerta del emparejador: lo sellado a una regla viva no se vuelve a proponer.
-    val usados = sellosVivos.mapNotNull { it.eventId }.toSet()
+    // La cuarta puerta del emparejador: lo sellado a una regla viva —a cualquier ocurrencia suya,
+    // de este período o de otro— no se vuelve a proponer como pago de otro ítem. Lo de una regla
+    // borrada sí queda libre: esa regla no está en los fijos de nadie.
+    val usados = sellos.filter { it.eventId != null && it.ruleId in reglaPorId }.mapNotNull { it.eventId }.toSet()
 
     // Lo que le falta a cada ítem de gasto del checklist para completar su monto.
     val falta = mutableMapOf<String, Long>()
@@ -131,12 +134,16 @@ fun parteFijaDelChecklist(
         val vence = vencimientoEnElChecklist(regla, hoy, settings, sellados, zone) ?: return@forEach
         val sello = sellos.firstOrNull { it.ruleId == regla.id && it.period == periodOf(vence) }
             ?.takeIf { periodOf(vence) in sellados }
+        val eventoDelSello = sello?.eventId
         val yaPagado = when {
-            sello?.eventId == null -> 0L
+            eventoDelSello == null -> 0L
             // Sellado con un movimiento vivo que cae fuera del período: el pago no está acá, y no
             // hay nada más que buscarle en este período.
-            sello.eventId !in porId -> regla.amount
-            else -> parte[sello.eventId] ?: 0L
+            eventoDelSello !in porId -> regla.amount
+            // El sello de ESTE ítem: su movimiento sale del variable hasta el monto de la regla,
+            // que es lo que los fijos ya restaron. Solo este: el sello de otra ocurrencia de la
+            // misma regla no está en los fijos de este período (ver el KDoc del archivo).
+            else -> minOf(porId.getValue(eventoDelSello).amount, regla.amount).also { parte[eventoDelSello] = it }
         }
         val resto = regla.amount - yaPagado
         if (resto > 0L) {

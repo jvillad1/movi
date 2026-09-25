@@ -42,10 +42,10 @@ import kotlin.test.assertTrue
  * El gasto variable de la tarjeta saca el pago de un fijo del checklist (`PagosDelChecklist.kt`),
  * pero armaba sus períodos ocurridos solo con los sellos a mano. Un pago que el checklist da por
  * hecho sin sello —emparejado solo, derivado en cada lectura— no rodaba el vencimiento del lado del
- * server: el arriendo del 24 pagado tarde el 26, ya en el período siguiente, seguía sumando como
- * gasto variable, cuando el mismo pago sellado a mano salía. Y en los días de gracia el server
- * decía «esta regla no está en el checklist» mientras el cliente, con `/upcoming` ya rodado, listaba
- * la ocurrencia siguiente como fijo.
+ * server: en los días de gracia el server decía «esta regla no está en el checklist» mientras el
+ * cliente, con `/upcoming` ya rodado, listaba la ocurrencia siguiente como fijo. Emparejado solo o
+ * sellado a mano, el pago de una ocurrencia del período ANTERIOR sigue siendo gasto variable de
+ * este: no es un fijo suyo (ver `PagoTardioPasadaLaGraciaTest`).
  *
  * Con un «hoy» fijo, sobre [parteFijaDelDisponible], que es lo que llama la ruta del Inicio.
  */
@@ -164,11 +164,14 @@ class DisponibleVeLoEmparejadoTest {
 
     /**
      * El arriendo del 24-sep pagado el 26, ya en el período de octubre, con el nombre calcado y sin
-     * sello: el checklist lo da por pagado, emparejado solo. Tiene que salir del variable igual que
-     * si el dueño lo hubiera sellado a mano.
+     * sello: en la gracia el checklist lo empareja solo, y eso rueda el vencimiento al 24-oct. Pero
+     * el 24-sep no es un fijo de ESTE período —el cliente solo resta lo que vence adentro—, y el
+     * Disponible parte de un saldo al inicio que todavía tenía esa plata: el pago tiene que seguir
+     * contando como gasto variable, o no se contaría en ningún lado. La identidad entera, con números,
+     * está en `PagoTardioPasadaLaGraciaTest`.
      */
     @Test
-    fun `un pago tardio emparejado solo sale del variable, igual que sellado`() {
+    fun `un pago tardio emparejado solo sigue siendo variable`() {
         reglaArriendo()
         gasto("ev-0926", "Arriendo", "Vivienda", 1_000_000L, LocalDate.of(2026, 9, 26))
 
@@ -177,12 +180,9 @@ class DisponibleVeLoEmparejadoTest {
         assertEquals("ev-0926", estado.eventId)
 
         val parte = parteFija(hoy)
-        assertEquals(1_000_000L, parte["ev-0926"], "El pago del fijo no es gasto variable")
-        val eventos = eventosDelPeriodo(hoy)
-        val sinParteFija = gastoVariablePorDia(eventos, emptyMap()) { epochMillisToAppDateString(it) }
-        assertEquals(1_000_000L, sinParteFija["2026-09-26"], "Sin parte fija el pago sí sería variable")
-        val variable = gastoVariablePorDia(eventos, parte) { epochMillisToAppDateString(it) }
-        assertFalse(variable.containsKey("2026-09-26"), "El 26 no tiene gasto variable; llegó $variable")
+        assertEquals(null, parte["ev-0926"], "El 24-sep no está en los fijos de este período")
+        val variable = gastoVariablePorDia(eventosDelPeriodo(hoy), parte) { epochMillisToAppDateString(it) }
+        assertEquals(1_000_000L, variable["2026-09-26"], "El pago cuenta una vez, como variable")
     }
 
     /** El control: el mismo pago sellado a mano da exactamente el mismo mapa. */
@@ -194,7 +194,7 @@ class DisponibleVeLoEmparejadoTest {
 
         val estado = checklist(arriendo, hoy)
         assertTrue(estado != null && estado.occurred && !estado.automatica, "Sellado a mano, no emparejado")
-        assertEquals(mapOf("ev-0926" to 1_000_000L), parteFija(hoy))
+        assertEquals(emptyMap(), parteFija(hoy))
     }
 
     /**

@@ -149,11 +149,24 @@ fun Transaction.loadRejectedPairs(uid: String): Set<Pair<String, String>> =
  *
  * **Y la ocurrencia anterior al período, que el checklist ya dejó atrás.** El checklist solo deriva
  * la ocurrencia por la que pregunta: pasada la gracia pasa a la siguiente, y el arriendo del 23
- * pagado el 26 —ya en el período que arrancó el 25— volvía al gasto variable por el resto del
- * período. Mientras la ventana de esa ocurrencia pise el período en curso, su emparejamiento sale
- * acá también (`OcurrenciasReales.anterioresEmparejadas`), derivado en la misma lectura y con la
- * misma reserva de movimientos. A «Próximos» no le cambia nada: la gracia ya había rodado ese
- * vencimiento, y un período ocurrido de más atrás solo hace rodar hacia adelante.
+ * pagado el 26 —ya en el período que arrancó el 25— quedaba sin emparejar. Mientras la ventana de
+ * esa ocurrencia pise el período en curso, su emparejamiento sale acá también
+ * (`OcurrenciasReales.anterioresEmparejadas`), en la misma lectura y con las mismas guardas: solo
+ * con un único concluyente, sin lo sellado ni lo rechazado, y con la misma reserva de movimientos.
+ * Qué hace y qué no:
+ *
+ * - **No saca plata del gasto variable.** Esa ocurrencia no está en los fijos de este período, así
+ *   que su pago sigue contando una vez, como variable (ver `PagosDelChecklist.kt`).
+ * - **Reserva el movimiento**: en el Disponible no puede pasar por el pago de otro ítem pendiente
+ *   —la administración, en la misma categoría—, que lo sacaría del variable mientras el fijo de
+ *   ese ítem sigue esperando: el Disponible se vería mejor de lo que es.
+ * - **A «Próximos» y al barrido no les cambia nada**: pasada la gracia, `dueDateFor` ya rodó ese
+ *   vencimiento, pagado o no, y un período ocurrido de más atrás solo hace rodar hacia adelante.
+ *
+ * Por eso no tiene dónde mostrarse ni un «no fue este»: un emparejamiento equivocado acá no puede
+ * callar ningún aviso (a lo sumo sería el de una ocurrencia que ya pasó, y esa ya rodó) ni mover
+ * plata; lo único que hace es dejar ese movimiento como gasto variable en vez de ofrecerlo como
+ * pago de otro ítem, que es el lado conservador.
  */
 internal fun Transaction.emparejadasComoSellos(
     uid: String,

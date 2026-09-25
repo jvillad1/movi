@@ -31,6 +31,8 @@ import com.jvillada.movi.shared.model.CuentaDelDisponible
 import com.jvillada.movi.shared.model.SumaDeMovimientos
 import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.shared.model.plataDelPeriodo
+import com.jvillada.movi.shared.model.PlataDelPeriodo
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.pagosDeDeudaFueraDelChecklist
 import com.jvillada.movi.shared.model.saldoDeTuPlata
 import com.jvillada.movi.shared.model.AccountType
@@ -155,18 +157,16 @@ fun Route.dashboardRoutes() {
                 .where { SmsMessages.userId eq uid }
                 .map { it[SmsMessages.time] to it[SmsMessages.state] }
             val captura = capturaDeSms(filasDeSms.map { it.first })
-            val eventosDelPeriodo = loadEventsBetween(uid, monthStart, monthEnd)
-            // La tarjeta «Disponible» cuenta lo que había en «Tu plata» al empezar el período y lo
-            // que le entró de afuera (un préstamo, un ahorro). Ver `PlataDelPeriodo.kt` en :core.
-            val cuentas = cuentasDelDisponible(uid)
-            val plata = plataDelPeriodo(
-                saldoAlInicio = saldoDeTuPlata(sumasAntesDe(uid, monthStart, voidedIds, cuentas), cuentas),
-                eventos = eventosDelPeriodo,
-                cuentas = cuentas,
+            val disponible = disponibleDelServidor(
+                uid = uid,
+                hoy = epochMillisToAppDate(ahora),
+                periodo = periodo,
+                monthStart = monthStart,
+                monthEnd = monthEnd,
+                voidedIds = voidedIds,
+                reglasDeCredito = reglasDeCredito,
             )
-
-            val hoy = epochMillisToAppDate(ahora)
-            val parteFija = parteFijaDelDisponible(uid, hoy, periodo, eventosDelPeriodo)
+            val plata = disponible.plata
 
             DashboardSummary(
                 scope = scope,
@@ -182,27 +182,11 @@ fun Route.dashboardRoutes() {
                     .where { Users.id eq uid }
                     .firstOrNull()?.get(Users.smsAlertMuted) ?: false,
                 usedCategories = usedCategories(uid, ahora, voidedIds),
-                // La tarjeta «Disponible»: el gasto variable del período, día por día. Los mismos
-                // movimientos que suman «Gastos» (vivos, flujo de caja, sin «Por confirmar», en
-                // pesos) menos las cuotas de crédito y la parte de cada movimiento que paga un
-                // ítem del checklist (`PagosDelChecklist.kt`). La regla vive en :core
-                // (`gastoVariablePorDia`).
-                gastoVariablePorDia = gastoVariablePorDia(
-                    eventos = eventosDelPeriodo,
-                    parteFija = parteFija,
-                    diaDe = { epochMillisToAppDateString(it) },
-                ),
+                gastoVariablePorDia = disponible.gastoVariablePorDia,
                 saldoTuPlataAlInicio = plata.saldoAlInicio,
                 entradasDelPeriodo = plata.entradas,
                 guardadoDelPeriodo = plata.guardado,
-                // Lo que salió de Tu plata a una deuda sin que los fijos ni el variable lo cuenten
-                // (ver `pagosDeDeudaFueraDelChecklist` en :core). Lo que ya está en los fijos: la
-                // parte que un recurrente reclamó y la cuota de un crédito del checklist.
-                pagosDeDeudaFueraDelChecklist = pagosDeDeudaFueraDelChecklist(
-                    eventos = eventosDelPeriodo,
-                    cuentas = cuentas,
-                    enLosFijos = parteFija + cuotasDelChecklistPagadas(reglasDeCredito, eventosDelPeriodo, hoy, periodo),
-                ),
+                pagosDeDeudaFueraDelChecklist = disponible.pagosDeDeudaFueraDelChecklist,
                 // **El patrimonio honesto**, con la casa y el carro adentro: la MISMA regla que usa
                 // el cliente sobre la lista de cuentas (`patrimonioDe`, en :core), sobre los mismos
                 // saldos que esa lista (ver `cuentasConSaldo`). No hay una segunda cuenta acá.
@@ -214,6 +198,63 @@ fun Route.dashboardRoutes() {
         }
         call.respond(summary)
     }
+}
+
+/**
+ * **Lo que el server manda para la tarjeta «Disponible»**, fuera de la ruta para poder probar la
+ * identidad entera con un «hoy» fijo (`AppClock` no se mueve desde una prueba). El cliente le suma
+ * los fijos del checklist (ver `disponibleDelPeriodo` en la UI): lo que queda = saldo al inicio +
+ * entradas − guardado − otros pagos de deuda − fijos − gasto variable.
+ */
+internal class DisponibleDelServidor(
+    /** Lo que había en «Tu plata» al empezar el período y lo que le entró de afuera. Ver `PlataDelPeriodo.kt`. */
+    val plata: PlataDelPeriodo,
+    /**
+     * El gasto variable del período, día por día: los mismos movimientos que suman «Gastos» (vivos,
+     * flujo de caja, sin «Por confirmar», en pesos) menos las cuotas de crédito y la parte de cada
+     * movimiento que paga un ítem del checklist (`PagosDelChecklist.kt`). La regla vive en :core
+     * (`gastoVariablePorDia`).
+     */
+    val gastoVariablePorDia: Map<String, Long>,
+    /**
+     * Lo que salió de Tu plata a una deuda sin que los fijos ni el variable lo cuenten (ver
+     * `pagosDeDeudaFueraDelChecklist` en :core). Lo que ya está en los fijos: la parte que un
+     * recurrente reclamó y la cuota de un crédito del checklist.
+     */
+    val pagosDeDeudaFueraDelChecklist: Long,
+)
+
+/** Arma [DisponibleDelServidor] para el período `[monthStart, monthEnd)` que contiene [hoy]. */
+internal fun Transaction.disponibleDelServidor(
+    uid: String,
+    hoy: LocalDate,
+    periodo: PeriodSettings,
+    monthStart: Long,
+    monthEnd: Long,
+    voidedIds: Set<String>,
+    reglasDeCredito: List<RecurringRule>,
+): DisponibleDelServidor {
+    val eventosDelPeriodo = loadEventsBetween(uid, monthStart, monthEnd)
+    val cuentas = cuentasDelDisponible(uid)
+    val plata = plataDelPeriodo(
+        saldoAlInicio = saldoDeTuPlata(sumasAntesDe(uid, monthStart, voidedIds, cuentas), cuentas),
+        eventos = eventosDelPeriodo,
+        cuentas = cuentas,
+    )
+    val parteFija = parteFijaDelDisponible(uid, hoy, periodo, eventosDelPeriodo)
+    return DisponibleDelServidor(
+        plata = plata,
+        gastoVariablePorDia = gastoVariablePorDia(
+            eventos = eventosDelPeriodo,
+            parteFija = parteFija,
+            diaDe = { epochMillisToAppDateString(it) },
+        ),
+        pagosDeDeudaFueraDelChecklist = pagosDeDeudaFueraDelChecklist(
+            eventos = eventosDelPeriodo,
+            cuentas = cuentas,
+            enLosFijos = parteFija + cuotasDelChecklistPagadas(reglasDeCredito, eventosDelPeriodo, hoy, periodo),
+        ),
+    )
 }
 
 /**
@@ -231,10 +272,14 @@ internal fun Transaction.parteFijaDelDisponible(
     eventosDelPeriodo: List<FinancialEvent>,
 ): Map<String, Long> {
     val sellos = loadOccurrenceRows(uid)
-    // Lo que el checklist dio por pagado sin sello cuenta como un sello con su movimiento: sale del
-    // variable hasta el monto de la regla y rueda el vencimiento igual que en `/upcoming`. Sin esto
-    // el arriendo pagado tarde, ya en el período siguiente, seguía como gasto variable, y en la
-    // gracia el server no listaba el vencimiento que el cliente sí resta como fijo.
+    // Lo que Movi emparejó solo cuenta como un sello con su movimiento, por dos cosas:
+    //  - rueda el vencimiento igual que en `/upcoming`, que es de donde el cliente saca su
+    //    checklist: sin esto, en la gracia el server no listaba el vencimiento que el cliente sí
+    //    resta como fijo;
+    //  - reserva el movimiento: el arriendo de septiembre pagado tarde no pasa a ser el pago de
+    //    otro ítem pendiente del período.
+    // Sacarlo del variable solo lo hace si es el sello del ítem de ESTE período: el pago de una
+    // ocurrencia anterior no está en los fijos de este Disponible (ver `PagosDelChecklist.kt`).
     val emparejadas = emparejadasComoSellos(uid, hoy, periodo)
     return parteFijaDelChecklist(
         reglas = RecurringRules.selectAll()
