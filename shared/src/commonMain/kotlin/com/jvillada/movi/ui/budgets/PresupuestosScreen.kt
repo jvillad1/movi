@@ -343,7 +343,7 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
         Month(periodoDe(Clock.System.now().toEpochMilliseconds(), settings).month).spanishName()
     }
 
-    // Ola D, Task 5: el dueño ve «Gastado en septiembre» con un período que va del 25 de agosto al
+    // Con corte 25 el dueño veía «Gastado en septiembre» con un período que va del 25 de agosto al
     // 24 de septiembre — septiembre no es lo que se contó. [tituloDelGastoDelPeriodo] decide, con
     // la misma regla que ya usa el resto de la app ([PeriodSettings.esMesDeCalendario]), si el
     // nombre del mes sigue siendo honesto o si hay que hablar de «este período» en general.
@@ -476,7 +476,7 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
         }
     }
 
-    // Ola D, Task 3: la tarjeta «Gastado en …» es un hecho sobre categorías que no existen sin
+    // La tarjeta «Gastado en …» es un hecho sobre categorías que no existen sin
     // presupuestos — hasta acá se pintaba igual, y con `totalSpent`/`totalLimit` en cero decía
     // «$0 de $0», justo el «$0 presentado como un hecho» que el vacío de arriba vino a evitar.
     if (estado.cargando) {
@@ -776,7 +776,7 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
             // F16: "de $2.000.000" en vez de "/ $2.000.000" — deja explícito que el límite es del
             // período sin depender solo del texto chico bajo el monto en la hoja.
             //
-            // Ola D, Task 5: sin el «este mes» final. Con corte 25 la fila decía «$290.340 de
+            // Sin el «este mes» final. Con corte 25 la fila decía «$290.340 de
             // $200.000 este mes» sobre un período que va del 25 de agosto al 24 de septiembre —
             // ninguno de los dos es «este mes». El rango exacto ya está arriba, en el título de la
             // tarjeta ([tituloDelGastoDelPeriodo]) y en Plan ([rangoLegibleDe]); acá alcanza con

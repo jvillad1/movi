@@ -685,7 +685,7 @@ fun LazyListScope.tableroDeRecurrentes(
     // el dueño ya miró y descartó («Uber no es una suscripción»), que no es una candidata ni
     // suma en ningún lado—, así que mirarla entera dejaba a alguien con cero reglas y un solo
     // descarte sin ver nunca el vacío: caía de nuevo en el checklist/«Próximos»/«Flujo libre»
-    // en `$0` que esta tarea vino a sacar. `candidatas` y `activas` ya filtran por estado (ver
+    // en `$0` que este vacío existe para evitar. `candidatas` y `activas` ya filtran por estado (ver
     // sus `derivedStateOf` más arriba) y son las mismas listas que las secciones de abajo usan
     // para decidir si tienen algo que pintar.
     //

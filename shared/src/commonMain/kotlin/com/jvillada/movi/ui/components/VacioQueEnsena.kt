@@ -26,7 +26,7 @@ const val TAG_VACIO_QUE_ENSENA: String = "vacio-que-ensena"
 /**
  * # Ola D: el vacío que enseña
  *
- * La regla vive en `global-constraints.md` y acá se cumple una sola vez: **un vacío dice qué va a
+ * Una regla de toda la app, cumplida acá una sola vez: **un vacío dice qué va a
  * aparecer ahí y trae el botón que lo llena**, nunca una pantalla en blanco ni un «$0» presentado
  * como un hecho para quien todavía no tiene nada. Antes cada pantalla escribía su propia versión
  * —con su propio tono, su propia tarjeta (o ninguna) y su propio botón—; esto es esa tarjeta,
@@ -42,8 +42,8 @@ const val TAG_VACIO_QUE_ENSENA: String = "vacio-que-ensena"
  * solo para poder usar este componente. Ver el KDoc de `vacioDeMovimientos` en
  * `TransactionsScreen.kt`.
  *
- * [icono] también es opcional: no todo vacío tenía uno antes de esta tarea (Movimientos no lo
- * traía) y agregarle un ícono nuevo a un vacío existente no era parte de lo que esta tarea pedía.
+ * [icono] también es opcional: no todo vacío tenía uno (Movimientos no lo traía), y pasar un vacío
+ * existente a esta tarjeta no tiene por qué cambiar cómo se ve más allá de la tarjeta misma.
  *
  * [contenido] va entre el detalle y el botón, adentro de la misma tarjeta: para el vacío que además
  * de explicar ya trae algo armado (Presupuestos propone categorías con lo que el dueño gastó) y
