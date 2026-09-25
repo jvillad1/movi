@@ -199,6 +199,19 @@ class RecurrenteDesdeMovimientoTest {
             header(HttpHeaders.Authorization, "Bearer ${token()}")
         }.bodyAsText()
 
+    /** «No fue este»: saca [eventId] de lo que Movi empareja solo para la única regla del dueño. */
+    private suspend fun ApplicationTestBuilder.rechazar(eventId: String) {
+        val ruleId = transaction {
+            RecurringRules.selectAll().where { RecurringRules.userId eq duenoId }.single()[RecurringRules.id]
+        }
+        val rechazo = client.post("/api/recurring-rules/$ruleId/occurrence/rechazo") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"eventId":"$eventId"}""")
+        }
+        assertEquals(HttpStatusCode.NoContent, rechazo.status, rechazo.bodyAsText())
+    }
+
     private fun activeFromGuardado(): String? = transaction {
         RecurringRules.selectAll().where { RecurringRules.userId eq duenoId }
             .single()[RecurringRules.activeFrom]
@@ -231,10 +244,17 @@ class RecurrenteDesdeMovimientoTest {
 
     // ── El primer vencimiento cae en el período SIGUIENTE ──────────────────────
 
+    /**
+     * El «Arriendo» del movimiento es además un emparejamiento concluyente para la regla, y lo que
+     * Movi empareja solo también rueda «Próximos». Se rechaza antes de mirar para que lo único que
+     * pueda rodar el vencimiento sea el sello que puso `eventoDeOrigen`: sin él, esta prueba pasaría
+     * igual y no cuidaría el alta desde un movimiento.
+     */
     @Test
     fun `el primer vencimiento es el del mes que viene, no el del movimiento`() = testApplication {
         wireApp()
         crearRegla(cuerpoDesdeElMovimiento())
+        rechazar("ev-arriendo")
 
         val texto = proximos()
         val vencimiento = Regex("\"dueDate\"\\s*:\\s*\"(\\d{4}-\\d{2}-\\d{2})\"").find(texto)!!.groupValues[1]
@@ -300,9 +320,10 @@ class RecurrenteDesdeMovimientoTest {
     }
 
     /**
-     * El contrafactual. Sin la fecha de arranque, la MISMA regla vence este mes — o sea que lo que
-     * separa «un recordatorio útil» de «que te pregunten por algo que acabas de pagar» es
-     * exactamente `activeFrom`, y no una casualidad del calendario.
+     * El contrafactual. Sin el id del movimiento ni la fecha de arranque, la MISMA regla vence este
+     * mes — o sea que lo que separa «un recordatorio útil» de «que te pregunten por algo que acabas
+     * de pagar» es el sello que pone `eventoDeOrigen` (la fecha solo marca el piso hacia atrás), y no
+     * una casualidad del calendario.
      *
      * El movimiento se rechaza antes de mirar: «Arriendo» contra «Arriendo» es un emparejamiento
      * concluyente, y lo que Movi empareja solo también rueda «Próximos» (el checklist lo da por
@@ -313,15 +334,7 @@ class RecurrenteDesdeMovimientoTest {
     fun `sin fecha de arranque la misma regla vence este mes`() = testApplication {
         wireApp()
         crearRegla(cuerpoDeLaRegla(null))
-        val ruleId = transaction {
-            RecurringRules.selectAll().where { RecurringRules.userId eq duenoId }.single()[RecurringRules.id]
-        }
-        val rechazo = client.post("/api/recurring-rules/$ruleId/occurrence/rechazo") {
-            header(HttpHeaders.Authorization, "Bearer ${token()}")
-            contentType(ContentType.Application.Json)
-            setBody("""{"eventId":"ev-arriendo"}""")
-        }
-        assertEquals(HttpStatusCode.NoContent, rechazo.status, rechazo.bodyAsText())
+        rechazar("ev-arriendo")
 
         val texto = proximos()
         val vencimiento = Regex("\"dueDate\"\\s*:\\s*\"(\\d{4}-\\d{2}-\\d{2})\"").find(texto)!!.groupValues[1]
@@ -351,16 +364,26 @@ class RecurrenteDesdeMovimientoTest {
             apretado.contains(""""candidates""""),
             "no se le puede PREGUNTAR al dueño por el pago que ORIGINÓ la regla: $texto",
         )
+        // Sellado por el alta, no deducido: sin el sello Movi lo emparejaría solo y esta prueba
+        // pasaría igual.
+        assertFalse(apretado.contains(""""automatica":true"""), "es la evidencia que dio el dueño: $texto")
     }
 
-    /** El contrafactual del anterior: sin `activeFrom`, ese mismo movimiento SÍ se propone. */
+    /**
+     * El contrafactual del anterior: sin el id del movimiento ni la fecha de arranque no hay sello,
+     * y ese mismo movimiento queda como algo que Movi **dedujo** (emparejado solo, rechazable), no
+     * como la evidencia que el dueño dio al crear la regla.
+     */
     @Test
-    fun `sin fecha de arranque el mismo movimiento si se propone como ocurrencia`() = testApplication {
+    fun `sin fecha de arranque ni id el mismo movimiento lo empareja Movi solo`() = testApplication {
         wireApp()
         crearRegla(cuerpoDeLaRegla(null))
 
         val texto = ocurrencias()
-        assertTrue(texto.contains("ev-arriendo"), texto)
+        val apretado = texto.replace(Regex("\\s"), "")
+        assertTrue(apretado.contains(""""eventId":"ev-arriendo""""), texto)
+        assertTrue(apretado.contains(""""automatica":true"""), texto)
+        assertEquals(emptyList(), sellosGuardados())
     }
 
     // ── Editar la regla no puede borrarle la fecha de arranque ─────────────────
