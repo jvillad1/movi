@@ -303,11 +303,25 @@ class RecurrenteDesdeMovimientoTest {
      * El contrafactual. Sin la fecha de arranque, la MISMA regla vence este mes — o sea que lo que
      * separa «un recordatorio útil» de «que te pregunten por algo que acabas de pagar» es
      * exactamente `activeFrom`, y no una casualidad del calendario.
+     *
+     * El movimiento se rechaza antes de mirar: «Arriendo» contra «Arriendo» es un emparejamiento
+     * concluyente, y lo que Movi empareja solo también rueda «Próximos» (el checklist lo da por
+     * pagado, y las dos pantallas tienen que decir lo mismo — ver `ProximosVeLoEmparejadoTest`).
+     * Sin sello, sin fecha de arranque y sin emparejamiento, queda lo que esta prueba quiere ver.
      */
     @Test
     fun `sin fecha de arranque la misma regla vence este mes`() = testApplication {
         wireApp()
         crearRegla(cuerpoDeLaRegla(null))
+        val ruleId = transaction {
+            RecurringRules.selectAll().where { RecurringRules.userId eq duenoId }.single()[RecurringRules.id]
+        }
+        val rechazo = client.post("/api/recurring-rules/$ruleId/occurrence/rechazo") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"eventId":"ev-arriendo"}""")
+        }
+        assertEquals(HttpStatusCode.NoContent, rechazo.status, rechazo.bodyAsText())
 
         val texto = proximos()
         val vencimiento = Regex("\"dueDate\"\\s*:\\s*\"(\\d{4}-\\d{2}-\\d{2})\"").find(texto)!!.groupValues[1]
