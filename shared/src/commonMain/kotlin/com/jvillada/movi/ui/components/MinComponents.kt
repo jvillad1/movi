@@ -57,6 +57,7 @@ fun MinCard(
     variant: MinCardVariant = MinCardVariant.Elevated,
     padding: PaddingValues = PaddingValues(Movi.espacios.margen),
     onClick: (() -> Unit)? = null,
+    onClickLabel: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val forma = RoundedCornerShape(Movi.formas.amplia)
@@ -70,7 +71,7 @@ fun MinCard(
                 Modifier
             },
         )
-        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+        .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
         .padding(padding)
     Column(modifier = baseModifier, content = content)
 }
