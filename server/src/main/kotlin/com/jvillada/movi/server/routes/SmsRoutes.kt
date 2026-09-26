@@ -61,6 +61,13 @@ private val merchantOfRegex = Regex("""\bde\s+(.+?)(?:\s+por\s|\s+con\s+tu\s|\.|
  * «CREPES Y WAFFLES LEMON por $130».
  */
 private val compraEnPorRegex = Regex("""\bcompra\s+en\s+(?!tu\s)(.+?)\s+por\s+(?:\$|COP\b|USD\b)""", RegexOption.IGNORE_CASE)
+/**
+ * **El aviso de Google Wallet**: «TOSTAO CAFE Y PAN VISC: COP15,100 with Glim ••3037». El comercio es
+ * todo lo que va antes de los dos puntos, y se toma entero: Wallet lo copia tal cual lo manda la
+ * red de la tarjeta, y cortarle palabras («VISC») sería inventar un nombre que nadie escribió. Sin
+ * esto el aviso no tenía ninguna frase conocida («compra en», «en …») y se anotaba como «Movimiento».
+ */
+private val pagoDeWalletRegex = Regex("""^\s*([^:]+?)\s*:\s*(?:COP|USD)\s*[0-9][0-9.,]*\s+with\s+""", RegexOption.IGNORE_CASE)
 /** «Pagaste $138,600.00 a Coomeva Medicina Prepagada S A desde tu producto 8133». */
 private val destinatarioDesdeRegex = Regex("""\ba\s+(?!la\s|las\s|tu\s)(.+?)\s+desde\s""", RegexOption.IGNORE_CASE)
 /** «… desde tu cuenta *8133 a DANIEL LEONETT el 10/09/26». */
@@ -231,7 +238,8 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
             limpio(merchantInRegex.find(text)?.groupValues?.get(1))
                 ?: llaveRegex.find(text)?.let { "Pago QR · llave ${it.groupValues[1]}" }
                 ?: "Pago QR"
-        else -> limpio(compraEnPorRegex.find(text)?.groupValues?.get(1))
+        else -> limpio(pagoDeWalletRegex.find(text)?.groupValues?.get(1))
+            ?: limpio(compraEnPorRegex.find(text)?.groupValues?.get(1))
             ?: limpio(destinatarioDesdeRegex.find(text)?.groupValues?.get(1))
             ?: limpio(destinatarioElRegex.find(text)?.groupValues?.get(1))
             ?: limpio(merchantInRegex.find(text)?.groupValues?.get(1))
