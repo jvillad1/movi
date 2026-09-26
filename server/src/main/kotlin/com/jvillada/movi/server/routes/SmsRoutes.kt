@@ -358,7 +358,8 @@ fun Route.smsRoutes() {
                 .orderBy(SmsMessages.time to SortOrder.DESC)
                 .map { it.toSmsMessage() }
         }
-        call.respond(list)
+        // Los pendientes que parecen el mismo pago que otro aviso lo dicen antes de aprobarse.
+        call.respond(conLosAvisosParecidos(list, ahora = System.currentTimeMillis()))
     }
 
     get("/api/sms/{id}") {
@@ -369,7 +370,16 @@ fun Route.smsRoutes() {
                 .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
                 .firstOrNull()?.toSmsMessage()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
-        call.respond(sms)
+        if (sms.state != SMS_STATE_PENDING) return@get call.respond(sms)
+        // Para saber si se parece a otro aviso hacen falta los demás; la marca es la misma que en
+        // la bandeja, con la misma regla ([conLosAvisosParecidos]).
+        val todos = dbQuery {
+            SmsMessages.selectAll()
+                .where { SmsMessages.userId eq uid }
+                .map { it.toSmsMessage() }
+        }
+        val marcado = conLosAvisosParecidos(todos, ahora = System.currentTimeMillis()).firstOrNull { it.id == sms.id }
+        call.respond(marcado ?: sms)
     }
 
     get("/api/sms/{id}/parse") {
