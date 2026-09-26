@@ -214,7 +214,13 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     item { MinSectionHeader(title = "Mensajes del banco", count = pendientes.size) }
                     pendientes.forEach { sms ->
                         item(key = "sms-${sms.id}") {
-                            TarjetaDeMensajeDelBanco(sms, onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) })
+                            TarjetaDeMensajeDelBanco(
+                                sms,
+                                onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) },
+                                // El otro aviso puede estar ya confirmado: se busca en la lista
+                                // entera, no solo entre los pendientes.
+                                parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
+                            )
                         }
                     }
                     item { Spacer(Modifier.height(14.dp)) }
