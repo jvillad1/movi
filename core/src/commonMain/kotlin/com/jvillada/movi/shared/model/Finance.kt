@@ -764,6 +764,16 @@ data class SmsMessage(
     /** Uno de [SMS_STATE_PENDING], [SMS_STATE_CONFIRMED] o [SMS_STATE_IGNORED]. Lo fija el server. */
     val state: String,
     val det: String,
+    /**
+     * **El id de otro aviso que parece ser el mismo movimiento**: mismo monto, moneda y tipo, a pocos
+     * minutos, de otro origen. El 25-sep un pago con la tarjeta Glim llegó dos veces —por Google
+     * Wallet y por la app de Glim— y el dueño aprobó los dos: nada le dijo antes que eran el mismo
+     * pago. Lo calcula el server al leer la bandeja, solo para los que todavía esperan decisión;
+     * `null` es «no se parece a ninguno» (o no está pendiente).
+     *
+     * Con valor por defecto para que el teléfono lo siga subiendo sin él y un APK viejo lo ignore.
+     */
+    val parecidoA: String? = null,
 )
 
 @Serializable

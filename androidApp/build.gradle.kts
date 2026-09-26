@@ -45,8 +45,8 @@ android {
         // Adentro van además #175-#179: Movi AI leyendo tus documentos, la cuota que no es ni
         // interés ni seguro ni capital, qué pasa si abonas de más, y los mínimos de tarjeta
         // descontados del flujo libre.
-        versionCode = 56
-        versionName = "1.55"
+        versionCode = 57
+        versionName = "1.56"
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }

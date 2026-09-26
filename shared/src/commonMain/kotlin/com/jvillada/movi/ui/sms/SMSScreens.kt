@@ -8,6 +8,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -262,7 +268,11 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
 
             mensajes.forEach { sms ->
                 item {
-                    TarjetaDeMensajeDelBanco(sms, onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) })
+                    TarjetaDeMensajeDelBanco(
+                        sms,
+                        onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) },
+                        parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
+                    )
                 }
             }
         }
@@ -278,7 +288,15 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
  * se lo mire.
  */
 @Composable
-internal fun TarjetaDeMensajeDelBanco(sms: SmsMessage, onRevisar: () -> Unit) {
+internal fun TarjetaDeMensajeDelBanco(
+    sms: SmsMessage,
+    onRevisar: () -> Unit,
+    /**
+     * El aviso al que este se parece ([SmsMessage.parecidoA]), si está en la lista que se tiene a
+     * mano. Solo se usa para decir su origen y su hora: la marca la decide el server.
+     */
+    parecidoA: SmsMessage? = null,
+) {
     MinCard(
         modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
         variant = MinCardVariant.Elevated,
@@ -319,6 +337,12 @@ internal fun TarjetaDeMensajeDelBanco(sms: SmsMessage, onRevisar: () -> Unit) {
                 maxLines = 1,
                 softWrap = false,
             )
+        }
+        // Antes de aprobar, que se sepa que otro aviso parece el mismo pago: dos avisos de un pago
+        // aprobados por separado son dos movimientos.
+        if (sms.state == SMS_STATE_PENDING && sms.parecidoA != null) {
+            Spacer(Modifier.height(8.dp))
+            LineaDelMismoPago(parecidoA)
         }
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
@@ -368,8 +392,30 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     var eligiendoCuenta by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    /** Movimientos ya anotados que parecen ser este SMS (mismo monto, moneda y tipo, días cercanos). */
-    var coincidencias by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+    /**
+     * Movimientos ya anotados que parecen ser este SMS (mismo monto, moneda y tipo, días cercanos).
+     *
+     * `null` = la revisión todavía no contestó, y mientras tanto **no se puede anotar**: el 25-sep el
+     * dueño aprobó dos avisos del mismo pago seis segundos aparte, y el «¿Ya lo anotaste?» del
+     * segundo no alcanzó a aparecer porque esta lectura llegaba después de que el botón ya estaba
+     * prendido. Lista vacía = revisó y no hay nada.
+     */
+    var coincidencias by remember { mutableStateOf<List<FinancialEvent>?>(null) }
+    /** La revisión de coincidencias falló: se dice, se ofrece reintentar, y anotar pide dos toques. */
+    var noSePudoRevisar by remember { mutableStateOf(false) }
+    /** Con la revisión caída, el primer toque de «Confirmar» arma este; el segundo anota. */
+    var anotarSinRevisar by remember { mutableStateOf(false) }
+    var reintentoDeRevision by remember { mutableStateOf(0) }
+    /**
+     * El otro aviso que parece ser este mismo pago ([SmsMessage.parecidoA]), leído para poder decir
+     * su origen y su hora. `null` también si no se pudo leer: la línea se dice igual, sin detalle.
+     */
+    var otroAviso by remember { mutableStateOf<SmsMessage?>(null) }
+    /**
+     * El comercio como lo dejó el dueño. `null` = no lo tocó y vale el leído; vacío también vuelve
+     * al leído — un movimiento sin nombre no se puede buscar después.
+     */
+    var comercioEditado by remember { mutableStateOf<String?>(null) }
 
     /** «Es este»: el SMS queda confirmado sin crear nada, porque el movimiento ya existía. */
     fun esElQueYaEstaba() {
@@ -377,7 +423,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         working = true
         error = null
         coroutine.launch {
-            runCatching { Repositories.wallets.confirmSms(smsId) }
+            intentar { Repositories.wallets.confirmSms(smsId) }
                 .onSuccess {
                     working = false
                     sms = sms?.copy(state = SMS_STATE_CONFIRMED)
@@ -388,16 +434,27 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     }
 
     LaunchedEffect(smsId) {
-        runCatching { Repositories.wallets.getSms(smsId) }.onSuccess { sms = it }
+        intentar { Repositories.wallets.getSms(smsId) }.onSuccess { sms = it }
             .onFailure { error = "No pude cargar el SMS" }
-        runCatching { Repositories.wallets.parseSms(smsId) }
+        // El otro aviso del mismo pago, para poder decir cuál es. Si no se lee, la línea se dice igual.
+        sms?.parecidoA?.let { id -> intentar { Repositories.wallets.getSms(id) }.onSuccess { otroAviso = it } }
+        intentar { Repositories.wallets.parseSms(smsId) }
             .onSuccess { parsed = it; selectedCategory = it.category }
             // El server explica por qué (un aviso que no es un movimiento, por ejemplo), y se
             // dice donde se estaba esperando la sugerencia.
             .onFailure { noSePudoLeer = it.toUserMessage() }
-        runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it }
-        // Si ya está anotado, se ofrece antes de crear otro: confirmar siempre creaba uno nuevo.
-        runCatching { Repositories.wallets.getSmsCoincidencias(smsId) }.onSuccess { coincidencias = it }
+        intentar { Repositories.wallets.getAccounts() }.onSuccess { accounts = it }
+    }
+    // Si ya está anotado, se ofrece antes de crear otro: confirmar siempre creaba uno nuevo. Va en
+    // su propio efecto —en paralelo con las demás lecturas y no detrás de ellas— y con reintento:
+    // hasta que conteste, anotar está apagado.
+    LaunchedEffect(smsId, reintentoDeRevision) {
+        coincidencias = null
+        noSePudoRevisar = false
+        anotarSinRevisar = false
+        intentar { Repositories.wallets.getSmsCoincidencias(smsId) }
+            .onSuccess { coincidencias = it }
+            .onFailure { noSePudoRevisar = true }
     }
 
     val currentSms = sms
@@ -451,19 +508,35 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         prefs = UsedCategoriesCache.prefs,
     )
 
+    /**
+     * El comercio que se guarda: el que dejó escrito el dueño, o el leído si lo dejó vacío. Monto y
+     * fecha no se editan acá — los dice el banco.
+     */
+    val comercio: String? = parsed?.let { p -> comercioEditado?.trim()?.takeIf { it.isNotEmpty() } ?: p.merchant }
+
     fun confirm() {
+        if (working) return
+        // La revisión de «¿ya lo anotaste?» tiene que haber contestado. Si falló, el primer toque
+        // solo arma «Anotar de todas formas»: anotar sin revisar es una decisión explícita.
+        if (coincidencias == null) {
+            if (!noSePudoRevisar) return
+            if (!anotarSinRevisar) {
+                anotarSinRevisar = true
+                return
+            }
+        }
         val cat = selectedCategory ?: parsed?.category ?: return
         val acct = resolvedAccount ?: return
         val p = parsed ?: return
         working = true
         error = null
         coroutine.launch {
-            runCatching {
+            intentar {
                 val event = movimientoConfirmadoDelSms(
                     // Mismo motivo que en QuickAddScreen — ver newId().
                     id = newId("ev"),
                     cuentaId = acct.id,
-                    leido = p,
+                    leido = p.copy(merchant = comercio ?: p.merchant),
                     categoria = cat,
                     // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelSms].
                     momento = momentoDelSms(sms?.time.orEmpty(), ahora = Clock.System.now().toEpochMilliseconds()),
@@ -522,6 +595,17 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
         ) {
             item {
+                // Arriba de todo: antes de mirar el resto, que sepa que otro aviso parece este mismo pago.
+                if (currentSms?.state == SMS_STATE_PENDING && currentSms.parecidoA != null) {
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+                    ) {
+                        LineaDelMismoPago(otroAviso)
+                    }
+                    Spacer(Modifier.height(14.dp))
+                }
                 MinSectionHeader(title = "SMS recibido")
                 MinCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -583,7 +667,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     }
                 }
 
-                if (coincidencias.isNotEmpty()) {
+                val yaAnotados = coincidencias.orEmpty()
+                if (yaAnotados.isNotEmpty()) {
                     Spacer(Modifier.height(14.dp))
                     MinSectionHeader(title = "¿Ya lo anotaste?")
                     MinCard(
@@ -592,13 +677,13 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         padding = PaddingValues(18.dp),
                     ) {
                         Text(
-                            if (coincidencias.size == 1) "Encontramos un movimiento igual. Si es este, no se crea otro."
+                            if (yaAnotados.size == 1) "Encontramos un movimiento igual. Si es este, no se crea otro."
                             else "Encontramos movimientos iguales. Si es uno de estos, no se crea otro.",
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                             lineHeight = 17.sp,
                         )
-                        coincidencias.forEach { ev ->
+                        yaAnotados.forEach { ev ->
                             Spacer(Modifier.height(12.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
@@ -626,7 +711,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 }
 
                 Spacer(Modifier.height(14.dp))
-                MinSectionHeader(title = if (coincidencias.isNotEmpty()) "O anótalo como nuevo" else "Movi sugiere")
+                MinSectionHeader(title = if (yaAnotados.isNotEmpty()) "O anótalo como nuevo" else "Movi sugiere")
                 MinCard(
                     modifier = Modifier.fillMaxWidth(),
                     variant = MinCardVariant.Elevated,
@@ -646,7 +731,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(p.merchant, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.2).sp)
+                                Text(comercio ?: p.merchant, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.2).sp)
                                 Text(
                                     "${selectedCategory ?: p.category} · ${resolvedAccount?.name ?: "Elige la cuenta"}",
                                     style = Movi.textos.apoyo,
@@ -674,11 +759,17 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     variant = MinCardVariant.Elevated,
                     padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                 ) {
-                    Detail(
-                        ok = parsed != null,
-                        label = "Comercio",
-                        value = parsed?.merchant ?: "—",
-                    )
+                    val leido = parsed
+                    if (leido == null) {
+                        Detail(ok = false, label = "Comercio", value = "—")
+                    } else {
+                        ComercioQueSeEdita(
+                            leido = leido.merchant,
+                            valor = comercioEditado ?: leido.merchant,
+                            enabled = !working && (currentSms == null || currentSms.state == SMS_STATE_PENDING),
+                            onCambio = { comercioEditado = it },
+                        )
+                    }
                     Hairline()
                     Detail(
                         ok = resolvedAccount != null,
@@ -779,6 +870,32 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         }
 
         val alreadyResolved = currentSms != null && currentSms.state != SMS_STATE_PENDING
+        // Junto al botón, que es donde se mira cuando no prende: por qué todavía no, o que la
+        // revisión falló y se puede reintentar.
+        if (!alreadyResolved) {
+            if (coincidencias == null && !noSePudoRevisar) {
+                Text(
+                    "Revisando si ya está anotado…",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                )
+            } else if (noSePudoRevisar) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        "No pudimos revisar si ya estaba anotado",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.aviso,
+                        modifier = Modifier.weight(1f),
+                    )
+                    BotonReintentar(onReintentar = { reintentoDeRevision++ })
+                }
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -794,7 +911,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             ) {
                 Text("Ignorar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             }
-            val canConfirm = parsed != null && resolvedAccount != null && !working && !alreadyResolved
+            // Hasta que la revisión de «¿ya lo anotaste?» conteste, no se anota. Si falló, se puede,
+            // pero con un segundo toque que dice lo que hace.
+            val revisionContesto = coincidencias != null || noSePudoRevisar
+            val canConfirm = parsed != null && resolvedAccount != null && !working && !alreadyResolved && revisionContesto
             Box(
                 modifier = Modifier
                     .weight(1.7f)
@@ -805,13 +925,79 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    if (working) "Guardando…" else "Confirmar",
+                    when {
+                        working -> "Guardando…"
+                        anotarSinRevisar -> "Anotar de todas formas"
+                        else -> "Confirmar"
+                    },
                     style = Movi.textos.cuerpo,
                     fontWeight = FontWeight.Medium,
                     color = if (canConfirm) Movi.colores.fondo else Movi.colores.textoApagado,
                 )
             }
         }
+    }
+}
+
+/**
+ * **La fila «Comercio», editable.** El nombre lo leyó Movi del aviso —«TOSTAO CAFE Y PAN VISC»,
+ * o «Movimiento» cuando no supo leerlo— y hasta acá solo se podía cambiar después, desde
+ * Movimientos. Lo que quede escrito es el concepto y el comercio del movimiento; vacío vuelve al
+ * leído, que se muestra de guía mientras tanto.
+ *
+ * El campo es el mismo del concepto en la hoja del movimiento ([rememberCampoConSeleccion], con
+ * ⌘A en la web), con el tope de la columna.
+ */
+@Composable
+private fun ComercioQueSeEdita(
+    leido: String,
+    valor: String,
+    enabled: Boolean,
+    onCambio: (String) -> Unit,
+) {
+    // Toda la fila lleva al campo, como las demás filas de este resumen llevan a lo suyo.
+    val foco = remember { FocusRequester() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { foco.requestFocus() }
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(Movi.colores.entra.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(12.dp))
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text("COMERCIO", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)
+            val campo = rememberCampoConSeleccion(valor) { onCambio(it.take(MAX_CONCEPTO_LENGTH)) }
+            BasicTextField(
+                value = campo.valor,
+                onValueChange = campo::alCambiar,
+                enabled = enabled,
+                cursorBrush = SolidColor(Movi.colores.texto),
+                textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto, letterSpacing = (-0.1).sp),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp)
+                    .focusRequester(foco)
+                    .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
+                decorationBox = { inner ->
+                    if (valor.isEmpty()) {
+                        Text(leido, style = Movi.textos.cuerpo, color = Movi.colores.textoApagado)
+                    }
+                    inner()
+                },
+            )
+        }
+        Text("Editar", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
     }
 }
 

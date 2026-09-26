@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.group
+import com.jvillada.movi.shared.model.normalizarParaBuscar
 
 /**
  * De dónde salió la cuenta que una pantalla de confirmación está mostrando.
@@ -81,9 +82,11 @@ data class CuentaDelBanco(
  */
 /**
  * Los números de cuenta que un mensaje del banco nombra: «de tu cuenta *9586», «a la cuenta * 4308…»,
- * y la forma de Nu, que no lleva asterisco: «con tu tarjeta terminada en 1336».
+ * la forma de Nu, que no lleva asterisco: «con tu tarjeta terminada en 1336», y la de Google
+ * Wallet, que los tapa con viñetas: «with Glim ••3037» (o `•3037`, `····3037`). Sin las viñetas el
+ * pago con la Glim del 25-sep no leía el número que traía escrito y caía en la primera cuenta.
  */
-private val numerosQueNombraElMensaje = Regex("""(?:\*|\bterminada\s+en)\s*(\d{4,})""", RegexOption.IGNORE_CASE)
+private val numerosQueNombraElMensaje = Regex("""(?:\*|\bterminada\s+en|[•·]+)\s*(\d{4,})""", RegexOption.IGNORE_CASE)
 
 /** Las corridas de dígitos de un nombre de cuenta: «Fiducuenta 9586» → 9586. */
 private val digitosDelNombre = Regex("""\d+""")
@@ -180,6 +183,77 @@ internal fun cuentaDeNu(banco: String, texto: String, candidatas: List<Account>)
         .singleOrNull()
 }
 
+/** «Notificación · Glim», «Correo · Bancolombia»: lo que va después del punto medio es quién lo mandó. */
+private val origenConNombre = Regex("""^\s*(?:notificacion|correo)\s*·\s*(.+?)\s*$""")
+
+/** La etiqueta con que Google Wallet nombra la tarjeta: «with Nu Mastercard Gold ••1336» → «Nu Mastercard Gold». */
+private val etiquetaDeWallet = Regex("""\bwith\s+(.+?)\s*[•·]+\s*\d{4}""")
+
+/**
+ * Las palabras de una etiqueta de Wallet que dicen **qué clase** de tarjeta es, no **de quién**:
+ * «Mastercard», «Débito», «Gold». La marca de la cuenta es la primera palabra que no sea una de estas.
+ */
+private val palabrasQueNoSonMarca = setOf(
+    "mastercard", "master", "visa", "amex", "american", "express",
+    "debito", "credito", "gold", "platinum", "black", "signature", "classic", "clasica",
+    "infinite", "world", "elite", "card", "tarjeta", "prepago", "de",
+)
+
+/** Las palabras de un texto ya normalizado (sin tildes ni mayúsculas), sin signos. */
+private fun palabrasDeLaMarca(texto: String): List<String> =
+    normalizarParaBuscar(texto).split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
+
+/** ¿[nombre] contiene [marca] como palabra —o palabras seguidas—, sin mayúsculas ni tildes? */
+private fun nombraLaMarca(nombre: String, marca: List<String>): Boolean {
+    if (marca.isEmpty()) return false
+    val palabras = palabrasDeLaMarca(nombre)
+    return palabras.windowed(marca.size).any { it == marca }
+}
+
+/**
+ * **La cuenta que el aviso nombra por su marca**, cuando no trae un número que la diga.
+ *
+ * El 25-sep el dueño pagó con su tarjeta Glim y la app de Glim avisó sin número: «Pagaste $15.100,00
+ * COP con tu tarjeta de beneficios Glim…», con el rótulo «Notificación · Glim». El paso por el nombre
+ * del banco compara el rótulo ENTERO contra el nombre de la cuenta, y ninguna se llama «Notificación ·
+ * Glim», así que el pago terminaba en Bancolombia Ahorros. Acá se lee lo que va después del punto
+ * medio —«Glim»— y se busca como palabra en el nombre de sus cuentas: «Glim Alimentación 3037».
+ *
+ * **Google Wallet no es una marca**: es quien avisa por todas las tarjetas. Ahí se lee la etiqueta de
+ * la tarjeta («with Nu Mastercard Gold ••1336») y se toma la primera palabra que diga de quién es
+ * («Nu»), saltando las que dicen de qué clase es («Mastercard», «Gold»). Esa clase sí sirve para
+ * desempatar: una etiqueta de Mastercard/Visa/Amex que no dice débito es una tarjeta de crédito, y
+ * entre «Nu» (ahorros) y «Nu Tarjeta» se queda con la tarjeta; una que dice débito nunca cae en una
+ * tarjeta de crédito.
+ *
+ * Solo se devuelve una cuenta si queda **exactamente una**: con dos «Bancolombia» no se adivina, por
+ * lo mismo que el empate de [cuentaPorElNumero].
+ */
+internal fun cuentaPorLaMarca(banco: String, texto: String, candidatas: List<Account>): Account? {
+    val quien = origenConNombre.find(normalizarParaBuscar(banco))?.groupValues?.get(1) ?: return null
+    val esWallet = palabrasDeLaMarca(quien) == listOf("google", "wallet")
+    val (marca, etiqueta) = if (esWallet) {
+        val etiqueta = etiquetaDeWallet.find(normalizarParaBuscar(texto))?.groupValues?.get(1) ?: return null
+        val primera = palabrasDeLaMarca(etiqueta).firstOrNull { it !in palabrasQueNoSonMarca && it.any(Char::isLetter) }
+            ?: return null
+        listOf(primera) to palabrasDeLaMarca(etiqueta)
+    } else {
+        // Nu tiene sus reglas propias ([tarjetaDeNu], [cuentaDeNu]), que saben algo que la marca
+        // sola no: si el aviso habla de la tarjeta o de la cuenta. Sin esta salida, una compra con
+        // la tarjeta Nu de quien no tiene anotada la tarjeta caería en la cuenta de ahorros «Nu».
+        if (palabraNu.containsMatchIn(quien)) return null
+        palabrasDeLaMarca(quien) to emptyList()
+    }
+    var coinciden = candidatas.filter { nombraLaMarca(it.name, marca) }
+    val esDebito = "debito" in etiqueta
+    val esDeCredito = !esDebito && etiqueta.any { it == "mastercard" || it == "visa" || it == "amex" }
+    if (esDebito) coinciden = coinciden.filter { it.type != AccountType.CREDIT_CARD }
+    if (esDeCredito && coinciden.size > 1) {
+        coinciden.filter { it.type == AccountType.CREDIT_CARD }.takeIf { it.isNotEmpty() }?.let { coinciden = it }
+    }
+    return coinciden.singleOrNull()
+}
+
 fun resolverCuentaDelBanco(
     accounts: List<Account>,
     uso: UsoDeCuenta,
@@ -201,6 +275,12 @@ fun resolverCuentaDelBanco(
     // Fiducuenta tiene que caer en la Fiducuenta y no en la primera cuenta que diga «Bancolombia».
     val porElNumero = cuentaPorElNumero(textoDelMensaje, candidatas)
     if (porElNumero != null) return CuentaDelBanco(porElNumero, OrigenDeLaCuentaDelBanco.POR_EL_NUMERO)
+
+    // La marca que dice el aviso cuando no dice el número: la app de Glim, o la etiqueta de la
+    // tarjeta en Google Wallet. Ver [cuentaPorLaMarca]. Va rotulada como la coincidencia por banco:
+    // el nombre de la cuenta («Glim Alimentación 3037») ya dice por qué está ahí.
+    val porLaMarca = cuentaPorLaMarca(banco, textoDelMensaje, candidatas)
+    if (porLaMarca != null) return CuentaDelBanco(porLaMarca, OrigenDeLaCuentaDelBanco.POR_EL_BANCO)
 
     // Nu no escribe el número en el nombre de la cuenta: ver [tarjetaDeNu]. El nombre de la cuenta
     // («Nu Tarjeta») ya dice por qué está ahí, así que va rotulada como la coincidencia por banco.
