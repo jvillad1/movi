@@ -113,8 +113,10 @@ class EsqueletosDelInicioTest {
         composeRule.waitForIdle()
     }
 
+    // Sin árbol fusionado: la tarjeta del hero es clickeable (lleva a «Tus períodos»), y un
+    // clickeable fusiona a sus hijos: las etiquetas de adentro solo se ven en el árbol sin fusionar.
     private fun contarTag(tag: String): Int =
-        composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().size
+        composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().size
 
     @Test
     fun `el hero cargando mide lo mismo que el hero cargado, con veredicto y barra`() {

@@ -149,11 +149,9 @@ class InicioDeUnVistazoEnPantallaTest {
     }
 
     /**
-     * Ola E, tarea 4: la línea del rango del período («Del 25 de agosto al 24 de septiembre · …»)
-     * se volvió la puerta a «Tus períodos» — mismo criterio que «Deudas» más arriba: el dueño que
-     * ya está mirando su período está a un toque de preguntarse por los anteriores. Solo existe con
-     * un corte distinto de 1 ([PeriodSettings.esMesDeCalendario]); con el corte de siempre la línea
-     * ni se pinta.
+     * La línea del rango del período («Del 25 de agosto al 24 de septiembre · …») es parte de la
+     * tarjeta, y la tarjeta entera lleva a «Tus períodos». Solo existe con un corte distinto de 1
+     * ([PeriodSettings.esMesDeCalendario]); con el corte de siempre la línea ni se pinta.
      */
     @Test
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
@@ -164,6 +162,30 @@ class InicioDeUnVistazoEnPantallaTest {
 
         composeRule.onNodeWithText("Del 25 de agosto al 24 de septiembre", substring = true, useUnmergedTree = true)
             .performClick()
+        assertEquals(Screen.Periodos, navegoA)
+    }
+
+    /**
+     * **Toda la tarjeta de «Tu plata» lleva a un solo lugar, «Tus períodos».** Antes la cifra iba a
+     * Patrimonio y la línea del período a «Tus períodos», con dos toques pegados y sin seña de cuál era
+     * cuál. Patrimonio ya tiene su pestaña. Se toca la cifra, el veredicto y las cifras de la barra, y
+     * en ningún caso el destino es Patrimonio.
+     */
+    @Test
+    @Config(qualifiers = "w390dp-h2400dp-xhdpi")
+    fun `la cifra, el veredicto y la barra de la tarjeta llevan a Tus periodos y no a Patrimonio`() {
+        montar()
+
+        // «$558.350» también está en el tramo «Tu plata» del patrimonio, más abajo: el primero es el hero.
+        primero("\$558.350").performClick()
+        assertEquals(Screen.Periodos, navegoA)
+
+        navegoA = null
+        composeRule.onNodeWithText(veredicto, useUnmergedTree = true).performClick()
+        assertEquals(Screen.Periodos, navegoA)
+
+        navegoA = null
+        composeRule.onNodeWithText("Entró", useUnmergedTree = true).performClick()
         assertEquals(Screen.Periodos, navegoA)
     }
 

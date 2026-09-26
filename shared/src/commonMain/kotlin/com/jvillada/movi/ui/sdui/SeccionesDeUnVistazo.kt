@@ -193,21 +193,22 @@ internal fun HeroDeUnVistazo(
             .testTag(TAG_TARJETA_DEL_HERO),
         variant = MinCardVariant.Elevated,
         padding = PaddingValues(Movi.espacios.margen),
+        // **Toda la tarjeta lleva a un solo lugar: «Tus períodos».** Antes cada renglón iba a un
+        // destino distinto (la línea del período a «Tus períodos», la cifra a Patrimonio) y el resto
+        // no respondía: dos toques pegados, sin ninguna seña de cuál era cuál. Todo lo que dice la
+        // tarjeta —la cifra, el veredicto, la barra— es del período que está corriendo, y Patrimonio
+        // ya tiene su pestaña en la barra de abajo.
+        onClick = { onNavigate(Screen.Periodos) },
+        onClickLabel = "Ver tus períodos",
     ) {
         // El rótulo viaja en el binario, no en la fila: ver [HERO_BALANCE_TITLE].
         Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         val rangoDelPeriodo = encabezadoDelPeriodo(data)
         if (rangoDelPeriodo != null) {
-            // La línea que explica el rango del período es también la puerta a
-            // «Tus períodos» — el dueño que se pregunta «¿de cuándo a cuándo va este mes?» está a
-            // un toque de preguntarse «¿y los anteriores?».
             Text(
                 text = rangoDelPeriodo,
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
-                modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Ver tus períodos") {
-                    onNavigate(Screen.Periodos)
-                },
             )
         } else if (data.periodoActual == null && hayCargaEnVuelo) {
             // Reservado SOLO mientras se sabe que el perfil (de donde sale el período) todavía
@@ -233,9 +234,6 @@ internal fun HeroDeUnVistazo(
                 // 42 sp es la afirmación más fuerte de la pantalla, y sería falsa.
                 text = if (data.accounts == null) "—" else formatCOP(cifraContando(balance.tuPlata, entradaDeLaCifra)),
                 color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
-                modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Ver tus cuentas") {
-                    onNavigate(Screen.Accounts)
-                },
             )
         }
         if (resumenCargando) {
@@ -282,7 +280,6 @@ internal fun HeroDeUnVistazo(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onNavigate(Screen.Accounts) }
                     .padding(top = Movi.espacios.medio),
             ) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
