@@ -3,6 +3,13 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Budgets
+import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.shared.model.CuentaDelDisponible
+import com.jvillada.movi.shared.model.FUENTE_CREDITO
+import com.jvillada.movi.shared.model.FUENTE_SALDO_INICIAL
+import com.jvillada.movi.shared.model.FuenteDePlata
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.reminders.arranqueDeLaRegla
 import com.jvillada.movi.server.reminders.ocurrenciaAnteriorQuePisaElPeriodo
@@ -45,6 +52,8 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
 import org.jetbrains.exposed.sql.Transaction
@@ -166,8 +175,102 @@ internal fun Transaction.detalleDePeriodo(
         masGrandes = losMasGrandes(uid, movimientos, tipos),
         tuPlataAlEmpezar = alEmpezar,
         tuPlataAlCerrar = alCerrar,
+        fuentesQueNoSonIngreso = fuentesQueNoSonIngreso(uid, desde, hasta, anulados, cuentas),
     )
 }
+
+/**
+ * **La plata que entró a tus cuentas en `[desde, hastaExclusivo)` y no es ingreso** — lo que explica
+ * un período que salió más de lo que entró sin que se haya gastado de más:
+ *
+ * - [FUENTE_CREDITO]: los desembolsos. La pata que ENTRA (INCOME, categoría [TRANSFER_CATEGORY]) a
+ *   una cuenta que no es deuda, cuya hermana por `transfer_id` sale de una cuenta LOAN. Un traspaso
+ *   entre cuentas propias (ahorros ↔ CDT) no es: esa plata ya estaba en tus cuentas.
+ * - [FUENTE_SALDO_INICIAL]: el «Saldo inicial» ([OPENING_CATEGORY], INCOME) de una cuenta de dinero
+ *   —ni deuda, ni inversión, ni un bien— que Movi conoció en el período. Condicionada o no: el AFC
+ *   también paga gastos. Una inversión no, porque su saldo (Skandia, $106M) taparía todo lo demás y
+ *   no es plata con la que se paga el mes.
+ *
+ * Solo en pesos y sin anulados, como toda suma de Movi. Una lectura de los eventos del período con
+ * esas dos categorías; las hermanas de los traspasos vienen en la misma lectura (las dos patas nacen
+ * en el mismo instante), y solo si alguna quedó afuera (una pata que se movió de fecha) se busca aparte.
+ * El [FuenteDePlata.detalle] nombra las cuentas de la más grande a la más chica.
+ */
+private fun Transaction.fuentesQueNoSonIngreso(
+    uid: String,
+    desde: Long,
+    hastaExclusivo: Long,
+    anulados: Set<String>,
+    cuentas: Map<String, CuentaDelDisponible>,
+): List<FuenteDePlata> {
+    val filas = Events.select(Events.id, Events.accountId, Events.type, Events.amount, Events.category, Events.transferId)
+        .where {
+            (Events.userId eq uid) and
+                (Events.currency eq "COP") and
+                (Events.timestamp greaterEq desde) and
+                (Events.timestamp less hastaExclusivo) and
+                (Events.category inList listOf(TRANSFER_CATEGORY, OPENING_CATEGORY))
+        }
+        .filterNot { it[Events.id] in anulados }
+        .map { PataSinIngreso(it[Events.accountId], it[Events.type], it[Events.amount], it[Events.category], it[Events.transferId]) }
+    if (filas.isEmpty()) return emptyList()
+
+    fun esDeDinero(cuenta: CuentaDelDisponible?) =
+        cuenta != null && !cuenta.esDeuda && !cuenta.esBien && cuenta.tipo != AccountType.INVESTMENT
+    val entradas = filas.filter { it.tipo == TransactionType.INCOME.name }
+    val saldosIniciales = entradas.filter { it.categoria == OPENING_CATEGORY && esDeDinero(cuentas[it.cuenta]) }
+    val entradasDeTraspaso = entradas.filter {
+        it.categoria == TRANSFER_CATEGORY && it.traspaso != null && cuentas[it.cuenta]?.esDeuda == false
+    }
+
+    // De qué cuenta salió cada traspaso: casi siempre en la misma lectura; si no, por `transfer_id`.
+    val origenDe: MutableMap<String, String> = filas
+        .filter { it.tipo == TransactionType.EXPENSE.name && it.categoria == TRANSFER_CATEGORY && it.traspaso != null }
+        .associateTo(mutableMapOf()) { it.traspaso!! to it.cuenta }
+    val faltan = entradasDeTraspaso.mapNotNull { it.traspaso }.filterNot { it in origenDe }.distinct()
+    if (faltan.isNotEmpty()) {
+        Events.select(Events.id, Events.accountId, Events.transferId)
+            .where {
+                (Events.userId eq uid) and (Events.transferId inList faltan) and
+                    (Events.type eq TransactionType.EXPENSE.name) and (Events.category eq TRANSFER_CATEGORY)
+            }
+            .filterNot { it[Events.id] in anulados }
+            .forEach { fila -> fila[Events.transferId]?.let { origenDe[it] = fila[Events.accountId] } }
+    }
+    // Cada desembolso con la cuenta de crédito de la que salió.
+    val desembolsos = entradasDeTraspaso.mapNotNull { entrada ->
+        val origen = origenDe[entrada.traspaso] ?: return@mapNotNull null
+        if (cuentas[origen]?.tipo == AccountType.LOAN) origen to entrada.monto else null
+    }
+
+    val nombres: Map<String, String> by lazy {
+        Accounts.select(Accounts.id, Accounts.name)
+            .where { Accounts.userId eq uid }
+            .associate { it[Accounts.id] to it[Accounts.name] }
+    }
+    fun fuente(tipo: String, porCuenta: List<Pair<String, Long>>): FuenteDePlata? {
+        val monto = porCuenta.sumOf { it.second }
+        if (monto <= 0) return null
+        val detalle = porCuenta.groupBy({ it.first }, { it.second })
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<String, List<Long>>> { it.value.sum() }.thenBy { it.key })
+            .mapNotNull { nombres[it.key] }
+        return FuenteDePlata(tipo, monto, detalle)
+    }
+    return listOfNotNull(
+        fuente(FUENTE_CREDITO, desembolsos),
+        fuente(FUENTE_SALDO_INICIAL, saldosIniciales.map { it.cuenta to it.monto }),
+    )
+}
+
+/** Lo que [fuentesQueNoSonIngreso] necesita de cada evento. */
+private class PataSinIngreso(
+    val cuenta: String,
+    val tipo: String,
+    val monto: Long,
+    val categoria: String,
+    val traspaso: String?,
+)
 
 /**
  * **Los pagos fijos de [periodo]**: cada ocurrencia de cada recurrente real que vence adentro —con el

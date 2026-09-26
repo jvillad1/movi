@@ -56,7 +56,38 @@ data class DetalleDePeriodo(
     val tuPlataAlEmpezar: Long? = null,
     /** Lo mismo al cerrar el período; en el período en curso, lo que hay hoy (hasta el final del día). */
     val tuPlataAlCerrar: Long? = null,
+    /**
+     * **La plata que entró a tus cuentas en el período y no es ingreso**: los desembolsos de un
+     * crédito ([FUENTE_CREDITO]) y los saldos que ya tenías y Movi conoció a mitad del período
+     * ([FUENTE_SALDO_INICIAL]). Ninguna de las dos suma en [ResumenDePeriodo.entradas] —un crédito es
+     * deuda y un saldo inicial ya era tuyo—, pero las dos pagan gastos que sí suman en
+     * [ResumenDePeriodo.salidas]. Sin esto, un período que se financió con un crédito se lee como si
+     * hubieras gastado más de lo que tenías. Solo las fuentes con monto; sin ninguna, vacía.
+     */
+    val fuentesQueNoSonIngreso: List<FuenteDePlata> = emptyList(),
 )
+
+/**
+ * Una fuente de plata que no es ingreso, con cuánto entró en el período y de dónde (nombres
+ * legibles: las cuentas de crédito que desembolsaron, o las cuentas cuyo saldo inicial se cargó).
+ *
+ * [tipo] es un `String` y no un enum por la misma razón que [PagoFijoDelPeriodo.estado]: un valor
+ * nuevo mañana no puede romper la deserialización de un cliente instalado. Hoy vale
+ * [FUENTE_CREDITO] o [FUENTE_SALDO_INICIAL]; un cliente que no conozca un tipo lo salta.
+ */
+@Serializable
+data class FuenteDePlata(
+    val tipo: String,
+    /** En pesos. */
+    val monto: Long,
+    val detalle: List<String> = emptyList(),
+)
+
+/** El desembolso de un crédito: un traspaso desde una cuenta de crédito a una cuenta tuya. */
+const val FUENTE_CREDITO: String = "CREDITO"
+
+/** El saldo con el que Movi conoció una cuenta de dinero: plata que ya tenías. */
+const val FUENTE_SALDO_INICIAL: String = "SALDO_INICIAL"
 
 @Serializable
 data class GastoDeCategoria(val category: String, val monto: Long)

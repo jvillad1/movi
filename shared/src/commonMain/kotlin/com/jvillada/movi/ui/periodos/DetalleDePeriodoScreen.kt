@@ -38,6 +38,8 @@ import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.DetalleDePeriodo
+import com.jvillada.movi.shared.model.FUENTE_CREDITO
+import com.jvillada.movi.shared.model.FUENTE_SALDO_INICIAL
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PAGO_FIJO_CON_DUDAS
 import com.jvillada.movi.shared.model.PAGO_FIJO_LISTO
@@ -105,6 +107,7 @@ const val TAG_VER_MOVIMIENTOS_DEL_PERIODO: String = "ver-movimientos-del-periodo
 const val TAG_EMPEZAR_PERIODO_HOY: String = "empezar-periodo-hoy"
 const val TAG_CONFIRMAR_PERIODO_HOY: String = "confirmar-periodo-hoy"
 const val TAG_GASTO_GRANDE: String = "gasto-grande"
+const val TAG_DE_DONDE_SALIO_LO_QUE_FALTO: String = "de-donde-salio-lo-que-falto"
 
 @Stable
 internal class EstadoDelDetalleDePeriodo internal constructor(
@@ -274,6 +277,7 @@ private fun DetalleCargado(
     onNavigate: (Screen) -> Unit,
 ) {
     Cabecera(detalle, estado.ajustes)
+    DeDondeSalioLoQueFalto(detalle)
     EnQueSeFue(detalle)
     PagosFijos(detalle.pagosFijos, onAgregar = { estado.nuevoPagoFijoAbierto = true })
     if (detalle.presupuestos.isNotEmpty()) Presupuestos(detalle.presupuestos)
@@ -358,6 +362,66 @@ private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
             Spacer(Modifier.height(10.dp))
             Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
+    }
+}
+
+// ── De dónde salió lo que faltó ──────────────────────────────────────────────
+
+/**
+ * Una fila por cada fuente de plata que no es ingreso, **solo si el período salió más de lo que
+ * entró** — «Créditos que te desembolsaron · $10M — Crédito Techo Gardenera». Vacía cuando entró lo
+ * mismo o más (no faltó nada que explicar), sin fuentes, o con fuentes que esta versión no conoce o
+ * que vienen en cero: la tarjeta no dice «$0» ni nombra un tipo que no sabe leer.
+ *
+ * Existe porque «Te quedó −$11,5M» se lee como si se hubiera gastado de más, cuando lo que faltó lo
+ * pagó un crédito o un saldo que ya estaba en las cuentas. Las cifras de arriba no cambian: esto
+ * solo cuenta de dónde salió la diferencia (ver [DetalleDePeriodo.fuentesQueNoSonIngreso]).
+ */
+internal fun filasDeLoQueFalto(detalle: DetalleDePeriodo): List<String> {
+    if (detalle.resumen.salidas <= detalle.resumen.entradas) return emptyList()
+    return detalle.fuentesQueNoSonIngreso.mapNotNull { fuente ->
+        if (fuente.monto <= 0) return@mapNotNull null
+        val rotulo = when (fuente.tipo) {
+            FUENTE_CREDITO -> "Créditos que te desembolsaron"
+            FUENTE_SALDO_INICIAL -> "Saldos que ya tenías y cargaste en el período"
+            else -> return@mapNotNull null
+        }
+        val base = "$rotulo · ${formatMoneyCompact(fuente.monto)}"
+        if (fuente.detalle.isEmpty()) base else "$base — ${fuente.detalle.joinToString(", ")}"
+    }
+}
+
+/**
+ * La tarjeta de [filasDeLoQueFalto], justo debajo de las cifras que explica. Solo aparece con el
+ * detalle ya cargado y no reserva lugar antes: el esqueleto no la anticipa, porque casi ningún
+ * período la tiene.
+ */
+@Composable
+private fun DeDondeSalioLoQueFalto(detalle: DetalleDePeriodo) {
+    val filas = filasDeLoQueFalto(detalle)
+    if (filas.isEmpty()) return
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(16.dp),
+    ) {
+        Text(
+            text = "De dónde salió lo que faltó",
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.texto,
+            fontWeight = FontWeight.Medium,
+        )
+        filas.forEach { fila ->
+            Spacer(Modifier.height(Movi.espacios.corto))
+            Text(text = fila, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Esta plata entró a tus cuentas pero no cuenta como ingreso: un crédito es deuda y un " +
+                "saldo inicial ya era tuyo.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+        )
     }
 }
 
