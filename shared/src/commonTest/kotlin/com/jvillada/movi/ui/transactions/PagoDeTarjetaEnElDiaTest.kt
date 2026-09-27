@@ -9,11 +9,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * Ola U — «Flujo del día $0» no puede quedar sin explicación cuando salió plata de verdad.
+ * Ola U/W — cuánto de verdad salió a pagar tarjeta, y cómo se explica.
  *
  * El caso real del dueño: pagó dos tarjetas desde Bancolombia Ahorros el mismo día ($386.902 +
- * $1.542.634 = $1.929.536) y Movimientos le dijo «Flujo del día $0» — cierto para el flujo del
- * mes, pero leído sin explicación se ve como una mentira.
+ * $1.542.634 = $1.929.536). `montoPagoDeTarjetaEnElDia` (esta clase) no cambió entre olas — sigue
+ * siendo la misma suma. Lo que cambió en la Ola W es qué se hace con ella: antes «Flujo del día»
+ * la excluía y esta línea aclaraba la exclusión; ahora `diasVisibles` la resta también del total,
+ * y esta línea aclara que no se duplica en el gasto del período.
  */
 class PagoDeTarjetaEnElDiaTest {
 
@@ -50,7 +52,8 @@ class PagoDeTarjetaEnElDiaTest {
         )
         assertEquals(1_929_536L, montoPagoDeTarjetaEnElDia(items, accountTypes))
         assertEquals(
-            "Además, \$1.929.536 salieron a pagar tarjeta (ya contado al comprar)",
+            "De eso, \$1.929.536 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando compraste, " +
+                "no se duplica.",
             textoPagoDeTarjetaEnElDia(montoPagoDeTarjetaEnElDia(items, accountTypes)),
         )
     }
@@ -91,7 +94,8 @@ class PagoDeTarjetaEnElDiaTest {
         )
         assertEquals(386_902L, montoPagoDeTarjetaEnElDia(items, accountTypes))
         assertEquals(
-            "Además, \$386.902 salieron a pagar tarjeta (ya contado al comprar)",
+            "De eso, \$386.902 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando compraste, " +
+                "no se duplica.",
             textoPagoDeTarjetaEnElDia(montoPagoDeTarjetaEnElDia(items, accountTypes)),
         )
     }

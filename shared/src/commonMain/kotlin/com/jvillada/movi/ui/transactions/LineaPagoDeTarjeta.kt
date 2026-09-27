@@ -21,10 +21,12 @@ import com.jvillada.movi.ui.components.formatCOP
  * $1.929.536 que salieron de verdad de su cuenta disponible) y Movimientos le dijo «Flujo del día
  * $0». Su reacción textual: *«eso es una mentira»*.
  *
- * La regla de plata sigue siendo correcta y no se toca: un pago de tarjeta no es flujo porque la
- * compra ya se contó como gasto el día que se hizo (ver `isCashFlow`/[CARD_PAYMENT_CATEGORY] en
- * `:core`). Lo que faltaba era **decirlo** — un día así se lee como si no hubiera pasado nada,
- * cuando sí salió plata de la cuenta, solo que no es plata nueva.
+ * La Ola U resolvió esto con una línea aparte que ACLARABA la exclusión. La Ola W fue más allá:
+ * el dueño pidió que «Flujo del día» sume también el pago de tarjeta —es su extracto del día, y
+ * esa cuenta sí perdió esa plata—, así que ahora esta línea aclara lo contrario: que esa parte NO
+ * se duplica en el gasto del período/Disponible, que sigue sin contarla (ver `aporteAlFlujoDelDia`
+ * en `:core`, que no cambia). Dos cifras honestas cada una a su manera: «Flujo del día» por día,
+ * «Salió»/Disponible por período.
  */
 
 /**
@@ -38,14 +40,15 @@ private val CUENTAS_DE_TU_PLATA = setOf(
 )
 
 /**
- * **Cuánto salió de verdad de «Tu plata» hoy a pagar una tarjeta** — la plata que «Flujo del día»
- * excluye a propósito porque ya se contó como gasto al comprar, y que por eso puede dejar un día en
- * «$0» aunque haya salido plata de la cuenta.
+ * **Cuánto salió de verdad de «Tu plata» hoy a pagar una tarjeta** — desde la Ola W, la misma
+ * cifra que `diasVisibles` YA resta de «Flujo del día» (antes la excluía; ahora la cuenta como la
+ * salida real que es). Esta función sigue siendo la única fuente de esa suma, para el total de
+ * arriba y para la línea de contexto de abajo.
  *
  * Suma los movimientos de [items] con [CARD_PAYMENT_CATEGORY] que son EXPENSE **en una cuenta de
  * Tu plata** — nunca en la propia tarjeta, donde la misma categoría llega como INCOME bajando la
  * deuda, no como plata que sale de ningún lado. Solo pesos, la misma moneda que suma «Flujo del
- * día» (`aporteAlFlujoDelDia`): sumar dólares acá inflaría la frase con una cifra que la cabecera
+ * día» (`aporteAlFlujoDelDia`): sumar dólares acá inflaría la cifra con un monto que la cabecera
  * del día no está contando.
  *
  * Puro sobre [items] y [accountTypes], que la pantalla ya tiene en memoria para armar el propio
@@ -63,17 +66,23 @@ fun montoPagoDeTarjetaEnElDia(items: List<FinancialEvent>, accountTypes: Map<Str
  * La frase que explica el pago de tarjeta del día, o `null` si ese día no tuvo ninguno — el caso
  * normal, donde «Flujo del día» ya cuenta la historia completa y no hay nada que agregar encima.
  *
- * Se lee bien tanto si «Flujo del día» quedó en $0 (el reclamo del dueño) como si ya venía con
- * gastos propios: «Además» avisa que esto se suma a lo que ya se dijo arriba, no que lo reemplaza.
+ * Ola W: ya no aclara una exclusión (esa plata SÍ está en el total de arriba, desde `diasVisibles`)
+ * — aclara que no se cuenta dos veces: el gasto real ya quedó registrado el día de la compra, así
+ * que el período/Disponible no vuelve a restarlo cuando se paga la tarjeta.
  */
 fun textoPagoDeTarjetaEnElDia(monto: Long): String? =
-    if (monto <= 0L) null else "Además, ${formatCOP(monto)} salieron a pagar tarjeta (ya contado al comprar)"
+    if (monto <= 0L) {
+        null
+    } else {
+        "De eso, ${formatCOP(monto)} fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
+            "compraste, no se duplica."
+    }
 
 /** El tag de la línea de pago de tarjeta del día, para que las pruebas la encuentren. */
 const val TAG_PAGO_DE_TARJETA_EN_EL_DIA: String = "pago-de-tarjeta-en-el-dia"
 
 /**
- * La línea que explica el pago de tarjeta del día, debajo del «Flujo del día» —ver
+ * La línea de contexto del pago de tarjeta del día, debajo del «Flujo del día» —ver
  * [textoPagoDeTarjetaEnElDia]. A diferencia de «Día a día» ([LineaDelDiaADiaEnElDia]), no reserva
  * alto cuando no hay nada que decir: el monto sale de movimientos que la pantalla ya tiene en
  * memoria, sin ninguna lectura en vuelo que pueda hacer saltar la lista al contestar.

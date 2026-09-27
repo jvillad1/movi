@@ -31,11 +31,13 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertTrue
 
 /**
- * # Ola U — «Flujo del día $0» no puede quedar sin explicación cuando salió plata de verdad
+ * # Ola W — «Flujo del día» ya incluye el pago de tarjeta como la salida real que es
  *
  * El caso del dueño, montado de verdad: pagó dos tarjetas desde Bancolombia Ahorros el mismo día
- * ($386.902 + $1.542.634 = $1.929.536) y Movimientos decía «Flujo del día $0» — correcto para el
- * mes (la compra ya se contó como gasto), pero leído sin explicación se ve como una mentira. Ver
+ * ($386.902 + $1.542.634 = $1.929.536). La Ola U había dejado «Flujo del día $0» con una línea
+ * aparte explicando la exclusión; el dueño pidió lo contrario: esa cuenta SÍ perdió esa plata ese
+ * día, así que «Flujo del día» debe decir −$1.929.536, y la línea de abajo debe aclarar que eso no
+ * se duplica en el gasto del período/Disponible (que sigue excluyéndola, sin cambios). Ver
  * `PagoDeTarjetaEnElDiaTest` para la función pura detrás de esta línea.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -109,12 +111,12 @@ class PagoDeTarjetaEnMovimientosTest {
     }
 
     /**
-     * **Dos pagos de tarjeta y ningún otro gasto**: el caso exacto del dueño. «Flujo del día» sigue
-     * en $0 (correcto: la compra ya se contó al comprarla) pero ya no se queda sin decir nada — la
-     * línea nueva dice cuánto salió de verdad de su cuenta.
+     * **Dos pagos de tarjeta y ningún otro gasto**: el caso exacto del dueño. «Flujo del día» ahora
+     * dice −$1.929.536 (la plata que de verdad salió de su cuenta ese día) y la línea de abajo
+     * aclara que eso no se duplica en el gasto del mes.
      */
     @Test
-    fun `un dia de puros pagos de tarjeta dice Flujo del dia 0 y la linea nueva con el monto real`() {
+    fun `un dia de puros pagos de tarjeta dice Flujo del dia con el monto real y la linea de contexto`() {
         montarCon(
             listOf(
                 pagoDeTarjeta("p1-out", "tr1", banco, TransactionType.EXPENSE, 386_902L),
@@ -124,9 +126,10 @@ class PagoDeTarjetaEnMovimientosTest {
             ),
         )
 
-        composeRule.onNodeWithText("$0", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("−$1.929.536", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText(
-            "Además, \$1.929.536 salieron a pagar tarjeta (ya contado al comprar)",
+            "De eso, \$1.929.536 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
+                "compraste, no se duplica.",
             useUnmergedTree = true,
         ).assertIsDisplayed()
     }
@@ -145,17 +148,18 @@ class PagoDeTarjetaEnMovimientosTest {
         val lineas = composeRule.onAllNodesWithTag(TAG_PAGO_DE_TARJETA_EN_EL_DIA, useUnmergedTree = true)
             .fetchSemanticsNodes()
         assertTrue(lineas.isEmpty(), "sin pagos de tarjeta no hay línea de más, había ${lineas.size}")
-        val texto = composeRule.onAllNodesWithText("salieron a pagar tarjeta", substring = true, useUnmergedTree = true)
+        val texto = composeRule.onAllNodesWithText("fueron a pagar tarjeta", substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes()
         assertTrue(texto.isEmpty())
     }
 
     /**
-     * Un día con un gasto normal Y un pago de tarjeta: «Flujo del día» ya no es $0 (el gasto normal
-     * sí cuenta) y la línea nueva igual aparece, sumando solo el pago de tarjeta.
+     * Un día con un gasto normal Y un pago de tarjeta: «Flujo del día» suma los dos (−$18.500 del
+     * gasto y −$386.902 del pago = −$405.402) y la línea de abajo aclara que solo el pago de
+     * tarjeta no se duplica en el gasto del mes.
      */
     @Test
-    fun `un dia con gasto normal y pago de tarjeta suma solo el pago de tarjeta en la linea nueva`() {
+    fun `un dia con gasto normal y pago de tarjeta suma los dos en Flujo del dia`() {
         montarCon(
             listOf(
                 gasto,
@@ -167,8 +171,10 @@ class PagoDeTarjetaEnMovimientosTest {
         assertTrue(
             composeRule.onAllNodesWithText("−$18.500", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
         )
+        composeRule.onNodeWithText("−$405.402", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText(
-            "Además, \$386.902 salieron a pagar tarjeta (ya contado al comprar)",
+            "De eso, \$386.902 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
+                "compraste, no se duplica.",
             useUnmergedTree = true,
         ).assertIsDisplayed()
     }
