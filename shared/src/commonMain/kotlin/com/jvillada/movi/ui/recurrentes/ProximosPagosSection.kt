@@ -173,7 +173,7 @@ internal fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
  *  2. **«No fue este»** — pasa a la propuesta siguiente, y el «no» se guarda (ver
  *     `rechazarOcurrencia`). Sin esto, una propuesta equivocada tapaba a la buena y el único
  *     camino era ignorarlas todas.
- *  3. **«Anotar el movimiento»**, cuando no hay ninguna propuesta: abre la hoja de Agregar con los
+ *  3. **«Anotar este pago»**, cuando no hay ninguna propuesta: abre la hoja de Agregar con los
  *     datos del recurrente puestos. Pagó en efectivo, desde una cuenta que Movi no lleva, o el
  *     banco nunca avisó — y la salida es que ese movimiento EXISTA, no que se tilde una casilla.
  *
@@ -293,7 +293,7 @@ internal fun PropuestaDeMovimiento(
 /** Los rótulos que la pantalla y sus pruebas tienen que nombrar igual. */
 const val ETIQUETA_SI_FUE_ESTE = "Sí, fue este"
 const val ETIQUETA_NO_FUE_ESTE = "No fue este"
-const val ETIQUETA_ANOTAR = "Anotar el movimiento"
+const val ETIQUETA_ANOTAR = "Anotar este pago"
 const val ETIQUETA_QUITAR_LA_MARCA = "Quitar la marca"
 
 /** Una acción ofrecida sobre una ocurrencia: qué dice, si es la principal, y qué hace. */

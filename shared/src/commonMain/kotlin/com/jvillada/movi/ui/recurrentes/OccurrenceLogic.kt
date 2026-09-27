@@ -346,7 +346,7 @@ fun avisoDeMontoDistinto(rule: RecurringRule, event: FinancialEvent): String? =
     else "No es el monto que anotaste (${formatCOP(rule.amount)}). Puede ser: revísalo antes de confirmar."
 
 /**
- * **A dónde lleva «Anotar el movimiento»**, con todo lo que el recurrente ya sabe puesto.
+ * **A dónde lleva «Anotar este pago»**, con todo lo que el recurrente ya sabe puesto.
  *
  * Es la salida que el dueño eligió para la fila sin ninguna evidencia —pagó en efectivo, pagó desde
  * una cuenta que Movi no lleva, o el banco nunca avisó—: en vez de dejarlo tildar sin movimiento,

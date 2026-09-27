@@ -59,7 +59,7 @@ import kotlin.test.assertTrue
  * permita notarlo.
  *
  * Tres cosas se afirman acá y no se pueden afirmar sin montar la pantalla: que la fila **no acepta
- * un toque**, que «Anotar el movimiento» abre la hoja de Agregar con los datos del recurrente, y
+ * un toque**, que «Anotar este pago» abre la hoja de Agregar con los datos del recurrente, y
  * que un sello viejo hecho a mano ofrece quitarse.
  *
  * **Las fechas se calculan desde hoy, no se escriben.** El checklist filtra por el período EN CURSO
@@ -272,9 +272,9 @@ class ChecklistDelPeriodoEnElTableroTest {
     fun `sin movimiento la fila ofrece anotarlo y abre la hoja prellenada`() {
         montar()
         esperarTexto(subtitulo)
-        esperarTexto("Sin movimiento")
+        esperarTexto("Movi no encontró el movimiento de este pago.")
 
-        tocar("Anotar el movimiento")
+        tocar("Anotar este pago")
 
         val hoja = assertIs<Screen.QuickAdd>(navegoA)
         assertEquals("Arriendo", hoja.presetNota)
@@ -349,7 +349,7 @@ class ChecklistDelPeriodoEnElTableroTest {
         // Y «Próximos» ofrece lo mismo que el checklist, no un segundo mecanismo de sellado: el
         // «Ya lo pagué» que sellaba sin movimiento se fue de las dos a la vez.
         assertTrue(
-            composeRule.onAllNodesWithText("Anotar el movimiento", useUnmergedTree = true)
+            composeRule.onAllNodesWithText("Anotar este pago", useUnmergedTree = true)
                 .fetchSemanticsNodes().size >= 2,
         )
         assertTrue(

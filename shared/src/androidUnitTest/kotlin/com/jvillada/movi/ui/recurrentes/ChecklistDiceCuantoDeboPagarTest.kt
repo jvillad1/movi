@@ -74,7 +74,7 @@ class ChecklistDiceCuantoDeboPagarTest {
         periodoDelSello = "2026-09",
     )
 
-    /** Las filas que pidieron «Anotar el movimiento». */
+    /** Las filas que pidieron «Anotar este pago». */
     private val aAnotar = mutableListOf<String>()
 
     private fun montar(conCreditos: Boolean) {
@@ -201,7 +201,7 @@ class ChecklistDiceCuantoDeboPagarTest {
     }
 
     /**
-     * **La fila dejó de ser tocable, y lo que la reemplazó es «Anotar el movimiento».**
+     * **La fila dejó de ser tocable, y lo que la reemplazó es «Anotar este pago».**
      *
      * Tildarla sellaba el período sin ninguna evidencia. El dueño lo cortó: *«no me debería dejar
      * hacer check sin que el movimiento asociado exista»*. Lo que queda es la salida honesta —que

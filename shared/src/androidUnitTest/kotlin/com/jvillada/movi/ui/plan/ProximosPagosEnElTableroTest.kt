@@ -170,7 +170,7 @@ class ProximosPagosEnElTableroTest {
         composeRule.onNodeWithText("¿Ya pagaste el de septiembre?", useUnmergedTree = true).assertIsDisplayed()
         assertEquals(
             true,
-            composeRule.onAllNodesWithText("Anotar el movimiento", useUnmergedTree = true)
+            composeRule.onAllNodesWithText("Anotar este pago", useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty(),
         )
         assertEquals(
@@ -186,13 +186,13 @@ class ProximosPagosEnElTableroTest {
      * recurrente puestos. Nada se sella hasta que ese movimiento exista.
      */
     @Test
-    fun `Anotar el movimiento abre la hoja prellenada y no sella nada`() {
+    fun `Anotar este pago abre la hoja prellenada y no sella nada`() {
         montar()
-        esperarTexto("Anotar el movimiento")
+        esperarTexto("Anotar este pago")
 
         // `onLast()`: el checklist va arriba y ofrece el mismo rótulo sobre la misma regla; el de
         // abajo es el de «Próximos», que es el que esta prueba mira.
-        composeRule.onAllNodesWithText("Anotar el movimiento", useUnmergedTree = true)
+        composeRule.onAllNodesWithText("Anotar este pago", useUnmergedTree = true)
             .onLast().performClick()
 
         val hoja = assertIs<Screen.QuickAdd>(navegoA)

@@ -118,7 +118,7 @@ const val TITULO_CHECKLIST_DEL_PERIODO = "Checklist del período"
  *   Ver [claveDescartada]: la clave es (regla, movimiento).
  * @param onConfirmar «Sí, fue este»: sella el período **anclado a ese movimiento**.
  * @param onNoFueEste «No fue este»: guarda el rechazo y, si había un sello, lo borra.
- * @param onAnotarMovimiento «Anotar el movimiento»: abre la hoja de Agregar con lo que el
+ * @param onAnotarMovimiento «Anotar este pago»: abre la hoja de Agregar con lo que el
  *   recurrente ya sabe. Quien llama decide a dónde lleva — la cuota de un crédito se anota en
  *   Créditos, no como un gasto suelto.
  * @param onQuitarLaMarca la única salida de un sello viejo hecho a mano, sin movimiento detrás.
@@ -490,7 +490,7 @@ private fun SinMovimiento(pago: PagoDelPeriodo, enVuelo: Boolean, acciones: Acci
  * secas, el dueño que sí pagó —en efectivo, o desde una cuenta que Movi no lleva— entendería que la
  * app le está diciendo que no pagó.
  */
-const val TEXTO_SIN_MOVIMIENTO = "Sin movimiento: Movi no encontró ninguno"
+const val TEXTO_SIN_MOVIMIENTO = "Movi no encontró el movimiento de este pago."
 
 /**
  * La casilla del checklist. **No es un control: es un reflejo** — nada de lo que la dibuja acepta

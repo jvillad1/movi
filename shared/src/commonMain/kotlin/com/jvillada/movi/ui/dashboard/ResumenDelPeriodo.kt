@@ -185,7 +185,7 @@ data class PagoDelPeriodo(
     /**
      * La categoría de la regla y la cuenta de la que sale (o a la que entra), si la tiene.
      *
-     * Existen para **«Anotar el movimiento»**: el checklist abre la hoja de Agregar con estos dos
+     * Existen para **«Anotar este pago»**: el checklist abre la hoja de Agregar con estos dos
      * ya puestos. No es comodidad — son justo los dos datos que `esConcluyente` compara en el
      * server, así que un movimiento anotado con otra categoría o en otra cuenta no vuelve a
      * emparejarse solo, y la fila que se venía a tildar se queda sin tildar.
