@@ -154,16 +154,13 @@ class ChecklistDiceCuantoDeboPagarTest {
     }
 
     /**
-     * Revisión final: el grupo de lo ya tildado se titula «Listos · X de Y» y cuenta lo que lista —
-     * el sueldo recibido incluido—, y el encabezado de la tarjeta usa el MISMO total. Con este
-     * mismo checklist decía «Ya salieron · 1 de 2» encima de dos filas, una de ellas un ingreso, y
-     * el encabezado contaba 2 (solo los pagos) sobre un checklist de 3.
-     *
-     * No «Ya ocurrieron»: ese título es de la sección de los sellos con «Deshacer», que en
-     * Movimientos se pinta en la misma pantalla.
+     * **Lo que salió y lo que llegó, en grupos distintos.** Antes era un solo «Listos · X de Y» que
+     * mezclaba el arriendo pagado con el sueldo recibido. En la lista única del período cada uno
+     * va en su grupo —«Ya pagaste» y «Ya recibiste»—, y el encabezado sigue contando todas las
+     * filas del período, ingreso incluido.
      */
     @Test
-    fun el_grupo_de_lo_ya_tildado_dice_listos_y_cuenta_el_ingreso() {
+    fun lo_pagado_y_lo_recibido_van_en_grupos_distintos() {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
@@ -189,10 +186,10 @@ class ChecklistDiceCuantoDeboPagarTest {
             }
         }
 
-        assertTrue(hay("Listos · 2 de 3"), "el título cuenta las dos filas que lista, sobre las tres")
-        assertTrue(!hay("Ya salieron"), "un sueldo recibido no «salió»")
-        assertTrue(!hay("Ya ocurrieron"), "ese título es de la sección de los sellos, no de este grupo")
-        // El encabezado de la tarjeta («Checklist del período · N») cuenta el mismo total que la Y.
+        assertTrue(hay("Ya pagaste · 1"), "el arriendo")
+        assertTrue(hay("Ya recibiste · 1"), "el sueldo, aparte: no «salió»")
+        assertTrue(!hay("Listos"), "el grupo que mezclaba las dos cosas se fue")
+        // El encabezado de la tarjeta («Pagos del período · N») cuenta todas las filas.
         assertEquals(
             1,
             composeRule.onAllNodesWithText(" · 3", useUnmergedTree = true).fetchSemanticsNodes().size,
@@ -273,31 +270,5 @@ class ChecklistDiceCuantoDeboPagarTest {
         assertTrue(hay(ETIQUETA_ANOTAR_INGRESO))
         assertTrue(!hay(TEXTO_SIN_MOVIMIENTO), "un ingreso no dice «de este pago»")
         assertTrue(!hay(ETIQUETA_ANOTAR), "ni «Anotar este pago»")
-    }
-
-    /** «Próximos»: la salida de una regla de ingreso sin propuesta dice ingreso, la de un gasto pago. */
-    @Test
-    fun la_propuesta_de_un_ingreso_ofrece_anotar_el_ingreso() {
-        fun regla(tipo: TransactionType) =
-            RecurringRule("r", "Sueldo", "Salario", 9_000_000L, 25, tipo)
-        val estado = OccurrenceState(ruleId = "r", period = "2026-09", dueDate = "2026-09-25", occurred = false, candidates = emptyList())
-        var tipo by mutableStateOf(TransactionType.INCOME)
-        composeRule.setContent {
-            MoviTheme {
-                Box(Modifier.fillMaxSize()) {
-                    PropuestaOcurrencia(
-                        estado = estado, rule = regla(tipo), propuesta = null, enVuelo = false,
-                        onConfirmar = {}, onDescartar = {}, onAnotarMovimiento = {},
-                    )
-                }
-            }
-        }
-        assertTrue(hay(ETIQUETA_ANOTAR_INGRESO))
-        assertTrue(!hay(ETIQUETA_ANOTAR))
-
-        tipo = TransactionType.EXPENSE
-        composeRule.waitForIdle()
-        assertTrue(hay(ETIQUETA_ANOTAR))
-        assertTrue(!hay(ETIQUETA_ANOTAR_INGRESO))
     }
 }

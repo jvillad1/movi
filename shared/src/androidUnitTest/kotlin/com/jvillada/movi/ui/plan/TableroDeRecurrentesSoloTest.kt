@@ -181,7 +181,7 @@ class TableroDeRecurrentesSoloTest {
 
         composeRule.onNodeWithText(TITULO_CHECKLIST_DEL_PERIODO.uppercase(), useUnmergedTree = true).assertExists()
         composeRule.onAllNodesWithText("Arriendo", useUnmergedTree = true).onLast().assertExists()
-        composeRule.onNodeWithText("DETECTADAS · POR CONFIRMAR", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText(TITULO_COBROS_DETECTADOS.uppercase(), useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("Spotify", useUnmergedTree = true).assertExists()
         // «Gastos recurrentes» del «Flujo libre»: el arriendo más Netflix — la candidata no suma.
         composeRule.onNodeWithText("$1.844.900", useUnmergedTree = true).assertExists()
@@ -195,7 +195,7 @@ class TableroDeRecurrentesSoloTest {
 
         composeRule.onNodeWithText("Confirmar", useUnmergedTree = true).performClick()
 
-        esperarQueDesaparezca("DETECTADAS · POR CONFIRMAR")
+        esperarQueDesaparezca(TITULO_COBROS_DETECTADOS.uppercase())
         assertEquals(SubStatus.CONFIRMED, actualizada?.status)
         // Confirmada, suma: la relectura la trae como activa.
         esperarTexto("2 cobros · $61.800 al mes")
@@ -205,7 +205,7 @@ class TableroDeRecurrentesSoloTest {
     fun `una lectura caida lo dice, no inventa la cifra, y su propio Reintentar la vuelve a pedir`() {
         fallanLosVencimientos = 1
         montar()
-        esperarTexto("No se pudo leer el checklist de este período")
+        esperarTexto("No se pudieron leer los pagos de este período")
         // Sin vencimientos no hay cifra: guion, no un total optimista.
         composeRule.onNodeWithText("$1.844.900", useUnmergedTree = true).assertDoesNotExist()
 
@@ -214,7 +214,7 @@ class TableroDeRecurrentesSoloTest {
         composeRule.onAllNodesWithText("Reintentar", useUnmergedTree = true).onLast().performClick()
 
         esperarTexto("$1.844.900")
-        composeRule.onNodeWithText("No se pudo leer el checklist de este período", useUnmergedTree = true)
+        composeRule.onNodeWithText("No se pudieron leer los pagos de este período", useUnmergedTree = true)
             .assertDoesNotExist()
         assertEquals(2, lecturasDeVencimientos)
     }

@@ -18,7 +18,10 @@ import com.jvillada.movi.ui.dashboard.ingresosPendientes
 import com.jvillada.movi.ui.dashboard.lineaDeLoQueFalta
 import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.pieDeLoYaPagado
-import com.jvillada.movi.ui.dashboard.tituloDeLosListos
+import com.jvillada.movi.ui.dashboard.ingresosRecibidos
+import com.jvillada.movi.ui.dashboard.pagosHechos
+import com.jvillada.movi.ui.dashboard.yaPagadoEnElPeriodo
+import com.jvillada.movi.ui.dashboard.yaRecibidoEnElPeriodo
 import com.jvillada.movi.ui.dashboard.yaMarcados
 import com.jvillada.movi.ui.Screen
 import kotlin.test.Test
@@ -96,6 +99,13 @@ class ChecklistDelPeriodoTest {
         monedaDelPago = if (montoDelPago == null) null else "COP",
     )
 
+    /** «Anotar este pago» desde una regla, como lo arma una fila del checklist. */
+    private fun hojaDe(r: RecurringRule, vence: String) = hojaParaAnotar(
+        ruleId = r.id, nombre = r.name, monto = r.amount, montoEsSaldo = r.montoEsSaldo,
+        categoria = r.category, cuentaId = r.accountId, venceIso = vence,
+        esIngreso = r.type == TransactionType.INCOME,
+    )
+
     // ── Qué entra al período ─────────────────────────────────────────────────
 
     /**
@@ -140,7 +150,7 @@ class ChecklistDelPeriodoTest {
         val fila = checklist.single()
         assertFalse(fila.pagado)
         assertTrue(fila.vencido)
-        assertEquals("venció hace 15 días", estadoDelChecklist(fila))
+        assertEquals("venció hace 15 días", fechaDeLaFila(fila))
         assertEquals(
             EstadoDeLaFila.SIN_MOVIMIENTO,
             fila.estado,
@@ -162,7 +172,7 @@ class ChecklistDelPeriodoTest {
         val fila = checklist.single()
         assertEquals(0, fila.diasParaVencer)
         assertFalse(fila.vencido, "vencer hoy todavía no es estar vencido")
-        assertEquals("12 de septiembre · vence hoy", subtituloDeLaFila(fila))
+        assertEquals("vence hoy", fechaDeLaFila(fila))
     }
 
     /**
@@ -311,13 +321,12 @@ class ChecklistDelPeriodoTest {
     }
 
     /**
-     * Revisión final: el grupo de lo ya tildado lista pagos E ingresos, así que su título no
-     * puede decir «salieron» ni contar solo los pagos. Con dos pagos tildados de tres y el sueldo
-     * ya recibido, el grupo muestra TRES filas: el título tiene que decir 3, sobre las 4 del
-     * checklist — no «Ya salieron · 2 de 3», que era lo que decía.
+     * **«Ya pagaste» y «Ya recibiste» son dos grupos.** Antes era un solo «Listos · X de Y» que
+     * mezclaba pagos con el sueldo; en la lista única del período lo que salió y lo que llegó van
+     * separados, cada uno con su total.
      */
     @Test
-    fun el_grupo_de_lo_ya_tildado_cuenta_lo_que_lista_incluido_el_ingreso() {
+    fun lo_pagado_y_lo_recibido_van_en_grupos_distintos() {
         val checklist = listOf(
             PagoDelPeriodo("r1", "Celular", 53_000, pagado = false, diasParaVencer = -2),
             PagoDelPeriodo("r2", "Gimnasio", 139_900, pagado = true, diasParaVencer = -8),
@@ -325,8 +334,10 @@ class ChecklistDelPeriodoTest {
             PagoDelPeriodo("r4", "Sueldo", 9_000_000, pagado = true, diasParaVencer = -1, esIngreso = true),
         )
 
-        assertEquals(3, yaMarcados(checklist).size, "el grupo lista los dos pagos y el sueldo")
-        assertEquals("Listos · 3 de 4", tituloDeLosListos(checklist))
+        assertEquals(listOf("Gimnasio", "Arriendo"), pagosHechos(checklist).map { it.nombre })
+        assertEquals(listOf("Sueldo"), ingresosRecibidos(checklist).map { it.nombre })
+        assertEquals(139_900L + 1_850_000L, yaPagadoEnElPeriodo(checklist))
+        assertEquals(9_000_000L, yaRecibidoEnElPeriodo(checklist))
         // Las líneas que hablan de pagos siguen contando sin el ingreso: esas sí son de plata que sale.
         assertEquals("Te falta 1 de 3 pagos de este período", lineaDeLoQueFalta(checklist))
     }
@@ -351,9 +362,8 @@ class ChecklistDelPeriodoTest {
     }
 
     /**
-     * El caso del dueño: «Listos · 14 de 14» junto a «Ya salieron los 12 pagos» — los 14 incluyen
-     * 2 ingresos que la línea nunca contaba. Sin nada pendiente y con ingresos en el checklist, la
-     * línea tiene que hablar de las dos cosas que «Listos» ya cuenta.
+     * «Ya salieron los 12 pagos» cuando además entraron 2 ingresos dejaba sin contar lo recibido.
+     * Sin nada pendiente y con ingresos en el checklist, la línea habla de las dos cosas.
      */
     @Test
     fun sin_nada_pendiente_y_con_ingresos_cuenta_las_dos_cosas() {
@@ -363,7 +373,8 @@ class ChecklistDelPeriodoTest {
             PagoDelPeriodo("i1", "Sueldo", 9_000_000, pagado = true, diasParaVencer = -1, esIngreso = true),
             PagoDelPeriodo("i2", "Arriendo que cobra", 1_200_000, pagado = true, diasParaVencer = -1, esIngreso = true),
         )
-        assertEquals("Listos · 14 de 14", tituloDeLosListos(checklist))
+        assertEquals(12, pagosHechos(checklist).size)
+        assertEquals(2, ingresosRecibidos(checklist).size)
         assertEquals(
             "Ya está todo lo de este período: 12 pagos y 2 ingresos",
             lineaDeLoQueFalta(checklist),
@@ -371,8 +382,8 @@ class ChecklistDelPeriodoTest {
     }
 
     /**
-     * Pagos todos salidos pero un ingreso sin entrar: «ya está todo» sería mentira al lado de
-     * «Listos · 13 de 14». La línea habla solo de los pagos, que es lo que sí es cierto.
+     * Pagos todos salidos pero un ingreso sin entrar: «ya está todo» sería mentira con un «Por
+     * cobrar» abajo. La línea habla solo de los pagos, que es lo que sí es cierto.
      */
     @Test
     fun con_un_ingreso_pendiente_no_dice_que_ya_esta_todo() {
@@ -382,7 +393,7 @@ class ChecklistDelPeriodoTest {
             PagoDelPeriodo("i1", "Sueldo", 9_000_000, pagado = true, diasParaVencer = -1, esIngreso = true),
             PagoDelPeriodo("i2", "Arriendo que cobra", 1_200_000, pagado = false, diasParaVencer = 3, esIngreso = true),
         )
-        assertEquals("Listos · 13 de 14", tituloDeLosListos(checklist))
+        assertEquals(1, ingresosRecibidos(checklist).size)
         assertEquals("Ya salieron los 12 pagos de este período", lineaDeLoQueFalta(checklist))
     }
 
@@ -417,8 +428,35 @@ class ChecklistDelPeriodoTest {
         assertEquals("", fechaLegibleDelChecklist(""), "sin fecha entendible no se inventa ninguna")
 
         val pendiente = PagoDelPeriodo("r", "Gimnasio", 139_900, pagado = false, diasParaVencer = 1, vence = "2026-09-13")
-        assertEquals("13 de septiembre · vence mañana", subtituloDeLaFila(pendiente))
-        assertEquals("venció ayer", estadoDelChecklist(pendiente.copy(diasParaVencer = -1)))
+        assertEquals("vence mañana", fechaDeLaFila(pendiente))
+        assertEquals("venció ayer", fechaDeLaFila(pendiente.copy(diasParaVencer = -1)))
+        assertEquals("venció hace 3 días", fechaDeLaFila(pendiente.copy(diasParaVencer = -3)))
+        // Lejos, la fecha y no una cuenta de días: «vence el 13 de septiembre».
+        assertEquals("vence el 13 de septiembre", fechaDeLaFila(pendiente.copy(diasParaVencer = 12)))
+        // Nada pendiente lleva evidencia: lo que dice una fila abierta lo dicen sus acciones.
+        assertNull(evidenciaDeLaFila(pendiente))
+    }
+
+    /** Un ingreso no «vence»: llega. */
+    @Test
+    fun la_fecha_de_un_ingreso_habla_de_cuando_llega() {
+        val sueldo = PagoDelPeriodo("r", "Salario", 6_000_000, pagado = false, diasParaVencer = 4, vence = "2026-09-30", esIngreso = true)
+        assertEquals("llega el 30 de septiembre", fechaDeLaFila(sueldo))
+        assertEquals("llega hoy", fechaDeLaFila(sueldo.copy(diasParaVencer = 0)))
+        assertEquals("debía llegar hace 2 días", fechaDeLaFila(sueldo.copy(diasParaVencer = -2)))
+    }
+
+    /**
+     * **Lo pagado dice el día en que salió la plata**, cuando se sabe: en lo que Movi emparejó y en
+     * la cuota derivada `confirmedAt` es la fecha del movimiento. En un sello del dueño es cuándo
+     * tocó el botón, así que ahí la fila dice el vencimiento en vez de inventar un día de pago.
+     */
+    @Test
+    fun lo_pagado_dice_cuando_se_pago_si_se_sabe() {
+        val pagado = PagoDelPeriodo("r", "Crediágil", 1_204_064, pagado = true, diasParaVencer = -1, vence = "2026-10-05", pagadoEl = "2026-09-27")
+        assertEquals("pagado el 27 de septiembre", fechaDeLaFila(pagado))
+        assertEquals("vencía el 5 de octubre", fechaDeLaFila(pagado.copy(pagadoEl = null)))
+        assertEquals("recibido el 27 de septiembre", fechaDeLaFila(pagado.copy(esIngreso = true)))
     }
 
     // ── Los tres estados de una fila, y que NINGUNA se tilde ─────────────────
@@ -504,12 +542,12 @@ class ChecklistDelPeriodoTest {
         assertEquals("ev_1", fila.eventId)
         assertEquals("Vivienda", fila.categoria)
         assertEquals("acc_1", fila.cuentaId)
-        // El subtítulo lo dice con todas las letras, y con la plata: un abono parcial no se puede
+        // La evidencia lo dice con todas las letras, y con la plata: un abono parcial no se puede
         // esconder detrás de un «pagado».
-        assertEquals(
-            "5 de septiembre · Movi lo emparejó con un movimiento de \$1.800.000",
-            subtituloDeLaFila(fila),
-        )
+        assertEquals("Movi lo emparejó con un movimiento de \$1.800.000", evidenciaDeLaFila(fila))
+        // Y el monto de la fila es lo que salió, no lo que dice la regla: el total de «Ya pagaste»
+        // se arma igual.
+        assertEquals("\$1.800.000", textoDelMontoDelChecklist(fila))
     }
 
     /** Los candidatos viajan en orden y el primero es el que la fila va a mostrar. */
@@ -554,7 +592,8 @@ class ChecklistDelPeriodoTest {
         ).single()
 
         assertEquals(EstadoDeLaFila.MARCADA_A_MANO, fila.estado)
-        assertEquals("12 de septiembre · marcado a mano, sin movimiento", subtituloDeLaFila(fila))
+        assertEquals("Marcado a mano, sin movimiento", evidenciaDeLaFila(fila))
+        assertEquals("vencía el 12 de septiembre", fechaDeLaFila(fila), "un sello no dice cuándo se pagó")
         assertEquals("2026-09", fila.periodoDelSello, "sin esto no habría qué borrar")
     }
 
@@ -589,10 +628,7 @@ class ChecklistDelPeriodoTest {
     @Test
     fun anotar_un_ingreso_abre_la_hoja_en_ingreso() {
         val hoja = assertIs<Screen.QuickAdd>(
-            hojaParaAnotar(
-                regla("rr_sueldo", "Salario", 6_000_000, 25, TransactionType.INCOME),
-                "2026-09-25",
-            ),
+            hojaDe(regla("rr_sueldo", "Salario", 6_000_000, 25, TransactionType.INCOME), "2026-09-25"),
         )
         assertTrue(hoja.presetEsIngreso)
     }
@@ -605,11 +641,11 @@ class ChecklistDelPeriodoTest {
     fun la_cuota_de_un_credito_se_anota_en_creditos() {
         assertEquals(
             Screen.Credits,
-            hojaParaAnotar(regla("credit_1", "Cuota Vehículo", 4_101_123, 10), "2026-09-10"),
+            hojaDe(regla("credit_1", "Cuota Vehículo", 4_101_123, 10), "2026-09-10"),
         )
         assertEquals(
             Screen.Credits,
-            hojaParaAnotar(regla("card_1", "Master Black", 27_501_150, 18, saldo = true), "2026-09-18"),
+            hojaDe(regla("card_1", "Master Black", 27_501_150, 18, saldo = true), "2026-09-18"),
         )
     }
 

@@ -128,7 +128,7 @@ class TableroDeRecurrentesVacioTest {
         esperarTexto("Spotify")
 
         assertTrue(!hay("Aquí van tus pagos fijos"), "con una candidata ya hay algo que revisar")
-        assertTrue(hay("DETECTADAS · POR CONFIRMAR"))
+        assertTrue(hay(TITULO_COBROS_DETECTADOS.uppercase()))
     }
 
     /**

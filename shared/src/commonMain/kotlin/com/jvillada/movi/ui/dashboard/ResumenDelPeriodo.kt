@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.ventanaDe
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -192,6 +193,20 @@ data class PagoDelPeriodo(
      */
     val categoria: String = "",
     val cuentaId: String? = null,
+    /**
+     * **El día en que salió la plata**, ISO, cuando se sabe: solo en lo que prueba un movimiento sin
+     * que nadie lo sellara —lo que Movi emparejó sola y la cuota que bajó una deuda—. Ahí el server
+     * manda en `confirmedAt` la fecha del movimiento (no hubo confirmación que fechar). En un sello
+     * del dueño `confirmedAt` es cuándo tocó el botón, no cuándo pagó, así que ahí va `null` y la
+     * fila dice el vencimiento en vez de inventar un día de pago.
+     */
+    val pagadoEl: String? = null,
+    /**
+     * El `"YYYY-MM"` del período del dueño al que pertenece este pago, tal como lo nombra el server
+     * (`OccurrenceState.periodoDelDueno`). Solo lo lleva una fila de [pendientesDePeriodosAnteriores]:
+     * es lo que le permite decir «Del período de septiembre» sin recalcular el corte.
+     */
+    val periodoDelDueno: String? = null,
 ) {
     val vencido: Boolean get() = !pagado && diasParaVencer < 0
 
@@ -312,34 +327,7 @@ fun checklistDelPeriodo(
             val vence = ocurrencia?.dueDate
                 ?: pago.dueDate.takeIf { epochDeFecha(it) in ventana }
                 ?: return@mapNotNull null
-            PagoDelPeriodo(
-                ruleId = pago.rule.id,
-                nombre = pago.rule.name,
-                monto = pago.rule.amount,
-                pagado = ocurrencia?.occurred == true,
-                // Con la fecha de la ocurrencia, el `daysUntil` que mandó el server habla de OTRO
-                // vencimiento: se recalcula contra el mismo «hoy» del que salió esa respuesta.
-                diasParaVencer = if (ocurrencia == null) pago.daysUntil
-                else diasEntre(hoy, vence) ?: pago.daysUntil,
-                montoEsSaldo = pago.rule.montoEsSaldo,
-                moneda = pago.rule.currency,
-                vence = vence,
-                periodoDelSello = ocurrencia?.period,
-                derivado = ocurrencia?.derivadaDeUnMovimiento == true,
-                esIngreso = pago.rule.type == TransactionType.INCOME,
-                montoPagado = ocurrencia
-                    ?.takeIf { it.occurred }
-                    ?.takeIf { (it.monedaDelPago ?: pago.rule.currency) == pago.rule.currency }
-                    ?.montoDelPago,
-                // Lo que la fila necesita para ser de SOLO LECTURA y aun así ofrecer algo útil:
-                // de dónde salió el tilde (o si no salió de ningún lado), qué movimiento hay
-                // detrás para poder decir «no fue este», y qué propone Movi cuando tuvo dudas.
-                automatica = ocurrencia?.automatica == true,
-                eventId = ocurrencia?.eventId,
-                candidatos = ocurrencia?.candidates.orEmpty(),
-                categoria = pago.rule.category,
-                cuentaId = pago.rule.accountId,
-            )
+            filaDelPago(pago, ocurrencia, vence, hoy)
         }
         .sortedWith(
             compareBy<PagoDelPeriodo> { it.pagado }
@@ -347,6 +335,76 @@ fun checklistDelPeriodo(
                 .thenBy { it.nombre.lowercase() },
         )
 }
+
+/**
+ * **Lo que quedó abierto de períodos ANTERIORES** al que se está mirando: la ocurrencia que el server
+ * todavía pregunta (`occurred = false`) y cuyo vencimiento cae antes de que empiece [periodo].
+ *
+ * Es lo que antes vivía en «Sin confirmar». No es de este período, y por eso la lista del período no
+ * lo mezcla con nada: va en un grupo propio, al final, que dice de qué período es. Lo que de un
+ * período anterior SÍ se pagó no aparece en ningún lado —pertenece a ese período, y se ve en «Tus
+ * períodos»—: mostrarlo acá era lo que hacía leer «Celular · ya ocurrió» en la pantalla de octubre
+ * cuando lo pagado era septiembre.
+ *
+ * Una ocurrencia sin regla conocida se descarta en silencio, igual que en el checklist.
+ */
+fun pendientesDePeriodosAnteriores(
+    upcoming: List<UpcomingPayment>,
+    ocurrencias: List<OccurrenceState>,
+    periodo: PeriodoFinanciero,
+    settings: PeriodSettings,
+): List<PagoDelPeriodo> {
+    val empieza = ventanaDe(periodo, settings).first
+    val hoy = hoySegunLosVencimientos(upcoming)
+    val reglas = upcoming.associateBy { it.rule.id }
+    return ocurrencias
+        .filter { !it.occurred && epochDeFecha(it.dueDate) < empieza }
+        .mapNotNull { ocurrencia ->
+            val pago = reglas[ocurrencia.ruleId] ?: return@mapNotNull null
+            filaDelPago(pago, ocurrencia, ocurrencia.dueDate, hoy)
+        }
+        .sortedWith(compareBy<PagoDelPeriodo> { it.vence }.thenBy { it.nombre.lowercase() })
+}
+
+/** Una fila, sea del período o de uno anterior: la regla, su ocurrencia (si hay) y su vencimiento. */
+private fun filaDelPago(
+    pago: UpcomingPayment,
+    ocurrencia: OccurrenceState?,
+    vence: String,
+    hoy: LocalDate?,
+): PagoDelPeriodo = PagoDelPeriodo(
+    ruleId = pago.rule.id,
+    nombre = pago.rule.name,
+    monto = pago.rule.amount,
+    pagado = ocurrencia?.occurred == true,
+    // Con la fecha de la ocurrencia, el `daysUntil` que mandó el server habla de OTRO
+    // vencimiento: se recalcula contra el mismo «hoy» del que salió esa respuesta.
+    diasParaVencer = if (ocurrencia == null) pago.daysUntil
+    else diasEntre(hoy, vence) ?: pago.daysUntil,
+    montoEsSaldo = pago.rule.montoEsSaldo,
+    moneda = pago.rule.currency,
+    vence = vence,
+    periodoDelSello = ocurrencia?.period,
+    derivado = ocurrencia?.derivadaDeUnMovimiento == true,
+    esIngreso = pago.rule.type == TransactionType.INCOME,
+    montoPagado = ocurrencia
+        ?.takeIf { it.occurred }
+        ?.takeIf { (it.monedaDelPago ?: pago.rule.currency) == pago.rule.currency }
+        ?.montoDelPago,
+    // Lo que la fila necesita para ser de SOLO LECTURA y aun así ofrecer algo útil:
+    // de dónde salió el tilde (o si no salió de ningún lado), qué movimiento hay
+    // detrás para poder decir «no fue este», y qué propone Movi cuando tuvo dudas.
+    automatica = ocurrencia?.automatica == true,
+    eventId = ocurrencia?.eventId,
+    candidatos = ocurrencia?.candidates.orEmpty(),
+    categoria = pago.rule.category,
+    cuentaId = pago.rule.accountId,
+    // Solo cuando `confirmedAt` ES la fecha del movimiento: ver [PagoDelPeriodo.pagadoEl].
+    pagadoEl = ocurrencia
+        ?.takeIf { it.occurred && it.derivadaDeUnMovimiento && it.confirmedAt > 0L }
+        ?.let { epochMillisToAppDate(it.confirmedAt).toString() },
+    periodoDelDueno = ocurrencia?.periodoDelDueno ?: ocurrencia?.period,
+)
 
 /**
  * Qué día es hoy **según la misma respuesta** que trajo los vencimientos.
@@ -417,6 +475,33 @@ fun ingresosPendientes(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
 /** Lo ya tildado, pagos e ingresos juntos: la mitad del checklist que prueba el avance. */
 fun yaMarcados(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> = checklist.filter { it.pagado }
 
+/** «Ya pagaste»: los pagos (no los ingresos) que tienen un pago en el período. */
+fun pagosHechos(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
+    checklist.filter { it.pagado && !it.esIngreso }
+
+/** «Ya recibiste»: los ingresos que ya llegaron en el período. */
+fun ingresosRecibidos(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
+    checklist.filter { it.pagado && it.esIngreso }
+
+/**
+ * **Cuánto ya pagaste en el período**, en pesos: lo que de verdad salió cuando se sabe
+ * ([PagoDelPeriodo.montoPagado]) y si no, lo que dice la regla.
+ *
+ * El saldo de una tarjeta no es un pago: sin el monto del movimiento que la pagó no suma nada, en
+ * vez de sumar la deuda entera como si se hubiera pagado. Y fuera de pesos no se suma: una cifra en
+ * pesos que esconde dólares adentro es la clase de total que este archivo no da.
+ */
+fun yaPagadoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
+    pagosHechos(checklist).filter { it.moneda == "COP" }.sumOf { it.montoPagado ?: if (it.montoEsSaldo) 0L else it.monto }
+
+/** Lo que falta que llegue: el total de «Por cobrar», con el mismo criterio que [faltaPorPagar]. */
+fun faltaPorCobrar(checklist: List<PagoDelPeriodo>): Long =
+    ingresosPendientes(checklist).filter { it.moneda == "COP" }.sumOf { it.monto }
+
+/** Lo que ya llegó: el total de «Ya recibiste», con lo que de verdad entró cuando se sabe. */
+fun yaRecibidoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
+    ingresosRecibidos(checklist).filter { it.moneda == "COP" }.sumOf { it.montoPagado ?: it.monto }
+
 /**
  * El avance **sobre los pagos**: cuántos están tildados de cuántos hay.
  *
@@ -438,11 +523,13 @@ fun avanceDelChecklist(checklist: List<PagoDelPeriodo>): Pair<Int, Int> {
  * checklist completo, a un toque— pero deja de presentar una parte como si fuera el total.
  *
  * **Sin nada pendiente y con ingresos, la línea cuenta las dos cosas.** «Ya salieron los 12
- * pagos» junto a [tituloDeLosListos] diciendo «Listos · 14 de 14» dejaba sin explicar los otros
- * dos: el grupo de abajo lista pagos E ingresos, y esta línea solo hablaba de pagos. Sin ingresos
- * en el checklist no hay nada que agregar, y sigue diciendo lo de siempre. Y «ya está todo» solo
- * si TAMBIÉN entraron los ingresos: con uno pendiente, la línea habla solo de los pagos (que sí
- * salieron todos) y no contradice al «Listos · 13 de 14» de abajo.
+ * pagos» con dos ingresos también recibidos dejaba sin contar lo que llegó: la lista del período
+ * también tiene los ingresos, y esta línea solo hablaba de pagos. Sin ingresos en el checklist no
+ * hay nada que agregar, y sigue diciendo lo de siempre. Y «ya está todo» solo si TAMBIÉN entraron
+ * los ingresos: con uno pendiente, la línea habla solo de los pagos (que sí salieron todos) y no
+ * contradice al «Por cobrar» de la lista.
+ *
+ * En Plan es también lo que dice «Falta por pagar» cuando ya no falta nada.
  */
 fun lineaDeLoQueFalta(checklist: List<PagoDelPeriodo>): String {
     val (pagados, total) = avanceDelChecklist(checklist)
@@ -472,28 +559,6 @@ fun pieDeLoYaPagado(checklist: List<PagoDelPeriodo>): String? {
     return if (pagados == 1) "Ya salió 1. El checklist completo está en «Ver todos»."
     else "Ya salieron $pagados. El checklist completo está en «Ver todos»."
 }
-
-/**
- * El título del grupo de lo ya tildado en el checklist completo: «Listos · X de Y».
- *
- * **Por qué no «Ya salieron», y por qué X de Y cuenta TODO el checklist.** El grupo lista
- * [yaMarcados] — pagos E ingresos —, pero el título decía «Ya salieron» y contaba con
- * [avanceDelChecklist], que deja los ingresos afuera: con tres pagos (dos tildados) y el sueldo
- * ya recibido, el grupo mostraba tres filas bajo «Ya salieron · 2 de 3», y una de ellas era plata
- * que ENTRÓ. «Listos» no tiene dirección, y X de Y cuenta exactamente lo que el grupo lista sobre
- * el total del checklist —el mismo total que el encabezado de la tarjeta—, así que el número se
- * puede verificar mirando las filas.
- *
- * **Por qué no «Ya ocurrieron».** Ese nombre ya es de la sección de los sellos con «Deshacer»
- * (`SeccionYaOcurrieron`), que en Movimientos → Recurrentes se pinta en la MISMA pantalla y con
- * filas que se solapan con estas: dos listas con el mismo título y contenido distinto se leen como
- * una sola que no cuadra.
- *
- * [lineaDeLoQueFalta] y [pieDeLoYaPagado] siguen hablando de «pagos» y contando sin ingresos a
- * propósito: esas sí hablan solo de plata que sale.
- */
-fun tituloDeLosListos(checklist: List<PagoDelPeriodo>): String =
-    "Listos · ${yaMarcados(checklist).size} de ${checklist.size}"
 
 // ── Qué debería revisar ──────────────────────────────────────────────────────
 

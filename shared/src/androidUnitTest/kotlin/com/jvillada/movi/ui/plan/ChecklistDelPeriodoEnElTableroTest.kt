@@ -87,16 +87,11 @@ class ChecklistDelPeriodoEnElTableroTest {
         "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
     )[vence.monthNumber - 1]
 
-    /** «1 de septiembre · venció hace 16 días» — el renglón que solo pinta el checklist. */
-    private val subtitulo: String = buildString {
-        append("${vence.dayOfMonth} de $mesEnPalabras · ")
-        append(
-            when {
-                diasVencido == 0 -> "vence hoy"
-                diasVencido == 1 -> "venció ayer"
-                else -> "venció hace $diasVencido días"
-            },
-        )
+    /** «venció hace 16 días» — el renglón de la fecha de la fila (ver `fechaDeLaFila`). */
+    private val subtitulo: String = when {
+        diasVencido == 0 -> "vence hoy"
+        diasVencido == 1 -> "venció ayer"
+        else -> "venció hace $diasVencido días"
     }
 
     private val bancolombia = Account("acc-banco", "Bancolombia", AccountType.SAVINGS, 1_000_000L, "COP")
@@ -213,8 +208,8 @@ class ChecklistDelPeriodoEnElTableroTest {
      * Tocar el primer botón que diga [texto].
      *
      * `performSemanticsAction` y no `performClick`: la tarjeta queda más abajo de lo que mide la
-     * pantalla de prueba y un click por coordenadas no llega. `onFirst()` porque el checklist va
-     * ARRIBA de «Próximos», y las dos secciones ofrecen los mismos rótulos sobre la misma regla.
+     * pantalla de prueba y un click por coordenadas no llega. Desde la ola «una sola lista» cada
+     * rótulo sale una sola vez por regla; `onFirst()` queda por si una prueba monta más de una.
      */
     private fun tocar(texto: String) {
         composeRule.onAllNodes(
@@ -234,11 +229,11 @@ class ChecklistDelPeriodoEnElTableroTest {
     fun `el checklist del periodo encabeza el tablero, con su fecha y su monto`() {
         montar()
 
-        esperarTexto("CHECKLIST DEL PERÍODO")
-        composeRule.onNodeWithText("Falta por pagar", useUnmergedTree = true).assertIsDisplayed()
+        esperarTexto("PAGOS DEL PERÍODO")
+        composeRule.onNodeWithText("Falta por pagar · 1", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText(subtitulo, useUnmergedTree = true).assertIsDisplayed()
         // El monto va entero, no abreviado: es la lista donde se compara lo que se debe. Hay más de
-        // un «$1.800.000» en pantalla (el tablero también lo pinta en «Próximos» y en el flujo libre),
+        // un «$1.800.000» en pantalla (el resumen de arriba, el total del grupo y el flujo libre),
         // así que se pide que exista, no que sea el único.
         assertEquals(
             true,
@@ -248,19 +243,24 @@ class ChecklistDelPeriodoEnElTableroTest {
     }
 
     /**
-     * **La fila no acepta un toque, y no hay ninguna forma de sellar el período sin movimiento.**
+     * **Tocar la fila abre la regla; nunca sella el período.**
      *
-     * Es la regresión de la ola entera. Antes la fila era clickeable y tildarla mandaba
-     * `markOccurrence(ruleId, period, null)` — un sello con la nada adentro. Ahora no hay nodo
-     * clickeable que contenga ese renglón, y nada se manda.
+     * Era la regresión de la ola del checklist: la fila era clickeable y tildarla mandaba
+     * `markOccurrence(ruleId, period, null)` — un sello con la nada adentro. Desde la ola «una sola
+     * lista» la fila vuelve a aceptar UN toque —el que tenía el renglón de «Próximos», que se fue—
+     * y ese toque abre la hoja de editar la regla. Lo que se prueba es las dos mitades: que el toque
+     * existe y lleva a editar, y que no manda ningún sello.
      */
     @Test
-    fun `la fila del checklist es de solo lectura`() {
+    fun `tocar la fila abre la regla para editarla y no sella nada`() {
         montar()
         esperarTexto(subtitulo)
 
-        assertEquals(0, clickeablesCon(subtitulo), "la fila dejó de ser un control")
-        assertEquals(0, marcadas, "y nadie selló nada")
+        assertEquals(1, clickeablesCon(subtitulo), "un solo toque: abrir la regla")
+        tocar(subtitulo)
+
+        esperarTexto("Editar recurrente")
+        assertEquals(0, marcadas, "abrir la regla no sella nada")
     }
 
     /**
@@ -330,7 +330,7 @@ class ChecklistDelPeriodoEnElTableroTest {
     fun `un sello sin movimiento se puede quitar`() {
         estadoDelArriendo = estadoDelArriendo.copy(occurred = true, eventId = null)
         montar()
-        esperarTexto("marcado a mano, sin movimiento")
+        esperarTexto("Marcado a mano, sin movimiento")
 
         tocar("Quitar la marca")
 
@@ -338,19 +338,31 @@ class ChecklistDelPeriodoEnElTableroTest {
         assertEquals(1, desmarcadas)
     }
 
-    /** El tablero sigue siendo el de siempre: el checklist se suma arriba, no reemplaza nada. */
+    /**
+     * **Una sola lista.** «Próximos», «Sin confirmar» y «Ya ocurrieron» se fueron: la regla aparece
+     * una vez, con UN «Anotar este pago». Lo que contesta otra cosa (el flujo libre) sigue abajo.
+     */
     @Test
-    fun `las secciones de siempre siguen debajo del checklist`() {
+    fun `la regla sale una sola vez y las otras listas ya no estan`() {
         montar()
-        esperarTexto("CHECKLIST DEL PERÍODO")
+        esperarTexto("PAGOS DEL PERÍODO")
 
-        composeRule.onNodeWithText("PRÓXIMOS", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Flujo libre", useUnmergedTree = true).assertIsDisplayed()
-        // Y «Próximos» ofrece lo mismo que el checklist, no un segundo mecanismo de sellado: el
-        // «Ya lo pagué» que sellaba sin movimiento se fue de las dos a la vez.
-        assertTrue(
-            composeRule.onAllNodesWithText("Anotar este pago", useUnmergedTree = true)
-                .fetchSemanticsNodes().size >= 2,
+        for (seccion in listOf("PRÓXIMOS", "SIN CONFIRMAR", "YA OCURRIERON")) {
+            assertTrue(
+                composeRule.onAllNodesWithText(seccion, substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isEmpty(),
+                "«$seccion» ya no existe",
+            )
+        }
+        assertEquals(
+            1,
+            composeRule.onAllNodesWithText("Arriendo", useUnmergedTree = true).fetchSemanticsNodes().size,
+            "el arriendo sale una sola vez",
+        )
+        assertEquals(
+            1,
+            composeRule.onAllNodesWithText("Anotar este pago", useUnmergedTree = true).fetchSemanticsNodes().size,
         )
         assertTrue(
             composeRule.onAllNodesWithText("Ya lo pagué", useUnmergedTree = true)

@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.recurrentes
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -35,28 +36,29 @@ class OccurrenceLogicTest {
         candidates = candidates,
     )
 
-    @Test fun `sin estado no se pregunta nada`() {
-        assertFalse(hayQuePreguntar(null))
-    }
+    /** La fila del checklist con los candidatos de [e], para probar [propuestaDeLaFila]. */
+    private fun fila(e: OccurrenceState) = PagoDelPeriodo(
+        ruleId = e.ruleId, nombre = "Salario", monto = 5_000_000, pagado = false, diasParaVencer = -1,
+        periodoDelSello = e.period, candidatos = e.candidates,
+    )
 
-    @Test fun `un periodo ya cerrado no vuelve a preguntar`() {
-        assertFalse(hayQuePreguntar(estado(occurred = true, eventId = "ev_1")))
-    }
-
-    @Test fun `un periodo abierto pregunta, aunque no haya ninguna propuesta`() {
-        // Sin candidatos igual hay que ofrecer el «ya lo pagué»: esa es la salida que hace que la
-        // función sirva cuando el emparejamiento no encuentra nada.
-        assertTrue(hayQuePreguntar(estado()))
-    }
+    /** La media frase de evidencia de una ocurrencia ya dada por ocurrida. */
+    private fun origen(e: OccurrenceState) = origenDeLoOcurrido(
+        automatica = e.automatica,
+        derivada = e.derivadaDeUnMovimiento,
+        hayMovimiento = e.eventId != null,
+        monto = e.montoDelPago,
+        moneda = e.monedaDelPago,
+    )
 
     @Test fun `no fue este pasa a la siguiente propuesta`() {
         val e = estado(candidates = listOf(evento("ev_1"), evento("ev_2")))
-        assertEquals("ev_1", propuestaActual(e)?.id)
-        assertEquals("ev_2", propuestaActual(e, descartadas = setOf(claveDescartada("rr_1", "ev_1")))?.id)
+        assertEquals("ev_1", propuestaDeLaFila(fila(e), emptySet())?.id)
+        assertEquals("ev_2", propuestaDeLaFila(fila(e), setOf(claveDescartada("rr_1", "ev_1")))?.id)
         assertNull(
-            propuestaActual(
-                e,
-                descartadas = setOf(claveDescartada("rr_1", "ev_1"), claveDescartada("rr_1", "ev_2")),
+            propuestaDeLaFila(
+                fila(e),
+                setOf(claveDescartada("rr_1", "ev_1"), claveDescartada("rr_1", "ev_2")),
             ),
         )
     }
@@ -73,10 +75,10 @@ class OccurrenceLogicTest {
         val gas = estado(candidates = listOf(elPagoDelGas)).copy(ruleId = "rr_gas")
         val rechazadoEnAgua = setOf(claveDescartada("rr_agua", "ev_gas"))
 
-        assertNull(propuestaActual(agua, rechazadoEnAgua), "en Agua ya se dijo que no")
+        assertNull(propuestaDeLaFila(fila(agua), rechazadoEnAgua), "en Agua ya se dijo que no")
         assertEquals(
             "ev_gas",
-            propuestaActual(gas, rechazadoEnAgua)?.id,
+            propuestaDeLaFila(fila(gas), rechazadoEnAgua)?.id,
             "en Gas sigue siendo el candidato correcto",
         )
     }
@@ -89,124 +91,70 @@ class OccurrenceLogicTest {
     @Test fun `un periodo ilegible no imprime un numero crudo`() {
         // Nunca «el de 13» ni «el de null»: si no se entiende el periodo, la frase se acorta.
         assertEquals("¿Ya te llegó?", tituloPropuesta(TransactionType.INCOME, "basura"))
-        assertEquals(
-            "Ya ocurrió · marcado a mano, sin movimiento",
-            textoYaOcurrio(estado(true, null).copy(period = "2026-99")),
-        )
     }
 
     /**
-     * Regresión del hallazgo ALTA-1: «Ya ocurrió **este mes**» era el único rastro que quedaba
-     * cuando la app cerraba el periodo equivocado, y estaba escrito de la única forma que lo
-     * volvía indetectable. El texto tiene que nombrar el mes.
-     */
-    @Test fun `una fila cerrada nombra el mes y dice si la respalda un movimiento`() {
-        assertEquals("Ya ocurrió en agosto · con un movimiento", textoYaOcurrio(estado(true, "ev_1")))
-        assertEquals(
-            "Ya ocurrió en septiembre · con un movimiento",
-            textoYaOcurrio(estado(true, "ev_1").copy(period = "2026-09")),
-        )
-    }
-
-    /**
-     * **Un sello sin movimiento lo dice, y eso es nuevo.**
-     *
-     * Decía «Ya ocurrió en agosto» a secas: la fila que MENOS respaldo tiene era la única que no
-     * explicaba de dónde salía, así que se leía igual que una anclada a plata que se puede mirar.
-     * Desde que la casilla del checklist dejó de marcar sin evidencia, estos sellos no se pueden
-     * crear más — pero en la base del dueño hay varios, y lo único honesto es que digan lo que son
-     * y ofrezcan quitarse.
+     * **Un sello sin movimiento lo dice.** La fila que MENOS respaldo tiene no puede leerse igual
+     * que una anclada a plata que se puede mirar. Desde que la casilla del checklist dejó de marcar
+     * sin evidencia, estos sellos no se pueden crear más — pero en la base del dueño hay varios.
      */
     @Test fun `un sello sin movimiento dice que se marco a mano`() {
-        assertEquals(
-            "Ya ocurrió en agosto · marcado a mano, sin movimiento",
-            textoYaOcurrio(estado(true, null)),
-        )
+        assertEquals("marcado a mano, sin movimiento", origen(estado(true, null)))
     }
 
     /**
-     * **Lo que el dueño marcó y lo que un movimiento prueba no se leen igual.**
-     *
-     * La cuota de un crédito y el pago de una tarjeta llegan a «Ya ocurrieron» derivados del
-     * movimiento que bajó la deuda: nadie los marcó. Decir «con un movimiento» —la frase de un
-     * sello que el dueño ancló a mano— borraría justamente la diferencia que explica por qué esa
-     * fila no tiene «Deshacer».
+     * **Lo que el dueño marcó y lo que un movimiento prueba no se leen igual.** La cuota de un
+     * crédito llega derivada del movimiento que bajó la deuda: nadie la marcó.
      */
     @Test fun `una fila derivada dice que la prueba un movimiento`() {
         val derivada = estado(true, "ev_1").copy(derivadaDeUnMovimiento = true)
-        assertEquals("Ya ocurrió en agosto · lo prueba un movimiento", textoYaOcurrio(derivada))
+        assertEquals("lo prueba un movimiento", origen(derivada))
     }
 
     /**
      * **Y dice cuánta plata.** El monto no filtra: un abono de $50.000 sobre un extracto de
-     * $1.008.902 salda el periodo igual que un pago completo y apaga el recordatorio, porque movi
-     * no conoce el extracto contra el cual comparar (ver `PagosDeDeuda.kt` en el server). Lo único
-     * honesto que queda es mostrar el número — sin él la fila diría «ya ocurrió» sobre un abono
-     * simbólico y el dueño no tendría cómo notarlo.
+     * $1.008.902 salda el periodo igual que un pago completo, porque movi no conoce el extracto
+     * (ver `PagosDeDeuda.kt` en el server). Sin el número el dueño no tendría cómo notarlo.
      */
     @Test fun `una fila derivada dice cuanta plata la prueba`() {
         val derivada = estado(true, "ev_1")
             .copy(derivadaDeUnMovimiento = true, montoDelPago = 50_000, monedaDelPago = "COP")
-        assertEquals("Ya ocurrió en agosto · lo prueba un pago de $50.000", textoYaOcurrio(derivada))
+        assertEquals("lo prueba un pago de $50.000", origen(derivada))
     }
 
     /** Una tarjeta en dólares no se lee en pesos: la moneda viaja con el monto. */
     @Test fun `el monto derivado respeta la moneda`() {
         val derivada = estado(true, "ev_1")
             .copy(derivadaDeUnMovimiento = true, montoDelPago = 181, monedaDelPago = "USD")
-        assertEquals("Ya ocurrió en agosto · lo prueba un pago de US$181", textoYaOcurrio(derivada))
+        assertEquals("lo prueba un pago de US$181", origen(derivada))
     }
 
     /**
-     * Un sello a mano no muestra monto aunque venga con movimiento: ahí el emparejamiento lo
-     * confirmó el dueño y la fila ya dice lo suyo. El monto se agregó para el caso donde NADIE
-     * confirmó nada.
+     * Un sello del dueño con movimiento dice «con un movimiento», no «lo prueba»: lo confirmó él.
+     * Con el monto cuando se sabe (el detalle de un período lo manda): una fila que dice «con un
+     * movimiento» sin decir de cuánto no deja notar un abono parcial.
      */
     @Test fun `un sello a mano no se disfraza de derivado`() {
-        val sellada = estado(true, "ev_1").copy(montoDelPago = 50_000, monedaDelPago = "COP")
-        assertEquals("Ya ocurrió en agosto · con un movimiento", textoYaOcurrio(sellada))
+        assertEquals("con un movimiento", origen(estado(true, "ev_1")))
+        val conMonto = estado(true, "ev_1").copy(montoDelPago = 50_000, monedaDelPago = "COP")
+        assertEquals("con un movimiento de $50.000", origen(conMonto))
     }
 
     /**
-     * **Lo que Movi emparejó solo lo dice con todas las letras.**
-     *
-     * Una cuota de crédito dice «lo prueba un movimiento» porque ahí el pago movió la deuda y no
-     * hay nada que discutir. Un emparejamiento automático es otra cosa: Movi dedujo cuál era, y
-     * puede haberse equivocado. Si las dos filas sonaran igual, la fila deducida le estaría
-     * pidiendo al dueño la misma confianza que la fila probada — justo donde corresponde revisar,
-     * y donde además tiene un «no fue este» para contestar.
+     * **Lo que Movi emparejó solo lo dice con todas las letras.** Un emparejamiento automático puede
+     * estar equivocado; si sonara igual que una cuota probada, le pediría al dueño la misma
+     * confianza justo donde corresponde revisar (y donde tiene un «no fue este»).
      */
     @Test fun `una fila automatica dice que la empareja Movi`() {
         val automatica = estado(true, "ev_1")
             .copy(derivadaDeUnMovimiento = true, automatica = true, montoDelPago = 180_000, monedaDelPago = "COP")
-        assertEquals(
-            "Ya ocurrió en agosto · Movi lo emparejó con un movimiento de $180.000",
-            textoYaOcurrio(automatica),
-        )
+        assertEquals("Movi lo emparejó con un movimiento de $180.000", origen(automatica))
     }
 
     /** Sin monto —que hoy no pasa, pero el default del campo lo permite— se dice igual de dónde sale. */
     @Test fun `una fila automatica sin monto igual dice quien la emparejo`() {
         val automatica = estado(true, "ev_1").copy(derivadaDeUnMovimiento = true, automatica = true)
-        assertEquals("Ya ocurrió en agosto · lo emparejó Movi", textoYaOcurrio(automatica))
-    }
-
-    /**
-     * **«Deshacer» solo donde hay un sello que borrar.** En una ocurrencia derivada el DELETE
-     * contestaría 404 y la pantalla se quedaría igual: un control muerto, el error exacto que este
-     * repo ya cometió una vez. Se revierte borrando el movimiento, no desmarcando nada.
-     */
-    @Test fun `una ocurrencia derivada no se puede deshacer`() {
-        assertTrue(sePuedeDeshacer(estado(true, "ev_1")))
-        assertTrue(sePuedeDeshacer(estado(true, null)))
-        assertFalse(sePuedeDeshacer(estado(true, "ev_1").copy(derivadaDeUnMovimiento = true)))
-        // Y tampoco la automática: tampoco hay fila que borrar. Se revierte con el rechazo, que es
-        // otro botón y otro endpoint — la pantalla que lo ofrezca lee `automatica`, no esto.
-        assertFalse(
-            sePuedeDeshacer(
-                estado(true, "ev_1").copy(derivadaDeUnMovimiento = true, automatica = true),
-            ),
-        )
+        assertEquals("lo emparejó Movi", origen(automatica))
     }
 
     @Test fun `la diferencia de monto se dice, no se disimula`() {
@@ -242,12 +190,5 @@ class OccurrenceLogicTest {
         // 1787677200000 = 25 de agosto de 2026, 12:00 en Bogotá.
         val texto = descripcionPropuesta(evento("ev_1").copy(timestamp = 1_787_677_200_000))
         assertTrue(texto.startsWith("Movimiento del 25 de agosto"), texto)
-    }
-
-    @Test fun `la ocurrencia se busca por regla`() {
-        val lista = listOf(estado(), estado().copy(ruleId = "rr_2", occurred = true))
-        assertFalse(ocurrenciaDe(lista, "rr_1")!!.occurred)
-        assertTrue(ocurrenciaDe(lista, "rr_2")!!.occurred)
-        assertNull(ocurrenciaDe(lista, "rr_3"))
     }
 }

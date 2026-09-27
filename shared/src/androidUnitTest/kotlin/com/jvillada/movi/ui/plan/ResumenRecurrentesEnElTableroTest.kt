@@ -131,7 +131,7 @@ class ResumenRecurrentesEnElTableroTest {
         esperarTexto("Disney+")
         composeRule.onNodeWithText("Disney+", useUnmergedTree = true).assertIsDisplayed()
         // MinSectionHeader pinta el título en mayúsculas.
-        composeRule.onNodeWithText("DETECTADAS · POR CONFIRMAR", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(TITULO_COBROS_DETECTADOS.uppercase(), useUnmergedTree = true).assertIsDisplayed()
     }
 
     /**
@@ -157,7 +157,7 @@ class ResumenRecurrentesEnElTableroTest {
 
         composeRule.onNodeWithText("Confirmar", useUnmergedTree = true).performClick()
 
-        esperarQueDesaparezca("DETECTADAS · POR CONFIRMAR")
+        esperarQueDesaparezca(TITULO_COBROS_DETECTADOS.uppercase())
         // Sale de «por confirmar», pero NO de la pantalla: confirmarla la vuelve una suscripción
         // ACTIVA, y desde el PR 5 las activas tienen dónde verse — con su etiqueta de origen y su
         // «Quitar». Antes de ese PR desaparecía sin dejar rastro, aunque siguiera sumando en el

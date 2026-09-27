@@ -9,6 +9,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertNull
+import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 
 /**
  * **Que la bandera exista no sirve de nada si un renderer no la mira.**
@@ -83,24 +85,24 @@ class MontoEsSaldoEnPantallaTest {
         // igual al saldo, así que la advertencia salía TODOS los meses: «No es el monto que
         // anotaste ($27.501.150)» sobre un pago perfectamente normal, repitiéndole encima la
         // cifra que el resto de la app dejó de mostrar como su pago.
-        assertFalse(avisaMontoDistinto(tarjeta, real = 1_400_000))
-        assertFalse(avisaMontoDistinto(tarjeta, real = 27_501_150), "ni siquiera cuando coincide")
+        assertFalse(avisaMontoDistinto(tarjeta.amount, tarjeta.montoEsSaldo, real = 1_400_000))
+        assertFalse(avisaMontoDistinto(tarjeta.amount, tarjeta.montoEsSaldo, real = 27_501_150), "ni siquiera cuando coincide")
     }
 
     @Test
     fun pero_en_una_regla_con_monto_esperado_el_aviso_se_conserva() {
         // La razón por la que el aviso existe (un sueldo con retenciones distintas cada mes) no
         // cambió: donde hay un monto esperado de verdad, la diferencia se sigue diciendo.
-        assertTrue(avisaMontoDistinto(sueldo, real = 11_780_000))
-        assertFalse(avisaMontoDistinto(sueldo, real = 12_000_000))
-        assertTrue(avisaMontoDistinto(cuota, real = 4_300_000))
+        assertTrue(avisaMontoDistinto(sueldo.amount, sueldo.montoEsSaldo, real = 11_780_000))
+        assertFalse(avisaMontoDistinto(sueldo.amount, sueldo.montoEsSaldo, real = 12_000_000))
+        assertTrue(avisaMontoDistinto(cuota.amount, cuota.montoEsSaldo, real = 4_300_000))
     }
 
     @Test
     fun una_propuesta_en_dolares_no_se_compara_contra_un_monto_en_pesos() {
         // La regla no tiene moneda (es en pesos); US$20 contra $12.000.000 no es «otro monto».
-        assertFalse(avisaMontoDistinto(sueldo, real = 20, monedaReal = "USD"))
-        assertTrue(avisaMontoDistinto(sueldo, real = 20, monedaReal = "COP"))
+        assertFalse(avisaMontoDistinto(sueldo.amount, sueldo.montoEsSaldo, real = 20, monedaReal = "USD"))
+        assertTrue(avisaMontoDistinto(sueldo.amount, sueldo.montoEsSaldo, real = 20, monedaReal = "COP"))
     }
 
     @Test
@@ -125,7 +127,12 @@ class MontoEsSaldoEnPantallaTest {
             ),
         )
 
-        assertTrue(hayQuePreguntar(estado))
-        assertEquals("ev-1", propuestaActual(estado)?.id)
+        val fila = PagoDelPeriodo(
+            ruleId = tarjeta.id, nombre = tarjeta.name, monto = tarjeta.amount, pagado = false,
+            diasParaVencer = -1, montoEsSaldo = true, periodoDelSello = estado.period,
+            candidatos = estado.candidates,
+        )
+        assertEquals("ev-1", propuestaDeLaFila(fila, emptySet())?.id)
+        assertNull(avisoDeMontoDistinto(tarjeta.amount, montoEsSaldo = true, estado.candidates.first()))
     }
 }
