@@ -4,13 +4,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -23,6 +26,7 @@ import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
@@ -166,11 +170,9 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
         suyas()
         montar()
 
-        // Ola N: «Pago de tarjeta» subió arriba de la cuadrícula (antes de la búsqueda), así que
-        // en 731 dp con la sección «¿Se repite?» montada un solo `performScrollTo` puede hacer
-        // falta — lo que importa es que siga siendo UN toque de scroll, no veinte filas de
-        // categorías para encontrarla.
-        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performScrollTo().assertIsDisplayed()
+        // Sin `performScrollTo`: si estuviera bajo veinte filas, en 731 dp no se vería. Y con la
+        // sección «¿Se repite?» montada, que es como la ve el dueño.
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed()
     }
 
     @Test
@@ -191,6 +193,54 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
         montar(gasto("Hija"))
 
         composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Hija")).performScrollTo().assertIsSelected()
+    }
+
+    /**
+     * Ola N, fix round (M3): con una categoría CONOCIDA (tiene celda propia) no puede volver a
+     * aparecer la fila de texto redundante — «Hija» tiene que verse una sola vez: la celda de la
+     * cuadrícula (y el rótulo de la sección, que la nombra aparte y no cuenta acá porque no es
+     * "Hija" a secas sino «CATEGORÍA · Hija»).
+     */
+    @Test
+    fun la_categoria_actual_conocida_no_aparece_dos_veces() {
+        suyas()
+        montar(gasto("Hija"))
+
+        composeRule.onAllNodesWithText("Hija", useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    /**
+     * Ola N, fix round (M3): una categoría ESCONDIDA no tiene celda en la cuadrícula (igual que
+     * una importada de un extracto), así que la fila de respaldo tiene que seguir marcándola.
+     */
+    @Test
+    fun una_categoria_escondida_se_ve_marcada_por_la_fila_de_respaldo() {
+        suyas()
+        UsedCategoriesCache.applyPref("Hija", CategoryPref(hidden = true))
+        montar(gasto("Hija"))
+
+        composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Hija")).assertDoesNotExist()
+        composeRule.onNode(
+            isSelected() and hasAnyDescendant(hasText("Hija")),
+            useUnmergedTree = true,
+        ).assertExists()
+    }
+
+    /**
+     * Ola N, fix round (M3): «Pago de tarjeta» tiene que quedar ARRIBA de la búsqueda y de la
+     * primera celda de la cuadrícula — es el punto 3 del brief, y nada lo medía todavía.
+     */
+    @Test
+    fun pago_de_tarjeta_queda_arriba_de_la_busqueda_y_de_la_cuadricula() {
+        suyas()
+        montar()
+
+        val pago = composeRule.onNodeWithText(CARD_PAYMENT_CATEGORY, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val busqueda = composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).getUnclippedBoundsInRoot()
+        val primeraCelda = composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Hija")).getUnclippedBoundsInRoot()
+
+        assertTrue(pago.top < busqueda.top, "«Pago de tarjeta» (${pago.top}) no está arriba de la búsqueda (${busqueda.top})")
+        assertTrue(pago.top < primeraCelda.top, "«Pago de tarjeta» (${pago.top}) no está arriba de la cuadrícula (${primeraCelda.top})")
     }
 
     @Test

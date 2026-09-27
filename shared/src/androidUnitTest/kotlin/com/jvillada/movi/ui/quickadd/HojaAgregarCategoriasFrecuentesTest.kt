@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -87,6 +88,37 @@ class HojaAgregarCategoriasFrecuentesTest {
         // como chip.
         assertApariciones("Transporte", 2)
         assertApariciones("Mercado", 1)
+    }
+
+    /**
+     * Ola N, fix round (I2): **tocar un chip no puede reordenar la fila.**
+     *
+     * Antes del fix, `categoriaActual` (el estado vivo) siempre iba primera —así que tocar
+     * cualquier chip la mandaba al frente y corría a las demás bajo el dedo: en un teléfono
+     * angosto, tocar la última pastilla visible la hacía desaparecer de la vista. Con cuatro
+     * categorías frecuentes, se toca la que NO es la más frecuente (para que el orden inicial no
+     * la ponga ya primera) y se verifica que dos pastillas ajenas al toque no cambiaron de
+     * posición relativa.
+     */
+    @Test
+    fun tocar_un_chip_no_reordena_las_demas_pastillas() {
+        cargarUsos(
+            UsedCategory("Mercado", listOf(TransactionType.EXPENSE), usosRecientes = 10),
+            UsedCategory("Transporte", listOf(TransactionType.EXPENSE), usosRecientes = 8),
+            UsedCategory("Salud", listOf(TransactionType.EXPENSE), usosRecientes = 6),
+            UsedCategory("Comida", listOf(TransactionType.EXPENSE), usosRecientes = 4),
+        )
+        montarHoja()
+
+        val transporteAntes = composeRule.onNodeWithText("Transporte").getUnclippedBoundsInRoot().left
+        val saludAntes = composeRule.onNodeWithText("Salud").getUnclippedBoundsInRoot().left
+
+        tocar("Comida")
+
+        val transporteDespues = composeRule.onNodeWithText("Transporte").getUnclippedBoundsInRoot().left
+        val saludDespues = composeRule.onNodeWithText("Salud").getUnclippedBoundsInRoot().left
+        assertEquals("«Transporte» se movió al tocar «Comida»", transporteAntes, transporteDespues)
+        assertEquals("«Salud» se movió al tocar «Comida»", saludAntes, saludDespues)
     }
 
     /** Sin datos de uso, la fila no dibuja nada: el comportamiento de siempre, intacto. */

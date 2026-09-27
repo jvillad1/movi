@@ -129,6 +129,14 @@ private fun CategoryRow(
     onClick: () -> Unit,
     /** Segunda línea opcional: hoy solo la usa «Pago de tarjeta», para decir qué implica elegirla. */
     subtitle: String? = null,
+    /**
+     * Ola N (fix round): con «Pago de tarjeta» y el respaldo de la actual arriba de la cuadrícula
+     * en vez de debajo de ella, su padding de siempre (14 dp) empujaba la búsqueda fuera de la
+     * vista en un teléfono de 731 dp — ver `la_busqueda_esta_a_la_vista_sin_buscarla_debajo_de_una_lista_larga`.
+     * Estas dos filas no necesitan tanto aire (no son una lista larga que hay que poder tocar sin
+     * errar): `true` las achica a la mitad.
+     */
+    compacto: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -136,7 +144,7 @@ private fun CategoryRow(
             .clickable(enabled = enabled, onClick = onClick)
             // El check dibujado no dice nada por sí solo: la fila declara que está elegida.
             .semantics { this.selected = selected }
-            .padding(vertical = 14.dp),
+            .padding(vertical = if (compacto) 7.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -698,7 +706,12 @@ internal fun ContenidoDelMovimiento(
             Spacer(Modifier.height(20.dp))
             Hairline()
             Spacer(Modifier.height(16.dp))
-            SheetLabel("CATEGORÍA")
+            // Ola N (fix round): con «Pago de tarjeta» arriba, lo primero bajo el título ya no es
+            // la categoría actual — y si no es de las frecuentes, su celda marcada puede quedar
+            // bajo el pliegue de la cuadrícula (orden alfabético, veinte y pico celdas). El rótulo
+            // dice cuál es sin que haga falta encontrar la celda, y TalkBack lo anuncia apenas
+            // entra a la sección (antes anunciaba «Pago de tarjeta», que no es la actual).
+            SheetLabel("CATEGORÍA · ${event.category}")
             Spacer(Modifier.height(4.dp))
             // Ola N: la fila de texto con la categoría actual se sacó de acá para el caso común —
             // quedaba dos veces (esta fila Y la celda marcada de la cuadrícula, justo debajo) y la
@@ -706,24 +719,32 @@ internal fun ContenidoDelMovimiento(
             // cuando la cuadrícula no tiene ninguna celda para marcar: una categoría escondida, o
             // importada de un extracto y fuera de cualquier catálogo, con la búsqueda vacía no
             // aparece entre las celdas — sin esta fila esos dos casos se quedarían sin ninguna
-            // marca, ni visual ni de TalkBack.
-            val laActualTieneCeldaPropia = contenidoDelSelectorDeCategoria(
-                busqueda = "",
-                tipo = event.type,
-                usadas = UsedCategoriesCache.used,
-                prefs = categoryPrefs,
-                usos = UsedCategoriesCache.usosRecientes,
-            ).celdas.any { esLaCeldaElegida(it, event.category) }
+            // marca, ni visual ni de TalkBack (el rótulo de arriba ya dice el nombre, pero no
+            // marca ninguna celda).
+            //
+            // `remember`: es el mismo cálculo que hace [SelectorDeCategoria] por dentro (misma
+            // búsqueda vacía, mismo tipo, `used`, `prefs` y `usos`) — sin esto corría dos veces en
+            // cada recomposición de la hoja entera.
+            val laActualTieneCeldaPropia = remember(event.category, event.type, categoryPrefs) {
+                contenidoDelSelectorDeCategoria(
+                    busqueda = "",
+                    tipo = event.type,
+                    usadas = UsedCategoriesCache.used,
+                    prefs = categoryPrefs,
+                    usos = UsedCategoriesCache.usosRecientes,
+                ).celdas.any { esLaCeldaElegida(it, event.category) }
+            }
             if (!laActualTieneCeldaPropia) {
-                CategoryRow(name = event.category, selected = true, enabled = false, onClick = {})
-                Spacer(Modifier.height(12.dp))
+                CategoryRow(name = event.category, selected = true, enabled = false, onClick = {}, compacto = true)
+                Spacer(Modifier.height(8.dp))
             }
             // Ola N: «Pago de tarjeta» sube ARRIBA de la cuadrícula — antes quedaba debajo de las
             // ~20 categorías del selector, y en una cuenta con muchas categorías el dueño tenía que
             // scrollear para encontrarla. Mismas condiciones de siempre
             // ([puedeMarcarsePagoDeTarjeta]): esto solo cambia la posición, no la lógica. Sigue sin
             // caber en el selector (es reservada: nada reservado se ofrece ahí), así que es su
-            // propia fila.
+            // propia fila. `compacto`: ver el KDoc de [CategoryRow] — libera el espacio que le
+            // hacía falta a la búsqueda para seguir a la vista sin scrollear en 731 dp.
             if (event.category != CARD_PAYMENT_CATEGORY && puedeMarcarsePagoDeTarjeta(event.type, categoryPrefs)) {
                 CategoryRow(
                     name = CARD_PAYMENT_CATEGORY,
@@ -731,10 +752,11 @@ internal fun ContenidoDelMovimiento(
                     enabled = !saving,
                     onClick = { choose(CARD_PAYMENT_CATEGORY) },
                     subtitle = "Deja de contar en tus gastos del mes: la compra ya se contó al usar la tarjeta",
+                    compacto = true,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 Hairline()
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
             }
             // Ola L · **Una sola forma de elegir categoría.** Acá había una lista de filas armada
             // con `PREDEFINED_CATEGORIES` (sin «Fútbol», «Hija», «Gardenera»: las del dueño) y, bajo

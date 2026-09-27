@@ -59,6 +59,7 @@ import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.newId
+import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -667,9 +668,9 @@ fun QuickAddScreen(
     }
 
     /**
-     * Ola A: hasta 6 chips con las categorías más frecuentes de esta pestaña — ver
-     * [categoriasParaLasPastillasDeAgregar]. Vacía sin datos de uso, que es cuando la fila de
-     * chips no ocupa lugar (ver [EditorBody]).
+     * Ola A: hasta 6 chips con las categorías más frecuentes de esta pestaña, con el mismo criterio
+     * que Reconciliar — ver [categoriasParaLasPastillasDeAgregar] para el porqué y las guardas
+     * (orden estable bajo el dedo, cuándo queda vacía de verdad).
      */
     val categoriasFrecuentesDelTipo = if (pickers.typeIndex > 1) {
         emptyList()
@@ -1985,13 +1986,21 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
  * secas, en vez de la [categoriasParaPastillas] común que ya usa Reconciliar (el detalle de un
  * SMS, ver [com.jvillada.movi.ui.sms.categoriasParaElegirEnElSms]): las dos pantallas podían
  * terminar en un orden distinto si esa función común cambiaba y solo una de las dos la usaba.
- * Acá no hay propuesta de Movi (esa es cosa del SMS) — lo único que va adelante es la categoría
- * que el movimiento ya tiene, para que no desaparezca de la fila si es menos frecuente que otra.
  *
- * **Vacía sin datos de uso** — la fila entera no se dibuja (ver [EditorBody]). Esta guarda es
- * propia de «Agregar»: [categoriasParaPastillas] sola no la tiene, y sin ella el catálogo se
- * colaría como "frecuente" el primer día que alguien abre Movi, antes de que exista ningún dato
- * de uso.
+ * **[categoriaActual] solo se antepone si el orden natural (frecuentes, luego propias, luego
+ * catálogo) no la trae ya** — fix round de la Ola N: al principio esta función SIEMPRE la ponía
+ * primera, así que tocar cualquier chip (que cambia la categoría elegida, ver
+ * [elegirCategoriaAMano]) mandaba esa pastilla al frente y corría a las demás bajo el dedo — en un
+ * teléfono angosto, tocar la última pastilla visible la hacía desaparecer de la vista. Con esta
+ * guarda, mientras la categoría elegida siga siendo una de las que YA aparecían, la fila no se
+ * reordena; el "adelantar" solo entra para el caso real que lo necesita: una categoría recién
+ * puesta (un preset de recurrente, por ejemplo) que todavía no tiene entrada en [usadas] y por eso
+ * no saldría en ningún lado.
+ *
+ * **Vacía sin datos de uso** — la fila entera no se dibuja (ver [EditorBody]). La guarda es
+ * "[usos] vacío", no "sin ninguna entrada con más de cero usos": con ALGÚN dato de uso (aunque sea
+ * de otra pestaña, o todo en cero) la fila igual aparece, rellena con propias y catálogo como
+ * Reconciliar — es la misma unificación de este fix, no una fila "vacía" a medias.
  *
  * Pura, para poder comparar su orden con el de Reconciliar sin pintar nada.
  */
@@ -2004,6 +2013,16 @@ internal fun categoriasParaLasPastillasDeAgregar(
     cuantas: Int = 6,
 ): List<String> {
     if (usos.isEmpty()) return emptyList()
+    val sinAdelantarNada = categoriasParaPastillas(
+        primeras = emptyList(),
+        tipo = tipo,
+        usadas = usadas,
+        prefs = prefs,
+        usos = usos,
+        cuantas = cuantas,
+    )
+    val yaEsta = sinAdelantarNada.any { normalizarParaBuscar(it) == normalizarParaBuscar(categoriaActual) }
+    if (yaEsta) return sinAdelantarNada
     return categoriasParaPastillas(
         primeras = listOf(categoriaActual),
         tipo = tipo,
