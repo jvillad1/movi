@@ -8,6 +8,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
+import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.ui.LocalRefreshTick
 import kotlinx.datetime.Clock
 
@@ -62,6 +66,12 @@ class Lectura<T : Any> internal constructor(recordado: T?) {
      * prendido la pantalla no puede presentar [valor] como actual.
      */
     val mostrandoLoUltimo: Boolean get() = valor != null && !contesto
+
+    /**
+     * Falló con algo a la vista: lo que se ve es lo último que vimos y la pantalla tiene que
+     * decirlo (ver `NoSePudoActualizar`). Sin nada a la vista, el error de siempre.
+     */
+    val falloConAlgoALaVista: Boolean get() = fallo && valor != null
 
     fun alEmpezar() {
         actualizando = true
@@ -126,6 +136,9 @@ class Lectura<T : Any> internal constructor(recordado: T?) {
  * [Lectura.anotar] acaba de poner— y se lee otra vez. Tras [REINTENTOS_POR_ESCRITURAS] vueltas
  * así se muestra lo último que trajo, sin guardarlo.
  *
+ * [activa] en `false` no lee (la pantalla está compuesta pero no se muestra, como Presupuestos
+ * con «Pagos del mes» elegido en Plan); lee apenas pasa a `true`.
+ *
  * La lectura usa [intentar] y no `runCatching`: una navegación que cancela la lectura no es una
  * falla, y no puede dejar un aviso rojo que nadie tuvo.
  */
@@ -134,6 +147,7 @@ fun <T : Any> rememberLectura(
     clave: ClaveDeLectura<T>,
     reintento: Int,
     periodoVigente: String? = null,
+    activa: Boolean = true,
     leer: suspend () -> T,
 ): Lectura<T> {
     val lectura = remember(clave, periodoVigente) {
@@ -141,7 +155,8 @@ fun <T : Any> rememberLectura(
     }
     val leerAhora by rememberUpdatedState(leer)
     val tick = LocalRefreshTick.current
-    LaunchedEffect(lectura, reintento, tick) {
+    LaunchedEffect(lectura, reintento, tick, activa) {
+        if (!activa) return@LaunchedEffect
         // Sin período no se sabe qué mostrar: ni se lee (ver el KDoc).
         if (clave.dependeDelPeriodo && periodoVigente == null) return@LaunchedEffect
         lectura.alEmpezar()
@@ -171,4 +186,18 @@ fun <T : Any> rememberLectura(
 /** Cuántas veces se vuelve a leer una lectura que se cruzó con escrituras antes de rendirse. */
 internal const val REINTENTOS_POR_ESCRITURAS: Int = 3
 
-private fun ahoraEnMs(): Long = Clock.System.now().toEpochMilliseconds()
+internal fun ahoraEnMs(): Long = Clock.System.now().toEpochMilliseconds()
+
+/**
+ * **El período vigente según el perfil a la vista**, como id («2026-09»), para pasárselo a
+ * [rememberLectura] en las claves que dependen del período.
+ *
+ * `null` mientras el perfil no se sabe: ni leído, ni recordado, ni falló. Si la lectura del perfil
+ * falló sin nada recordado se usa el mes de calendario, que es lo que esas pantallas ya hacían sin
+ * perfil; lo que se guarde así lleva ese id, y si el período de verdad es otro no se va a mostrar.
+ */
+fun periodoVigenteSegun(perfil: Lectura<UserProfile>, ahora: Long = ahoraEnMs()): String? {
+    val ajustes = perfil.valor?.ajustesDelPeriodo()
+        ?: if (perfil.terminada) PeriodSettings() else return null
+    return periodoActual(ahora, ajustes).prefijo
+}
