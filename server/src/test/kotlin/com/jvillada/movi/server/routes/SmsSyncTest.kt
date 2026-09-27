@@ -229,6 +229,45 @@ class SmsSyncTest {
     }
 
     /**
+     * **Los dos avisos del mismo pago se apuntan entre sí**, en la bandeja y en el detalle: el pago
+     * con la tarjeta Glim del 25-sep, avisado por Google Wallet y por la app de Glim.
+     */
+    @Test
+    fun `GET api sms marca los avisos que parecen el mismo pago`() = testApplication {
+        application { testModule() }
+        val client = smsClient(this)
+        val tokenA = mintToken(userAId, userAEmail)
+
+        client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                listOf(
+                    makeSms(
+                        "parecido-wallet", "TOSTAO CAFE Y PAN VISC: COP15,100 with Glim ••3037",
+                        time = "2026-09-25 09:15", bank = "Notificación · Google Wallet",
+                    ),
+                    makeSms(
+                        "parecido-glim",
+                        "¡Usaste tus beneficios!: Pagaste \$15.100,00 COP con tu tarjeta de beneficios Glim el 25/09/2026 a las 14:15 en TOSTAO CAFE Y PAN.",
+                        time = "2026-09-25 09:15", bank = "Notificación · Glim",
+                    ),
+                )
+            )
+        }
+
+        val lista = client.get("/api/sms") { header(HttpHeaders.Authorization, "Bearer $tokenA") }
+            .body<List<SmsMessage>>()
+            .associate { it.id to it.parecidoA }
+        assertEquals("parecido-glim", lista["parecido-wallet"])
+        assertEquals("parecido-wallet", lista["parecido-glim"])
+
+        val detalle = client.get("/api/sms/parecido-glim") { header(HttpHeaders.Authorization, "Bearer $tokenA") }
+            .body<SmsMessage>()
+        assertEquals("parecido-wallet", detalle.parecidoA)
+    }
+
+    /**
      * Re-syncing the same message id does NOT duplicate rows (count stays the same).
      */
     @Test

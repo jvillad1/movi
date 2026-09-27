@@ -139,6 +139,17 @@ fun fechaLegibleDeSms(time: String): String {
 }
 
 /**
+ * Solo la hora de un `time` guardado, como la dice [fechaLegibleDeSms]: «9:15 a. m.». `null` si el
+ * `time` no se puede leer como fecha, para que quien la use no invente una hora.
+ */
+fun horaLegibleDeSms(time: String): String? {
+    val normalizado = claveDeTiempoDeSms(time)
+    val completo = if (normalizado.length == 16) "$normalizado:00" else normalizado
+    val fecha = runCatching { LocalDateTime.parse(completo) }.getOrNull() ?: return null
+    return horaLegibleDeLasDoce(fecha.hour, fecha.minute)
+}
+
+/**
  * «7:52 p. m.» — la hora de 24 en la forma de 12 que se dice hablando. Las 0 horas son «las doce»
  * de la madrugada, no «las cero»: `hour == 0` se muestra como `12`, no como `0`.
  */
