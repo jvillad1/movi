@@ -24,7 +24,7 @@ import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
-import com.jvillada.movi.ui.dashboard.ANCHO_DE_UNA_COLUMNA
+import com.jvillada.movi.ui.components.ANCHO_DE_UNA_COLUMNA
 import com.jvillada.movi.ui.dashboard.columnasDelInicio
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
@@ -61,9 +61,11 @@ import com.jvillada.movi.ui.dashboard.visibleSections
  * ### Una columna en el teléfono, dos en escritorio
  *
  * Generación 8. El ancho decide ([columnasDelInicio]): por debajo de ~900 dp, una columna en el
- * orden de la definición —el del teléfono—, con el ancho de siempre (600 dp); desde ahí, dos
- * columnas repartidas por tipo. En escritorio el Inicio era una tira de 500 px en el medio de un
- * lienzo de 1.400.
+ * orden de la definición —el del teléfono—, con el ancho de la columna de lectura (720 dp desde la
+ * Ola W1, el mismo que cualquier otra pantalla); desde ahí, dos columnas repartidas por tipo. En
+ * escritorio el Inicio era una tira de 500 px en el medio de un lienzo de 1.400. El umbral mira el
+ * ancho que le deja la cáscara (ya sin el rail), y el tope de ese ancho es el de un
+ * `Disposicion.Tablero`: 840 dp en una ventana mediana (una columna) y 1.280 en escritorio.
  *
  * **Ya no es una `LazyColumn`**: dos columnas que scrollean juntas no caben en una lista perezosa, y
  * el Inicio son a lo sumo ocho bloques —no una lista de trescientos movimientos—, así que componerlo

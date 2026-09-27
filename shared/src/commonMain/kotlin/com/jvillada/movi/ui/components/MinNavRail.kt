@@ -21,16 +21,22 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 
 /**
- * Contraparte de [MinBottomNav] en pantalla ancha: un rail a la izquierda, pintado una vez en la
- * raíz de App.kt. Ola C: muestra **las mismas cuatro pestañas** que la barra del teléfono
- * ([destinosPrincipales]) y debajo «Agregar» — sin Créditos, Presupuestos ni Más, que ahora viven
- * adentro de Patrimonio, de Plan y del avatar.
+ * Contraparte de [MinBottomNav] desde 600 dp: un rail a la izquierda, pintado una vez en la raíz de
+ * App.kt — ancho (216 dp) en escritorio y [compacto] (80 dp) en una ventana mediana. Ola C:
+ * muestra **las mismas cuatro pestañas** que la barra del teléfono ([destinosPrincipales]) y
+ * «Agregar» — sin Créditos, Presupuestos ni Más, que ahora viven adentro de Patrimonio, de Plan y
+ * del avatar.
  */
 @Composable
 fun MinNavRail(
     active: NavTab?,
     onTabSelected: (NavTab) -> Unit,
+    compacto: Boolean = false,
 ) {
+    if (compacto) {
+        RailCompacto(active, onTabSelected)
+        return
+    }
     Column(
         modifier = Modifier
             .width(216.dp)
@@ -81,6 +87,86 @@ fun MinNavRail(
                 color = Movi.colores.sobreMarca,
             )
         }
+    }
+}
+
+/** El ancho del rail compacto de una ventana mediana. */
+val ANCHO_DEL_RAIL_COMPACTO = 80.dp
+
+/**
+ * Ola W1: el rail de una ventana **mediana** (600–999 dp: tablet vertical, teléfono horizontal,
+ * ventana angosta de escritorio). 80 dp: el «+» arriba —es lo que más se usa— y debajo cada pestaña
+ * con su ícono y su rótulo corto ([DestinoPrincipal.rotuloCorto]). El rail ancho de 216 dp se come
+ * un tercio de una tablet vertical; la barra inferior, estirada a 800 dp, deja los destinos lejos
+ * del pulgar y del mouse.
+ */
+@Composable
+private fun RailCompacto(active: NavTab?, onTabSelected: (NavTab) -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(ANCHO_DEL_RAIL_COMPACTO)
+            .fillMaxHeight()
+            .background(Movi.colores.tarjeta)
+            .padding(vertical = Movi.espacios.margen),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(Movi.colores.marca)
+                .clickable { onTabSelected(NavTab.ADD) },
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = "Agregar",
+                tint = Movi.colores.sobreMarca,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        destinosPrincipales.forEach { dest ->
+            RailCompactoItem(dest, active, onTabSelected)
+        }
+    }
+}
+
+@Composable
+private fun RailCompactoItem(dest: DestinoPrincipal, active: NavTab?, onTabSelected: (NavTab) -> Unit) {
+    val isActive = dest.tab == active
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onTabSelected(dest.tab) }
+            .padding(horizontal = 2.dp, vertical = 8.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .clip(RoundedCornerShape(Movi.formas.pleno))
+                .background(if (isActive) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
+                .padding(horizontal = 14.dp, vertical = 3.dp),
+        ) {
+            Icon(
+                imageVector = dest.icon,
+                contentDescription = dest.label,
+                tint = if (isActive) Movi.colores.marca else Movi.colores.textoApagado,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Text(
+            text = dest.rotuloCorto,
+            maxLines = 1,
+            style = Movi.textos.rotulo.copy(
+                letterSpacing = 0.2.sp,
+                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+            ),
+            color = if (isActive) Movi.colores.texto else Movi.colores.textoApagado,
+        )
     }
 }
 

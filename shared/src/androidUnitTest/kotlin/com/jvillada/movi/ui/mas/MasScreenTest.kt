@@ -69,6 +69,18 @@ class MasScreenTest {
         lasDeAjustes.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertIsDisplayed() }
     }
 
+    /** Ola W1: en una ventana mediana (rail compacto) tampoco se esconde nada. */
+    @Test
+    fun `en una ventana mediana Ajustes muestra las mismas fichas`() {
+        composeRule.setContent {
+            CompositionLocalProvider(LocalWindowWidthClass provides WindowWidthClass.Medium) {
+                MoviTheme { MasScreen(onNavigate = {}) }
+            }
+        }
+
+        lasDeAjustes.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertIsDisplayed() }
+    }
+
     /** Ajustes no es pestaña: lleva flecha (vuelve a donde se estaba), no el avatar que la abrió. */
     @Test
     fun `Ajustes lleva flecha de volver`() {

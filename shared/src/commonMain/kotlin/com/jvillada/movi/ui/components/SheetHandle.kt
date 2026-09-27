@@ -34,13 +34,16 @@ import com.jvillada.movi.theme.Movi
 fun SheetHandleWithClose(
     onClose: () -> Unit,
     enabled: Boolean = true,
+    // Ola W1: una hoja centrada en pantalla ancha (ver [MarcoDeHoja]) no se arrastra desde abajo,
+    // así que no lleva manija — solo la X, en el mismo renglón de 44 dp.
+    conManija: Boolean = true,
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(44.dp),
     ) {
-        Box(
+        if (conManija) Box(
             modifier = Modifier
                 .align(Alignment.Center)
                 .width(32.dp)
