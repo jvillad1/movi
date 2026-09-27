@@ -16,6 +16,7 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.server.reminders.loadOccurredBy
 import com.jvillada.movi.server.reminders.loadOccurrenceRows
+import com.jvillada.movi.server.reminders.loadRejectedPairs
 import com.jvillada.movi.server.reminders.parteFijaDelChecklist
 import com.jvillada.movi.server.reminders.emparejadasComoSellos
 import com.jvillada.movi.server.reminders.periodosPorRegla
@@ -294,6 +295,10 @@ internal fun Transaction.parteFijaDelDisponible(
         hoy = hoy,
         settings = periodo,
         automaticas = emparejadas.map { it.ruleId to it.period }.toSet(),
+        // Los «no fue este» del dueño: sin esto un movimiento que ya rechazó explícitamente para
+        // una regla podía absorberse igual por nombre, y el Disponible salía mejor de lo que es
+        // (ver el KDoc de `parteFijaDelChecklist` en `PagosDelChecklist.kt`).
+        rechazados = loadRejectedPairs(uid),
     )
 }
 

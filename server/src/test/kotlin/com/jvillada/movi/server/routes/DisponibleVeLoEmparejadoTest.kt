@@ -129,6 +129,15 @@ class DisponibleVeLoEmparejadoTest {
         }
     }
 
+    private fun rechazar(ruleId: String, eventId: String) = transaction {
+        OccurrenceRejections.insert {
+            it[userId] = uid
+            it[OccurrenceRejections.ruleId] = ruleId
+            it[OccurrenceRejections.eventId] = eventId
+            it[rejectedAt] = 1L
+        }
+    }
+
     /** Los movimientos que la ruta del Inicio lee: los vivos del período que contiene [dia]. */
     private fun eventosDelPeriodo(dia: LocalDate): List<FinancialEvent> = transaction {
         val dias = diasDelPeriodo(dia, ajustesDelPeriodoSinSuspender(uid))
@@ -270,5 +279,36 @@ class DisponibleVeLoEmparejadoTest {
         val variable = gastoVariablePorDia(eventosDelPeriodo(hoy), parteFija(hoy)) { epochMillisToAppDateString(it) }
         assertEquals(94_800L, variable.values.sum())
         assertEquals(6_700L, variable["2026-09-27"], "Hoy")
+    }
+
+    // ── Ola O: el Disponible respeta «No fue este» ───────────────────────────
+
+    /**
+     * El dueño ya marcó explícitamente que «Éxito» no es el pago de «Mercado» en la pantalla del
+     * checklist (`OccurrenceRejections`). Sin este filtro `parteFijaDelDisponible` lo absorbía igual
+     * por nombre y el gasto variable quedaba en $0 mientras el fijo seguía restando sus $2.000.000
+     * enteros — el Disponible salía mejor de lo que es.
+     */
+    @Test
+    fun `un rechazo explicito no se absorbe en el Disponible`() {
+        regla("rr-mercado", "Mercado", "Mercado", 2_000_000L, dia = 25)
+        gasto("ev-mercado", "Mercado", "Mercado", 2_000_000L, LocalDate.of(2026, 9, 25))
+        rechazar("rr-mercado", "ev-mercado")
+
+        val parte = parteFija(hoy)
+        assertEquals(null, parte["ev-mercado"], "El rechazo explícito lo excluye")
+        val variable = gastoVariablePorDia(eventosDelPeriodo(hoy), parte) { epochMillisToAppDateString(it) }
+        assertEquals(2_000_000L, variable["2026-09-25"], "Sigue siendo gasto variable")
+    }
+
+    /** El par completo importa: un rechazo para OTRA regla no le quita el candidato a esta. */
+    @Test
+    fun `un rechazo para otra regla no afecta al Disponible de esta`() {
+        regla("rr-mercado", "Mercado", "Mercado", 2_000_000L, dia = 25)
+        regla("rr-otra", "Otra regla", "Otra", 500_000L, dia = 25)
+        gasto("ev-mercado", "Mercado", "Mercado", 2_000_000L, LocalDate.of(2026, 9, 25))
+        rechazar("rr-otra", "ev-mercado")
+
+        assertEquals(2_000_000L, parteFija(hoy)["ev-mercado"])
     }
 }

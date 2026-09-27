@@ -132,6 +132,12 @@ fun vencimientoEnElChecklist(
  * @param automaticas los `(regla, período)` de [sellos] que Movi emparejó solo
  *   (`emparejadasComoSellos`): su ítem sale por el monto entero del movimiento, ver el KDoc del
  *   archivo.
+ * @param rechazados los «no fue este» del dueño, como pares `(ruleId, eventId)` — mismo formato
+ *   que `loadRejectedPairs`. Un candidato rechazado explícitamente para una regla no puede
+ *   absorber su ítem: el dueño ya dijo que ese movimiento no es el pago, y sin este filtro salía
+ *   igual por nombre, dejando el gasto variable en $0 mientras el fijo seguía restando su monto
+ *   entero. El par completo importa, no el movimiento solo: un rechazo para OTRA regla no excluye
+ *   nada acá (mismo criterio que protege `loadRejectedPairs`).
  */
 fun parteFijaDelChecklist(
     reglas: List<RecurringRule>,
@@ -142,6 +148,7 @@ fun parteFijaDelChecklist(
     settings: PeriodSettings,
     zone: ZoneId = AppClock.zone,
     automaticas: Set<Pair<String, String>> = emptySet(),
+    rechazados: Set<Pair<String, String>> = emptySet(),
 ): Map<String, Long> {
     val porId = eventos.associateBy { it.id }
     val reglaPorId = reglas.associateBy { it.id }
@@ -206,6 +213,10 @@ fun parteFijaDelChecklist(
     val pares = falta.keys.flatMap { ruleId ->
         val regla = reglaPorId.getValue(ruleId)
         val candidatos = candidatosPuntuados(regla, vencimientos.getValue(ruleId), elegibles, usados, zone, settings = settings)
+            // El dueño ya dijo «no fue este» para este par exacto: no puede absorber el ítem, ni
+            // siquiera por nombre. Antes del filtro de SENA_DEL_NOMBRE para que tampoco cuente como
+            // evidencia de que el pago «ya se ve» (yaSeVeElPago, más abajo).
+            .filterNot { (ruleId to it.event.id) in rechazados }
         // Solo el NOMBRE absorbe. Un movimiento que comparte apenas la categoría (y la cuenta) no es
         // evidencia de que pague este fijo: si lo absorbiera, «Mercado» ($2.000.000, sin pagar) se
         // comería los gastos de Comida y el variable quedaría en $0 mientras el fijo sigue restando

@@ -59,7 +59,8 @@ class PagosDelChecklistTest {
         eventos: List<FinancialEvent>,
         hoy: LocalDate = this.hoy,
         settings: PeriodSettings = corte25,
-    ) = parteFijaDelChecklist(reglas, sellos, ocurridosDe(sellos), eventos, hoy, settings)
+        rechazados: Set<Pair<String, String>> = emptySet(),
+    ) = parteFijaDelChecklist(reglas, sellos, ocurridosDe(sellos), eventos, hoy, settings, rechazados = rechazados)
 
     private fun gastoTotal(eventos: List<FinancialEvent>, parte: Map<String, Long>) =
         gastoVariablePorDia(eventos, parte) { epochMillisToAppDateString(it) }.values.sum()
@@ -433,6 +434,47 @@ class PagosDelChecklistTest {
         val parte = parteFija(listOf(colegio), emptyList(), eventos)
         assertEquals(mapOf("tres" to 3_000_000L, "uno" to 1_000_000L), parte)
         assertEquals(250_000L, gastoTotal(eventos, parte))
+    }
+
+    // ── Ola O: «No fue este» no se absorbe ───────────────────────────────────
+
+    /**
+     * El dueño ya dijo explícitamente que este movimiento NO es el pago de esta regla. Sin el
+     * filtro de `rechazados`, «el-mercado» ganaba por nombre y el gasto variable quedaba en $0
+     * mientras el fijo seguía restando sus $2.000.000 enteros — el Disponible salía mejor de lo
+     * que es.
+     */
+    @Test
+    fun `un movimiento rechazado explicitamente para la regla no se absorbe`() {
+        val mercado = regla("rr_mercado", "Mercado", "Mercado", 2_000_000, 25)
+        val eventos = listOf(evento("el-mercado", "Mercado", 2_000_000, "2026-08-27", "Mercado"))
+        val parte = parteFija(
+            listOf(mercado),
+            listOf(sello("rr_mercado", "2026-08", null)),
+            eventos,
+            rechazados = setOf("rr_mercado" to "el-mercado"),
+        )
+        assertEquals(emptyMap(), parte)
+        // Sigue siendo variable: ningún otro candidato lo reemplaza.
+        assertEquals(2_000_000L, gastoTotal(eventos, parte))
+    }
+
+    /**
+     * El par completo importa, no el movimiento solo (mismo criterio que protege
+     * [com.jvillada.movi.server.reminders.loadRejectedPairs]): rechazar «el-mercado» para OTRA
+     * regla no puede quitárselo a «Mercado».
+     */
+    @Test
+    fun `un rechazo para otra regla no afecta esta`() {
+        val mercado = regla("rr_mercado", "Mercado", "Mercado", 2_000_000, 25)
+        val eventos = listOf(evento("el-mercado", "Mercado", 2_000_000, "2026-08-27", "Mercado"))
+        val parte = parteFija(
+            listOf(mercado),
+            listOf(sello("rr_mercado", "2026-08", null)),
+            eventos,
+            rechazados = setOf("rr_otra" to "el-mercado"),
+        )
+        assertEquals(mapOf("el-mercado" to 2_000_000L), parte)
     }
 
     /**
