@@ -12,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -131,154 +130,137 @@ fun CardTermsSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !saving, onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
-        ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
-
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                if (editing != null) {
-                    SectionLabel("TARJETA")
-                    Spacer(Modifier.height(8.dp))
-                    Text(editing.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                    Spacer(Modifier.height(16.dp))
-                } else {
-                    FieldBox("Nombre (p.ej. Visa Bancolombia)", name, { name = it })
-                    Spacer(Modifier.height(8.dp))
-                    // Opcional a propósito: una tarjeta recién sacada no debe nada.
-                    MoneyField(initialDebt, { initialDebt = it }, placeholder = "Deuda actual ($currency, opcional)")
-                    Spacer(Modifier.height(12.dp))
-                    SectionLabel("MONEDA")
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        for (cur in listOf("COP", "USD")) {
-                            CurrencyChip(
-                                label = cur,
-                                selected = currency == cur,
-                                onClick = { currency = cur },
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                }
-
-                SectionLabel("TÉRMINOS")
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            if (editing != null) {
+                SectionLabel("TARJETA")
                 Spacer(Modifier.height(8.dp))
-                FieldBox("Banco", bank, { bank = it })
-                Spacer(Modifier.height(8.dp))
-                MoneyField(
-                    creditLimit, { creditLimit = it },
-                    placeholder = "Cupo total (${editing?.account?.currency ?: currency}, opcional)",
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f)) {
-                        FieldBox("20", cutoffDay, { cutoffDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number, rotulo = "Corte (opcional)")
-                    }
-                    Box(Modifier.weight(1f)) {
-                        FieldBox("5", paymentDay, { paymentDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number, rotulo = "Día de pago")
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                // **El único campo de esta hoja que Movi no puede deducir de nada.** El cupo
-                // disponible sale del cupo menos la deuda, la deuda sale de los eventos; el mínimo
-                // no sale de ningún lado, y estimarlo con el 5 % de Bancolombia sería un número
-                // sobre su plata que él no puede verificar contra el extracto. Opcional a
-                // propósito: vacío significa «no lo sé», que se dice, no se rellena.
-                MoneyField(
-                    pagoMinimo, { pagoMinimo = it },
-                    placeholder = "Pago mínimo del extracto (${editing?.account?.currency ?: currency}, opcional)",
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = TEXTO_DE_AYUDA_DEL_MINIMO,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoApagado,
-                )
-
-                Spacer(Modifier.height(8.dp))
-                // Último renglón de los términos, igual que en la hoja de crédito: lo que la
-                // tarjeta tiene de particular y no cabe en ningún campo —«difiere a 36 cuotas
-                // toda compra internacional», el cupo que el banco todavía no sube—. Es el único
-                // dato de esta hoja que Movi no vuelve a derivar de nada si se pierde.
-                FieldBox("Notas (opcional)", notes, { notes = it })
-
+                Text(editing.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                 Spacer(Modifier.height(16.dp))
-                // El pago de esta tarjeta entra al barrido de recordatorios salvo que el dueño
-                // diga que no — mismo componente y mismo texto que crédito y recurrente.
-                ReminderOptInField(
-                    checked = remindMe,
-                    onCheckedChange = { remindMe = it },
-                    enabled = !saving,
-                )
+            } else {
+                FieldBox("Nombre (p.ej. Visa Bancolombia)", name, { name = it })
+                Spacer(Modifier.height(8.dp))
+                // Opcional a propósito: una tarjeta recién sacada no debe nada.
+                MoneyField(initialDebt, { initialDebt = it }, placeholder = "Deuda actual ($currency, opcional)")
+                Spacer(Modifier.height(12.dp))
+                SectionLabel("MONEDA")
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    for (cur in listOf("COP", "USD")) {
+                        CurrencyChip(
+                            label = cur,
+                            selected = currency == cur,
+                            onClick = { currency = cur },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
 
-                error?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            SectionLabel("TÉRMINOS")
+            Spacer(Modifier.height(8.dp))
+            FieldBox("Banco", bank, { bank = it })
+            Spacer(Modifier.height(8.dp))
+            MoneyField(
+                creditLimit, { creditLimit = it },
+                placeholder = "Cupo total (${editing?.account?.currency ?: currency}, opcional)",
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) {
+                    FieldBox("20", cutoffDay, { cutoffDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number, rotulo = "Corte (opcional)")
+                }
+                Box(Modifier.weight(1f)) {
+                    FieldBox("5", paymentDay, { paymentDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number, rotulo = "Día de pago")
                 }
             }
+            Spacer(Modifier.height(8.dp))
+            // **El único campo de esta hoja que Movi no puede deducir de nada.** El cupo
+            // disponible sale del cupo menos la deuda, la deuda sale de los eventos; el mínimo
+            // no sale de ningún lado, y estimarlo con el 5 % de Bancolombia sería un número
+            // sobre su plata que él no puede verificar contra el extracto. Opcional a
+            // propósito: vacío significa «no lo sé», que se dice, no se rellena.
+            MoneyField(
+                pagoMinimo, { pagoMinimo = it },
+                placeholder = "Pago mínimo del extracto (${editing?.account?.currency ?: currency}, opcional)",
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = TEXTO_DE_AYUDA_DEL_MINIMO,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoApagado,
+            )
+
+            Spacer(Modifier.height(8.dp))
+            // Último renglón de los términos, igual que en la hoja de crédito: lo que la
+            // tarjeta tiene de particular y no cabe en ningún campo —«difiere a 36 cuotas
+            // toda compra internacional», el cupo que el banco todavía no sube—. Es el único
+            // dato de esta hoja que Movi no vuelve a derivar de nada si se pierde.
+            FieldBox("Notas (opcional)", notes, { notes = it })
 
             Spacer(Modifier.height(16.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
-                    .clickable(enabled = canSave) { save() }
-                    .padding(vertical = 15.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(if (saving) "Guardando…" else "Guardar tarjeta", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
+            // El pago de esta tarjeta entra al barrido de recordatorios salvo que el dueño
+            // diga que no — mismo componente y mismo texto que crédito y recurrente.
+            ReminderOptInField(
+                checked = remindMe,
+                onCheckedChange = { remindMe = it },
+                enabled = !saving,
+            )
+
+            error?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
-            if (!canSave && !saving && missingFieldMessage != null) {
-                Spacer(Modifier.height(8.dp))
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
+                .clickable(enabled = canSave) { save() }
+                .padding(vertical = 15.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(if (saving) "Guardando…" else "Guardar tarjeta", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
+        }
+        if (!canSave && !saving && missingFieldMessage != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = missingFieldMessage,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (editing?.terms != null) {
+            Spacer(Modifier.height(8.dp))
+            if (pidiendoBorrar) {
+                // Borrar pregunta antes (ver [ConfirmacionEnLinea]).
+                ConfirmacionEnLinea(
+                    pregunta = "¿Eliminar los términos de «${editing.account.name}»?",
+                    detalle = "Se borran el cupo, el corte, el día de pago y el mínimo. La cuenta, su deuda y sus movimientos no se tocan. No se puede deshacer.",
+                    textoConfirmar = "Eliminar",
+                    ocupado = saving,
+                    onConfirmar = { deleteTerms() },
+                    onCancelar = { pidiendoBorrar = false },
+                )
+            } else {
                 Text(
-                    text = missingFieldMessage,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
+                    "Eliminar términos",
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.sale,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = 8.dp),
                 )
             }
-            if (editing?.terms != null) {
-                Spacer(Modifier.height(8.dp))
-                if (pidiendoBorrar) {
-                    // Borrar pregunta antes (ver [ConfirmacionEnLinea]).
-                    ConfirmacionEnLinea(
-                        pregunta = "¿Eliminar los términos de «${editing.account.name}»?",
-                        detalle = "Se borran el cupo, el corte, el día de pago y el mínimo. La cuenta, su deuda y sus movimientos no se tocan. No se puede deshacer.",
-                        textoConfirmar = "Eliminar",
-                        ocupado = saving,
-                        onConfirmar = { deleteTerms() },
-                        onCancelar = { pidiendoBorrar = false },
-                    )
-                } else {
-                    Text(
-                        "Eliminar términos",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.sale,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = 8.dp),
-                    )
-                }
-            }
-            Spacer(Modifier.height(20.dp))
         }
+        Spacer(Modifier.height(20.dp))
     }
 }
 

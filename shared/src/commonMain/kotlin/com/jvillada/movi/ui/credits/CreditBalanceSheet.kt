@@ -11,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,93 +66,75 @@ fun CreditBalanceSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !saving, onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-        Column(
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            SectionLabel("AJUSTAR SALDO")
+            Spacer(Modifier.height(8.dp))
+            Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Spacer(Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Deuda en Movi", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                Text(
+                    formatCOP(current),
+                    style = Movi.textos.monto,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.texto,
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+
+            MoneyField(
+                value = target,
+                onValueChange = { target = it },
+                placeholder = "Deuda real según el banco (COP)",
+            )
+
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = when {
+                    overCap        -> "Saldo fuera de rango — revisa el monto."
+                    parsed == null -> "Copia el saldo que muestra la banca en línea hoy."
+                    delta == 0L    -> "Ya coincide con Movi — no hay nada que registrar."
+                    delta!! > 0L   -> "Se registrará un cargo de ${formatCOP(delta)} para subir la deuda."
+                    else           -> "Se registrará un abono de ${formatCOP(-delta)} para bajar la deuda."
+                },
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Queda como un movimiento visible en la cuenta, no como un número editado a mano.",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoApagado,
+            )
+
+            error?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
+                .clickable(enabled = canSave) { adjust() }
+                .padding(vertical = 15.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
-            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
-
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                SectionLabel("AJUSTAR SALDO")
-                Spacer(Modifier.height(8.dp))
-                Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                Spacer(Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Deuda en Movi", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                    Text(
-                        formatCOP(current),
-                        style = Movi.textos.monto,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                    )
-                }
-                Spacer(Modifier.height(14.dp))
-
-                MoneyField(
-                    value = target,
-                    onValueChange = { target = it },
-                    placeholder = "Deuda real según el banco (COP)",
-                )
-
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = when {
-                        overCap        -> "Saldo fuera de rango — revisa el monto."
-                        parsed == null -> "Copia el saldo que muestra la banca en línea hoy."
-                        delta == 0L    -> "Ya coincide con Movi — no hay nada que registrar."
-                        delta!! > 0L   -> "Se registrará un cargo de ${formatCOP(delta)} para subir la deuda."
-                        else           -> "Se registrará un abono de ${formatCOP(-delta)} para bajar la deuda."
-                    },
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Queda como un movimiento visible en la cuenta, no como un número editado a mano.",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoApagado,
-                )
-
-                error?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
-                    .clickable(enabled = canSave) { adjust() }
-                    .padding(vertical = 15.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    if (saving) "Registrando…" else "Registrar ajuste",
-                    color = Movi.colores.fondo,
-                    style = Movi.textos.cuerpo,
-                )
-            }
-            Spacer(Modifier.height(20.dp))
+            Text(
+                if (saving) "Registrando…" else "Registrar ajuste",
+                color = Movi.colores.fondo,
+                style = Movi.textos.cuerpo,
+            )
         }
+        Spacer(Modifier.height(20.dp))
     }
 }

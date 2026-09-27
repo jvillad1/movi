@@ -12,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,127 +62,110 @@ fun SimuladorDeAbonoSheet(
         simularAbonoUnico(credit, monto)?.let { textoDeLaSimulacion(it, periodoActual, minimo, elAhorroEsSuyo) }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
-        ) {
-            SheetHandleWithClose(onClose = onDismiss)
+    MarcoDeHoja(onDismiss = onDismiss) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            SectionLabel(TITULO_DEL_SIMULADOR)
+            Spacer(Modifier.height(8.dp))
+            Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Spacer(Modifier.height(16.dp))
 
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                SectionLabel(TITULO_DEL_SIMULADOR)
-                Spacer(Modifier.height(8.dp))
-                Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                Spacer(Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Deuda hoy", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                    Text(
-                        formatCOP(saldo),
-                        style = Movi.textos.monto,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                    )
-                }
-
-                // **De quién es el ahorro, antes de decir cuánto es.** Cuatro de los doce créditos
-                // del dueño no salen de su cuenta, y son DOS casos distintos: dos libranzas —donde
-                // la plata sí es suya, retenida antes de que el sueldo llegue— y dos hipotecas que
-                // gira Skandia, donde no. Ver [avisoDeQuienPagaLaCuota].
-                credit.terms?.let { avisoDeQuienPagaLaCuota(it) }?.let { aviso ->
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        aviso.texto,
-                        style = Movi.textos.apoyo,
-                        color = if (aviso.esAdvertencia) Movi.colores.aviso else Movi.colores.textoMedio,
-                        lineHeight = 16.sp,
-                    )
-                }
-
-                if (sugeridos.isNotEmpty()) {
-                    Spacer(Modifier.height(14.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        sugeridos.forEach { s ->
-                            ChipDeMonto(
-                                etiqueta = s.etiqueta,
-                                seleccionado = abono == s.monto,
-                                onClick = { abono = s.monto },
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-                MoneyField(
-                    value = abono,
-                    onValueChange = { abono = it },
-                    placeholder = "Cuánto abonarías (COP)",
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Deuda hoy", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                Text(
+                    formatCOP(saldo),
+                    style = Movi.textos.monto,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.texto,
                 )
+            }
 
+            // **De quién es el ahorro, antes de decir cuánto es.** Cuatro de los doce créditos
+            // del dueño no salen de su cuenta, y son DOS casos distintos: dos libranzas —donde
+            // la plata sí es suya, retenida antes de que el sueldo llegue— y dos hipotecas que
+            // gira Skandia, donde no. Ver [avisoDeQuienPagaLaCuota].
+            credit.terms?.let { avisoDeQuienPagaLaCuota(it) }?.let { aviso ->
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    aviso.texto,
+                    style = Movi.textos.apoyo,
+                    color = if (aviso.esAdvertencia) Movi.colores.aviso else Movi.colores.textoMedio,
+                    lineHeight = 16.sp,
+                )
+            }
+
+            if (sugeridos.isNotEmpty()) {
                 Spacer(Modifier.height(14.dp))
-                if (resultado == null) {
-                    Text(PIDE_UN_MONTO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
-                } else {
-                    Text(
-                        resultado.titular,
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = if (resultado.esAlerta) Movi.colores.sale else Movi.colores.texto,
-                        lineHeight = 19.sp,
-                    )
-                    resultado.detalle?.let {
-                        Spacer(Modifier.height(6.dp))
-                        Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    sugeridos.forEach { s ->
+                        ChipDeMonto(
+                            etiqueta = s.etiqueta,
+                            seleccionado = abono == s.monto,
+                            onClick = { abono = s.monto },
+                        )
                     }
                 }
+            }
 
-                Spacer(Modifier.height(16.dp))
-                Hairline()
-                Spacer(Modifier.height(12.dp))
-                // Los TRES supuestos, y ninguno en letra más chica que el otro: el de la proyección
-                // (la tasa y la cuota de hoy) lo arrastra toda esta pantalla; el del abono (que el
-                // banco acorte el plazo y no la cuota) es propio de esta hoja y además es algo que
-                // él tiene que pedir; y el de la estimación —que el interés que Movi calcula se
-                // queda corto contra el extracto— es el único que habla de la cifra misma y no del
-                // futuro. Ver [SUPUESTO_DE_LA_ESTIMACION].
-                Text(SUPUESTO_DEL_ABONO, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 15.sp)
-                Spacer(Modifier.height(6.dp))
-                Text(SUPUESTO_DE_LA_PROYECCION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 15.sp)
-                Spacer(Modifier.height(6.dp))
-                Text(SUPUESTO_DE_LA_ESTIMACION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 15.sp)
+            Spacer(Modifier.height(12.dp))
+            MoneyField(
+                value = abono,
+                onValueChange = { abono = it },
+                placeholder = "Cuánto abonarías (COP)",
+            )
+
+            Spacer(Modifier.height(14.dp))
+            if (resultado == null) {
+                Text(PIDE_UN_MONTO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+            } else {
+                Text(
+                    resultado.titular,
+                    style = Movi.textos.cuerpo,
+                    fontWeight = FontWeight.Medium,
+                    color = if (resultado.esAlerta) Movi.colores.sale else Movi.colores.texto,
+                    lineHeight = 19.sp,
+                )
+                resultado.detalle?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+                }
             }
 
             Spacer(Modifier.height(16.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Movi.colores.tarjeta)
-                    .clickable(onClick = onDismiss)
-                    .padding(vertical = 15.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Cerrar", color = Movi.colores.texto, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium)
-            }
-            Spacer(Modifier.height(20.dp))
+            Hairline()
+            Spacer(Modifier.height(12.dp))
+            // Los TRES supuestos, y ninguno en letra más chica que el otro: el de la proyección
+            // (la tasa y la cuota de hoy) lo arrastra toda esta pantalla; el del abono (que el
+            // banco acorte el plazo y no la cuota) es propio de esta hoja y además es algo que
+            // él tiene que pedir; y el de la estimación —que el interés que Movi calcula se
+            // queda corto contra el extracto— es el único que habla de la cifra misma y no del
+            // futuro. Ver [SUPUESTO_DE_LA_ESTIMACION].
+            Text(SUPUESTO_DEL_ABONO, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 15.sp)
+            Spacer(Modifier.height(6.dp))
+            Text(SUPUESTO_DE_LA_PROYECCION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 15.sp)
+            Spacer(Modifier.height(6.dp))
+            Text(SUPUESTO_DE_LA_ESTIMACION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 15.sp)
         }
+
+        Spacer(Modifier.height(16.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Movi.colores.tarjeta)
+                .clickable(onClick = onDismiss)
+                .padding(vertical = 15.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Cerrar", color = Movi.colores.texto, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium)
+        }
+        Spacer(Modifier.height(20.dp))
     }
 }
 
