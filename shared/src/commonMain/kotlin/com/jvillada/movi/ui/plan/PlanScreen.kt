@@ -217,7 +217,13 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
  */
 @Composable
 private fun LineaDelPeriodo(texto: String?, reservar: Boolean) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Movi.espacios.margen)) {
+    // El aire de arriba es de la línea y no del encabezado: el encabezado lo comparten todas las
+    // pantallas y su respiro de abajo (`medio`) es para el título solo; esta línea es otra cosa y
+    // sin su propio aire quedaba pegada a él.
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .padding(start = Movi.espacios.margen, end = Movi.espacios.margen, top = Movi.espacios.corto),
+    ) {
         when {
             texto != null -> Text(
                 text = texto,
@@ -301,10 +307,13 @@ const val TAG_FILA_DE_TUS_PERIODOS: String = "fila-de-tus-periodos"
 @Composable
 private fun FilaDeTusPeriodos(onClick: () -> Unit) {
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
+        // El mismo aire que hay entre cualquier par de secciones de la pantalla (y del Inicio): la
+        // fila hablaba de otra cosa que la tarjeta de arriba y estaba pegada a ella, sin nada.
+        Spacer(Modifier.height(Movi.espacios.seccion))
         MinCard(
             modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_TUS_PERIODOS),
             variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+            padding = PaddingValues(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
             onClick = onClick,
         ) {
             Row(
@@ -314,7 +323,7 @@ private fun FilaDeTusPeriodos(onClick: () -> Unit) {
             ) {
                 Column {
                     Text("Tus períodos", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(Movi.espacios.minimo))
                     Text("Cómo te fue en cada ciclo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
                 ChevronRight()
