@@ -53,9 +53,17 @@ class LaMarcaDeLaCuentaTest {
     }
 
     @Test
-    fun `una sola vineta o puntos medios tambien son numero`() {
+    fun `una sola vineta o las viñetas gruesas tambien son numero`() {
         assertEquals(glim, cuentaPorElNumero("PAN: COP1,000 with Glim •3037", todas))
-        assertEquals(glim, cuentaPorElNumero("PAN: COP1,000 with Glim ····3037", todas))
+        assertEquals(glim, cuentaPorElNumero("PAN: COP1,000 with Glim ●●3037", todas))
+    }
+
+    /** El punto medio es el separador de los rótulos de Movi, no una viñeta: no marca un número. */
+    @Test
+    fun `el punto medio no es una vineta`() {
+        assertNull(cuentaPorElNumero("Notificación · Glim 3037", todas))
+        assertNull(cuentaPorElNumero("PAN: COP1,000 with Glim ····3037", todas))
+        assertNull(cuentaPorLaMarca("Notificación · Google Wallet", "PAN: COP1,000 with Glim ·3037", todas))
     }
 
     @Test

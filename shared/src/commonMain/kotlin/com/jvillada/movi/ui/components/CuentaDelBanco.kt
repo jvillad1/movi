@@ -83,10 +83,12 @@ data class CuentaDelBanco(
 /**
  * Los números de cuenta que un mensaje del banco nombra: «de tu cuenta *9586», «a la cuenta * 4308…»,
  * la forma de Nu, que no lleva asterisco: «con tu tarjeta terminada en 1336», y la de Google
- * Wallet, que los tapa con viñetas: «with Glim ••3037» (o `•3037`, `····3037`). Sin las viñetas el
+ * Wallet, que los tapa con viñetas: «with Glim ••3037» (o `•3037`, `●●3037`). Sin las viñetas el
  * pago con la Glim del 25-sep no leía el número que traía escrito y caía en la primera cuenta.
+ * Solo las viñetas de verdad (• y ●), no el punto medio «·»: ese es el separador de los rótulos de
+ * Movi («Notificación · Glim») y un «· 2026» no es un número de cuenta.
  */
-private val numerosQueNombraElMensaje = Regex("""(?:\*|\bterminada\s+en|[•·]+)\s*(\d{4,})""", RegexOption.IGNORE_CASE)
+private val numerosQueNombraElMensaje = Regex("""(?:\*|\bterminada\s+en|[•●]+)\s*(\d{4,})""", RegexOption.IGNORE_CASE)
 
 /** Las corridas de dígitos de un nombre de cuenta: «Fiducuenta 9586» → 9586. */
 private val digitosDelNombre = Regex("""\d+""")
@@ -187,7 +189,7 @@ internal fun cuentaDeNu(banco: String, texto: String, candidatas: List<Account>)
 private val origenConNombre = Regex("""^\s*(?:notificacion|correo)\s*·\s*(.+?)\s*$""")
 
 /** La etiqueta con que Google Wallet nombra la tarjeta: «with Nu Mastercard Gold ••1336» → «Nu Mastercard Gold». */
-private val etiquetaDeWallet = Regex("""\bwith\s+(.+?)\s*[•·]+\s*\d{4}""")
+private val etiquetaDeWallet = Regex("""\bwith\s+(.+?)\s*[•●]+\s*\d{4}""")
 
 /**
  * Las palabras de una etiqueta de Wallet que dicen **qué clase** de tarjeta es, no **de quién**:
