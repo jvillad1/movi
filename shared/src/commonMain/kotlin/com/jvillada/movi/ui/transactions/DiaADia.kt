@@ -101,7 +101,15 @@ internal object LecturaDelDiaADia {
     /** Para las pruebas: lo recordado deja de contar como reciente. */
     internal fun olvidar() { leidoEn = 0L }
 
-    fun esReciente(ahora: Long): Boolean = (ahora - leidoEn) in 0..CacheDeLecturas.EDAD_MAXIMA_PARA_MOSTRAR
+    /**
+     * Más corta que los 30 minutos del resto de lo recordado: un gasto que entra por SMS o desde
+     * otro aparato no invalida este caché, y la línea «Día a día» es justo la que dice si te
+     * pasaste hoy. Cinco minutos cuestan poco (el resumen pesado se pide a lo sumo una vez cada
+     * tanto) y no dejan una cifra vieja a la vista.
+     */
+    const val EDAD_MAXIMA: Long = 5 * 60_000L
+
+    fun esReciente(ahora: Long): Boolean = (ahora - leidoEn) in 0..EDAD_MAXIMA
 }
 
 /**
