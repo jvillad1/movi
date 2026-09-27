@@ -178,6 +178,15 @@ fun isTransferLeg(event: FinancialEvent): Boolean =
  * que esa rama vino a matar, una pestaña más allá. Y por esa misma bandera **quitar una apertura
  * no puede mover el total**: ya estaba excluida de la suma.
  *
+ * ### Ola W: el pago de tarjeta SÍ resta acá, aunque no cuente en el mes
+ *
+ * `aporteAlFlujoDelDia` (y `countsAsCashFlow` detrás) no cambian: siguen siendo la fuente de
+ * «Salió»/Disponible por período, que no puede contar dos veces el gasto real (la compra ya restó
+ * el mes cuando se hizo). Pero «Flujo del día» es OTRA cifra —el extracto del día, no el gasto del
+ * período— y de esa cuenta sí salió la plata del pago. Por eso este total, que solo vive acá (en
+ * el cliente, para esta cabecera), le resta también [montoPagoDeTarjetaEnElDia]: la misma suma que
+ * ya usaba la línea de contexto de la Ola U, ahora sumada al total en vez de solo mencionada aparte.
+ *
  * Un día que se queda sin filas se descarta entero (encabezado incluido): un día vacío con su
  * «Flujo del día» no le dice nada a nadie.
  */
@@ -185,6 +194,7 @@ fun diasVisibles(
     days: List<EventDay>,
     chip: Int,
     query: String,
+    accountTypes: Map<String, AccountType> = emptyMap(),
 ): List<EventDay> =
     days.mapNotNull { day ->
         val filtered = day.items
@@ -197,9 +207,10 @@ fun diasVisibles(
         if (filtered.isEmpty()) null
         else day.copy(
             items = filtered,
-            // La misma función que usa el server en `/by-day`. Antes acá se recalculaba sin mirar
-            // la moneda, y un cobro en dólares habría restado su monto como si fueran pesos.
-            total = filtered.sumOf { aporteAlFlujoDelDia(it) },
+            // La misma función que usa el server en `/by-day`, MENOS el pago de tarjeta del día
+            // (ver nota de la Ola W arriba): un pago siempre resta, nunca suma, porque es plata
+            // que salió de una cuenta de Tu plata.
+            total = filtered.sumOf { aporteAlFlujoDelDia(it) } - montoPagoDeTarjetaEnElDia(filtered, accountTypes),
         )
     }
 
@@ -1104,8 +1115,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     // contestar la relectura movería la lista en cada visita.
     val reservaElDiaADia = datosDelDiaADia.valor == null && perfilParaElDiaADia != null && !datosDelDiaADia.terminada
 
-    val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo) {
-        val filtrados = diasVisibles(allDays, activeFilter, searchQuery)
+    val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo, accountTypes) {
+        val filtrados = diasVisibles(allDays, activeFilter, searchQuery, accountTypes)
         // **Buscar atraviesa los períodos**, por cuarta vez en esta pantalla y por el mismo motivo
         // que las otras tres: escribir una consulta es pedir que algo aparezca, y encontrarlo solo
         // si además caía en el mes que estabas mirando es la peor forma de no encontrarlo.
@@ -1560,11 +1571,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                                 )
                             }
                         }
-                        // Ola U: si «Flujo del día» excluyó uno o más pagos de tarjeta (plata que
-                        // SÍ salió de una cuenta de Tu plata, aunque ya contara como gasto al
-                        // comprar), decirlo — sin esto un día de puros pagos de tarjeta se leía
-                        // «$0» como si no hubiera pasado nada. Sobre los mismos `day.items` que ya
-                        // arman el total de arriba, sin ninguna lectura nueva.
+                        // Ola W: «Flujo del día» de arriba YA incluye el pago de tarjeta (ver
+                        // `diasVisibles`) — esta línea ya no aclara una exclusión, aclara que esa
+                        // parte no se duplica en el gasto del período/Disponible, que sigue sin
+                        // contarla (la compra ya restó el mes cuando se hizo). Sobre los mismos
+                        // `day.items` que ya arman el total de arriba, sin ninguna lectura nueva.
                         val montoPagoDeTarjeta = montoPagoDeTarjetaEnElDia(day.items, accountTypes)
                         val textoPagoDeTarjeta = textoPagoDeTarjetaEnElDia(montoPagoDeTarjeta)
                         if (textoPagoDeTarjeta != null) LineaPagoDeTarjetaEnElDia(textoPagoDeTarjeta)
