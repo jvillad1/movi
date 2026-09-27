@@ -478,6 +478,35 @@ class PagosDelChecklistTest {
     }
 
     /**
+     * **Guarda de orden**: el filtro de `rechazados` tiene que aplicarse ANTES de calcular
+     * `yaSeVeElPago`/el filtro de `SENA_DEL_NOMBRE` (ver el comentario en
+     * [parteFijaDelChecklist]). «Mercado» exacto está rechazado; «Mercado Éxito» solo EMPIEZA con
+     * el nombre y por eso nunca absorbe solo (necesita que "ya se vea el pago" por otro candidato
+     * concluyente). Si el filtro se corriera después, el candidato rechazado seguiría contando
+     * como esa evidencia y «Mercado Éxito» se comería $300.000 del fijo en silencio. Con el orden
+     * correcto ninguno de los dos se absorbe: la regla sigue pendiente y los $2.300.000 completos
+     * siguen siendo gasto variable.
+     */
+    @Test
+    fun `un rechazo exacto no cuenta como evidencia de que ya se vio el pago`() {
+        val mercado = regla("rr_mercado", "Mercado", "Mercado", 2_000_000, 25)
+        val eventos = listOf(
+            evento("el-mercado", "Mercado", 2_000_000, "2026-08-27", "Mercado"),
+            // Misma categoría que la regla, para que sea candidato (nombrePega solo no basta:
+            // «empieza con» sin ser la evidencia por sí solo, ver `empiezaConElNombre`).
+            evento("exito", "Mercado Éxito", 300_000, "2026-08-28", "Mercado"),
+        )
+        val parte = parteFija(
+            listOf(mercado),
+            emptyList(),
+            eventos,
+            rechazados = setOf("rr_mercado" to "el-mercado"),
+        )
+        assertEquals(emptyMap(), parte)
+        assertEquals(2_000_000L + 300_000L, gastoTotal(eventos, parte))
+    }
+
+    /**
      * Un candidato solo de categoría + cuenta + monto exacto sigue siendo concluyente para
      * `emparejadasComoSellos` (eso no cambió): ahí el emparejador lo sella y `automaticas` lo saca
      * entero del variable. Esta pasada solo cambia lo que NO llega a concluyente.
