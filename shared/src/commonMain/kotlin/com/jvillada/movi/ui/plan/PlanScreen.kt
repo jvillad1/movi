@@ -1,17 +1,22 @@
 package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
@@ -43,6 +48,7 @@ import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NewItemButton
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.PanelDeTablero
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
 import com.jvillada.movi.ui.dashboard.alcanzaParaElDisponible
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
@@ -64,6 +70,10 @@ import kotlinx.datetime.Clock
  * de [rememberDisponibleDelPlan]; los pagos son [tableroDeRecurrentes]; los presupuestos son
  * [presupuestos]. Todo va en **una sola lista**: el período, la tarjeta, el selector y el segmento
  * se desplazan juntos, como una pantalla y no como tres pegadas.
+ *
+ * En pantalla ancha (Ola W3) las dos preguntas van lado a lado: el período, la tarjeta y «Tus
+ * períodos» en una columna fija a la izquierda; el selector y su segmento a la derecha. Ver
+ * [planEnDosColumnas].
  */
 
 /** «Pagos del mes»: el tablero de Recurrentes. Es el segmento con el que se entra por la pestaña. */
@@ -122,10 +132,61 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     val esqueletoDePagos = pagos.estado.primeraLecturaEnCurso || (data.periodoActual == null && disponible.cargando)
 
     val listState = rememberLazyListState()
-    // Pantalla ancha: la rueda del mouse sobre los márgenes también mueve esta lista.
+    // La columna del disponible, en dos columnas: su propio scroll.
+    val scrollDelDisponible = rememberScrollState()
+    // Pantalla ancha: la rueda del mouse sobre los márgenes también mueve esta lista (en dos columnas,
+    // la de los pagos: es la larga).
     ScrollDesdeLosMargenes(listState)
 
+    // Las piezas de Plan, una sola vez: en una columna van todas en la misma lista; en dos, las tres
+    // primeras a la izquierda y el selector con su segmento a la derecha.
+    val lineaDelPeriodo: @Composable () -> Unit = {
+        LineaDelPeriodo(
+            texto = encabezadoDelPeriodo(data),
+            reservar = data.periodoActual == null && disponible.cargando && lineaRecordada != false,
+        )
+    }
+    val cuantoPuedesGastar: @Composable () -> Unit = {
+        SeccionCuantoPuedesGastar(
+            disponible = disponible,
+            onReintentar = { pagos.estado.recargar() },
+        )
+    }
+    val tusPeriodos: @Composable () -> Unit = {
+        FilaDeTusPeriodos(onClick = { onNavigate(Screen.Periodos) })
+    }
+    val selector: @Composable () -> Unit = {
+        SelectorSegmentado(
+            labels = ROTULOS_DE_LOS_SEGMENTOS,
+            selected = elegido,
+            onSelect = { elegido = it },
+        )
+    }
+    // Lo de debajo del selector: el tablero de Recurrentes o los presupuestos. Perezoso siempre.
+    fun LazyListScope.segmentoElegido() {
+        if (enPagos) {
+            item(key = "aire-de-pagos") { Spacer(Modifier.height(Movi.espacios.amplio)) }
+            if (esqueletoDePagos) {
+                tableroDeRecurrentesEsqueleto()
+            } else {
+                tableroDeRecurrentes(
+                    estado = pagos.estado,
+                    periodoVisible = periodoDeHoy,
+                    periodoDeHoy = periodoDeHoy,
+                    ajustesDelPeriodo = ajustesDelPeriodo,
+                    accountNames = pagos.accountNames,
+                    onNavigate = onNavigate,
+                )
+            }
+        } else {
+            presupuestos(presupuestos)
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+        // Ola W3: en pantalla ancha, el disponible a la izquierda y los pagos a la derecha. El ancho
+        // lo mide el panel, ya sin el rail — ver [planEnDosColumnas] para la cuenta completa.
+        PanelDeTablero(enDosColumnas = ::planEnDosColumnas) { dosColumnas ->
         Column(modifier = Modifier.fillMaxSize()) {
             // Las acciones del encabezado, desde el primer cuadro: «Nuevo» es la de Presupuestos y
             // solo tiene sentido con ese segmento a la vista (ver
@@ -151,55 +212,57 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                     }
                 },
             )
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(bottom = 80.dp),
-            ) {
-                item(key = "periodo") {
-                    LineaDelPeriodo(
-                        texto = encabezadoDelPeriodo(data),
-                        reservar = data.periodoActual == null && disponible.cargando && lineaRecordada != false,
-                    )
-                }
-                item(key = "disponible") {
-                    SeccionCuantoPuedesGastar(
-                        disponible = disponible,
-                        onReintentar = { pagos.estado.recargar() },
-                    )
-                }
-                item(key = "tus-periodos") {
-                    FilaDeTusPeriodos(onClick = { onNavigate(Screen.Periodos) })
-                }
-                item(key = "segmentos") {
-                    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-                        Spacer(Modifier.height(Movi.espacios.seccion))
-                        SelectorSegmentado(
-                            labels = ROTULOS_DE_LOS_SEGMENTOS,
-                            selected = elegido,
-                            onSelect = { elegido = it },
-                        )
+            if (dosColumnas) {
+                // Las mismas piezas que en una columna, en los mismos lugares relativos: cargando o
+                // cargadas, cada una ya está en su columna, así que al llegar los datos nada cambia
+                // de lado. El esqueleto del disponible y el del tablero se reparten igual.
+                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .width(ANCHO_DE_LA_COLUMNA_DEL_DISPONIBLE)
+                            .fillMaxHeight()
+                            .testTag(TAG_COLUMNA_DEL_DISPONIBLE)
+                            .verticalScroll(scrollDelDisponible)
+                            .padding(bottom = 80.dp),
+                    ) {
+                        lineaDelPeriodo()
+                        cuantoPuedesGastar()
+                        tusPeriodos()
+                    }
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LOS_PAGOS),
+                        contentPadding = PaddingValues(bottom = 80.dp),
+                    ) {
+                        item(key = "segmentos") {
+                            // A la altura de la línea del período de la izquierda (su aire `corto`).
+                            Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio).padding(top = Movi.espacios.corto)) {
+                                selector()
+                            }
+                        }
+                        segmentoElegido()
                     }
                 }
-                if (enPagos) {
-                    item(key = "aire-de-pagos") { Spacer(Modifier.height(Movi.espacios.amplio)) }
-                    if (esqueletoDePagos) {
-                        tableroDeRecurrentesEsqueleto()
-                    } else {
-                        tableroDeRecurrentes(
-                            estado = pagos.estado,
-                            periodoVisible = periodoDeHoy,
-                            periodoDeHoy = periodoDeHoy,
-                            ajustesDelPeriodo = ajustesDelPeriodo,
-                            accountNames = pagos.accountNames,
-                            onNavigate = onNavigate,
-                        )
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(bottom = 80.dp),
+                ) {
+                    item(key = "periodo") { lineaDelPeriodo() }
+                    item(key = "disponible") { cuantoPuedesGastar() }
+                    item(key = "tus-periodos") { tusPeriodos() }
+                    item(key = "segmentos") {
+                        Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
+                            Spacer(Modifier.height(Movi.espacios.seccion))
+                            selector()
+                        }
                     }
-                } else {
-                    presupuestos(presupuestos)
+                    segmentoElegido()
                 }
             }
         }
+        } // PanelDeTablero
         SnackbarHost(
             hostState = pagos.aviso,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),

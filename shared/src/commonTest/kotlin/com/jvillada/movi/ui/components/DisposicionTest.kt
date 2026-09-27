@@ -45,10 +45,11 @@ class DisposicionTest {
     // ── Qué tipo de pantalla es cada una ───────────────────────────────────────
 
     @Test
-    fun `Hoy es un tablero y lo que no se adapto todavia se lee en columna`() {
-        assertEquals(Disposicion.Tablero, disposicionDe(Screen.Dashboard))
+    fun `Hoy, Patrimonio, Creditos y Plan son tableros y lo que no se adapto todavia se lee en columna`() {
+        listOf(Screen.Dashboard, Screen.Accounts, Screen.Credits, Screen.Plan())
+            .forEach { assertEquals(Disposicion.Tablero, disposicionDe(it), "$it") }
         listOf(
-            Screen.Transactions(), Screen.Plan(),
+            Screen.Transactions(),
             Screen.Mas, Screen.Profile, Screen.Categorias, Screen.Login, Screen.PorRevisar,
         ).forEach { assertEquals(Disposicion.Lectura, disposicionDe(it), "$it") }
     }

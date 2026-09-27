@@ -577,19 +577,166 @@ class PlanScreenTest {
     }
 
     /**
-     * Ola W1: a 1.000 dp la ventana ya es de escritorio, y Plan se lee en la columna de 720 dp. Se
-     * monta en la cáscara real para medir el aire donde de verdad se ve.
+     * Ola W1/W3: en una ventana mediana de 840 dp (sin rail en esta prueba: su «Plan» duplicaría el
+     * título que mide [comprobarElAire]) el panel es de 840, por debajo de las dos columnas (860), y
+     * Plan se lee en la columna de 720, centrada. Se monta en la cáscara real para medir el aire donde
+     * de verdad se ve.
      */
     @Test
-    @Config(qualifiers = "w1000dp-h2400dp-xhdpi")
-    fun `en pantalla ancha el aire es el mismo`() {
+    @Config(qualifiers = "w840dp-h2400dp-xhdpi")
+    fun `en una ventana mediana el aire es el mismo, en la columna de lectura`() {
         conElInicioFresco()
         montarEnLaCascara()
         composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_FILA_DE_TUS_PERIODOS) == 1 }
         comprobarElAire()
+        assertEquals(0, contarTag(TAG_COLUMNA_DEL_DISPONIBLE))
         val fila = composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(fila.right - fila.left <= 720.dp, "Plan va en la columna de lectura (${fila.right - fila.left})")
-        assertTrue(fila.left >= 140.dp, "centrada en los 1.000 dp (${fila.left})")
+        assertTrue(fila.left >= 60.dp, "centrada en los 840 dp (${fila.left})")
+    }
+
+    /** Ola W3: en dos columnas, la de la izquierda conserva el mismo aire entre sus piezas. */
+    @Test
+    @Config(qualifiers = "w1280dp-h2400dp-xhdpi")
+    fun `en dos columnas el aire de la columna del disponible es el mismo`() {
+        conElInicioFresco()
+        montarEnLaCascara()
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_FILA_DE_TUS_PERIODOS) == 1 }
+        assertEquals(1, contarTag(TAG_COLUMNA_DEL_DISPONIBLE))
+        comprobarElAire()
+    }
+
+    // ── Dos columnas dentro de la cáscara, con el rail (Ola W3) ──────────────────
+
+    /** Como la monta App.kt: con la clase de ancho real, el rail y el tope del tablero. */
+    private fun montarConElRail(segmento: Int = SEGMENTO_PAGOS) {
+        composeRule.setContent {
+            ConClaseDeAncho {
+                EsqueletoDeLaCascara(
+                    pantalla = Screen.Plan(segmento),
+                    activeTab = NavTab.PLAN,
+                    conNavegacion = true,
+                    onTabSelected = {},
+                    relevoDeScroll = remember { RelevoDeScroll() },
+                ) {
+                    PlanScreen(onNavigate = {}, segmento = segmento)
+                }
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun limites(tag: String) = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+
+    /** La izquierda fija de 400 a la derecha del rail; los pagos con el resto; cada pieza en su lado. */
+    private fun comprobarDosColumnas(anchoDeLosPagos: Float) {
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Aquí van tus pagos fijos") }
+        val disponible = limites(TAG_COLUMNA_DEL_DISPONIBLE)
+        val pagos = limites(TAG_COLUMNA_DE_LOS_PAGOS)
+        assertEquals(216f, disponible.left, 0.5f, "empieza donde termina el rail")
+        assertEquals(400f, disponible.width, 0.5f)
+        assertEquals(anchoDeLosPagos, pagos.width, 0.5f)
+        assertEquals(disponible.right, pagos.left, 0.5f)
+        assertEquals(disponible.top, pagos.top, 0.5f)
+        assertTrue(limites(TAG_TARJETA_DEL_DISPONIBLE).right <= disponible.right + 0.5f)
+        assertTrue(limites(TAG_FILA_DE_TUS_PERIODOS).right <= disponible.right + 0.5f)
+        val selector = composeRule.onNodeWithText("Pagos del mes", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(selector.left >= pagos.left, "el selector va con los pagos: $selector")
+        assertTrue(selector.top < limites(TAG_TARJETA_DEL_DISPONIBLE).top, "el selector va arriba, a la altura de la línea del período")
+        val vacio = composeRule.onNodeWithText("Aquí van tus pagos fijos", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(vacio.left >= pagos.left)
+    }
+
+    /** 1280 − 216 = 1064 de panel: 400 del disponible y 664 de pagos. */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 dp el disponible va a la izquierda y los pagos a la derecha`() {
+        conElInicioFresco()
+        puerta.complete(Unit)
+        montarConElRail()
+        comprobarDosColumnas(anchoDeLosPagos = 664f)
+    }
+
+    /** 1440 − 216 = 1224 de panel: 400 y 824. */
+    @Test
+    @Config(qualifiers = "w1440dp-h900dp-mdpi")
+    fun `a 1440 dp tambien`() {
+        conElInicioFresco()
+        puerta.complete(Unit)
+        montarConElRail()
+        comprobarDosColumnas(anchoDeLosPagos = 824f)
+    }
+
+    /** 1024 − 216 = 808 de panel: a los pagos les quedarían 408, menos de 460. Una columna. */
+    @Test
+    @Config(qualifiers = "w1024dp-h2400dp-mdpi")
+    fun `a 1024 dp va en una columna de lectura`() {
+        conElInicioFresco()
+        puerta.complete(Unit)
+        montarConElRail()
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Aquí van tus pagos fijos") }
+        assertEquals(0, contarTag(TAG_COLUMNA_DEL_DISPONIBLE))
+        assertEquals(0, contarTag(TAG_COLUMNA_DE_LOS_PAGOS))
+        assertTrue(limites(TAG_FILA_DE_TUS_PERIODOS).width <= 720f - 32f + 0.5f)
+    }
+
+    @Test
+    @Config(qualifiers = "w999dp-h2400dp-mdpi")
+    fun `en la ventana mediana mas ancha va en una columna`() {
+        conElInicioFresco()
+        puerta.complete(Unit)
+        montarConElRail()
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Aquí van tus pagos fijos") }
+        assertEquals(0, contarTag(TAG_COLUMNA_DEL_DISPONIBLE))
+        assertTrue(limites(TAG_FILA_DE_TUS_PERIODOS).width <= 720f - 32f + 0.5f)
+    }
+
+    /**
+     * Cargando, cada esqueleto ya está en su columna —el del disponible a la izquierda, el del tablero
+     * a la derecha— y al llegar los datos nada cambia de lado ni salta.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 dp el esqueleto se reparte igual y nada salta al llegar los datos`() {
+        montarConElRail()
+        assertEquals(1, contarTag(TAG_ESQUELETO_DEL_DISPONIBLE))
+        assertTrue(contarTag(TAG_ESQUELETO_DEL_TABLERO) > 0)
+        val disponible = limites(TAG_COLUMNA_DEL_DISPONIBLE)
+        val pagos = limites(TAG_COLUMNA_DE_LOS_PAGOS)
+        assertTrue(limites(TAG_TARJETA_DEL_DISPONIBLE).right <= disponible.right + 0.5f)
+        val esqueletoDelTablero = composeRule.onAllNodesWithTag(TAG_ESQUELETO_DEL_TABLERO, useUnmergedTree = true)
+            .fetchSemanticsNodes().first().boundsInRoot
+        assertTrue(esqueletoDelTablero.left >= pagos.left, "el esqueleto del tablero va con los pagos")
+        val tarjetaCargando = limites(TAG_TARJETA_DEL_DISPONIBLE)
+        val periodosCargando = limites(TAG_FILA_DE_TUS_PERIODOS)
+        val selectorCargando = composeRule.onNodeWithText("Pagos del mes", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+
+        puerta.complete(Unit)
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Aquí van tus pagos fijos") }
+
+        val tarjetaCargada = limites(TAG_TARJETA_DEL_DISPONIBLE)
+        assertEquals(tarjetaCargando.left, tarjetaCargada.left, 0.5f)
+        assertEquals(tarjetaCargando.top, tarjetaCargada.top, 8f)
+        assertEquals(periodosCargando.left, limites(TAG_FILA_DE_TUS_PERIODOS).left, 0.5f)
+        assertTrue(abs(periodosCargando.top - limites(TAG_FILA_DE_TUS_PERIODOS).top) <= 8f)
+        val selectorCargado = composeRule.onNodeWithText("Pagos del mes", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(selectorCargando.left, selectorCargado.left, 0.5f)
+        assertTrue(abs(selectorCargando.top - selectorCargado.top) <= 8f)
+    }
+
+    /** Presupuestos también va a la derecha, debajo del selector, y el disponible no se mueve. */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 dp Presupuestos va en la columna de los pagos`() {
+        conElInicioFresco()
+        puerta.complete(Unit)
+        montarConElRail(segmento = SEGMENTO_PRESUPUESTOS)
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Comida") }
+        val pagos = limites(TAG_COLUMNA_DE_LOS_PAGOS)
+        val comida = composeRule.onAllNodesWithText("Comida", useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
+        assertTrue(comida.left >= pagos.left, "el presupuesto va con los pagos: $comida")
+        assertEquals(1, contarTag(TAG_COLUMNA_DEL_DISPONIBLE))
+        assertTrue(limites(TAG_TARJETA_DEL_DISPONIBLE).right <= pagos.left + 0.5f)
     }
 
     /** El esqueleto reserva el mismo aire: al llegar los datos ni «Tus períodos» ni el selector se corren. */
