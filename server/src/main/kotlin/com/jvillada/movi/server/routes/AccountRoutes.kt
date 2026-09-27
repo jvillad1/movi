@@ -652,7 +652,11 @@ fun Route.accountRoutes() {
  *   del banco es un INGRESO de ese monto, y el Inicio pasaba de «$12,4M» a «$269,4M» — plata
  *   prestada presentada como plata ganada. Ahí la plata no salió del perímetro: entró, y es
  *   deuda. `isCashFlow` excluye la categoría por nombre; el **saldo** de la cuenta sobreviviente
- *   se sigue moviendo, que es el invariante de arriba. Si esa plata sí se fue de verdad, el dueño
+ *   se sigue moviendo, que es el invariante de arriba.
+ *   Y como el desembolso de un crédito ahora sí cuenta como plata que entró
+ *   ([com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY]), este relabel es también lo que lo saca
+ *   de «Entró» al borrar el crédito: la deuda se va y con ella la plata prestada deja de
+ *   presentarse como ingreso del período. Si esa plata sí se fue de verdad, el dueño
  *   recategoriza la fila en un toque y vuelve a contar — algo que la categoría reservada le
  *   negaba.
  *

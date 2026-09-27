@@ -264,7 +264,9 @@ internal fun balanceWarningLabel(balance: Long, isDebt: Boolean, currency: Strin
     return if (isDebt) {
         "Con la cuenta desaparece su deuda de $cuanto, así que tu patrimonio va a subir esa misma " +
             "cifra sin que hayas pagado nada: la plata prestada sigue en tus otras cuentas. Si el " +
-            "banco te la sigue cobrando, vuelve a crear el crédito."
+            "banco te la sigue cobrando, vuelve a crear el crédito. Y si con este crédito te " +
+            "desembolsaron plata, ese desembolso deja de sumar en lo que entró de su período: " +
+            "queda suelto, como un movimiento de una cuenta eliminada."
     } else {
         "Con la cuenta desaparecen sus $cuanto, así que tu patrimonio va a bajar esa misma cifra."
     }

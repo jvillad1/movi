@@ -72,6 +72,7 @@ import kotlinx.datetime.LocalDate
 const val TAG_FILA_DE_PERIODO: String = "fila-de-periodo"
 const val TAG_FILA_DE_PERIODO_ESQUELETO: String = "fila-de-periodo-esqueleto"
 const val TAG_LO_QUE_CUBRIO: String = "fila-de-periodo-lo-que-cubrio"
+const val TAG_INCLUYE_CREDITOS: String = "periodo-incluye-creditos"
 
 /** Cuántas filas reserva el esqueleto sin nada recordado todavía (la primera vez en el aparato). */
 private const val FILAS_POR_DEFECTO = 3
@@ -233,6 +234,7 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, onClick: () -> Unit) {
             ChevronRight()
         }
         CifrasDelPeriodo(resumen)
+        LineaDeCreditosDesembolsados(resumen)
         val cubierto = loQueCubrioLoDemas(resumen)
         if (cubierto != null) {
             Spacer(Modifier.height(8.dp))
@@ -248,20 +250,41 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, onClick: () -> Unit) {
 
 /**
  * La línea que explica el hueco de un período que salió más de lo que entró: «Lo demás lo cubrieron
- * $10M de créditos y $22,2M de saldos que ya tenías.» Solo las partes con monto, y `null` cuando no
- * salió de más o no hay nada que decir — ni «$0» ni una explicación que no existe. Las cifras son
- * las de [ResumenDePeriodo.creditosRecibidos] y [ResumenDePeriodo.saldosIniciales], las mismas que
- * el detalle nombra cuenta por cuenta en «De dónde salió lo que faltó»; sin ellas, «Te quedó −$11,5M»
- * se lee como haber gastado de más cuando lo pagó un crédito o plata que ya estaba en las cuentas.
+ * $22,2M de saldos que ya tenías.» `null` cuando no salió de más o no hay saldos que decir — ni «$0»
+ * ni una explicación que no existe. La cifra es la de [ResumenDePeriodo.saldosIniciales], la misma que
+ * el detalle nombra cuenta por cuenta en «De dónde salió lo que faltó»; sin ella, «Te quedó −$11,5M»
+ * se lee como haber gastado de más cuando lo pagó plata que ya estaba en las cuentas.
+ *
+ * Los créditos ya no van acá: el desembolso es plata que entró y suma en «Entró»; su parte se dice
+ * aparte, en [textoDeCreditosDesembolsados].
  */
 internal fun loQueCubrioLoDemas(resumen: ResumenDePeriodo): String? {
     if (resumen.salidas <= resumen.entradas) return null
-    val partes = listOfNotNull(
-        resumen.creditosRecibidos.takeIf { it > 0 }?.let { "${formatMoneyCompact(it)} de créditos" },
-        resumen.saldosIniciales.takeIf { it > 0 }?.let { "${formatMoneyCompact(it)} de saldos que ya tenías" },
+    val saldos = resumen.saldosIniciales.takeIf { it > 0 } ?: return null
+    return "Lo demás lo cubrieron ${formatMoneyCompact(saldos)} de saldos que ya tenías."
+}
+
+/**
+ * «Incluye $10M de créditos desembolsados.»: cuánto de «Entró» es plata prestada y no sueldo
+ * ([ResumenDePeriodo.creditosRecibidos]). `null` sin créditos, o si no hay nada que haya entrado
+ * (la línea explica una cifra que tiene que estar).
+ */
+internal fun textoDeCreditosDesembolsados(resumen: ResumenDePeriodo): String? {
+    if (resumen.creditosRecibidos <= 0 || resumen.entradas <= 0) return null
+    return "Incluye ${formatMoneyCompact(resumen.creditosRecibidos)} de créditos desembolsados."
+}
+
+/** La línea de [textoDeCreditosDesembolsados], la misma en la fila de la lista y en el detalle. */
+@Composable
+internal fun LineaDeCreditosDesembolsados(resumen: ResumenDePeriodo) {
+    val texto = textoDeCreditosDesembolsados(resumen) ?: return
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = texto,
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
+        modifier = Modifier.testTag(TAG_INCLUYE_CREDITOS),
     )
-    if (partes.isEmpty()) return null
-    return "Lo demás lo cubrieron ${partes.joinToString(" y ")}."
 }
 
 /**

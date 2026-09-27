@@ -10,7 +10,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.DetalleDePeriodo
-import com.jvillada.movi.shared.model.FUENTE_CREDITO
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.FUENTE_SALDO_INICIAL
 import com.jvillada.movi.shared.model.FuenteDePlata
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
@@ -31,9 +31,10 @@ import kotlin.test.assertTrue
 /**
  * **De dónde salió lo que faltó**: la plata que entró a las cuentas en un período y no es ingreso.
  *
- * El caso del dueño en septiembre (25-ago → 23-sep): el crédito Techo Gardenera se desembolsó a
- * Bancolombia como traspaso, y Movi conoció a mitad del período el saldo de Nu y del AFC. Nada de
- * eso es ingreso —y las entradas y salidas del período no cambian—, pero pagó gastos que sí lo son.
+ * El caso del dueño en septiembre (25-ago → 23-sep): Movi conoció a mitad del período el saldo de Nu
+ * y del AFC. Eso no es ingreso, pero pagó gastos que sí lo son. El crédito Techo Gardenera, en
+ * cambio, se desembolsó a Bancolombia y SÍ es plata que entró: suma en «Entró», y
+ * `creditosRecibidos` dice cuánto de eso es deuda.
  */
 class FuentesQueNoSonIngresoTest {
 
@@ -123,6 +124,12 @@ class FuentesQueNoSonIngresoTest {
         }
     }
 
+    /** Las dos patas de un desembolso, como las escribe `POST /api/transfers` desde un crédito. */
+    private fun desembolso(id: String, cuando: Long, monto: Long, desde: String, hacia: String, usuario: String = uid) {
+        movimiento("$id-sale", cuando, monto, desde, categoria = DESEMBOLSO_CATEGORY, traspaso = id, usuario = usuario)
+        movimiento("$id-entra", cuando, monto, hacia, tipo = "INCOME", categoria = DESEMBOLSO_CATEGORY, traspaso = id, usuario = usuario)
+    }
+
     /** Las dos patas de un traspaso, como las escribe `POST /api/transfers`. */
     private fun traspaso(id: String, cuando: Long, monto: Long, desde: String, hacia: String, usuario: String = uid) {
         movimiento("$id-sale", cuando, monto, desde, categoria = TRANSFER_CATEGORY, traspaso = id, usuario = usuario)
@@ -147,12 +154,12 @@ class FuentesQueNoSonIngresoTest {
     private fun lista(): List<ResumenDePeriodo> =
         transaction { resumenesDePeriodos(uid, dia(10, 5), delDueno) }
 
-    /** El septiembre del dueño: un desembolso y dos saldos iniciales, con sus nombres. */
+    /** El septiembre del dueño: un desembolso que entró y dos saldos iniciales que no son ingreso. */
     @Test
-    fun `el desembolso de un credito y los saldos iniciales son las fuentes del periodo`() {
+    fun `el desembolso entra y solo los saldos iniciales son fuente que no es ingreso`() {
         // Ancla la lista de períodos en julio, para que septiembre tenga detalle.
         movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
-        traspaso("tr-gardenera", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
+        desembolso("tr-gardenera", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
         saldoInicial("si-nu", dia(8, 31), 15_300_000, nu)
         saldoInicial("si-afc", dia(9, 8), 6_900_000, afc)
         movimiento("ev-obra", dia(9, 2), 9_960_000, ahorros, categoria = "Gardenera")
@@ -160,14 +167,13 @@ class FuentesQueNoSonIngresoTest {
         val septiembre = detalle("2026-09")
 
         assertEquals(
-            listOf(
-                FuenteDePlata(FUENTE_CREDITO, 10_000_000, listOf("Crédito Techo Gardenera")),
-                FuenteDePlata(FUENTE_SALDO_INICIAL, 22_200_000, listOf("Nu", "AFC Davibank")),
-            ),
+            listOf(FuenteDePlata(FUENTE_SALDO_INICIAL, 22_200_000, listOf("Nu", "AFC Davibank"))),
             septiembre.fuentesQueNoSonIngreso,
         )
-        // Lo demás no cambia: ni el crédito ni los saldos iniciales son entradas, la obra sí es gasto.
-        assertEquals(0, septiembre.resumen.entradas)
+        // El desembolso es plata que entró (la pata del crédito no suma otra vez); los saldos
+        // iniciales no; la obra sí es gasto.
+        assertEquals(10_000_000, septiembre.resumen.entradas)
+        assertEquals(10_000_000, septiembre.resumen.creditosRecibidos)
         assertEquals(9_960_000, septiembre.resumen.salidas)
     }
 
@@ -175,7 +181,7 @@ class FuentesQueNoSonIngresoTest {
     @Test
     fun `los anulados no cuentan`() {
         movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
-        traspaso("tr-anulado", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
+        desembolso("tr-anulado", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
         anular("tr-anulado-entra")
         anular("tr-anulado-sale")
         saldoInicial("si-nu", dia(8, 31), 15_300_000, nu)
@@ -186,6 +192,8 @@ class FuentesQueNoSonIngresoTest {
             listOf(FuenteDePlata(FUENTE_SALDO_INICIAL, 15_300_000, listOf("Nu"))),
             detalle("2026-09").fuentesQueNoSonIngreso,
         )
+        assertEquals(0, detalle("2026-09").resumen.creditosRecibidos)
+        assertEquals(0, detalle("2026-09").resumen.entradas)
     }
 
     /**
@@ -214,10 +222,11 @@ class FuentesQueNoSonIngresoTest {
         saldoInicial("si-octubre", dia(9, 24), 211, ahorros)
         // En dólares: una suma en pesos no puede leerlo como pesos.
         movimiento("si-usd", dia(9, 10), 700, nu, tipo = "INCOME", categoria = OPENING_CATEGORY, moneda = "USD")
-        traspaso("tr-del-otro", dia(9, 1), 7_000_000, desde = creditoDelOtro, hacia = cuentaDelOtro, usuario = otro)
+        desembolso("tr-del-otro", dia(9, 1), 7_000_000, desde = creditoDelOtro, hacia = cuentaDelOtro, usuario = otro)
         saldoInicial("si-del-otro", dia(9, 2), 3_000_000, cuentaDelOtro, usuario = otro)
 
         assertEquals(emptyList(), detalle("2026-09").fuentesQueNoSonIngreso)
+        assertEquals(0, detalle("2026-09").resumen.creditosRecibidos)
         assertEquals(emptyList(), detalle("2026-08").fuentesQueNoSonIngreso)
         assertEquals(
             listOf(FuenteDePlata(FUENTE_SALDO_INICIAL, 211, listOf("Bancolombia Ahorros"))),
@@ -226,25 +235,42 @@ class FuentesQueNoSonIngresoTest {
         )
     }
 
-    /** Dos desembolsos del mismo crédito: una fuente, el nombre una vez. */
+    /** Dos desembolsos del mismo crédito, a cuentas distintas: los dos suman, y ninguno es «fuente». */
     @Test
-    fun `dos desembolsos del mismo credito nombran el credito una vez`() {
+    fun `dos desembolsos del mismo credito suman en lo que entro y en los creditos recibidos`() {
         movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
-        traspaso("tr-1", dia(9, 1), 4_000_000, desde = credito, hacia = ahorros)
-        traspaso("tr-2", dia(9, 15), 6_000_000, desde = credito, hacia = nu)
+        desembolso("tr-1", dia(9, 1), 4_000_000, desde = credito, hacia = ahorros)
+        desembolso("tr-2", dia(9, 15), 6_000_000, desde = credito, hacia = nu)
 
-        val fuente = detalle("2026-09").fuentesQueNoSonIngreso.single()
-        assertEquals(FUENTE_CREDITO, fuente.tipo)
-        assertEquals(10_000_000, fuente.monto)
-        assertEquals(listOf("Crédito Techo Gardenera"), fuente.detalle)
+        val septiembre = detalle("2026-09")
+        assertTrue(septiembre.fuentesQueNoSonIngreso.isEmpty())
+        assertEquals(10_000_000, septiembre.resumen.creditosRecibidos)
+        assertEquals(10_000_000, septiembre.resumen.entradas)
         assertTrue(detalle("2026-08").fuentesQueNoSonIngreso.isEmpty())
+    }
+
+    /**
+     * Un desembolso guardado ANTES de la regla —«Traspaso» desde el crédito— sigue diciendo cuánto
+     * es crédito mientras la migración de datos no corra, aunque todavía no sume en «Entró».
+     */
+    @Test
+    fun `un desembolso viejo anotado como traspaso cuenta en creditos recibidos`() {
+        movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
+        traspaso("tr-viejo", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
+        // Entre cuentas propias y un abono al crédito no son desembolsos.
+        traspaso("tr-al-cdt", dia(9, 3), 2_000_000, desde = ahorros, hacia = cdt)
+        traspaso("tr-abono", dia(9, 6), 500_000, desde = ahorros, hacia = credito)
+
+        val septiembre = detalle("2026-09").resumen
+        assertEquals(10_000_000, septiembre.creditosRecibidos)
+        assertEquals(0, septiembre.entradas)
     }
 
     /** La lista dice lo mismo que el detalle: un desembolso y dos saldos iniciales en septiembre. */
     @Test
     fun `la lista trae los creditos y los saldos iniciales de cada periodo`() {
         movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
-        traspaso("tr-gardenera", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
+        desembolso("tr-gardenera", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
         saldoInicial("si-nu", dia(8, 31), 15_300_000, nu)
         saldoInicial("si-afc", dia(9, 8), 6_900_000, afc)
         movimiento("ev-obra", dia(9, 2), 9_960_000, ahorros, categoria = "Gardenera")
@@ -259,15 +285,15 @@ class FuentesQueNoSonIngresoTest {
         // Sin fuentes: cero, también en el hueco.
         assertEquals(0, periodos.getValue("2026-08").creditosRecibidos)
         assertEquals(0, periodos.getValue("2026-08").saldosIniciales)
-        // Lo demás de la fila no cambia.
-        assertEquals(0, periodos.getValue("2026-09").entradas)
+        // El desembolso es plata que entró.
+        assertEquals(10_000_000, periodos.getValue("2026-09").entradas)
         assertEquals(9_960_000, periodos.getValue("2026-09").salidas)
     }
 
     @Test
     fun `la lista no cuenta anulados ni traspasos entre cuentas propias ni dolares`() {
         movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
-        traspaso("tr-anulado", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
+        desembolso("tr-anulado", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
         anular("tr-anulado-entra")
         anular("tr-anulado-sale")
         saldoInicial("si-anulado", dia(9, 8), 6_900_000, afc)
@@ -285,8 +311,8 @@ class FuentesQueNoSonIngresoTest {
     @Test
     fun `la lista y el detalle dan los mismos numeros para el mismo periodo`() {
         movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
-        traspaso("tr-1", dia(9, 1), 4_000_000, desde = credito, hacia = ahorros)
-        traspaso("tr-2", dia(9, 24), 6_000_000, desde = credito, hacia = nu)
+        desembolso("tr-1", dia(9, 1), 4_000_000, desde = credito, hacia = ahorros)
+        desembolso("tr-2", dia(9, 24), 6_000_000, desde = credito, hacia = nu)
         saldoInicial("si-nu", dia(8, 31), 15_300_000, nu)
         saldoInicial("si-afc", dia(10, 2), 6_900_000, afc)
 
@@ -295,7 +321,7 @@ class FuentesQueNoSonIngresoTest {
             assertEquals(d.creditosRecibidos, fila.creditosRecibidos, fila.id)
             assertEquals(d.saldosIniciales, fila.saldosIniciales, fila.id)
             val fuentes = detalle(fila.id).fuentesQueNoSonIngreso
-            assertEquals(fuentes.filter { it.tipo == FUENTE_CREDITO }.sumOf { it.monto }, fila.creditosRecibidos, fila.id)
+            assertEquals(d.entradas, fila.entradas, fila.id)
             assertEquals(fuentes.filter { it.tipo == FUENTE_SALDO_INICIAL }.sumOf { it.monto }, fila.saldosIniciales, fila.id)
         }
         assertEquals(4_000_000, lista().single { it.id == "2026-09" }.creditosRecibidos)
