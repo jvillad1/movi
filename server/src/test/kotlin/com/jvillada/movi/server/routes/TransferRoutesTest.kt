@@ -21,6 +21,7 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.server.time.epochMillisToAppDate
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
 import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
@@ -408,19 +409,18 @@ class TransferRoutesTest {
      * **La medición de esta rama, con el escenario real y sus cifras reales.**
      *
      * El dueño gana $12.400.000 en el mes. Aparte, saca un crédito de $257.000.000 que el banco
-     * le deposita en la cuenta: desde la ola 14 eso es un traspaso (deuda ↑, efectivo ↑) y por
-     * eso no toca ni ingresos ni gastos. Después borra la cuenta del crédito —el camino más
+     * le deposita en la cuenta: un desembolso (deuda ↑, efectivo ↑) que es plata que ENTRÓ y suma
+     * en «Ingresos» (ver `DESEMBOLSO_CATEGORY`). Después borra la cuenta del crédito —el camino más
      * corto para llegar acá es descubrir que contó la deuda dos veces y borrarla para rehacerla—
      * y la pata del banco sobrevive, como tiene que sobrevivir.
      *
-     * Antes de esta rama, esa pata volvía al flujo de caja por su categoría nueva y el Inicio
-     * pasaba a decir **«Ingresos $269.400.000»** para alguien que había ganado $12,4M: la plata
-     * prestada, presentada como plata ganada. Acá se fija que eso no vuelve a pasar, y que el
-     * **saldo** de la cuenta que el dueño no tocó no se mueve ni un peso — que es el otro lado
-     * de la promesa y la razón por la que la pata no se borra.
+     * Con el crédito borrado ya no hay deuda que respalde esa plata, así que la pata queda suelta
+     * y rotulada como de una cuenta eliminada: **sale de «Ingresos»** y no vuelve a contar como
+     * ganancia. Acá se fija eso, y que el **saldo** de la cuenta que el dueño no tocó no se mueve
+     * ni un peso — que es el otro lado de la promesa y la razón por la que la pata no se borra.
      */
     @Test
-    fun `borrar el credito desembolsado no convierte la plata prestada en ingreso del mes`() = testApplication {
+    fun `borrar el credito desembolsado saca el desembolso de los ingresos del mes`() = testApplication {
         wireApp()
         sembrarSueldoDelMes()
 
@@ -431,7 +431,7 @@ class TransferRoutesTest {
             setBody(transferBody(fromAccountId = vehiculoId, toAccountId = ahorrosId, amount = 257_000_000L))
         }
 
-        assertEquals(12_400_000L, monthIncome(), "un desembolso no es un ingreso: es deuda")
+        assertEquals(269_400_000L, monthIncome(), "el desembolso es plata que entró y suma en Ingresos")
         val saldoAntes = balanceOf(cuentas(), ahorrosId)
         assertEquals(270_400_000L, saldoAntes, "el millón de la apertura + el sueldo + lo prestado")
 
@@ -445,11 +445,11 @@ class TransferRoutesTest {
         assertEquals(ORPHANED_LEG_CATEGORY, pata[Events.category])
         assertEquals(257_000_000L, pata[Events.amount])
 
-        // Y ESTO es lo que cambia: la cifra que decía $269.400.000.
+        // Y ESTO es lo que cambia: sin el crédito, el desembolso deja de sumar en «Entró».
         assertEquals(
             12_400_000L,
             monthIncome(),
-            "la plata prestada no se convierte en plata ganada por borrar la otra punta",
+            "borrar el crédito saca el desembolso de los ingresos del mes",
         )
         // El invariante que no se negocia: el saldo de la cuenta que el dueño NO tocó.
         assertEquals(saldoAntes, balanceOf(cuentas(), ahorrosId), "el saldo de Ahorros no se mueve")
@@ -703,16 +703,55 @@ class TransferRoutesTest {
     }
 
     /**
-     * Un desembolso de $20.000.000 no puede aparecer como «Ingresos del mes: $20.000.000», y un
-     * abono extraordinario tampoco como gasto: las dos patas llevan la categoría reservada.
+     * Un desembolso de $20.000.000 SÍ es plata que entró —«Ingresos del mes: $20.000.000»—, con la
+     * pata del crédito afuera (no suma una segunda vez ni aparece como gasto). Un abono
+     * extraordinario sigue siendo un traspaso puro: no es gasto ni ingreso.
      */
     @Test
-    fun `ni el desembolso ni el abono tocan ingresos ni gastos del mes`() = testApplication {
+    fun `el desembolso suma en los ingresos del mes y el abono no toca ingresos ni gastos`() = testApplication {
         wireApp()
         val antes = client.get("/api/dashboard/summary") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
         }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
 
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(fromAccountId = libranzaId, toAccountId = ahorrosId, amount = 20_000_000L))
+        }
+        val tras = client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
+        assertEquals(20_000_000L, tras["monthIncome"]?.jsonPrimitive?.long ?: 0L)
+        assertEquals(antes["monthSpent"], tras["monthSpent"], "la pata del crédito no es un gasto")
+        assertEquals(antes["spentByCategory"], tras["spentByCategory"])
+
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                transferBody(
+                    transferId = "tr-2", fromEventId = "ev-from-2", toEventId = "ev-to-2",
+                    fromAccountId = ahorrosId, toAccountId = libranzaId, amount = 400_000L,
+                ),
+            )
+        }
+        val despues = client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
+
+        assertEquals(tras["monthIncome"], despues["monthIncome"], "el abono no cambia los ingresos")
+        assertEquals(tras["monthSpent"], despues["monthSpent"], "ni los gastos")
+        assertEquals(tras["spentByCategory"], despues["spentByCategory"])
+    }
+
+    /**
+     * Las dos patas del desembolso llevan la categoría nueva; las del abono, «Traspaso». Y el
+     * desembolso solo entra por el par: una pata suelta con esa categoría se rechaza.
+     */
+    @Test
+    fun `las patas de un desembolso llevan Desembolso de credito y las de un abono Traspaso`() = testApplication {
+        wireApp()
         client.post("/api/transfers") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
             contentType(ContentType.Application.Json)
@@ -728,16 +767,13 @@ class TransferRoutesTest {
                 ),
             )
         }
-
-        val despues = client.get("/api/dashboard/summary") {
-            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
-        }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
-
-        assertEquals(antes["monthIncome"], despues["monthIncome"])
-        assertEquals(antes["monthSpent"], despues["monthSpent"])
-        assertEquals(antes["spentByCategory"], despues["spentByCategory"])
-        assertEquals(0L, despues["monthIncome"]?.jsonPrimitive?.long ?: 0L)
-        assertEquals(0L, despues["monthSpent"]?.jsonPrimitive?.long ?: 0L)
+        transaction {
+            fun categoria(id: String) = Events.selectAll().where { Events.id eq id }.single()[Events.category]
+            assertEquals(DESEMBOLSO_CATEGORY, categoria("ev-from-1"))
+            assertEquals(DESEMBOLSO_CATEGORY, categoria("ev-to-1"))
+            assertEquals(TRANSFER_CATEGORY, categoria("ev-from-2"))
+            assertEquals(TRANSFER_CATEGORY, categoria("ev-to-2"))
+        }
     }
 
     /**

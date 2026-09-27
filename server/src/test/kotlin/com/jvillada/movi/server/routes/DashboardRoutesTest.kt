@@ -26,6 +26,7 @@ import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
@@ -377,6 +378,23 @@ class DashboardRoutesTest {
         event("traspaso", savings, "EXPENSE", 100_000L, category = TRANSFER_CATEGORY, timestamp = ahora)
         event("ajuste", savings, "EXPENSE", 50_000L, category = ADJUSTMENT_CATEGORY, timestamp = ahora)
         event("pago-tc", savings, "EXPENSE", 30_000L, category = CARD_PAYMENT_CATEGORY, timestamp = ahora)
+
+        assertEquals(card, summary()["cuentaMasUsada"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * La pata del crédito en un desembolso ya no cae en una categoría reservada (lleva «Desembolso de
+     * crédito»); sin excluir las patas de un par, una cuenta de crédito ganaría como «la más usada».
+     */
+    @Test
+    fun `la pata del credito en un desembolso no hace de su cuenta la mas usada`() = testApplication {
+        wireApp()
+        val ahora = System.currentTimeMillis()
+        event("real", card, "EXPENSE", 5_000L, category = "Comida", timestamp = ahora)
+        event("d-sale-1", loan, "EXPENSE", 10_000_000L, category = DESEMBOLSO_CATEGORY, timestamp = ahora, traspaso = "d-1")
+        event("d-entra-1", savings, "INCOME", 10_000_000L, category = DESEMBOLSO_CATEGORY, timestamp = ahora, traspaso = "d-1")
+        event("d-sale-2", loan, "EXPENSE", 2_000_000L, category = DESEMBOLSO_CATEGORY, timestamp = ahora, traspaso = "d-2")
+        event("d-entra-2", savings, "INCOME", 2_000_000L, category = DESEMBOLSO_CATEGORY, timestamp = ahora, traspaso = "d-2")
 
         assertEquals(card, summary()["cuentaMasUsada"]!!.jsonPrimitive.content)
     }
@@ -823,7 +841,7 @@ class DashboardRoutesTest {
 
     /**
      * El caso del dueño en chico: lo que había en la cuenta libre antes del período, el préstamo
-     * de su papá anotado como traspaso desde la cuenta del crédito, el colegio pagado desde Nu
+     * de su papá desembolsado desde la cuenta del crédito, el colegio pagado desde Nu
      * (condicionada), los rendimientos de Nu (que no cuentan) y una plata apartada en Nu.
      */
     @Test
@@ -846,8 +864,8 @@ class DashboardRoutesTest {
         event("p-sueldo", savings, "INCOME", 3_000_000L, category = "Sueldo", timestamp = inicio)
 
         // En el período.
-        event("p-techo-sale", loan, "EXPENSE", 10_000_000L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-techo")
-        event("p-techo-entra", savings, "INCOME", 10_000_000L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-techo")
+        event("p-techo-sale", loan, "EXPENSE", 10_000_000L, category = DESEMBOLSO_CATEGORY, timestamp = ahora, traspaso = "t-techo")
+        event("p-techo-entra", savings, "INCOME", 10_000_000L, category = DESEMBOLSO_CATEGORY, timestamp = ahora, traspaso = "t-techo")
         event("p-colegio", "acc-nu", "EXPENSE", 3_000_000L, category = "Educación", timestamp = ahora)
         event("p-rendimientos", "acc-nu", "INCOME", 1_222_041L, category = "Rendimientos", timestamp = ahora)
         event("p-a-nu-sale", savings, "EXPENSE", 500_000L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-nu")
@@ -861,6 +879,30 @@ class DashboardRoutesTest {
         // El sueldo + el préstamo + el colegio que pagó Nu. Los rendimientos de Nu, no.
         assertEquals(3_000_000L + 10_000_000L + 3_000_000L, body.long("entradasDelPeriodo"))
         assertEquals(500_000L, body.long("guardadoDelPeriodo"))
+        // El desembolso es plata que entró: suma en «Ingresos» junto al sueldo (y los rendimientos de
+        // Nu, que en Ingresos sí cuentan), y NO se cuenta otra vez como plata de afuera. La pata del
+        // crédito no suma en ningún lado.
+        assertEquals(3_000_000L + 10_000_000L + 1_222_041L, body.long("monthIncome"))
+        // Y cada peso una vez: el Disponible de la tarjeta es saldo al inicio + entradas − fijos −
+        // variable; aquí el ingreso del período (sueldo + préstamo) está en `entradasDelPeriodo` una
+        // sola vez, no dos.
+        assertEquals(
+            700_000L + 16_000_000L - 500_000L,
+            body.long("saldoTuPlataAlInicio") + body.long("entradasDelPeriodo") - body.long("guardadoDelPeriodo"),
+        )
+    }
+
+    /** Un desembolso guardado antes de la regla (categoría «Traspaso») sigue entrando como plata de afuera. */
+    @Test
+    fun `un desembolso viejo anotado como traspaso entra igual al Disponible`() = testApplication {
+        val ahora = System.currentTimeMillis()
+        event("v-techo-sale", loan, "EXPENSE", 10_000_000L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-viejo")
+        event("v-techo-entra", savings, "INCOME", 10_000_000L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-viejo")
+
+        wireApp()
+        val body = summary()
+        assertEquals(10_000_000L, body.long("entradasDelPeriodo"))
+        assertEquals(0L, body.long("monthIncome"), "todavía no migró: sigue siendo un traspaso")
     }
 
     /**
