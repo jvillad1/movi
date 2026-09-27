@@ -16,6 +16,7 @@ import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.InvalidaElInicioAlEscribir
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -74,7 +75,7 @@ class MovimientosRecuerdaLoUltimoTest {
     /** Cómo contesta `getUserProfile`; por defecto, enseguida y con [perfil]. */
     private var leerPerfil: suspend () -> UserProfile = { perfil }
 
-    private val repositorio = object : RepositorioDePrueba() {
+    private val repositorio = object : RepositorioDePruebaDeMovimientos() {
         override suspend fun getUserProfile(): UserProfile = leerPerfil()
         override suspend fun getEventsByDay(): List<EventDay> { pedidosDeEventos++; return eventos() }
         override suspend fun getAccounts(): List<com.jvillada.movi.shared.model.Account> = emptyList()

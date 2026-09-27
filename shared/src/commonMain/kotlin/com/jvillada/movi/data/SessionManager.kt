@@ -318,6 +318,8 @@ object SessionManager {
         DashboardDataCache.clear()
         // Y lo último que leyó cada pantalla: son SUS movimientos, SUS cuentas.
         CacheDeLecturas.borrarTodo()
+        // Y el sello de cuándo se leyó de verdad lo del «Día a día» de Movimientos.
+        com.jvillada.movi.ui.transactions.LecturaDelDiaADia.olvidar()
         // Ola 9: las categorías usadas y lo que ya se ofreció como recurrente también son del
         // usuario que se va — sugerirle al siguiente las categorías del anterior sería filtrar
         // algo suyo por una lista de autocompletado.

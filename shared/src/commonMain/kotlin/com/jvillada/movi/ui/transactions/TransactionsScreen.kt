@@ -47,7 +47,10 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.intentar
+import com.jvillada.movi.data.ahoraEnMs
+import com.jvillada.movi.data.periodoVigenteSegun
 import com.jvillada.movi.data.rememberLectura
+import com.jvillada.movi.shared.model.inicioDelPeriodo
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -1051,6 +1054,43 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
         mutableStateOf(periodoInicial?.let { periodoDelPrefijo(it) } ?: periodoDeHoy)
     }
 
+    // **«Día a día»**: la meta diaria del Disponible de Plan, para decir en cada día del período en
+    // curso cuánto podías gastar y si te pasaste (ver [DiaADia]). Es una lectura de adorno: si no
+    // llega o falla no se dice nada —ni esqueleto, ni «Actualizando…», ni error— y la lista es la
+    // de siempre. Solo se lee con el período en curso a la vista (o buscando, que atraviesa
+    // períodos): en uno cerrado el Disponible de entonces no se puede reconstruir.
+    val hoyLocal = remember(hoyIso) { LocalDate.parse(hoyIso) }
+    val perfilParaElDiaADia = perfilVigente
+    val periodoDelDiaADia = periodoVigenteSegun(perfil)
+    val datosDelDiaADia = rememberLectura(
+        ClaveDeLectura.DatosDelDiaADia,
+        reintento = refreshKey,
+        periodoVigente = periodoDelDiaADia,
+        activa = perfilParaElDiaADia != null && (periodoVisible == periodoDeHoy || searchQuery.isNotBlank()),
+    ) {
+        // Lo reciente que ya esté en el cache (de Plan o del Inicio) no se vuelve a pedir: ver
+        // [datosParaElDiaADia]. El «Reintentar» de esta pantalla (`refreshKey`) sí pide de nuevo.
+        datosParaElDiaADia(
+            perfil = checkNotNull(perfilParaElDiaADia),
+            ahora = ahoraEnMs(),
+            tick = refreshTick,
+            forzar = refreshKey != 0,
+            periodoVigente = periodoDelDiaADia,
+        )
+    }
+    val diaADia = remember(datosDelDiaADia.valor, hoyLocal) {
+        datosDelDiaADia.valor?.let { diaADiaDe(it, hoyLocal) }
+    }
+    // Los días que pueden llevar la línea (del período en curso, hasta hoy) y, mientras la lectura
+    // viaja sin nada a la vista, reservan su alto: la línea aparece sin empujar la lista.
+    val inicioDelPeriodoEnCurso = remember(periodoDeHoy, ajustesDelPeriodo) {
+        inicioDelPeriodo(periodoDeHoy, ajustesDelPeriodo)
+    }
+    // Solo mientras **no se sabe nada**: con lo recordado a la vista —aunque no traiga meta, por un
+    // disponible sin margen— ya se sabe que no hay línea, y reservar el alto para recogerlo al
+    // contestar la relectura movería la lista en cada visita.
+    val reservaElDiaADia = datosDelDiaADia.valor == null && perfilParaElDiaADia != null && !datosDelDiaADia.terminada
+
     val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo) {
         val filtrados = diasVisibles(allDays, activeFilter, searchQuery)
         // **Buscar atraviesa los períodos**, por cuarta vez en esta pantalla y por el mismo motivo
@@ -1477,6 +1517,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                                 )
                             }
                         }
+                        // «Día a día»: debajo del «Flujo del día», del lado de la cifra. Con la meta a
+                        // la vista, la línea de ese día; sin ella y con la lectura en vuelo, su alto
+                        // reservado en los días que podrían llevarla; si no, nada.
+                        val diaCuenta = day.date >= inicioDelPeriodoEnCurso.toString() && day.date <= hoyIso
+                        val lineaDelDia = diaADia?.linea(day.date)
+                        if (lineaDelDia != null) LineaDelDiaADiaEnElDia(lineaDelDia)
+                        else if (reservaElDiaADia && diaCuenta) LineaDelDiaADiaEnElDia(null)
                         if (!plegado) MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,

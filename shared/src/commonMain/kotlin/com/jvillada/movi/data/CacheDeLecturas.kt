@@ -12,6 +12,7 @@ import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.shared.model.DetalleDePeriodo as DetalleDePeriodoLeido
 import kotlin.concurrent.Volatile
 
@@ -60,6 +61,14 @@ sealed interface ClaveDeLectura<T : Any> {
     }
     data object MensajesDelBanco : ClaveDeLectura<List<SmsMessage>>
     data object CandidatosPagoDeTarjeta : ClaveDeLectura<List<FinancialEvent>>
+
+    /**
+     * Lo que hace falta para la meta diaria del «Día a día» de Movimientos (ver `DiaADia`): las
+     * cinco lecturas de las que sale la tarjeta «Disponible». Cambian de naturaleza con el período.
+     */
+    data object DatosDelDiaADia : ClaveDeLectura<DashboardData> {
+        override val dependeDelPeriodo: Boolean get() = true
+    }
 
     /** El gasto y el ingreso «del mes»: los del período vigente. */
     data class ResumenDelTablero(val scope: Scope) : ClaveDeLectura<DashboardSummary> {
@@ -163,7 +172,7 @@ object CacheDeLecturas {
      * de cerrar sesión o de entrar con otra cuenta, no puede dejarle al siguiente la plata del
      * anterior—, si no hay sesión, si desde que salió la lectura hubo una escritura
      * ([generacionAlLeer], ver [generacion]), o si la clave [depende del período]
-     * [ClaveDeLectura.dependeDelPeriodo] y no se dice de cuál es.
+     * [ClaveDeLectura.dependeDelPeriodo] y no se dice de cuál es. Devuelve si lo guardó.
      */
     fun <T : Any> guardar(
         clave: ClaveDeLectura<T>,
@@ -172,11 +181,12 @@ object CacheDeLecturas {
         ahora: Long,
         periodo: String? = null,
         generacionAlLeer: Int = generacion,
-    ) {
-        if (usuario == null || SessionManager.userId != usuario) return
-        if (generacionAlLeer != generacion) return
-        if (clave.dependeDelPeriodo && periodo == null) return
+    ): Boolean {
+        if (usuario == null || SessionManager.userId != usuario) return false
+        if (generacionAlLeer != generacion) return false
+        if (clave.dependeDelPeriodo && periodo == null) return false
         entradas = entradas + (clave to Entrada(valor, ahora, usuario, periodo))
+        return true
     }
 
     /** Suelta [entrada] solo si sigue siendo la de [clave]: otra más nueva no se toca. */

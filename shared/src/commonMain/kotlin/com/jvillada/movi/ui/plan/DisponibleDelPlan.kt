@@ -8,9 +8,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.jvillada.movi.data.CacheDeLecturas
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.ahoraEnMs
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.ui.LocalRefreshTick
@@ -21,6 +23,7 @@ import com.jvillada.movi.ui.dashboard.conElPerfil
 import com.jvillada.movi.ui.dashboard.conElPeriodoDe
 import com.jvillada.movi.ui.dashboard.conResumenDelInicio
 import com.jvillada.movi.ui.dashboard.debeRecargarElInicio
+import com.jvillada.movi.ui.transactions.recordarParaElDiaADia
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -93,6 +96,18 @@ internal class DisponibleDelPlan(
     /** Algo de lo que sale la tarjeta no contestó en su última lectura. */
     val fallo: Boolean get() = falloPropio || tablero.recurrentesNoSePudieronLeer
 
+    /**
+     * El número de [CacheDeLecturas.generacion] cuando empezó la lectura: si una escritura lo movió,
+     * lo que se leyó pudo quedar viejo y no se le deja a Movimientos (ver [recordarParaElDiaADia]).
+     */
+    internal var generacionAlEmpezar = CacheDeLecturas.generacion
+
+    /** Esta composición leyó las tres lecturas propias de verdad (no se conformó con lo del Inicio). */
+    internal var leyoDeVerdad by mutableStateOf(false)
+
+    /** El tablero ya trajo los vencimientos y las ocurrencias de donde salen los fijos. */
+    val tableroListo: Boolean get() = tablero.vencimientosOk && tablero.ocurrenciasOk
+
     /** La primera carga de esta composición no es un reintento: puede usar lo del Inicio si está fresco. */
     internal var yaCargoUnaVez = false
 }
@@ -128,6 +143,7 @@ internal fun rememberDisponibleDelPlan(recarga: Int, tablero: EstadoDelTableroDe
         }
         estado.cargandoPropio = true
         estado.falloPropio = false
+        estado.generacionAlEmpezar = CacheDeLecturas.generacion
         val usuario = SessionManager.userId
         // Cuántas de las tres contestaron en ESTA carga (ver el KDoc de [DisponibleDelPlan]).
         var llegaron = 0
@@ -160,7 +176,15 @@ internal fun rememberDisponibleDelPlan(recarga: Int, tablero: EstadoDelTableroDe
         }
         // Se llega acá solo si la carga no se canceló (`intentar` deja pasar la cancelación).
         estado.falloPropio = llegaron < LECTURAS_PROPIAS
+        estado.leyoDeVerdad = llegaron == LECTURAS_PROPIAS
         estado.cargandoPropio = false
+    }
+    // Con la tarjeta completa y confirmada por lecturas de ESTA visita, Movimientos la reusa para su
+    // «Día a día» en vez de pedir otra vez lo mismo (ver [recordarParaElDiaADia]).
+    val completa = estado.leyoDeVerdad && !estado.cargando && !estado.fallo && estado.tableroListo
+    val datos = estado.data
+    LaunchedEffect(completa, datos) {
+        if (completa) recordarParaElDiaADia(datos, estado.generacionAlEmpezar, ahoraEnMs())
     }
     return estado
 }

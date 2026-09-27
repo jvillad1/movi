@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MovimientoRechazado
@@ -56,7 +57,7 @@ class AvisoDeLoQueNoSubioTest {
 
     @Test
     fun `Movimientos muestra el aviso`() {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getEventsByDay(): List<EventDay> = emptyList()
             override suspend fun getMovimientosRechazados(): List<MovimientoRechazado> = listOf(rechazado("1", "Almuerzo"))
         }

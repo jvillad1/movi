@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
@@ -114,7 +115,7 @@ class IconoDeCategoriaEnLaAppTest {
 
     private fun montarMovimientos() {
         DiasPlegadosStore.clear()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getAccounts(): List<Account> = listOf(cuenta)
             override suspend fun getEventsByDay(): List<EventDay> = listOf(dia)
             override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
@@ -153,7 +154,7 @@ class IconoDeCategoriaEnLaAppTest {
 
     @Test
     fun `el icono de categoria aparece en una fila de Presupuestos`() {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getBudgets(): List<Budget> = listOf(Budget("Comida", 1_000_000L))
             override suspend fun getEventsByDay(): List<EventDay> = emptyList()
         }
@@ -178,7 +179,7 @@ class IconoDeCategoriaEnLaAppTest {
      */
     @Test
     fun `la fila de Movimientos no cambia de alto al agregarle el icono`() {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getAccounts(): List<Account> = listOf(cuenta)
             override suspend fun getEventsByDay(): List<EventDay> = listOf(dia)
             override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
@@ -213,7 +214,7 @@ class IconoDeCategoriaEnLaAppTest {
     @Test
     fun `el titulo esqueleto de Movimientos arranca en el mismo x que el titulo real`() {
         val puerta = CompletableDeferred<List<EventDay>>()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getUserProfile(): UserProfile =
                 UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "morado")
             override suspend fun getEventsByDay(): List<EventDay> = puerta.await()
@@ -245,7 +246,7 @@ class IconoDeCategoriaEnLaAppTest {
     @Test
     fun `el titulo esqueleto de Presupuestos arranca en el mismo x que el titulo real`() {
         val puertaDelGasto = CompletableDeferred<DashboardSummary>()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getBudgets(): List<Budget> = listOf(Budget("Comida", 1_000_000L))
             override suspend fun getEventsByDay(): List<EventDay> = emptyList()
             override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = puertaDelGasto.await()

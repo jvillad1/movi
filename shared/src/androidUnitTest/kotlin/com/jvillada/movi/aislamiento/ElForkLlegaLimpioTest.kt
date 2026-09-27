@@ -20,6 +20,7 @@ import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.EnlaceCompartido
+import com.jvillada.movi.ui.transactions.LecturaDelDiaADia
 import com.jvillada.movi.shared.model.EnlaceCompartidoCreado
 import com.jvillada.movi.shared.model.NuevoEnlaceCompartido
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
@@ -124,6 +125,8 @@ class ElForkLlegaLimpioTest {
         // que va después de `save`. Dos claves, para que no alcance con limpiar una sola.
         CacheDeLecturas.guardar(ClaveDeLectura.EventosPorDia, emptyList(), "u1", ahora = 1_700_000_000_000L)
         CacheDeLecturas.guardar(ClaveDeLectura.Cuentas, emptyList(), "u1", ahora = 1_700_000_000_000L)
+        // El sello del «Día a día»: lo recordado se reusa mientras sea reciente, y eso no puede pasar de un usuario a otro.
+        LecturaDelDiaADia.sellar(1_700_000_000_000L)
         // La instantánea del Inicio NO es un `object` en memoria: vive en el `Settings` del
         // aparato, que sobrevive a todo menos al logout. Acá, en un almacén de mentira que es
         // estático de este archivo (sobrevive de un método al siguiente, como el de verdad). La
@@ -173,6 +176,7 @@ class ElForkLlegaLimpioTest {
         assertNull("ScreenDefCache trae resaca", ScreenDefCache.dashboard)
         assertNull("DashboardDataCache trae resaca", DashboardDataCache.data)
         assertEquals("CacheDeLecturas trae las lecturas de otra prueba", 0, CacheDeLecturas.cuantas)
+        assertFalse("LecturaDelDiaADia trae el sello de otra prueba", LecturaDelDiaADia.esReciente(1_700_000_000_000L))
         assertEquals("DashboardDataCache trae la marca de tiempo anterior", 0L, DashboardDataCache.cargadoEn)
         assertEquals("DashboardDataCache trae el tick anterior", 0, DashboardDataCache.tickDeLaCarga)
         assertEquals("DashboardDataCache trae entradas ya hechas", emptySet<String>(), DashboardDataCache.entradasHechas)
