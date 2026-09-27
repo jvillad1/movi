@@ -15,6 +15,7 @@ import kotlinx.coroutines.CompletableDeferred
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
@@ -92,7 +93,7 @@ class PorConfirmarEnMovimientosTest {
         candidatos: List<FinancialEvent> = emptyList(),
     ) {
         DiasPlegadosStore.clear()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getAccounts(): List<Account> = listOf(banco)
             override suspend fun getEventsByDay(): List<EventDay> =
                 listOf(EventDay(date = HOY_ISO, total = -18_500L, items = items))
@@ -137,7 +138,7 @@ class PorConfirmarEnMovimientosTest {
         var contestaronMensajes = false
         var contestaronCandidatos = false
         DiasPlegadosStore.clear()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getAccounts(): List<Account> = listOf(banco)
             override suspend fun getEventsByDay(): List<EventDay> =
                 listOf(EventDay(date = HOY_ISO, total = -18_500L, items = listOf(aMano)))
@@ -194,7 +195,7 @@ class PorConfirmarEnMovimientosTest {
         val tick = mutableStateOf(0)
         var compuerta: CompletableDeferred<Unit>? = null
         DiasPlegadosStore.clear()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getAccounts(): List<Account> = listOf(banco)
             override suspend fun getEventsByDay(): List<EventDay> {
                 compuerta?.await()
@@ -249,7 +250,7 @@ class PorConfirmarEnMovimientosTest {
     @Test
     fun `una fuente caida no suma ni tapa a las otras`() {
         DiasPlegadosStore.clear()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getAccounts(): List<Account> = listOf(banco)
             override suspend fun getEventsByDay(): List<EventDay> =
                 listOf(EventDay(date = HOY_ISO, total = -18_500L, items = listOf(aMano, porSms)))

@@ -172,7 +172,7 @@ object CacheDeLecturas {
      * de cerrar sesión o de entrar con otra cuenta, no puede dejarle al siguiente la plata del
      * anterior—, si no hay sesión, si desde que salió la lectura hubo una escritura
      * ([generacionAlLeer], ver [generacion]), o si la clave [depende del período]
-     * [ClaveDeLectura.dependeDelPeriodo] y no se dice de cuál es.
+     * [ClaveDeLectura.dependeDelPeriodo] y no se dice de cuál es. Devuelve si lo guardó.
      */
     fun <T : Any> guardar(
         clave: ClaveDeLectura<T>,
@@ -181,11 +181,12 @@ object CacheDeLecturas {
         ahora: Long,
         periodo: String? = null,
         generacionAlLeer: Int = generacion,
-    ) {
-        if (usuario == null || SessionManager.userId != usuario) return
-        if (generacionAlLeer != generacion) return
-        if (clave.dependeDelPeriodo && periodo == null) return
+    ): Boolean {
+        if (usuario == null || SessionManager.userId != usuario) return false
+        if (generacionAlLeer != generacion) return false
+        if (clave.dependeDelPeriodo && periodo == null) return false
         entradas = entradas + (clave to Entrada(valor, ahora, usuario, periodo))
+        return true
     }
 
     /** Suelta [entrada] solo si sigue siendo la de [clave]: otra más nueva no se toca. */

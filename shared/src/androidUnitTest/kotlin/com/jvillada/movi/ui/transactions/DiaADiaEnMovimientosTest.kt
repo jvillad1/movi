@@ -19,10 +19,15 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.unit.Density
 import com.jvillada.movi.data.DiasPlegadosStore
+import com.jvillada.movi.data.InvalidaElInicioAlEscribir
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.EventDay
@@ -42,7 +47,11 @@ import com.jvillada.movi.shared.model.periodoSiguiente
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.dashboard.DashboardData
+import com.jvillada.movi.ui.dashboard.DashboardDataCache
+import com.jvillada.movi.ui.plan.PlanScreen
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.daysUntil
@@ -102,13 +111,24 @@ class DiaADiaEnMovimientosTest {
     private val dias = listOf(
         EventDay(hoy.toString(), 1_000_000L, listOf(evento("e1", TransactionType.INCOME, 1_000_000L, "Sueldo de hoy", hoy))),
         EventDay(ayer.toString(), -60_000L, listOf(evento("e2", TransactionType.EXPENSE, 60_000L, "Cena de ayer", ayer))),
-        EventDay(anteayer.toString(), -10_000L, listOf(evento("e3", TransactionType.EXPENSE, 10_000L, "Tinto de antier", anteayer))),
+        // El flujo de este día es −$510.000 (un pago fijo de $500.000 y un tinto); el gasto variable, $10.000.
+        EventDay(
+            anteayer.toString(), -510_000L,
+            listOf(
+                evento("e3", TransactionType.EXPENSE, 10_000L, "Tinto de antier", anteayer),
+                evento("e5", TransactionType.EXPENSE, 500_000L, "Arriendo del mes", anteayer),
+            ),
+        ),
         EventDay(delAnterior.toString(), -5_000L, listOf(evento("e4", TransactionType.EXPENSE, 5_000L, "Pan del período anterior", delAnterior))),
     )
 
     private var resumenDelInicio: suspend () -> DashboardSummary = {
         DashboardSummary(gastoVariablePorDia = mapOf(ayer.toString() to 60_000L, anteayer.toString() to 10_000L))
     }
+
+    /** Lo que el server dice que entró en el período; por defecto, lo que deja la meta en $40.000. */
+    private var ingresosDelPeriodo: Long = diasDelPeriodo * meta
+    private var pedidosDelResumen = 0
 
     private val repositorio = object : RepositorioDePrueba() {
         override suspend fun getUserProfile(): UserProfile = UserProfile(
@@ -118,38 +138,51 @@ class DiaADiaEnMovimientosTest {
         override suspend fun getEventsByDay(): List<EventDay> = dias
         override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
         override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
-            FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = diasDelPeriodo * meta, egresos = 0)
-        override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = resumenDelInicio()
+            FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = ingresosDelPeriodo, egresos = 0)
+        override suspend fun getDashboardSummary(scope: Scope): DashboardSummary { pedidosDelResumen++; return resumenDelInicio() }
         override suspend fun getUpcomingPayments(): List<UpcomingPayment> = emptyList()
         override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
+        // Lo que además pide Plan (la prueba de ir de Plan a Movimientos).
+        override suspend fun getBudgets(): List<Budget> = emptyList()
+        override suspend fun getSubscriptions(): SubscriptionsResult = SubscriptionsResult(emptyList(), monthlyTotalCop = 0)
+        override suspend fun getRecurringRules(): List<RecurringRule> = emptyList()
+        override suspend fun voidEvent(id: String, reason: String?): VoidEvent =
+            VoidEvent(id = "v1", originalEventId = id, reason = reason, timestamp = ahora)
     }
 
     private var colorDeSale = Color.Unspecified
-    private var colorDeEntra = Color.Unspecified
+    private var colorApagado = Color.Unspecified
 
     @Before
     fun entrar() {
         SessionManager.save(token = "tok", userId = "u1", name = "Juan", email = "juan@ejemplo.com")
         DiasPlegadosStore.clear()
-        Repositories.sustitutoDePrueba = repositorio
+        DashboardDataCache.data = null
+        LecturaDelDiaADia.olvidar()
+        // Envuelto como en la app, para que una escritura vacíe lo recordado de verdad.
+        Repositories.sustitutoDePrueba = InvalidaElInicioAlEscribir(repositorio)
     }
 
     @After
     fun salir() {
+        DashboardDataCache.data = null
         Repositories.sustitutoDePrueba = null
         DiasPlegadosStore.clear()
     }
 
     private var enPantalla by mutableStateOf(true)
+    private var enPlan by mutableStateOf(false)
 
     private fun montar(periodoInicial: String? = null) {
         composeRule.setContent {
             if (enPantalla) MoviTheme {
                 colorDeSale = Movi.colores.sale
-                colorDeEntra = Movi.colores.entra
+                colorApagado = Movi.colores.textoApagado
                 val base = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
-                    Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}, periodoInicial = periodoInicial) }
+                    Box(Modifier.fillMaxSize()) {
+                        if (enPlan) PlanScreen(onNavigate = {}) else TransactionsScreen(onNavigate = {}, periodoInicial = periodoInicial)
+                    }
                 }
             }
         }
@@ -191,13 +224,15 @@ class DiaADiaEnMovimientosTest {
             descripciones(),
         )
         assertTrue(!hay("Pan del período anterior"), "el día del período cerrado ni siquiera está en la lista")
+        // M1: el día del arriendo tuvo un flujo de −$510.000, pero la línea cuenta el gasto VARIABLE.
+        assertTrue(hay("Arriendo del mes"))
         // A 390 dp con la letra ×1,12 la más larga entra en UNA línea: ninguna se corta ni se parte.
         val altos = lineas().map { it.fetchSemanticsNode().boundsInRoot.height }.toSet()
         assertEquals(1, altos.size, "las tres líneas miden lo mismo (una sola línea): $altos")
     }
 
     @Test
-    fun `lo pasado va en el rojo de la plata que sale y lo que quedo dentro en el de la que entra`() {
+    fun `lo pasado va en el rojo de la plata que sale y el resto en el tono apagado`() {
         montar()
         composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
 
@@ -208,7 +243,7 @@ class DiaADiaEnMovimientosTest {
         val pasada = spans(1)
         assertEquals(colorDeSale, pasada["te pasaste \$20.000"])
         val dentro = spans(2)
-        assertEquals(colorDeEntra, dentro["Día a día: \$10.000 de \$40.000"])
+        assertEquals(colorApagado, dentro["Día a día: \$10.000 de \$40.000"])
         assertTrue(dentro.values.none { it == colorDeSale })
     }
 
@@ -235,17 +270,7 @@ class DiaADiaEnMovimientosTest {
 
     @Test
     fun `sin margen que dividir tampoco se dibuja nada`() {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
-            override suspend fun getUserProfile(): UserProfile = repositorio.getUserProfile()
-            override suspend fun getAccounts(): List<Account> = listOf(banco)
-            override suspend fun getEventsByDay(): List<EventDay> = dias
-            override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
-            override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
-                FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 0, egresos = 0)
-            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = resumenDelInicio()
-            override suspend fun getUpcomingPayments(): List<UpcomingPayment> = emptyList()
-            override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
-        }
+        ingresosDelPeriodo = 0L
         montar()
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Cena de ayer") }
         composeRule.waitForIdle()
@@ -297,6 +322,127 @@ class DiaADiaEnMovimientosTest {
         assertTrue(hay("Cena de ayer"))
         puerta.complete(DashboardSummary(gastoVariablePorDia = mapOf(ayer.toString() to 60_000L, anteayer.toString() to 10_000L)))
         composeRule.waitForIdle()
+        assertEquals(3, lineas().size)
+    }
+
+    /**
+     * Sin margen (los fijos se llevan todo) la línea no existe, y **ir y volver no mueve la lista**:
+     * con lo recordado a la vista ya se sabe que no hay línea, así que no se reserva un renglón que
+     * la relectura tenga que recoger al contestar.
+     */
+    @Test
+    fun `sin margen, volver a Movimientos no mueve la lista ni al contestar la relectura`() {
+        ingresosDelPeriodo = 0L
+        montar()
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Cena de ayer") }
+        composeRule.waitForIdle()
+        val primera = tops()
+        assertEquals(3, primera.size)
+        enPantalla = false
+        composeRule.waitForIdle()
+
+        // Lo recordado ya no cuenta como reciente: la segunda visita relee, y esa relectura viaja.
+        LecturaDelDiaADia.olvidar()
+        val puerta = CompletableDeferred<DashboardSummary>()
+        resumenDelInicio = { puerta.await() }
+        enPantalla = true
+        composeRule.waitForIdle()
+        assertEquals(primera, tops(), "con la relectura en vuelo la lista ya está donde va")
+
+        puerta.complete(DashboardSummary())
+        composeRule.waitForIdle()
+        assertEquals(primera, tops(), "y al contestar tampoco se mueve")
+        assertEquals(0, lineas().size)
+    }
+
+    private fun irYVolver() {
+        enPantalla = false
+        composeRule.waitForIdle()
+        enPantalla = true
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun `dos visitas seguidas piden el resumen una sola vez`() {
+        montar()
+        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
+        composeRule.waitForIdle()
+        assertEquals(1, pedidosDelResumen)
+
+        irYVolver()
+
+        assertEquals(1, pedidosDelResumen, "lo reciente no se vuelve a pedir")
+        assertEquals(3, lineas().size)
+    }
+
+    @Test
+    fun `una escritura propia entre visitas obliga a leer otra vez`() {
+        montar()
+        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
+        composeRule.waitForIdle()
+        enPantalla = false
+        composeRule.waitForIdle()
+        runBlocking { Repositories.wallets.voidEvent("e2", null) }
+
+        enPantalla = true
+        composeRule.waitForIdle()
+
+        assertEquals(2, pedidosDelResumen, "la escritura volvió viejo lo recordado")
+    }
+
+    @Test
+    fun `el Reintentar vuelve a pedir aunque haya algo reciente`() {
+        montar()
+        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
+        composeRule.waitForIdle()
+        assertEquals(3, lineas().size)
+        val leidas = pedidosDelResumen
+
+        // Lo reciente no se pide: el mismo pedido de `datosParaElDiaADia` con `forzar` sí.
+        runBlocking {
+            datosParaElDiaADia(
+                perfil = repositorio.getUserProfile(), ahora = ahora, tick = 0, forzar = true,
+                periodoVigente = periodo.prefijo,
+            )
+        }
+        assertEquals(leidas + 1, pedidosDelResumen)
+    }
+
+    /** Lo que el Inicio dejó fresco en [DashboardDataCache] alcanza: cero pedidos del resumen. */
+    @Test
+    fun `con el Inicio fresco no se pide nada`() {
+        DashboardDataCache.data = DashboardData(
+            summary = FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = diasDelPeriodo * meta, egresos = 0),
+            upcoming = emptyList(),
+            ocurrencias = emptyList(),
+            gastoVariablePorDia = mapOf(ayer.toString() to 60_000L, anteayer.toString() to 10_000L),
+            ajustesDePeriodo = ajustes,
+            periodoActual = periodo,
+        )
+        DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
+        DashboardDataCache.tickDeLaCarga = 0
+
+        montar()
+        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
+        composeRule.waitForIdle()
+
+        assertEquals(0, pedidosDelResumen)
+        assertEquals("Día a día: \$60.000 de \$40.000 · te pasaste \$20.000", descripciones()[1])
+    }
+
+    /** Plan ya leyó la tarjeta del Disponible: ir de Plan a Movimientos no repite `/api/dashboard/summary`. */
+    @Test
+    fun `de Plan a Movimientos no se vuelve a pedir el resumen`() {
+        enPlan = true
+        montar()
+        composeRule.waitForIdle()
+        assertEquals(1, pedidosDelResumen, "Plan lo lee una vez")
+
+        enPlan = false
+        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
+        composeRule.waitForIdle()
+
+        assertEquals(1, pedidosDelResumen, "Movimientos usa lo que Plan dejó")
         assertEquals(3, lineas().size)
     }
 }

@@ -29,6 +29,10 @@ const val TAG_DIA_A_DIA: String = "dia-a-dia"
  *   que cuando la lectura de la que sale la meta llegue la lista de abajo no salte.
  *
  * Es UN solo texto, y TalkBack lo lee entero: los colores son de vista, la frase es la misma.
+ *
+ * Toda la línea va en el tono apagado de las demás líneas de apoyo —con 20 o 30 días en fila, un
+ * verde en cada uno sería ruido—; lo único que se pinta es «te pasaste …», en el rojo de la plata
+ * que sale.
  */
 @Composable
 internal fun LineaDelDiaADiaEnElDia(linea: LineaDelDiaADia?) {
@@ -39,10 +43,9 @@ internal fun LineaDelDiaADiaEnElDia(linea: LineaDelDiaADia?) {
         return
     }
     val colores = Movi.colores
-    val dentro = !linea.pasada
     Text(
         text = buildAnnotatedString {
-            withStyle(SpanStyle(color = if (dentro) colores.entra else colores.textoApagado)) { append(linea.base) }
+            withStyle(SpanStyle(color = colores.textoApagado)) { append(linea.base) }
             linea.aviso?.let { aviso ->
                 withStyle(SpanStyle(color = colores.textoApagado)) { append(" · ") }
                 withStyle(SpanStyle(color = colores.sale)) { append(aviso) }

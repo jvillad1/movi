@@ -1061,12 +1061,23 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     // períodos): en uno cerrado el Disponible de entonces no se puede reconstruir.
     val hoyLocal = remember(hoyIso) { LocalDate.parse(hoyIso) }
     val perfilParaElDiaADia = perfilVigente
+    val periodoDelDiaADia = periodoVigenteSegun(perfil)
     val datosDelDiaADia = rememberLectura(
         ClaveDeLectura.DatosDelDiaADia,
         reintento = refreshKey,
-        periodoVigente = periodoVigenteSegun(perfil),
+        periodoVigente = periodoDelDiaADia,
         activa = perfilParaElDiaADia != null && (periodoVisible == periodoDeHoy || searchQuery.isNotBlank()),
-    ) { leerDatosDelDiaADia(checkNotNull(perfilParaElDiaADia), ahoraEnMs()) }
+    ) {
+        // Lo reciente que ya esté en el cache (de Plan o del Inicio) no se vuelve a pedir: ver
+        // [datosParaElDiaADia]. El «Reintentar» de esta pantalla (`refreshKey`) sí pide de nuevo.
+        datosParaElDiaADia(
+            perfil = checkNotNull(perfilParaElDiaADia),
+            ahora = ahoraEnMs(),
+            tick = refreshTick,
+            forzar = refreshKey != 0,
+            periodoVigente = periodoDelDiaADia,
+        )
+    }
     val diaADia = remember(datosDelDiaADia.valor, hoyLocal) {
         datosDelDiaADia.valor?.let { diaADiaDe(it, hoyLocal) }
     }
@@ -1075,7 +1086,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     val inicioDelPeriodoEnCurso = remember(periodoDeHoy, ajustesDelPeriodo) {
         inicioDelPeriodo(periodoDeHoy, ajustesDelPeriodo)
     }
-    val reservaElDiaADia = diaADia == null && perfilParaElDiaADia != null && !datosDelDiaADia.terminada
+    // Solo mientras **no se sabe nada**: con lo recordado a la vista —aunque no traiga meta, por un
+    // disponible sin margen— ya se sabe que no hay línea, y reservar el alto para recogerlo al
+    // contestar la relectura movería la lista en cada visita.
+    val reservaElDiaADia = datosDelDiaADia.valor == null && perfilParaElDiaADia != null && !datosDelDiaADia.terminada
 
     val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo) {
         val filtrados = diasVisibles(allDays, activeFilter, searchQuery)

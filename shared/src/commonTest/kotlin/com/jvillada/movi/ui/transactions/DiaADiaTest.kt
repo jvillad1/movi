@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 /**
  * # «Día a día»: lo que gastaste ese día contra lo que podías gastar
  *
- * Las frases exactas, leídas tal cual. Los números son los del dueño (período 25-sep → 24-oct,
+ * Las frases exactas, leídas tal cual. Los números son los del dueño (período 24-sep → 24-oct, con arranque propio,
  * meta de $41.924 al día).
  */
 class DiaADiaTest {
