@@ -220,9 +220,15 @@ private fun LineaDelPeriodo(texto: String?, reservar: Boolean) {
     // El aire de arriba es de la línea y no del encabezado: el encabezado lo comparten todas las
     // pantallas y su respiro de abajo (`medio`) es para el título solo; esta línea es otra cosa y
     // sin su propio aire quedaba pegada a él.
+    // Sin línea (mes de calendario) no hay nada a lo que darle aire: quedan solo los `amplio` de
+    // abajo, como siempre, y no 8 + 16 vacíos sobre la tarjeta.
+    val hayLinea = texto != null || reservar
     Column(
-        modifier = Modifier.fillMaxWidth()
-            .padding(start = Movi.espacios.margen, end = Movi.espacios.margen, top = Movi.espacios.corto),
+        modifier = Modifier.fillMaxWidth().padding(
+            start = Movi.espacios.margen,
+            end = Movi.espacios.margen,
+            top = if (hayLinea) Movi.espacios.corto else 0.dp,
+        ),
     ) {
         when {
             texto != null -> Text(

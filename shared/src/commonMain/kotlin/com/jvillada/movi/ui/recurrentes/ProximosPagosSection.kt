@@ -220,7 +220,11 @@ internal fun PropuestaOcurrencia(
         } else {
             Spacer(Modifier.height(10.dp))
             AccionesDeLaFila(
-                acciones = listOf(AccionDeOcurrencia(ETIQUETA_ANOTAR, primary = true, onClick = onAnotarMovimiento)),
+                acciones = listOf(AccionDeOcurrencia(
+                        etiquetaDeAnotar(rule.type == TransactionType.INCOME),
+                        primary = true,
+                        onClick = onAnotarMovimiento,
+                    )),
                 enVuelo = enVuelo,
             )
         }
@@ -294,6 +298,11 @@ internal fun PropuestaDeMovimiento(
 const val ETIQUETA_SI_FUE_ESTE = "Sí, fue este"
 const val ETIQUETA_NO_FUE_ESTE = "No fue este"
 const val ETIQUETA_ANOTAR = "Anotar este pago"
+/** Un ingreso no se paga: llega (mismo criterio que `tituloPropuesta`). */
+const val ETIQUETA_ANOTAR_INGRESO = "Anotar este ingreso"
+
+/** El rótulo de la salida «Anotar…» según sea un pago o un ingreso. */
+internal fun etiquetaDeAnotar(esIngreso: Boolean): String = if (esIngreso) ETIQUETA_ANOTAR_INGRESO else ETIQUETA_ANOTAR
 const val ETIQUETA_QUITAR_LA_MARCA = "Quitar la marca"
 
 /** Una acción ofrecida sobre una ocurrencia: qué dice, si es la principal, y qué hace. */

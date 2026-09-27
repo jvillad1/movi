@@ -468,7 +468,7 @@ private fun LoQueOfreceLaFila(
 @Composable
 private fun SinMovimiento(pago: PagoDelPeriodo, enVuelo: Boolean, acciones: AccionesDelChecklist) {
     Text(
-        text = TEXTO_SIN_MOVIMIENTO,
+        text = if (pago.esIngreso) TEXTO_SIN_MOVIMIENTO_DE_INGRESO else TEXTO_SIN_MOVIMIENTO,
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
         lineHeight = 16.sp,
@@ -476,7 +476,7 @@ private fun SinMovimiento(pago: PagoDelPeriodo, enVuelo: Boolean, acciones: Acci
     Spacer(Modifier.height(8.dp))
     AccionesDeLaFila(
         acciones = listOf(
-            AccionDeOcurrencia(ETIQUETA_ANOTAR, primary = true) { acciones.onAnotarMovimiento(pago) },
+            AccionDeOcurrencia(etiquetaDeAnotar(pago.esIngreso), primary = true) { acciones.onAnotarMovimiento(pago) },
         ),
         enVuelo = enVuelo,
     )
@@ -491,6 +491,9 @@ private fun SinMovimiento(pago: PagoDelPeriodo, enVuelo: Boolean, acciones: Acci
  * app le está diciendo que no pagó.
  */
 const val TEXTO_SIN_MOVIMIENTO = "Movi no encontró el movimiento de este pago."
+
+/** Lo mismo para una fila de ingreso: un sueldo no se paga, llega. */
+const val TEXTO_SIN_MOVIMIENTO_DE_INGRESO = "Movi no encontró el movimiento de este ingreso."
 
 /**
  * La casilla del checklist. **No es un control: es un reflejo** — nada de lo que la dibuja acepta
