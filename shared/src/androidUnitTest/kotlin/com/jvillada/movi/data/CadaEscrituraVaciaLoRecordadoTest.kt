@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
  * confía en la lista: recorre la INTERFAZ, llama a cada función que no es una lectura y afirma que
  * [CacheDeLecturas.borrarTodo] corrió. Una escritura nueva sin envolver se pone roja acá.
  *
- * «Lectura» es lo que empieza con `get`, más `isScreenAdmin`. Si mañana aparece una lectura con
+ * «Lectura» es lo que empieza con `get`, más [LECTURAS_SIN_GET]. Si mañana aparece una lectura con
  * otro nombre, esta prueba la marcará como escritura sin envolver: se agrega a [LECTURAS_SIN_GET]
  * a conciencia, no por omisión.
  *
@@ -35,11 +35,7 @@ class CadaEscrituraVaciaLoRecordadoTest {
 
     @Test
     fun `cada escritura del repositorio borra lo recordado`() {
-        val abajo = Proxy.newProxyInstance(
-            WalletRepository::class.java.classLoader,
-            arrayOf(WalletRepository::class.java),
-        ) { _, metodo, _ -> respuestaVacia(metodo) } as WalletRepository
-        val envuelto = InvalidaElInicioAlEscribir(abajo)
+        val envuelto = envueltoSobreNada()
 
         val escrituras = WalletRepository::class.java.methods
             .filter { !Modifier.isStatic(it.modifiers) && !esLectura(it) }
@@ -53,6 +49,36 @@ class CadaEscrituraVaciaLoRecordadoTest {
         }.map { it.name }
 
         assertEquals(emptyList(), sinEnvolver, "escrituras que no vacían lo recordado")
+    }
+
+    /**
+     * Y al revés: una lectura envuelta por error no engaña a nadie, pero vacía lo recordado cada vez
+     * que se hace — `parseSms` lo hacía, y abrir un mensaje del banco y volver dejaba Por revisar y
+     * Movimientos en esqueleto.
+     */
+    @Test
+    fun `ninguna lectura borra lo recordado`() {
+        val envuelto = envueltoSobreNada()
+        val lecturas = WalletRepository::class.java.methods
+            .filter { !Modifier.isStatic(it.modifiers) && esLectura(it) }
+
+        val queBorran = lecturas.filter { metodo ->
+            val antes = CacheDeLecturas.generacion
+            val args = metodo.parameterTypes.map { argumentoVacio(it) }.toTypedArray()
+            metodo.invoke(envuelto, *args)
+            CacheDeLecturas.generacion != antes
+        }.map { it.name }
+
+        assertEquals(emptyList(), queBorran, "lecturas que vacían lo recordado")
+    }
+
+    /** El envoltorio de la app sobre un repositorio que contesta vacío a todo, sin suspender. */
+    private fun envueltoSobreNada(): WalletRepository {
+        val abajo = Proxy.newProxyInstance(
+            WalletRepository::class.java.classLoader,
+            arrayOf(WalletRepository::class.java),
+        ) { _, metodo, _ -> respuestaVacia(metodo) } as WalletRepository
+        return InvalidaElInicioAlEscribir(abajo)
     }
 
     /**
@@ -91,7 +117,8 @@ class CadaEscrituraVaciaLoRecordadoTest {
     }
 
     private companion object {
-        val LECTURAS_SIN_GET = setOf("isScreenAdmin")
+        // `parseSms` es `GET /api/sms/{id}/parse`: interpreta el mensaje, no escribe nada.
+        val LECTURAS_SIN_GET = setOf("isScreenAdmin", "parseSms")
 
         val CONTINUACION = object : Continuation<Any?> {
             override val context: CoroutineContext = EmptyCoroutineContext

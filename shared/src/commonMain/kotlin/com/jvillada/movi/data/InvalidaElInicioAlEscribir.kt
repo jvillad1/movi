@@ -37,7 +37,7 @@ import com.jvillada.movi.ui.dashboard.DashboardDataCache
  * Se invalida **después** de que la escritura salió bien: si el server rechaza, no cambió nada y
  * no hay nada que refrescar.
  *
- * Las lecturas (`get*`, `isScreenAdmin`) pasan derecho por la delegación `by delegado` y no se
+ * Las lecturas (`get*`, `isScreenAdmin`, `parseSms`) pasan derecho por la delegación `by delegado` y no se
  * listan acá. Toda otra función del repositorio tiene que estar abajo: `CadaEscrituraVaciaLoRecordadoTest`
  * lo comprueba contra la interfaz, así que una escritura nueva que nadie envuelva se pone roja.
  */
@@ -69,7 +69,8 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun createGoal(goal: Goal): Goal = trasEscribir { delegado.createGoal(goal) }
     override suspend fun updateGoal(id: String, goal: Goal): Goal = trasEscribir { delegado.updateGoal(id, goal) }
     override suspend fun deleteGoal(id: String): Unit = trasEscribir { delegado.deleteGoal(id) }
-    override suspend fun parseSms(id: String): ParsedSms = trasEscribir { delegado.parseSms(id) }
+    // `parseSms` NO invalida: es un GET que interpreta el mensaje, no escribe nada. Envuelto, abrir
+    // un mensaje del banco desde Por revisar y volver dejaba la bandeja y Movimientos en esqueleto.
     override suspend fun confirmSms(id: String): Unit = trasEscribir { delegado.confirmSms(id) }
     override suspend fun ignoreSms(id: String): Unit = trasEscribir { delegado.ignoreSms(id) }
     override suspend fun createBudget(budget: Budget): Budget = trasEscribir { delegado.createBudget(budget) }
