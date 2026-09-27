@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.ui.sdui.TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA
@@ -64,6 +65,18 @@ class InicioDeUnVistazoEnPantallaTest {
             Account(id = "l1", name = "Hipoteca", type = AccountType.LOAN, balance = 2_191_000_000),
         ),
         spentByCategory = mapOf(CUOTA_CATEGORY to 12_915_000L, "Comida" to 2_000_000L),
+    )
+
+    /**
+     * Dos cuentas de «Tu plata» en vez de una — misma suma ($558.350) que [datos], para que la
+     * cifra grande del hero y el veredicto no cambien y las pruebas de siempre sigan valiendo.
+     */
+    private val datosConDosCuentasDeTuPlata = datos.copy(
+        accounts = listOf(
+            Account(id = "a1", name = "Cuenta de ahorros", type = AccountType.SAVINGS, balance = 300_000),
+            Account(id = "a2", name = "Nequi", type = AccountType.CHECKING, balance = 258_350),
+            Account(id = "l1", name = "Hipoteca", type = AccountType.LOAN, balance = 2_191_000_000),
+        ),
     )
 
     private var navegoA: Screen? = null
@@ -290,6 +303,62 @@ class InicioDeUnVistazoEnPantallaTest {
         navegoA = null
         composeRule.onNodeWithText("Entró", useUnmergedTree = true).performClick()
         assertEquals(Screen.Periodos, navegoA)
+    }
+
+    /**
+     * Ola T: con una sola cuenta de «Tu plata» ([datos] — la Hipoteca es deuda, no cuenta) no hay
+     * nada que desglosar (mismo criterio `cuentas.size > 1` que ya usa «Tu patrimonio»): el chevron
+     * ni se pinta.
+     */
+    @Test
+    @Config(qualifiers = "w390dp-h2400dp-xhdpi")
+    fun `con una sola cuenta de Tu plata el hero no ofrece desglose`() {
+        montar()
+        composeRule.onNodeWithContentDescription("Ver el detalle de tu plata", useUnmergedTree = true)
+            .assertDoesNotExist()
+    }
+
+    /**
+     * Ola T — el pedido del dueño: con más de una cuenta de «Tu plata», el chevron junto a la cifra
+     * despliega inline el saldo de cada cuenta (la MISMA lista que ya arma «Tu patrimonio»,
+     * [datosConDosCuentasDeTuPlata] suma igual que [datos]: $300.000 + $258.350 = $558.350, la
+     * cifra grande de siempre). Tocar el chevron es su propio toque — no navega — y se puede volver
+     * a plegar.
+     */
+    @Test
+    @Config(qualifiers = "w390dp-h2400dp-xhdpi")
+    fun `con mas de una cuenta el chevron despliega el detalle y la suma coincide con la cifra`() {
+        montar(datosConDosCuentasDeTuPlata)
+
+        // Antes de tocar el chevron, el desglose ya está SIEMPRE visible en «Tu patrimonio», más
+        // abajo — una sola aparición de cada monto todavía.
+        assertEquals(1, cuantas("\$300.000"))
+        assertEquals(1, cuantas("\$258.350"))
+
+        composeRule.onNodeWithContentDescription("Ver el detalle de tu plata", useUnmergedTree = true)
+            .assertIsDisplayed()
+            .performClick()
+
+        // Ahora también en el hero: una segunda aparición de cada monto.
+        composeRule.onNodeWithContentDescription("Ocultar el detalle de tu plata", useUnmergedTree = true)
+            .assertIsDisplayed()
+        assertEquals(2, cuantas("\$300.000"))
+        assertEquals(2, cuantas("\$258.350"))
+        // «Cuenta de ahorros» y «Nequi» también están en «Tu patrimonio», más abajo: el primero es
+        // el que acaba de aparecer en el hero.
+        primero("Cuenta de ahorros").assertIsDisplayed()
+        primero("Nequi").assertIsDisplayed()
+        // La cifra grande sigue siendo la misma: la suma de las dos filas de arriba.
+        primero("\$558.350").assertIsDisplayed()
+
+        // Tocar el chevron no navega: es su propio nodo, no el de la tarjeta entera.
+        assertEquals(null, navegoA)
+
+        composeRule.onNodeWithContentDescription("Ocultar el detalle de tu plata", useUnmergedTree = true)
+            .performClick()
+        assertEquals(1, cuantas("\$300.000"), "se vuelve a plegar")
+        composeRule.onNodeWithContentDescription("Ver el detalle de tu plata", useUnmergedTree = true)
+            .assertIsDisplayed()
     }
 
     /**
