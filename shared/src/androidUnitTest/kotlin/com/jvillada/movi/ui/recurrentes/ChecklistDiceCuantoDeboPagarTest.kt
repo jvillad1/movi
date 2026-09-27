@@ -252,7 +252,7 @@ class ChecklistDiceCuantoDeboPagarTest {
                         checklist = listOf(
                             PagoDelPeriodo(
                                 "r_sueldo", "Sueldo", 9_000_000, pagado = false, diasParaVencer = -1,
-                                esIngreso = true,
+                                esIngreso = true, periodoDelSello = "2026-09",
                             ),
                         ),
                         cargando = false,
