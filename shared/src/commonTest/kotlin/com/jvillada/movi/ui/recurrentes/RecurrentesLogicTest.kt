@@ -449,6 +449,30 @@ class RecurrentesLogicTest {
         assertEquals("acc-2", cuentaParaElWire("acc-2", elDuenoEligioSinCuenta = false))
     }
 
+    // ── Ola V: el destino conocido de un recurrente en el wire ────────────────
+    //
+    // Mismos tres estados que la cuenta, y por el mismo motivo — ver [destinoParaElWire].
+
+    @Test
+    fun `el destino elegido viaja como su id`() {
+        assertEquals("dst-1", destinoParaElWire("dst-1", elDuenoEligioSinDestino = false))
+    }
+
+    @Test
+    fun `elegir Sin destino a proposito es lo unico que manda la cadena vacia`() {
+        assertEquals("", destinoParaElWire(null, elDuenoEligioSinDestino = true))
+    }
+
+    @Test
+    fun `sin hablar de destinos se manda null, que el server lee como no lo toques`() {
+        assertEquals(null, destinoParaElWire(null, elDuenoEligioSinDestino = false))
+    }
+
+    @Test
+    fun `volver a elegir un destino despues de Sin destino deshace el borrado`() {
+        assertEquals("dst-2", destinoParaElWire("dst-2", elDuenoEligioSinDestino = false))
+    }
+
     // ── candidatasSinConfirmar (PR 2 del rediseño de Recurrentes) ─────────────
 
     @Test

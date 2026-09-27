@@ -15,6 +15,10 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.TransactionType
+import io.ktor.client.call.body
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -22,8 +26,11 @@ import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authentication
 import io.ktor.server.auth.jwt.JWTPrincipal
@@ -187,6 +194,42 @@ class DestinoRoutesTest {
         assertEquals(HttpStatusCode.NoContent, del.status)
         val res = client.get("/api/destinos") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
         assertTrue(Json.parseToJsonElement(res.bodyAsText()).jsonArray.isEmpty())
+    }
+
+    /**
+     * Ola V — **borrar un destino suelta las reglas recurrentes que lo tenían asociado**, no las
+     * borra: «Tía Caro, día 1, $100.000» sigue siendo un plan real aunque el dueño borre el
+     * registro de «Caro» (ver el KDoc de `RecurringRule.destinoConocidoId`). Se verifica leyendo
+     * de vuelta con `GET /api/recurring-rules`, el mismo camino que usa la hoja de edición.
+     */
+    @Test
+    fun `borrar un destino suelta las reglas recurrentes que lo tenian asociado`() = testApplication {
+        wireApp()
+        val tipado = createClient { install(ContentNegotiation) { json() } }
+        val id = Json.parseToJsonElement(crearCaro().bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
+
+        val reglaCreada = tipado.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Tía Caro", "Familia", 100_000, 1,
+                    TransactionType.EXPENSE, destinoConocidoId = id,
+                ),
+            )
+        }.body<RecurringRule>()
+        assertEquals(id, reglaCreada.destinoConocidoId, "la regla guardó el destino antes de borrarlo")
+
+        val del = client.delete("/api/destinos/$id") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        assertEquals(HttpStatusCode.NoContent, del.status)
+
+        val reglas = tipado.get("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.body<List<RecurringRule>>()
+        val reglaLeida = reglas.single { it.id == reglaCreada.id }
+        // La regla SIGUE existiendo — solo se soltó la referencia, no queda apuntando a un id que
+        // ya no existe.
+        assertEquals(null, reglaLeida.destinoConocidoId)
     }
 
     @Test

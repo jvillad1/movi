@@ -479,7 +479,7 @@ class PagosDelChecklistTest {
 
     /**
      * **Guarda de orden**: el filtro de `rechazados` tiene que aplicarse ANTES de calcular
-     * `yaSeVeElPago`/el filtro de `SENA_DEL_NOMBRE` (ver el comentario en
+     * `yaSeVeElPago`/el filtro de `identidadFuerte` (ver el comentario en
      * [parteFijaDelChecklist]). «Mercado» exacto está rechazado; «Mercado Éxito» solo EMPIEZA con
      * el nombre y por eso nunca absorbe solo (necesita que "ya se vea el pago" por otro candidato
      * concluyente). Si el filtro se corriera después, el candidato rechazado seguiría contando

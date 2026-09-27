@@ -558,4 +558,109 @@ class OccurrenceMatchingTest {
         )
         assertTrue(occurrenceCandidatesFor(tiaCaro, vencimiento, listOf(transferencia), destinos = destinos).isEmpty())
     }
+
+    // ── Fix C1 (revisión final): el destino NUNCA decide sin el monto exacto ─────────
+
+    /**
+     * **El escenario real que motivó el arreglo.** La cuenta de «Caro» es la de la ESPOSA del
+     * dueño, y a esa cuenta le llega plata por motivos distintos cada mes: el mercado, la cuota de
+     * un crédito compartido, y (acá) la mesada de la tía. Sin la guarda del monto, CUALQUIERA de
+     * esas transferencias marcaría «Tía Caro» ($100.000) como pagada — apagaría su aviso real y
+     * subiría el Disponible por plata que no era de ella.
+     *
+     * $2.000.000 a la misma cuenta: entra como candidato (el destino sí es una seña), pero NO se
+     * empareja solo. $100.000 exactos: sí se empareja solo (ver el primer test de esta sección).
+     */
+    @Test fun `un traspaso al destino por OTRO monto no se empareja solo, pero sigue siendo candidato`() {
+        val tiaCaro = regla(
+            name = "Tía Caro",
+            category = "Familia",
+            amount = 100_000,
+            type = TransactionType.EXPENSE,
+            destinoConocidoId = "dst_caro",
+        )
+        val destinos = mapOf("dst_caro" to destino(id = "dst_caro"))
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        // El mercado, no la mesada de la tía — a la MISMA cuenta.
+        val mercado = evento(
+            id = "ev_mercado",
+            day = 25,
+            month = 9,
+            amount = 2_000_000,
+            category = "Otra categoría",
+            description = "Transferencia a la cuenta *31973270756",
+            type = TransactionType.EXPENSE,
+        )
+        // Candidato: el destino pega, así que la pantalla se lo puede proponer al dueño.
+        assertEquals(
+            listOf("ev_mercado"),
+            occurrenceCandidatesFor(tiaCaro, vencimiento, listOf(mercado), destinos = destinos).map { it.id },
+        )
+        // Pero NO concluyente: sin el monto exacto, el destino no alcanza para decidir solo.
+        assertNull(ocurrenciaConcluyente(tiaCaro, vencimiento, listOf(mercado), destinos = destinos))
+    }
+
+    /**
+     * Mismo escenario, mirado desde `CandidatoPuntuado` directo: el destino solo pesa para EL
+     * ORDEN (`senas`) y para la seña mínima (aparece como candidato); `identidadFuerte` y
+     * `concluyente` —lo que de verdad decide (absorber en el Disponible, emparejar solo)— exigen
+     * además el monto exacto.
+     */
+    @Test fun `candidatosPuntuados marca identidadFuerte y concluyente solo con el monto exacto`() {
+        val tiaCaro = regla(
+            name = "Tía Caro",
+            category = "Familia",
+            amount = 100_000,
+            type = TransactionType.EXPENSE,
+            destinoConocidoId = "dst_caro",
+        )
+        val destinos = mapOf("dst_caro" to destino(id = "dst_caro"))
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val otroMonto = evento(
+            id = "ev_otro", day = 25, month = 9, amount = 2_000_000,
+            category = "Otra categoría", description = "Transferencia a la cuenta *31973270756",
+            type = TransactionType.EXPENSE,
+        )
+        val montoExacto = evento(
+            id = "ev_exacto", day = 25, month = 9, amount = 100_000,
+            category = "Otra categoría", description = "Transferencia a la cuenta *31973270756",
+            type = TransactionType.EXPENSE,
+        )
+        val candidatos = candidatosPuntuados(tiaCaro, vencimiento, listOf(otroMonto, montoExacto), destinos = destinos)
+            .associateBy { it.event.id }
+
+        val conOtroMonto = candidatos.getValue("ev_otro")
+        assertTrue(conOtroMonto.senas > 0, "el destino tiene que sumar algo al orden")
+        assertFalse(conOtroMonto.identidadFuerte)
+        assertFalse(conOtroMonto.concluyente)
+
+        val conMontoExacto = candidatos.getValue("ev_exacto")
+        assertTrue(conMontoExacto.identidadFuerte)
+        assertTrue(conMontoExacto.concluyente)
+    }
+
+    /**
+     * El agravante que encontró la revisión: la señal de NOMBRE de `vaHaciaElDestino` («Almuerzo
+     * caro» pega con el destino «Caro» por ser palabra suelta) NO puede decidir un recurrente
+     * solo. `destinoPegaCon` usa `nombraElNumeroDelDestino` —solo el número— así que un gasto que
+     * ni siquiera menciona la cuenta, y encima con un monto distinto, no es candidato ni
+     * concluyente.
+     */
+    @Test fun `la palabra suelta del nombre del destino no hace candidato ni concluyente a un gasto`() {
+        val tiaCaro = regla(
+            name = "Tía Caro",
+            category = "Familia",
+            amount = 100_000,
+            type = TransactionType.EXPENSE,
+            destinoConocidoId = "dst_caro",
+        )
+        val destinos = mapOf("dst_caro" to destino(id = "dst_caro", nombre = "Caro"))
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val almuerzoCaro = evento(
+            id = "ev_almuerzo", day = 25, month = 9, amount = 45_000,
+            category = "Otra categoría", description = "Almuerzo caro", type = TransactionType.EXPENSE,
+        )
+        assertTrue(occurrenceCandidatesFor(tiaCaro, vencimiento, listOf(almuerzoCaro), destinos = destinos).isEmpty())
+        assertNull(ocurrenciaConcluyente(tiaCaro, vencimiento, listOf(almuerzoCaro), destinos = destinos))
+    }
 }

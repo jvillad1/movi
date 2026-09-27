@@ -1,6 +1,6 @@
 # Ola V — reporte final
 
-## Estado: DONE
+## Estado: DONE (con fix round tras revisión final — ver más abajo)
 
 ## Commits
 1. `6cf55adf` — «Cuentas de otros» ahora también se abre desde Ajustes (Parte 1).
@@ -35,3 +35,72 @@ Sí encontré y arreglé un problema real, más chico, de la misma familia: mi p
 - El nombre de la ficha en Ajustes es «Cuentas de otros» (igual que el título de la pantalla y no «Cuentas de terceros» / «Personas y cuentas») para que Ajustes y la pantalla digan lo mismo — el brief dejaba elegir.
 - La seña del destino se hizo pesar EXACTAMENTE igual que el nombre (`SENA_DEL_NOMBRE`), no una seña nueva propia — razonado en el KDoc de `nombrePegaCon`. Si el dueño prueba el caso real de «Tía Caro» y el peso se siente mal calibrado (por ejemplo, dos destinos que compiten), vale la pena revisarlo con datos reales.
 - No se creó ninguna noción nueva de «esto es un traspaso a un tercero» en el modelo: el selector de destino se ofrece en CUALQUIER regla de gasto (real, no sintética), porque el brief no pedía un campo nuevo para distinguir tipos de gasto y cualquier gasto puede en los hechos ser una transferencia a alguien.
+# Ola V — fix round tras la revisión final
+
+## C1 (Critical, bloqueante) — RESUELTO
+El destino asociado a una regla ya NO decide solo con cualquier monto.
+
+- `nombrePegaCon` (server) volvió a ser SOLO el nombre — el destino salió de ahí por completo.
+- Nueva puerta 3 en `esConcluyente`/`CandidatoPuntuado.concluyente`: **destino + monto EXACTO**
+  (análoga a la puerta 2, categoría+cuenta+monto exacto). Sin monto exacto, el destino no puede
+  emparejar solo ni absorber en el Disponible.
+- `CandidatoPuntuado` ahora expone dos campos separados:
+  - `senas` (Int): SOLO para ordenar el «¿Es este?» — el destino suma `SENA_DEL_DESTINO = 2`
+    (menos que el nombre, `SENA_DEL_NOMBRE = 3`), y puede combinarse con categoría/cuenta sin que
+    eso implique nada (el KDoc de `SENA_DEL_NOMBRE` ya no promete «`senas >= 3` = el nombre pega»).
+  - `identidadFuerte`/`concluyente` (Boolean): lo que de verdad DECIDE. `identidadFuerte` = nombre
+    pega, o destino+monto exacto — es lo único que `PagosDelChecklist.parteFijaDelChecklist` deja
+    absorber un fijo (antes leía `senas >= SENA_DEL_NOMBRE`, que ahora sería un falso positivo si
+    el destino contribuyera solo). `concluyente` = `identidadFuerte` o categoría+cuenta+monto
+    exacto — es lo que decide `ocurrenciaConcluyente`/el checklist automático.
+- Test nuevo que reproduce el escenario EXACTO del revisor: regla «Tía Caro» $100.000 + destino
+  «Caro» asociado; una transferencia de $2.000.000 a esa cuenta (el mercado) entra como candidato
+  pero NO se empareja sola; una de $100.000 exactos sí. Y de punta a punta contra
+  `/api/payments/occurrences` en `ReminderRoutesTest` (3 tests nuevos), no solo con las funciones
+  sueltas.
+
+## I1 — RESUELTO
+Nueva función en `:core`, `nombraElNumeroDelDestino(evento, destino)`: SOLO mira el número (mismo
+patrón `NUMEROS_QUE_NOMBRA_EL_TEXTO` que ya existía). `vaHaciaElDestino` se refactorizó para
+reusarla como su primera señal, y sigue aceptando además el nombre suelto (para agrupar en
+«Cuentas de otros», donde un falso positivo del nombre no sella nada). `destinoPegaCon` en
+`OccurrenceMatching.kt` usa la nueva función número-only, no `vaHaciaElDestino`. Test nuevo en
+`DestinoConocidoTest.kt` (`:core`) fija la distinción: «Almuerzo caro» pega en `vaHaciaElDestino`
+pero no en `nombraElNumeroDelDestino`.
+
+## I2 — RESUELTO (cobertura de ruta añadida)
+- `ReminderRoutesTest.kt`: `KnownDestinations` agregada al esquema de prueba (con su propio ciclo
+  drop+create, como el resto); 4 tests nuevos para POST/PUT en sus 3 estados (guardar propio,
+  ajeno → null, PUT sin campo → conserva, PUT con `""` → quita); 3 tests end-to-end contra
+  `GET /api/payments/occurrences` (monto exacto cierra sola, monto distinto NO cierra pero propone,
+  y con las dos transferencias en el mismo período gana la de monto exacto).
+- `DestinoRoutesTest.kt`: test nuevo que crea destino + regla asociada, borra el destino, y lee de
+  vuelta la regla por `GET /api/recurring-rules` verificando que `destinoConocidoId` quedó en null.
+- `RecurrentesLogicTest.kt`: 4 tests para `destinoParaElWire` (gemelos de los de `cuentaParaElWire`).
+- `DestinoConocidoEnRecurrenteTest.kt` (nuevo, Compose/Robolectric): la sección existe al crear un
+  gasto; una regla que YA tiene destino lo muestra en edición. (Los tests de INTERACCIÓN —abrir el
+  selector y elegir un destino con un click simulado— resultaron frágiles por cómo `MarcoDeHoja`
+  funde la semántica del panel en un solo nodo; se dejaron afuera para no comprar una prueba
+  intermitente. La lógica de selección ya está cubierta end-to-end por `destinoParaElWire` +
+  las pruebas de ruta.)
+
+## Minor — todos resueltos
+- «asocialo» → «asócialo».
+- Pasar de Gasto a Ingreso al editar manda `""` (borra de verdad), no `null` (no tocar).
+- «Aún no tienes ninguna cuenta guardada» ya no sale si la lectura falló — nuevo estado
+  `fallaronLosDestinos`, mismo criterio que `fallaronLasCuentas`.
+- KDoc actualizado en la cabecera de `OccurrenceMatching.kt`, `SENA_DEL_NOMBRE`, `ocurrenciaConcluyente`
+  (ahora TRES puertas), y en `PagosDelChecklist.kt` («identidadFuerte» reemplaza «Solo el NOMBRE»).
+- `ReminderScheduler.kt` y `ContextoDelPeriodo.kt` (los otros dos mapeadores de fila a
+  `RecurringRule`) ahora también leen `destinoConocidoId`.
+
+## Sobre la "anomalía H2"
+Confirmado por el revisor: no era real. Era mi primera versión (lectura incondicional de
+`known_destinations`), ya resuelta con la lectura condicional. No se investigó más, como pidió el
+coordinador.
+
+## Verificado
+- `:server:test` completo (no solo clases filtradas): BUILD SUCCESSFUL.
+- `:core:jvmTest --tests DestinoConocidoTest`: verde.
+- `:shared:testDebugUnitTest --tests RecurrentesLogicTest,DestinoConocidoEnRecurrenteTest`: verde.
+- CI completo con `--rerun-tasks` corriendo — ver el resultado final en la respuesta.

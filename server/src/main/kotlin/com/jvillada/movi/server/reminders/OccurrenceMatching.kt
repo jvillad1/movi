@@ -9,7 +9,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.nombreDeMovimientoPegaConRegla
-import com.jvillada.movi.shared.model.vaHaciaElDestino
+import com.jvillada.movi.shared.model.nombraElNumeroDelDestino
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -53,8 +53,10 @@ import kotlin.math.abs
  *
  * ## Y una señal mínima, para no proponer cualquier cosa
  *
- * Además de las puertas, un candidato tiene que **llamarse igual o compartir la categoría**. La
- * cuenta *suma* —ordena mejor a lo que cae donde el dueño dijo que cae— pero **no alcanza sola**,
+ * Además de las puertas, un candidato tiene que **llamarse igual, compartir la categoría, o ir hacia
+ * el [com.jvillada.movi.shared.model.DestinoConocido] que la regla tiene asociado** (Ola V — un
+ * traspaso a un tercero ya registrado, ver [candidatosPuntuados]). La cuenta *suma* —ordena mejor a
+ * lo que cae donde el dueño dijo que cae— pero **no alcanza sola**,
  * y esto costó una revisión: `rule.accountId != null` no mira el movimiento, así que con la
  * cuenta como seña suficiente TODO gasto de esa cuenta en la ventana pasaba el mínimo. La regla
  * «Arriendo · Vivienda · $1.800.000 · Bancolombia» proponía el mercado del Éxito de $1.750.000
@@ -190,40 +192,51 @@ fun occurrenceCandidatesFor(
  * dicho por su nombre le gana al «Crédito Mamá» que solo comparte la categoría.
  */
 /**
- * **El nombre pega**, para las dos puertas de este archivo ([candidatosPuntuados] y
- * [esConcluyente]): la nota del movimiento o el comercio que dijo el banco coincide con el nombre
+ * **El nombre pega**: la nota del movimiento o el comercio que dijo el banco coincide con el nombre
  * de la regla, perdonando que el movimiento agregue el mes/año («Salario Octubre 2026» pega con
- * «Salario» — ver [nombreDeMovimientoPegaConRegla] en `:core`). Una sola definición para que las
- * dos puertas nunca puedan leer «pega» distinto para el mismo par regla/movimiento.
+ * «Salario» — ver [nombreDeMovimientoPegaConRegla] en `:core`).
  *
- * **Ola V: o el DESTINO de la regla pega.** Un traspaso a un tercero ya registrado —«Tía Caro»
- * asociada al destino «Caro»— casi nunca repite el nombre de la regla: el banco solo nombra el
- * número de la cuenta que recibe, nunca «Tía Caro». Se decidió que esto pese IGUAL que el nombre
- * (no una seña aparte, más chica) y no una categoría propia entre medio: [destinoPegaCon] reusa
- * [vaHaciaElDestino] — la misma función que ya junta «lo que le mandaste» a un destino en
- * `DestinosScreen`— y esa función exige que el número de cuenta aparezca en el texto del banco (o,
- * más suelto, que el NOMBRE del destino aparezca como palabra completa). Las dos son exactamente
- * tan específicas como el nombre de la regla: un número de cuenta identifica una única cuenta
- * tanto como «Salario» identifica un único concepto, y equipararla a categoría+cuenta (peso 2) las
- * habría dejado perdiendo contra un «Mercado Éxito» que solo comparte categoría y cuenta con el
- * arriendo — el mismo modo de falla que el KDoc de arriba ya cuenta.
+ * **Ola V — el destino de la regla NO entra por acá.** La primera versión de esta ola metía la seña
+ * del destino adentro de esta misma función, con el mismo peso que el nombre — y eso la volvía la
+ * puerta 1 de lo que decide sola (ver el `concluyente` de [CandidatoPuntuado]), sin exigir ningún
+ * monto. Encontrado en revisión con datos reales del dueño: el destino «Caro» es la cuenta de su
+ * ESPOSA, y a esa cuenta le llega plata por motivos distintos cada mes (el mercado, la cuota de un
+ * crédito compartido, la mesada de la tía). Un nombre («Salario») identifica un CONCEPTO; un destino
+ * identifica a una PERSONA, que no es lo mismo — se parece más a la cuenta propia, que este mismo
+ * archivo ya rechazó como seña suficiente (ver el KDoc de cabecera, el caso del mercado del Éxito
+ * propuesto como el arriendo). Por eso el destino tiene su propia puerta, más angosta, en
+ * [candidatosPuntuados]: exige ADEMÁS el monto exacto para poder decidir solo.
  */
-private fun nombrePegaCon(rule: RecurringRule, event: FinancialEvent, destinos: Map<String, DestinoConocido>): Boolean =
+private fun nombrePegaCon(rule: RecurringRule, event: FinancialEvent): Boolean =
     nombreDeMovimientoPegaConRegla(rule.name, event.description) ||
-        nombreDeMovimientoPegaConRegla(rule.name, event.merchant.orEmpty()) ||
-        destinoPegaCon(rule, event, destinos)
+        nombreDeMovimientoPegaConRegla(rule.name, event.merchant.orEmpty())
 
 /**
- * ¿[event] fue hacia el [DestinoConocido] que [rule] tiene asociado (si tiene alguno)? Ver el KDoc
- * de [nombrePegaCon] para el porqué de que esto cuente como si el nombre pegara.
+ * **Ola V — ¿el texto de [event] nombra el NÚMERO del [DestinoConocido] que [rule] tiene asociado**
+ * (si tiene alguno)?
+ *
+ * Reusa [nombraElNumeroDelDestino] de `:core` y **no** [com.jvillada.movi.shared.model.vaHaciaElDestino] —
+ * esa función también acepta el NOMBRE del destino como palabra suelta («Almuerzo caro», «Mercado
+ * caro»: «caro» es un adjetivo común en español), una seña floja hecha a propósito para que un
+ * movimiento anotado a mano se enganche solo con escribirle el nombre. Ahí un falso positivo infla
+ * un total en pantalla; acá podría emparejar solo un gasto ajeno y apagar el aviso de una deuda
+ * real, así que la única seña que se admite es el **hecho** que escribió el banco: el número.
  *
  * `destinos` trae SOLO los destinos que el llamador ya resolvió como del dueño de esta regla — un
  * mapa y no una lista para no recorrerla por cada movimiento de la ventana.
  */
 private fun destinoPegaCon(rule: RecurringRule, event: FinancialEvent, destinos: Map<String, DestinoConocido>): Boolean {
     val destino = rule.destinoConocidoId?.let { destinos[it] } ?: return false
-    return vaHaciaElDestino(event, destino)
+    return nombraElNumeroDelDestino(event, destino)
 }
+
+/**
+ * El monto de [event] es EXACTAMENTE el de [rule] (y en la misma moneda). Puerta compartida por la
+ * decisión de categoría+cuenta y la de destino en [candidatosPuntuados] — ver el KDoc de
+ * [CandidatoPuntuado.concluyente] para el porqué de que acá no valga un margen.
+ */
+private fun montoExactoCon(rule: RecurringRule, event: FinancialEvent): Boolean =
+    event.currency == MONEDA_DE_LAS_REGLAS && event.amount == rule.amount
 
 fun candidatosPuntuados(
     rule: RecurringRule,
@@ -264,23 +277,41 @@ fun candidatosPuntuados(
             val fecha = epochMillisToAppDate(event.timestamp, zone)
             if (fecha !in ventana) return@mapNotNull null
             val dias = ChronoUnit.DAYS.between(dueDate, fecha)
-            val nombrePega = nombrePegaCon(rule, event, destinos)
+            val nombrePega = nombrePegaCon(rule, event)
             val categoriaPega = claveCategoria.isNotEmpty() &&
                 claveComparableDeNombre(event.category) == claveCategoria
-            // La seña mínima es el NOMBRE o la CATEGORÍA. La cuenta no basta sola: no dice nada
-            // del movimiento, solo de dónde está guardado (ver el KDoc de arriba).
-            if (!nombrePega && !categoriaPega) return@mapNotNull null
+            // Ola V: el destino asociado a la regla es la tercera seña mínima — un traspaso a un
+            // tercero ya registrado, que casi nunca repite ni el nombre ni la categoría de la
+            // regla. Ver el KDoc de cabecera y el de [destinoPegaCon].
+            val destinoPega = destinoPegaCon(rule, event, destinos)
+            // La seña mínima es el NOMBRE, la CATEGORÍA o el DESTINO. La cuenta no basta sola: no
+            // dice nada del movimiento, solo de dónde está guardado (ver el KDoc de arriba).
+            if (!nombrePega && !categoriaPega && !destinoPega) return@mapNotNull null
             val laCuentaPega = rule.accountId != null && event.accountId == rule.accountId
+            val montoExacto = montoExactoCon(rule, event)
             // El nombre pesa más que la categoría: «Salario» dicho igual identifica mejor que
-            // «Otros ingresos» compartido con media docena de cosas. La cuenta desempata.
+            // «Otros ingresos» compartido con media docena de cosas. La cuenta desempata. El
+            // destino pesa MENOS que el nombre —ver [SENA_DEL_DESTINO]— y esto es SOLO para
+            // ordenar: lo que de verdad puede decidir (emparejar solo, absorber en el Disponible)
+            // vive en [identidadFuerte] y [concluyente], no en este puntaje. Ver su KDoc.
             val senas = (if (nombrePega) SENA_DEL_NOMBRE else 0) +
                 (if (categoriaPega) 1 else 0) +
-                (if (laCuentaPega) 1 else 0)
+                (if (laCuentaPega) 1 else 0) +
+                (if (destinoPega) SENA_DEL_DESTINO else 0)
+            // Ola V (fix de una revisión): el destino identifica a la PERSONA que recibe, no el
+            // CONCEPTO del pago, y una persona recibe plata por motivos distintos (la esposa del
+            // dueño recibe el mercado, la cuota de un crédito compartido y la mesada de la tía,
+            // los tres a la MISMA cuenta). Por eso nunca decide con el peso puro del nombre: hace
+            // falta ADEMÁS el monto exacto — la misma exigencia que ya tenía categoría+cuenta.
+            val identidadFuerte = nombrePega || (destinoPega && montoExacto)
             CandidatoPuntuado(
                 event = event,
                 senas = senas,
                 distanciaMonto = abs(event.amount - rule.amount),
                 distanciaDias = abs(dias),
+                identidadFuerte = identidadFuerte,
+                // Las TRES puertas de «sin lugar a dudas» — ver el KDoc de [ocurrenciaConcluyente].
+                concluyente = identidadFuerte || (categoriaPega && laCuentaPega && montoExacto),
             )
         }
         .sortedWith(ORDEN_DE_CANDIDATOS)
@@ -299,17 +330,48 @@ val ORDEN_DE_CANDIDATOS: Comparator<CandidatoPuntuado> =
         .thenBy { it.event.id }
 
 /**
- * Lo que suma que el nombre pegue. Es mayor que categoría + cuenta juntas (1 + 1), así que
- * `senas >= SENA_DEL_NOMBRE` quiere decir «el nombre pega», y nada menos lo garantiza.
+ * Lo que suma que el nombre pegue — el PESO MÁS ALTO de los cuatro. Antes de Ola V, `senas >=
+ * SENA_DEL_NOMBRE` alcanzaba para decir «el nombre pega, y nada menos lo garantiza» (categoría +
+ * cuenta sumaban como mucho 2). **Ya no es así**: el destino ([SENA_DEL_DESTINO]) también suma para
+ * el ORDEN y puede combinarse con categoría o cuenta para llegar a 3 sin que el nombre haya pegado.
+ * `senas` sigue sirviendo para UNA sola cosa —ordenar las propuestas del «¿Es este?»— y nada más:
+ * ninguna decisión automática (emparejar solo, absorber en el Disponible) lee este número directo,
+ * las dos leen [CandidatoPuntuado.identidadFuerte] o [CandidatoPuntuado.concluyente].
  */
 const val SENA_DEL_NOMBRE: Int = 3
 
-/** Un candidato con lo que lo ordena: sus señas (nombre 3, categoría 1, cuenta 1) y sus distancias. */
+/**
+ * Lo que suma que el destino asociado a la regla pegue — Ola V. Menor que [SENA_DEL_NOMBRE] a
+ * propósito: el destino identifica a una PERSONA, no a un concepto, así que por sí solo ordena
+ * peor que el nombre (ver el KDoc de cabecera y el de [destinoPegaCon]). Es un peso para ORDENAR
+ * nada más: lo que decide si el destino puede marcar solo un pago es [CandidatoPuntuado.identidadFuerte]
+ * (destino + monto exacto), no este número.
+ */
+const val SENA_DEL_DESTINO: Int = 2
+
+/**
+ * Un candidato con lo que lo ordena (sus señas y distancias) y lo que decide (ver abajo).
+ */
 data class CandidatoPuntuado(
     val event: FinancialEvent,
+    /** Señas: nombre 3, categoría 1, cuenta 1, destino 2. SOLO para ordenar — ver su KDoc. */
     val senas: Int,
     val distanciaMonto: Long,
     val distanciaDias: Long,
+    /**
+     * **¿Esto identifica el pago tan bien como si dijera el nombre entero?** `true` cuando el
+     * nombre pega, o cuando el destino asociado pega Y el monto es exacto. Es lo único que
+     * [PagosDelChecklist.parteFijaDelChecklist] deja absorber un fijo del checklist (antes,
+     * «Solo el NOMBRE absorbe»; Ola V agrega el destino, con la misma exigencia de monto que ya
+     * tenía la cuenta+categoría para decidir en [concluyente]).
+     */
+    val identidadFuerte: Boolean,
+    /**
+     * **¿Esto es, sin lugar a dudas, la ocurrencia de la regla?** `identidadFuerte`, o las tres
+     * circunstancias de siempre (categoría + cuenta + monto exacto). Ver el KDoc de
+     * [ocurrenciaConcluyente] para las tres puertas completas.
+     */
+    val concluyente: Boolean,
 )
 
 /**
@@ -332,7 +394,7 @@ data class CandidatoPuntuado(
  *
  * ## Qué cuenta como concluyente
  *
- * Un candidato lo es cuando pasa **una** de estas dos puertas:
+ * Un candidato lo es cuando pasa **una** de estas tres puertas (ver [CandidatoPuntuado.concluyente]):
  *
  *  1. **El nombre pega**: la clave comparable de la nota del movimiento (o del comercio que dijo
  *     el banco) es idéntica a la de la regla — o el movimiento dice el nombre de la regla y le
@@ -347,12 +409,22 @@ data class CandidatoPuntuado(
  *     ventana del vencimiento. Es lo que hace que un movimiento que no repite ni el nombre ni el
  *     mes de la regla —«Reintegro» contra la regla «Salario», digamos— siga contando como la
  *     ocurrencia si el monto es exacto.
+ *  3. **Ola V — el destino de la regla pega, Y el monto es exacto.** Un traspaso a un tercero ya
+ *     registrado («Tía Caro» → el destino «Caro») nunca repite el nombre de la regla —el banco solo
+ *     nombra el número de la cuenta que recibe— así que sin esta puerta nunca sería concluyente. Pero
+ *     el destino identifica a la PERSONA, no al concepto del pago, y una persona recibe plata por
+ *     motivos distintos: la cuenta de la esposa del dueño recibe el mercado, la cuota de un crédito
+ *     compartido y la mesada de la tía, las tres al mismo número. Sin el monto exacto, cualquiera de
+ *     esas transferencias marcaría «Tía Caro» como pagada — apagaría su aviso real y subiría el
+ *     Disponible por plata que no era de ella. Con el monto exacto puesto, es tan específico como la
+ *     puerta 2.
  *
  * **«Monto exacto» es exacto.** El KDoc de arriba argumenta contra los márgenes de ±10 % elegidos
  * a ojo, y ese argumento vale doblemente acá: si el monto de un recurrente es un estimado, un
  * margen inventado no lo vuelve un contrato, solo agranda la puerta. Cuando el monto no es el
  * mismo, esta función no decide — y eso no pierde nada, porque el candidato sigue apareciendo en
- * [occurrenceCandidatesFor] para que el dueño confirme.
+ * [occurrenceCandidatesFor] para que el dueño confirme (con el destino como seña, ver
+ * [candidatosPuntuados]).
  *
  * ## Y solo con UNO. Con dos, pregunta.
  *
@@ -382,11 +454,15 @@ fun ocurrenciaConcluyente(
     ocurrenciasConcluyentes(rule, dueDate, events, usedEventIds, zone, windowDays, settings, destinos).singleOrNull()
 
 /**
- * **Todos los candidatos que pasan una de las dos puertas de [ocurrenciaConcluyente]**, sin elegir.
+ * **Todos los candidatos que pasan una de las tres puertas de [ocurrenciaConcluyente]**, sin elegir.
  *
  * Es el cuerpo de [ocurrenciaConcluyente], que se queda con el único; suelto porque «Tus períodos»
  * necesita distinguir los dos `null` que ella junta: con cero concluyentes el pago está pendiente,
  * con dos o más Movi tiene dudas. La decisión de emparejar sigue siendo una sola.
+ *
+ * Lee [CandidatoPuntuado.concluyente] directo —ya lo calculó [candidatosPuntuados] con la MISMA
+ * `destinos` que se le pasó acá— en vez de recalcularlo: una sola definición de «concluyente» para
+ * quien pregunta por la lista completa y quien pregunta por el único.
  */
 fun ocurrenciasConcluyentes(
     rule: RecurringRule,
@@ -403,28 +479,5 @@ fun ocurrenciasConcluyentes(
     // «exactamente uno»: la ambigüedad se taparía justo cuando más movimientos parecidos hay, que
     // es cuando más caro sale equivocarse.
     candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings, destinos)
-        .filter { esConcluyente(rule, it.event, destinos) }
+        .filter { it.concluyente }
         .map { it.event }
-
-/**
- * Las dos puertas de [ocurrenciaConcluyente], aplicadas a un candidato que ya pasó todos los
- * filtros de [candidatosPuntuados] (vivo, del tipo correcto, en la ventana, en pesos, no traspaso,
- * no reservado, no usado).
- *
- * No se reusan las `senas` del puntaje aunque midan lo mismo: ahí son un ORDEN —el nombre vale 3,
- * la categoría 1, la cuenta 1— y acá son una DECISIÓN. Un umbral sobre ese puntaje («5 o más»)
- * diría lo mismo hoy y mentiría mañana, apenas alguien toque un peso para mejorar el orden.
- */
-private fun esConcluyente(rule: RecurringRule, event: FinancialEvent, destinos: Map<String, DestinoConocido>): Boolean {
-    if (nombrePegaCon(rule, event, destinos)) return true
-    val claveCategoria = claveComparableDeNombre(rule.category)
-    val categoriaPega = claveCategoria.isNotEmpty() &&
-        claveComparableDeNombre(event.category) == claveCategoria
-    val laCuentaPega = rule.accountId != null && event.accountId == rule.accountId
-    // La moneda ya la filtró `candidatosPuntuados` (solo COP, que es la moneda de toda regla), pero
-    // comparar montos es justo donde una moneda distinta hace el daño más silencioso: US$180 no es
-    // $180.000. Se vuelve a decir acá para que esta función se sostenga sola si alguien la llama
-    // desde otro lado.
-    val montoExacto = event.currency == MONEDA_DE_LAS_REGLAS && event.amount == rule.amount
-    return categoriaPega && laCuentaPega && montoExacto
-}

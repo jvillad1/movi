@@ -251,6 +251,29 @@ class DestinoConocidoTest {
         assertTrue(vaHaciaElDestino(conPuntuacion, caro), "la puntuación no tiene que romper la palabra")
     }
 
+    /**
+     * Ola V — [nombraElNumeroDelDestino] es SOLO la señal del número: la palabra suelta del nombre
+     * («Almuerzo caro», donde «caro» es un adjetivo común) NO puede pegar acá, aunque sí pegue en
+     * [vaHaciaElDestino] (que la sigue aceptando a propósito, para agrupar en pantalla — no para
+     * decidir un recurrente solo, que es justo el problema que `nombraElNumeroDelDestino` existe
+     * para evitar).
+     */
+    @Test
+    fun `nombraElNumeroDelDestino solo mira el numero, nunca el nombre suelto`() {
+        val almuerzoCaro = gasto("ev-almuerzo", "Almuerzo caro", 45_000L, elVeintiseisDeAgosto)
+        assertFalse(nombraElNumeroDelDestino(almuerzoCaro, caro), "el número no está en el texto")
+        assertTrue(
+            vaHaciaElDestino(almuerzoCaro, caro),
+            "vaHaciaElDestino SÍ acepta el nombre suelto — el agravante que encontró la revisión",
+        )
+
+        val conElNumero = gasto(
+            "ev-numero", "Transferencia", 45_000L, elVeintiseisDeAgosto,
+            crudo = "Enviaste \$45.000 a la cuenta *31973270756",
+        )
+        assertTrue(nombraElNumeroDelDestino(conElNumero, caro))
+    }
+
     @Test
     fun `lo que ENTRA de esa cuenta no se cuenta como enviado`() {
         val devuelto = gasto(
