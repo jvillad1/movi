@@ -123,7 +123,12 @@ fun GoalSheet(
         }
     }
 
-    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
+    MarcoDeHoja(
+        onDismiss = onDismiss,
+        dismissEnabled = !saving,
+        // Escape (la web) retira primero la pregunta de borrar, después la hoja. Ver [MarcoDeHoja].
+        onEscape = { if (pidiendoBorrar) pidiendoBorrar = false else if (!saving) onDismiss() },
+    ) {
         // El contenido de la hoja se desplaza.
         //
         // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado

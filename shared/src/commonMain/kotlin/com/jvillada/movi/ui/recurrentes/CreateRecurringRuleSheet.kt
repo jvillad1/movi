@@ -396,7 +396,20 @@ fun CreateRecurringRuleSheet(
     // los campos scrollean, y la manija y el botón quedan FIJOS: el botón es siempre alcanzable
     // sin depender de que el usuario descubra que hay que rodar.
     // (el tope lo pone `MarcoDeHoja` con `fraccionDeAltoMaximo`; en la web, el de la hoja centrada)
-    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving, fraccionDeAltoMaximo = 0.92f) {
+    MarcoDeHoja(
+        onDismiss = onDismiss,
+        dismissEnabled = !saving,
+        fraccionDeAltoMaximo = 0.92f,
+        // Escape (la web) cierra primero lo que esté abierto adentro —la lista de cuentas, la
+        // pregunta de borrar— y solo después la hoja. Ver [MarcoDeHoja].
+        onEscape = {
+            when {
+                accountPickerOpen -> accountPickerOpen = false
+                pidiendoBorrar -> pidiendoBorrar = false
+                !saving -> onDismiss()
+            }
+        },
+    ) {
         // Solo los CAMPOS scrollean; `fill = false` para que una hoja corta siga
         // midiendo lo que ocupa en vez de estirarse hasta el tope.
         Column(

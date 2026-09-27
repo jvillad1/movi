@@ -110,7 +110,12 @@ fun DestinoSheet(
         }
     }
 
-    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !guardando) {
+    MarcoDeHoja(
+        onDismiss = onDismiss,
+        dismissEnabled = !guardando,
+        // Escape (la web) retira primero la pregunta de borrar, después la hoja. Ver [MarcoDeHoja].
+        onEscape = { if (pidiendoBorrar) pidiendoBorrar = false else if (!guardando) onDismiss() },
+    ) {
         // `weight(1f, fill = false)`: la hoja crece con su contenido y recién ahí desplaza,
         // igual que el resto de las hojas de Movi — sin esto, con el teclado abierto en un
         // teléfono chico el botón de guardar queda fuera de la pantalla y recortado.

@@ -336,6 +336,10 @@ fun QuickAddScreen(
     /** El cuerpo del editor está compuesto y medible: no hay ningún sub-picker tapándolo. */
     val cuerpoCompuesto = pickers.cuerpoCompuesto
 
+    // Escape con un sub-picker de Traspaso abierto: ese estado vive adentro de [TransferBody], así
+    // que se le pide que lo cierre subiendo este contador.
+    var pedidosDeCerrarElDeTraspaso by remember { mutableStateOf(0) }
+
     // Dónde estaba la hoja ANTES de abrir un sub-picker. Ver [recordarScroll].
     var scrollAntesDelPicker by remember { mutableStateOf(0) }
 
@@ -823,6 +827,16 @@ fun QuickAddScreen(
             onDismiss = onDismiss,
             dismissEnabled = !saving,
             anchoMaximo = ANCHO_DE_LA_HOJA_DE_AGREGAR,
+            // Escape (la web) sale del sub-editor abierto —Nota, Categoría, Cuenta, Fecha o los de
+            // Traspaso— y solo sin ninguno cierra la hoja: cerrarla desde la Nota perdía el
+            // movimiento entero. Mismo destino que la X de cada sub-editor.
+            onEscape = {
+                when {
+                    pickers.propio != Picker.None -> pasarA(pickers.cerrar())
+                    pickers.deTraspaso -> pedidosDeCerrarElDeTraspaso++
+                    !saving -> onDismiss()
+                }
+            },
         ) {
             // ── Ola 12 — SI LA HOJA NO ENTRA, SE PUEDE LLEGAR IGUAL AL BOTÓN ────────────
             //
@@ -1108,6 +1122,7 @@ fun QuickAddScreen(
                                 onPickerAbierto = { abierto ->
                                     pasarA(pickers.conPickerDeTraspaso(abierto))
                                 },
+                                pedidosDeCerrarPicker = pedidosDeCerrarElDeTraspaso,
                                 // Ola 11: si la hoja se abrió desde el detalle de una cuenta, ese
                                 // contexto vale también para el ORIGEN del traspaso — es la
                                 // cuenta que el dueño estaba mirando cuando tocó «Agregar».

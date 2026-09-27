@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -57,8 +58,13 @@ fun claseDeAncho(ancho: Dp): WindowWidthClass = when {
  */
 @Composable
 fun CascaraDeAncho(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    // La pila del foco de las hojas centradas (ver [MarcoDeHoja]) vive acá: una por app.
+    val pilaDeFoco = remember { PilaDeFocoDeHojas() }
     BoxWithConstraints(modifier = modifier) {
         val clase = claseDeAncho(maxWidth)
-        CompositionLocalProvider(LocalWindowWidthClass provides clase) { content() }
+        CompositionLocalProvider(
+            LocalWindowWidthClass provides clase,
+            LocalPilaDeFocoDeHojas provides pilaDeFoco,
+        ) { content() }
     }
 }

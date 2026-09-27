@@ -130,7 +130,12 @@ fun CardTermsSheet(
         }
     }
 
-    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
+    MarcoDeHoja(
+        onDismiss = onDismiss,
+        dismissEnabled = !saving,
+        // Escape (la web) retira primero la pregunta de borrar, después la hoja. Ver [MarcoDeHoja].
+        onEscape = { if (pidiendoBorrar) pidiendoBorrar = false else if (!saving) onDismiss() },
+    ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             if (editing != null) {
                 SectionLabel("TARJETA")

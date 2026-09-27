@@ -151,7 +151,12 @@ fun BienSheet(
         }
     }
 
-    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !guardando) {
+    MarcoDeHoja(
+        onDismiss = onDismiss,
+        dismissEnabled = !guardando,
+        // Escape (la web) cierra primero el calendario abierto, después la hoja. Ver [MarcoDeHoja].
+        onEscape = { if (eligiendoFecha) eligiendoFecha = false else if (!guardando) onDismiss() },
+    ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text(
                 text = if (existente == null) "Nuevo bien" else "Actualizar bien",
