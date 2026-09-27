@@ -179,17 +179,23 @@ class PeriodosScreenTest {
 
     private val septiembreDelDueno = ResumenDePeriodo(
         id = "2026-09", nombre = "Septiembre 2026", desde = "2026-08-25", hasta = "2026-09-23",
-        entradas = 22_500_000L, salidas = 34_000_000L, movimientos = 40,
+        entradas = 32_500_000L, salidas = 34_000_000L, movimientos = 40,
         creditosRecibidos = 10_000_000L, saldosIniciales = 22_200_000L,
     )
 
     @Test
     fun `un periodo que salio de mas dice que lo cubrio, con los textos exactos`() {
         // Los créditos ya no cubren lo demás: suman en «Entró» y se dicen aparte.
+        // Entró $32,5M y salió $34M: faltó $1,5M, y los $22,2M de saldos no cubren más que eso.
         assertEquals(
-            "Lo demás lo cubrieron $22,2M de saldos que ya tenías.",
+            "Lo demás lo cubrieron $1,5M de saldos que ya tenías.",
             loQueCubrioLoDemas(septiembreDelDueno),
         )
+        // Agosto: el hueco es de $529.368 y los saldos $471.600 — no alcanzan el tope, se dicen enteros.
+        val agosto = septiembreDelDueno.copy(
+            id = "2026-08", entradas = 10_000_000L, salidas = 10_529_368L, creditosRecibidos = 0, saldosIniciales = 471_600L,
+        )
+        assertEquals("Lo demás lo cubrieron $471.600 de saldos que ya tenías.", loQueCubrioLoDemas(agosto))
         assertEquals(null, loQueCubrioLoDemas(septiembreDelDueno.copy(saldosIniciales = 0)))
     }
 
@@ -217,7 +223,7 @@ class PeriodosScreenTest {
         esperarTexto("Septiembre 2026")
 
         assertTrue(hay("Incluye $10M de créditos desembolsados."))
-        assertTrue(hay("Lo demás lo cubrieron $22,2M de saldos que ya tenías."))
+        assertTrue(hay("Lo demás lo cubrieron $1,5M de saldos que ya tenías."))
         // Agosto entró más de lo que salió: sus saldos no se nombran.
         assertEquals(1, composeRule.onAllNodesWithText("Lo demás lo cubrieron", substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes().size)
