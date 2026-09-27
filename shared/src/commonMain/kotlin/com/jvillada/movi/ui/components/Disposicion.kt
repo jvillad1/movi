@@ -42,7 +42,7 @@ enum class Disposicion {
  * aprende a usar el ancho.
  */
 fun disposicionDe(pantalla: Screen): Disposicion = when (pantalla) {
-    Screen.Dashboard -> Disposicion.Tablero
+    Screen.Dashboard, Screen.Accounts -> Disposicion.Tablero
     Screen.Periodos, is Screen.DetalleDePeriodo -> Disposicion.ListaYDetalle
     else -> Disposicion.Lectura
 }
@@ -71,6 +71,42 @@ val ANCHO_PARA_DOS_COLUMNAS: Dp = 900.dp
  * columna se lee como cualquier otra pantalla.
  */
 val ANCHO_DE_UNA_COLUMNA: Dp = ANCHO_DE_LECTURA
+
+/**
+ * Lo que un tablero de dos columnas gasta en aire: 16 dp a cada lado y 16 entre las dos
+ * (`Movi.espacios.amplio`). Lo que queda se reparte entre las columnas.
+ */
+val RELLENO_DE_DOS_COLUMNAS: Dp = 48.dp
+
+/**
+ * Si en un panel de [anchoDelPanel] caben dos columnas iguales de al menos [anchoMinimoDeColumna]
+ * cada una, descontado [RELLENO_DE_DOS_COLUMNAS]. Se decide por la columna y no por el panel porque
+ * es la columna la que tiene que caber (el mismo criterio que el detalle de un período, Ola W2).
+ */
+fun cabenDosColumnasIguales(anchoDelPanel: Dp, anchoMinimoDeColumna: Dp): Boolean =
+    (anchoDelPanel - RELLENO_DE_DOS_COLUMNAS) / 2 >= anchoMinimoDeColumna
+
+/** Lo que el rail de [clase] se come del ancho de la ventana: nada, 80 o 216 dp. */
+fun anchoDelRail(clase: WindowWidthClass): Dp = when (clase) {
+    WindowWidthClass.Compact -> 0.dp
+    WindowWidthClass.Medium -> ANCHO_DEL_RAIL_COMPACTO
+    WindowWidthClass.Expanded -> ANCHO_DEL_RAIL_ANCHO
+}
+
+/**
+ * **El ancho REAL que le queda a [pantalla] en una ventana de [ventana]**, dentro de la cáscara
+ * completa (`EsqueletoDeLaCascara`): la ventana menos el rail de su clase, topado por la
+ * [disposicionDe] de la pantalla. Es la cuenta que la Ola W2 hizo a mano sin restar el rail —y las
+ * dos columnas del detalle de un período nunca aparecían en una laptop de 1280—, escrita una vez
+ * para que cada umbral de columnas se pruebe contra ella y no contra un número suelto.
+ *
+ * Supone una pantalla con navegación (la que tiene rail). Las pruebas montadas dentro de la cáscara
+ * miden lo mismo con `boundsInRoot`; esta función es la versión en números, para las pruebas puras.
+ */
+fun anchoDelPanelEnLaCascara(ventana: Dp, pantalla: Screen): Dp {
+    val clase = claseDeAncho(ventana)
+    return minOf(ventana - anchoDelRail(clase), anchoMaximoDeLaPantalla(pantalla, clase))
+}
 
 /** El tope de una pantalla de tipo [disposicion] en la clase [clase]. [Dp.Infinity] es «lleno». */
 fun anchoMaximoDe(disposicion: Disposicion, clase: WindowWidthClass): Dp = when (clase) {

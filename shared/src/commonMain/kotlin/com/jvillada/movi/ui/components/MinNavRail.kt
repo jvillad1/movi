@@ -47,7 +47,7 @@ fun MinNavRail(
     }
     Column(
         modifier = Modifier
-            .width(216.dp)
+            .width(ANCHO_DEL_RAIL_ANCHO)
             .fillMaxHeight()
             .background(Movi.colores.tarjeta)
             .windowInsetsPadding(barrasDelSistemaDelRail)
@@ -108,6 +108,9 @@ private val barrasDelSistemaDelRail: WindowInsets
 
 /** El ancho del rail compacto de una ventana mediana. */
 val ANCHO_DEL_RAIL_COMPACTO = 80.dp
+
+/** El ancho del rail de escritorio (expandido). Lo descuenta [anchoDelPanelEnLaCascara]. */
+val ANCHO_DEL_RAIL_ANCHO = 216.dp
 
 /**
  * Ola W1: el rail de una ventana **mediana** (600–999 dp: tablet vertical, teléfono horizontal,
