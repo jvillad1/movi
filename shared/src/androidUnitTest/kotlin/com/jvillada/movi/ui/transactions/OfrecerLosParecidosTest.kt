@@ -24,7 +24,6 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
-import com.jvillada.movi.ui.components.TAG_CAMPO_DE_CATEGORIA
 import com.jvillada.movi.ui.components.tagDeCeldaDeCategoria
 import org.junit.After
 import org.junit.Rule
@@ -185,7 +184,7 @@ class OfrecerLosParecidosTest {
     }
 
     /**
-     * Revisión final de la Ola B: elegir en la cuadrícula del campo «O busca otra» ES elegir — un
+     * Revisión final de la Ola B: elegir en la cuadrícula ES elegir — un
      * toque, como en la lista de arriba. Antes el toque solo llenaba el campo y había que tocar
      * además «Usar "…"».
      */
@@ -196,9 +195,8 @@ class OfrecerLosParecidosTest {
         var cambiado: FinancialEvent? = null
         montar { cambiado = it }
 
-        composeRule.onNodeWithTag(TAG_CAMPO_DE_CATEGORIA, useUnmergedTree = true).performScrollTo()
-            .performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
+        // Ola L: la hoja ya no esconde el selector tras un campo plegado: la cuadrícula está a la
+        // vista, y una celda toca y guarda.
         composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Comida"), useUnmergedTree = true).performScrollTo()
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
