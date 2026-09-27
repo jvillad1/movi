@@ -443,8 +443,8 @@ fun nombreCanonicoConocido(
 /**
  * Campo de categoría compartido: muestra la categoría puesta y, al tocarlo, despliega el
  * [SelectorDeCategoria] — la cuadrícula con las frecuentes primero y la búsqueda que no levanta
- * el teclado sola. Usado en Presupuestos, Recurrentes y la hoja de recategorizar (el sub-picker
- * de «Agregar» usa el selector directo, porque ahí ya es una pantalla entera); así una categoría
+ * el teclado sola. Usado en Presupuestos y Recurrentes (la hoja de recategorizar y el sub-picker
+ * de «Agregar» usan el selector directo: ya son una hoja o una pantalla entera); así una categoría
  * se llama igual en todos lados, lo que importa porque presupuestos y gastos se cruzan por nombre.
  *
  * **Ola B · Task 4 — ya no es un campo de texto.** Antes era texto libre con sugerencias: lo que

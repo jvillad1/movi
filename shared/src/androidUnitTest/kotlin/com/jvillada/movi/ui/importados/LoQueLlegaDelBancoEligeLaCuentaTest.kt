@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -21,6 +22,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.extractos.StatementReviewScreen
 import com.jvillada.movi.ui.sms.SMSReconcileScreen
+import com.jvillada.movi.ui.sms.tagDeFilaDelSms
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -85,7 +87,7 @@ class LoQueLlegaDelBancoEligeLaCuentaTest {
     fun desde_un_sms_sin_cuenta_se_puede_elegir_una_con_el_dedo() {
         montarSms(cuentas = todas)
 
-        tocar("Cambiar")
+        cambiarLaCuentaDelSms()
         tocar("AMEX 9208")
 
         composeRule.onNodeWithText("AMEX 9208").assertIsDisplayed()
@@ -101,7 +103,7 @@ class LoQueLlegaDelBancoEligeLaCuentaTest {
     fun el_selector_del_sms_no_ofrece_el_credito_pero_no_lo_esconde() {
         montarSms(cuentas = todas)
 
-        tocar("Cambiar")
+        cambiarLaCuentaDelSms()
 
         // La AMEX y no la cuenta de ahorros: esa ya está arriba, en el resumen, y buscarla por
         // texto encontraría dos nodos. La tarjeta solo puede estar en la lista.
@@ -208,6 +210,12 @@ class LoQueLlegaDelBancoEligeLaCuentaTest {
                 Box(Modifier.fillMaxSize()) { pantalla() }
             }
         }
+        composeRule.waitForIdle()
+    }
+
+    /** Ola L: la fila «Categoría» también dice «Cambiar»; se toca la de la cuenta por su rótulo. */
+    private fun cambiarLaCuentaDelSms() {
+        composeRule.onNodeWithTag(tagDeFilaDelSms("Cuenta")).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 
