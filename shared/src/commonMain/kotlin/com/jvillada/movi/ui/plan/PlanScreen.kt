@@ -136,8 +136,9 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                 leading = HeaderLeading.Avatar(onNavigate),
                 action = {
                     // Va en la cabecera, cuyo alto fija el avatar: aparecer y desaparecer no mueve
-                    // nada de lo de abajo. Mismo texto y estilo que el Inicio.
-                    if (actualizando) {
+                    // nada de lo de abajo. Mismo texto y estilo que el Inicio. También cuando lo que
+                    // se recarga son los presupuestos recordados, con ese segmento a la vista.
+                    if (actualizando || (!enPagos && presupuestos.actualizandoConAlgoALaVista)) {
                         Text(
                             "Actualizando…",
                             style = Movi.textos.apoyo,

@@ -29,8 +29,14 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.ClaveDeLectura
+import com.jvillada.movi.data.Lectura
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
+import com.jvillada.movi.data.periodoVigenteSegun
+import com.jvillada.movi.data.rememberLectura
+import com.jvillada.movi.shared.model.DashboardSummary
+import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.PropuestaDePresupuesto
@@ -164,18 +170,31 @@ internal sealed class Sheet {
  */
 @Stable
 class EstadoDePresupuestos internal constructor(private val alcance: CoroutineScope) {
-    // `null` = la lectura todavía no contestó bien; `emptyList()` = contestó y no hay ninguno. Ver
-    // [listo] para por qué con los presupuestos solos no alcanza para pintar la lista.
-    internal var budgets by mutableStateOf<List<Budget>?>(null)
-    internal var cutoffDay by mutableStateOf(1)
+    /**
+     * Las cuatro lecturas de la pantalla (ver [rememberEstadoDePresupuestos]). Las pone la
+     * composición en cada pasada: la de los presupuestos y la del gasto se rehacen cuando cambia el
+     * período, y este estado —con las hojas abiertas y las propuestas desmarcadas— no.
+     */
+    private var lecturas by mutableStateOf<LecturasDePresupuestos?>(null)
+
+    internal fun conectar(nuevas: LecturasDePresupuestos) {
+        if (lecturas != nuevas) lecturas = nuevas
+    }
+
+    // `null` = la lectura todavía no contestó bien (ni en esta visita ni en una reciente);
+    // `emptyList()` = contestó y no hay ninguno. Ver [listo] para por qué con los presupuestos
+    // solos no alcanza para pintar la lista.
+    internal val budgets: List<Budget>? get() = lecturas?.presupuestos?.valor
+    private val perfil: UserProfile? get() = lecturas?.perfil?.valor
+    internal val cutoffDay: Int get() = perfil?.periodCutoffDay ?: 1
     /** Los meses que arrancaron otro día. Ver `PeriodSettings.iniciosPropios`. */
-    internal var iniciosPropios by mutableStateOf(emptyMap<String, String>())
-    internal var days by mutableStateOf<List<EventDay>>(emptyList())
+    internal val iniciosPropios: Map<String, String> get() = perfil?.periodStarts ?: emptyMap()
+    internal val days: List<EventDay> get() = lecturas?.eventos?.valor.orEmpty()
     // Se incrementa al asociar un gasto, para volver a leer con el movimiento ya movido.
     internal var refreshKeyLocal by mutableStateOf(0)
     // Gasto del mes por categoría según el server (la misma fuente que el Inicio); null hasta
     // que llegue o si no hay red — ver `progresses`.
-    internal var serverSpent by mutableStateOf<Map<String, Long>?>(null)
+    internal val serverSpent: Map<String, Long>? get() = lecturas?.resumen?.valor?.spentByCategory
     internal var sheet by mutableStateOf<Sheet?>(null)
     // Error de guardar/renombrar que la hoja tiene que mostrar (409 del server, red).
     internal var sheetError by mutableStateOf<String?>(null)
@@ -184,16 +203,34 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     // Mismo `!saving` que las hojas de metas, recurrentes, tarjetas y créditos.
     internal var guardando by mutableStateOf(false)
     // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
-    // parpadeaba un instante antes de que llegaran los presupuestos reales.
-    internal var loading by mutableStateOf(true)
+    // parpadeaba un instante antes de que llegaran los presupuestos reales. Prendido mientras
+    // alguna de las cuatro lecturas viaja (o espera el período para salir).
+    internal val loading: Boolean get() = lecturas?.todas?.any { it.actualizando } ?: true
 
-    // Los movimientos del período contestaron bien al menos una vez: son el respaldo del gasto
-    // cuando el server no contesta (ver [gastoPorCategoria]).
-    internal var eventosLeidos by mutableStateOf(false)
-    // La lectura del gasto del server y la del perfil ya contestaron (bien o mal) al menos una vez.
-    // Hasta entonces, cualquier gasto que se pintara podía cambiar —el del aparato por el del
-    // server, o el mes de calendario por el período del dueño— y con él el ORDEN de la lista.
-    internal var gastoYPeriodoContestaron by mutableStateOf(false)
+    // Los movimientos contestaron bien (en esta visita o en una reciente): son el respaldo del
+    // gasto cuando el server no contesta (ver [gastoPorCategoria]).
+    internal val eventosLeidos: Boolean get() = lecturas?.eventos?.valor != null
+    // La lectura del gasto del server y la del perfil ya se saben (leídas, recordadas, o
+    // terminadas aunque hayan fallado). Hasta entonces, cualquier gasto que se pintara podía cambiar
+    // —el del aparato por el del server, o el mes de calendario por el período del dueño— y con él
+    // el ORDEN de la lista.
+    internal val gastoYPeriodoContestaron: Boolean get() {
+        val l = lecturas ?: return false
+        return (l.resumen.valor != null || l.resumen.terminada) && (l.perfil.valor != null || l.perfil.terminada)
+    }
+
+    /**
+     * Lo que se ve es lo último que vimos: una lectura que decide lo pintado falló con algo a la
+     * vista. Los movimientos cuentan solo cuando son la fuente del gasto (sin el del server).
+     */
+    internal val noSePudoActualizar: Boolean get() {
+        val l = lecturas ?: return false
+        return l.presupuestos.falloConAlgoALaVista || l.resumen.falloConAlgoALaVista || l.perfil.falloConAlgoALaVista ||
+            (l.eventos.falloConAlgoALaVista && serverSpent == null)
+    }
+
+    /** Hay algo pintado que esta visita todavía no confirmó: «Actualizando…» en la cabecera. */
+    val actualizandoConAlgoALaVista: Boolean get() = loading && listo
 
     // ── Lo que Movi propone presupuestar (solo sin presupuestos) ──────────────────────────────
     //
@@ -270,15 +307,13 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     /** El «Reintentar» de las propuestas que no se pudieron crear: solo esas. */
     internal fun reintentarPropuestas() = crearPropuestas(propuestasQueFallaron)
 
+    /**
+     * Relee solo los presupuestos, tras una escritura propia desde la hoja (crear, editar,
+     * renombrar, borrar): lo que vuelve se muestra ya ([Lectura.anotar]); la escritura acaba de
+     * vaciar lo recordado, y lo vuelve a llenar la próxima lectura de la pantalla.
+     */
     internal suspend fun reload() {
-        // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
-        // esta pantalla ya carga presupuestos y movimientos, no hace falta un fetch nuevo.
-        intentar { Repositories.wallets.getBudgets() }.onSuccess {
-            budgets = it
-            // Ola 9 · A3: un presupuesto es, por definición, un límite de GASTO — así que sus
-            // categorías se anotan con ese tipo y no como "no se sabe".
-            UsedCategoriesCache.recordAll(it.map { b -> b.category to TransactionType.EXPENSE })
-        }
+        intentar { Repositories.wallets.getBudgets() }.onSuccess { lecturas?.presupuestos?.anotar(it) }
     }
 
     // Mover un movimiento a la categoría del presupuesto. Va acá y no en la hoja porque después
@@ -377,6 +412,9 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     internal val noSeLeyo: Boolean get() = !loading && !listo
     internal val cargando: Boolean get() = loading && !listo
     internal val sinPresupuestos: Boolean get() = listo && budgets.isNullOrEmpty()
+    // «No tienes presupuestos» se afirma solo con una lectura que contestó en ESTA visita: uno
+    // recordado con la lectura de ahora caída sería el de otra (queda el aviso, con su «Reintentar»).
+    internal val vacioAfirmable: Boolean get() = sinPresupuestos && !noSePudoActualizar
 
     /**
      * ¿Va el «Nuevo» compacto en el encabezado de quien monta esto?
@@ -396,6 +434,16 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     internal val overCount: Int get() = progresses.count { it.state.estaSuperado }
 }
 
+/** Las cuatro lecturas de Presupuestos, juntas. Ver [EstadoDePresupuestos.conectar]. */
+internal data class LecturasDePresupuestos(
+    val perfil: Lectura<UserProfile>,
+    val presupuestos: Lectura<List<Budget>>,
+    val eventos: Lectura<List<EventDay>>,
+    val resumen: Lectura<DashboardSummary>,
+) {
+    val todas: List<Lectura<*>> get() = listOf(perfil, presupuestos, eventos, resumen)
+}
+
 /**
  * El estado de Presupuestos, atado a la composición, **con sus lecturas corriendo**.
  *
@@ -409,31 +457,46 @@ fun rememberEstadoDePresupuestos(activo: Boolean = true): EstadoDePresupuestos {
     val alcance = rememberCoroutineScope()
     val estado = remember(alcance) { EstadoDePresupuestos(alcance) }
     val refreshTick = LocalRefreshTick.current
-    // `refreshTick` y no `Unit`: con Unit esta pantalla no recargaba NUNCA mientras estuviera
-    // compuesta, y desde que Agregar es una modal se puede registrar un gasto parado acá y ver
-    // la barra del presupuesto sin moverse. Ver [LocalRefreshTick].
-    LaunchedEffect(refreshTick, estado.refreshKeyLocal, activo) {
-        if (!activo) return@LaunchedEffect
-        estado.loading = true
-        estado.reload()
-        intentar { Repositories.wallets.getEventsByDay() }.onSuccess {
-            estado.days = it
-            estado.eventosLeidos = true
-            // Ola 9 · A3: con el tipo de cada movimiento, así una categoría propia se ofrece
-            // del lado en que de verdad se usó.
-            UsedCategoriesCache.recordAll(it.flatMap { d -> d.items }.map { ev -> ev.category to ev.type })
-        }
-        // Misma cifra que el Inicio: el server suma con TODO lo que sabe (todos los dispositivos,
-        // SMS, importaciones; anulados fuera). En el teléfono `getEventsByDay` es local y solo
-        // conoce lo de este aparato, así que el Inicio podía decir «Comida superado» y esta
-        // pantalla no. Si falla (sin red) queda el cálculo local de abajo como fallback.
-        intentar { Repositories.wallets.getDashboardSummary(Scope.SELF) }.onSuccess { estado.serverSpent = it.spentByCategory }
-        // El corte del período: define qué ventana usa el cálculo local de respaldo. Si falla,
-        // queda en 1 —mes de calendario— que es el comportamiento de siempre.
-        intentar { Repositories.wallets.getUserProfile() }
-            .onSuccess { estado.cutoffDay = it.periodCutoffDay; estado.iniciosPropios = it.periodStarts }
-        estado.gastoYPeriodoContestaron = true
-        estado.loading = false
+    // **Lo último que se vio, al primer cuadro** (ver [rememberLectura]). Todas se releen con
+    // `refreshKeyLocal` y con `LocalRefreshTick`: desde que Agregar es una modal se puede registrar
+    // un gasto parado acá, y sin el tick la barra del presupuesto no se movía.
+    //
+    // El corte del período: define la ventana del cálculo local de respaldo y el período de lo que
+    // se recuerda. Si falla, queda en 1 —mes de calendario— que es el comportamiento de siempre.
+    val perfil = rememberLectura(ClaveDeLectura.Perfil, estado.refreshKeyLocal, activa = activo) {
+        Repositories.wallets.getUserProfile()
+    }
+    // Los presupuestos y el gasto se pintan juntos, EN un período: no se leen ni se muestran hasta
+    // saber cuál es (ver [ClaveDeLectura.dependeDelPeriodo]).
+    val periodo = periodoVigenteSegun(perfil)
+    val presupuestos = rememberLectura(ClaveDeLectura.Presupuestos, estado.refreshKeyLocal, periodo, activo) {
+        Repositories.wallets.getBudgets()
+    }
+    // La historia, la MISMA entrada que Movimientos y Por revisar: una lectura, no tres.
+    val eventos = rememberLectura(ClaveDeLectura.EventosPorDia, estado.refreshKeyLocal, activa = activo) {
+        Repositories.wallets.getEventsByDay()
+    }
+    // Misma cifra que el Inicio: el server suma con TODO lo que sabe (todos los dispositivos,
+    // SMS, importaciones; anulados fuera). En el teléfono `getEventsByDay` es local y solo
+    // conoce lo de este aparato, así que el Inicio podía decir «Comida superado» y esta
+    // pantalla no. Si falla (sin red) queda el cálculo local como respaldo.
+    val resumen = rememberLectura(ClaveDeLectura.ResumenDelTablero(Scope.SELF), estado.refreshKeyLocal, periodo, activo) {
+        Repositories.wallets.getDashboardSummary(Scope.SELF)
+    }
+    estado.conectar(LecturasDePresupuestos(perfil, presupuestos, eventos, resumen))
+    // F35: de paso, alimentan el caché de "categorías ya usadas" que lee CategoryField — esta
+    // pantalla ya carga presupuestos y movimientos, no hace falta un fetch nuevo.
+    LaunchedEffect(presupuestos.valor) {
+        // Ola 9 · A3: un presupuesto es, por definición, un límite de GASTO — así que sus
+        // categorías se anotan con ese tipo y no como "no se sabe".
+        val leidos = presupuestos.valor ?: return@LaunchedEffect
+        UsedCategoriesCache.recordAll(leidos.map { b -> b.category to TransactionType.EXPENSE })
+    }
+    LaunchedEffect(eventos.valor) {
+        // Ola 9 · A3: con el tipo de cada movimiento, así una categoría propia se ofrece
+        // del lado en que de verdad se usó.
+        val dias = eventos.valor ?: return@LaunchedEffect
+        UsedCategoriesCache.recordAll(dias.flatMap { d -> d.items }.map { ev -> ev.category to ev.type })
     }
     // Las propuestas se piden SOLO sin presupuestos: a quien ya tiene no le cuestan ni una llamada.
     // Una lectura caída deja lo que había (nada, la primera vez): el vacío de siempre.
@@ -451,6 +514,13 @@ fun rememberEstadoDePresupuestos(activo: Boolean = true): EstadoDePresupuestos {
  */
 fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
     item {
+        if (estado.noSePudoActualizar) {
+            Spacer(Modifier.height(14.dp))
+            NoSePudoActualizar(
+                onReintentar = { estado.reintentar() },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
         if (estado.noSeLeyo) {
             Spacer(Modifier.height(14.dp))
             NoSePudoLeer(
@@ -458,7 +528,7 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
                 onReintentar = { estado.reintentar() },
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
-        } else if (estado.sinPresupuestos) {
+        } else if (estado.vacioAfirmable) {
             // En Plan, el segmento «Pagos del mes» siempre deja `Movi.espacios.amplio` de
             // aire antes de su contenido («aire-de-pagos» en `PlanScreen`) — este vacío quedaba
             // pegado al selector porque no traía ningún espaciador propio. Mismo token, mismo aire.
@@ -646,11 +716,14 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Presupuestos",
                 leading = leadingFor(Screen.Budgets, onNavigate, fallback = Screen.Plan(SEGMENTO_PRESUPUESTOS)),
-                action = if (estado.nuevoEnElEncabezado) {
-                    // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la
-                    // pantalla quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En esta
-                    // pantalla no hay otra cosa que se pueda crear, así que la palabra alcanza.
-                    { NewItemButton(label = "Nuevo", onClick = { estado.abrirNuevo() }) }
+                action = if (estado.nuevoEnElEncabezado || estado.actualizandoConAlgoALaVista) {
+                    {
+                        if (estado.actualizandoConAlgoALaVista) ActualizandoEnLaCabecera()
+                        // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la
+                        // pantalla quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En
+                        // esta pantalla no hay otra cosa que se pueda crear, así que la palabra alcanza.
+                        if (estado.nuevoEnElEncabezado) NewItemButton(label = "Nuevo", onClick = { estado.abrirNuevo() })
+                    }
                 } else null,
             )
             LazyColumn(
