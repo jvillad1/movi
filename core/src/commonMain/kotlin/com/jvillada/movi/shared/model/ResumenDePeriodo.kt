@@ -34,6 +34,15 @@ data class ResumenDePeriodo(
     val salidas: Long = 0,
     /** Cuántos movimientos suman en [entradas] y [salidas]. */
     val movimientos: Int = 0,
+    /**
+     * Lo que entró a tus cuentas como desembolso de un crédito ([FUENTE_CREDITO]), en pesos: no suma
+     * en [entradas] (es deuda), pero paga gastos que sí suman en [salidas]. Es lo mismo que el
+     * detalle dice en [DetalleDePeriodo.fuentesQueNoSonIngreso], para que la lista pueda explicar el
+     * hueco sin abrir cada período.
+     */
+    val creditosRecibidos: Long = 0,
+    /** Lo mismo para los saldos que ya tenías y Movi conoció a mitad del período ([FUENTE_SALDO_INICIAL]). */
+    val saldosIniciales: Long = 0,
 )
 
 /** El detalle de un período. Ver [ResumenDePeriodo] para el porqué de las reglas. */

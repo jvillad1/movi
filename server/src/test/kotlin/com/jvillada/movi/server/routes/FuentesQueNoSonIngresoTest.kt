@@ -15,6 +15,7 @@ import com.jvillada.movi.shared.model.FUENTE_SALDO_INICIAL
 import com.jvillada.movi.shared.model.FuenteDePlata
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -143,6 +144,9 @@ class FuentesQueNoSonIngresoTest {
     private fun detalle(id: String): DetalleDePeriodo =
         assertNotNull(transaction { detalleDePeriodo(uid, id, dia(10, 5), delDueno) })
 
+    private fun lista(): List<ResumenDePeriodo> =
+        transaction { resumenesDePeriodos(uid, dia(10, 5), delDueno) }
+
     /** El septiembre del dueño: un desembolso y dos saldos iniciales, con sus nombres. */
     @Test
     fun `el desembolso de un credito y los saldos iniciales son las fuentes del periodo`() {
@@ -234,5 +238,67 @@ class FuentesQueNoSonIngresoTest {
         assertEquals(10_000_000, fuente.monto)
         assertEquals(listOf("Crédito Techo Gardenera"), fuente.detalle)
         assertTrue(detalle("2026-08").fuentesQueNoSonIngreso.isEmpty())
+    }
+
+    /** La lista dice lo mismo que el detalle: un desembolso y dos saldos iniciales en septiembre. */
+    @Test
+    fun `la lista trae los creditos y los saldos iniciales de cada periodo`() {
+        movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
+        traspaso("tr-gardenera", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
+        saldoInicial("si-nu", dia(8, 31), 15_300_000, nu)
+        saldoInicial("si-afc", dia(9, 8), 6_900_000, afc)
+        movimiento("ev-obra", dia(9, 2), 9_960_000, ahorros, categoria = "Gardenera")
+        // Octubre (arrancó el 24-sep) tiene el suyo: no se mezcla con septiembre.
+        saldoInicial("si-octubre", dia(9, 24), 211, ahorros)
+
+        val periodos = lista().associateBy { it.id }
+        assertEquals(10_000_000, periodos.getValue("2026-09").creditosRecibidos)
+        assertEquals(22_200_000, periodos.getValue("2026-09").saldosIniciales)
+        assertEquals(0, periodos.getValue("2026-10").creditosRecibidos)
+        assertEquals(211, periodos.getValue("2026-10").saldosIniciales)
+        // Sin fuentes: cero, también en el hueco.
+        assertEquals(0, periodos.getValue("2026-08").creditosRecibidos)
+        assertEquals(0, periodos.getValue("2026-08").saldosIniciales)
+        // Lo demás de la fila no cambia.
+        assertEquals(0, periodos.getValue("2026-09").entradas)
+        assertEquals(9_960_000, periodos.getValue("2026-09").salidas)
+    }
+
+    @Test
+    fun `la lista no cuenta anulados ni traspasos entre cuentas propias ni dolares`() {
+        movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
+        traspaso("tr-anulado", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
+        anular("tr-anulado-entra")
+        anular("tr-anulado-sale")
+        saldoInicial("si-anulado", dia(9, 8), 6_900_000, afc)
+        anular("si-anulado")
+        traspaso("tr-al-cdt", dia(9, 3), 2_000_000, desde = ahorros, hacia = cdt)
+        saldoInicial("si-skandia", dia(9, 5), 106_000_000, skandia)
+        movimiento("si-usd", dia(9, 10), 700, nu, tipo = "INCOME", categoria = OPENING_CATEGORY, moneda = "USD")
+
+        val septiembre = lista().single { it.id == "2026-09" }
+        assertEquals(0, septiembre.creditosRecibidos)
+        assertEquals(0, septiembre.saldosIniciales)
+    }
+
+    /** Una sola regla: para cada período de la lista, el detalle da las mismas cifras. */
+    @Test
+    fun `la lista y el detalle dan los mismos numeros para el mismo periodo`() {
+        movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
+        traspaso("tr-1", dia(9, 1), 4_000_000, desde = credito, hacia = ahorros)
+        traspaso("tr-2", dia(9, 24), 6_000_000, desde = credito, hacia = nu)
+        saldoInicial("si-nu", dia(8, 31), 15_300_000, nu)
+        saldoInicial("si-afc", dia(10, 2), 6_900_000, afc)
+
+        lista().forEach { fila ->
+            val d = detalle(fila.id).resumen
+            assertEquals(d.creditosRecibidos, fila.creditosRecibidos, fila.id)
+            assertEquals(d.saldosIniciales, fila.saldosIniciales, fila.id)
+            val fuentes = detalle(fila.id).fuentesQueNoSonIngreso
+            assertEquals(fuentes.filter { it.tipo == FUENTE_CREDITO }.sumOf { it.monto }, fila.creditosRecibidos, fila.id)
+            assertEquals(fuentes.filter { it.tipo == FUENTE_SALDO_INICIAL }.sumOf { it.monto }, fila.saldosIniciales, fila.id)
+        }
+        assertEquals(4_000_000, lista().single { it.id == "2026-09" }.creditosRecibidos)
+        assertEquals(6_000_000, lista().single { it.id == "2026-10" }.creditosRecibidos)
     }
 }

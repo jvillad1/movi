@@ -174,4 +174,56 @@ class PeriodosScreenTest {
 
         assertEquals(Screen.DetalleDePeriodo(conInicioPropio.id), navegado.single())
     }
+
+    // ── Lo que cubrió lo demás ────────────────────────────────────────────────
+
+    private val septiembreDelDueno = ResumenDePeriodo(
+        id = "2026-09", nombre = "Septiembre 2026", desde = "2026-08-25", hasta = "2026-09-23",
+        entradas = 22_500_000L, salidas = 34_000_000L, movimientos = 40,
+        creditosRecibidos = 10_000_000L, saldosIniciales = 22_200_000L,
+    )
+
+    @Test
+    fun `un periodo que salio de mas dice que lo cubrio, con los textos exactos`() {
+        assertEquals(
+            "Lo demás lo cubrieron $10M de créditos y $22,2M de saldos que ya tenías.",
+            loQueCubrioLoDemas(septiembreDelDueno),
+        )
+        assertEquals(
+            "Lo demás lo cubrieron $10M de créditos.",
+            loQueCubrioLoDemas(septiembreDelDueno.copy(saldosIniciales = 0)),
+        )
+        assertEquals(
+            "Lo demás lo cubrieron $22,2M de saldos que ya tenías.",
+            loQueCubrioLoDemas(septiembreDelDueno.copy(creditosRecibidos = 0)),
+        )
+    }
+
+    @Test
+    fun `sin salir de mas o sin fuentes no dice nada`() {
+        assertEquals(null, loQueCubrioLoDemas(septiembreDelDueno.copy(creditosRecibidos = 0, saldosIniciales = 0)))
+        // Entró lo mismo o más: no falta nada que explicar, aunque haya fuentes.
+        assertEquals(null, loQueCubrioLoDemas(septiembreDelDueno.copy(entradas = 34_000_000L)))
+        assertEquals(null, loQueCubrioLoDemas(septiembreDelDueno.copy(entradas = 40_000_000L)))
+        // Un período sin flujo tampoco.
+        assertEquals(null, loQueCubrioLoDemas(sinFlujo.copy(creditosRecibidos = 5_000_000L)))
+    }
+
+    @Test
+    fun `la linea aparece solo en la fila que salio de mas`() {
+        montarConRepo(ConPeriodos(listOf(septiembreDelDueno, enCurso.copy(id = "2026-08", nombre = "Agosto 2026", enCurso = false, creditosRecibidos = 1_000_000L))))
+        esperarTexto("Septiembre 2026")
+
+        assertTrue(hay("Lo demás lo cubrieron $10M de créditos y $22,2M de saldos que ya tenías."))
+        // Agosto entró más de lo que salió: sus créditos no se nombran.
+        assertEquals(1, composeRule.onAllNodesWithText("Lo demás lo cubrieron", substring = true, useUnmergedTree = true)
+            .fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `sin creditos ni saldos la lista se ve como siempre`() {
+        montarConRepo(ConPeriodos(periodos))
+        esperarTexto("Septiembre 2026")
+        assertTrue(!hay("Lo demás lo cubrieron", substring = true))
+    }
 }
