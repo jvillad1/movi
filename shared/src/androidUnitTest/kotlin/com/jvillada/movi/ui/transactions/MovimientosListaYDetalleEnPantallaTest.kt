@@ -38,7 +38,11 @@ import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.NavTab
+import com.jvillada.movi.ui.components.LocalRelevoDeScroll
 import com.jvillada.movi.ui.components.RelevoDeScroll
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.geometry.Offset
 import com.jvillada.movi.ui.components.TAG_PANEL_DE_HOJA
 import kotlinx.datetime.Clock
 import org.junit.After
@@ -109,24 +113,30 @@ class MovimientosListaYDetalleEnPantallaTest {
         }
     }
 
-    private fun montar(): ConMovimientos {
+    private fun montar(): ConMovimientos = montar2("Señor Gol")
+
+    private fun montar2(primera: String): ConMovimientos {
         DiasPlegadosStore.clear()
         val repo = ConMovimientos()
         Repositories.sustitutoDePrueba = repo
         composeRule.setContent {
+            // El relevo de los márgenes puesto como en App.kt: la lista se registra en él.
+            val relevo = remember { RelevoDeScroll() }
             ConClaseDeAncho {
-                EsqueletoDeLaCascara(
-                    pantalla = Screen.Transactions(),
-                    activeTab = NavTab.MOVIMIENTOS,
-                    conNavegacion = true,
-                    onTabSelected = {},
-                    relevoDeScroll = remember { RelevoDeScroll() },
-                ) {
-                    TransactionsScreen(onNavigate = {})
+                CompositionLocalProvider(LocalRelevoDeScroll provides relevo) {
+                    EsqueletoDeLaCascara(
+                        pantalla = Screen.Transactions(),
+                        activeTab = NavTab.MOVIMIENTOS,
+                        conNavegacion = true,
+                        onTabSelected = {},
+                        relevoDeScroll = relevo,
+                    ) {
+                        TransactionsScreen(onNavigate = {})
+                    }
                 }
             }
         }
-        esperar { filaDe("Señor Gol").fetchSemanticsNodes().isNotEmpty() }
+        esperar { filaDe(primera).fetchSemanticsNodes().isNotEmpty() }
         return repo
     }
 
@@ -336,6 +346,65 @@ class MovimientosListaYDetalleEnPantallaTest {
         val panel = limites(TAG_PANEL_DEL_MOVIMIENTO)
         // Centrado en 720: (863 − 720) / 2 ≈ 71 de aire, más los 20 de relleno del panel.
         assertEquals(panel.left + 71.5f + 20f, monto.left, 1f)
+    }
+
+    /**
+     * Visto en la web: la rueda sobre el panel, pasado su propio final (o sin nada que desplazar,
+     * con la invitación), seguía hasta el relevo de los márgenes de la cáscara y **movía la lista
+     * de la izquierda**. El relevo es para los márgenes, no para el panel.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `la rueda sobre el panel no mueve la lista`() {
+        eventos = (1..30).map { gasto("m$it", "Gasto número $it", 1_000L * it, "Comida") }
+        montar2("Gasto número 1")
+        val antes = fila("Gasto número 1").fetchSemanticsNode().boundsInRoot.top
+
+        composeRule.onNodeWithTag(TAG_PANEL_DEL_MOVIMIENTO, useUnmergedTree = true).performMouseInput {
+            moveTo(center)
+            repeat(10) { scroll(120f) }
+        }
+        composeRule.waitForIdle()
+
+        val despues = fila("Gasto número 1").fetchSemanticsNode().boundsInRoot.top
+        assertEquals(antes, despues, 0.5f, "la lista no se movió")
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `la rueda sobre el panel sigue moviendo su propio contenido`() {
+        montar()
+        elegir("Las Doce")
+        fun etiqueta() = composeRule.onNode(hasText("MONTO, CUENTA Y CONCEPTO") and enElPanel, useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot.top
+        val antes = etiqueta()
+        val lista = fila("Señor Gol").fetchSemanticsNode().boundsInRoot.top
+
+        composeRule.onNodeWithTag(TAG_PANEL_DEL_MOVIMIENTO, useUnmergedTree = true).performMouseInput {
+            moveTo(center)
+            repeat(3) { scroll(120f) }
+        }
+        composeRule.waitForIdle()
+
+        assertTrue(etiqueta() < antes - 1f, "el contenido del panel se desplazó")
+        assertEquals(lista, fila("Señor Gol").fetchSemanticsNode().boundsInRoot.top, 0.5f, "la lista no")
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `la rueda sobre la lista la sigue moviendo`() {
+        eventos = (1..30).map { gasto("m$it", "Gasto número $it", 1_000L * it, "Comida") }
+        montar2("Gasto número 1")
+        val antes = fila("Gasto número 1").fetchSemanticsNode().boundsInRoot.top
+
+        composeRule.onNodeWithTag(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO, useUnmergedTree = true).performMouseInput {
+            moveTo(center)
+            repeat(3) { scroll(120f) }
+        }
+        composeRule.waitForIdle()
+
+        val despues = filaDe("Gasto número 1").fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
+        assertTrue(despues == null || despues < antes - 1f, "la lista tenía que moverse: $antes / $despues")
     }
 
     // ── Sin lugar al lado: como hoy ─────────────────────────────────────────────

@@ -2,6 +2,9 @@ package com.jvillada.movi.ui.transactions
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -168,6 +171,11 @@ internal fun ListaYPanelDeMovimientos(
                     .weight(1f)
                     .fillMaxHeight()
                     .testTag(TAG_PANEL_DEL_MOVIMIENTO)
+                    // El tope de la rueda: lo que el contenido del panel no usa —o toda la rueda,
+                    // con la invitación, que no se desplaza— se queda acá. Sin esto seguía hasta
+                    // el relevo de los márgenes de la cáscara y movía la LISTA de la izquierda
+                    // (visto en la web). El relevo es para los márgenes, no para el panel.
+                    .scrollable(rememberScrollableState { it }, Orientation.Vertical)
                     .focusRequester(focoDelPanel)
                     .focusable(),
                 contentAlignment = Alignment.TopCenter,
