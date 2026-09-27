@@ -73,9 +73,9 @@ import com.jvillada.movi.shared.model.categoriaQueSostieneReglasMensaje
 import com.jvillada.movi.shared.model.nombreSostieneReglasDePlata
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.Hairline
-import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.CirculoEsqueleto
@@ -922,24 +922,8 @@ private fun LazyListScope.categoriasEsqueleto(filas: Int) {
 
 @Composable
 private fun HojaBase(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
-        ) {
-            SheetHandleWithClose(onClose = onDismiss)
-            content()
-        }
+    MarcoDeHoja(onDismiss = onDismiss) {
+        content()
     }
 }
 
