@@ -97,6 +97,27 @@ class LaMarcaDeLaCuentaTest {
         assertEquals(OrigenDeLaCuentaDelBanco.POR_EL_BANCO, r.origen)
     }
 
+    /**
+     * Una etiqueta de crédito nunca cae en una cuenta que no es tarjeta, aunque sea la única de la
+     * marca: quien no tiene anotada su «Nu Tarjeta» no puede ver la compra en sus ahorros «Nu».
+     */
+    @Test
+    fun `una etiqueta de credito sin tarjeta de la marca no cae en los ahorros`() {
+        val sinTarjetaNu = todas - nuTarjeta
+        assertNull(cuentaPorLaMarca("Notificación · Google Wallet", nuPorWallet, sinTarjetaNu))
+        val r = resolverCuentaDelBanco(sinTarjetaNu, UsoDeCuenta.ORIGEN_DE_GASTO, "Notificación · Google Wallet", textoDelMensaje = nuPorWallet)
+        assertEquals(ahorros, r.cuenta)
+        assertEquals(OrigenDeLaCuentaDelBanco.POR_DEFECTO, r.origen)
+        // Lo mismo con una sola cuenta de ahorros de la marca.
+        val soloAhorros = listOf(ahorros)
+        assertNull(cuentaPorLaMarca("Notificación · Google Wallet", "EXITO: COP9,000 with Bancolombia Mastercard ••9999", soloAhorros))
+    }
+
+    @Test
+    fun `una etiqueta de credito con una sola tarjeta de la marca cae en ella`() {
+        assertEquals(nuTarjeta, cuentaPorLaMarca("Notificación · Google Wallet", nuPorWallet, listOf(ahorros, nuTarjeta)))
+    }
+
     @Test
     fun `una debito sin marca de cuenta sigue como hoy`() {
         assertNull(cuentaPorLaMarca("Notificación · Google Wallet", debitoPorWallet, todas))

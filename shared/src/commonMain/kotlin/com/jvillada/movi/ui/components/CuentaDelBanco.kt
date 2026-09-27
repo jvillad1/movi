@@ -222,9 +222,9 @@ private fun nombraLaMarca(nombre: String, marca: List<String>): Boolean {
  * **Google Wallet no es una marca**: es quien avisa por todas las tarjetas. Ahí se lee la etiqueta de
  * la tarjeta («with Nu Mastercard Gold ••1336») y se toma la primera palabra que diga de quién es
  * («Nu»), saltando las que dicen de qué clase es («Mastercard», «Gold»). Esa clase sí sirve para
- * desempatar: una etiqueta de Mastercard/Visa/Amex que no dice débito es una tarjeta de crédito, y
- * entre «Nu» (ahorros) y «Nu Tarjeta» se queda con la tarjeta; una que dice débito nunca cae en una
- * tarjeta de crédito.
+ * filtrar: una etiqueta de Mastercard/Visa/Amex que no dice débito es una tarjeta de crédito y solo
+ * cae en una tarjeta de crédito —entre «Nu» (ahorros) y «Nu Tarjeta», la tarjeta; sin tarjeta de la
+ * marca, ninguna—; una que dice débito nunca cae en una tarjeta de crédito.
  *
  * Solo se devuelve una cuenta si queda **exactamente una**: con dos «Bancolombia» no se adivina, por
  * lo mismo que el empate de [cuentaPorElNumero].
@@ -247,10 +247,12 @@ internal fun cuentaPorLaMarca(banco: String, texto: String, candidatas: List<Acc
     var coinciden = candidatas.filter { nombraLaMarca(it.name, marca) }
     val esDebito = "debito" in etiqueta
     val esDeCredito = !esDebito && etiqueta.any { it == "mastercard" || it == "visa" || it == "amex" }
+    // La clase de la tarjeta filtra siempre, no solo para desempatar: una compra con una tarjeta de
+    // crédito no sale de una cuenta de ahorros aunque sea la única de la marca (quien no tiene
+    // anotada su «Nu Tarjeta» la vería en sus ahorros «Nu»). Sin tarjeta de la marca no se elige
+    // nada y sigue la cadena de siempre, que lo dice en voz alta.
     if (esDebito) coinciden = coinciden.filter { it.type != AccountType.CREDIT_CARD }
-    if (esDeCredito && coinciden.size > 1) {
-        coinciden.filter { it.type == AccountType.CREDIT_CARD }.takeIf { it.isNotEmpty() }?.let { coinciden = it }
-    }
+    if (esDeCredito) coinciden = coinciden.filter { it.type == AccountType.CREDIT_CARD }
     return coinciden.singleOrNull()
 }
 
