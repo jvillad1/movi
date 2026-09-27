@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
+import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
@@ -332,6 +333,15 @@ interface WalletRepository {
      * cuota de un crédito cuenta en los gastos del mes y el pago de una tarjeta no.
      */
     suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult
+
+    /**
+     * Ola Y — completar en el traspaso de deuda un gasto suelto que YA existe (viene de un SMS
+     * confirmado o de una edición), en vez de crear un pago nuevo desde cero. Ver
+     * [VincularPagoDeDeudaRequest] para el porqué de cada campo. Mismo criterio que
+     * [createTransfer]/[payInstallment]: exige conexión, no hay camino offline — la atomicidad de
+     * las dos patas vive en la transacción del server.
+     */
+    suspend fun vincularPagoDeDeuda(eventId: String, request: VincularPagoDeDeudaRequest): PagoDeCuotaResult
 
     /**
      * Cambia la categoría de un movimiento ya registrado. Devuelve el [FinancialEvent]

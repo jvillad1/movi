@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
+import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
@@ -803,6 +804,12 @@ class WalletRepositoryImpl(
     // al subir salía como «Algo salió mal» en vez de «Tu sesión expiró».
     override suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult =
         client.post("$baseUrl/api/payments/installment") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.exigirExito().body()
+
+    override suspend fun vincularPagoDeDeuda(eventId: String, request: VincularPagoDeDeudaRequest): PagoDeCuotaResult =
+        client.put("$baseUrl/api/events/$eventId/vincular-deuda") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }.exigirExito().body()

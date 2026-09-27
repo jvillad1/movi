@@ -469,6 +469,8 @@ open class NoOpRepository(
     override suspend fun deleteStatementImport(id: String) {}
     override suspend fun payInstallment(request: CreatePagoDeCuotaRequest) =
         PagoDeCuotaResult(deudaRestante = 0L, patas = emptyList())
+    override suspend fun vincularPagoDeDeuda(eventId: String, request: com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest) =
+        PagoDeCuotaResult(deudaRestante = 0L, patas = emptyList())
     override suspend fun getDocuments() = emptyList<Documento>()
     override suspend fun uploadDocument(
         fileName: String,

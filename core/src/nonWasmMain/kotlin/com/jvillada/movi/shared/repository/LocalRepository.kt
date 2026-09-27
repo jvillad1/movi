@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
+import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
@@ -2159,6 +2160,13 @@ class LocalRepository(
     // muestra un pago que el server todavía no aceptó.
     override suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult =
         remote.payInstallment(request)
+
+    // Mismo criterio que `payInstallment`, arriba: dos patas enlazadas y una deuda que baja, así
+    // que va directo al server. El espejo local del movimiento que se vincula queda desactualizado
+    // (categoría vieja, sin `transferId`) hasta la próxima lectura — igual que cualquier campo que
+    // el server recalcula, no hay una segunda copia de esta regla en SQLDelight.
+    override suspend fun vincularPagoDeDeuda(eventId: String, request: VincularPagoDeDeudaRequest): PagoDeCuotaResult =
+        remote.vincularPagoDeDeuda(eventId, request)
 
     override suspend fun getDocuments(): List<Documento> = remote.getDocuments()
     override suspend fun uploadDocument(

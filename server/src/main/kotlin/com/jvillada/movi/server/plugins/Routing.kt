@@ -82,6 +82,7 @@ fun Application.configureRouting() {
             eventRoutes()
             transferRoutes()
             pagoDeCuotaRoutes()
+            vincularPagoDeDeudaRoutes()
             financeRoutes()
             categoryRoutes()
             dashboardRoutes()

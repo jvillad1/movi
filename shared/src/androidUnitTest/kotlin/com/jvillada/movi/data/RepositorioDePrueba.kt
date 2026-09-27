@@ -102,6 +102,10 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun voidEvent(id: String, reason: String?): VoidEvent = noUsado("voidEvent")
     override suspend fun createTransfer(request: CreateTransferRequest): TransferResult = noUsado("createTransfer")
     override suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult = noUsado("payInstallment")
+    override suspend fun vincularPagoDeDeuda(
+        eventId: String,
+        request: com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest,
+    ): PagoDeCuotaResult = noUsado("vincularPagoDeDeuda")
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent = noUsado("updateEventCategory")
     /** Vacío y no `noUsado`: la hoja de categoría lo pide siempre, y no tener parecidos es normal. */
     override suspend fun getParecidos(id: String): List<FinancialEvent> = emptyList()

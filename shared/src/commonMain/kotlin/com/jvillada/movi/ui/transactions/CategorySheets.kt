@@ -49,6 +49,9 @@ import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
+import com.jvillada.movi.shared.model.newId
+import com.jvillada.movi.shared.model.ofreceVincularDeuda
+import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import com.jvillada.movi.shared.model.EventOccurrenceMark
@@ -404,6 +407,40 @@ internal fun ContenidoDelMovimiento(
                     else oferta = OfertaDeLote(categoria = category, movimiento = actualizado, otros = otros)
                 }
                 .onFailure { error = it.toUserMessage() }
+        }
+    }
+
+    // Ola Y: «¿A cuál crédito o tarjeta corresponde?» — completar en el traspaso de deuda un
+    // gasto suelto ya categorizado. Aparte de `saving`/`error` (que son de la categoría) porque
+    // las dos acciones pueden pasar en momentos distintos: primero se elige la categoría, y solo
+    // DESPUÉS —con la fila ya recomposed con `event.category` actualizado— aparece este paso.
+    var vinculando by remember(event.id) { mutableStateOf(false) }
+    var errorDeVinculo by remember(event.id) { mutableStateOf<String?>(null) }
+
+    fun vincular(cuenta: Account) {
+        if (vinculando) return
+        vinculando = true
+        errorDeVinculo = null
+        coroutine.launch {
+            val result = runCatching {
+                Repositories.wallets.vincularPagoDeDeuda(
+                    event.id,
+                    VincularPagoDeDeudaRequest(
+                        debtAccountId = cuenta.id,
+                        transferId = newId("tr"),
+                        toEventId = newId("ev"),
+                    ),
+                )
+            }
+            vinculando = false
+            result
+                .onSuccess { resultado ->
+                    // La pata del dinero es la que comparte id con ESTE movimiento — la otra es
+                    // la de la deuda, recién creada. Si por lo que sea no viene (no debería), la
+                    // hoja se queda como estaba: no hay nada que romper mostrando el mismo evento.
+                    resultado.patas.firstOrNull { it.id == event.id }?.let(onEventChanged)
+                }
+                .onFailure { errorDeVinculo = it.toUserMessage() }
         }
     }
 
@@ -778,6 +815,29 @@ internal fun ContenidoDelMovimiento(
             )
             Spacer(Modifier.height(4.dp))
             EnlaceAdministrarCategorias()
+
+            // Ola Y: opcional, y solo con las dos categorías de deuda sobre un gasto que todavía
+            // no es la mitad de un traspaso — ver `ofreceVincularDeuda`. Debajo de la categoría
+            // porque depende de cuál quedó guardada: aparece apenas `choose()` la deja en
+            // «Cuota de crédito» o «Pago de tarjeta», sin que el dueño tenga que reabrir la hoja.
+            if (ofreceVincularDeuda(event.type, event.category, event.transferId)) {
+                Spacer(Modifier.height(20.dp))
+                Hairline()
+                Spacer(Modifier.height(16.dp))
+                SelectorDeCuentaDeDeuda(
+                    cuentas = cuentas,
+                    seleccionada = null,
+                    onSeleccionar = { it?.let(::vincular) },
+                )
+                if (vinculando) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Vinculando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                }
+                errorDeVinculo?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+                }
+            }
 
             if (saving) {
                 Spacer(Modifier.height(10.dp))

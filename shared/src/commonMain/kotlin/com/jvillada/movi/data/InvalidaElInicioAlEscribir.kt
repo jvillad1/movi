@@ -101,6 +101,10 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun voidEvent(id: String, reason: String?): VoidEvent = trasEscribir { delegado.voidEvent(id, reason) }
     override suspend fun createTransfer(request: CreateTransferRequest): TransferResult = trasEscribir { delegado.createTransfer(request) }
     override suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult = trasEscribir { delegado.payInstallment(request) }
+    override suspend fun vincularPagoDeDeuda(
+        eventId: String,
+        request: com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest,
+    ): PagoDeCuotaResult = trasEscribir { delegado.vincularPagoDeDeuda(eventId, request) }
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent = trasEscribir { delegado.updateEventCategory(id, category) }
     // `getParecidos` NO invalida: es una lectura, y no escribe nada.
     override suspend fun getParecidos(id: String): List<FinancialEvent> = delegado.getParecidos(id)
