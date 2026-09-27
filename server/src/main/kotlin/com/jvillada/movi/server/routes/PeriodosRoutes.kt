@@ -119,7 +119,9 @@ internal fun Transaction.resumenesDePeriodos(uid: String, ahora: Long, ajustes: 
     )
     val ventanas = periodos.map { it to ventanaDe(it, ajustes) }
     val porPeriodo = movimientos.groupBy { m -> ventanas.firstOrNull { (_, v) -> m.timestamp in v }?.first }
-    return periodos.map { resumenDe(it, ajustes, enCurso, porPeriodo[it].orEmpty()) }
+    // Lo que no es ingreso, por período, con la MISMA regla que el detalle y en una sola lectura.
+    val fuentes = fuentesQueNoSonIngresoPorVentana(uid, ventanas.map { it.second }, anulados, cuentasDelDisponible(uid))
+    return periodos.mapIndexed { i, periodo -> resumenDe(periodo, ajustes, enCurso, porPeriodo[periodo].orEmpty(), fuentes[i]) }
 }
 
 /**
@@ -153,9 +155,10 @@ internal fun Transaction.detalleDePeriodo(
     // al final de una ventana que todavía no llegó.
     val cierre = if (enCurso) minOf(hasta, appDateToEpochMillis(hoy.plusDays(1))) else hasta
     val (alEmpezar, alCerrar) = saldosDeTuPlataAntesDe(uid, listOf(desde, cierre), anulados, cuentas)
+    val fuentes = fuentesQueNoSonIngresoPorVentana(uid, listOf(ventana), anulados, cuentas).single()
 
     return DetalleDePeriodo(
-        resumen = resumenDe(periodo, ajustes, periodos.first(), movimientos),
+        resumen = resumenDe(periodo, ajustes, periodos.first(), movimientos, fuentes),
         porCategoria = gastoPorCategoria.entries
             .sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key })
             .map { GastoDeCategoria(it.key, it.value) },
@@ -175,13 +178,15 @@ internal fun Transaction.detalleDePeriodo(
         masGrandes = losMasGrandes(uid, movimientos, tipos),
         tuPlataAlEmpezar = alEmpezar,
         tuPlataAlCerrar = alCerrar,
-        fuentesQueNoSonIngreso = fuentesQueNoSonIngreso(uid, desde, hasta, anulados, cuentas),
+        fuentesQueNoSonIngreso = fuentes,
     )
 }
 
 /**
- * **La plata que entró a tus cuentas en `[desde, hastaExclusivo)` y no es ingreso** — lo que explica
- * un período que salió más de lo que entró sin que se haya gastado de más:
+ * **La plata que entró a tus cuentas en cada una de las [ventanas] y no es ingreso** — lo que explica
+ * un período que salió más de lo que entró sin que se haya gastado de más. Devuelve una lista por
+ * ventana, en el mismo orden; el detalle de un período la llama con una ventana y la lista de
+ * «Tus períodos» con todas, así que las dos cuentan con UNA regla:
  *
  * - [FUENTE_CREDITO]: los desembolsos. La pata que ENTRA (INCOME, categoría [TRANSFER_CATEGORY]) a
  *   una cuenta que no es deuda, cuya hermana por `transfer_id` sale de una cuenta LOAN. Un traspaso
@@ -191,19 +196,24 @@ internal fun Transaction.detalleDePeriodo(
  *   también paga gastos. Una inversión no, porque su saldo (Skandia, $106M) taparía todo lo demás y
  *   no es plata con la que se paga el mes.
  *
- * Solo en pesos y sin anulados, como toda suma de Movi. Una lectura de los eventos del período con
- * esas dos categorías; las hermanas de los traspasos vienen en la misma lectura (las dos patas nacen
- * en el mismo instante), y solo si alguna quedó afuera (una pata que se movió de fecha) se busca aparte.
- * El [FuenteDePlata.detalle] nombra las cuentas de la más grande a la más chica.
+ * Solo en pesos y sin anulados, como toda suma de Movi. Una lectura de los eventos con esas dos
+ * categorías entre la primera y la última ventana; las hermanas de los traspasos vienen en la misma
+ * lectura (las dos patas nacen en el mismo instante), y solo si alguna quedó afuera (una pata que se
+ * movió de fecha) se busca aparte. El [FuenteDePlata.detalle] nombra las cuentas de la más grande a
+ * la más chica. Solo las fuentes con monto; sin ninguna, la lista de esa ventana es vacía.
  */
-private fun Transaction.fuentesQueNoSonIngreso(
+private fun Transaction.fuentesQueNoSonIngresoPorVentana(
     uid: String,
-    desde: Long,
-    hastaExclusivo: Long,
+    ventanas: List<LongRange>,
     anulados: Set<String>,
     cuentas: Map<String, CuentaDelDisponible>,
-): List<FuenteDePlata> {
-    val filas = Events.select(Events.id, Events.accountId, Events.type, Events.amount, Events.category, Events.transferId)
+): List<List<FuenteDePlata>> {
+    if (ventanas.isEmpty()) return emptyList()
+    val desde = ventanas.minOf { it.first }
+    val hastaExclusivo = ventanas.maxOf { it.last } + 1
+    val filas = Events.select(
+        Events.id, Events.accountId, Events.type, Events.amount, Events.category, Events.transferId, Events.timestamp,
+    )
         .where {
             (Events.userId eq uid) and
                 (Events.currency eq "COP") and
@@ -212,8 +222,13 @@ private fun Transaction.fuentesQueNoSonIngreso(
                 (Events.category inList listOf(TRANSFER_CATEGORY, OPENING_CATEGORY))
         }
         .filterNot { it[Events.id] in anulados }
-        .map { PataSinIngreso(it[Events.accountId], it[Events.type], it[Events.amount], it[Events.category], it[Events.transferId]) }
-    if (filas.isEmpty()) return emptyList()
+        .map {
+            PataSinIngreso(
+                it[Events.accountId], it[Events.type], it[Events.amount], it[Events.category],
+                it[Events.transferId], it[Events.timestamp],
+            )
+        }
+    if (filas.isEmpty()) return ventanas.map { emptyList() }
 
     fun esDeDinero(cuenta: CuentaDelDisponible?) =
         cuenta != null && !cuenta.esDeuda && !cuenta.esBien && cuenta.tipo != AccountType.INVESTMENT
@@ -237,10 +252,10 @@ private fun Transaction.fuentesQueNoSonIngreso(
             .filterNot { it[Events.id] in anulados }
             .forEach { fila -> fila[Events.transferId]?.let { origenDe[it] = fila[Events.accountId] } }
     }
-    // Cada desembolso con la cuenta de crédito de la que salió.
+    // Cada desembolso: la entrada, con la cuenta de crédito de la que salió.
     val desembolsos = entradasDeTraspaso.mapNotNull { entrada ->
         val origen = origenDe[entrada.traspaso] ?: return@mapNotNull null
-        if (cuentas[origen]?.tipo == AccountType.LOAN) origen to entrada.monto else null
+        if (cuentas[origen]?.tipo == AccountType.LOAN) origen to entrada else null
     }
 
     val nombres: Map<String, String> by lazy {
@@ -257,19 +272,22 @@ private fun Transaction.fuentesQueNoSonIngreso(
             .mapNotNull { nombres[it.key] }
         return FuenteDePlata(tipo, monto, detalle)
     }
-    return listOfNotNull(
-        fuente(FUENTE_CREDITO, desembolsos),
-        fuente(FUENTE_SALDO_INICIAL, saldosIniciales.map { it.cuenta to it.monto }),
-    )
+    return ventanas.map { ventana ->
+        listOfNotNull(
+            fuente(FUENTE_CREDITO, desembolsos.filter { it.second.momento in ventana }.map { it.first to it.second.monto }),
+            fuente(FUENTE_SALDO_INICIAL, saldosIniciales.filter { it.momento in ventana }.map { it.cuenta to it.monto }),
+        )
+    }
 }
 
-/** Lo que [fuentesQueNoSonIngreso] necesita de cada evento. */
+/** Lo que [fuentesQueNoSonIngresoPorVentana] necesita de cada evento. */
 private class PataSinIngreso(
     val cuenta: String,
     val tipo: String,
     val monto: Long,
     val categoria: String,
     val traspaso: String?,
+    val momento: Long,
 )
 
 /**
@@ -515,6 +533,7 @@ private fun resumenDe(
     ajustes: PeriodSettings,
     enCurso: PeriodoFinanciero,
     movimientos: List<MovimientoDeFlujo>,
+    fuentes: List<FuenteDePlata>,
 ): ResumenDePeriodo {
     val ventana = ventanaDe(periodo, ajustes)
     val (entradas, gastoPorCategoria) = flujoDeCaja(movimientos)
@@ -531,6 +550,8 @@ private fun resumenDe(
         entradas = entradas,
         salidas = gastoPorCategoria.values.sum(),
         movimientos = movimientos.size,
+        creditosRecibidos = fuentes.filter { it.tipo == FUENTE_CREDITO }.sumOf { it.monto },
+        saldosIniciales = fuentes.filter { it.tipo == FUENTE_SALDO_INICIAL }.sumOf { it.monto },
     )
 }
 
