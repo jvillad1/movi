@@ -52,12 +52,14 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.CATEGORY_RESERVED_SHORT
 import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
+import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.CuentasDelPicker
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.newId
+import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -666,14 +668,15 @@ fun QuickAddScreen(
     }
 
     /**
-     * Ola A: hasta 6 chips con las categorías más frecuentes de esta pestaña — ver
-     * [categoriasFrecuentes]. Vacía sin datos de uso, que es cuando la fila de chips no ocupa
-     * lugar (ver [EditorBody]).
+     * Ola A: hasta 6 chips con las categorías más frecuentes de esta pestaña, con el mismo criterio
+     * que Reconciliar — ver [categoriasParaLasPastillasDeAgregar] para el porqué y las guardas
+     * (orden estable bajo el dedo, cuándo queda vacía de verdad).
      */
     val categoriasFrecuentesDelTipo = if (pickers.typeIndex > 1) {
         emptyList()
     } else {
-        categoriasFrecuentes(
+        categoriasParaLasPastillasDeAgregar(
+            categoriaActual = category,
             tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
             usadas = usedCategories,
             prefs = categoryPrefs,
@@ -1975,4 +1978,57 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
             Text("Guardar nota", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
         }
     }
+}
+
+/**
+ * **Las pastillas de categoría de «Agregar»** — la fila de chips de hasta 6 categorías frecuentes
+ * debajo del monto (Ola A). Hasta la Ola N armaba su propia lista con [categoriasFrecuentes] a
+ * secas, en vez de la [categoriasParaPastillas] común que ya usa Reconciliar (el detalle de un
+ * SMS, ver [com.jvillada.movi.ui.sms.categoriasParaElegirEnElSms]): las dos pantallas podían
+ * terminar en un orden distinto si esa función común cambiaba y solo una de las dos la usaba.
+ *
+ * **[categoriaActual] solo se antepone si el orden natural (frecuentes, luego propias, luego
+ * catálogo) no la trae ya** — fix round de la Ola N: al principio esta función SIEMPRE la ponía
+ * primera, así que tocar cualquier chip (que cambia la categoría elegida, ver
+ * [elegirCategoriaAMano]) mandaba esa pastilla al frente y corría a las demás bajo el dedo — en un
+ * teléfono angosto, tocar la última pastilla visible la hacía desaparecer de la vista. Con esta
+ * guarda, mientras la categoría elegida siga siendo una de las que YA aparecían, la fila no se
+ * reordena; el "adelantar" solo entra para el caso real que lo necesita: una categoría recién
+ * puesta (un preset de recurrente, por ejemplo) que todavía no tiene entrada en [usadas] y por eso
+ * no saldría en ningún lado.
+ *
+ * **Vacía sin datos de uso** — la fila entera no se dibuja (ver [EditorBody]). La guarda es
+ * "[usos] vacío", no "sin ninguna entrada con más de cero usos": con ALGÚN dato de uso (aunque sea
+ * de otra pestaña, o todo en cero) la fila igual aparece, rellena con propias y catálogo como
+ * Reconciliar — es la misma unificación de este fix, no una fila "vacía" a medias.
+ *
+ * Pura, para poder comparar su orden con el de Reconciliar sin pintar nada.
+ */
+internal fun categoriasParaLasPastillasDeAgregar(
+    categoriaActual: String,
+    tipo: TransactionType,
+    usadas: Map<String, Set<TransactionType>>,
+    prefs: Map<String, CategoryPref>,
+    usos: Map<String, Int>,
+    cuantas: Int = 6,
+): List<String> {
+    if (usos.isEmpty()) return emptyList()
+    val sinAdelantarNada = categoriasParaPastillas(
+        primeras = emptyList(),
+        tipo = tipo,
+        usadas = usadas,
+        prefs = prefs,
+        usos = usos,
+        cuantas = cuantas,
+    )
+    val yaEsta = sinAdelantarNada.any { normalizarParaBuscar(it) == normalizarParaBuscar(categoriaActual) }
+    if (yaEsta) return sinAdelantarNada
+    return categoriasParaPastillas(
+        primeras = listOf(categoriaActual),
+        tipo = tipo,
+        usadas = usadas,
+        prefs = prefs,
+        usos = usos,
+        cuantas = cuantas,
+    )
 }
