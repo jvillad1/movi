@@ -374,6 +374,35 @@ class PagosDelChecklistTest {
         assertEquals(94_800L, gastoTotal(eventos, parte))
     }
 
+    /**
+     * Empezar con el nombre («Mercado Éxito», «Mercado D1») no alcanza por sí solo: son otras compras
+     * que nombran el mismo lugar, y absorberlas devolvería el «$0» con el fijo restando sus
+     * $2.000.000 enteros. Solo completan el ítem si el pago ya se ve por su nombre.
+     */
+    @Test
+    fun `una compra que solo empieza con el nombre no se absorbe sin un pago que lo diga entero`() {
+        val mercado = regla("rr_mercado", "Mercado", "Comida", 2_000_000, 25)
+        val eventos = listOf(
+            evento("exito", "Mercado Éxito", 150_000, "2026-09-25", "Comida"),
+            evento("d1", "Mercado D1", 80_000, "2026-09-26", "Comida"),
+        )
+        val hoyDelDueno = LocalDate.of(2026, 9, 26)
+        val parte = parteFija(listOf(mercado), emptyList(), eventos, hoy = hoyDelDueno)
+        assertEquals(emptyMap(), parte)
+        assertEquals(230_000L, gastoTotal(eventos, parte))
+    }
+
+    @Test
+    fun `con un pago que dice el nombre entero, lo que empieza con el nombre completa el item`() {
+        val mercado = regla("rr_mercado", "Mercado", "Comida", 2_000_000, 25)
+        val eventos = listOf(
+            evento("grande", "Mercado", 1_500_000, "2026-09-25", "Comida"),
+            evento("exito", "Mercado Éxito", 500_000, "2026-09-26", "Comida"),
+        )
+        val parte = parteFija(listOf(mercado), emptyList(), eventos, hoy = LocalDate.of(2026, 9, 26))
+        assertEquals(mapOf("grande" to 1_500_000L, "exito" to 500_000L), parte)
+    }
+
     /** Lo mismo con la cuenta de la regla: categoría + cuenta suman 2 y siguen sin ser el nombre. */
     @Test
     fun `categoria mas cuenta no bastan para absorber, el nombre si`() {

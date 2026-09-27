@@ -42,7 +42,7 @@ private fun esAnio(palabra: String) =
 private fun esPalabraDeFecha(palabra: String) = esPalabraDeMes(palabra) || esAnio(palabra)
 
 /** Palabras de [nombre], cada una pasada por [claveComparableDeNombre] — sin tildes, minúsculas. */
-private fun palabrasClave(nombre: String): List<String> =
+fun palabrasClave(nombre: String): List<String> =
     nombre.split(Regex("[^\\p{L}\\p{Nd}]+")).filter { it.isNotBlank() }.map(::claveComparableDeNombre)
 
 /**
