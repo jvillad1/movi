@@ -208,9 +208,10 @@ class MovimientosListaYDetalleEnPantallaTest {
 
         val lista = limites(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO)
         val panel = limites(TAG_PANEL_DEL_MOVIMIENTO)
-        assertEquals(360f, lista.width, 0.5f)
-        // 1280 − 216 del rail − 360 de la lista − 1 del divisor.
-        assertEquals(703f, panel.width, 0.5f, "el panel se lleva lo que sobra")
+        // Ola X: la lista subió de 360 a 420 dp — el dueño la vio apretada.
+        assertEquals(420f, lista.width, 0.5f)
+        // 1280 − 216 del rail − 420 de la lista − 1 del divisor.
+        assertEquals(643f, panel.width, 0.5f, "el panel se lleva lo que sobra")
         assertTrue(panel.left >= lista.right, "$lista / $panel")
         // La lista es la de siempre, con su «Flujo del día».
         assertTrue(hayEnLaLista("Señor Gol"))
@@ -346,11 +347,11 @@ class MovimientosListaYDetalleEnPantallaTest {
 
     @Test
     @Config(qualifiers = "w1024dp-h900dp-mdpi")
-    fun `a 1024 tambien va en lista y detalle, con 447 de detalle`() {
+    fun `a 1024 tambien va en lista y detalle, con 387 de detalle`() {
         montar()
-        assertEquals(360f, limites(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO).width, 0.5f)
-        // 1024 − 216 − 360 − 1.
-        assertEquals(447f, limites(TAG_PANEL_DEL_MOVIMIENTO).width, 0.5f)
+        assertEquals(420f, limites(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO).width, 0.5f)
+        // 1024 − 216 − 420 − 1.
+        assertEquals(387f, limites(TAG_PANEL_DEL_MOVIMIENTO).width, 0.5f)
 
         elegir("Las Doce")
         assertTrue(!hayTag(TAG_PANEL_DE_HOJA))
@@ -358,15 +359,15 @@ class MovimientosListaYDetalleEnPantallaTest {
 
     @Test
     @Config(qualifiers = "w1440dp-h900dp-mdpi")
-    fun `a 1440 el detalle mide 863 y su contenido va en la columna de lectura`() {
+    fun `a 1440 el detalle mide 803 y su contenido va en la columna de lectura`() {
         montar()
-        assertEquals(863f, limites(TAG_PANEL_DEL_MOVIMIENTO).width, 0.5f)
+        assertEquals(803f, limites(TAG_PANEL_DEL_MOVIMIENTO).width, 0.5f)
         elegir("Las Doce")
         val monto = composeRule.onNode(hasText("MONTO, CUENTA Y CONCEPTO") and enElPanel, useUnmergedTree = true)
             .fetchSemanticsNode().boundsInRoot
         val panel = limites(TAG_PANEL_DEL_MOVIMIENTO)
-        // Centrado en 720: (863 − 720) / 2 ≈ 71 de aire, más los 20 de relleno del panel.
-        assertEquals(panel.left + 71.5f + 20f, monto.left, 1f)
+        // Centrado en 720: (803 − 720) / 2 = 41.5 de aire, más los 20 de relleno del panel.
+        assertEquals(panel.left + 41.5f + 20f, monto.left, 1f)
     }
 
     /**
@@ -514,7 +515,7 @@ class MovimientosListaYDetalleEnPantallaTest {
     @Config(qualifiers = "w800dp-h900dp-mdpi")
     fun `en una ventana mediana angosta tocar una fila abre la hoja modal como hoy`() {
         montar()
-        assertTrue(!hayTag(TAG_PANEL_DEL_MOVIMIENTO), "800 − 80 = 720 < 781: sin panel")
+        assertTrue(!hayTag(TAG_PANEL_DEL_MOVIMIENTO), "800 − 80 = 720 < 801: sin panel")
         assertTrue(!hayTag(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO))
 
         fila("Las Doce").performClick()

@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.ClaveDeLectura
@@ -1795,6 +1796,21 @@ fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color = when (tono
  * `internal` desde la ola C: la bandeja «Por revisar» pinta con este mismo renglón lo que entró
  * solo, para que un movimiento se vea igual allá y acá.
  */
+
+/**
+ * El aire vertical de cada renglón de la lista de Movimientos: 14 dp en el teléfono, el de
+ * siempre, y un poco más —18 dp— en pantalla ancha (Medio/Expandido). Ola X: el dueño la vio
+ * apretada en la web, en alto además de en ancho.
+ *
+ * [TransferRow], [RenglonDeAjustes] y [MovementSingleRow] son el mismo renglón que pinta la lista
+ * del teléfono y la lista al lado del panel (Ola W4) — no hay forma limpia de separar la densidad
+ * de uno del otro sin duplicar los tres composables por 4 dp de diferencia, así que se resuelve
+ * leyendo [LocalWindowWidthClass] acá adentro: el teléfono, que ya se ve bien, no cambia.
+ */
+@Composable
+private fun paddingVerticalDeLaFila(): Dp =
+    if (LocalWindowWidthClass.current == WindowWidthClass.Compact) 14.dp else 18.dp
+
 @Composable
 internal fun TransferRow(
     row: MovementRow.Transfer,
@@ -1809,7 +1825,7 @@ internal fun TransferRow(
             .fillMaxWidth()
             .marcaDeElegido(elegido)
             .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
+            .padding(vertical = paddingVerticalDeLaFila()),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -1888,7 +1904,7 @@ private fun RenglonDeAjustes(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onAlternar)
-            .padding(vertical = 14.dp),
+            .padding(vertical = paddingVerticalDeLaFila()),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -1959,7 +1975,7 @@ internal fun MovementSingleRow(
             .testTag(TAG_FILA_DE_MOVIMIENTO_SUELTO)
             .marcaDeElegido(elegido)
             .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
+            .padding(vertical = paddingVerticalDeLaFila()),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
