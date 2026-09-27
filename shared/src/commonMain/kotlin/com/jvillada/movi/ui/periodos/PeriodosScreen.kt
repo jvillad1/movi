@@ -71,6 +71,7 @@ import kotlinx.datetime.LocalDate
 
 const val TAG_FILA_DE_PERIODO: String = "fila-de-periodo"
 const val TAG_FILA_DE_PERIODO_ESQUELETO: String = "fila-de-periodo-esqueleto"
+const val TAG_LO_QUE_CUBRIO: String = "fila-de-periodo-lo-que-cubrio"
 
 /** Cuántas filas reserva el esqueleto sin nada recordado todavía (la primera vez en el aparato). */
 private const val FILAS_POR_DEFECTO = 3
@@ -232,7 +233,35 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, onClick: () -> Unit) {
             ChevronRight()
         }
         CifrasDelPeriodo(resumen)
+        val cubierto = loQueCubrioLoDemas(resumen)
+        if (cubierto != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = cubierto,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.testTag(TAG_LO_QUE_CUBRIO),
+            )
+        }
     }
+}
+
+/**
+ * La línea que explica el hueco de un período que salió más de lo que entró: «Lo demás lo cubrieron
+ * $10M de créditos y $22,2M de saldos que ya tenías.» Solo las partes con monto, y `null` cuando no
+ * salió de más o no hay nada que decir — ni «$0» ni una explicación que no existe. Las cifras son
+ * las de [ResumenDePeriodo.creditosRecibidos] y [ResumenDePeriodo.saldosIniciales], las mismas que
+ * el detalle nombra cuenta por cuenta en «De dónde salió lo que faltó»; sin ellas, «Te quedó −$11,5M»
+ * se lee como haber gastado de más cuando lo pagó un crédito o plata que ya estaba en las cuentas.
+ */
+internal fun loQueCubrioLoDemas(resumen: ResumenDePeriodo): String? {
+    if (resumen.salidas <= resumen.entradas) return null
+    val partes = listOfNotNull(
+        resumen.creditosRecibidos.takeIf { it > 0 }?.let { "${formatMoneyCompact(it)} de créditos" },
+        resumen.saldosIniciales.takeIf { it > 0 }?.let { "${formatMoneyCompact(it)} de saldos que ya tenías" },
+    )
+    if (partes.isEmpty()) return null
+    return "Lo demás lo cubrieron ${partes.joinToString(" y ")}."
 }
 
 /**
