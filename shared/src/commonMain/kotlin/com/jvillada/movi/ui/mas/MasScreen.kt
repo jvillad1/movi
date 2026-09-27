@@ -55,6 +55,12 @@ private val items = listOf(
     // Ola 18: los papeles. Ola B, tarea 7: absorbió a «Extractos» — el importador archiva ahí
     // lo que pasa por él, y ahora también «Importar movimientos» vive en cada fila de acá.
     MasItem("Documentos",   Icons.Rounded.Folder,           Color(0xFFB3C8FF), Color(0x1AB3C8FF), Screen.Documentos),
+    // Ola V: hasta acá la ÚNICA puerta a `Screen.Destinos` era la tarjeta «Te deben» de
+    // Patrimonio — un lugar que no tiene nada que ver con «registrar quién es esta cuenta», y que
+    // el dueño no la encontró buscando en Ajustes. Esta ficha no la reemplaza (Patrimonio sigue
+    // llevando ahí): agrega la puerta que faltaba, con el mismo nombre que ya usa el título de la
+    // pantalla («Cuentas de otros»), para que las dos digan lo mismo.
+    MasItem("Cuentas de otros", Icons.Rounded.Groups,       Color(0xFFFFCC80), Color(0x24FFCC80), Screen.Destinos),
     // Compartir con un tercero: el enlace de solo lectura para Caro o un asesor. Tiene además un
     // ícono en el encabezado del Hoy. El rótulo es el título de la pantalla, como en toda ficha.
     MasItem("Compartir",    Icons.Rounded.Share,            Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Compartir),

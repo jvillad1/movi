@@ -129,10 +129,16 @@ sealed class Screen {
      * `DestinoConocido`). Ponerlas en la misma pantalla invitaría exactamente a la confusión que
      * el modelo evita.
      *
-     * Ola C, tarea 4: la puerta es la tarjeta **«Te deben»** de Patrimonio (ver `SeccionDeTeDeben`
-     * en `AccountsScreen.kt`) — antes de esta tarea no tenía ninguna, «Más» dejó de ser pestaña
-     * (Task 3) y esta pantalla se quedó sin como llegar. Marca la pestaña Patrimonio (ver
-     * [navTabFor]) y su flecha cae ahí, no en Ajustes.
+     * Ola C, tarea 4: la primera puerta fue la tarjeta **«Te deben»** de Patrimonio (ver
+     * `SeccionDeTeDeben` en `AccountsScreen.kt`) — antes de esa tarea no tenía ninguna, «Más» dejó
+     * de ser pestaña (Task 3) y esta pantalla se quedó sin como llegar.
+     *
+     * Ola V: **«Cuentas de otros» en Ajustes** ([MasScreen][com.jvillada.movi.ui.mas.MasScreen]) es
+     * la segunda — el dueño no la buscó en Patrimonio, la buscó en Ajustes, y esta pantalla no es
+     * solo «a quién le presté», es un registro que ahora también alimenta a las reglas recurrentes.
+     * Marca la pestaña Patrimonio igual (ver [navTabFor]), así que la flecha «atrás» respeta la
+     * historia real y cae en la puerta por la que se entró — Ajustes o Patrimonio, cualquiera haya
+     * sido — y solo usa el `fallback` de la pantalla (Patrimonio) cuando no hay historial.
      */
     data object Destinos : Screen()
 
