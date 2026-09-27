@@ -514,7 +514,8 @@ fun rememberEstadoDePresupuestos(activo: Boolean = true): EstadoDePresupuestos {
  */
 fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
     item {
-        if (estado.noSePudoActualizar) {
+        // Un solo aviso: sin nada que mostrar, el «No pudimos cargar» de abajo ya lo dice todo.
+        if (estado.noSePudoActualizar && !estado.noSeLeyo) {
             Spacer(Modifier.height(14.dp))
             NoSePudoActualizar(
                 onReintentar = { estado.reintentar() },
@@ -716,14 +717,15 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Presupuestos",
                 leading = leadingFor(Screen.Budgets, onNavigate, fallback = Screen.Plan(SEGMENTO_PRESUPUESTOS)),
-                action = if (estado.nuevoEnElEncabezado || estado.actualizandoConAlgoALaVista) {
-                    {
-                        if (estado.actualizandoConAlgoALaVista) ActualizandoEnLaCabecera()
-                        // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la
-                        // pantalla quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En
-                        // esta pantalla no hay otra cosa que se pueda crear, así que la palabra alcanza.
-                        if (estado.nuevoEnElEncabezado) NewItemButton(label = "Nuevo", onClick = { estado.abrirNuevo() })
-                    }
+                // Mientras dice «Actualizando…» no lleva «Nuevo»: las dos juntas vuelven a cortar el
+                // título en «Presupues…» a 390 dp. El botón vuelve apenas la lectura contesta.
+                action = if (estado.actualizandoConAlgoALaVista) {
+                    { ActualizandoEnLaCabecera() }
+                } else if (estado.nuevoEnElEncabezado) {
+                    // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la
+                    // pantalla quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En esta
+                    // pantalla no hay otra cosa que se pueda crear, así que la palabra alcanza.
+                    { NewItemButton(label = "Nuevo", onClick = { estado.abrirNuevo() }) }
                 } else null,
             )
             LazyColumn(

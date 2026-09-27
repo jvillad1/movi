@@ -150,9 +150,14 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Patrimonio",
                 leading = HeaderLeading.Avatar(onNavigate),
+                // Mientras dice «Actualizando…» no lleva «Nueva cuenta»: las dos juntas no entran a
+                // 390 dp sin cortar el título en «Patr…». El botón vuelve apenas la lectura contesta.
                 action = {
-                    if (actualizandoConAlgoALaVista) ActualizandoEnLaCabecera()
-                    NewItemButton(label = "Nueva cuenta", onClick = { showCreateSheet = true })
+                    if (actualizandoConAlgoALaVista) {
+                        ActualizandoEnLaCabecera()
+                    } else {
+                        NewItemButton(label = "Nueva cuenta", onClick = { showCreateSheet = true })
+                    }
                 },
             )
 
