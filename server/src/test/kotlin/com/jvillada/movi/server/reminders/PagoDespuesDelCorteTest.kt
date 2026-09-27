@@ -170,25 +170,47 @@ class PagoDespuesDelCorteTest {
 
     /**
      * El ejemplo del KDoc de `PagosDeDeuda.kt`: AMEX (día 16) pagada el 30 de agosto, sin ningún
-     * pago anterior. Es ambiguo —adelantó septiembre o pagó agosto tarde— y se elige el lado barato:
-     * agosto. Con calendario y con corte 25.
+     * pago anterior. Con mes de calendario, agosto: el pago cae en agosto. Con corte 25, el 30 de
+     * agosto es del período 25-ago a 24-sep, cuya cuota es la del 16 de septiembre.
      */
-    @Test fun `AMEX pagada el 30 de agosto sigue saldando agosto`() {
+    @Test fun `AMEX pagada el 30 de agosto salda la cuota del periodo en que se pago`() {
         val amex = tarjeta(dia = 16)
         val pagos = listOf(pagoDeTarjeta("ev_0830", LocalDate.of(2026, 8, 30)))
-        listOf(calendario, corte25).forEach { settings ->
-            assertEquals(setOf("2026-08"), periodosSaldados(listOf(amex), pagos, settings = settings)[amex.id], "$settings")
-        }
+        assertEquals(setOf("2026-08"), periodosSaldados(listOf(amex), pagos, settings = calendario)[amex.id])
+        assertEquals(setOf("2026-09"), periodosSaldados(listOf(amex), pagos, settings = corte25)[amex.id])
     }
 
-    /** Y un pago anterior que NO cae en el período del vencimiento de agosto no cambia nada. */
-    @Test fun `un pago de hace dos periodos no convierte el de AMEX en adelanto`() {
-        val amex = tarjeta(dia = 16)
-        val pagos = listOf(
-            pagoDeTarjeta("ev_0720", LocalDate.of(2026, 7, 20)), // período 25-jun a 24-jul
-            pagoDeTarjeta("ev_0830", LocalDate.of(2026, 8, 30)),
+    /**
+     * **Master Black, el caso real** (27-sep-2026): tarjeta de día 2, su primer pago registrado en
+     * movi hecho el 27-sep, sin ningún pago anterior. Es del período 25-sep a 24-oct, cuya cuota es la
+     * del 2 de octubre: esa es la que salda, y «Falta por pagar» no la vuelve a pedir. El dueño: *«si
+     * aparece un pago nuevo de una tarjeta va a pasar lo mismo y voy a tener que esperar hasta el
+     * otro mes, eso no tiene sentido»*.
+     */
+    @Test fun `el primer pago de una tarjeta despues del corte salda la cuota de su periodo`() {
+        val masterBlack = tarjeta(dia = 2)
+        val pagos = listOf(pagoDeTarjeta("ev_mb_0927", veintisiete, 1_542_634))
+
+        val porPreguntar = ocurrenciaPorPreguntar(veintisiete, masterBlack, corte25)!!
+        assertEquals(LocalDate.of(2026, 10, 2), porPreguntar)
+        assertEquals(
+            "ev_mb_0927",
+            pagosDeDeudaPorPeriodo(listOf(masterBlack), pagos, settings = corte25)[masterBlack.id]?.get(periodOf(porPreguntar))?.id,
         )
-        assertEquals(setOf("2026-07", "2026-08"), periodosSaldados(listOf(amex), pagos, settings = corte25)[amex.id])
+        // Y el aviso del 2-oct no sale: ya está pagada.
+        val saldados = periodosSaldados(listOf(masterBlack), pagos, settings = corte25)
+        assertTrue(selectDueForReminder(listOf(masterBlack to null), LocalDate.of(2026, 9, 30), 3, saldados, corte25).isEmpty())
+    }
+
+    /** Y la cuota que viene después sigue avisando: pagar la de octubre no paga noviembre. */
+    @Test fun `pagar la cuota de su periodo no apaga la del periodo siguiente`() {
+        val masterBlack = tarjeta(dia = 2)
+        val saldados = periodosSaldados(listOf(masterBlack), listOf(pagoDeTarjeta("ev_mb_0927", veintisiete)), settings = corte25)
+        assertEquals(setOf("2026-10"), saldados[masterBlack.id])
+        assertEquals(
+            listOf(masterBlack.id),
+            selectDueForReminder(listOf(masterBlack to null), LocalDate.of(2026, 10, 31), 3, saldados, corte25).map { it.id },
+        )
     }
 
     // ── 3. Un solo pago, sin pago anterior ────────────────────────────────────
@@ -201,9 +223,9 @@ class PagoDespuesDelCorteTest {
                 "$settings",
             )
         }
-        // Y el pago solo del 27-sep, sin el del 5: ambiguo como el de AMEX, y se queda en septiembre.
+        // Y el pago solo del 27-sep, sin el del 5: es del período de octubre, y salda octubre.
         assertEquals(
-            setOf("2026-09"),
+            setOf("2026-10"),
             periodosSaldados(listOf(crediagil), listOf(abonoAlCredito("ev_0927", veintisiete)), settings = corte25)[crediagil.id],
         )
     }
@@ -230,8 +252,8 @@ class PagoDespuesDelCorteTest {
             setOf("2026-09", "2026-10"),
             periodos(veintisiete, LocalDate.of(2026, 9, 29), antes = listOf(abonoAlCredito("ev_0905", cinco))),
         )
-        // …y sin septiembre pagado, las dos son septiembre (lado barato, como AMEX): nunca una y una.
-        assertEquals(setOf("2026-09"), periodos(veintisiete, LocalDate.of(2026, 9, 29)))
+        // …y sin septiembre pagado, las dos también son octubre: nunca una y una.
+        assertEquals(setOf("2026-10"), periodos(veintisiete, LocalDate.of(2026, 9, 29)))
     }
 
     // ── Lo que el arreglo no puede mover ──────────────────────────────────────
