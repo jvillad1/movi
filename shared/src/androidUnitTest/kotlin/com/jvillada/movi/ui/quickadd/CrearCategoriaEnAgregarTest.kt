@@ -11,7 +11,11 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -143,7 +147,8 @@ class CrearCategoriaEnAgregarTest {
         montar(conFrecuentes = true)
 
         val nueva = composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR).getUnclippedBoundsInRoot()
-        val hija = composeRule.onNodeWithText("Hija").getUnclippedBoundsInRoot()
+        // «Hija» también es el valor de la fila «Categoría»: el chip es el que tiene rol de botón.
+        val hija = composeRule.onNode(hasText("Hija") and hasRole(Role.Button)).getUnclippedBoundsInRoot()
         assertTrue(nueva.left < hija.left, "«+ Nueva» tiene que ir primera")
     }
 
@@ -155,4 +160,8 @@ class CrearCategoriaEnAgregarTest {
 
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsNotFocused()
     }
+}
+
+private fun hasRole(rol: Role) = SemanticsMatcher("rol $rol") {
+    it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Role) == rol
 }
