@@ -17,9 +17,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.dp
+import com.jvillada.movi.ConClaseDeAncho
+import com.jvillada.movi.EsqueletoDeLaCascara
+import com.jvillada.movi.ui.Screen
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -105,5 +109,42 @@ class ScrollDesdeLosMargenesTest {
         arrastrarSobreElMargen()
 
         assertEquals(0, listState.firstVisibleItemIndex)
+    }
+
+    /**
+     * Ola W1: lo mismo con el esqueleto real de App.kt. A 1.200 dp la ventana es de escritorio: el
+     * rail ancho se lleva 216 y la columna de lectura mide 720, así que quedan 132 dp de margen a
+     * cada lado. Se arrastra sobre el de la derecha.
+     */
+    @Test
+    fun `en la cascara real el margen derecho mueve la lista`() {
+        composeRule.setContent {
+            val relevo = remember { RelevoDeScroll() }
+            ConClaseDeAncho {
+                CompositionLocalProvider(LocalRelevoDeScroll provides relevo) {
+                    EsqueletoDeLaCascara(
+                        pantalla = Screen.Transactions(),
+                        activeTab = NavTab.MOVIMIENTOS,
+                        conNavegacion = true,
+                        onTabSelected = {},
+                        relevoDeScroll = relevo,
+                    ) {
+                        listState = rememberLazyListState()
+                        ScrollDesdeLosMargenes(listState)
+                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                            items(200) { Text("Renglón $it", Modifier.height(40.dp)) }
+                        }
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onRoot().performTouchInput {
+            swipe(start = Offset(width - 30f, height * 0.8f), end = Offset(width - 30f, height * 0.2f), durationMillis = 300)
+        }
+        composeRule.waitForIdle()
+
+        assertTrue(listState.firstVisibleItemIndex > 0, "el margen derecho de la cáscara tenía que mover la lista")
     }
 }

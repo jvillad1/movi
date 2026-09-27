@@ -54,7 +54,12 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ConClaseDeAncho
+import com.jvillada.movi.EsqueletoDeLaCascara
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.NavTab
+import com.jvillada.movi.ui.components.RelevoDeScroll
+import androidx.compose.runtime.remember
 import com.jvillada.movi.ui.budgets.TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO
 import com.jvillada.movi.ui.budgets.TAG_TARJETA_DEL_GASTO_DEL_PERIODO
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -202,6 +207,29 @@ class PlanScreenTest {
                 val base = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * escala)) {
                     Box(Modifier.fillMaxSize()) { PlanScreen(onNavigate = onNavigate, segmento = segmento) }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    /**
+     * Como la monta App.kt en una ventana ancha: con la clase de ancho real ([ConClaseDeAncho]) y
+     * dentro del esqueleto, en la columna de lectura de 720 dp. Ola W1. Sin el rail: su «Plan»
+     * duplicaría el título que mide [comprobarElAire] (la posición respecto del rail la mide
+     * `EsqueletoResponsivoTest`).
+     */
+    private fun montarEnLaCascara() {
+        composeRule.setContent {
+            ConClaseDeAncho {
+                EsqueletoDeLaCascara(
+                    pantalla = Screen.Plan(),
+                    activeTab = NavTab.PLAN,
+                    conNavegacion = false,
+                    onTabSelected = {},
+                    relevoDeScroll = remember { RelevoDeScroll() },
+                ) {
+                    PlanScreen(onNavigate = {}, segmento = SEGMENTO_PAGOS)
                 }
             }
         }
@@ -548,13 +576,20 @@ class PlanScreenTest {
         comprobarElAire()
     }
 
+    /**
+     * Ola W1: a 1.000 dp la ventana ya es de escritorio, y Plan se lee en la columna de 720 dp. Se
+     * monta en la cáscara real para medir el aire donde de verdad se ve.
+     */
     @Test
     @Config(qualifiers = "w1000dp-h2400dp-xhdpi")
     fun `en pantalla ancha el aire es el mismo`() {
         conElInicioFresco()
-        montar(escala = 1.12f)
+        montarEnLaCascara()
         composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_FILA_DE_TUS_PERIODOS) == 1 }
         comprobarElAire()
+        val fila = composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(fila.right - fila.left <= 720.dp, "Plan va en la columna de lectura (${fila.right - fila.left})")
+        assertTrue(fila.left >= 140.dp, "centrada en los 1.000 dp (${fila.left})")
     }
 
     /** El esqueleto reserva el mismo aire: al llegar los datos ni «Tus períodos» ni el selector se corren. */
