@@ -24,6 +24,7 @@ import com.jvillada.movi.data.FormaDePeriodos
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.CacheDeLecturas
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.formaEnMemoria
 import com.jvillada.movi.shared.model.Account
@@ -122,6 +123,11 @@ class LaFormaRecordadaEnPantallaTest {
     }
 
     private fun abrirDeNuevo() {
+        // Reabrir en el mismo proceso, a los pocos minutos y sin escribir nada, ya no muestra el
+        // esqueleto: muestra lo último leído (ver `CacheDeLecturas`). La forma recordada es para
+        // cuando eso no está —un proceso nuevo, más de media hora, una escritura en el medio—, así
+        // que se simula eso.
+        CacheDeLecturas.borrarTodo()
         vuelta.intValue++
         composeRule.waitForIdle()
     }

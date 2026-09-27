@@ -228,6 +228,24 @@ class HechosDeLaPreguntaTest {
         assertTrue(intereses.indexOf("«Hipoteca 1254»") < intereses.indexOf("«Vehículo 8761»"), "del más caro al más barato:\n$intereses")
     }
 
+    /**
+     * El desembolso suma en «Ingresos» (es plata que entró) pero es deuda, no sueldo: los hechos lo
+     * dicen con su cifra y hacen la cuenta sin él, para que el modelo no tenga que restar.
+     */
+    @Test
+    fun `si se desembolso un credito el periodo dice cuanto de los ingresos es deuda`() {
+        val conCredito = DatosParaLosHechos(
+            cuentas, patrimonioDe(cuentas), periodo.copy(creditosDesembolsados = 10_000_000L), presupuestos,
+        )
+        val texto = assertNotNull(hechosParaLaPregunta("¿me alcanza este período?", conCredito))
+        assertTrue("Los ingresos incluyen \$10.000.000 de créditos desembolsados (deuda, no sueldo)." in texto, texto)
+        assertTrue("Sin los créditos desembolsados, el flujo del período sería \$1.025.009" in texto, texto)
+
+        // Sin desembolsos no se agrega nada.
+        val sin = assertNotNull(hechos("¿me alcanza este período?"))
+        assertTrue("créditos desembolsados" !in sin, sin)
+    }
+
     // ── La regresión del 23-sep ───────────────────────────────────────────────
 
     /**

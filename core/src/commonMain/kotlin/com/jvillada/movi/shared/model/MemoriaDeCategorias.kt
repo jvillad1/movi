@@ -109,6 +109,8 @@ fun laHuellaEsUnNumero(huella: String): Boolean =
  */
 internal val CATEGORIAS_QUE_NO_SE_APRENDEN: Set<String> = setOf(
     OPENING_CATEGORY, ADJUSTMENT_CATEGORY, TRANSFER_CATEGORY, ORPHANED_LEG_CATEGORY,
+    // La escribe Movi sola al desembolsar un crédito; proponerla a mano sería inflar «Entró».
+    DESEMBOLSO_CATEGORY,
     "Otro", "Otros",
 )
 

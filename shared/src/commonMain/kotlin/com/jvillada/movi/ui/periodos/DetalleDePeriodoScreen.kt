@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,12 +32,18 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.jvillada.movi.data.ClaveDeLectura
+import com.jvillada.movi.data.Lectura
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.periodoVigenteSegun
+import com.jvillada.movi.data.rememberLectura
+import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.ui.components.ActualizandoEnLaCabecera
+import com.jvillada.movi.ui.components.NoSePudoActualizar
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.DetalleDePeriodo
-import com.jvillada.movi.shared.model.FUENTE_CREDITO
 import com.jvillada.movi.shared.model.FUENTE_SALDO_INICIAL
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PAGO_FIJO_CON_DUDAS
@@ -116,19 +121,40 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
     /** El día de hoy en la zona de la app, leído cada vez que se pregunta — no al montar. */
     private val hoy: () -> LocalDate,
 ) {
-    internal var detalle by mutableStateOf<DetalleDePeriodo?>(null)
-    internal var loading by mutableStateOf(true)
+    /**
+     * El perfil, el detalle y las cuentas (ver [rememberEstadoDelDetalleDePeriodo]). Los pone la
+     * composición en cada pasada: el detalle se rehace cuando cambia el período vigente, y este
+     * estado —con la confirmación abierta— no.
+     */
+    private var lecturas by mutableStateOf<LecturasDelDetalle?>(null)
+
+    internal fun conectar(nuevas: LecturasDelDetalle) {
+        if (lecturas != nuevas) lecturas = nuevas
+    }
+
+    internal val detalle: DetalleDePeriodo? get() = lecturas?.detalle?.valor
+    /** Hay una lectura en vuelo (o el detalle espera el período para salir). */
+    internal val loading: Boolean get() = lecturas?.let { it.detalle.actualizando || it.perfil.actualizando } ?: true
     internal var refreshKey by mutableStateOf(0)
 
     /**
-     * El corte y los arranques propios del dueño. `null` mientras no se leyó (o si falló): sin
+     * El corte y los arranques propios del dueño. `null` mientras no se sabe (o si falló): sin
      * ellos no se puede decir si hoy es un arranque válido, así que la acción de empezar hoy no se
      * ofrece — escribir un mapa armado sobre ajustes que no se leyeron podría borrar excepciones.
      */
-    internal var ajustes by mutableStateOf<PeriodSettings?>(null)
+    internal val ajustes: PeriodSettings? get() = lecturas?.perfil?.valor?.ajustesDelPeriodo()
 
     /** Las cuentas, para la hoja del movimiento. Vacía = no llegaron (la hoja lo tolera). */
-    internal var cuentas by mutableStateOf<List<Account>>(emptyList())
+    internal val cuentas: List<Account> get() = lecturas?.cuentas?.valor.orEmpty()
+
+    /** Lo que se ve es lo último que vimos: una lectura falló con el detalle a la vista. */
+    internal val noSePudoActualizar: Boolean get() {
+        val l = lecturas ?: return false
+        return l.detalle.falloConAlgoALaVista || (l.perfil.falloConAlgoALaVista && detalle != null)
+    }
+
+    /** Hay algo pintado que esta visita todavía no confirmó: «Actualizando…» en la cabecera. */
+    internal val actualizandoConAlgoALaVista: Boolean get() = detalle != null && loading
 
     internal var confirmando by mutableStateOf(false)
     /** El día que dice la confirmación: el de cuando se abrió, y el de cuando se confirmó. */
@@ -169,18 +195,6 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
         refreshKey++
     }
 
-    internal fun cargar() {
-        alcance.launch {
-            loading = true
-            intentar { Repositories.wallets.getDetalleDePeriodo(id) }.onSuccess { detalle = it }
-            intentar { Repositories.wallets.getUserProfile() }.onSuccess { ajustes = it.ajustesDelPeriodo() }
-            loading = false
-        }
-        alcance.launch {
-            intentar { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
-        }
-    }
-
     /**
      * Guarda el arranque del siguiente en hoy por el mismo camino que la hoja de Movimientos
      * ([cambiarLosIniciosPropios], que relee el perfil antes de escribir) y recarga. «Hoy» se lee
@@ -199,7 +213,8 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
         alcance.launch {
             intentar { cambiarLosIniciosPropios { empezarElSiguienteHoy(periodo, hoyAlConfirmar, it) } }
                 .onSuccess {
-                    ajustes = it.ajustesDelPeriodo()
+                    // Lo que devolvió la escritura es el perfil nuevo: se muestra ya.
+                    lecturas?.perfil?.anotar(it)
                     confirmando = false
                     reintentar()
                 }
@@ -209,11 +224,29 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
     }
 }
 
+/** Las tres lecturas del detalle, juntas. Ver [EstadoDelDetalleDePeriodo.conectar]. */
+internal data class LecturasDelDetalle(
+    val perfil: Lectura<UserProfile>,
+    val detalle: Lectura<DetalleDePeriodo>,
+    val cuentas: Lectura<List<Account>>,
+)
+
+/**
+ * **Lo último que se vio, al primer cuadro** (ver [rememberLectura]). El detalle depende del período
+ * de hoy (el en curso cambia de naturaleza cuando cierra), así que se recuerda con él y no se lee
+ * ni se muestra hasta saberlo por el perfil. Se relee con «Reintentar», tras una escritura desde la
+ * pantalla, y con `LocalRefreshTick`.
+ */
 @Composable
 internal fun rememberEstadoDelDetalleDePeriodo(id: String, hoy: () -> LocalDate): EstadoDelDetalleDePeriodo {
     val alcance = rememberCoroutineScope()
     val estado = remember(alcance, id, hoy) { EstadoDelDetalleDePeriodo(alcance, id, hoy) }
-    LaunchedEffect(estado, estado.refreshKey) { estado.cargar() }
+    val perfil = rememberLectura(ClaveDeLectura.Perfil, estado.refreshKey) { Repositories.wallets.getUserProfile() }
+    val detalle = rememberLectura(ClaveDeLectura.DetalleDePeriodo(id), estado.refreshKey, periodoVigenteSegun(perfil)) {
+        Repositories.wallets.getDetalleDePeriodo(id)
+    }
+    val cuentas = rememberLectura(ClaveDeLectura.Cuentas, estado.refreshKey) { Repositories.wallets.getAccounts() }
+    estado.conectar(LecturasDelDetalle(perfil, detalle, cuentas))
     return estado
 }
 
@@ -229,7 +262,13 @@ fun DetalleDePeriodoScreen(onNavigate: (Screen) -> Unit, id: String, hoy: LocalD
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            MinScreenHeader(title = titulo, leading = HeaderLeading.Back(fallback = Screen.Periodos))
+            MinScreenHeader(
+                title = titulo,
+                leading = HeaderLeading.Back(fallback = Screen.Periodos),
+                action = if (estado.actualizandoConAlgoALaVista) {
+                    { ActualizandoEnLaCabecera() }
+                } else null,
+            )
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -239,6 +278,7 @@ fun DetalleDePeriodoScreen(onNavigate: (Screen) -> Unit, id: String, hoy: LocalD
                 verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
             ) {
                 val detalle = estado.detalle
+                if (estado.noSePudoActualizar) NoSePudoActualizar(onReintentar = { estado.reintentar() })
                 when {
                     estado.noSeLeyo -> NoSePudoLeer("No pudimos cargar este período", onReintentar = { estado.reintentar() })
                     detalle == null -> DetalleEsqueleto()
@@ -358,6 +398,7 @@ private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
             Text(text = "En curso", style = Movi.textos.apoyo, color = Movi.colores.marca, fontWeight = FontWeight.Medium)
         }
         CifrasDelPeriodo(resumen)
+        LineaDeCreditosDesembolsados(resumen)
         lineaDeTuPlata(detalle)?.let {
             Spacer(Modifier.height(10.dp))
             Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -369,12 +410,13 @@ private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
 
 /**
  * Una fila por cada fuente de plata que no es ingreso, **solo si el período salió más de lo que
- * entró** — «Créditos que te desembolsaron · $10M — Crédito Techo Gardenera». Vacía cuando entró lo
+ * entró** — «Saldos que ya tenías y cargaste en el período · $22,2M — Nu, AFC Davibank». Vacía cuando entró lo
  * mismo o más (no faltó nada que explicar), sin fuentes, o con fuentes que esta versión no conoce o
- * que vienen en cero: la tarjeta no dice «$0» ni nombra un tipo que no sabe leer.
+ * que vienen en cero: la tarjeta no dice «$0» ni nombra un tipo que no sabe leer. Los créditos ya no
+ * son una fila: el desembolso suma en «Entró» y se dice bajo el encabezado.
  *
  * Existe porque «Te quedó −$11,5M» se lee como si se hubiera gastado de más, cuando lo que faltó lo
- * pagó un crédito o un saldo que ya estaba en las cuentas. Las cifras de arriba no cambian: esto
+ * pagó un saldo que ya estaba en las cuentas. Las cifras de arriba no cambian: esto
  * solo cuenta de dónde salió la diferencia (ver [DetalleDePeriodo.fuentesQueNoSonIngreso]).
  */
 internal fun filasDeLoQueFalto(detalle: DetalleDePeriodo): List<String> {
@@ -382,7 +424,6 @@ internal fun filasDeLoQueFalto(detalle: DetalleDePeriodo): List<String> {
     return detalle.fuentesQueNoSonIngreso.mapNotNull { fuente ->
         if (fuente.monto <= 0) return@mapNotNull null
         val rotulo = when (fuente.tipo) {
-            FUENTE_CREDITO -> "Créditos que te desembolsaron"
             FUENTE_SALDO_INICIAL -> "Saldos que ya tenías y cargaste en el período"
             else -> return@mapNotNull null
         }
@@ -417,8 +458,8 @@ private fun DeDondeSalioLoQueFalto(detalle: DetalleDePeriodo) {
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            text = "Esta plata entró a tus cuentas pero no cuenta como ingreso: un crédito es deuda y un " +
-                "saldo inicial ya era tuyo.",
+            text = "Esta plata ya estaba en tus cuentas cuando Movi la conoció, así que no cuenta como " +
+                "ingreso.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )

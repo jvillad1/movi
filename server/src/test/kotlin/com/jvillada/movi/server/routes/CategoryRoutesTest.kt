@@ -22,6 +22,8 @@ import com.jvillada.movi.shared.model.CATEGORY_COLOR_MAX_LENGTH
 import com.jvillada.movi.shared.model.CATEGORY_COLOR_TOO_LONG
 import com.jvillada.movi.shared.model.CATEGORY_ICONO_MAX_LENGTH
 import com.jvillada.movi.shared.model.CATEGORY_ICONO_TOO_LONG
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -388,6 +390,31 @@ class CategoryRoutesTest {
         // Y ni siquiera en minúsculas: sería fabricar un nombre a un carácter del reservado.
         assertEquals(HttpStatusCode.UnprocessableEntity, rename("Carro", "traspaso").status)
         assertEquals("Carro", categoriaEnEventos("e1"))
+    }
+
+    /**
+     * «Cuota de crédito» y «Desembolso de crédito» no son reservadas (cuentan en el mes) pero de su
+     * nombre exacto dependen las cifras: ninguna se renombra ni se unifica en otra, y nadie unifica
+     * movimientos EN el desembolso (inflaría «Entró»).
+     */
+    @Test
+    fun `la cuota y el desembolso de un credito no se renombran ni se unifican en otra`() = testApplication {
+        wireApp()
+        seedEvent("e-cuota", CUOTA_CATEGORY)
+        seedEvent("e-desembolso", DESEMBOLSO_CATEGORY)
+        seedEvent("e-carro", "Carro")
+        for (nombre in listOf(CUOTA_CATEGORY, DESEMBOLSO_CATEGORY)) {
+            assertEquals(HttpStatusCode.UnprocessableEntity, rename(nombre, "Otra cosa").status, "renombrar «$nombre»")
+            assertEquals(HttpStatusCode.UnprocessableEntity, merge(nombre, "Carro").status, "unificar «$nombre»")
+        }
+        // Hacia el desembolso, nadie; hacia la cuota, sí (es el destino de «Crédito» y parecidas).
+        assertEquals(HttpStatusCode.UnprocessableEntity, rename("Carro", DESEMBOLSO_CATEGORY).status)
+        assertEquals(HttpStatusCode.UnprocessableEntity, rename("Carro", "desembolso de credito").status)
+        assertEquals(HttpStatusCode.UnprocessableEntity, merge("Carro", DESEMBOLSO_CATEGORY).status)
+        assertEquals(HttpStatusCode.OK, merge("Carro", CUOTA_CATEGORY).status)
+        assertEquals(CUOTA_CATEGORY, categoriaEnEventos("e-carro"))
+        assertEquals(DESEMBOLSO_CATEGORY, categoriaEnEventos("e-desembolso"))
+        assertEquals(CUOTA_CATEGORY, categoriaEnEventos("e-cuota"))
     }
 
     // ── Renombrar ─────────────────────────────────────────────────────────────

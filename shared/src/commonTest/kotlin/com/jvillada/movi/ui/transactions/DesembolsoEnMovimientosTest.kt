@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.transactions
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -16,9 +17,9 @@ import kotlin.test.assertTrue
 
 /**
  * **El desembolso de un crédito se ve como lo que es: plata que entró a tu cuenta.** Es un par
- * (la pata de salida en la cuenta del crédito, la de entrada en Bancolombia) que no cuenta como
- * ingreso del mes, pero pinta en verde y con «+», con una nota que dice por qué no suma. Ningún
- * otro par cambia.
+ * (la pata de salida en la cuenta del crédito, la de entrada en Bancolombia) que SÍ cuenta como
+ * ingreso del mes, y pinta en verde y con «+», con una nota que dice que la plata es prestada.
+ * Ningún otro par cambia.
  */
 class DesembolsoEnMovimientosTest {
 
@@ -53,7 +54,11 @@ class DesembolsoEnMovimientosTest {
             into = pata("into", hacia, TransactionType.INCOME, categoria, monto),
         )
 
-    private val desembolso = par("acc_credito", "acc_ahorros")
+    /** Como lo escribe hoy `transferLegsFor`: con la categoría del desembolso en las dos patas. */
+    private val desembolso = par("acc_credito", "acc_ahorros", DESEMBOLSO_CATEGORY)
+
+    /** Uno guardado antes de la categoría nueva: «Traspaso», y solo los tipos de cuenta lo delatan. */
+    private val desembolsoViejo = par("acc_credito", "acc_ahorros")
 
     @Test
     fun `un desembolso va en verde, con signo mas y su nota`() {
@@ -63,19 +68,55 @@ class DesembolsoEnMovimientosTest {
         assertEquals(COLORES_OSCUROS.entra, colorDelTono(tonoDelRenglon(desembolso, tipos), COLORES_OSCUROS))
         assertTrue(textoDelMontoDeTraspaso(desembolso, tipos).startsWith("+"), textoDelMontoDeTraspaso(desembolso, tipos))
         assertTrue(textoDelMontoDeTraspaso(desembolso, tipos).contains("10.000.000"))
-        assertEquals("Crédito · plata prestada, no cuenta como ingreso", NOTA_DE_DESEMBOLSO)
+        assertEquals("Crédito · plata prestada que entró a tu cuenta", NOTA_DE_DESEMBOLSO)
         assertTrue(esDesembolso(desembolso, tipos))
         // El nombre del crédito sigue a la vista en el «De X a Y».
         assertEquals("De Crédito Techo Gardenera a Bancolombia Ahorros", transferRowSubtitle(desembolso, nombres))
     }
 
+    /**
+     * La categoría manda: el título dice «Desembolso» y el monto va en verde con «+» aunque la lista
+     * de cuentas todavía no haya llegado. Con un desembolso viejo («Traspaso») y sin tipos no hay
+     * cómo saberlo, y se queda neutro como siempre.
+     */
     @Test
-    fun `sin los tipos de cuenta todavia, el desembolso se queda neutro como siempre`() {
-        assertEquals("Traspaso", transferRowTitle(desembolso, emptyMap()))
-        assertEquals(TonoDelMonto.ENTRE_CUENTAS, tonoDelRenglon(desembolso))
-        assertEquals(TonoDelMonto.ENTRE_CUENTAS, tonoDelRenglon(desembolso, emptyMap()))
-        assertNotEquals('+', textoDelMontoDeTraspaso(desembolso, emptyMap()).first())
-        assertTrue(!esDesembolso(desembolso, emptyMap()))
+    fun `sin los tipos de cuenta todavia, la categoria nueva ya dice Desembolso y el viejo se queda neutro`() {
+        assertEquals("Desembolso", transferRowTitle(desembolso, emptyMap()))
+        assertEquals(TonoDelMonto.INGRESO, tonoDelRenglon(desembolso, emptyMap()))
+        assertEquals('+', textoDelMontoDeTraspaso(desembolso, emptyMap()).first())
+        assertTrue(esDesembolso(desembolso, emptyMap()))
+
+        assertEquals("Traspaso", transferRowTitle(desembolsoViejo, emptyMap()))
+        assertEquals(TonoDelMonto.ENTRE_CUENTAS, tonoDelRenglon(desembolsoViejo))
+        assertEquals(TonoDelMonto.ENTRE_CUENTAS, tonoDelRenglon(desembolsoViejo, emptyMap()))
+        assertNotEquals('+', textoDelMontoDeTraspaso(desembolsoViejo, emptyMap()).first())
+        assertTrue(!esDesembolso(desembolsoViejo, emptyMap()))
+    }
+
+    @Test
+    fun `un desembolso viejo anotado como traspaso se sigue leyendo como desembolso con los tipos`() {
+        assertEquals("Desembolso", transferRowTitle(desembolsoViejo, tipos))
+        assertTrue(esDesembolso(desembolsoViejo, tipos))
+    }
+
+    /**
+     * En el chip «Ingresos» solo pasa la pata del dinero (la del crédito no es flujo de caja): la
+     * otra pata no está, y el renglón queda suelto —«Desembolso desde …», en verde— en vez de
+     * desaparecer.
+     */
+    @Test
+    fun `en el chip Ingresos la pata del dinero de un desembolso se muestra suelta`() {
+        val delCredito = pata("out", "acc_credito", TransactionType.EXPENSE, DESEMBOLSO_CATEGORY, 10_000_000L)
+        val alDinero = pata("into", "acc_ahorros", TransactionType.INCOME, DESEMBOLSO_CATEGORY, 10_000_000L)
+            .copy(description = "Desembolso desde Crédito Techo Gardenera", countsAsCashFlow = true)
+
+        assertTrue(matchesChip(alDinero, CHIP_INGRESOS))
+        assertTrue(!matchesChip(delCredito, CHIP_INGRESOS))
+        assertTrue(!matchesChip(alDinero, CHIP_GASTOS))
+
+        val filas = collapseTransfers(listOf(alDinero, delCredito).filter { matchesChip(it, CHIP_INGRESOS) })
+        val suelta = filas.single() as MovementRow.Single
+        assertEquals("Desembolso desde Crédito Techo Gardenera", suelta.event.description)
     }
 
     @Test

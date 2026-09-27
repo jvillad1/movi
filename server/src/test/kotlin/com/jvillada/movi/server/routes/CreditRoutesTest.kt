@@ -14,7 +14,7 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.CreditSummary
-import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.CreditTerms
 import io.ktor.client.request.delete
@@ -1113,12 +1113,13 @@ class CreditRoutesTest {
     /**
      * **Las cuatro cifras del escenario real, en una sola operación.**
      *
-     * Deuda $257.000.000 · Efectivo $269.400.000 · Patrimonio $12.400.000 · Ingresos del mes $0.
+     * Deuda $257.000.000 · Efectivo $269.400.000 · Patrimonio $12.400.000 · Ingresos del mes $257.000.000.
      *
      * El patrimonio no se mueve, y eso es lo correcto: pedir prestado no te hace ni más rico ni
-     * más pobre, te deja con la plata y con la deuda. Los ingresos tampoco, y ese es el que la
-     * ola 14 vino a arreglar — anotar la libranza como ingreso decía que el mes había entrado
-     * $257 millones sin que el dueño ganara un peso.
+     * más pobre, te deja con la plata y con la deuda. Los ingresos SÍ suben: el dueño decidió que
+     * lo desembolsado es plata que entró (*«entraron 10 millones del desembolso»*), con la pata
+     * del crédito afuera para que no cuente dos veces. Sin eso, un mes con desembolso salía más
+     * de lo que entraba, que es imposible.
      */
     @Test
     fun `un credito recien recibido crea la deuda y la plata en un solo guardado`() = testApplication {
@@ -1144,10 +1145,13 @@ class CreditRoutesTest {
         assertEquals(TransactionType.INCOME, patas.to.type)
         assertEquals(257_000_000L, patas.to.amount)
         assertEquals(corrienteId, patas.to.accountId)
-        // Categoría reservada y fuera del flujo de caja: es lo que hace que un desembolso no sea
-        // un ingreso. Lo garantiza `transferLegsFor`, la misma función que usa POST /api/transfers.
-        assertEquals(TRANSFER_CATEGORY, patas.to.category)
-        assertEquals(false, patas.to.countsAsCashFlow)
+        // La categoría del desembolso: la pata del dinero cuenta como plata que entró y la del
+        // crédito no (el tipo de cuenta la excluye). Lo garantiza `transferLegsFor`, la misma
+        // función que usa POST /api/transfers.
+        assertEquals(DESEMBOLSO_CATEGORY, patas.to.category)
+        assertEquals(DESEMBOLSO_CATEGORY, patas.from.category)
+        assertEquals(true, patas.to.countsAsCashFlow)
+        assertEquals(false, patas.from.countsAsCashFlow)
         // Y las dos son el mismo traspaso.
         assertEquals(patas.from.transferId, patas.to.transferId)
         assertTrue(patas.to.transferId != null)
@@ -1160,13 +1164,13 @@ class CreditRoutesTest {
             .map { it.jsonObject }.first { it["id"]!!.jsonPrimitive.content == corrienteId }
         assertEquals(269_400_000L, corriente["balance"]!!.jsonPrimitive.long)
 
-        // 5 · Patrimonio e ingresos del mes: intactos los dos.
+        // 5 · Patrimonio intacto; ingresos del mes: lo desembolsado, una sola vez.
         val resumen = client.get("/api/finance-summary") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}")
         }
         val fin = Json.parseToJsonElement(resumen.bodyAsText()).jsonObject
         assertEquals(12_400_000L, fin["balance"]!!.jsonPrimitive.long, "patrimonio: la plata y la deuda se cancelan")
-        assertEquals(0L, fin["ingresos"]!!.jsonPrimitive.long, "un desembolso no es un ingreso")
+        assertEquals(257_000_000L, fin["ingresos"]!!.jsonPrimitive.long, "el desembolso es plata que entró")
         assertEquals(0L, fin["egresos"]!!.jsonPrimitive.long)
     }
 
@@ -1216,7 +1220,7 @@ class CreditRoutesTest {
             client.get("/api/finance-summary") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}") }.bodyAsText(),
         ).jsonObject
         assertEquals(5_400_000L, fin["balance"]!!.jsonPrimitive.long)
-        assertEquals(0L, fin["ingresos"]!!.jsonPrimitive.long)
+        assertEquals(250_000_000L, fin["ingresos"]!!.jsonPrimitive.long, "entró lo que el banco giró")
     }
 
     /** Los dos números juntos son, literalmente, cómo se contaba la deuda dos veces. */

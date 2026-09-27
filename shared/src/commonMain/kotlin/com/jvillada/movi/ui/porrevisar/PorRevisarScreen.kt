@@ -18,7 +18,6 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,10 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
-import com.jvillada.movi.data.intentar
+import com.jvillada.movi.data.ClaveDeLectura
+import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.data.isAndroid
-import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.group
@@ -50,6 +48,8 @@ import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.NoSePudoActualizar
+import com.jvillada.movi.ui.components.ActualizandoEnLaCabecera
 import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.sms.TarjetaDeMensajeDelBanco
@@ -110,27 +110,24 @@ fun RenglonPorRevisar(cuantos: Int, onClick: () -> Unit, modifier: Modifier = Mo
 @Composable
 fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     var recarga by remember { mutableStateOf(0) }
-    val refreshTick = LocalRefreshTick.current
+    // **Lo último que se vio, al primer cuadro** (ver [rememberLectura]): todo arranca con lo que
+    // dejó la visita anterior y se relee igual, con «Actualizar» y con `LocalRefreshTick`.
     val lecturas = rememberLecturasPorRevisar(recarga)
 
-    /** `null` hasta que `getEventsByDay` contesta bien; un reintento que falla conserva lo último. */
-    var diasLeidos by remember { mutableStateOf<List<EventDay>?>(null) }
-    var leyendoDias by remember { mutableStateOf(true) }
-    LaunchedEffect(recarga, refreshTick) {
-        leyendoDias = true
-        intentar { Repositories.wallets.getEventsByDay() }.onSuccess { diasLeidos = it }
-        leyendoDias = false
-    }
+    /**
+     * La historia: la MISMA entrada que Movimientos y Presupuestos, una lectura y no tres. `null`
+     * hasta que contesta bien; un reintento que falla conserva lo último.
+     */
+    val eventos = rememberLectura(ClaveDeLectura.EventosPorDia, recarga) { Repositories.wallets.getEventsByDay() }
+    val diasLeidos = eventos.valor
+    val leyendoDias = eventos.actualizando
     // Secundarias: sin las cuentas los renglones dicen solo la categoría, y sin el perfil no se
     // sabe si el dueño silenció el aviso de la captura, así que ese renglón no se pinta.
-    var cuentas by remember { mutableStateOf<List<Account>>(emptyList()) }
-    LaunchedEffect(recarga, refreshTick) {
-        intentar { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
-    }
-    var capturaSilenciada by remember { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(recarga) {
-        intentar { Repositories.wallets.getUserProfile() }.onSuccess { capturaSilenciada = it.smsAlertMuted }
-    }
+    val cuentas = rememberLectura(ClaveDeLectura.Cuentas, recarga) { Repositories.wallets.getAccounts() }.valor.orEmpty()
+    val capturaSilenciada = rememberLectura(ClaveDeLectura.Perfil, recarga) { Repositories.wallets.getUserProfile() }
+        .valor?.smsAlertMuted
+    // Lo que se ve es lo último que vimos: una de las tres fuentes falló con lo de antes a la vista.
+    val noSePudoActualizar = lecturas.falloConAlgoALaVista || eventos.falloConAlgoALaVista
 
     // Los candidatos que el dueño ya resolvió acá —«Marcar» o «No es»—. Se descuentan de la lista
     // porque el refetch puede fallar y dejarla vieja: sin esto, un pago recién resuelto volvía a
@@ -155,12 +152,15 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     val cargando = (mensajes == null && lecturas.leyendoMensajes) ||
         (dias == null && leyendoDias) ||
         (lecturas.candidatos == null && lecturas.leyendoCandidatos)
+    // Con todo pintado, alguna lectura sigue en vuelo: lo pintado es lo de antes.
+    val actualizandoConAlgoALaVista = !cargando && (lecturas.leyendoMensajes || leyendoDias || lecturas.leyendoCandidatos)
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         MinScreenHeader(
             title = TITULO_DE_POR_REVISAR,
             leading = HeaderLeading.Back(fallback = Screen.Transactions()),
             action = {
+                if (actualizandoConAlgoALaVista) ActualizandoEnLaCabecera()
                 Icon(
                     Icons.Rounded.Refresh,
                     contentDescription = "Actualizar",
@@ -179,6 +179,12 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 return@LazyColumn
             }
 
+            if (noSePudoActualizar) {
+                item {
+                    NoSePudoActualizar(onReintentar = { recarga++ }, modifier = Modifier.padding(bottom = 16.dp))
+                }
+            }
+
             avisoDeCapturaEnLaBandeja(mensajes, capturaSilenciada)?.let { aviso ->
                 item {
                     FilaQueLleva(
@@ -191,6 +197,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
 
+            // «Todo al día» es un vacío: se afirma solo con lecturas que contestaron en esta visita.
+            if (bandejaAlDia(mensajes, dias, candidatos) && noSePudoActualizar) return@LazyColumn
             if (bandejaAlDia(mensajes, dias, candidatos)) {
                 item { TodoAlDia() }
                 // `mensajes` no es `null` acá —[bandejaAlDia] lo exige— y contestó

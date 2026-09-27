@@ -580,14 +580,15 @@ private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<
  * Ola A: **la cuenta con más gastos en los últimos 30 días**, para que «Agregar» arranque ahí en
  * vez de la primera por orden alfabético (ver el KDoc de [DashboardSummary.cuentaMasUsada]).
  *
- * No anulados y fuera las categorías reservadas ([isReservedCategory] ya incluye
- * `CARD_PAYMENT_CATEGORY`): un pago de tarjeta o un traspaso no dicen en qué cuenta el dueño
- * ANOTA sus gastos, dicen otra cosa. Empate en cantidad → la cuenta del movimiento más reciente.
+ * No anulados, fuera las categorías reservadas ([isReservedCategory] ya incluye
+ * `CARD_PAYMENT_CATEGORY`) y fuera cualquier pata de un par (`transferId`): un pago de tarjeta, un
+ * traspaso o un desembolso no dicen en qué cuenta el dueño ANOTA sus gastos, dicen otra cosa.
+ * Empate en cantidad → la cuenta del movimiento más reciente.
  * Sin gastos en la ventana → `null`, y el cliente cae al orden de siempre.
  */
 private fun Transaction.cuentaMasUsada(uid: String, ahora: Long, voidedIds: Set<String>): String? {
     val hace30Dias = ahora - 30L * UN_DIA_MS
-    val gastos = Events.select(Events.id, Events.accountId, Events.category, Events.timestamp)
+    val gastos = Events.select(Events.id, Events.accountId, Events.category, Events.timestamp, Events.transferId)
         .where {
             (Events.userId eq uid) and
                 (Events.type eq TransactionType.EXPENSE.name) and
@@ -595,6 +596,10 @@ private fun Transaction.cuentaMasUsada(uid: String, ahora: Long, voidedIds: Set<
         }
         .filterNot { it[Events.id] in voidedIds }
         .filterNot { isReservedCategory(it[Events.category]) }
+        // Una pata de traspaso no dice dónde anota el dueño sus gastos. La del lado del crédito en
+        // un desembolso ya no cae en una categoría reservada (lleva «Desembolso de crédito»), y sin
+        // esto la cuenta del crédito se volvía la «más usada».
+        .filter { it[Events.transferId] == null }
 
     return gastos
         .groupBy { it[Events.accountId] }

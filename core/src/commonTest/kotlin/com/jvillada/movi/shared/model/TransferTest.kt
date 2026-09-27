@@ -126,15 +126,30 @@ class TransferTest {
         assertEquals(-5_000_000L, signedDelta(prestamo.type, pataPrestamo.type, pataPrestamo.amount))
     }
 
-    /** Ni el desembolso ni el abono son ingreso o gasto del mes: los dos son patas de traspaso. */
+    /**
+     * El desembolso es plata que ENTRÓ a la cuenta del dueño y cuenta como ingreso; la pata del
+     * crédito no (la excluye el tipo de cuenta). El abono extraordinario sigue siendo un traspaso
+     * puro: ninguna de sus dos patas cuenta.
+     */
     @Test
-    fun `ninguna pata de un desembolso ni de un abono cuenta en el mes`() {
-        val desembolso = transferLegsFor(request(), prestamo, ahorros)
+    fun `la pata de dinero de un desembolso cuenta como ingreso y la del credito no`() {
+        val (delPrestamo, alDinero) = transferLegsFor(request(), prestamo, ahorros)
+        assertEquals(DESEMBOLSO_CATEGORY, delPrestamo.category)
+        assertEquals(DESEMBOLSO_CATEGORY, alDinero.category)
+        assertFalse(isReservedCategory(DESEMBOLSO_CATEGORY))
+
+        assertFalse(isCashFlow(prestamo.type, delPrestamo.type, delPrestamo.category))
+        assertFalse(delPrestamo.countsAsCashFlow)
+        assertTrue(isCashFlow(ahorros.type, alDinero.type, alDinero.category))
+        assertTrue(alDinero.countsAsCashFlow)
+        assertEquals(TransactionType.INCOME, alDinero.type)
+    }
+
+    @Test
+    fun `ninguna pata de un abono extraordinario cuenta en el mes`() {
         val abono = transferLegsFor(request(), ahorros, prestamo)
-        listOf(
-            prestamo.type to desembolso.first, ahorros.type to desembolso.second,
-            ahorros.type to abono.first, prestamo.type to abono.second,
-        ).forEach { (tipoCuenta, pata) ->
+        listOf(ahorros.type to abono.first, prestamo.type to abono.second).forEach { (tipoCuenta, pata) ->
+            assertEquals(TRANSFER_CATEGORY, pata.category)
             assertFalse(isCashFlow(tipoCuenta, pata.type, pata.category))
             assertFalse(pata.countsAsCashFlow)
         }

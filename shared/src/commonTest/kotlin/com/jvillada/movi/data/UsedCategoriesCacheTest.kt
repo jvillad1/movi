@@ -1,6 +1,7 @@
 package com.jvillada.movi.data
 
 import com.jvillada.movi.shared.model.CategoryPref
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -35,6 +36,15 @@ class UsedCategoriesCacheTest {
         assertFalse(TRANSFER_CATEGORY in UsedCategoriesCache.categories)
         assertTrue("Mercado" in UsedCategoriesCache.categories)
         assertTrue("Transporte" in UsedCategoriesCache.categories)
+    }
+
+    /** «Desembolso de crédito» no es reservada, pero tampoco se ofrece a mano: solo nace con su par. */
+    @Test
+    fun `el desembolso de un credito no entra al caché de sugerencias`() {
+        UsedCategoriesCache.record(listOf("Mercado", DESEMBOLSO_CATEGORY))
+
+        assertFalse(DESEMBOLSO_CATEGORY in UsedCategoriesCache.categories)
+        assertTrue("Mercado" in UsedCategoriesCache.categories)
     }
 
     @Test

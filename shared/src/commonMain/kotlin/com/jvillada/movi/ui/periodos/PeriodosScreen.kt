@@ -18,7 +18,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,7 +29,13 @@ import com.jvillada.movi.data.FormaDePeriodos
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
-import com.jvillada.movi.data.intentar
+import com.jvillada.movi.data.ClaveDeLectura
+import com.jvillada.movi.data.Lectura
+import com.jvillada.movi.data.periodoVigenteSegun
+import com.jvillada.movi.data.rememberLectura
+import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.ui.components.ActualizandoEnLaCabecera
+import com.jvillada.movi.ui.components.NoSePudoActualizar
 import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.diaLegible
 import com.jvillada.movi.shared.model.periodoDelPrefijo
@@ -50,8 +55,6 @@ import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.components.leadingFor
 import com.jvillada.movi.ui.dashboard.fraccionQueEntro
 import com.jvillada.movi.ui.sdui.BarraDeDosTramos
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 
 /**
@@ -72,41 +75,61 @@ import kotlinx.datetime.LocalDate
 const val TAG_FILA_DE_PERIODO: String = "fila-de-periodo"
 const val TAG_FILA_DE_PERIODO_ESQUELETO: String = "fila-de-periodo-esqueleto"
 const val TAG_LO_QUE_CUBRIO: String = "fila-de-periodo-lo-que-cubrio"
+const val TAG_INCLUYE_CREDITOS: String = "periodo-incluye-creditos"
 
 /** Cuántas filas reserva el esqueleto sin nada recordado todavía (la primera vez en el aparato). */
 private const val FILAS_POR_DEFECTO = 3
 
 @Stable
-internal class EstadoDePeriodos internal constructor(private val alcance: CoroutineScope) {
-    internal var periodos by mutableStateOf<List<ResumenDePeriodo>?>(null)
-    internal var loading by mutableStateOf(true)
+internal class EstadoDePeriodos internal constructor() {
     internal var refreshKey by mutableStateOf(0)
+
+    /** El perfil y los períodos. Los pone [rememberEstadoDePeriodos] en cada pasada. */
+    private var perfil by mutableStateOf<Lectura<UserProfile>?>(null)
+    private var lectura by mutableStateOf<Lectura<List<ResumenDePeriodo>>?>(null)
+
+    internal fun conectar(perfil: Lectura<UserProfile>, periodos: Lectura<List<ResumenDePeriodo>>) {
+        if (this.perfil !== perfil) this.perfil = perfil
+        if (lectura !== periodos) lectura = periodos
+    }
+
+    internal val periodos: List<ResumenDePeriodo>? get() = lectura?.valor
+    // Mientras el perfil no dice el período, los períodos ni se leen (ver `rememberLectura`): cargando.
+    internal val loading: Boolean get() = lectura?.actualizando ?: true
 
     internal val noSeLeyo: Boolean get() = !loading && periodos == null
     internal val cargando: Boolean get() = loading && periodos == null
-    internal val vacio: Boolean get() = periodos?.isEmpty() == true
+    /** Lo que se ve es lo último que vimos: la lectura falló con algo a la vista. */
+    internal val noSePudoActualizar: Boolean get() =
+        lectura?.falloConAlgoALaVista == true || (perfil?.falloConAlgoALaVista == true && periodos != null)
+    // Un vacío solo se afirma con una lectura que contestó en esta visita.
+    internal val vacio: Boolean get() = periodos?.isEmpty() == true && !noSePudoActualizar
+    /** Hay algo pintado que esta visita todavía no confirmó: «Actualizando…» en la cabecera. */
+    internal val actualizandoConAlgoALaVista: Boolean get() =
+        periodos != null && (loading || perfil?.actualizando == true)
 
     internal fun reintentar() {
         refreshKey++
     }
-
-    internal fun cargar() {
-        alcance.launch {
-            loading = true
-            intentar { Repositories.wallets.getPeriodos() }.onSuccess {
-                periodos = it
-                FormaRecordada.delAparato.guardarPeriodos(SessionManager.userId, FormaDePeriodos(filas = it.size))
-            }
-            loading = false
-        }
-    }
 }
 
+/**
+ * **Lo último que se vio, al primer cuadro** (ver [rememberLectura]). Los períodos dependen del
+ * de hoy («En curso»), así que se recuerdan con él y no se leen ni se muestran hasta saberlo por el
+ * perfil (ver [periodoVigenteSegun]). Se releen con «Reintentar» y con `LocalRefreshTick`.
+ */
 @Composable
 internal fun rememberEstadoDePeriodos(): EstadoDePeriodos {
-    val alcance = rememberCoroutineScope()
-    val estado = remember(alcance) { EstadoDePeriodos(alcance) }
-    LaunchedEffect(estado.refreshKey) { estado.cargar() }
+    val estado = remember { EstadoDePeriodos() }
+    val perfil = rememberLectura(ClaveDeLectura.Perfil, estado.refreshKey) { Repositories.wallets.getUserProfile() }
+    val periodos = rememberLectura(ClaveDeLectura.Periodos, estado.refreshKey, periodoVigenteSegun(perfil)) {
+        Repositories.wallets.getPeriodos()
+    }
+    estado.conectar(perfil, periodos)
+    LaunchedEffect(periodos.valor) {
+        val leidos = periodos.valor ?: return@LaunchedEffect
+        FormaRecordada.delAparato.guardarPeriodos(SessionManager.userId, FormaDePeriodos(filas = leidos.size))
+    }
     return estado
 }
 
@@ -123,6 +146,9 @@ fun PeriodosScreen(onNavigate: (Screen) -> Unit) {
         MinScreenHeader(
             title = "Tus períodos",
             leading = leadingFor(Screen.Periodos, onNavigate, fallback = Screen.Plan()),
+            action = if (estado.actualizandoConAlgoALaVista) {
+                { ActualizandoEnLaCabecera() }
+            } else null,
         )
         LazyColumn(
             modifier = Modifier.weight(1f),
@@ -134,6 +160,9 @@ fun PeriodosScreen(onNavigate: (Screen) -> Unit) {
             ),
             verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
         ) {
+            if (estado.noSePudoActualizar) {
+                item { NoSePudoActualizar(onReintentar = { estado.reintentar() }) }
+            }
             when {
                 estado.noSeLeyo -> item {
                     NoSePudoLeer("No pudimos cargar tus períodos", onReintentar = { estado.reintentar() })
@@ -145,6 +174,8 @@ fun PeriodosScreen(onNavigate: (Screen) -> Unit) {
                 estado.cargando -> items(filasRecordadas) { indice ->
                     FilaDePeriodoEsqueleto(conMarca = indice == 0)
                 }
+                // Lo recordado vacío con la lectura de ahora caída: solo el aviso de arriba.
+                estado.periodos?.isEmpty() == true && !estado.vacio -> Unit
                 estado.vacio -> item {
                     // No debería pasar — el server siempre manda al menos el período en curso —
                     // pero una lista vacía no puede quedar en blanco sin decir nada.
@@ -233,6 +264,7 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, onClick: () -> Unit) {
             ChevronRight()
         }
         CifrasDelPeriodo(resumen)
+        LineaDeCreditosDesembolsados(resumen)
         val cubierto = loQueCubrioLoDemas(resumen)
         if (cubierto != null) {
             Spacer(Modifier.height(8.dp))
@@ -248,20 +280,41 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, onClick: () -> Unit) {
 
 /**
  * La línea que explica el hueco de un período que salió más de lo que entró: «Lo demás lo cubrieron
- * $10M de créditos y $22,2M de saldos que ya tenías.» Solo las partes con monto, y `null` cuando no
- * salió de más o no hay nada que decir — ni «$0» ni una explicación que no existe. Las cifras son
- * las de [ResumenDePeriodo.creditosRecibidos] y [ResumenDePeriodo.saldosIniciales], las mismas que
- * el detalle nombra cuenta por cuenta en «De dónde salió lo que faltó»; sin ellas, «Te quedó −$11,5M»
- * se lee como haber gastado de más cuando lo pagó un crédito o plata que ya estaba en las cuentas.
+ * $22,2M de saldos que ya tenías.» `null` cuando no salió de más o no hay saldos que decir — ni «$0»
+ * ni una explicación que no existe. La cifra es la de [ResumenDePeriodo.saldosIniciales], la misma que
+ * el detalle nombra cuenta por cuenta en «De dónde salió lo que faltó»; sin ella, «Te quedó −$11,5M»
+ * se lee como haber gastado de más cuando lo pagó plata que ya estaba en las cuentas.
+ *
+ * Los créditos ya no van acá: el desembolso es plata que entró y suma en «Entró»; su parte se dice
+ * aparte, en [textoDeCreditosDesembolsados].
  */
 internal fun loQueCubrioLoDemas(resumen: ResumenDePeriodo): String? {
     if (resumen.salidas <= resumen.entradas) return null
-    val partes = listOfNotNull(
-        resumen.creditosRecibidos.takeIf { it > 0 }?.let { "${formatMoneyCompact(it)} de créditos" },
-        resumen.saldosIniciales.takeIf { it > 0 }?.let { "${formatMoneyCompact(it)} de saldos que ya tenías" },
+    val saldos = resumen.saldosIniciales.takeIf { it > 0 } ?: return null
+    return "Lo demás lo cubrieron ${formatMoneyCompact(saldos)} de saldos que ya tenías."
+}
+
+/**
+ * «Incluye $10M de créditos desembolsados.»: cuánto de «Entró» es plata prestada y no sueldo
+ * ([ResumenDePeriodo.creditosRecibidos]). `null` sin créditos, o si no hay nada que haya entrado
+ * (la línea explica una cifra que tiene que estar).
+ */
+internal fun textoDeCreditosDesembolsados(resumen: ResumenDePeriodo): String? {
+    if (resumen.creditosRecibidos <= 0 || resumen.entradas <= 0) return null
+    return "Incluye ${formatMoneyCompact(resumen.creditosRecibidos)} de créditos desembolsados."
+}
+
+/** La línea de [textoDeCreditosDesembolsados], la misma en la fila de la lista y en el detalle. */
+@Composable
+internal fun LineaDeCreditosDesembolsados(resumen: ResumenDePeriodo) {
+    val texto = textoDeCreditosDesembolsados(resumen) ?: return
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = texto,
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
+        modifier = Modifier.testTag(TAG_INCLUYE_CREDITOS),
     )
-    if (partes.isEmpty()) return null
-    return "Lo demás lo cubrieron ${partes.joinToString(" y ")}."
 }
 
 /**

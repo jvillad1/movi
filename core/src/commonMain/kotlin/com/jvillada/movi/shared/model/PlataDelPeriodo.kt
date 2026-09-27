@@ -90,8 +90,10 @@ fun saldoDeTuPlata(sumas: List<SumaDeMovimientos>, cuentas: Map<String, CuentaDe
  * @property ingresos los ingresos del período que cayeron en una cuenta de Tu plata, con la regla
  *   de «Ingresos» (sin traspasos, sin «Por confirmar», sin anulados). Un rendimiento que cae en un
  *   ahorro condicionado no está: esa plata no se puede usar.
- * @property desdeFuera traspasos **hacia** Tu plata **desde** una cuenta de afuera: el desembolso de
- *   un préstamo, un retiro de un ahorro condicionado o de una inversión fuera de Tu plata.
+ * @property desdeFuera traspasos **hacia** Tu plata **desde** una cuenta de afuera: un retiro de un
+ *   ahorro condicionado o de una inversión fuera de Tu plata. El desembolso de un préstamo ya no
+ *   está acá: lleva [DESEMBOLSO_CATEGORY], cuenta como ingreso y va en [ingresos]. (Uno guardado
+ *   antes de esa regla, con la categoría «Traspaso», sigue cayendo acá hasta que se migre.)
  * @property pagadoDesdeFuera lo que se pagó **directo** desde una cuenta de ahorro o inversión de
  *   afuera (el colegio desde Nu). El gasto se cuenta igual —como gasto variable o como fijo— y esto
  *   lo financia, así que se compensan. Una compra con tarjeta no está: se va a pagar después desde

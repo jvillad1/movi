@@ -21,6 +21,7 @@ import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.server.routes.estadosDeLasOcurrenciasReales
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.ComoVaLaDeuda
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.planDeUnaDeuda
@@ -200,6 +201,12 @@ internal data class ContextoDelPeriodo(
     val diasQueQuedan: Int,
     val corte: Int,
     val ingresos: Long,
+    /**
+     * **Cuánto de [ingresos] es un crédito desembolsado** (deuda, no sueldo). El desembolso suma en
+     * «Entró» porque es plata que entró a la cuenta; sin esta cifra el asistente lo leería como
+     * ganancia («ganaste $32M») cuando $10M los prestó un banco. Ver [DESEMBOLSO_CATEGORY].
+     */
+    val creditosDesembolsados: Long = 0L,
     val gastoPorCategoria: Map<String, Long>,
     val recurrentes: List<RecurrenteParaContexto>,
     val creditos: List<CreditoParaContexto>,
@@ -242,6 +249,11 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
 
         val ingresos = delPeriodo
             .filter { it[Events.type] == TransactionType.INCOME.name }
+            .sumOf { it[Events.amount] }
+        // La pata del crédito del desembolso es un EXPENSE en una cuenta LOAN y `isCashFlow` ya la
+        // dejó fuera: aquí solo queda la pata que entró a la cuenta de dinero.
+        val creditosDesembolsados = delPeriodo
+            .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.category] == DESEMBOLSO_CATEGORY }
             .sumOf { it[Events.amount] }
         val gastoPorCategoria = delPeriodo
             .filter { it[Events.type] == TransactionType.EXPENSE.name }
@@ -376,6 +388,7 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             diasQueQuedan = diasHasta(ventana.endMillisExclusive),
             corte = ajustes.cutoffDay,
             ingresos = ingresos,
+            creditosDesembolsados = creditosDesembolsados,
             gastoPorCategoria = gastoPorCategoria,
             recurrentes = recurrentes,
             creditos = creditos,
@@ -388,12 +401,26 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
     }
 }
 
+/**
+ * «Los ingresos incluyen $X de créditos desembolsados (deuda, no sueldo).», o `null` si en el
+ * período no se desembolsó nada. [formato] pone cada cifra como la escribe el bloque que la usa
+ * (el contexto va con el número pelado; los hechos, con puntos de miles): la cifra es UNA, la misma
+ * que respalda al verificador de cifras.
+ *
+ * Existe porque el desembolso suma en «Ingresos» (es plata que entró), y sin decir que es deuda el
+ * asistente tomaría un mes con un crédito por un mes de ganancias.
+ */
+internal fun ContextoDelPeriodo.lineaDeCreditosDesembolsados(formato: (Long) -> String): String? =
+    if (creditosDesembolsados <= 0L) null
+    else "- Los ingresos incluyen ${formato(creditosDesembolsados)} de créditos desembolsados (deuda, no sueldo)."
+
 /** El bloque de texto que se le pasa al asistente. Vacío si no hay nada que contar. */
 internal fun ContextoDelPeriodo.render(): String = buildString {
     appendLine("== El período en curso ==")
     appendLine("- Va del $rango (el dueño cierra su mes el día $corte, no el 30).")
     appendLine("- Quedan $diasQueQuedan días de este período.")
     appendLine("- Ingresos del período: \$$ingresos")
+    lineaDeCreditosDesembolsados { "\$$it" }?.let { appendLine(it) }
     appendLine("- Gastos del período: \$${gastoPorCategoria.values.sum()}")
     appendLine()
 

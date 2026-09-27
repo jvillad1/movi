@@ -34,6 +34,8 @@ import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
 import com.jvillada.movi.shared.model.avisoDeMontoDeUnPar
@@ -368,6 +370,7 @@ fun ChangeCategorySheet(
                     when (event.category) {
                         CUOTA_CATEGORY -> "CUOTA DE CRÉDITO"
                         CARD_PAYMENT_CATEGORY -> "PAGO DE TARJETA"
+                        DESEMBOLSO_CATEGORY -> "DESEMBOLSO DE CRÉDITO"
                         else -> "TRASPASO"
                     },
                 )
@@ -376,7 +379,14 @@ fun ChangeCategorySheet(
                 Spacer(Modifier.height(12.dp))
                 PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
                 Spacer(Modifier.height(16.dp))
-                Text(TRANSFER_RECATEGORIZE_BLOCKED, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                // El texto de «traspaso» dice «no es un gasto ni un ingreso», y un desembolso SÍ es
+                // plata que entró: para él se dice lo suyo.
+                Text(
+                    if (event.category == DESEMBOLSO_CATEGORY) DESEMBOLSO_RECATEGORIZE_BLOCKED
+                    else TRANSFER_RECATEGORIZE_BLOCKED,
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.textoMedio,
+                )
                 Spacer(Modifier.height(20.dp))
                 Hairline()
                 Spacer(Modifier.height(16.dp))
