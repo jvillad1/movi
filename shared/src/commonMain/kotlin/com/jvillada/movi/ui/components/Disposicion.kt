@@ -42,7 +42,7 @@ enum class Disposicion {
  * aprende a usar el ancho.
  */
 fun disposicionDe(pantalla: Screen): Disposicion = when (pantalla) {
-    Screen.Dashboard, Screen.Accounts -> Disposicion.Tablero
+    Screen.Dashboard, Screen.Accounts, Screen.Credits -> Disposicion.Tablero
     Screen.Periodos, is Screen.DetalleDePeriodo -> Disposicion.ListaYDetalle
     else -> Disposicion.Lectura
 }

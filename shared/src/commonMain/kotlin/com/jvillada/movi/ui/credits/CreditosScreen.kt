@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -181,7 +182,17 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             ),
         )
     }
+    // Una columna: la lista de siempre. Dos: una sola página que scrollea entera (el resumen arriba
+    // y las dos columnas debajo se leen juntos). La rueda del mouse sobre los márgenes mueve la que
+    // está a la vista (ver [ScrollDesdeLosMargenes]).
+    val estadoDeLaLista = rememberLazyListState()
+    val scrollDeDosColumnas = rememberScrollState()
+    val conDeudasParaRepartir = hayDeudasParaDosColumnas(cargando = cargando, sinDeudas = sinDeudas, noSeLeyo = noSeLeyo)
     Box(modifier = Modifier.fillMaxSize()) {
+        // Ola W3: en pantalla ancha, Préstamos y Tarjetas lado a lado debajo del resumen. El ancho lo
+        // mide el panel, ya sin el rail — ver [creditosEnDosColumnas] para la cuenta completa.
+        PanelDeTablero(enDosColumnas = { creditosEnDosColumnas(it) && conDeudasParaRepartir }) { dosColumnas ->
+        ScrollDesdeLosMargenes(if (dosColumnas) scrollDeDosColumnas else estadoDeLaLista)
         Column(
             modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)
         ) {
@@ -228,38 +239,121 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 Spacer(Modifier.height(14.dp))
             }
 
+            // Las piezas de la pantalla, una sola vez: la lista de una columna y la página de dos
+            // columnas las ponen en lugares distintos, con el mismo contenido.
+            val resumenDeDeuda: @Composable (List<CreditSummary>, List<CardSummary>) -> Unit = { creditosALaVista, tarjetasALaVista ->
+                MinCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
+                    variant = MinCardVariant.Elevated,
+                    padding = PaddingValues(22.dp),
+                ) {
+                    Text("Deuda total", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(10.dp))
+                    // F20: préstamos + tarjetas — la MISMA función que usa el Inicio.
+                    // La protagonista de esta pantalla, igual que «Tu plata» en el Inicio: misma
+                    // letra, mismo tamaño, y un renglón siempre. Ver [CifraProtagonista].
+                    CifraProtagonista(formatCOP(totalDebtCop(creditosALaVista, tarjetasALaVista)), color = Movi.colores.texto)
+                    // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
+                    // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
+                    // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
+                    // [saleDeTuBolsillo].
+                    LoQueCuestaLaDeuda(
+                        planes.values.filterNotNull(),
+                        periodoActual,
+                        quienesPaganLoQueNoSaleDeTuBolsillo(creditosALaVista.mapNotNull { it.terms }),
+                        onRenglonesDelAvisoAmbar = { renglonesDelAvisoAmbar = it },
+                        onRenglonesDelAvisoRojo = { renglonesDelAvisoRojo = it },
+                    )
+                }
+            }
+            val tarjetaDePrestamo: @Composable (CreditSummary) -> Unit = { c ->
+                LoanCard(
+                    credit = c,
+                    plan = planes[c.account.id],
+                    periodoActual = periodoActual,
+                    onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
+                    onEdit = { editingLoan = c; showLoanSheet = true },
+                    onAdjust = { adjusting = c },
+                    onSimulate = { simulando = c },
+                    onPayrollDeduction = { descontando = c },
+                )
+            }
+            val tarjetaDeCredito: @Composable (CardSummary) -> Unit = { c ->
+                CreditCardCard(
+                    card = c,
+                    onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
+                    onEdit = { editingCard = c; showCardSheet = true },
+                )
+            }
+
             if (cargando) {
-                CreditosEsqueleto(forma = formaRecordada, modifier = Modifier.weight(1f))
-            } else if (creditosListos != null && tarjetasListas != null) LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
+                CreditosEsqueleto(forma = formaRecordada, dosColumnas = dosColumnas, modifier = Modifier.weight(1f))
+            } else if (creditosListos != null && tarjetasListas != null && dosColumnas) {
+                // ── Dos columnas (Ola W3) ─────────────────────────────────────────────────
+                // Solo con deudas (ver [hayDeudasParaDosColumnas]): el resumen a lo ancho, y debajo
+                // Préstamos a la izquierda y Tarjetas a la derecha. Con uno solo de los dos grupos,
+                // sus tarjetas se reparten en las dos columnas bajo un solo título.
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollDeDosColumnas)
+                        .padding(bottom = 80.dp),
+                ) {
+                    resumenDeDeuda(creditosListos, tarjetasListas)
+                    Spacer(Modifier.height(20.dp))
+                    val ambos = creditosListos.isNotEmpty() && tarjetasListas.isNotEmpty()
+                    if (!ambos) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            if (creditosListos.isNotEmpty()) {
+                                MinSectionHeader(title = "Préstamos", count = creditosListos.size)
+                            } else {
+                                MinSectionHeader(title = "Tarjetas", count = tarjetasListas.size)
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        val izquierda = Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS)
+                        val derecha = Modifier.weight(1f).testTag(TAG_COLUMNA_DERECHA_DE_CREDITOS)
+                        if (ambos) {
+                            Column(modifier = izquierda) {
+                                MinSectionHeader(title = "Préstamos", count = creditosListos.size)
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    creditosListos.forEach { tarjetaDePrestamo(it) }
+                                }
+                            }
+                            Column(modifier = derecha) {
+                                MinSectionHeader(title = "Tarjetas", count = tarjetasListas.size)
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    tarjetasListas.forEach { tarjetaDeCredito(it) }
+                                }
+                            }
+                        } else if (creditosListos.isNotEmpty()) {
+                            val (pares, impares) = repartirEnDos(creditosListos)
+                            Column(modifier = izquierda, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                pares.forEach { tarjetaDePrestamo(it) }
+                            }
+                            Column(modifier = derecha, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                impares.forEach { tarjetaDePrestamo(it) }
+                            }
+                        } else {
+                            val (pares, impares) = repartirEnDos(tarjetasListas)
+                            Column(modifier = izquierda, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                pares.forEach { tarjetaDeCredito(it) }
+                            }
+                            Column(modifier = derecha, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                impares.forEach { tarjetaDeCredito(it) }
+                            }
+                        }
+                    }
+                }
+            } else if (creditosListos != null && tarjetasListas != null) LazyColumn(state = estadoDeLaLista, modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
                 // Sin un solo crédito ni tarjeta no hay deuda que resumir — «Deuda total $0»
                 // arriba del vacío que enseña presentaba un cero como si fuera un hecho. Con
                 // cualquier crédito o tarjeta, esta tarjeta sigue apareciendo igual que siempre.
                 if (!sinDeudas) {
-                    item {
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(22.dp),
-                        ) {
-                            Text("Deuda total", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                            Spacer(Modifier.height(10.dp))
-                            // F20: préstamos + tarjetas — la MISMA función que usa el Inicio.
-                            // La protagonista de esta pantalla, igual que «Tu plata» en el Inicio: misma
-                            // letra, mismo tamaño, y un renglón siempre. Ver [CifraProtagonista].
-                            CifraProtagonista(formatCOP(totalDebtCop(creditosListos, tarjetasListas)), color = Movi.colores.texto)
-                            // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
-                            // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
-                            // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
-                            // [saleDeTuBolsillo].
-                            LoQueCuestaLaDeuda(
-                                planes.values.filterNotNull(),
-                                periodoActual,
-                                quienesPaganLoQueNoSaleDeTuBolsillo(creditosListos.mapNotNull { it.terms }),
-                                onRenglonesDelAvisoAmbar = { renglonesDelAvisoAmbar = it },
-                                onRenglonesDelAvisoRojo = { renglonesDelAvisoRojo = it },
-                            )
-                        }
-                    }
+                    item { resumenDeDeuda(creditosListos, tarjetasListas) }
                 }
 
                 if (isEmpty) {
@@ -285,18 +379,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                             MinSectionHeader(title = "Préstamos", count = creditosListos.size)
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                creditosListos.forEach { c ->
-                                    LoanCard(
-                                        credit = c,
-                                        plan = planes[c.account.id],
-                                        periodoActual = periodoActual,
-                                        onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
-                                        onEdit = { editingLoan = c; showLoanSheet = true },
-                                        onAdjust = { adjusting = c },
-                                        onSimulate = { simulando = c },
-                                        onPayrollDeduction = { descontando = c },
-                                    )
-                                }
+                                creditosListos.forEach { tarjetaDePrestamo(it) }
                             }
                         }
                     }
@@ -308,19 +391,14 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                             MinSectionHeader(title = "Tarjetas", count = tarjetasListas.size)
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                tarjetasListas.forEach { c ->
-                                    CreditCardCard(
-                                        card = c,
-                                        onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
-                                        onEdit = { editingCard = c; showCardSheet = true },
-                                    )
-                                }
+                                tarjetasListas.forEach { tarjetaDeCredito(it) }
                             }
                         }
                     }
                 }
             }
         }
+        } // PanelDeTablero
         if (showTypeChooser) {
             DebtTypeChooserSheet(
                 onDismiss = { showTypeChooser = false },
@@ -929,7 +1007,7 @@ private const val MAX_PRESTAMOS_ESQUELETO = 12
  * dibujarlo encima de la barra de abajo.
  */
 @Composable
-private fun CreditosEsqueleto(forma: FormaDeCreditos?, modifier: Modifier = Modifier) {
+private fun CreditosEsqueleto(forma: FormaDeCreditos?, dosColumnas: Boolean = false, modifier: Modifier = Modifier) {
     val grupos = forma?.gruposDelResumen ?: listOf(1, 1, 1)
     val prestamos = (forma?.prestamos ?: 3).coerceAtMost(MAX_PRESTAMOS_ESQUELETO)
     LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 80.dp), userScrollEnabled = false) {
@@ -994,11 +1072,19 @@ private fun CreditosEsqueleto(forma: FormaDeCreditos?, modifier: Modifier = Modi
         if (prestamos > 0) {
             item {
                 Spacer(Modifier.height(20.dp))
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    RotuloDeSeccionEsqueleto()
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        repeat(prestamos) { TarjetaDePrestamoEsqueleto() }
+                // En dos columnas (Ola W3) los préstamos caen a la izquierda, donde van a quedar: la
+                // derecha es de las tarjetas, que la forma recordada no cuenta.
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Column(modifier = if (dosColumnas) Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS) else Modifier.weight(1f)) {
+                        RotuloDeSeccionEsqueleto()
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            repeat(prestamos) { TarjetaDePrestamoEsqueleto() }
+                        }
                     }
+                    if (dosColumnas) Spacer(Modifier.weight(1f))
                 }
             }
         }

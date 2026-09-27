@@ -48,7 +48,7 @@ class DisposicionTest {
     fun `Hoy es un tablero y lo que no se adapto todavia se lee en columna`() {
         assertEquals(Disposicion.Tablero, disposicionDe(Screen.Dashboard))
         listOf(
-            Screen.Transactions(), Screen.Credits, Screen.Plan(),
+            Screen.Transactions(), Screen.Plan(),
             Screen.Mas, Screen.Profile, Screen.Categorias, Screen.Login, Screen.PorRevisar,
         ).forEach { assertEquals(Disposicion.Lectura, disposicionDe(it), "$it") }
     }
