@@ -46,6 +46,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * # «Actualizando…» no le corta el título a la pantalla
@@ -122,7 +123,14 @@ class TituloEnteroMientrasActualizaTest {
         nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(medidas)
         val medida = medidas.single()
         assertFalse(medida.isLineEllipsized(0), "«$titulo» sale cortado en la cabecera a 390 dp")
-        assertFalse(medida.hasVisualOverflow, "«$titulo» no entra en la cabecera a 390 dp")
+        // Lo que el título pide contra lo que le dieron. No `hasVisualOverflow` ni `didOverflowWidth`:
+        // el renglón de `titular` declara un interlineado más bajo que la fuente a ×1,12 (desborde de
+        // ALTO sin cortar nada), y con ancho ajustado al contenido el párrafo se arma al ancho máximo
+        // y `didOverflowWidth` da verdadero aunque el texto entre.
+        assertTrue(
+            medida.multiParagraph.maxIntrinsicWidth <= medida.size.width,
+            "«$titulo» pide ${medida.multiParagraph.maxIntrinsicWidth} px y le dieron ${medida.size.width}",
+        )
     }
 
     @Test
