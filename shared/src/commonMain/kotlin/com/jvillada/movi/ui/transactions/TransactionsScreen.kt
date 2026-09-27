@@ -1560,6 +1560,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                                 )
                             }
                         }
+                        // Ola U: si «Flujo del día» excluyó uno o más pagos de tarjeta (plata que
+                        // SÍ salió de una cuenta de Tu plata, aunque ya contara como gasto al
+                        // comprar), decirlo — sin esto un día de puros pagos de tarjeta se leía
+                        // «$0» como si no hubiera pasado nada. Sobre los mismos `day.items` que ya
+                        // arman el total de arriba, sin ninguna lectura nueva.
+                        val montoPagoDeTarjeta = montoPagoDeTarjetaEnElDia(day.items, accountTypes)
+                        val textoPagoDeTarjeta = textoPagoDeTarjetaEnElDia(montoPagoDeTarjeta)
+                        if (textoPagoDeTarjeta != null) LineaPagoDeTarjetaEnElDia(textoPagoDeTarjeta)
                         // «Día a día»: debajo del «Flujo del día», del lado de la cifra. Con la meta a
                         // la vista, la línea de ese día; sin ella y con la lectura en vuelo, su alto
                         // reservado en los días que podrían llevarla; si no, nada.
