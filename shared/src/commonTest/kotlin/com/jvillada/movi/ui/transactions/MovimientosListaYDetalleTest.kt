@@ -47,36 +47,46 @@ class MovimientosListaYDetalleTest {
 
     @Test
     fun `el umbral es la lista mas el divisor mas el detalle minimo`() {
-        assertEquals(781.dp, UMBRAL_DE_MOVIMIENTOS_CON_PANEL)
+        // Ola X: la lista subió a 420 (antes 360) y el detalle mínimo bajó a 380 (antes 420) para
+        // compensar — ver el comentario de [ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO].
+        assertEquals(801.dp, UMBRAL_DE_MOVIMIENTOS_CON_PANEL)
         assertEquals(
             ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS + ANCHO_DEL_DIVISOR_DE_MOVIMIENTOS + ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO,
             UMBRAL_DE_MOVIMIENTOS_CON_PANEL,
         )
-        assertTrue(movimientosConPanel(781.dp))
-        assertFalse(movimientosConPanel(780.dp))
+        assertTrue(movimientosConPanel(801.dp))
+        assertFalse(movimientosConPanel(800.dp))
     }
 
+    /**
+     * Ola X: al subir el umbral de 781 a 801, el borde de aparición ya no cae en 861 sino en 881
+     * (mediana: 881 − 80 = 801). Entre 1.000 y 1.016 dp de ventana hay una franja angosta sin panel
+     * —el rail salta de 80 a 216 al entrar a escritorio (784 < 801) antes de que la ventana crezca
+     * lo suficiente para volver a superar el umbral (1.017: 1.017 − 216 = 801)—; ya existía esa
+     * caída de ancho al cruzar a escritorio (ver `el ancho de Movimientos en cada ventana`), solo
+     * que antes el umbral (781) quedaba por debajo de los 784 de esa caída y no se notaba.
+     */
     @Test
     fun `con panel en toda ventana de escritorio y en las medianas anchas`() {
-        listOf(861, 920, 999, 1_000, 1_024, 1_280, 1_440, 1_920).forEach { ventana ->
+        listOf(881, 920, 999, 1_017, 1_024, 1_280, 1_440, 1_920).forEach { ventana ->
             assertTrue(movimientosConPanel(anchoDelPanelEnLaCascara(ventana.dp, movimientos)), "$ventana")
         }
     }
 
     @Test
-    fun `sin panel en las medianas angostas, como hoy`() {
-        listOf(600, 700, 768, 800, 860).forEach { ventana ->
+    fun `sin panel en las medianas angostas, como hoy, y en la franja angosta de escritorio`() {
+        listOf(600, 700, 768, 800, 860, 1_000, 1_010).forEach { ventana ->
             assertFalse(movimientosConPanel(anchoDelPanelEnLaCascara(ventana.dp, movimientos)), "$ventana")
         }
     }
 
     @Test
-    fun `a 1024 el detalle mide 447 y a 1280, 703`() {
+    fun `a 1024 el detalle mide 387 y a 1280, 643`() {
         fun detalle(ventana: Int) = anchoDelPanelEnLaCascara(ventana.dp, movimientos) -
             ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS - ANCHO_DEL_DIVISOR_DE_MOVIMIENTOS
-        assertEquals(447.dp, detalle(1_024))
-        assertEquals(703.dp, detalle(1_280))
-        assertEquals(863.dp, detalle(1_440))
+        assertEquals(387.dp, detalle(1_024))
+        assertEquals(643.dp, detalle(1_280))
+        assertEquals(803.dp, detalle(1_440))
     }
 
     // ── Qué muestra el panel ─────────────────────────────────────────────────
