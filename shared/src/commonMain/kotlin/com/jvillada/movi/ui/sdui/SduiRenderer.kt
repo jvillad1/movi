@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +48,9 @@ import com.jvillada.movi.ui.dashboard.quickLinkFigure
 import com.jvillada.movi.ui.recurrentes.textoDelMonto
 import com.jvillada.movi.ui.dashboard.upcomingPaymentsWithin
 import com.jvillada.movi.ui.dashboard.visibleSections
+
+/** La guía de primeros pasos cuando el Inicio va en dos columnas: arriba de la izquierda. */
+const val TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA: String = "inicio-guia-en-la-columna-izquierda"
 
 /**
  * Pinta una [ScreenDefinition] del Inicio. Consume `visibleSections(definition, data)`:
@@ -103,13 +107,22 @@ fun SduiRenderer(
                 .padding(bottom = Movi.espacios.seccion),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (header != null) {
+            // En una columna, la guía va arriba con el ancho de la columna. En dos (Ola W3) va arriba
+            // de la IZQUIERDA —la del estado, la que se lee primero—, alineada con sus bordes: centrada
+            // en 720 encima de dos columnas que suman 1.064 no caía sobre ninguna de las dos.
+            if (header != null && !columnas.sonDos) {
                 Box(Modifier.widthIn(max = ANCHO_DE_UNA_COLUMNA)) { header() }
                 Spacer(Modifier.height(Movi.espacios.margen))
             }
             if (columnas.sonDos) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                    ColumnaDeSecciones(columnas.izquierda, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler, Modifier.weight(1f))
+                    Column(modifier = Modifier.weight(1f)) {
+                        if (header != null) {
+                            Box(Modifier.fillMaxWidth().testTag(TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA)) { header() }
+                            Spacer(Modifier.height(Movi.espacios.margen))
+                        }
+                        ColumnaDeSecciones(columnas.izquierda, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler, Modifier.fillMaxWidth())
+                    }
                     ColumnaDeSecciones(columnas.derecha, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler, Modifier.weight(1f))
                 }
             } else {
