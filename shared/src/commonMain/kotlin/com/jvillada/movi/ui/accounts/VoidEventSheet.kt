@@ -16,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontWeight
@@ -130,210 +129,192 @@ fun VoidEventSheet(
     val nombres = remember(cuentas) { cuentas.associate { it.id to it.name } }
     val loQuePasa = (otraMitad as? LaOtraMitad.Llego)?.let { loQuePasaAlAnular(event, it.hermana) }.orEmpty()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !voiding, onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !voiding) {
+        // El contenido de la hoja se desplaza.
+        //
+        // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+        // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+        // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+        // propia hoja. Sin manera de llegar a él.
+        //
+        // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+        // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+        // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .verticalScroll(rememberScrollState())
+                .weight(1f, fill = false),
         ) {
-            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
-            SheetHandleWithClose(onClose = onDismiss, enabled = !voiding)
-            // El contenido de la hoja se desplaza.
-            //
-            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
-            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
-            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
-            // propia hoja. Sin manera de llegar a él.
-            //
-            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
-            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
-            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .weight(1f, fill = false),
-            ) {
 
-                // Event summary card
-                MinCard(
+            // Event summary card
+            MinCard(
+                modifier = Modifier.fillMaxWidth(),
+                variant = MinCardVariant.Elevated,
+                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = event.description,
-                                style = Movi.textos.cuerpo,
-                                color = Movi.colores.texto,
-                            )
-                            Spacer(Modifier.height(3.dp))
-                            Text(
-                                text = "${event.category} · ${event.source.name}",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = signedAmount,
-                            style = Movi.textos.monto,
-                            fontWeight = FontWeight.Medium,
-                            color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
-                            letterSpacing = (-0.3).sp,
+                            text = event.description,
+                            style = Movi.textos.cuerpo,
+                            color = Movi.colores.texto,
+                        )
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            text = "${event.category} · ${event.source.name}",
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
                         )
                     }
-                }
-
-                // **Las dos cifras, cuando son dos.**
-                //
-                // La de arriba es la de la pata que el dueño tocó, y hasta acá era todo lo que la
-                // hoja decía. En un par simétrico eso alcanza y esta sección no aparece: un aviso
-                // de más sobre algo que no cambia enseña a ignorarlos.
-                if (loQuePasa.isNotEmpty()) {
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.width(12.dp))
                     Text(
-                        text = "AL ANULAR",
-                        style = Movi.textos.rotulo,
-                        color = Movi.colores.textoMedio,
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    loQuePasa.forEach { efecto ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            verticalAlignment = Alignment.Top,
-                        ) {
-                            // Ícono y no un «✓» de texto: en wasm la fuente del canvas no trae ese
-                            // glifo y sale como ▯ — el mismo problema que ya obligó a reemplazar el
-                            // «›» y la flecha del subtítulo de un traspaso.
-                            Icon(
-                                imageVector = Icons.Rounded.Check,
-                                contentDescription = null,
-                                tint = Movi.colores.textoMedio,
-                                modifier = Modifier.size(15.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = textoDeLoQuePasa(
-                                    efecto,
-                                    nombres[efecto.accountId],
-                                    formatMoney(efecto.monto, efecto.currency),
-                                ),
-                                style = Movi.textos.cuerpo,
-                                color = Movi.colores.texto,
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(2.dp))
-                    // Sin esta frase, dos números distintos sobre un solo pago se leen como un
-                    // error de la app.
-                    Text(
-                        text = ANULAR_DESHACE_LAS_DOS_MITADES,
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
+                        text = signedAmount,
+                        style = Movi.textos.monto,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
+                        letterSpacing = (-0.3).sp,
                     )
                 }
+            }
 
-                // **Y mientras la otra mitad no esté, se dice.** La lectura tarda del orden de
-                // segundos (medido a ojo en la web), y callar durante esa ventana dejaba la hoja
-                // viéndose entera con una sola cifra — el mismo defecto de siempre, ahora por
-                // tiempo en vez de por contenido. El botón sigue habilitado en los dos casos: el
-                // server cascadea a las dos patas pase lo que pase acá.
-                val avisoDeLaEspera = when (otraMitad) {
-                    LaOtraMitad.Buscando -> BUSCANDO_LA_OTRA_MITAD
-                    LaOtraMitad.NoSePudo -> NO_SE_PUDO_LEER_LA_OTRA_MITAD
-                    else -> null
-                }
-                if (avisoDeLaEspera != null) {
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        text = avisoDeLaEspera,
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                    )
-                }
-
+            // **Las dos cifras, cuando son dos.**
+            //
+            // La de arriba es la de la pata que el dueño tocó, y hasta acá era todo lo que la
+            // hoja decía. En un par simétrico eso alcanza y esta sección no aparece: un aviso
+            // de más sobre algo que no cambia enseña a ignorarlos.
+            if (loQuePasa.isNotEmpty()) {
                 Spacer(Modifier.height(18.dp))
-
-                // Reason label
                 Text(
-                    text = "MOTIVO (OPCIONAL)",
+                    text = "AL ANULAR",
                     style = Movi.textos.rotulo,
                     color = Movi.colores.textoMedio,
                 )
-                Spacer(Modifier.height(8.dp))
-
-                // Reason input
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Movi.colores.tarjeta)
-                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                ) {
-                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                    // [esAtajoDeSeleccionarTodo].
-                    val campo = rememberCampoConSeleccion(reason) { reason = it }
-                    BasicTextField(
-                        value = campo.valor,
-                        onValueChange = campo::alCambiar,
-                        cursorBrush = SolidColor(Movi.colores.texto),
-                        textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                            .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                        decorationBox = { inner ->
-                            if (reason.isEmpty()) {
-                                Text("Ej: Movimiento duplicado", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                            }
-                            inner()
-                        },
-                    )
+                Spacer(Modifier.height(10.dp))
+                loQuePasa.forEach { efecto ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        // Ícono y no un «✓» de texto: en wasm la fuente del canvas no trae ese
+                        // glifo y sale como ▯ — el mismo problema que ya obligó a reemplazar el
+                        // «›» y la flecha del subtítulo de un traspaso.
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = Movi.colores.textoMedio,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = textoDeLoQuePasa(
+                                efecto,
+                                nombres[efecto.accountId],
+                                formatMoney(efecto.monto, efecto.currency),
+                            ),
+                            style = Movi.textos.cuerpo,
+                            color = Movi.colores.texto,
+                        )
+                    }
                 }
-
-                Spacer(Modifier.height(20.dp))
-
-                // CTA
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (!voiding) Movi.colores.sale.copy(alpha = 0.14f) else Movi.colores.tarjeta)
-                        .clickable(enabled = !voiding) { doVoid() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = if (voiding) "Anulando…" else "Anular movimiento",
-                        style = Movi.textos.titulo,
-                        fontWeight = FontWeight.Medium,
-                        color = if (!voiding) Movi.colores.sale else Movi.colores.textoApagado,
-                    )
-                }
-
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(2.dp))
+                // Sin esta frase, dos números distintos sobre un solo pago se leen como un
+                // error de la app.
+                Text(
+                    text = ANULAR_DESHACE_LAS_DOS_MITADES,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                )
             }
-            // El error de anular, **fuera del área que se desplaza**. Estaba pintado adentro, entre
-            // el motivo y el botón: con la sección de «al anular» y el teclado abierto en un
-            // teléfono chico, aparecía donde el dueño no está mirando — o sea que, desde su lado,
-            // la anulación fallaba en silencio. Ver [BarraDeError].
-            BarraDeError(error)
+
+            // **Y mientras la otra mitad no esté, se dice.** La lectura tarda del orden de
+            // segundos (medido a ojo en la web), y callar durante esa ventana dejaba la hoja
+            // viéndose entera con una sola cifra — el mismo defecto de siempre, ahora por
+            // tiempo en vez de por contenido. El botón sigue habilitado en los dos casos: el
+            // server cascadea a las dos patas pase lo que pase acá.
+            val avisoDeLaEspera = when (otraMitad) {
+                LaOtraMitad.Buscando -> BUSCANDO_LA_OTRA_MITAD
+                LaOtraMitad.NoSePudo -> NO_SE_PUDO_LEER_LA_OTRA_MITAD
+                else -> null
+            }
+            if (avisoDeLaEspera != null) {
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = avisoDeLaEspera,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Reason label
+            Text(
+                text = "MOTIVO (OPCIONAL)",
+                style = Movi.textos.rotulo,
+                color = Movi.colores.textoMedio,
+            )
+            Spacer(Modifier.height(8.dp))
+
+            // Reason input
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Movi.colores.tarjeta)
+                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+            ) {
+                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                // [esAtajoDeSeleccionarTodo].
+                val campo = rememberCampoConSeleccion(reason) { reason = it }
+                BasicTextField(
+                    value = campo.valor,
+                    onValueChange = campo::alCambiar,
+                    cursorBrush = SolidColor(Movi.colores.texto),
+                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
+                    decorationBox = { inner ->
+                        if (reason.isEmpty()) {
+                            Text("Ej: Movimiento duplicado", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                        }
+                        inner()
+                    },
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // CTA
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (!voiding) Movi.colores.sale.copy(alpha = 0.14f) else Movi.colores.tarjeta)
+                    .clickable(enabled = !voiding) { doVoid() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (voiding) "Anulando…" else "Anular movimiento",
+                    style = Movi.textos.titulo,
+                    fontWeight = FontWeight.Medium,
+                    color = if (!voiding) Movi.colores.sale else Movi.colores.textoApagado,
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
         }
+        // El error de anular, **fuera del área que se desplaza**. Estaba pintado adentro, entre
+        // el motivo y el botón: con la sección de «al anular» y el teclado abierto en un
+        // teléfono chico, aparecía donde el dueño no está mirando — o sea que, desde su lado,
+        // la anulación fallaba en silencio. Ver [BarraDeError].
+        BarraDeError(error)
     }
 }
 
