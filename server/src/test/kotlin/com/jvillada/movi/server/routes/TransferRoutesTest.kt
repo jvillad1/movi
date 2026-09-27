@@ -22,6 +22,7 @@ import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
 import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
@@ -1054,6 +1055,59 @@ class TransferRoutesTest {
         }
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
         assertEquals(before, eventCount())
+    }
+
+    /** El desembolso solo nace con su par: una pata suelta inflaría «Entró» sin la deuda detrás. */
+    @Test
+    fun `POST de un evento suelto con la categoria del desembolso es 400 y no escribe`() = testApplication {
+        wireApp()
+        val before = eventCount()
+        val response = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"id":"ev-suelto-d","accountId":"$ahorrosId","type":"INCOME","amount":10000000,""" +
+                    """"category":"$DESEMBOLSO_CATEGORY","description":"ingreso inventado",""" +
+                    """"timestamp":${System.currentTimeMillis()}}""",
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertEquals(DESEMBOLSO_CATEGORY_NOT_MANUAL, response.bodyAsText())
+        assertEquals(before, eventCount())
+    }
+
+    @Test
+    fun `no se puede recategorizar un movimiento a Desembolso de credito`() = testApplication {
+        wireApp()
+        val response = client.put("/api/events/ev-apertura-ahorros/category") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"category":"$DESEMBOLSO_CATEGORY"}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertEquals(DESEMBOLSO_CATEGORY_NOT_MANUAL, response.bodyAsText())
+    }
+
+    /** Anular un desembolso anula las dos patas: lo que había sumado en «Ingresos» se va con él. */
+    @Test
+    fun `anular un desembolso lo saca de los ingresos y devuelve los saldos`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(fromAccountId = libranzaId, toAccountId = ahorrosId, amount = 20_000_000L))
+        }
+        assertEquals(20_000_000L, monthIncome())
+        val saldoConDesembolso = balanceOf(cuentas(), ahorrosId)
+
+        val response = client.post("/api/events/ev-to-1/void") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.Created, response.status)
+
+        assertEquals(0L, monthIncome(), "anular la pata del dinero saca el desembolso de Ingresos")
+        assertEquals(saldoConDesembolso - 20_000_000L, balanceOf(cuentas(), ahorrosId))
+        assertEquals(50_000_000L, balanceOf(cuentas(), libranzaId), "y la otra pata se anuló con ella: la deuda vuelve a lo que era")
     }
 
     // ── C1: el reintento del dedo no puede duplicar el traspaso ───────────────
