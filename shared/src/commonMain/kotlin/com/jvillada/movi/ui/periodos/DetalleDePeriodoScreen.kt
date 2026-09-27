@@ -1,6 +1,11 @@
 package com.jvillada.movi.ui.periodos
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.jvillada.movi.ui.components.LocalWindowWidthClass
+import com.jvillada.movi.ui.components.WindowWidthClass
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -118,7 +122,12 @@ const val TAG_DE_DONDE_SALIO_LO_QUE_FALTO: String = "de-donde-salio-lo-que-falto
 internal class EstadoDelDetalleDePeriodo internal constructor(
     private val alcance: CoroutineScope,
     private val id: String,
-    /** El día de hoy en la zona de la app, leído cada vez que se pregunta — no al montar. */
+    /** Lo que además hay que releer con [reintentar]: el perfil compartido con la lista (Ola W2). */
+    private val alReintentar: () -> Unit = {},
+    /**
+     * El día de hoy en la zona de la app, leído cada vez que se pregunta — no al montar. Va último
+     * para que se pueda pasar como lambda final.
+     */
     private val hoy: () -> LocalDate,
 ) {
     /**
@@ -193,6 +202,7 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
 
     internal fun reintentar() {
         refreshKey++
+        alReintentar()
     }
 
     /**
@@ -236,12 +246,22 @@ internal data class LecturasDelDetalle(
  * de hoy (el en curso cambia de naturaleza cuando cierra), así que se recuerda con él y no se lee
  * ni se muestra hasta saberlo por el perfil. Se relee con «Reintentar», tras una escritura desde la
  * pantalla, y con `LocalRefreshTick`.
+ *
+ * [perfilCompartido]: el perfil que ya leyó la lista de al lado (Ola W2). Con él el detalle no lo
+ * vuelve a pedir, y lo que el detalle relee o anota en él lo ve también la lista.
  */
 @Composable
-internal fun rememberEstadoDelDetalleDePeriodo(id: String, hoy: () -> LocalDate): EstadoDelDetalleDePeriodo {
+internal fun rememberEstadoDelDetalleDePeriodo(
+    id: String,
+    hoy: () -> LocalDate,
+    perfilCompartido: PerfilCompartido? = null,
+): EstadoDelDetalleDePeriodo {
     val alcance = rememberCoroutineScope()
-    val estado = remember(alcance, id, hoy) { EstadoDelDetalleDePeriodo(alcance, id, hoy) }
-    val perfil = rememberLectura(ClaveDeLectura.Perfil, estado.refreshKey) { Repositories.wallets.getUserProfile() }
+    val estado = remember(alcance, id, hoy) {
+        EstadoDelDetalleDePeriodo(alcance, id, alReintentar = perfilCompartido?.releer ?: {}, hoy = hoy)
+    }
+    val perfil = perfilCompartido?.lectura
+        ?: rememberLectura(ClaveDeLectura.Perfil, estado.refreshKey) { Repositories.wallets.getUserProfile() }
     val detalle = rememberLectura(ClaveDeLectura.DetalleDePeriodo(id), estado.refreshKey, periodoVigenteSegun(perfil)) {
         Repositories.wallets.getDetalleDePeriodo(id)
     }
@@ -251,28 +271,81 @@ internal fun rememberEstadoDelDetalleDePeriodo(id: String, hoy: () -> LocalDate)
 }
 
 /**
+ * El detalle a pantalla completa, con su cabecera y la flecha ‹ a «Tus períodos». Es lo que se ve en
+ * el teléfono; en la web, al lado de la lista, va [ContenidoDelDetalleDePeriodo] sin la flecha (ver
+ * [PeriodosListaYDetalle]).
+ *
  * @param id el prefijo del período («2026-09»).
  * @param hoy el día de hoy en la zona de la app; solo lo fija una prueba.
  */
 @Composable
 fun DetalleDePeriodoScreen(onNavigate: (Screen) -> Unit, id: String, hoy: LocalDate? = null) {
+    ContenidoDelDetalleDePeriodo(onNavigate = onNavigate, id = id, conCabecera = true, conFlecha = true, hoy = hoy)
+}
+
+/** Las dos columnas del detalle cuando el panel es ancho (ver [detalleEnDosColumnas]). */
+const val TAG_COLUMNA_IZQUIERDA_DEL_DETALLE: String = "detalle-de-periodo-columna-izquierda"
+const val TAG_COLUMNA_DERECHA_DEL_DETALLE: String = "detalle-de-periodo-columna-derecha"
+
+/**
+ * # El cuerpo del detalle de un período
+ *
+ * [conCabecera] dibuja arriba el título del período y «Actualizando…» mientras lo recordado se
+ * confirma; [conFlecha] le pone la flecha ‹ (solo en el teléfono: al lado de la lista no hay a
+ * dónde volver). [perfilCompartido] es el perfil que ya leyó la lista de al lado.
+ *
+ * En el teléfono se compone exactamente como siempre. En mediano y expandido mide el panel que le
+ * tocó: desde [ANCHO_PARA_DETALLE_EN_DOS_COLUMNAS] las secciones van en dos columnas (arriba de las
+ * acciones, que siguen a lo ancho).
+ */
+@Composable
+internal fun ContenidoDelDetalleDePeriodo(
+    onNavigate: (Screen) -> Unit,
+    id: String,
+    conCabecera: Boolean,
+    conFlecha: Boolean = true,
+    hoy: LocalDate? = null,
+    perfilCompartido: PerfilCompartido? = null,
+) {
     val reloj: () -> LocalDate = remember(hoy) { { hoy ?: epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()) } }
-    val estado = rememberEstadoDelDetalleDePeriodo(id, reloj)
+    val estado = rememberEstadoDelDetalleDePeriodo(id, reloj, perfilCompartido)
+    if (LocalWindowWidthClass.current == WindowWidthClass.Compact) {
+        CuerpoDelDetalle(onNavigate, id, estado, conCabecera, conFlecha, enDosColumnas = false)
+    } else {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            CuerpoDelDetalle(onNavigate, id, estado, conCabecera, conFlecha, enDosColumnas = detalleEnDosColumnas(maxWidth))
+        }
+    }
+}
+
+@Composable
+private fun CuerpoDelDetalle(
+    onNavigate: (Screen) -> Unit,
+    id: String,
+    estado: EstadoDelDetalleDePeriodo,
+    conCabecera: Boolean,
+    conFlecha: Boolean,
+    enDosColumnas: Boolean,
+) {
     val titulo = estado.detalle?.resumen?.nombre ?: nombreDelId(id) ?: id
+    // Por período: al elegir otro en la lista de al lado, el detalle nuevo arranca desde arriba.
+    val desplazamiento = rememberSaveable(id, saver = ScrollState.Saver) { ScrollState(0) }
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            MinScreenHeader(
-                title = titulo,
-                leading = HeaderLeading.Back(fallback = Screen.Periodos),
-                action = if (estado.actualizandoConAlgoALaVista) {
-                    { ActualizandoEnLaCabecera() }
-                } else null,
-            )
+            if (conCabecera) {
+                MinScreenHeader(
+                    title = titulo,
+                    leading = if (conFlecha) HeaderLeading.Back(fallback = Screen.Periodos) else HeaderLeading.Ninguno,
+                    action = if (estado.actualizandoConAlgoALaVista) {
+                        { ActualizandoEnLaCabecera() }
+                    } else null,
+                )
+            }
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(desplazamiento)
                     .padding(horizontal = Movi.espacios.amplio)
                     .padding(top = Movi.espacios.corto, bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
@@ -282,7 +355,7 @@ fun DetalleDePeriodoScreen(onNavigate: (Screen) -> Unit, id: String, hoy: LocalD
                 when {
                     estado.noSeLeyo -> NoSePudoLeer("No pudimos cargar este período", onReintentar = { estado.reintentar() })
                     detalle == null -> DetalleEsqueleto()
-                    else -> DetalleCargado(detalle, estado, onNavigate)
+                    else -> DetalleCargado(detalle, estado, onNavigate, enDosColumnas)
                 }
             }
         }
@@ -310,15 +383,49 @@ fun DetalleDePeriodoScreen(onNavigate: (Screen) -> Unit, id: String, hoy: LocalD
     }
 }
 
+/**
+ * [enDosColumnas]: a la izquierda cómo le fue (la cabecera, de dónde salió lo que faltó y en qué se
+ * fue), a la derecha lo que tenía que pasar (pagos fijos, presupuestos) y los gastos más grandes.
+ * Sin él, todo en una columna, en ese mismo orden, como siempre.
+ */
 @Composable
 private fun DetalleCargado(
     detalle: DetalleDePeriodo,
     estado: EstadoDelDetalleDePeriodo,
     onNavigate: (Screen) -> Unit,
+    enDosColumnas: Boolean,
 ) {
+    if (enDosColumnas) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.amplio),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DEL_DETALLE),
+                verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+            ) { SeccionesDeComoTeFue(detalle, estado) }
+            Column(
+                modifier = Modifier.weight(1f).testTag(TAG_COLUMNA_DERECHA_DEL_DETALLE),
+                verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+            ) { SeccionesDeLoQueTeniaQuePasar(detalle, estado) }
+        }
+    } else {
+        SeccionesDeComoTeFue(detalle, estado)
+        SeccionesDeLoQueTeniaQuePasar(detalle, estado)
+    }
+    AccionesDelDetalle(detalle, estado, onNavigate)
+}
+
+@Composable
+private fun SeccionesDeComoTeFue(detalle: DetalleDePeriodo, estado: EstadoDelDetalleDePeriodo) {
     Cabecera(detalle, estado.ajustes)
     DeDondeSalioLoQueFalto(detalle)
     EnQueSeFue(detalle)
+}
+
+@Composable
+private fun SeccionesDeLoQueTeniaQuePasar(detalle: DetalleDePeriodo, estado: EstadoDelDetalleDePeriodo) {
     PagosFijos(detalle.pagosFijos, onAgregar = { estado.nuevoPagoFijoAbierto = true })
     if (detalle.presupuestos.isNotEmpty()) Presupuestos(detalle.presupuestos)
     // Sin gastos no hay «más grandes»: el vacío de «En qué se fue» ya lo dice, y dos tarjetas
@@ -326,6 +433,15 @@ private fun DetalleCargado(
     if (detalle.masGrandes.isNotEmpty()) {
         LosMasGrandes(detalle.masGrandes, onAbrir = { estado.movimientoAbierto = it })
     }
+}
+
+/** Las acciones que cierran el detalle, siempre a lo ancho y abajo de todo. */
+@Composable
+private fun AccionesDelDetalle(
+    detalle: DetalleDePeriodo,
+    estado: EstadoDelDetalleDePeriodo,
+    onNavigate: (Screen) -> Unit,
+) {
 
     FilaDeAccion(
         texto = "Ver los movimientos de este período",

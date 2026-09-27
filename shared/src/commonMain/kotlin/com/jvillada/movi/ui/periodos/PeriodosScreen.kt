@@ -1,6 +1,12 @@
 package com.jvillada.movi.ui.periodos
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -76,12 +82,16 @@ const val TAG_FILA_DE_PERIODO: String = "fila-de-periodo"
 const val TAG_FILA_DE_PERIODO_ESQUELETO: String = "fila-de-periodo-esqueleto"
 const val TAG_LO_QUE_CUBRIO: String = "fila-de-periodo-lo-que-cubrio"
 const val TAG_INCLUYE_CREDITOS: String = "periodo-incluye-creditos"
+const val TAG_LISTA_DE_PERIODOS: String = "lista-de-periodos"
 
 /** Cuántas filas reserva el esqueleto sin nada recordado todavía (la primera vez en el aparato). */
 private const val FILAS_POR_DEFECTO = 3
 
 @Stable
-internal class EstadoDePeriodos internal constructor() {
+internal class EstadoDePeriodos internal constructor(
+    /** Lo que además hay que releer con «Reintentar»: el perfil compartido con el detalle (Ola W2). */
+    private val alReintentar: () -> Unit = {},
+) {
     internal var refreshKey by mutableStateOf(0)
 
     /** El perfil y los períodos. Los pone [rememberEstadoDePeriodos] en cada pasada. */
@@ -110,6 +120,7 @@ internal class EstadoDePeriodos internal constructor() {
 
     internal fun reintentar() {
         refreshKey++
+        alReintentar()
     }
 }
 
@@ -117,11 +128,15 @@ internal class EstadoDePeriodos internal constructor() {
  * **Lo último que se vio, al primer cuadro** (ver [rememberLectura]). Los períodos dependen del
  * de hoy («En curso»), así que se recuerdan con él y no se leen ni se muestran hasta saberlo por el
  * perfil (ver [periodoVigenteSegun]). Se releen con «Reintentar» y con `LocalRefreshTick`.
+ *
+ * [perfilCompartido] es el perfil que ya leyó quien monta la lista al lado del detalle (Ola W2):
+ * con él la lista no lo vuelve a pedir, y su «Reintentar» lo relee para los dos.
  */
 @Composable
-internal fun rememberEstadoDePeriodos(): EstadoDePeriodos {
-    val estado = remember { EstadoDePeriodos() }
-    val perfil = rememberLectura(ClaveDeLectura.Perfil, estado.refreshKey) { Repositories.wallets.getUserProfile() }
+internal fun rememberEstadoDePeriodos(perfilCompartido: PerfilCompartido? = null): EstadoDePeriodos {
+    val estado = remember { EstadoDePeriodos(alReintentar = perfilCompartido?.releer ?: {}) }
+    val perfil = perfilCompartido?.lectura
+        ?: rememberLectura(ClaveDeLectura.Perfil, estado.refreshKey) { Repositories.wallets.getUserProfile() }
     val periodos = rememberLectura(ClaveDeLectura.Periodos, estado.refreshKey, periodoVigenteSegun(perfil)) {
         Repositories.wallets.getPeriodos()
     }
@@ -135,7 +150,28 @@ internal fun rememberEstadoDePeriodos(): EstadoDePeriodos {
 
 @Composable
 fun PeriodosScreen(onNavigate: (Screen) -> Unit) {
-    val estado = rememberEstadoDePeriodos()
+    ListaDePeriodos(
+        onNavigate = onNavigate,
+        estado = rememberEstadoDePeriodos(),
+        elegido = null,
+        onTocar = { id -> onNavigate(Screen.DetalleDePeriodo(id)) },
+    )
+}
+
+/**
+ * La lista con su cabecera: toda la pantalla en el teléfono, el panel de la izquierda en la web
+ * (ver [PeriodosListaYDetalle]). [elegido] es el período que el panel de la derecha muestra (se
+ * marca); `null` en el teléfono, donde no hay nada al lado. Tocar una fila llama a [onTocar] con su
+ * id: en el teléfono navega al detalle, en la web lo elige (ver [alTocarUnPeriodo]).
+ */
+@Composable
+internal fun ListaDePeriodos(
+    onNavigate: (Screen) -> Unit,
+    estado: EstadoDePeriodos,
+    elegido: String?,
+    onTocar: (String) -> Unit,
+    estadoDeLaLista: LazyListState = rememberLazyListState(),
+) {
     // La cantidad de filas de la última carga que salió bien, para que el esqueleto no invente un
     // largo distinto del que el dueño va a ver — mismo patrón que Créditos/Categorías/Cuentas.
     val filasRecordadas = remember {
@@ -151,7 +187,8 @@ fun PeriodosScreen(onNavigate: (Screen) -> Unit) {
             } else null,
         )
         LazyColumn(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).testTag(TAG_LISTA_DE_PERIODOS),
+            state = estadoDeLaLista,
             contentPadding = PaddingValues(
                 start = Movi.espacios.amplio,
                 end = Movi.espacios.amplio,
@@ -185,7 +222,7 @@ fun PeriodosScreen(onNavigate: (Screen) -> Unit) {
                     )
                 }
                 else -> items(estado.periodos.orEmpty(), key = { it.id }) { resumen ->
-                    FilaDePeriodo(resumen, onClick = { onNavigate(Screen.DetalleDePeriodo(resumen.id)) })
+                    FilaDePeriodo(resumen, elegida = resumen.id == elegido, onClick = { onTocar(resumen.id) })
                 }
             }
         }
@@ -229,10 +266,21 @@ private fun colorDeTeQuedo(monto: Long): Color = when {
     else -> Movi.colores.textoMedio
 }
 
+/**
+ * [elegida]: es el período que muestra el detalle de al lado (solo en la web). Se marca con un borde
+ * del color de la marca, y se anuncia como seleccionada.
+ */
 @Composable
-private fun FilaDePeriodo(resumen: ResumenDePeriodo, onClick: () -> Unit) {
+private fun FilaDePeriodo(resumen: ResumenDePeriodo, elegida: Boolean, onClick: () -> Unit) {
+    val marcaDeElegida = if (elegida) {
+        Modifier
+            .border(1.5.dp, Movi.colores.marca, RoundedCornerShape(Movi.formas.amplia))
+            .semantics { selected = true }
+    } else {
+        Modifier
+    }
     MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_PERIODO),
+        modifier = Modifier.fillMaxWidth().then(marcaDeElegida).testTag(TAG_FILA_DE_PERIODO),
         variant = MinCardVariant.Elevated,
         padding = PaddingValues(16.dp),
         onClick = onClick,
