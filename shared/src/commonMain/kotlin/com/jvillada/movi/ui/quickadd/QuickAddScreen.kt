@@ -52,6 +52,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.CATEGORY_RESERVED_SHORT
 import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
+import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.CuentasDelPicker
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsoDeCuenta
@@ -667,13 +668,14 @@ fun QuickAddScreen(
 
     /**
      * Ola A: hasta 6 chips con las categorías más frecuentes de esta pestaña — ver
-     * [categoriasFrecuentes]. Vacía sin datos de uso, que es cuando la fila de chips no ocupa
-     * lugar (ver [EditorBody]).
+     * [categoriasParaLasPastillasDeAgregar]. Vacía sin datos de uso, que es cuando la fila de
+     * chips no ocupa lugar (ver [EditorBody]).
      */
     val categoriasFrecuentesDelTipo = if (pickers.typeIndex > 1) {
         emptyList()
     } else {
-        categoriasFrecuentes(
+        categoriasParaLasPastillasDeAgregar(
+            categoriaActual = category,
             tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
             usadas = usedCategories,
             prefs = categoryPrefs,
@@ -1975,4 +1977,39 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
             Text("Guardar nota", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
         }
     }
+}
+
+/**
+ * **Las pastillas de categoría de «Agregar»** — la fila de chips de hasta 6 categorías frecuentes
+ * debajo del monto (Ola A). Hasta la Ola N armaba su propia lista con [categoriasFrecuentes] a
+ * secas, en vez de la [categoriasParaPastillas] común que ya usa Reconciliar (el detalle de un
+ * SMS, ver [com.jvillada.movi.ui.sms.categoriasParaElegirEnElSms]): las dos pantallas podían
+ * terminar en un orden distinto si esa función común cambiaba y solo una de las dos la usaba.
+ * Acá no hay propuesta de Movi (esa es cosa del SMS) — lo único que va adelante es la categoría
+ * que el movimiento ya tiene, para que no desaparezca de la fila si es menos frecuente que otra.
+ *
+ * **Vacía sin datos de uso** — la fila entera no se dibuja (ver [EditorBody]). Esta guarda es
+ * propia de «Agregar»: [categoriasParaPastillas] sola no la tiene, y sin ella el catálogo se
+ * colaría como "frecuente" el primer día que alguien abre Movi, antes de que exista ningún dato
+ * de uso.
+ *
+ * Pura, para poder comparar su orden con el de Reconciliar sin pintar nada.
+ */
+internal fun categoriasParaLasPastillasDeAgregar(
+    categoriaActual: String,
+    tipo: TransactionType,
+    usadas: Map<String, Set<TransactionType>>,
+    prefs: Map<String, CategoryPref>,
+    usos: Map<String, Int>,
+    cuantas: Int = 6,
+): List<String> {
+    if (usos.isEmpty()) return emptyList()
+    return categoriasParaPastillas(
+        primeras = listOf(categoriaActual),
+        tipo = tipo,
+        usadas = usadas,
+        prefs = prefs,
+        usos = usos,
+        cuantas = cuantas,
+    )
 }

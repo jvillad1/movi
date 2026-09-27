@@ -166,9 +166,11 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
         suyas()
         montar()
 
-        // Sin `performScrollTo`: si estuviera bajo veinte filas, en 731 dp no se vería. Y con la
-        // sección «¿Se repite?» montada, que es como la ve el dueño.
-        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed()
+        // Ola N: «Pago de tarjeta» subió arriba de la cuadrícula (antes de la búsqueda), así que
+        // en 731 dp con la sección «¿Se repite?» montada un solo `performScrollTo` puede hacer
+        // falta — lo que importa es que siga siendo UN toque de scroll, no veinte filas de
+        // categorías para encontrarla.
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performScrollTo().assertIsDisplayed()
     }
 
     @Test

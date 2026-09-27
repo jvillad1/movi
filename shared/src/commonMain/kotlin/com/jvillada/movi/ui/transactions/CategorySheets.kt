@@ -700,10 +700,42 @@ internal fun ContenidoDelMovimiento(
             Spacer(Modifier.height(16.dp))
             SheetLabel("CATEGORÍA")
             Spacer(Modifier.height(4.dp))
-            // La actual, marcada, SIEMPRE: si viene de un extracto y no está en ningún catálogo,
-            // o si el dueño la escondió, igual se ve cuál tiene hoy el movimiento.
-            CategoryRow(name = event.category, selected = true, enabled = false, onClick = {})
-            Spacer(Modifier.height(12.dp))
+            // Ola N: la fila de texto con la categoría actual se sacó de acá para el caso común —
+            // quedaba dos veces (esta fila Y la celda marcada de la cuadrícula, justo debajo) y la
+            // celda ya comunica cuál es, con sus semantics de `selected` (Ola L). Se queda SOLO
+            // cuando la cuadrícula no tiene ninguna celda para marcar: una categoría escondida, o
+            // importada de un extracto y fuera de cualquier catálogo, con la búsqueda vacía no
+            // aparece entre las celdas — sin esta fila esos dos casos se quedarían sin ninguna
+            // marca, ni visual ni de TalkBack.
+            val laActualTieneCeldaPropia = contenidoDelSelectorDeCategoria(
+                busqueda = "",
+                tipo = event.type,
+                usadas = UsedCategoriesCache.used,
+                prefs = categoryPrefs,
+                usos = UsedCategoriesCache.usosRecientes,
+            ).celdas.any { esLaCeldaElegida(it, event.category) }
+            if (!laActualTieneCeldaPropia) {
+                CategoryRow(name = event.category, selected = true, enabled = false, onClick = {})
+                Spacer(Modifier.height(12.dp))
+            }
+            // Ola N: «Pago de tarjeta» sube ARRIBA de la cuadrícula — antes quedaba debajo de las
+            // ~20 categorías del selector, y en una cuenta con muchas categorías el dueño tenía que
+            // scrollear para encontrarla. Mismas condiciones de siempre
+            // ([puedeMarcarsePagoDeTarjeta]): esto solo cambia la posición, no la lógica. Sigue sin
+            // caber en el selector (es reservada: nada reservado se ofrece ahí), así que es su
+            // propia fila.
+            if (event.category != CARD_PAYMENT_CATEGORY && puedeMarcarsePagoDeTarjeta(event.type, categoryPrefs)) {
+                CategoryRow(
+                    name = CARD_PAYMENT_CATEGORY,
+                    selected = false,
+                    enabled = !saving,
+                    onClick = { choose(CARD_PAYMENT_CATEGORY) },
+                    subtitle = "Deja de contar en tus gastos del mes: la compra ya se contó al usar la tarjeta",
+                )
+                Spacer(Modifier.height(8.dp))
+                Hairline()
+                Spacer(Modifier.height(8.dp))
+            }
             // Ola L · **Una sola forma de elegir categoría.** Acá había una lista de filas armada
             // con `PREDEFINED_CATEGORIES` (sin «Fútbol», «Hija», «Gardenera»: las del dueño) y, bajo
             // ella, un campo plegado para buscar o crear que nadie veía. Ahora es la cuadrícula de
@@ -722,22 +754,6 @@ internal fun ContenidoDelMovimiento(
                 prefs = categoryPrefs,
                 usos = UsedCategoriesCache.usosRecientes,
             )
-            // «Pago de tarjeta» sigue estando acá a propósito —es el camino real para arreglar un
-            // «No es» tocado por error— pero elegirla saca el movimiento de las cifras del mes, y
-            // eso no se puede dejar mudo. No cabe en el selector (es reservada: nada reservado se
-            // ofrece ahí), así que es su propia fila.
-            if (event.category != CARD_PAYMENT_CATEGORY && puedeMarcarsePagoDeTarjeta(event.type, categoryPrefs)) {
-                Spacer(Modifier.height(8.dp))
-                Hairline()
-                CategoryRow(
-                    name = CARD_PAYMENT_CATEGORY,
-                    selected = false,
-                    enabled = !saving,
-                    onClick = { choose(CARD_PAYMENT_CATEGORY) },
-                    subtitle = "Deja de contar en tus gastos del mes: la compra ya se contó al usar la tarjeta",
-                )
-                Hairline()
-            }
             Spacer(Modifier.height(4.dp))
             EnlaceAdministrarCategorias()
 
