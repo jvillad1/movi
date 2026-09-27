@@ -59,7 +59,8 @@ class PagosDelChecklistTest {
         eventos: List<FinancialEvent>,
         hoy: LocalDate = this.hoy,
         settings: PeriodSettings = corte25,
-    ) = parteFijaDelChecklist(reglas, sellos, ocurridosDe(sellos), eventos, hoy, settings)
+        rechazados: Set<Pair<String, String>> = emptySet(),
+    ) = parteFijaDelChecklist(reglas, sellos, ocurridosDe(sellos), eventos, hoy, settings, rechazados = rechazados)
 
     private fun gastoTotal(eventos: List<FinancialEvent>, parte: Map<String, Long>) =
         gastoVariablePorDia(eventos, parte) { epochMillisToAppDateString(it) }.values.sum()
@@ -433,6 +434,76 @@ class PagosDelChecklistTest {
         val parte = parteFija(listOf(colegio), emptyList(), eventos)
         assertEquals(mapOf("tres" to 3_000_000L, "uno" to 1_000_000L), parte)
         assertEquals(250_000L, gastoTotal(eventos, parte))
+    }
+
+    // ── Ola O: «No fue este» no se absorbe ───────────────────────────────────
+
+    /**
+     * El dueño ya dijo explícitamente que este movimiento NO es el pago de esta regla. Sin el
+     * filtro de `rechazados`, «el-mercado» ganaba por nombre y el gasto variable quedaba en $0
+     * mientras el fijo seguía restando sus $2.000.000 enteros — el Disponible salía mejor de lo
+     * que es.
+     */
+    @Test
+    fun `un movimiento rechazado explicitamente para la regla no se absorbe`() {
+        val mercado = regla("rr_mercado", "Mercado", "Mercado", 2_000_000, 25)
+        val eventos = listOf(evento("el-mercado", "Mercado", 2_000_000, "2026-08-27", "Mercado"))
+        val parte = parteFija(
+            listOf(mercado),
+            listOf(sello("rr_mercado", "2026-08", null)),
+            eventos,
+            rechazados = setOf("rr_mercado" to "el-mercado"),
+        )
+        assertEquals(emptyMap(), parte)
+        // Sigue siendo variable: ningún otro candidato lo reemplaza.
+        assertEquals(2_000_000L, gastoTotal(eventos, parte))
+    }
+
+    /**
+     * El par completo importa, no el movimiento solo (mismo criterio que protege
+     * [com.jvillada.movi.server.reminders.loadRejectedPairs]): rechazar «el-mercado» para OTRA
+     * regla no puede quitárselo a «Mercado».
+     */
+    @Test
+    fun `un rechazo para otra regla no afecta esta`() {
+        val mercado = regla("rr_mercado", "Mercado", "Mercado", 2_000_000, 25)
+        val eventos = listOf(evento("el-mercado", "Mercado", 2_000_000, "2026-08-27", "Mercado"))
+        val parte = parteFija(
+            listOf(mercado),
+            listOf(sello("rr_mercado", "2026-08", null)),
+            eventos,
+            rechazados = setOf("rr_otra" to "el-mercado"),
+        )
+        assertEquals(mapOf("el-mercado" to 2_000_000L), parte)
+    }
+
+    /**
+     * **Guarda de orden**: el filtro de `rechazados` tiene que aplicarse ANTES de calcular
+     * `yaSeVeElPago`/el filtro de `SENA_DEL_NOMBRE` (ver el comentario en
+     * [parteFijaDelChecklist]). «Mercado» exacto está rechazado; «Mercado Éxito» solo EMPIEZA con
+     * el nombre y por eso nunca absorbe solo (necesita que "ya se vea el pago" por otro candidato
+     * concluyente). Si el filtro se corriera después, el candidato rechazado seguiría contando
+     * como esa evidencia y «Mercado Éxito» se comería $300.000 del fijo en silencio. Con el orden
+     * correcto ninguno de los dos se absorbe: la regla sigue pendiente y los $2.300.000 completos
+     * siguen siendo gasto variable.
+     */
+    @Test
+    fun `un rechazo exacto no cuenta como evidencia de que ya se vio el pago`() {
+        val mercado = regla("rr_mercado", "Mercado", "Mercado", 2_000_000, 25)
+        val eventos = listOf(
+            evento("el-mercado", "Mercado", 2_000_000, "2026-08-27", "Mercado"),
+            // Misma categoría que la regla, para que sea candidato (nombrePega solo no basta:
+            // «empieza con» sin ser la evidencia por sí solo, ver `empiezaConElNombre`).
+            evento("exito", "Mercado Éxito", 300_000, "2026-08-28", "Mercado"),
+        )
+        val parte = parteFija(
+            listOf(mercado),
+            emptyList(),
+            eventos,
+            rechazados = setOf("rr_mercado" to "el-mercado"),
+        )
+        assertEquals(emptyMap(), parte)
+        assertEquals(2_000_000L + 300_000L, gastoTotal(eventos, parte))
     }
 
     /**
