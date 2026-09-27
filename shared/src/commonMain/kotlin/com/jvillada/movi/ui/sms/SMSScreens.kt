@@ -62,6 +62,9 @@ import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.newId
+import com.jvillada.movi.shared.model.ofreceVincularDeuda
+import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
+import com.jvillada.movi.ui.transactions.SelectorDeCuentaDeDeuda
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
@@ -466,6 +469,13 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      * al leído — un movimiento sin nombre no se puede buscar después.
      */
     var comercioEditado by remember { mutableStateOf<String?>(null) }
+    /**
+     * Ola Y: la cuenta de deuda que el dueño eligió en «¿A cuál crédito o tarjeta corresponde?».
+     * `null` = no eligió ninguna, que es el camino de siempre (gasto suelto). Se limpia si cambia
+     * de categoría hacia una que ya no ofrece el paso, para no vincular con una elección vieja que
+     * quedó pegada de una categoría anterior.
+     */
+    var cuentaDeDeudaElegida by remember { mutableStateOf<Account?>(null) }
 
     /** «Es este»: el SMS queda confirmado sin crear nada, porque el movimiento ya existía. */
     fun esElQueYaEstaba() {
@@ -567,6 +577,15 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      */
     val comercio: String? = parsed?.let { p -> comercioEditado?.trim()?.takeIf { it.isNotEmpty() } ?: p.merchant }
 
+    // Ola Y: ¿corresponde ofrecer «¿A cuál crédito o tarjeta corresponde?» para lo que se va a
+    // confirmar? Un SMS recién confirmado nunca es ya la mitad de un traspaso, así que las tres
+    // puertas de `ofreceVincularDeuda` se reducen acá a la categoría y el tipo.
+    val ofreceVinculo = parsed != null &&
+        ofreceVincularDeuda(parsed!!.type, selectedCategory ?: parsed!!.category, transferId = null)
+    LaunchedEffect(ofreceVinculo) {
+        if (!ofreceVinculo) cuentaDeDeudaElegida = null
+    }
+
     fun confirm() {
         if (working) return
         // La revisión de «¿ya lo anotaste?» tiene que haber contestado. Si falló, el primer toque
@@ -583,6 +602,9 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         val p = parsed ?: return
         working = true
         error = null
+        // Se lee ACÁ, antes del `coroutine.launch`: si el dueño toca dos veces rápido, la segunda
+        // pasada no puede ver un estado que la primera ya limpió a mitad de camino.
+        val cuentaDeDeuda = cuentaDeDeudaElegida
         coroutine.launch {
             // Si el movimiento se crea y marcar el aviso falla, el aviso sigue pendiente: sin volver
             // a revisar, el siguiente «Confirmar» crearía un segundo movimiento en silencio.
@@ -603,6 +625,22 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 // Una categoría creada acá tiene que ser conocida en el siguiente aviso: sin esto
                 // la bandeja no recarga el caché y «Colegio» se volvía a ofrecer como «Crear».
                 UsedCategoriesCache.record(cat, p.type)
+                // Ola Y: si eligió una deuda, arma el traspaso completo. Es best-effort a propósito
+                // — el movimiento YA quedó guardado como gasto suelto en la línea de arriba, así
+                // que si esto falla no se pierde nada: queda exactamente como si no hubiera elegido
+                // ninguna cuenta, y se puede completar después desde el editor del movimiento.
+                cuentaDeDeuda?.let { deuda ->
+                    runCatching {
+                        Repositories.wallets.vincularPagoDeDeuda(
+                            eventId = event.id,
+                            request = VincularPagoDeDeudaRequest(
+                                debtAccountId = deuda.id,
+                                transferId = newId("tr"),
+                                toEventId = newId("ev"),
+                            ),
+                        )
+                    }
+                }
                 Repositories.wallets.confirmSms(smsId)
             }.onSuccess {
                 working = false
@@ -975,6 +1013,18 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             }
                         }
                     }
+                }
+
+                // Ola Y: opcional, y solo con esas dos categorías sobre un gasto — ver
+                // `ofreceVincularDeuda`. Debajo de las pastillas de categoría, porque depende de
+                // cuál quedó elegida.
+                if (ofreceVinculo) {
+                    Spacer(Modifier.height(14.dp))
+                    SelectorDeCuentaDeDeuda(
+                        cuentas = accounts,
+                        seleccionada = cuentaDeDeudaElegida,
+                        onSeleccionar = { cuentaDeDeudaElegida = it },
+                    )
                 }
 
                 if (error != null) {
