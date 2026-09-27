@@ -80,8 +80,8 @@ internal suspend fun leerDatosDelDiaADia(perfil: UserProfile, ahora: Long): Dash
  * La meta diaria del período en curso y el gasto de cada día, lo único que el encabezado de un día
  * necesita para decir su [LineaDelDiaADia].
  *
- * @property inicio primer día del período en curso.
- * @property hoy el último día que tiene línea: los días futuros no tienen qué comparar.
+ * Lleva línea un día del período en curso (desde [inicio]) hasta [hoy]: los días futuros no tienen
+ * qué comparar y los de un período cerrado no se pueden reconstruir honestamente.
  */
 class DiaADia internal constructor(
     private val meta: Long,

@@ -3,6 +3,9 @@ package com.jvillada.movi.ui.transactions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -137,9 +140,11 @@ class DiaADiaEnMovimientosTest {
         DiasPlegadosStore.clear()
     }
 
+    private var enPantalla by mutableStateOf(true)
+
     private fun montar(periodoInicial: String? = null) {
         composeRule.setContent {
-            MoviTheme {
+            if (enPantalla) MoviTheme {
                 colorDeSale = Movi.colores.sale
                 colorDeEntra = Movi.colores.entra
                 val base = LocalDensity.current
@@ -268,5 +273,30 @@ class DiaADiaEnMovimientosTest {
         composeRule.waitForIdle()
 
         assertEquals(antes, tops(), "el alto ya estaba reservado")
+    }
+
+    /**
+     * Ir a otra pantalla y volver no vuelve a esconder la línea: la meta se recuerda como el resto
+     * de las lecturas (ver `CacheDeLecturas`) y al primer cuadro ya está, con la lectura nueva
+     * todavía en vuelo.
+     */
+    @Test
+    fun `al volver a Movimientos la linea ya esta al primer cuadro`() {
+        montar()
+        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
+        composeRule.waitForIdle()
+        enPantalla = false
+        composeRule.waitForIdle()
+
+        val puerta = CompletableDeferred<DashboardSummary>()
+        resumenDelInicio = { puerta.await() }
+        enPantalla = true
+        composeRule.waitForIdle()
+
+        assertEquals(3, lineas().size, "lo último que se vio ya está a la vista")
+        assertTrue(hay("Cena de ayer"))
+        puerta.complete(DashboardSummary(gastoVariablePorDia = mapOf(ayer.toString() to 60_000L, anteayer.toString() to 10_000L)))
+        composeRule.waitForIdle()
+        assertEquals(3, lineas().size)
     }
 }
