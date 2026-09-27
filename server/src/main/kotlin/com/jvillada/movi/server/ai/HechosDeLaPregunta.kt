@@ -310,6 +310,11 @@ private fun hechosDelPeriodo(p: ContextoDelPeriodo): String = buildString {
     val flujo = p.ingresos - gastos
     appendLine("Este período (${p.rango}; quedan ${p.diasQueQuedan} días):")
     appendLine("- Ingresos: ${pesos(p.ingresos)}; gastos: ${pesos(gastos)}; flujo (ingresos − gastos): ${pesos(flujo)}")
+    p.lineaDeCreditosDesembolsados(::pesos)?.let {
+        appendLine(it)
+        // La cuenta hecha: lo que quedaría sin la plata prestada, para que el modelo no la calcule.
+        appendLine("- Sin los créditos desembolsados, el flujo del período sería ${pesos(flujo - p.creditosDesembolsados)}")
+    }
     val pendientes = p.recurrentes.filter { !it.esIngreso && !it.yaOcurrioEnElPeriodo }.sumOf { it.monto }
     if (pendientes > 0L) {
         appendLine("- Gastos recurrentes que todavía no ocurrieron: ${pesos(pendientes)}")
