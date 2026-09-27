@@ -531,6 +531,9 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         working = true
         error = null
         coroutine.launch {
+            // Si el movimiento se crea y marcar el aviso falla, el aviso sigue pendiente: sin volver
+            // a revisar, el siguiente «Confirmar» crearía un segundo movimiento en silencio.
+            var movimientoCreado = false
             intentar {
                 val event = movimientoConfirmadoDelSms(
                     // Mismo motivo que en QuickAddScreen — ver newId().
@@ -543,6 +546,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     textoDelSms = sms?.text.orEmpty(),
                 )
                 Repositories.wallets.postEvent(event)
+                movimientoCreado = true
                 Repositories.wallets.confirmSms(smsId)
             }.onSuccess {
                 working = false
@@ -553,6 +557,9 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             }.onFailure {
                 working = false
                 error = it.toUserMessage()
+                // Se vuelve a revisar «¿Ya lo anotaste?»: el que se acaba de crear aparece ahí con
+                // «Es este», que marca el aviso sin crear otro.
+                if (movimientoCreado) reintentoDeRevision++
             }
         }
     }

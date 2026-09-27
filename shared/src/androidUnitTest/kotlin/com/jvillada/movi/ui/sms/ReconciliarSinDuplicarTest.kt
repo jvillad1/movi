@@ -80,7 +80,9 @@ class ReconciliarSinDuplicarTest {
     private inner class Repo(
         private val sms: SmsMessage = deGlim,
         private val coincidencias: suspend (Int) -> List<FinancialEvent> = { emptyList() },
+        private val confirmar: suspend (Int) -> Unit = {},
     ) : RepositorioDePrueba() {
+        var confirmaciones = 0
         var lecturasDeCoincidencias = 0
         override suspend fun getAccounts(): List<Account> = listOf(glim)
         override suspend fun getSms(id: String): SmsMessage = if (id == deWallet.id) deWallet else sms
@@ -89,7 +91,7 @@ class ReconciliarSinDuplicarTest {
         override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> =
             coincidencias(++lecturasDeCoincidencias)
         override suspend fun postEvent(event: FinancialEvent): FinancialEvent = event.also { publicados += it }
-        override suspend fun confirmSms(id: String) {}
+        override suspend fun confirmSms(id: String) = confirmar(++confirmaciones)
     }
 
     // ── El botón espera la revisión ─────────────────────────────────────────────
@@ -150,6 +152,29 @@ class ReconciliarSinDuplicarTest {
         // El encabezado va en versales («¿YA LO ANOTASTE?»): se busca la frase de abajo.
         composeRule.onNodeWithText("Encontramos un movimiento igual", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("Es este").assertIsDisplayed()
+    }
+
+    /**
+     * **Se creó el movimiento y marcar el aviso falló.** El aviso sigue pendiente, y sin volver a
+     * revisar el siguiente «Confirmar» creaba un segundo movimiento. Ahora se revisa de nuevo y el
+     * que se acaba de crear se ofrece con «Es este».
+     */
+    @Test
+    fun si_marcar_el_aviso_falla_se_vuelve_a_revisar_y_se_ofrece_el_creado() {
+        val repo = Repo(
+            coincidencias = { if (publicados.isEmpty()) emptyList() else publicados.toList() },
+            confirmar = { vez -> if (vez == 1) error("sin señal") },
+        )
+        montar(repo)
+
+        tocar("Confirmar")
+
+        assertEquals(1, publicados.size)
+        assertEquals(2, repo.lecturasDeCoincidencias, "no se volvió a revisar después de la falla")
+        composeRule.onNodeWithText("Encontramos un movimiento igual", substring = true).assertIsDisplayed()
+        tocar("Es este")
+        assertEquals(1, publicados.size, "se creó un segundo movimiento")
+        assertEquals(2, repo.confirmaciones)
     }
 
     // ── El aviso del mismo pago ─────────────────────────────────────────────────
