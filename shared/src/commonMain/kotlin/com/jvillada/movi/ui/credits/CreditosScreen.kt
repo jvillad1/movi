@@ -115,11 +115,20 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     val creditosListos = credits.takeIf { perfilContestado }
     val tarjetasListas = cards.takeIf { perfilContestado }
     val cargando = !noSeLeyo && (creditosListos == null || tarjetasListas == null)
-    // Un vacío solo se afirma con una lectura que contestó en ESTA visita: uno recordado con la
-    // lectura de ahora caída sería el de otra visita (queda el aviso, con su «Reintentar»).
-    val isEmpty = creditosListos?.isEmpty() == true && tarjetasListas?.isEmpty() == true && !noSePudoActualizar
+    // Las dos listas a la vista y vacías. NO es lo mismo que [isEmpty]: esto dice qué hay pintado,
+    // aquello si se puede AFIRMAR que no hay deudas. Todo lo que presupone deudas —la tarjeta de
+    // «Deuda total», el «Nuevo crédito» compacto— mira esto: con las listas vacías y una lectura
+    // caída, «Deuda total $0» sería una cifra salida de una lectura que falló.
+    val sinDeudas = creditosListos?.isEmpty() == true && tarjetasListas?.isEmpty() == true
+    // Un vacío solo se afirma con préstamos y tarjetas que contestaron en ESTA visita: uno recordado
+    // con la lectura de ahora caída sería el de otra visita (queda el aviso, con su «Reintentar»).
+    // Una falla del perfil no cuenta: el perfil solo nombra el mes de la última cuota.
+    val isEmpty = sinDeudas && !creditosLeidos.falloConAlgoALaVista && !tarjetasLeidas.falloConAlgoALaVista
     // Hay algo pintado que esta visita todavía no confirmó: «Actualizando…» en la cabecera.
     val actualizandoConAlgoALaVista = loading && creditosListos != null && tarjetasListas != null
+    // El alta compacta. Mientras dice «Actualizando…» la cabecera no la lleva: las dos juntas no
+    // entran a 390 dp sin cortar el título en «Cré…», y el alta vuelve en cuanto la lectura contesta.
+    val nuevoEnLaCabecera = !sinDeudas && !noSeLeyo && !actualizandoConAlgoALaVista
     // El plan de cada préstamo (interés de la cuota, si amortiza, cuándo termina). Se calcula acá
     // una sola vez y baja a las tarjetas: la aritmética vive en `:core` para que el server y los
     // tres clientes vean el mismo número. Ver [PlanDelCredito].
@@ -187,14 +196,14 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Créditos",
                 leading = leadingFor(Screen.Credits, onNavigate, fallback = Screen.Accounts),
-                action = if ((!isEmpty && !noSeLeyo) || actualizandoConAlgoALaVista) {
-                    {
-                        if (actualizandoConAlgoALaVista) ActualizandoEnLaCabecera()
-                        if (!isEmpty && !noSeLeyo) NewItemButton(label = "Nuevo crédito", onClick = { showTypeChooser = true })
-                    }
+                action = if (actualizandoConAlgoALaVista) {
+                    { ActualizandoEnLaCabecera() }
+                } else if (nuevoEnLaCabecera) {
+                    { NewItemButton(label = "Nuevo crédito", onClick = { showTypeChooser = true }) }
                 } else null,
             )
-            if (noSePudoActualizar) {
+            // Un solo aviso: sin nada que mostrar, el de «No pudimos cargar» de abajo ya lo dice todo.
+            if (noSePudoActualizar && !noSeLeyo) {
                 Spacer(Modifier.height(14.dp))
                 NoSePudoActualizar(
                     onReintentar = { reloadKey++ },
@@ -225,7 +234,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 // Sin un solo crédito ni tarjeta no hay deuda que resumir — «Deuda total $0»
                 // arriba del vacío que enseña presentaba un cero como si fuera un hecho. Con
                 // cualquier crédito o tarjeta, esta tarjeta sigue apareciendo igual que siempre.
-                if (!isEmpty) {
+                if (!sinDeudas) {
                     item {
                         MinCard(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
