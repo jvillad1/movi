@@ -94,6 +94,17 @@ class AvisosDelMismoPagoTest {
         assertNull(parecidos(atajo, glim)["g"])
     }
 
+    /** `momentoDelSms` fecha «ahora» lo que no entiende: dos de esos no son el mismo pago por eso. */
+    @Test
+    fun `una hora ilegible o futura no marca ni es marcada`() {
+        assertEquals(mapOf("w" to null, "g" to null), parecidos(wallet.copy(time = "ayer"), glim.copy(time = "sin hora")))
+        assertEquals(mapOf("w" to null, "g" to null), parecidos(wallet.copy(time = "ayer"), glim))
+        // Los dos en el futuro (el reloj del teléfono adelantado): con un `ahora` de junio de 2025,
+        // el 25-sep-2026 todavía no pasó.
+        val enElFuturo = conLosAvisosParecidos(listOf(wallet, glim), ahora = 1_750_000_000_000L)
+        assertEquals(listOf(null, null), enElFuturo.map { it.parecidoA })
+    }
+
     @Test
     fun `entre varios parecidos apunta al mas cercano`() {
         val sms1 = sms("s1", "85540", "Bancolombia: Compraste \$15.100,00 en TOSTAO con tu T.Deb *4057", time = "2026-09-25 09:22")

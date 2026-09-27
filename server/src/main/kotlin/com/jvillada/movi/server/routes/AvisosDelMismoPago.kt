@@ -27,14 +27,19 @@ internal const val MINUTOS_PARA_EL_MISMO_PAGO: Long = 10
  * aprobar. El otro puede estar en cualquier estado — que ya se haya aprobado el primero es
  * justamente el caso en que aprobar el segundo duplica. Si hay varios, se apunta al más cercano.
  *
+ * Un aviso cuya hora no se puede leer, o cae en el futuro, **no entra**: ni lleva la marca ni se
+ * la da a otro. [momentoDelSms] los fecha «ahora» para poder anotarlos, pero acá dos de esos
+ * quedarían a cero minutos y se verían como el mismo pago sin serlo.
+ *
  * No cambia el orden ni ningún otro campo: solo llena `parecidoA`.
  */
 internal fun conLosAvisosParecidos(mensajes: List<SmsMessage>, ahora: Long): List<SmsMessage> {
     if (mensajes.none { it.state == SMS_STATE_PENDING }) return mensajes
     val margen = MINUTOS_PARA_EL_MISMO_PAGO * 60_000L
     val leidos = mensajes.mapNotNull { sms ->
+        val momento = momentoConfiable(sms.time, ahora) ?: return@mapNotNull null
         val parsed = parseSms(sms.text, sms.bank) ?: return@mapNotNull null
-        Leido(sms, parsed.amount.roundToLong(), parsed.currency, parsed.type, momentoDelSms(sms.time, ahora))
+        Leido(sms, parsed.amount.roundToLong(), parsed.currency, parsed.type, momento)
     }
     val porId = leidos.associateBy { it.sms.id }
     return mensajes.map { sms ->
@@ -52,6 +57,15 @@ internal fun conLosAvisosParecidos(mensajes: List<SmsMessage>, ahora: Long): Lis
             .minByOrNull { abs(it.momento - este.momento) }
         if (parecido == null) sms else sms.copy(parecidoA = parecido.sms.id)
     }
+}
+
+/**
+ * El momento del aviso solo si de verdad se leyó y no es futuro. Con `ahora = Long.MAX_VALUE`,
+ * [momentoDelSms] no recorta nada y devuelve ese mismo valor únicamente cuando no entendió la hora.
+ */
+private fun momentoConfiable(time: String, ahora: Long): Long? {
+    val momento = momentoDelSms(time, ahora = Long.MAX_VALUE)
+    return momento.takeIf { it != Long.MAX_VALUE && it <= ahora }
 }
 
 private class Leido(val sms: SmsMessage, val monto: Long, val moneda: String, val tipo: TransactionType, val momento: Long)
