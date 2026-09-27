@@ -22,8 +22,8 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.MoneyField
-import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.VerTodasLasCuentas
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.credits.FieldBox
@@ -123,155 +123,138 @@ fun GoalSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !saving, onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
+        // El contenido de la hoja se desplaza.
+        //
+        // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+        // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+        // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+        // propia hoja. Sin manera de llegar a él.
+        //
+        // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+        // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+        // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .verticalScroll(rememberScrollState())
+                .weight(1f, fill = false),
         ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
-            // El contenido de la hoja se desplaza.
-            //
-            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
-            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
-            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
-            // propia hoja. Sin manera de llegar a él.
-            //
-            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
-            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
-            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .weight(1f, fill = false),
-            ) {
 
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (isEditMode) "Editar meta" else "Nueva meta",
+                    style = Movi.textos.titulo,
+                    color = Movi.colores.texto,
+                    modifier = Modifier.weight(1f),
+                )
+                if (isEditMode) {
                     Text(
-                        text = if (isEditMode) "Editar meta" else "Nueva meta",
-                        style = Movi.textos.titulo,
-                        color = Movi.colores.texto,
-                        modifier = Modifier.weight(1f),
+                        text = if (saving) "…" else "Eliminar",
+                        style = Movi.textos.cuerpo,
+                        color = Movi.colores.sale,
+                        modifier = Modifier.clickable(enabled = !saving) { pidiendoBorrar = true },
                     )
-                    if (isEditMode) {
-                        Text(
-                            text = if (saving) "…" else "Eliminar",
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.sale,
-                            modifier = Modifier.clickable(enabled = !saving) { pidiendoBorrar = true },
+                }
+            }
+            if (pidiendoBorrar && existing != null) {
+                ConfirmacionEnLinea(
+                    pregunta = "¿Eliminar la meta «${existing.name}»?",
+                    detalle = "Se borra la meta. La plata de su cuenta y sus movimientos no se tocan. No se puede deshacer.",
+                    textoConfirmar = "Eliminar",
+                    ocupado = saving,
+                    onConfirmar = { delete() },
+                    onCancelar = { pidiendoBorrar = false },
+                    modifier = Modifier.padding(bottom = 18.dp),
+                )
+            }
+
+            SectionLabel("NOMBRE")
+            Spacer(Modifier.height(8.dp))
+            FieldBox("Ej: Viaje, Colchón de emergencia", name, { name = it })
+
+            Spacer(Modifier.height(18.dp))
+
+            SectionLabel("MONTO OBJETIVO")
+            Spacer(Modifier.height(8.dp))
+            MoneyField(value = target, onValueChange = { target = it })
+
+            Spacer(Modifier.height(18.dp))
+
+            SectionLabel("CUENTA DONDE SE AHORRA")
+            Spacer(Modifier.height(8.dp))
+            if (cuentas.vacio) {
+                Text(
+                    "No tienes cuentas de Dinero o Inversión — crea una en Patrimonio primero",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val visibles = if (verTodasLasCuentas) cuentas.todas else cuentas.principales
+                    visibles.forEach { acc ->
+                        GoalAccountRow(
+                            label = acc.name,
+                            selected = selectedAccountId == acc.id,
+                            onClick = { selectedAccountId = acc.id },
+                        )
+                    }
+                    if (cuentas.hayOtras) {
+                        VerTodasLasCuentas(
+                            expandido = verTodasLasCuentas,
+                            cuantas = cuentas.otras.size,
+                            uso = UsoDeCuenta.DINERO_PROPIO,
+                            onToggle = { verTodasLasCuentas = !verTodasLasCuentas },
                         )
                     }
                 }
-                if (pidiendoBorrar && existing != null) {
-                    ConfirmacionEnLinea(
-                        pregunta = "¿Eliminar la meta «${existing.name}»?",
-                        detalle = "Se borra la meta. La plata de su cuenta y sus movimientos no se tocan. No se puede deshacer.",
-                        textoConfirmar = "Eliminar",
-                        ocupado = saving,
-                        onConfirmar = { delete() },
-                        onCancelar = { pidiendoBorrar = false },
-                        modifier = Modifier.padding(bottom = 18.dp),
-                    )
-                }
-
-                SectionLabel("NOMBRE")
-                Spacer(Modifier.height(8.dp))
-                FieldBox("Ej: Viaje, Colchón de emergencia", name, { name = it })
-
-                Spacer(Modifier.height(18.dp))
-
-                SectionLabel("MONTO OBJETIVO")
-                Spacer(Modifier.height(8.dp))
-                MoneyField(value = target, onValueChange = { target = it })
-
-                Spacer(Modifier.height(18.dp))
-
-                SectionLabel("CUENTA DONDE SE AHORRA")
-                Spacer(Modifier.height(8.dp))
-                if (cuentas.vacio) {
-                    Text(
-                        "No tienes cuentas de Dinero o Inversión — crea una en Patrimonio primero",
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                    )
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val visibles = if (verTodasLasCuentas) cuentas.todas else cuentas.principales
-                        visibles.forEach { acc ->
-                            GoalAccountRow(
-                                label = acc.name,
-                                selected = selectedAccountId == acc.id,
-                                onClick = { selectedAccountId = acc.id },
-                            )
-                        }
-                        if (cuentas.hayOtras) {
-                            VerTodasLasCuentas(
-                                expandido = verTodasLasCuentas,
-                                cuantas = cuentas.otras.size,
-                                uso = UsoDeCuenta.DINERO_PROPIO,
-                                onToggle = { verTodasLasCuentas = !verTodasLasCuentas },
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(18.dp))
-
-                SectionLabel("FECHA OBJETIVO (AAAA-MM-DD, OPCIONAL)")
-                Spacer(Modifier.height(8.dp))
-                FieldBox("Ej: 2027-06-01", targetDate, { targetDate = filterDateInput(it) })
-
-                if (error != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
-
-                Spacer(Modifier.height(20.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                        .clickable(enabled = canSave) { save() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = when {
-                            saving     -> if (isEditMode) "Guardando…" else "Creando…"
-                            isEditMode -> "Guardar cambios"
-                            else       -> "Crear meta"
-                        },
-                        style = Movi.textos.titulo,
-                        color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
-                    )
-                }
-                if (!canSave && !saving && missingFieldMessage != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = missingFieldMessage,
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                    )
-                }
-
-                Spacer(Modifier.height(14.dp))
             }
+
+            Spacer(Modifier.height(18.dp))
+
+            SectionLabel("FECHA OBJETIVO (AAAA-MM-DD, OPCIONAL)")
+            Spacer(Modifier.height(8.dp))
+            FieldBox("Ej: 2027-06-01", targetDate, { targetDate = filterDateInput(it) })
+
+            if (error != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                    .clickable(enabled = canSave) { save() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = when {
+                        saving     -> if (isEditMode) "Guardando…" else "Creando…"
+                        isEditMode -> "Guardar cambios"
+                        else       -> "Crear meta"
+                    },
+                    style = Movi.textos.titulo,
+                    color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
+                )
+            }
+            if (!canSave && !saving && missingFieldMessage != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = missingFieldMessage,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
         }
     }
 }
