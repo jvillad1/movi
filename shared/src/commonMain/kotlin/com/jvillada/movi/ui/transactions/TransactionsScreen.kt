@@ -1258,7 +1258,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
         // Durante una recarga (cada «Reintentar», cada guardado desde Agregar) se queda con el
         // último número que se contó: desmontarlo mientras se lee hacía saltar la lista ~56 dp y
         // volver. Solo se va cuando una lectura que terminó dice cero.
-        val conteoFresco = if (!loading && porRevisar.terminaron) {
+        //
+        // Con lo recordado de la visita anterior —las tres fuentes a la vista desde el primer cuadro—
+        // se cuenta ya, como se pinta ya la lista: esperar a que contesten haría aparecer el renglón
+        // DESPUÉS de la lista y la empujaría hacia abajo.
+        val lasTresALaVista = perfilLeido && diasLeidos && porRevisar.mensajes != null && porRevisar.candidatos != null
+        val conteoFresco = if ((!loading && porRevisar.terminaron) || lasTresALaVista) {
             cuantosPorRevisar(
                 mensajes = porRevisar.mensajes,
                 dias = if (diasLeidos) allDays else null,
