@@ -5,6 +5,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -20,7 +21,27 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
     RecurringRule(
         id         = "$CREDIT_RULE_PREFIX${terms.accountId}",
         name       = "Cuota $accountName",
-        category   = "Créditos",
+        // **Ola S (2026-09-27):** era `"Créditos"`, un texto que ningún movimiento real usa — la
+        // categoría con la que de verdad se anota el pago de una cuota es [CUOTA_CATEGORY] («Cuota
+        // de crédito», ver `pagoDeCuotaLegs`). `candidatosPuntuados` exige que el NOMBRE o la
+        // CATEGORÍA del movimiento peguen con los de esta regla; el texto de una transferencia casi
+        // nunca dice el nombre del crédito, así que con la categoría equivocada un pago cuya única
+        // evidencia era la categoría correcta ni siquiera entraba como candidato. Ver el KDoc de
+        // [CUOTA_CATEGORY] y `OccurrenceMatchingTest` (caso «Crédito Mamá»).
+        //
+        // **Ojo con lo que este arreglo NO alcanza a cerrar.** El «Plan» de HOY no le pregunta
+        // nada a `candidatosPuntuados` sobre esta regla: `GET /api/payments/occurrences` nunca
+        // trata una regla sintética como abierta ni le arma candidatos (lo prueba
+        // `LaCuotaPagadaNoEstaVencidaTest`, caso «una regla sintética nunca sale abierta de
+        // occurrences»); su «pagado» sale entero de `pagosDeDeudaPorPeriodo` (`PagosDeDeuda.kt`),
+        // que compara con una categoría FIJA en código (`categoriaQueSalda`, no esta) y exige
+        // además que el movimiento sea la pata que baja la deuda EN LA CUENTA de esa deuda — el
+        // mismo archivo prueba a propósito, en «la pata del dinero sola no salda la cuota», que un
+        // gasto suelto en la cuenta de ahorros con esta misma categoría NO salda nada. Este cambio
+        // deja lista la categoría para el día en que una regla sintética SÍ entre a
+        // `candidatosPuntuados`; no cambia, por sí solo, qué hace pagada hoy a una cuota o a una
+        // tarjeta.
+        category   = CUOTA_CATEGORY,
         amount     = terms.installment,
         // **Un crédito a un mes no es un compromiso mensual: es un pago y se acabó.** El dueño
         // tiene uno («Crédito Techo Gardenera», $10.000.000 a un plazo de 1 mes, que es su saldo

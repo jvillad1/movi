@@ -36,7 +36,7 @@ class PagosDeDeudaTest {
     private fun reglaDeCredito(dia: Int = 15, desde: String? = null) = RecurringRule(
         id = "$CREDIT_RULE_PREFIX$cuentaDelCredito",
         name = "Cuota Crediágil 3090",
-        category = "Créditos",
+        category = CUOTA_CATEGORY,
         amount = 26_485,
         dayOfMonth = dia,
         type = TransactionType.EXPENSE,
@@ -46,7 +46,7 @@ class PagosDeDeudaTest {
     private fun reglaDeTarjeta(dia: Int = 16) = RecurringRule(
         id = "$CARD_RULE_PREFIX$cuentaDeLaTarjeta",
         name = "Pago tarjeta AMEX 9208",
-        category = "Créditos",
+        category = CUOTA_CATEGORY,
         amount = 19_818_701,
         montoEsSaldo = true,
         dayOfMonth = dia,

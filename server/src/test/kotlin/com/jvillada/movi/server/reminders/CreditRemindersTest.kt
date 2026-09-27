@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.TransactionType
 import java.time.LocalDate
@@ -21,7 +22,9 @@ class CreditRemindersTest {
         val rule = virtualRuleFor(terms, accountName = "Crédito Vehículo")
         assertEquals("credit_acc-loan-1", rule.id)
         assertEquals("Cuota Crédito Vehículo", rule.name)
-        assertEquals("Créditos", rule.category)
+        // Ola S: era "Créditos", un texto que ningún movimiento real usa (ver el KDoc de
+        // `virtualRuleFor`). La categoría real de una cuota es CUOTA_CATEGORY.
+        assertEquals(CUOTA_CATEGORY, rule.category)
         assertEquals(4_550_030, rule.amount)
         assertEquals(25, rule.dayOfMonth)
         assertEquals(TransactionType.EXPENSE, rule.type)

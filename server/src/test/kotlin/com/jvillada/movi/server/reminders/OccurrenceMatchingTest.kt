@@ -2,6 +2,7 @@ package com.jvillada.movi.server.reminders
 
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.PaymentStatus
@@ -384,5 +385,60 @@ class OccurrenceMatchingTest {
         val deOtro = evento(id = "ev_otro", day = 24, month = 9, amount = 125_000, category = "Deporte",
             description = "Gimnasio Caro", type = TransactionType.EXPENSE)
         assertNull(ocurrenciaConcluyente(gimnasio, LocalDate.of(2026, 9, 25), listOf(deOtro)))
+    }
+
+    // ── Ola S: la cuota de un crédito/tarjeta, emparejada solo por su categoría ───────────────
+
+    /**
+     * **El bug real (2026-09-27).** La regla sintética de un crédito o de una tarjeta —armada al
+     * vuelo por `virtualRuleFor`/`virtualRuleForCard`, nunca una fila de `recurring_rules`— llevaba
+     * `category = "Créditos"`, un texto que NINGÚN movimiento real usa: la categoría que de verdad
+     * anotan los pagos de cuota es [CUOTA_CATEGORY] («Cuota de crédito»). Como el texto de un SMS de
+     * transferencia nunca dice el nombre del crédito, el nombre tampoco pegaba casi nunca — así que
+     * un movimiento cuya única evidencia es la categoría correcta ni siquiera entraba como
+     * candidato. Ver `virtualRuleFor`/`virtualRuleForCard` para el arreglo.
+     */
+    @Test fun `un movimiento cuya unica evidencia es la categoria de cuota entra como candidato`() {
+        // La regla sintética de verdad, armada como la arma `virtualRuleFor` — no una a mano con
+        // la categoría ya corregida: si esta prueba no llama a `virtualRuleFor`, no prueba nada
+        // sobre el bug real.
+        val terms = com.jvillada.movi.shared.model.CreditTerms(
+            accountId = "acc-mama", bank = "Bancolombia", principal = 15_000_000,
+            rateEa = 18.0, termMonths = 24, installment = 1_300_000,
+            dayOfMonth = 27, startDate = "2025-01-27",
+        )
+        val cuotaDelCredito = virtualRuleFor(terms, accountName = "Crédito Mamá")
+
+        // El texto de la transferencia no dice «Crédito Mamá» —nunca lo dice— y la categoría es
+        // la única seña. Antes del arreglo, ni el nombre ni la categoría pegaban y no se proponía
+        // nada; el dueño terminó con un pago real que el checklist seguía marcando pendiente.
+        val transferencia = evento(
+            id = "ev_mama", day = 27, month = 8, amount = 1_300_000,
+            category = CUOTA_CATEGORY, description = "Transferencia a Mamá",
+            type = TransactionType.EXPENSE,
+        )
+        assertEquals(
+            listOf("ev_mama"),
+            occurrenceCandidatesFor(cuotaDelCredito, LocalDate.of(2026, 8, 27), listOf(transferencia)).map { it.id },
+        )
+    }
+
+    /** Lo mismo del lado de una tarjeta, cuya regla sintética arma `virtualRuleForCard`. */
+    @Test fun `lo mismo con el pago sintetico de una tarjeta`() {
+        val terms = com.jvillada.movi.shared.model.CardTerms(
+            accountId = "acc-master", bank = "Bancolombia",
+            creditLimit = 20_000_000, cutoffDay = 10, paymentDay = 25,
+        )
+        val pagoDeLaTarjeta = virtualRuleForCard(
+            terms, accountName = "Master Black", currentDebt = 500_000, accountCurrency = "COP", tasa = null,
+        )
+        val abono = evento(
+            id = "ev_master", day = 25, month = 8, amount = 500_000,
+            category = CUOTA_CATEGORY, description = "Pago", type = TransactionType.EXPENSE,
+        )
+        assertEquals(
+            listOf("ev_master"),
+            occurrenceCandidatesFor(pagoDeLaTarjeta, LocalDate.of(2026, 8, 25), listOf(abono)).map { it.id },
+        )
     }
 }

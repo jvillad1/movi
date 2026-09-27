@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -41,7 +42,7 @@ class PrimeraCuotaTest {
     private fun regla(activeFrom: String?) = RecurringRule(
         id = "rule-1",
         name = "Cuota Crédito",
-        category = "Créditos",
+        category = CUOTA_CATEGORY,
         amount = 10_000_000L,
         dayOfMonth = 1,
         type = TransactionType.EXPENSE,
