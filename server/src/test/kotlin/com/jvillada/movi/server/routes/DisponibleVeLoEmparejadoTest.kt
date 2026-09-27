@@ -250,4 +250,25 @@ class DisponibleVeLoEmparejadoTest {
         assertEquals(LocalDate.of(2026, 10, 22), vence, "El mismo vencimiento que `/upcoming`")
         assertEquals(53_077L, parteFija(elDiaDelDueno)["ev-1014"], "El pago de octubre es el fijo que el cliente ya resta")
     }
+
+    // ── El fijo sin pagar no se come el gasto de su categoría ────────────────
+
+    /**
+     * **El «Período $0» del dueño (26-sep).** «Mercado» ($2.000.000, «Comida», en su cuenta) sin pagar
+     * y cuatro gastos de Comida: solo comparten categoría y cuenta, no el nombre. Ninguno es pago de
+     * la regla, así que el Disponible resta los $2.000.000 del fijo Y los $94.800 reales.
+     */
+    @Test
+    fun `los gastos de la categoria de un fijo sin pagar cuentan como variable`() {
+        regla("rr-mercado", "Mercado", "Comida", 2_000_000L, dia = 25)
+        gasto("ev-1", "Almuerzo", "Comida", 44_000L, LocalDate.of(2026, 9, 25))
+        gasto("ev-2", "Domicilio", "Comida", 29_000L, LocalDate.of(2026, 9, 26))
+        gasto("ev-3", "Panadería", "Comida", 15_100L, LocalDate.of(2026, 9, 26))
+        gasto("ev-4", "Café", "Comida", 6_700L, LocalDate.of(2026, 9, 27))
+
+        assertEquals(emptyMap(), parteFija(hoy))
+        val variable = gastoVariablePorDia(eventosDelPeriodo(hoy), parteFija(hoy)) { epochMillisToAppDateString(it) }
+        assertEquals(94_800L, variable.values.sum())
+        assertEquals(6_700L, variable["2026-09-27"], "Hoy")
+    }
 }

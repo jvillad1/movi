@@ -235,7 +235,7 @@ fun candidatosPuntuados(
             val laCuentaPega = rule.accountId != null && event.accountId == rule.accountId
             // El nombre pesa más que la categoría: «Salario» dicho igual identifica mejor que
             // «Otros ingresos» compartido con media docena de cosas. La cuenta desempata.
-            val senas = (if (nombrePega) 3 else 0) +
+            val senas = (if (nombrePega) SENA_DEL_NOMBRE else 0) +
                 (if (categoriaPega) 1 else 0) +
                 (if (laCuentaPega) 1 else 0)
             CandidatoPuntuado(
@@ -259,6 +259,12 @@ val ORDEN_DE_CANDIDATOS: Comparator<CandidatoPuntuado> =
         .thenBy { it.distanciaMonto }
         .thenBy { it.distanciaDias }
         .thenBy { it.event.id }
+
+/**
+ * Lo que suma que el nombre pegue. Es mayor que categoría + cuenta juntas (1 + 1), así que
+ * `senas >= SENA_DEL_NOMBRE` quiere decir «el nombre pega», y nada menos lo garantiza.
+ */
+const val SENA_DEL_NOMBRE: Int = 3
 
 /** Un candidato con lo que lo ordena: sus señas (nombre 3, categoría 1, cuenta 1) y sus distancias. */
 data class CandidatoPuntuado(

@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.cuentaComoGastoVariable
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
@@ -34,9 +35,12 @@ import java.time.ZoneId
  * 1. **el movimiento de su sello**, si lo tiene — y lo que Movi emparejó solo cuenta como un sello
  *    (`emparejadasComoSellos`): el checklist ya lo da por pagado;
  * 2. si falta monto (sellado sin movimiento, sin sellar, o pagado en partes), **los candidatos del
- *    «¿Es este?»** — el mismo [candidatosPuntuados] que la pantalla de Recurrentes usa para
- *    proponer, con sus mismas cuatro puertas y la misma seña mínima (nombre o categoría). No hay
- *    un emparejador nuevo.
+ *    «¿Es este?» cuyo NOMBRE pega con la regla** — el mismo [candidatosPuntuados] que la pantalla de
+ *    Recurrentes usa para proponer, con sus mismas cuatro puertas, pero sin bajar a la seña mínima
+ *    de esa pantalla (nombre o categoría): compartir solo la categoría (y la cuenta) sirve para
+ *    proponerle el movimiento al dueño, no para darlo por pagado acá. La regla «Mercado» de
+ *    $2.000.000 en «Comida» absorbía así todo el gasto de Comida del período y el variable
+ *    —«Período/Semana/Hoy»— se quedaba en $0. No hay un emparejador nuevo.
  *
  * Cada movimiento paga **como mucho lo que le falta a la regla**: el colegio de $4.000.000 pagado
  * con $3.000.000 (sellado) + $1.000.000 saca los dos; el segundo gimnasio de $180.000, con la regla
@@ -189,6 +193,12 @@ fun parteFijaDelChecklist(
     val pares = falta.keys.flatMap { ruleId ->
         val regla = reglaPorId.getValue(ruleId)
         candidatosPuntuados(regla, vencimientos.getValue(ruleId), elegibles, usados, zone, settings = settings)
+            // Solo el NOMBRE absorbe. Un movimiento que comparte apenas la categoría (y la cuenta)
+            // no es evidencia de que pague este fijo: si lo absorbiera, «Mercado» ($2.000.000, sin
+            // pagar) se comería los gastos de Comida y el variable quedaría en $0 mientras el fijo
+            // sigue restando sus $2.000.000 enteros. Ese movimiento sigue siendo variable y el
+            // checklist se lo propone al dueño; al confirmarlo queda sellado y ahí sí sale.
+            .filter { dichoPorElNombre(regla, it) }
             .map { ruleId to it }
     }
     val orden = compareBy(ORDEN_DE_CANDIDATOS) { par: Pair<String, CandidatoPuntuado> -> par.second }
@@ -203,6 +213,24 @@ fun parteFijaDelChecklist(
     }
     return parte
 }
+
+/**
+ * El movimiento **dice el nombre de la regla**: el nombre pega (ver [SENA_DEL_NOMBRE]) o el
+ * movimiento empieza, palabra por palabra, con el nombre de la regla. Lo segundo cubre el pago en
+ * partes que el propio Movi rotula («Colegio Hija · parte desde Bancolombia»): sigue siendo
+ * «Colegio Hija» dicho por su nombre, aunque la cola no sea una fecha. Compartir solo la categoría
+ * o la cuenta no basta.
+ */
+private fun dichoPorElNombre(regla: RecurringRule, candidato: CandidatoPuntuado): Boolean {
+    if (candidato.senas >= SENA_DEL_NOMBRE) return true
+    val delaRegla = palabrasDelNombre(regla.name)
+    if (delaRegla.isEmpty()) return false
+    return listOf(candidato.event.description, candidato.event.merchant.orEmpty())
+        .any { palabrasDelNombre(it).take(delaRegla.size) == delaRegla }
+}
+
+private fun palabrasDelNombre(nombre: String): List<String> =
+    nombre.split(Regex("[^\\p{L}\\p{Nd}]+")).filter { it.isNotBlank() }.map(::claveComparableDeNombre)
 
 /** Un gasto en pesos, que cuenta en «Gastos», con la categoría de la cuota de un crédito. */
 private fun esCuotaQueSaleDelBolsillo(evento: FinancialEvent): Boolean =
