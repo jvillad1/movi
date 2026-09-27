@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -25,11 +24,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.recurrentes.reminderLeadHint
 
 /**
@@ -55,101 +53,84 @@ fun DiasDeAvisoSheet(
     // del dueño.
     var dias by remember(diasActuales) { mutableStateOf(diasActuales.coerceIn(0, 30)) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
+        // El contenido de la hoja se desplaza.
+        //
+        // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+        // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+        // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+        // propia hoja. Sin manera de llegar a él.
+        //
+        // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+        // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+        // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .verticalScroll(rememberScrollState())
+                .weight(1f, fill = false),
         ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
-            // El contenido de la hoja se desplaza.
-            //
-            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
-            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
-            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
-            // propia hoja. Sin manera de llegar a él.
-            //
-            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
-            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
-            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .weight(1f, fill = false),
-            ) {
 
-                Text(
-                    text = "¿Con cuánta anticipación te avisamos?",
-                    style = Movi.textos.titulo,
-                    color = Movi.colores.texto,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
-                )
-                Text(
-                    text = reminderLeadHint(dias),
-                    // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Normal,
-                    color = Movi.colores.textoMedio,
-                    modifier = Modifier.padding(bottom = 18.dp),
-                )
+            Text(
+                text = "¿Con cuánta anticipación te avisamos?",
+                style = Movi.textos.titulo,
+                color = Movi.colores.texto,
+                modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+            )
+            Text(
+                text = reminderLeadHint(dias),
+                // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
+                style = Movi.textos.cuerpo,
+                fontWeight = FontWeight.Normal,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.padding(bottom = 18.dp),
+            )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf(0, 1, 2, 3, 5, 7).forEach { d ->
-                        val elegido = d == dias
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (elegido) Movi.colores.marca else Movi.colores.tarjeta)
-                                .clickable(enabled = !saving) { dias = d },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = d.toString(),
-                                style = Movi.textos.cuerpo,
-                                fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (elegido) Movi.colores.fondo else Movi.colores.texto,
-                            )
-                        }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                listOf(0, 1, 2, 3, 5, 7).forEach { d ->
+                    val elegido = d == dias
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (elegido) Movi.colores.marca else Movi.colores.tarjeta)
+                            .clickable(enabled = !saving) { dias = d },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = d.toString(),
+                            style = Movi.textos.cuerpo,
+                            fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (elegido) Movi.colores.fondo else Movi.colores.texto,
+                        )
                     }
                 }
-
-                if (error != null) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(text = error, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
-
-                Spacer(Modifier.height(20.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (saving) Movi.colores.tarjeta else Movi.colores.marca)
-                        .clickable(enabled = !saving) { onSave(dias) }
-                        .padding(vertical = 15.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = if (saving) "Guardando…" else "Guardar",
-                        color = if (saving) Movi.colores.textoMedio else Movi.colores.fondo,
-                        style = Movi.textos.cuerpo,
-                    )
-                }
-
-                Spacer(Modifier.height(28.dp))
             }
+
+            if (error != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(text = error, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (saving) Movi.colores.tarjeta else Movi.colores.marca)
+                    .clickable(enabled = !saving) { onSave(dias) }
+                    .padding(vertical = 15.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (saving) "Guardando…" else "Guardar",
+                    color = if (saving) Movi.colores.textoMedio else Movi.colores.fondo,
+                    style = Movi.textos.cuerpo,
+                )
+            }
+
+            Spacer(Modifier.height(28.dp))
         }
     }
 }

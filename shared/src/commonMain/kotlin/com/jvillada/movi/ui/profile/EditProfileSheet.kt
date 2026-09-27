@@ -24,6 +24,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.AvatarPalette
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.credits.FieldBox
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.avatarColorOrDefault
@@ -70,78 +71,61 @@ fun EditProfileSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !saving, onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-        Column(
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Text("ALIAS", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+            Spacer(Modifier.height(8.dp))
+            FieldBox(
+                placeholder = "Tu nombre",
+                value = name,
+                onValueChange = { name = it },
+                keyboardType = KeyboardType.Text,
+            )
+
+            Spacer(Modifier.height(20.dp))
+            Text("COLOR DEL AVATAR", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+            Spacer(Modifier.height(10.dp))
+            for (row in AvatarPalette.COLORS.chunked(4)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    for (hex in row) {
+                        ColorSwatch(hex = hex, selected = hex == color, onClick = { color = hex })
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
+            error?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
+                .clickable(enabled = canSave) { save() }
+                .padding(vertical = 15.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
-
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                Text("ALIAS", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-                Spacer(Modifier.height(8.dp))
-                FieldBox(
-                    placeholder = "Tu nombre",
-                    value = name,
-                    onValueChange = { name = it },
-                    keyboardType = KeyboardType.Text,
-                )
-
-                Spacer(Modifier.height(20.dp))
-                Text("COLOR DEL AVATAR", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-                Spacer(Modifier.height(10.dp))
-                for (row in AvatarPalette.COLORS.chunked(4)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        for (hex in row) {
-                            ColorSwatch(hex = hex, selected = hex == color, onClick = { color = hex })
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                }
-
-                error?.let {
-                    Spacer(Modifier.height(6.dp))
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
-                    .clickable(enabled = canSave) { save() }
-                    .padding(vertical = 15.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(if (saving) "Guardando…" else "Guardar", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
-            }
-            if (!canSave && !saving && missingFieldMessage != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = missingFieldMessage,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            Spacer(Modifier.height(20.dp))
+            Text(if (saving) "Guardando…" else "Guardar", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
         }
+        if (!canSave && !saving && missingFieldMessage != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = missingFieldMessage,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Spacer(Modifier.height(20.dp))
     }
 }
 

@@ -13,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -23,7 +22,7 @@ import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.auth.AuthField
-import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -87,94 +86,77 @@ fun ChangePasswordSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !saving, onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
-        ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
+        if (success) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    "Listo, tu contraseña quedó actualizada.",
+                    style = Movi.textos.cuerpo, color = Movi.colores.entra,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        } else {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+                Text("Contraseña actual", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+                AuthField(
+                    value = current,
+                    onChange = { current = it },
+                    placeholder = "Tu contraseña de hoy",
+                    isPassword = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                )
+                Spacer(Modifier.height(14.dp))
+                Text("Contraseña nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+                AuthField(
+                    value = new,
+                    onChange = { new = it },
+                    placeholder = "•".repeat(PasswordPolicy.MIN_LENGTH),
+                    isPassword = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                )
+                Spacer(Modifier.height(14.dp))
+                Text("Repetir la nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+                AuthField(
+                    value = repeat,
+                    onChange = { repeat = it },
+                    placeholder = "Escríbela de nuevo",
+                    isPassword = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { save() }),
+                )
 
-            if (success) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        "Listo, tu contraseña quedó actualizada.",
-                        style = Movi.textos.cuerpo, color = Movi.colores.entra,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            } else {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                    Text("Contraseña actual", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
-                    AuthField(
-                        value = current,
-                        onChange = { current = it },
-                        placeholder = "Tu contraseña de hoy",
-                        isPassword = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Text("Contraseña nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
-                    AuthField(
-                        value = new,
-                        onChange = { new = it },
-                        placeholder = "•".repeat(PasswordPolicy.MIN_LENGTH),
-                        isPassword = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Text("Repetir la nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
-                    AuthField(
-                        value = repeat,
-                        onChange = { repeat = it },
-                        placeholder = "Escríbela de nuevo",
-                        isPassword = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { save() }),
-                    )
-
-                    error?.let {
-                        Spacer(Modifier.height(10.dp))
-                        Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
-                        .clickable(enabled = canSave) { save() }
-                        .padding(vertical = 15.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(if (saving) "Cambiando…" else "Cambiar contraseña", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
-                }
-                if (!canSave && !saving && missingFieldMessage != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = missingFieldMessage,
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                error?.let {
+                    Spacer(Modifier.height(10.dp))
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
             }
-            Spacer(Modifier.height(20.dp))
+
+            Spacer(Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
+                    .clickable(enabled = canSave) { save() }
+                    .padding(vertical = 15.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(if (saving) "Cambiando…" else "Cambiar contraseña", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
+            }
+            if (!canSave && !saving && missingFieldMessage != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = missingFieldMessage,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
+        Spacer(Modifier.height(20.dp))
     }
 }
