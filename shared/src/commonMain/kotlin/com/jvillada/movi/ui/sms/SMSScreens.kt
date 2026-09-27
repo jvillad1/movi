@@ -28,6 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -280,6 +283,37 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
     }
 }
 
+/** «$386.902», «$1,300,000», «$4.000.000»: el mismo par de formatos que ya reconoce `amountRegex`
+ * de `SmsRoutes.kt` (punto O coma como separador de miles), pero anclado al `$` porque acá solo
+ * resaltamos, no parseamos — un COP/USD sin `$` no es tan visible como para pelear por él. */
+private val MONTO_EN_PESOS = Regex("""\$[0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]+)?""")
+
+/** «*3684», «*8133», «*10272432504»: el mismo patrón que `CUENTA` en `MemoriaDeCategorias.kt` y
+ * `numerosQueNombraElMensaje` en `CuentaDelBanco.kt` — no es pública ninguna de las dos, así que se
+ * repite acá para no acoplar un módulo de UI a uno de lógica de negocio por una regex. */
+private val CUENTA_O_TARJETA = Regex("""\*\s?(\d{4,})""")
+
+/**
+ * **Lo importante de un SMS del banco, en negrita.** El dueño lo pidió mirando la bandeja «Por
+ * revisar»: el texto citado tal cual se ve todo con el mismo peso, y lo que quiere escanear de un
+ * vistazo —cuánto, en qué cuenta, de qué banco— no salta a la vista.
+ *
+ * No toca [texto] en sí (sigue siendo el dato crudo que llegó del banco): solo decide qué rangos
+ * pintar en negrita al mostrarlo. Sin ninguno de los patrones, devuelve el texto tal cual, sin
+ * negrita y sin lanzar — un SMS raro sin monto no es un error.
+ */
+internal fun resaltadoDelTextoDelBanco(texto: String): AnnotatedString = buildAnnotatedString {
+    append(texto)
+    fun negrita(rango: IntRange) = addStyle(SpanStyle(fontWeight = FontWeight.Bold), rango.first, rango.last + 1)
+
+    // El banco/entidad: la palabra o frase antes de los primeros dos puntos, si los hay.
+    val dosPuntos = texto.indexOf(':')
+    if (dosPuntos > 0 && texto.substring(0, dosPuntos).isNotBlank()) negrita(0 until dosPuntos)
+
+    MONTO_EN_PESOS.findAll(texto).forEach { negrita(it.range) }
+    CUENTA_O_TARJETA.findAll(texto).forEach { negrita(it.range) }
+}
+
 /**
  * **Un mensaje del banco**, como se lee en todas partes: el banco, cuándo llegó y en qué estado
  * está; el texto tal cual; y lo que Movi entendió, con «Revisar» si todavía espera una decisión.
@@ -348,7 +382,7 @@ internal fun TarjetaDeMensajeDelBanco(
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
             Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Movi.colores.hilo))
-            Text(sms.text, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace, lineHeight = 17.sp, modifier = Modifier.padding(start = 12.dp))
+            Text(resaltadoDelTextoDelBanco(sms.text), style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace, lineHeight = 17.sp, modifier = Modifier.padding(start = 12.dp))
         }
         Spacer(Modifier.height(14.dp))
         Hairline()
