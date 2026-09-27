@@ -71,6 +71,7 @@ import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
@@ -804,6 +805,9 @@ fun transferRowTitle(row: MovementRow.Transfer, accountTypes: Map<String, Accoun
     // llegar a ella, así que distingue exacto.
     row.out.category == CUOTA_CATEGORY -> "Cuota de crédito"
     row.out.category == CARD_PAYMENT_CATEGORY -> "Pago de tarjeta"
+    // La categoría del desembolso también manda sobre el tipo de cuenta: dice «Desembolso» aunque la
+    // lista de cuentas todavía no haya llegado (con el mapa vacío caería en «Traspaso»).
+    row.out.category == DESEMBOLSO_CATEGORY -> TITULO_DE_DESEMBOLSO
     accountTypes[row.out.accountId] == AccountType.LOAN -> TITULO_DE_DESEMBOLSO
     accountTypes[row.into.accountId] == AccountType.LOAN -> "Abono extraordinario"
     else -> "Traspaso"
@@ -811,20 +815,26 @@ fun transferRowTitle(row: MovementRow.Transfer, accountTypes: Map<String, Accoun
 
 /** ¿Este par es el desembolso de un crédito: la plata prestada que entró a una cuenta tuya? */
 fun esDesembolso(row: MovementRow.Transfer, accountTypes: Map<String, AccountType>): Boolean =
-    transferRowTitle(row, accountTypes) == TITULO_DE_DESEMBOLSO &&
-        // La plata tiene que llegar a una cuenta que NO es deuda: un par de un crédito a otro
-        // crédito o a una tarjeta no es plata prestada que entró.
-        accountTypes[row.into.accountId].let { it != null && it != AccountType.LOAN && it != AccountType.CREDIT_CARD }
+    // La categoría la escribe `transferLegsFor` solo cuando la plata sale de un crédito hacia una
+    // cuenta que no es deuda, así que no hace falta mirar los tipos de cuenta (que pueden no haber
+    // llegado). Sin ella (un par anterior a la categoría) se decide por los tipos.
+    row.out.category == DESEMBOLSO_CATEGORY ||
+        (
+            transferRowTitle(row, accountTypes) == TITULO_DE_DESEMBOLSO &&
+                // La plata tiene que llegar a una cuenta que NO es deuda: un par de un crédito a otro
+                // crédito o a una tarjeta no es plata prestada que entró.
+                accountTypes[row.into.accountId].let { it != null && it != AccountType.LOAN && it != AccountType.CREDIT_CARD }
+            )
 
 private const val TITULO_DE_DESEMBOLSO = "Desembolso"
 
 /**
- * Lo que el renglón de un desembolso aclara: la plata entró, pero es deuda y no suma como ingreso.
- * Va en su propia línea, encima del «De X a Y», para que el nombre del crédito no lo recorte la
- * elipsis; y puede ocupar dos renglones, porque en un teléfono angosto «no cuenta como ingreso» —lo
- * que la nota vino a decir— es justo lo que una sola línea cortaría.
+ * Lo que el renglón de un desembolso aclara: la plata entró a tu cuenta, pero es prestada — deuda,
+ * no sueldo. Suma en «Entró» de su período (ver [DESEMBOLSO_CATEGORY]). Va en su propia línea, encima
+ * del «De X a Y», para que el nombre del crédito no lo recorte la elipsis; y puede ocupar dos
+ * renglones en un teléfono angosto.
  */
-const val NOTA_DE_DESEMBOLSO: String = "Crédito · plata prestada, no cuenta como ingreso"
+const val NOTA_DE_DESEMBOLSO: String = "Crédito · plata prestada que entró a tu cuenta"
 
 /** El monto grande del par: con «+» si es un desembolso (entró plata), sin signo en los demás. */
 fun textoDelMontoDeTraspaso(row: MovementRow.Transfer, accountTypes: Map<String, AccountType>): String {

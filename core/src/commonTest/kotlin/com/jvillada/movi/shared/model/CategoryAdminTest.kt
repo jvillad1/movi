@@ -20,6 +20,24 @@ class CategoryAdminTest {
 
     // ── Las reservadas ────────────────────────────────────────────────────────
 
+    /**
+     * La cuota y el desembolso de un crédito NO son reservadas (cuentan en el mes como cualquier
+     * categoría), pero de su nombre exacto dependen las cifras: por eso se les cierra la puerta de
+     * renombrar/unificar como origen (ver [nombreSostieneReglasDePlata]).
+     */
+    @Test
+    fun `la cuota y el desembolso no son reservadas pero sostienen reglas de plata`() {
+        assertEquals("Desembolso de crédito", DESEMBOLSO_CATEGORY)
+        assertFalse(isReservedCategory(DESEMBOLSO_CATEGORY))
+        assertFalse(isReservedCategory(CUOTA_CATEGORY))
+        assertTrue(nombreSostieneReglasDePlata(DESEMBOLSO_CATEGORY))
+        assertTrue(nombreSostieneReglasDePlata("  cuota de crédito "))
+        assertFalse(nombreSostieneReglasDePlata("Comida"))
+        // Y el desembolso sí cuenta como flujo de caja donde entra plata: una cuenta de dinero.
+        assertTrue(isCashFlow(AccountType.SAVINGS, TransactionType.INCOME, DESEMBOLSO_CATEGORY))
+        assertFalse(isCashFlow(AccountType.LOAN, TransactionType.EXPENSE, DESEMBOLSO_CATEGORY))
+    }
+
     @Test
     fun `las reservadas son exactamente las que isCashFlow reconoce por nombre`() {
         assertEquals(

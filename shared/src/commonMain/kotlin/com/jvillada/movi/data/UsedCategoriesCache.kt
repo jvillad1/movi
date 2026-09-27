@@ -12,6 +12,7 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
@@ -122,9 +123,14 @@ object UsedCategoriesCache {
      * - «Cuenta eliminada», que el server le pone a la pata de traspaso que quedó sin hermana.
      * - «Saldo inicial», que marca la apertura de una cuenta y queda FUERA del flujo de caja.
      *
-     * Las dos últimas llegaron con la lista completa que ahora manda el Inicio (Ola 9 · A2).
+     * - «Desembolso de crédito», que llevan las dos patas de un desembolso y que cuenta como plata
+     *   que entró: ofrecerla a mano es invitar a inflar «Entró» sin deuda detrás (el server rechaza
+     *   escribirla suelta). No es reservada, pero tampoco se sugiere.
+     *
+     * «Cuenta eliminada» y «Saldo inicial» llegaron con la lista completa que ahora manda el Inicio
+     * (Ola 9 · A2).
      */
-    private val RESERVADAS = setOf(TRANSFER_CATEGORY, ORPHANED_LEG_CATEGORY, OPENING_CATEGORY)
+    private val RESERVADAS = setOf(TRANSFER_CATEGORY, ORPHANED_LEG_CATEGORY, OPENING_CATEGORY, DESEMBOLSO_CATEGORY)
 
     /** Una sola categoría, con el tipo con el que se la acaba de usar (o `null` si no se sabe). */
     fun record(name: String, type: TransactionType?) {

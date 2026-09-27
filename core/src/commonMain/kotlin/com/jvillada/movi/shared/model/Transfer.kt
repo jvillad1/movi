@@ -38,6 +38,14 @@ const val TRANSFER_RECATEGORIZE_BLOCKED =
         "ni un ingreso. Si te equivocaste, anúlalo y vuelve a hacerlo."
 
 /**
+ * Lo mismo para un desembolso ([DESEMBOLSO_CATEGORY]): a diferencia de un traspaso, este SÍ es plata
+ * que entró y suma en «Entró», así que el texto no dice que no sea un ingreso.
+ */
+const val DESEMBOLSO_RECATEGORIZE_BLOCKED =
+    "Un desembolso no se puede recategorizar: es plata prestada que entró a tu cuenta y la deuda " +
+        "del crédito sube con ella. Si te equivocaste, anúlalo y vuelve a hacerlo."
+
+/**
  * Lo que se le dice a alguien que intenta *entrar* a [TRANSFER_CATEGORY] recategorizando.
  *
  * Sin flecha: «→» sale como ▯ en wasm (la fuente del canvas no trae el glifo), y este texto se le

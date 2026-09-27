@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.categorias
 
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CATEGORY_COLOR_MAX_LENGTH
 import com.jvillada.movi.shared.model.CATEGORY_ICONO_MAX_LENGTH
 import com.jvillada.movi.shared.model.CategoryPref
@@ -54,6 +56,13 @@ class AparienciaDeCategoriaTest {
         // «arriendo» como palabra clave es un gasto (ámbar); «Arriendo recibido» es un ingreso.
         assertEquals(ap("arriendo", "ambar"), aparienciaDe("Arriendo del apartamento", null))
         assertEquals(ap("arriendo", "verde"), aparienciaDe("Arriendo recibido", null))
+    }
+
+    /** El desembolso lleva el ícono de crédito de la cuota, pero en verde: es plata que entró. */
+    @Test
+    fun `el desembolso de un credito es el icono de credito en verde`() {
+        assertEquals(ap("credito", "verde"), aparienciaDe(DESEMBOLSO_CATEGORY, null))
+        assertEquals(ap("credito", "violeta"), aparienciaDe(CUOTA_CATEGORY, null))
     }
 
     @Test
