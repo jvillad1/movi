@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,6 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -133,6 +136,11 @@ internal fun MedirPanelDeMovimientos(contenido: @Composable (conPanel: Boolean) 
 @Composable
 internal fun ListaYPanelDeMovimientos(
     conPanel: Boolean,
+    /**
+     * El panel entero es un destino de foco: al elegir otro movimiento el foco viene acá, fuera de
+     * todo campo, en vez de quedar suelto (ver `elegir` en [TransactionsScreen]).
+     */
+    focoDelPanel: FocusRequester,
     lista: @Composable () -> Unit,
     panel: @Composable () -> Unit,
 ) {
@@ -156,7 +164,12 @@ internal fun ListaYPanelDeMovimientos(
         if (conPanel) {
             Box(modifier = Modifier.width(ANCHO_DEL_DIVISOR_DE_MOVIMIENTOS).fillMaxHeight().background(Movi.colores.hilo))
             Box(
-                modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_PANEL_DEL_MOVIMIENTO),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .testTag(TAG_PANEL_DEL_MOVIMIENTO)
+                    .focusRequester(focoDelPanel)
+                    .focusable(),
                 contentAlignment = Alignment.TopCenter,
             ) {
                 Box(modifier = Modifier.widthIn(max = ANCHO_DE_LECTURA).fillMaxSize()) { panel() }

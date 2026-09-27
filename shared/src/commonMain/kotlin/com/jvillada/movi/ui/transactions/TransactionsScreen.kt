@@ -984,6 +984,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
      */
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
     val focusManager = LocalFocusManager.current
+    /** A dónde va el foco al cambiar de movimiento en el panel (ver `elegir`). */
+    val focoDelPanel = remember { FocusRequester() }
 
     // Los avisos de una lectura caída, con el «Reintentar» de siempre — solo cuando NO hay nada a
     // la vista. Con la lista pintada (de esta visita o recordada) lo dice [NoSePudoActualizar]
@@ -1113,18 +1115,26 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     // `MovimientosListaYDetalle` para la cuenta del ancho; en el teléfono, todo como siempre.
     MedirPanelDeMovimientos { conPanel ->
     /**
-     * Elegir un movimiento. Con el panel, **primero se suelta el foco**: si un campo del panel
-     * (la búsqueda de categorías, el monto) lo tenía, en la web el `<input>` oculto de Compose sigue
-     * recibiendo lo que se teclea y lo pegaba al campo del movimiento anterior. Ver
+     * Elegir un movimiento. Con el panel, **primero se saca el foco del campo que lo tenga**: si
+     * uno del panel (la búsqueda de categorías, el monto) lo tenía, en la web el `<input>` oculto de
+     * Compose seguía recibiendo lo que se teclea y lo pegaba al campo del movimiento anterior. Ver
      * `movi-teclado-en-la-web`. Sin panel se abre la hoja, como siempre.
+     *
+     * El foco se **lleva al panel** ([focoDelPanel]) y no se suelta a secas: en Android (una tablet),
+     * soltarlo del todo hace que la vista lo reclame y Compose se lo da al primer campo que
+     * encuentra —la búsqueda de categorías del movimiento nuevo, con el teclado arriba—. Lo midió
+     * `MovimientosListaYDetalleEnPantallaTest`.
      */
     val elegir: (FinancialEvent?) -> Unit = { evento ->
-        if (conPanel) focusManager.clearFocus()
+        if (conPanel) {
+            if (runCatching { focoDelPanel.requestFocus() }.isFailure) focusManager.clearFocus()
+        }
         selectedEvent = evento
     }
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
     ListaYPanelDeMovimientos(
         conPanel = conPanel,
+        focoDelPanel = focoDelPanel,
         lista = {
     Column(modifier = Modifier.fillMaxSize()) {
         // F60: encabezado único — Movimientos es raíz: avatar + rótulo del menú + la lupa.
