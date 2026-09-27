@@ -37,7 +37,7 @@ import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.WindowWidthClass
 
 /**
- * # Movimientos en lista + detalle (Ola W4)
+ * # Movimientos en lista + detalle (Ola W4; ancho de la lista y el detalle ajustados en la Ola X)
  *
  * En pantalla ancha la lista de movimientos va a la izquierda —con su encabezado, sus filtros, su
  * scroll y sus días tal cual, «Flujo del día» y «Día a día» incluidos— y a la derecha el movimiento
@@ -51,43 +51,56 @@ import com.jvillada.movi.ui.components.WindowWidthClass
  * escritorio. Lo que le queda es la ventana menos el rail (80 en mediano, 216 en escritorio),
  * topado ahí (`anchoDelPanelEnLaCascara`); **y se mide adentro con `BoxWithConstraints`**
  * ([MedirPanelDeMovimientos]), nunca se calcula a mano. De eso salen la lista
- * ([ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS], 360), el divisor (1) y lo que sobra para el detalle, que
- * tiene que medir al menos [ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO] (420):
+ * ([ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS], 420 desde la Ola X — el dueño la vio apretada), el divisor
+ * (1) y lo que sobra para el detalle, que tiene que medir al menos
+ * [ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO] (380, bajado un poco para compensar: ver ahí):
  *
  * | Ventana | Clase     | Rail | Ancho         | Detalle | Resultado          |
  * |---------|-----------|------|---------------|---------|--------------------|
  * | 768     | mediana   | 80   | 688           | —       | hoja, como hoy     |
- * | 860     | mediana   | 80   | 780           | —       | hoja (el borde)    |
- * | 861     | mediana   | 80   | 781           | 420     | **lista + detalle**|
- * | 999     | mediana   | 80   | 840 (tope)    | 479     | **lista + detalle**|
- * | 1024    | escritorio| 216  | 808           | 447     | **lista + detalle**|
- * | 1280    | escritorio| 216  | 1064          | 703     | **lista + detalle**|
- * | 1440    | escritorio| 216  | 1224          | 863     | **lista + detalle**|
- * | 1920    | escritorio| 216  | 1440 (tope)   | 1079    | **lista + detalle**|
+ * | 860     | mediana   | 80   | 780           | —       | hoja (más ancho: el umbral subió con la lista)|
+ * | 881     | mediana   | 80   | 801           | 380     | **lista + detalle** (el nuevo borde) |
+ * | 999     | mediana   | 80   | 840 (tope)    | 419     | **lista + detalle**|
+ * | 1000    | escritorio| 216  | 784           | —       | hoja (el salto del rail; ver [UMBRAL_DE_MOVIMIENTOS_CON_PANEL]) |
+ * | 1017    | escritorio| 216  | 801           | 380     | **lista + detalle** (vuelve a aparecer) |
+ * | 1024    | escritorio| 216  | 808           | 387     | **lista + detalle**|
+ * | 1280    | escritorio| 216  | 1064          | 643     | **lista + detalle**|
+ * | 1440    | escritorio| 216  | 1224          | 803     | **lista + detalle**|
+ * | 1920    | escritorio| 216  | 1440 (tope)   | 1019    | **lista + detalle**|
  *
  * Con un detalle de más de [ANCHO_DE_LECTURA] (720), su contenido va centrado en esa columna: es
- * un formulario de una columna, y estirarlo a 1.079 no se lee mejor.
+ * un formulario de una columna, y estirarlo a 1.019 no se lee mejor.
  *
  * Sin lugar para los dos (el teléfono, o una ventana mediana angosta) Movimientos se ve exactamente
  * como antes: la lista sola —en su columna de lectura fuera del teléfono— y tocar una fila abre la
  * hoja modal ([HojaDelMovimiento]).
  */
 
-/** El ancho de la lista al lado del detalle: el de un teléfono, el mismo que la de «Tus períodos». */
-val ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS: Dp = 360.dp
+/**
+ * El ancho de la lista al lado del detalle: 420 dp desde la Ola X (antes 360, el de un teléfono).
+ * El dueño la vio apretada en la web ancha, en ancho y en alto (ver `paddingVerticalDeLaFila` en
+ * `TransactionsScreen.kt` para el alto). Subir esto sube el umbral de aparición del panel —ver
+ * [ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO], que se bajó un poco para compensar.
+ */
+val ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS: Dp = 420.dp
 
 /** El hilo entre la lista y el detalle. */
 val ANCHO_DEL_DIVISOR_DE_MOVIMIENTOS: Dp = 1.dp
 
 /**
- * Lo mínimo que mide el detalle al lado de la lista: 420 dp, algo más que un teléfono grande
- * (~412). Es el ancho en el que la hoja del movimiento ya se lee en el teléfono —el monto, la
- * cuenta, la fecha y la cuadrícula de categorías—; más angosto, el panel sería una hoja apretada al
- * lado de una lista, peor que la hoja centrada de siempre.
+ * Lo mínimo que mide el detalle al lado de la lista: 380 dp (antes 420). Ola X: al subir
+ * [ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS] a 420, dejarlo en 420 habría subido el umbral de aparición del
+ * panel por encima de lo que deja una ventana de escritorio angosta (1024 dp: con el rail ancho de
+ * 216 dp, a esa ventana le quedan apenas 808 dp - ver la tabla de arriba) — el panel habría dejado
+ * de aparecer justo en un ancho real que W4 ya probaba. Se bajó lo justo para que 1024 (y todo lo
+ * que sigue) siga entrando: 420 + 1 + 380 = 801 ≤ 808. El umbral de ventana sube de ~861 a ~881 dp,
+ * un corrimiento chico. Con eso el detalle nunca baja de 380 (más angosto que el de W4, pero sigue
+ * siendo un formulario de una columna, no una hoja recortada) y a 1280/1440 —donde de verdad importa
+ * verse cómodo— sigue midiendo 643/803, muy por encima del mínimo.
  */
-val ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO: Dp = 420.dp
+val ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO: Dp = 380.dp
 
-/** El ancho mínimo de Movimientos (ya sin el rail) para ir en lista + detalle: 360 + 1 + 420 = 781. */
+/** El ancho mínimo de Movimientos (ya sin el rail) para ir en lista + detalle: 420 + 1 + 380 = 801. */
 val UMBRAL_DE_MOVIMIENTOS_CON_PANEL: Dp =
     ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS + ANCHO_DEL_DIVISOR_DE_MOVIMIENTOS + ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO
 
