@@ -1,6 +1,20 @@
 package com.jvillada.movi
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.performTouchInput
+import com.jvillada.movi.ui.components.ANCHO_DEL_RAIL_COMPACTO
+import com.jvillada.movi.ui.components.RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO
+import com.jvillada.movi.ui.components.RotuloDelRailCompacto
+import com.jvillada.movi.ui.components.TAG_VELO_DE_HOJA
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
@@ -103,9 +117,8 @@ class EsqueletoResponsivoTest {
         montar()
 
         assertEquals(WindowWidthClass.Compact, clase)
-        // La barra inferior dice «Movimientos» entero; el rail compacto diría «Movs».
+        // La barra inferior dice «Movimientos» entero; y sin rail el contenido arranca en 0.
         composeRule.onNodeWithText("Movimientos", useUnmergedTree = true).assertIsDisplayed()
-        assertFalse(hay("Movs"), "no hay rail compacto en el teléfono")
         val contenido = limites("contenido")
         assertEquals(0f, contenido.left)
         assertEquals(raiz().right, contenido.right)
@@ -117,11 +130,12 @@ class EsqueletoResponsivoTest {
         montar()
 
         assertEquals(WindowWidthClass.Medium, clase)
+        // Cada ítem se lee con el nombre entero (el rótulo corto no llega a la accesibilidad).
         destinosPrincipales.forEach {
-            composeRule.onNodeWithText(it.rotuloCorto, useUnmergedTree = true).assertIsDisplayed()
+            composeRule.onNodeWithContentDescription(it.label, useUnmergedTree = true).assertIsDisplayed()
         }
         composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).assertIsDisplayed()
-        // Ni la barra del teléfono («Movimientos» entero) ni el rail ancho («Agregar» escrito).
+        // Ni la barra del teléfono («Movimientos» escrito) ni el rail ancho («Agregar» escrito).
         assertFalse(hay("Movimientos"), "la barra inferior es solo del teléfono")
         assertFalse(hay("Agregar"), "el rail ancho es del escritorio")
 
@@ -131,20 +145,51 @@ class EsqueletoResponsivoTest {
         assertEquals(688f, enDp(contenido.width), 0.5f)
     }
 
-    @Test
-    @Config(qualifiers = "w768dp-h1024dp-mdpi")
-    fun `los rotulos cortos del rail entran enteros en un renglon`() {
-        montar()
-
+    /**
+     * El rótulo corto, en el ancho que le deja el ítem del rail (80 − 2×2 dp), con la letra de la app
+     * y con la del sistema. Se monta el rótulo solo porque el ítem le borra la semántica a propósito
+     * (el lector de pantalla dice el nombre entero): así se puede leer cómo quedó el texto.
+     */
+    private fun comprobarQueLosRotulosEntran(letraDelSistema: Float) {
+        composeRule.setContent {
+            ConClaseDeAncho(escala = 1.12f * letraDelSistema) {
+                Column {
+                    destinosPrincipales.forEach { dest ->
+                        Box(Modifier.width(ANCHO_DEL_RAIL_COMPACTO - RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO * 2)) {
+                            RotuloDelRailCompacto(dest.rotuloCorto, activo = dest.tab == NavTab.PATRIMONIO)
+                        }
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        val ancho = ANCHO_DEL_RAIL_COMPACTO - RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO * 2
         destinosPrincipales.forEach { dest ->
             val nodo = composeRule.onNodeWithText(dest.rotuloCorto, useUnmergedTree = true).fetchSemanticsNode()
             val resultados = mutableListOf<TextLayoutResult>()
             nodo.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(resultados)
             val texto = resultados.single()
-            assertEquals(1, texto.lineCount, "«${dest.rotuloCorto}» en un renglón")
-            assertFalse(texto.multiParagraph.didExceedMaxLines, "«${dest.rotuloCorto}» sin partirse")
-            assertTrue(enDp(nodo.boundsInRoot.right) <= 80.5f, "«${dest.rotuloCorto}» adentro del rail")
+            assertEquals(1, texto.lineCount, "«${dest.rotuloCorto}» en un renglón a ${letraDelSistema}×")
+            assertFalse(texto.multiParagraph.didExceedMaxLines, "«${dest.rotuloCorto}» sin partirse a ${letraDelSistema}×")
+            val anchoDelTexto = enDp(texto.getLineRight(0) - texto.getLineLeft(0))
+            assertTrue(
+                anchoDelTexto <= ancho.value + 0.5f,
+                "«${dest.rotuloCorto}» entra entero a ${letraDelSistema}×: mide $anchoDelTexto dp contra ${ancho.value}",
+            )
         }
+    }
+
+    @Test
+    @Config(qualifiers = "w768dp-h1024dp-mdpi")
+    fun `los rotulos cortos del rail entran enteros en un renglon`() {
+        comprobarQueLosRotulosEntran(letraDelSistema = 1f)
+    }
+
+    /** Con la letra del sistema al 130 % «Patrimonio» ya no entra a su tamaño: se achica, no se corta. */
+    @Test
+    @Config(qualifiers = "w768dp-h1024dp-mdpi")
+    fun `con la letra del sistema al 130 por ciento ningun rotulo del rail se corta`() {
+        comprobarQueLosRotulosEntran(letraDelSistema = 1.3f)
     }
 
     @Test
@@ -154,7 +199,6 @@ class EsqueletoResponsivoTest {
 
         assertEquals(WindowWidthClass.Expanded, clase)
         composeRule.onNodeWithText("Agregar", useUnmergedTree = true).assertIsDisplayed()
-        assertFalse(hay("Movs"))
 
         val contenido = limites("contenido")
         assertTrue(enDp(contenido.width) <= 720.5f, "la columna de lectura mide ${enDp(contenido.width)} dp")
@@ -268,5 +312,137 @@ class EsqueletoResponsivoTest {
 
         val panel = limites(TAG_PANEL_DE_HOJA)
         assertTrue(panel.height <= raiz().height * 0.9f + 1f, "la hoja mide ${enDp(panel.height)} dp")
+    }
+
+    // ── La hoja en la cáscara: velo de borde a borde y Escape por capas (fix W1) ─────
+
+    private var pestanaElegida: NavTab? = null
+
+    /** El esqueleto real con una hoja abierta desde adentro de la pantalla, como en la app. */
+    private fun montarHojaEnLaCascara(contenidoDeLaHoja: @Composable (cerrar: () -> Unit) -> Unit = { Text("Hoja") }) {
+        cerrada = false
+        pestanaElegida = null
+        composeRule.setContent {
+            ConClaseDeAncho {
+                var abierta by remember { mutableStateOf(true) }
+                EsqueletoDeLaCascara(
+                    pantalla = Screen.Accounts,
+                    activeTab = NavTab.PATRIMONIO,
+                    conNavegacion = true,
+                    onTabSelected = { pestanaElegida = it },
+                    relevoDeScroll = remember { RelevoDeScroll() },
+                ) {
+                    Box(Modifier.fillMaxSize().testTag("contenido"))
+                    if (abierta) {
+                        val cerrar = { cerrada = true; abierta = false }
+                        MarcoDeHoja(onDismiss = cerrar) { contenidoDeLaHoja(cerrar) }
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun `a 1280 dp el velo cubre la ventana entera, rail incluido, y la hoja se centra en ella`() {
+        montarHojaEnLaCascara()
+
+        assertEquals(raiz(), limites(TAG_VELO_DE_HOJA), "el velo va de borde a borde, no solo sobre la columna")
+        val panel = limites(TAG_PANEL_DE_HOJA)
+        assertTrue(abs(panel.left - (raiz().right - panel.right)) <= 1f, "centrada en la ventana")
+    }
+
+    @Test
+    @Config(qualifiers = "w768dp-h1024dp-mdpi")
+    fun `a 768 dp el rail queda bajo el velo y tocarlo no elige una pestana`() {
+        montarHojaEnLaCascara()
+
+        assertEquals(raiz(), limites(TAG_VELO_DE_HOJA))
+        // Donde está el primer ítem del rail compacto (el «+» ocupa los primeros ~72 dp).
+        val hoy = composeRule.onNodeWithContentDescription("Hoy", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        composeRule.onRoot().performTouchInput { click(hoy.center) }
+        composeRule.waitForIdle()
+
+        assertEquals(null, pestanaElegida, "con la hoja abierta el rail no navega")
+        assertTrue(cerrada, "tocar afuera —el rail también es afuera— cierra la hoja, como el velo")
+    }
+
+    /**
+     * I1: con un sub-editor abierto y el foco en SU campo, Escape cierra el sub-editor y no la hoja
+     * (el campo no se traga la tecla: el velo la ve antes, en el preview). El segundo Escape —ya sin
+     * campo, así que el foco volvió al velo— cierra la hoja.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun `Escape en un sub-editor lo cierra sin cerrar la hoja, y el segundo cierra la hoja`() {
+        cerrada = false
+        composeRule.setContent {
+            ConClaseDeAncho {
+                var abierta by remember { mutableStateOf(true) }
+                var subEditor by remember { mutableStateOf(true) }
+                if (abierta) {
+                    MarcoDeHoja(
+                        onDismiss = { cerrada = true; abierta = false },
+                        onEscape = { if (subEditor) subEditor = false else { cerrada = true; abierta = false } },
+                    ) {
+                        if (subEditor) {
+                            val foco = remember { FocusRequester() }
+                            var texto by remember { mutableStateOf("Nómina") }
+                            LaunchedEffect(Unit) { foco.requestFocus() }
+                            BasicTextField(texto, { texto = it }, Modifier.focusRequester(foco).testTag("campo"))
+                        } else {
+                            Text("Editor principal")
+                        }
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("campo").assertIsFocused()
+
+        composeRule.onNodeWithTag("campo").performKeyInput { pressKey(Key.Escape) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("campo").assertDoesNotExist()
+        composeRule.onNodeWithText("Editor principal").assertIsDisplayed()
+        assertFalse(cerrada, "el primer Escape cierra el sub-editor, no la hoja")
+
+        composeRule.onRoot().performKeyInput { pressKey(Key.Escape) }
+        composeRule.waitForIdle()
+
+        assertTrue(cerrada, "el segundo Escape cierra la hoja")
+    }
+
+    /** m4: dos hojas apiladas. Escape cierra la de arriba y la de abajo retoma el foco. */
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun `con dos hojas apiladas Escape cierra una por vez`() {
+        var abajo by mutableStateOf(true)
+        var arriba by mutableStateOf(true)
+        composeRule.setContent {
+            ConClaseDeAncho {
+                EsqueletoDeLaCascara(
+                    pantalla = Screen.Accounts,
+                    activeTab = NavTab.PATRIMONIO,
+                    conNavegacion = true,
+                    onTabSelected = {},
+                    relevoDeScroll = remember { RelevoDeScroll() },
+                ) {
+                    if (abajo) MarcoDeHoja(onDismiss = { abajo = false }) { Text("La de abajo") }
+                    if (arriba) MarcoDeHoja(onDismiss = { arriba = false }) { Text("La de arriba") }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onRoot().performKeyInput { pressKey(Key.Escape) }
+        composeRule.waitForIdle()
+        assertFalse(arriba, "el primer Escape cierra la de arriba")
+        assertTrue(abajo, "y deja la de abajo")
+
+        composeRule.onRoot().performKeyInput { pressKey(Key.Escape) }
+        composeRule.waitForIdle()
+        assertFalse(abajo, "el segundo Escape le llega a la de abajo y la cierra")
     }
 }

@@ -8,7 +8,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +50,7 @@ fun MinNavRail(
             .width(216.dp)
             .fillMaxHeight()
             .background(Movi.colores.tarjeta)
+            .windowInsetsPadding(barrasDelSistemaDelRail)
             .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.margen),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -90,6 +99,13 @@ fun MinNavRail(
     }
 }
 
+/**
+ * Las barras del sistema que el rail descuenta: arriba (la de estado, que si no tapa el «+»), abajo y
+ * al costado del rail (la de navegación de Android en horizontal). En la web son cero.
+ */
+private val barrasDelSistemaDelRail: WindowInsets
+    @Composable get() = WindowInsets.systemBars.only(WindowInsetsSides.Vertical + WindowInsetsSides.Start)
+
 /** El ancho del rail compacto de una ventana mediana. */
 val ANCHO_DEL_RAIL_COMPACTO = 80.dp
 
@@ -104,9 +120,12 @@ val ANCHO_DEL_RAIL_COMPACTO = 80.dp
 private fun RailCompacto(active: NavTab?, onTabSelected: (NavTab) -> Unit) {
     Column(
         modifier = Modifier
-            .width(ANCHO_DEL_RAIL_COMPACTO)
             .fillMaxHeight()
             .background(Movi.colores.tarjeta)
+            // Afuera del ancho: la barra de navegación en horizontal (a la izquierda) ensancha el
+            // fondo en vez de comerse los 80 dp del rail.
+            .windowInsetsPadding(barrasDelSistemaDelRail)
+            .width(ANCHO_DEL_RAIL_COMPACTO)
             .padding(vertical = Movi.espacios.margen),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -142,7 +161,15 @@ private fun RailCompactoItem(dest: DestinoPrincipal, active: NavTab?, onTabSelec
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onTabSelected(dest.tab) }
-            .padding(horizontal = 2.dp, vertical = 8.dp),
+            // Un lector de pantalla dice el nombre entero UNA vez («Movimientos»), no el ícono y
+            // después el rótulo corto («Movimientos, Movs»).
+            .clearAndSetSemantics {
+                contentDescription = dest.label
+                role = Role.Tab
+                selected = isActive
+                onClick { onTabSelected(dest.tab); true }
+            }
+            .padding(horizontal = RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO, vertical = 8.dp),
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -153,21 +180,39 @@ private fun RailCompactoItem(dest: DestinoPrincipal, active: NavTab?, onTabSelec
         ) {
             Icon(
                 imageVector = dest.icon,
-                contentDescription = dest.label,
+                contentDescription = null,
                 tint = if (isActive) Movi.colores.marca else Movi.colores.textoApagado,
                 modifier = Modifier.size(22.dp),
             )
         }
-        Text(
-            text = dest.rotuloCorto,
-            maxLines = 1,
-            style = Movi.textos.rotulo.copy(
-                letterSpacing = 0.2.sp,
-                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-            ),
-            color = if (isActive) Movi.colores.texto else Movi.colores.textoApagado,
-        )
+        RotuloDelRailCompacto(dest.rotuloCorto, isActive)
     }
+}
+
+/** El relleno a cada lado de un ítem del rail compacto: el rótulo tiene 80 − 2×2 = 76 dp. */
+internal val RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO = 2.dp
+
+/**
+ * El rótulo de un ítem del rail compacto. **Nunca se parte ni se corta**: en un renglón y, si no
+ * entra —«Patrimonio» con la letra del sistema al 130 % mide ~87 dp contra 76—, se achica de a
+ * cuartos de punto hasta que entre. Es el mismo modo de falla que `LasCuatroPestanasTest` protege en
+ * la barra del teléfono; ahí sobra lugar, acá no.
+ */
+@Composable
+internal fun RotuloDelRailCompacto(texto: String, activo: Boolean, modifier: Modifier = Modifier) {
+    val estilo = Movi.textos.rotulo.copy(
+        letterSpacing = 0.2.sp,
+        fontWeight = if (activo) FontWeight.SemiBold else FontWeight.Normal,
+        color = if (activo) Movi.colores.texto else Movi.colores.textoApagado,
+    )
+    BasicText(
+        text = texto,
+        modifier = modifier,
+        style = estilo,
+        maxLines = 1,
+        softWrap = false,
+        autoSize = TextAutoSize.StepBased(minFontSize = 7.sp, maxFontSize = estilo.fontSize, stepSize = 0.25.sp),
+    )
 }
 
 @Composable

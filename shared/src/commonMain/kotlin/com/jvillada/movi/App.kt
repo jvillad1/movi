@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -84,6 +85,8 @@ import com.jvillada.movi.ui.components.MinBottomNav
 import com.jvillada.movi.ui.components.MinNavRail
 import com.jvillada.movi.ui.components.anchoMaximoDeLaPantalla
 import com.jvillada.movi.ui.components.CascaraDeAncho
+import com.jvillada.movi.ui.components.AnfitrionDeHojas
+import com.jvillada.movi.ui.components.LocalAnfitrionDeHojas
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.RelevoDeScroll
 import com.jvillada.movi.ui.components.WindowWidthClass
@@ -445,6 +448,11 @@ internal fun EsqueletoDeLaCascara(
     val showRail = widthClass != WindowWidthClass.Compact && conNavegacion
     val showBottomNav = widthClass == WindowWidthClass.Compact && conNavegacion
     val tecladoALaVista = elTecladoEstaALaVista()
+    // Las hojas centradas (mediano y expandido) se dibujan acá, encima de todo — ver
+    // [AnfitrionDeHojas]. Así su velo tapa también el rail y los márgenes.
+    val anfitrionDeHojas = remember { AnfitrionDeHojas() }
+    CompositionLocalProvider(LocalAnfitrionDeHojas provides anfitrionDeHojas) {
+    Box(modifier = Modifier.fillMaxSize()) {
     Row(modifier = Modifier.fillMaxSize()) {
         if (showRail) {
             MinNavRail(
@@ -467,7 +475,10 @@ internal fun EsqueletoDeLaCascara(
             // que tienen un campo abajo, y una sola línea las cubre a todas — incluidas las
             // hojas, que se dibujan adentro de este mismo hueco.
             // El tope depende de la pantalla y del ancho (ver `anchoMaximoDeLaPantalla`).
-            Column(modifier = Modifier.widthIn(max = anchoMaximoDeLaPantalla(pantalla, widthClass)).fillMaxSize().statusBarsPadding().imePadding()) {
+            // Desde 600 dp no hay barra inferior que descuente la barra de navegación del sistema
+            // (la de Android, abajo o al costado en horizontal): la descuenta la columna.
+            val sinBarraInferior = if (widthClass == WindowWidthClass.Compact) Modifier else Modifier.navigationBarsPadding()
+            Column(modifier = Modifier.widthIn(max = anchoMaximoDeLaPantalla(pantalla, widthClass)).fillMaxSize().statusBarsPadding().then(sinBarraInferior).imePadding()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), content = contenido)
 
                 // Y con el teclado arriba la barra se esconde: no sirve para nada mientras se
@@ -479,4 +490,7 @@ internal fun EsqueletoDeLaCascara(
             }
         }
     }
+    anfitrionDeHojas.Hojas()
+    } // Box (esqueleto + hojas centradas)
+    } // CompositionLocalProvider(LocalAnfitrionDeHojas)
 }

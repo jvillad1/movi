@@ -246,8 +246,9 @@ class LasCuatroPestanasTest {
     fun `el rail compacto pinta las mismas cuatro con su rotulo corto y el boton de agregar`() {
         montarRail(compacto = true)
 
+        // El lector de pantalla oye el nombre entero una vez; el rótulo corto es solo lo que se ve.
         destinosPrincipales.forEach {
-            composeRule.onNodeWithText(it.rotuloCorto, useUnmergedTree = true).assertIsDisplayed()
+            composeRule.onNodeWithContentDescription(it.label, useUnmergedTree = true).assertIsDisplayed()
         }
         composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).assertIsDisplayed()
         loQueYaNoEsPestana.filter { it != "Movs" }
@@ -258,7 +259,7 @@ class LasCuatroPestanasTest {
     fun `tocar una entrada del rail compacto la elige, y el mas abre Agregar`() {
         montarRail(compacto = true)
 
-        composeRule.onNodeWithText("Movs", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Movimientos", useUnmergedTree = true).performClick()
         assertEquals(NavTab.MOVIMIENTOS, elegida)
         composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).performClick()
         assertEquals(NavTab.ADD, elegida)
