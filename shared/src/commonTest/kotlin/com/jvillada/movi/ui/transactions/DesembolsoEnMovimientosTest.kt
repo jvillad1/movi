@@ -86,8 +86,11 @@ class DesembolsoEnMovimientosTest {
         val entreAhorros = par("acc_ahorros", "acc_cdt", monto = 5_000_000L)
         // La pata de salida en un crédito pero con la categoría de cuota: no es un desembolso.
         val cuotaDesdeElCredito = par("acc_credito", "acc_ahorros", CUOTA_CATEGORY)
+        // De un crédito a una tarjeta no es plata prestada que entró a una cuenta tuya: la que recibe
+        // también es deuda.
+        val delCreditoALaTarjeta = par("acc_credito", "acc_tarjeta")
 
-        for (fila in listOf(cuota, tarjeta, abono, entreAhorros, cuotaDesdeElCredito)) {
+        for (fila in listOf(cuota, tarjeta, abono, entreAhorros, cuotaDesdeElCredito, delCreditoALaTarjeta)) {
             assertEquals(TonoDelMonto.ENTRE_CUENTAS, tonoDelRenglon(fila, tipos), transferRowTitle(fila, tipos))
             assertNotEquals('+', textoDelMontoDeTraspaso(fila, tipos).first())
             assertTrue(!esDesembolso(fila, tipos))

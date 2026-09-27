@@ -811,14 +811,18 @@ fun transferRowTitle(row: MovementRow.Transfer, accountTypes: Map<String, Accoun
 
 /** ¿Este par es el desembolso de un crédito: la plata prestada que entró a una cuenta tuya? */
 fun esDesembolso(row: MovementRow.Transfer, accountTypes: Map<String, AccountType>): Boolean =
-    transferRowTitle(row, accountTypes) == TITULO_DE_DESEMBOLSO
+    transferRowTitle(row, accountTypes) == TITULO_DE_DESEMBOLSO &&
+        // La plata tiene que llegar a una cuenta que NO es deuda: un par de un crédito a otro
+        // crédito o a una tarjeta no es plata prestada que entró.
+        accountTypes[row.into.accountId].let { it != null && it != AccountType.LOAN && it != AccountType.CREDIT_CARD }
 
 private const val TITULO_DE_DESEMBOLSO = "Desembolso"
 
 /**
  * Lo que el renglón de un desembolso aclara: la plata entró, pero es deuda y no suma como ingreso.
  * Va en su propia línea, encima del «De X a Y», para que el nombre del crédito no lo recorte la
- * elipsis.
+ * elipsis; y puede ocupar dos renglones, porque en un teléfono angosto «no cuenta como ingreso» —lo
+ * que la nota vino a decir— es justo lo que una sola línea cortaría.
  */
 const val NOTA_DE_DESEMBOLSO: String = "Crédito · plata prestada, no cuenta como ingreso"
 
@@ -1652,7 +1656,7 @@ internal fun TransferRow(
                     text = NOTA_DE_DESEMBOLSO,
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
