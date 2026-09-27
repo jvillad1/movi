@@ -181,6 +181,12 @@ All dependency versions are centralized in `gradle/libs.versions.toml`. Add new 
 - **New shared models** go in `core/src/commonMain/.../shared/model/` and must be annotated with `@Serializable`.
 - **Platform-specific Ktor engine wiring** belongs in each `:shared` source set's dependency block, not in `commonMain`.
 - The iOS Xcode project (`iosApp/iosApp.xcodeproj`) references the `ComposeApp` XCFramework at `shared/build/XCFrameworks/debug/ComposeApp.xcframework`. Always run `./gradlew :shared:assembleComposeAppDebugXCFramework` before building the iOS app — the Xcode build will fail if the framework is missing.
+- **El desembolso de un crédito es plata que ENTRÓ** (decisión del dueño): las dos patas de un par
+  que sale de una cuenta LOAN llevan `DESEMBOLSO_CATEGORY` («Desembolso de crédito»), la del dinero
+  suma en «Entró»/«Ingresos» y la del crédito no (la excluye el tipo de cuenta). No es reservada
+  —cuenta como cualquier categoría— pero solo la escribe `transferLegsFor`: `POST /api/events` la
+  rechaza suelta, renombrar/unificar la protegen (igual que a `CUOTA_CATEGORY`), y Movi AI dice cuánto
+  de los ingresos es deuda. El abono extraordinario sigue siendo un traspaso puro.
 - **Las pruebas Robolectric arrancan con los `object` de la app en cero.** Todas las clases de
   `:shared:testDebugUnitTest` comparten un fork de JVM y un sandbox, así que el estado estático se
   filtraba de una clase a la siguiente (y ya hizo intermitente a una prueba que medía una pantalla).
