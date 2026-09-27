@@ -52,6 +52,7 @@ import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.Hairline
@@ -85,7 +86,6 @@ import androidx.compose.ui.text.TextStyle
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.ui.components.ListaDeCuentasElegibles
-import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -435,55 +435,44 @@ private fun SeccionDeImportaciones(
  */
 @Composable
 private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(onClick = onCancelar),
+    MarcoDeHoja(
+        onDismiss = onCancelar,
+        relleno = PaddingValues(horizontal = 20.dp, vertical = 22.dp),
+        conCierre = false,
     ) {
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .clickable(enabled = false) {}
-                .padding(horizontal = 20.dp, vertical = 22.dp),
-        ) {
-            Text("¿Borrar este documento?", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            Spacer(Modifier.height(8.dp))
-            Text(nombreQueSePartePorSusSeparadores(doc.nombre), style = Movi.textos.cuerpo, color = Movi.colores.texto)
-            Spacer(Modifier.height(4.dp))
+        Text("¿Borrar este documento?", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+        Spacer(Modifier.height(8.dp))
+        Text(nombreQueSePartePorSusSeparadores(doc.nombre), style = Movi.textos.cuerpo, color = Movi.colores.texto)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Se borra del todo. Movi no guarda una copia y no se puede deshacer.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            lineHeight = 17.sp,
+        )
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
             Text(
-                "Se borra del todo. Movi no guarda una copia y no se puede deshacer.",
-                style = Movi.textos.apoyo,
+                "Cancelar",
+                style = Movi.textos.cuerpo,
                 color = Movi.colores.textoMedio,
-                lineHeight = 17.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onCancelar)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
             )
-            Spacer(Modifier.height(20.dp))
-            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "Cancelar",
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.textoMedio,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable(onClick = onCancelar)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Borrar",
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.sale,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable(onClick = onConfirmar)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                )
-            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "Borrar",
+                style = Movi.textos.cuerpo,
+                color = Movi.colores.sale,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onConfirmar)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            )
         }
     }
 }
@@ -952,29 +941,13 @@ private fun HojaDeDocumento(
     cerrarHabilitado: Boolean,
     contenido: @Composable () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = cerrarHabilitado, onClick = onDismiss),
-    ) {
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = cerrarHabilitado) {
         Column(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .clickable(enabled = false) {}
-                .padding(horizontal = 20.dp),
+                .verticalScroll(rememberScrollState())
+                .weight(1f, fill = false),
         ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = cerrarHabilitado)
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .weight(1f, fill = false),
-            ) {
-                contenido()
-            }
+            contenido()
         }
     }
 }
