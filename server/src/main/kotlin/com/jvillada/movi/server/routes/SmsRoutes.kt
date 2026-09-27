@@ -378,7 +378,8 @@ fun Route.smsRoutes() {
                 .where { SmsMessages.userId eq uid }
                 .map { it.toSmsMessage() }
         }
-        val marcado = conLosAvisosParecidos(todos, ahora = System.currentTimeMillis()).firstOrNull { it.id == sms.id }
+        val marcado = conLosAvisosParecidos(todos, ahora = System.currentTimeMillis(), soloElDe = sms.id)
+            .firstOrNull { it.id == sms.id }
         call.respond(marcado ?: sms)
     }
 

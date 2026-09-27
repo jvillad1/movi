@@ -105,6 +105,29 @@ class AvisosDelMismoPagoTest {
         assertEquals(listOf(null, null), enElFuturo.map { it.parecidoA })
     }
 
+    /** El historial crece sin tope: solo se lee lo que está a diez minutos de algún pendiente. */
+    @Test
+    fun `solo se leen los avisos cerca de un pendiente`() {
+        val viejos = (1..50).map { i ->
+            sms("v$i", "85540", "Bancolombia: Compraste \$15.100,00 en TOSTAO", time = "2026-08-%02d 09:15".format(1 + i % 28), state = SMS_STATE_CONFIRMED)
+        }
+        val leidos = mutableListOf<String>()
+        val salida = conLosAvisosParecidos(viejos + wallet + glim, ahora) { m ->
+            leidos += m.id
+            com.jvillada.movi.server.routes.parseSms(m.text, m.bank)
+        }
+        assertEquals(setOf("w", "g"), leidos.toSet())
+        assertEquals(mapOf("w" to "g", "g" to "w"), salida.filter { it.id in setOf("w", "g") }.associate { it.id to it.parecidoA })
+        // Los viejos salen tal cual, en el mismo orden.
+        assertEquals(viejos, salida.take(50))
+    }
+
+    @Test
+    fun `el detalle de uno solo marca ese`() {
+        val salida = conLosAvisosParecidos(listOf(wallet, glim), ahora, soloElDe = "g")
+        assertEquals(listOf(null, "w"), salida.map { it.parecidoA })
+    }
+
     @Test
     fun `entre varios parecidos apunta al mas cercano`() {
         val sms1 = sms("s1", "85540", "Bancolombia: Compraste \$15.100,00 en TOSTAO con tu T.Deb *4057", time = "2026-09-25 09:22")

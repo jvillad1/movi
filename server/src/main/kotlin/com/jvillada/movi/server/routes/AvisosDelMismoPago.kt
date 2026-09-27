@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
@@ -33,17 +34,44 @@ internal const val MINUTOS_PARA_EL_MISMO_PAGO: Long = 10
  *
  * No cambia el orden ni ningún otro campo: solo llena `parecidoA`.
  */
-internal fun conLosAvisosParecidos(mensajes: List<SmsMessage>, ahora: Long): List<SmsMessage> {
-    if (mensajes.none { it.state == SMS_STATE_PENDING }) return mensajes
+internal fun conLosAvisosParecidos(
+    mensajes: List<SmsMessage>,
+    ahora: Long,
+    /**
+     * Si viene, solo se marca ese mensaje (el detalle de uno, `GET /api/sms/{id}`); los demás salen
+     * tal cual. `null` marca todos los pendientes (la bandeja).
+     */
+    soloElDe: String? = null,
+    /** Cómo se lee un aviso. Es `parseSms`; se deja cambiar para poder contar cuántos se leen. */
+    leer: (SmsMessage) -> ParsedSms? = { parseSms(it.text, it.bank) },
+): List<SmsMessage> {
     val margen = MINUTOS_PARA_EL_MISMO_PAGO * 60_000L
+    val momentos = mensajes.associate { it.id to momentoConfiable(it.time, ahora) }
+    // Los pendientes que hay que marcar, por momento. Solo se lee (con `parseSms`) lo que cae a
+    // [MINUTOS_PARA_EL_MISMO_PAGO] de alguno: el historial entero crece sin tope y casi nada de él
+    // está cerca de un pendiente.
+    val anclas = mensajes
+        .filter { it.state == SMS_STATE_PENDING && (soloElDe == null || it.id == soloElDe) }
+        .mapNotNull { momentos[it.id] }
+        .sorted()
+    if (anclas.isEmpty()) return mensajes
+    fun cercaDeUnPendiente(momento: Long): Boolean {
+        val i = anclas.binarySearch(momento)
+        if (i >= 0) return true
+        val despues = -i - 1
+        return (despues < anclas.size && anclas[despues] - momento <= margen) ||
+            (despues > 0 && momento - anclas[despues - 1] <= margen)
+    }
     val leidos = mensajes.mapNotNull { sms ->
-        val momento = momentoConfiable(sms.time, ahora) ?: return@mapNotNull null
-        val parsed = parseSms(sms.text, sms.bank) ?: return@mapNotNull null
+        val momento = momentos[sms.id] ?: return@mapNotNull null
+        if (!cercaDeUnPendiente(momento)) return@mapNotNull null
+        val parsed = leer(sms) ?: return@mapNotNull null
         Leido(sms, parsed.amount.roundToLong(), parsed.currency, parsed.type, momento)
     }
     val porId = leidos.associateBy { it.sms.id }
     return mensajes.map { sms ->
         if (sms.state != SMS_STATE_PENDING) return@map sms
+        if (soloElDe != null && sms.id != soloElDe) return@map sms
         val este = porId[sms.id] ?: return@map sms
         val parecido = leidos
             .filter { otro ->
