@@ -149,6 +149,10 @@ fun parteFijaDelChecklist(
     zone: ZoneId = AppClock.zone,
     automaticas: Set<Pair<String, String>> = emptySet(),
     rechazados: Set<Pair<String, String>> = emptySet(),
+    // Ola V: mismo parámetro que `candidatosPuntuados` — un movimiento que solo trae el número de
+    // un destino asociado a la regla absorbe el fijo igual que si dijera su nombre. Ver el KDoc de
+    // `RecurringRule.destinoConocidoId`.
+    destinos: Map<String, com.jvillada.movi.shared.model.DestinoConocido> = emptyMap(),
 ): Map<String, Long> {
     val porId = eventos.associateBy { it.id }
     val reglaPorId = reglas.associateBy { it.id }
@@ -212,7 +216,7 @@ fun parteFijaDelChecklist(
     val elegibles = eventos.filter { (cuentaComoGastoVariable(it) || esCuotaQueSaleDelBolsillo(it)) && it.id !in parte }
     val pares = falta.keys.flatMap { ruleId ->
         val regla = reglaPorId.getValue(ruleId)
-        val candidatos = candidatosPuntuados(regla, vencimientos.getValue(ruleId), elegibles, usados, zone, settings = settings)
+        val candidatos = candidatosPuntuados(regla, vencimientos.getValue(ruleId), elegibles, usados, zone, settings = settings, destinos = destinos)
             // El dueño ya dijo «no fue este» para este par exacto: no puede absorber el ítem, ni
             // siquiera por nombre. Antes del filtro de SENA_DEL_NOMBRE para que tampoco cuente como
             // evidencia de que el pago «ya se ve» (yaSeVeElPago, más abajo).

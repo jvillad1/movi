@@ -11,6 +11,7 @@ import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.reminders.OCCURRENCE_WINDOW_DAYS
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.KnownDestinations
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.OccurrenceRejections
@@ -20,6 +21,7 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.push.WebPushSender
+import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.reminders.cargarPagosDeDeuda
 import com.jvillada.movi.server.reminders.loadCardRulePairs
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
@@ -89,6 +91,9 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     // `arranqueDeLaRegla`). Sin leerla acá, la regla la guardaría y ninguna pantalla la
     // respetaría.
     activeFrom = this[RecurringRules.activeFrom],
+    // Ola V: a qué destino conocido va este traspaso, si el dueño lo asoció. Ver
+    // `RecurringRule.destinoConocidoId`.
+    destinoConocidoId = this[RecurringRules.destinoConocidoId],
 )
 
 /**
@@ -107,6 +112,19 @@ internal fun org.jetbrains.exposed.sql.Transaction.accountIdIfOwned(uid: String,
     val id = accountId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     val exists = Accounts.selectAll()
         .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
+        .firstOrNull() != null
+    return if (exists) id else null
+}
+
+/**
+ * Ola V: ¿este destino conocido es de este usuario? Misma decisión que [accountIdIfOwned] y por el
+ * mismo motivo — un id ajeno o inventado no rechaza el alta ni la edición de la regla, se guarda
+ * `null`: perder la asociación con un destino es mucho más barato que perder el plan entero.
+ */
+internal fun org.jetbrains.exposed.sql.Transaction.destinoConocidoIdIfOwned(uid: String, destinoId: String?): String? {
+    val id = destinoId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val exists = KnownDestinations.selectAll()
+        .where { (KnownDestinations.id eq id) and (KnownDestinations.userId eq uid) }
         .firstOrNull() != null
     return if (exists) id else null
 }
@@ -143,8 +161,13 @@ fun Route.reminderRoutes() {
             return@post call.respond(HttpStatusCode.BadRequest, motivo)
         }
         val newId = "rr_${UUID.randomUUID()}"
+        var storedDestinoId: String? = null
         val storedAccountId = dbQuery {
             val safeAccountId = accountIdIfOwned(uid, body.accountId)
+            // Ola V: el destino es opcional y, si viene, tiene que ser de este usuario (ver
+            // [destinoConocidoIdIfOwned]) — mismo criterio que la cuenta, arriba.
+            val safeDestinoId = destinoConocidoIdIfOwned(uid, body.destinoConocidoId)
+            storedDestinoId = safeDestinoId
             RecurringRules.insert {
                 it[id] = newId
                 it[userId] = uid
@@ -159,6 +182,7 @@ fun Route.reminderRoutes() {
                 // Ola 9 · D: la cuenta es opcional y, si viene, tiene que ser de este usuario
                 // (ver [accountIdIfOwned]).
                 it[accountId] = safeAccountId
+                it[destinoConocidoId] = safeDestinoId
                 // **Desde cuándo corre.** Lo manda quien crea la regla a partir de un movimiento
                 // que ya ocurrió: con la fecha de ese movimiento acá, la regla no se inventa
                 // ocurrencias en los períodos ANTERIORES. El período de ese movimiento sí existe,
@@ -211,6 +235,7 @@ fun Route.reminderRoutes() {
             body.copy(
                 id = newId,
                 accountId = storedAccountId,
+                destinoConocidoId = storedDestinoId,
                 activeFrom = fechaIsoValida(body.activeFrom),
                 eventoDeOrigen = null,
             ),
@@ -226,6 +251,7 @@ fun Route.reminderRoutes() {
             return@put call.respond(HttpStatusCode.BadRequest, motivo)
         }
         var storedAccountId: String? = null
+        var storedDestinoId: String? = null
         var storedActiveFrom: String? = null
         val updated = dbQuery {
             // Ola 9 · D — **un cliente viejo NO puede borrar la cuenta sin querer.**
@@ -251,6 +277,16 @@ fun Route.reminderRoutes() {
                 else -> accountIdIfOwned(uid, pedida)
             }
             storedAccountId = safeAccountId
+            // Ola V: los mismos tres estados, para el destino conocido (ver
+            // `RecurringRule.destinoConocidoId`).
+            val destinoActual = filaActual?.get(RecurringRules.destinoConocidoId)
+            val destinoPedido = body.destinoConocidoId
+            val safeDestinoId = when {
+                destinoPedido == null -> destinoActual
+                destinoPedido.isBlank() -> null
+                else -> destinoConocidoIdIfOwned(uid, destinoPedido)
+            }
+            storedDestinoId = safeDestinoId
             // **`activeFrom` se PRESERVA en un PUT**, y por el mismo agujero que el de la cuenta,
             // solo que sin la variante «quítala»: ningún cliente de hoy edita esta fecha —la pone
             // el alta desde un movimiento y nada más— así que un `null` en el body es siempre «no
@@ -268,11 +304,19 @@ fun Route.reminderRoutes() {
                 it[type] = body.type.name
                 it[remindMe] = body.remindMe
                 it[accountId] = safeAccountId
+                it[destinoConocidoId] = safeDestinoId
                 it[activeFrom] = arranqueGuardado
             }
         }
         if (updated == 0) call.respond(HttpStatusCode.NotFound)
-        else call.respond(body.copy(id = id, accountId = storedAccountId, activeFrom = storedActiveFrom))
+        else call.respond(
+            body.copy(
+                id = id,
+                accountId = storedAccountId,
+                destinoConocidoId = storedDestinoId,
+                activeFrom = storedActiveFrom,
+            ),
+        )
     }
 
     delete("/api/recurring-rules/{id}") {
@@ -833,6 +877,22 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
 
     val enJuego = ocurrenciasPorPreguntar(rules, today, periodo)
 
+    // Ola V: los destinos conocidos del dueño, resueltos UNA vez para toda la respuesta (las tres
+    // pasadas de abajo los necesitan) — ver el KDoc de `RecurringRule.destinoConocidoId` y de
+    // `candidatosPuntuados`. Sin totales: acá solo hace falta el número para reconocer el destino
+    // en el texto del banco, no cuánto se le mandó.
+    //
+    // **Solo se lee `known_destinations` si alguna regla de verdad tiene un destino asociado.**
+    // No es solo una micro-optimización: es lo que deja intacto todo esquema de prueba que arma
+    // su propia tabla acotada de tablas (sin `KnownDestinations`, porque hasta esta ola ningún
+    // camino de recordatorios la tocaba) — leerla incondicionalmente rompía esos tests con «Tabla
+    // "known_destinations" no encontrada» aunque ninguna de sus reglas usara el campo nuevo.
+    val destinos = if (rules.any { it.destinoConocidoId != null }) {
+        destinosDelDueno(uid).associateBy { it.id }
+    } else {
+        emptyMap()
+    }
+
     // ── Pasada 1: lo que Movi empareja SOLO ──────────────────────────────────
     //
     // Hasta acá este endpoint solo proponía: la casilla del checklist sellaba con
@@ -841,7 +901,7 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
     // calcado. Ahora, cuando hay un único movimiento concluyente (ver
     // `ocurrenciaConcluyente`), la fila sale ya emparejada; con cero o con dos, se
     // pregunta como siempre. El cómo vive en [resolverOcurrencias].
-    val resueltas = resolverOcurrencias(enJuego, lectura, today, periodo)
+    val resueltas = resolverOcurrencias(enJuego, lectura, today, periodo, destinos)
 
     // ── Pasada 2: la respuesta ───────────────────────────────────────────────
     val estados = resueltas.mapNotNull { (rule, due, resolucion) ->
@@ -896,6 +956,7 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
                     lectura.sinRechazados(rule),
                     lectura.reservados,
                     settings = periodo,
+                    destinos = destinos,
                 ),
                 periodoDelDueno = nombreDelPeriodo,
             )
@@ -915,7 +976,7 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
         if (enJuego.any { (r, due) -> r.id == rule.id && due == anterior }) return@mapNotNull null
         rule to anterior
     }
-    val anterioresEmparejadas = resolverOcurrencias(anteriores, lectura, today, periodo)
+    val anterioresEmparejadas = resolverOcurrencias(anteriores, lectura, today, periodo, destinos)
         .mapNotNull { (rule, due, resolucion) ->
             val evento = (resolucion as? Resolucion.Emparejada)?.evento ?: return@mapNotNull null
             RecurringOccurrence(
@@ -1075,6 +1136,10 @@ internal fun resolverOcurrencias(
     lectura: LecturaDeOcurrencias,
     today: java.time.LocalDate,
     periodo: PeriodSettings,
+    // Ola V: ver el parámetro homónimo de `candidatosPuntuados`. Vacío por default para que
+    // `PeriodosRoutes` (que hoy no lo necesita para su propio uso) no tenga que empezar a
+    // resolverlo si no le importa.
+    destinos: Map<String, com.jvillada.movi.shared.model.DestinoConocido> = emptyMap(),
 ): List<OcurrenciaResuelta> = pares.map { (rule, due) ->
     val clave = periodOf(due)
     val resolucion = when {
@@ -1087,6 +1152,7 @@ internal fun resolverOcurrencias(
                 lectura.sinRechazados(rule),
                 lectura.reservados,
                 settings = periodo,
+                destinos = destinos,
             )
             val unico = concluyentes.singleOrNull()
             if (unico != null) {

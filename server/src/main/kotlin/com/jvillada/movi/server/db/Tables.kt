@@ -445,6 +445,16 @@ object RecurringRules : Table("recurring_rules") {
      * nacieron, y «Tus períodos» lo deduce de su evidencia (ver `PeriodosRoutes`).
      */
     val createdAt          = long("created_at").nullable()
+    /**
+     * Ola V: a qué [com.jvillada.movi.server.db.KnownDestinations] va este traspaso todos los
+     * meses — ver [com.jvillada.movi.shared.model.RecurringRule.destinoConocidoId], que es quien
+     * explica el porqué. Nullable, y por eso es DDL seguro: `createMissingTablesAndColumns` emite
+     * `ADD COLUMN destino_conocido_id VARCHAR(50) NULL` sobre la tabla con filas, y toda regla que
+     * ya existe queda en NULL — la verdad: hasta hoy no había ningún destino que asociarle. Sin FK
+     * a `known_destinations`, mismo motivo que [accountId] no la tiene con `accounts`: si el
+     * destino se borra, `DestinoRoutes` suelta la referencia en vez de borrar la regla.
+     */
+    val destinoConocidoId  = varchar("destino_conocido_id", 50).nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_recurring_rules_user_id", false, userId) }
 }

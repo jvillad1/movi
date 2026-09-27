@@ -759,6 +759,21 @@ fun cuentaParaElWire(cuentaEnLaHoja: String?, elDuenoEligioSinCuenta: Boolean): 
 }
 
 /**
+ * Ola V: la misma decisión que [cuentaParaElWire], para `RecurringRule.destinoConocidoId` — los
+ * mismos tres estados de wire (ver su KDoc) y el mismo motivo: sin esto, una lectura de destinos
+ * que todavía no llegó (o que falló) podría mandar «quitá el destino» donde el dueño no tocó nada.
+ *
+ * @param destinoEnLaHoja el id que muestra el campo, o `null` si el campo dice «Sin destino».
+ * @param elDuenoEligioSinDestino ¿ese `null` salió de que el dueño tocó «Sin destino» en el
+ *   selector? Si no, el `null` significa «acá no se habló de destinos».
+ */
+fun destinoParaElWire(destinoEnLaHoja: String?, elDuenoEligioSinDestino: Boolean): String? = when {
+    destinoEnLaHoja != null -> destinoEnLaHoja
+    elDuenoEligioSinDestino -> ""
+    else -> null
+}
+
+/**
  * **El texto del monto de un recurrente, en cualquiera de las tres pantallas que lo pintan.**
  *
  * Existe como función —y no como un `if` copiado en cada renderer— porque el defecto que arregla

@@ -14,6 +14,7 @@ import com.jvillada.movi.server.reminders.arranqueDeLaRegla
 import com.jvillada.movi.server.reminders.ocurrenciaAnteriorQuePisaElPeriodo
 import com.jvillada.movi.server.reminders.periodOf
 import com.jvillada.movi.server.reminders.primeraOcurrenciaDesde
+import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.server.db.Events
@@ -342,9 +343,20 @@ internal fun Transaction.pagosFijosDelPeriodo(
     val resto = delPeriodo.filterNot { it in primero }
 
     val lectura = leerOcurrenciasDe(uid, primero + resto, ajustes)
-    val resueltas = resolverOcurrencias(primero, lectura, hoy, ajustes) + resolverOcurrencias(resto, lectura, hoy, ajustes)
+    // Ola V: mismos destinos conocidos que usa el checklist en curso — «Tus períodos» no puede
+    // reconocer MENOS que lo que ya reconoce `/api/payments/occurrences` para el mismo par
+    // regla/movimiento, o un período cerrado se vería «con dudas» donde el período en curso ya
+    // lo dio por resuelto. Solo se lee `known_destinations` si hace falta — ver el comentario
+    // homónimo en `ReminderRoutes.ocurrenciasReales`.
+    val destinos = if (reglas.any { it.destinoConocidoId != null }) {
+        destinosDelDueno(uid).associateBy { it.id }
+    } else {
+        emptyMap()
+    }
+    val resueltas = resolverOcurrencias(primero, lectura, hoy, ajustes, destinos) +
+        resolverOcurrencias(resto, lectura, hoy, ajustes, destinos)
     val delPeriodoResueltas = resueltas.filter { it.due in dias }
-        .let { if (enCurso) it else existiaEnElPeriodo(uid, it, lectura, inicioDeLaHistoria, dias.start, hoy, ajustes) }
+        .let { if (enCurso) it else existiaEnElPeriodo(uid, it, lectura, inicioDeLaHistoria, dias.start, hoy, ajustes, destinos) }
 
     // Lo que se movió de verdad en un pago sellado a mano con su movimiento: ese movimiento puede
     // estar fuera de la franja leída (el dueño eligió uno a mano), así que se busca por id.
@@ -416,6 +428,7 @@ private fun Transaction.existiaEnElPeriodo(
     inicioDelPeriodo: LocalDate,
     hoy: LocalDate,
     ajustes: PeriodSettings,
+    destinos: Map<String, com.jvillada.movi.shared.model.DestinoConocido> = emptyMap(),
 ): List<OcurrenciaResuelta> {
     if (resueltas.isEmpty()) return resueltas
     val creadas: Map<String, LocalDate?> = RecurringRules.select(RecurringRules.id, RecurringRules.createdAt)
@@ -438,7 +451,7 @@ private fun Transaction.existiaEnElPeriodo(
             else -> sinDecidir += regla
         }
     }
-    if (sinDecidir.isNotEmpty()) existian += conPagoAutomaticoAntes(uid, sinDecidir, inicioDeLaHistoria, inicioDelPeriodo, hoy, ajustes)
+    if (sinDecidir.isNotEmpty()) existian += conPagoAutomaticoAntes(uid, sinDecidir, inicioDeLaHistoria, inicioDelPeriodo, hoy, ajustes, destinos)
     return resueltas.filter { ocurrencia ->
         val creada = creadas[ocurrencia.rule.id]
         ocurrencia.rule.id in existian &&
@@ -465,13 +478,14 @@ private fun Transaction.conPagoAutomaticoAntes(
     antesDe: LocalDate,
     hoy: LocalDate,
     ajustes: PeriodSettings,
+    destinos: Map<String, com.jvillada.movi.shared.model.DestinoConocido> = emptyMap(),
 ): Set<String> {
     if (!desde.isBefore(antesDe)) return emptySet()
     val pares = reglas
         .flatMap { regla -> ocurrenciasEntre(regla, desde..antesDe.minusDays(1), ajustes).map { regla to it } }
         .sortedWith(compareBy({ it.second }, { it.first.id }))
     if (pares.isEmpty()) return emptySet()
-    return resolverOcurrencias(pares, leerOcurrenciasDe(uid, pares, ajustes), hoy, ajustes)
+    return resolverOcurrencias(pares, leerOcurrenciasDe(uid, pares, ajustes), hoy, ajustes, destinos)
         .filter { it.resolucion is Resolucion.Emparejada }
         .mapTo(mutableSetOf()) { it.rule.id }
 }

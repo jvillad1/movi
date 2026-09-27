@@ -3,11 +3,13 @@ package com.jvillada.movi.server.reminders
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.epochMillisToAppDate
+import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.nombreDeMovimientoPegaConRegla
+import com.jvillada.movi.shared.model.vaHaciaElDestino
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -170,8 +172,11 @@ fun occurrenceCandidatesFor(
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
     max: Int = MAX_OCCURRENCE_CANDIDATES,
     settings: PeriodSettings = PeriodSettings(),
+    // Ola V: los destinos conocidos del dueño, por id — ver el parámetro homónimo de
+    // [candidatosPuntuados].
+    destinos: Map<String, DestinoConocido> = emptyMap(),
 ): List<FinancialEvent> =
-    candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings)
+    candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings, destinos)
         .take(max)
         .map { it.event }
 
@@ -190,10 +195,35 @@ fun occurrenceCandidatesFor(
  * de la regla, perdonando que el movimiento agregue el mes/año («Salario Octubre 2026» pega con
  * «Salario» — ver [nombreDeMovimientoPegaConRegla] en `:core`). Una sola definición para que las
  * dos puertas nunca puedan leer «pega» distinto para el mismo par regla/movimiento.
+ *
+ * **Ola V: o el DESTINO de la regla pega.** Un traspaso a un tercero ya registrado —«Tía Caro»
+ * asociada al destino «Caro»— casi nunca repite el nombre de la regla: el banco solo nombra el
+ * número de la cuenta que recibe, nunca «Tía Caro». Se decidió que esto pese IGUAL que el nombre
+ * (no una seña aparte, más chica) y no una categoría propia entre medio: [destinoPegaCon] reusa
+ * [vaHaciaElDestino] — la misma función que ya junta «lo que le mandaste» a un destino en
+ * `DestinosScreen`— y esa función exige que el número de cuenta aparezca en el texto del banco (o,
+ * más suelto, que el NOMBRE del destino aparezca como palabra completa). Las dos son exactamente
+ * tan específicas como el nombre de la regla: un número de cuenta identifica una única cuenta
+ * tanto como «Salario» identifica un único concepto, y equipararla a categoría+cuenta (peso 2) las
+ * habría dejado perdiendo contra un «Mercado Éxito» que solo comparte categoría y cuenta con el
+ * arriendo — el mismo modo de falla que el KDoc de arriba ya cuenta.
  */
-private fun nombrePegaCon(rule: RecurringRule, event: FinancialEvent): Boolean =
+private fun nombrePegaCon(rule: RecurringRule, event: FinancialEvent, destinos: Map<String, DestinoConocido>): Boolean =
     nombreDeMovimientoPegaConRegla(rule.name, event.description) ||
-        nombreDeMovimientoPegaConRegla(rule.name, event.merchant.orEmpty())
+        nombreDeMovimientoPegaConRegla(rule.name, event.merchant.orEmpty()) ||
+        destinoPegaCon(rule, event, destinos)
+
+/**
+ * ¿[event] fue hacia el [DestinoConocido] que [rule] tiene asociado (si tiene alguno)? Ver el KDoc
+ * de [nombrePegaCon] para el porqué de que esto cuente como si el nombre pegara.
+ *
+ * `destinos` trae SOLO los destinos que el llamador ya resolvió como del dueño de esta regla — un
+ * mapa y no una lista para no recorrerla por cada movimiento de la ventana.
+ */
+private fun destinoPegaCon(rule: RecurringRule, event: FinancialEvent, destinos: Map<String, DestinoConocido>): Boolean {
+    val destino = rule.destinoConocidoId?.let { destinos[it] } ?: return false
+    return vaHaciaElDestino(event, destino)
+}
 
 fun candidatosPuntuados(
     rule: RecurringRule,
@@ -203,6 +233,14 @@ fun candidatosPuntuados(
     zone: ZoneId = AppClock.zone,
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
     settings: PeriodSettings = PeriodSettings(),
+    /**
+     * Ola V: los destinos conocidos del dueño, por id. Solo hace falta traer TODOS los suyos (no
+     * solo el de esta regla) porque el llamador los resuelve una única vez por respuesta y los
+     * reusa para todas las reglas — ver `destinosDelDueno` en `:server`. Vacío por default: nada
+     * cambia para quien no lo pasa, que es exactamente lo que pide el brief («sin destino
+     * asociado, el comportamiento de hoy no cambia»).
+     */
+    destinos: Map<String, DestinoConocido> = emptyMap(),
 ): List<CandidatoPuntuado> {
     val claveCategoria = claveComparableDeNombre(rule.category)
     // La ventana (con su piso en el primer día del mes del vencimiento) sale de
@@ -226,7 +264,7 @@ fun candidatosPuntuados(
             val fecha = epochMillisToAppDate(event.timestamp, zone)
             if (fecha !in ventana) return@mapNotNull null
             val dias = ChronoUnit.DAYS.between(dueDate, fecha)
-            val nombrePega = nombrePegaCon(rule, event)
+            val nombrePega = nombrePegaCon(rule, event, destinos)
             val categoriaPega = claveCategoria.isNotEmpty() &&
                 claveComparableDeNombre(event.category) == claveCategoria
             // La seña mínima es el NOMBRE o la CATEGORÍA. La cuenta no basta sola: no dice nada
@@ -338,9 +376,10 @@ fun ocurrenciaConcluyente(
     zone: ZoneId = AppClock.zone,
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
     settings: PeriodSettings = PeriodSettings(),
+    destinos: Map<String, DestinoConocido> = emptyMap(),
 ): FinancialEvent? =
     // `singleOrNull`: cero o dos es lo mismo acá — no hay nada que afirmar, se pregunta.
-    ocurrenciasConcluyentes(rule, dueDate, events, usedEventIds, zone, windowDays, settings).singleOrNull()
+    ocurrenciasConcluyentes(rule, dueDate, events, usedEventIds, zone, windowDays, settings, destinos).singleOrNull()
 
 /**
  * **Todos los candidatos que pasan una de las dos puertas de [ocurrenciaConcluyente]**, sin elegir.
@@ -357,13 +396,14 @@ fun ocurrenciasConcluyentes(
     zone: ZoneId = AppClock.zone,
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
     settings: PeriodSettings = PeriodSettings(),
+    destinos: Map<String, DestinoConocido> = emptyMap(),
 ): List<FinancialEvent> =
     // **Sobre los candidatos SIN recortar**, no sobre los tres que se muestran. Si se mirara la
     // lista recortada, un cuarto concluyente quedaría invisible y los tres de arriba parecerían
     // «exactamente uno»: la ambigüedad se taparía justo cuando más movimientos parecidos hay, que
     // es cuando más caro sale equivocarse.
-    candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings)
-        .filter { esConcluyente(rule, it.event) }
+    candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings, destinos)
+        .filter { esConcluyente(rule, it.event, destinos) }
         .map { it.event }
 
 /**
@@ -375,8 +415,8 @@ fun ocurrenciasConcluyentes(
  * la categoría 1, la cuenta 1— y acá son una DECISIÓN. Un umbral sobre ese puntaje («5 o más»)
  * diría lo mismo hoy y mentiría mañana, apenas alguien toque un peso para mejorar el orden.
  */
-private fun esConcluyente(rule: RecurringRule, event: FinancialEvent): Boolean {
-    if (nombrePegaCon(rule, event)) return true
+private fun esConcluyente(rule: RecurringRule, event: FinancialEvent, destinos: Map<String, DestinoConocido>): Boolean {
+    if (nombrePegaCon(rule, event, destinos)) return true
     val claveCategoria = claveComparableDeNombre(rule.category)
     val categoriaPega = claveCategoria.isNotEmpty() &&
         claveComparableDeNombre(event.category) == claveCategoria
