@@ -12,6 +12,7 @@ import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.shared.model.DetalleDePeriodo as DetalleDePeriodoLeido
 import kotlin.concurrent.Volatile
 
@@ -60,6 +61,14 @@ sealed interface ClaveDeLectura<T : Any> {
     }
     data object MensajesDelBanco : ClaveDeLectura<List<SmsMessage>>
     data object CandidatosPagoDeTarjeta : ClaveDeLectura<List<FinancialEvent>>
+
+    /**
+     * Lo que hace falta para la meta diaria del «Día a día» de Movimientos (ver `DiaADia`): las
+     * cinco lecturas de las que sale la tarjeta «Disponible». Cambian de naturaleza con el período.
+     */
+    data object DatosDelDiaADia : ClaveDeLectura<DashboardData> {
+        override val dependeDelPeriodo: Boolean get() = true
+    }
 
     /** El gasto y el ingreso «del mes»: los del período vigente. */
     data class ResumenDelTablero(val scope: Scope) : ClaveDeLectura<DashboardSummary> {
