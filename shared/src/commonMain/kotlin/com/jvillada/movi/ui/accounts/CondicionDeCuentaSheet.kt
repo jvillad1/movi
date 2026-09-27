@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontWeight
@@ -39,7 +37,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.MAX_ACCOUNT_CONDITION_LENGTH
 import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.CancellationException
@@ -90,138 +88,120 @@ fun CondicionDeCuentaSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !guardando, onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !guardando) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .verticalScroll(rememberScrollState())
+                .weight(1f, fill = false),
         ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = !guardando)
+            Text(
+                text = "¿Esta plata solo sirve para algo?",
+                style = Movi.textos.titulo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.texto,
+                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+            )
 
-            Column(
+            // Qué hace, dicho con las dos consecuencias que tiene y sin ninguna más: es
+            // exactamente lo que el campo cambia en la app, y decir de más acá sería
+            // prometerle al dueño un efecto que no existe.
+            Text(
+                text = "Hay plata tuya que no puedes usar para cualquier cosa: una pensión " +
+                    "voluntaria, las cesantías, una cuenta AFC. Si escribes para qué sirve, " +
+                    "esta cuenta deja de sumar en «Tu plata» y aparece en su propio renglón. " +
+                    "Tu patrimonio no cambia: la plata sigue siendo tuya.",
+                style = Movi.textos.cuerpo,
+                // Un párrafo de explicación: con el peso de una fila se leería pesado.
+                fontWeight = FontWeight.Normal,
+                color = Movi.colores.textoMedio,
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Box(
                 modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .weight(1f, fill = false),
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Movi.colores.tarjeta)
+                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
             ) {
-                Text(
-                    text = "¿Esta plata solo sirve para algo?",
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+                if (texto.isEmpty()) {
+                    Text("Vivienda", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
+                }
+                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                // [esAtajoDeSeleccionarTodo]. El recorte de abajo sigue siendo el de siempre:
+                // el campo avisa el texto, la pantalla decide con cuánto se queda.
+                val campo = rememberCampoConSeleccion(texto) {
+                    // El recorte va acá y no solo al guardar: un campo que acepta teclas que
+                    // después se tiran en silencio es peor que uno que deja de aceptarlas.
+                    texto = it.take(MAX_ACCOUNT_CONDITION_LENGTH)
+                }
+                BasicTextField(
+                    value = campo.valor,
+                    onValueChange = campo::alCambiar,
+                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
+                    cursorBrush = SolidColor(Movi.colores.texto),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    singleLine = true,
+                    enabled = !guardando,
+                    modifier = Modifier.fillMaxWidth()
+                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                 )
+            }
 
-                // Qué hace, dicho con las dos consecuencias que tiene y sin ninguna más: es
-                // exactamente lo que el campo cambia en la app, y decir de más acá sería
-                // prometerle al dueño un efecto que no existe.
-                Text(
-                    text = "Hay plata tuya que no puedes usar para cualquier cosa: una pensión " +
-                        "voluntaria, las cesantías, una cuenta AFC. Si escribes para qué sirve, " +
-                        "esta cuenta deja de sumar en «Tu plata» y aparece en su propio renglón. " +
-                        "Tu patrimonio no cambia: la plata sigue siendo tuya.",
-                    style = Movi.textos.cuerpo,
-                    // Un párrafo de explicación: con el peso de una fila se leería pesado.
-                    fontWeight = FontWeight.Normal,
-                    color = Movi.colores.textoMedio,
-                )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = if (account.condicionadaA != null) {
+                    "Déjalo vacío para quitar la condición."
+                } else {
+                    "Déjalo vacío si puedes usar esta plata para lo que quieras."
+                },
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoApagado,
+            )
 
-                Spacer(Modifier.height(16.dp))
+            if (error != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            }
 
+            Spacer(Modifier.height(20.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .weight(1f)
+                        .height(50.dp)
+                        .clip(RoundedCornerShape(999.dp))
                         .background(Movi.colores.tarjeta)
-                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                        .clickable(enabled = !guardando, onClick = onDismiss),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    if (texto.isEmpty()) {
-                        Text("Vivienda", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
-                    }
-                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                    // [esAtajoDeSeleccionarTodo]. El recorte de abajo sigue siendo el de siempre:
-                    // el campo avisa el texto, la pantalla decide con cuánto se queda.
-                    val campo = rememberCampoConSeleccion(texto) {
-                        // El recorte va acá y no solo al guardar: un campo que acepta teclas que
-                        // después se tiran en silencio es peor que uno que deja de aceptarlas.
-                        texto = it.take(MAX_ACCOUNT_CONDITION_LENGTH)
-                    }
-                    BasicTextField(
-                        value = campo.valor,
-                        onValueChange = campo::alCambiar,
-                        textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                        cursorBrush = SolidColor(Movi.colores.texto),
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                        singleLine = true,
-                        enabled = !guardando,
-                        modifier = Modifier.fillMaxWidth()
-                            .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
+                    Text("Cancelar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1.4f)
+                        .height(50.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(if (cambio && !guardando) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                        .clickable(enabled = cambio && !guardando) { guardar() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (guardando) "Guardando…" else "Guardar",
+                        style = Movi.textos.cuerpo,
+                        fontWeight = FontWeight.Medium,
+                        color = if (cambio && !guardando) Movi.colores.marca else Movi.colores.textoApagado,
                     )
                 }
-
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = if (account.condicionadaA != null) {
-                        "Déjalo vacío para quitar la condición."
-                    } else {
-                        "Déjalo vacío si puedes usar esta plata para lo que quieras."
-                    },
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoApagado,
-                )
-
-                if (error != null) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
-
-                Spacer(Modifier.height(20.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Movi.colores.tarjeta)
-                            .clickable(enabled = !guardando, onClick = onDismiss),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("Cancelar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1.4f)
-                            .height(50.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(if (cambio && !guardando) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                            .clickable(enabled = cambio && !guardando) { guardar() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = if (guardando) "Guardando…" else "Guardar",
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = if (cambio && !guardando) Movi.colores.marca else Movi.colores.textoApagado,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(24.dp))
             }
+
+            Spacer(Modifier.height(24.dp))
         }
     }
 }

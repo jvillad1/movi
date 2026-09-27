@@ -534,6 +534,11 @@ internal fun TransferBody(
      * que nadie lo cierre.
      */
     onPickerAbierto: (Boolean) -> Unit = {},
+    /**
+     * Sube cada vez que la hoja pide cerrar el sub-picker abierto (Escape en la web). Un contador y
+     * no un `Boolean`: dos Escape seguidos son dos pedidos, y ninguno queda «pegado».
+     */
+    pedidosDeCerrarPicker: Int = 0,
     modo: ModoDeTraspaso = ModoDeTraspaso.TRASPASO,
     onSaved: () -> Unit,
 ) {
@@ -711,6 +716,14 @@ internal fun TransferBody(
     //
     // `rememberUpdatedState` porque `onDispose` corre fuera de la composición y no puede
     // depender de qué instancia del lambda quedó capturada.
+    LaunchedEffect(pedidosDeCerrarPicker) {
+        if (pedidosDeCerrarPicker == 0) return@LaunchedEffect
+        when {
+            picking != null -> cerrarPicker()
+            pickingDate -> cerrarFecha()
+        }
+    }
+
     val avisar by rememberUpdatedState(onPickerAbierto)
     DisposableEffect(Unit) { onDispose { avisar(false) } }
     // Los ids viven en el borrador, NO adentro de `save()`: un reintento tras un fallo tiene que

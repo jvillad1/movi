@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontWeight
@@ -37,7 +36,7 @@ import com.jvillada.movi.ui.components.categoriaPorDefectoPara
 import com.jvillada.movi.ui.components.categoriaSirveParaTipo
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
-import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.VerTodasLasCuentas
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
@@ -396,471 +395,462 @@ fun CreateRecurringRuleSheet(
     // llanamente, imposible de crear. Ahora la hoja se topa en el 92% de la altura disponible,
     // los campos scrollean, y la manija y el botón quedan FIJOS: el botón es siempre alcanzable
     // sin depender de que el usuario descubra que hay que rodar.
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val altoMaximoDeLaHoja = maxHeight * 0.92f
+    // (el tope lo pone `MarcoDeHoja` con `fraccionDeAltoMaximo`; en la web, el de la hoja centrada)
+    MarcoDeHoja(
+        onDismiss = onDismiss,
+        dismissEnabled = !saving,
+        fraccionDeAltoMaximo = 0.92f,
+        // Escape (la web) cierra primero lo que esté abierto adentro —la lista de cuentas, la
+        // pregunta de borrar— y solo después la hoja. Ver [MarcoDeHoja].
+        onEscape = {
+            when {
+                accountPickerOpen -> accountPickerOpen = false
+                pidiendoBorrar -> pidiendoBorrar = false
+                !saving -> onDismiss()
+            }
+        },
+    ) {
+        // Solo los CAMPOS scrollean; `fill = false` para que una hoja corta siga
+        // midiendo lo que ocupa en vez de estirarse hasta el tope.
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
-                .clickable(enabled = !saving, onClick = onDismiss),
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState()),
         ) {
-            Box(modifier = Modifier.weight(1f))
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = altoMaximoDeLaHoja)
-                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .background(Movi.colores.tarjeta)
-                    .padding(horizontal = 20.dp)
-                    .clickable(enabled = false) {},
+            // Title row: sheet title + optional delete action in edit mode
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
-                SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
-
-                // Solo los CAMPOS scrollean; `fill = false` para que una hoja corta siga
-                // midiendo lo que ocupa en vez de estirarse hasta el tope.
-                Column(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    // Title row: sheet title + optional delete action in edit mode
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = when {
-                                editandoSuscripcion -> "Editar suscripción"
-                                isEditMode -> "Editar recurrente"
-                                else -> "Nuevo recurrente"
-                            },
-                            style = Movi.textos.titulo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                            modifier = Modifier.weight(1f),
-                        )
-                        // `existing != null` y no `isEditMode`: desde que editar una
-                        // suscripción también hace `isEditMode`, este enlace se pintaba sobre una
-                        // hoja donde `delete()` sale en la primera línea (`existing == null`).
-                        // Un enlace rojo destructivo que no hacía absolutamente nada, ni siquiera
-                        // fallar. Para una suscripción el camino es «Quitar» desde la fila, que
-                        // además sabe distinguir borrar de marcar DISMISSED.
-                        if (existing != null) {
-                            Text(
-                                text = if (saving) "…" else "Eliminar",
-                                style = Movi.textos.cuerpo,
-                                color = Movi.colores.sale,
-                                modifier = Modifier.clickable(enabled = !saving) { pidiendoBorrar = true },
-                            )
-                        }
-                    }
-                    if (pidiendoBorrar && existing != null) {
-                        ConfirmacionEnLinea(
-                            pregunta = "¿Eliminar el recurrente «${existing.name}»?",
-                            detalle = "Deja de avisarte y de contar en el flujo libre. Los movimientos que ya anotaste no se tocan. No se puede deshacer.",
-                            textoConfirmar = "Eliminar",
-                            ocupado = saving,
-                            onConfirmar = { delete() },
-                            onCancelar = { pidiendoBorrar = false },
-                            modifier = Modifier.padding(bottom = 18.dp),
-                        )
-                    }
-
-                    // --- NOMBRE ---
-                    SheetSectionLabel("NOMBRE")
-                    Spacer(Modifier.height(8.dp))
-                    SheetInputBox {
-                        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                        // [esAtajoDeSeleccionarTodo].
-                        val campo = rememberCampoConSeleccion(name) { name = it }
-                        BasicTextField(
-                            value = campo.valor,
-                            onValueChange = campo::alCambiar,
-                            cursorBrush = SolidColor(Movi.colores.texto),
-                            textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                                .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                            decorationBox = { inner ->
-                                if (name.isEmpty()) {
-                                    Text("Ej: Arriendo, Netflix, Gym", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                                }
-                                inner()
-                            },
-                        )
-                    }
-
-                    Spacer(Modifier.height(18.dp))
-
-                    // --- MONEDA ---
-                    // La única pregunta que decide dónde se guarda esto, y es una pregunta del mundo
-                    // real: cualquiera sabe si le cobran en pesos o en dólares. Al editar no aparece —
-                    // editar es siempre editar una regla (ver KDoc).
-                    // La moneda se pregunta solo al CREAR. Editando una regla no aplica (siempre
-                    // es COP) y editando una suscripción el `PUT` no escribe esa columna — ver el
-                    // KDoc de [existingSub].
-                    if (!isEditMode) {
-                        SheetSectionLabel("MONEDA")
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            SheetChip(
-                                label = "Pesos",
-                                selected = currency == "COP",
-                                onClick = {
-                                    currency = "COP"
-                                    // Volver a pesos solo deshace el aviso si lo que mandaba a la
-                                    // rama de suscripción era la moneda: con ANUAL elegido, esto
-                                    // se sigue guardando como suscripción y sigue siendo un cobro.
-                                    if (!esAnual) tipoCambiadoPorSerSuscripcion = false
-                                },
-                            )
-                            SheetChip(
-                                label = "Dólares",
-                                selected = currency == "USD",
-                                onClick = {
-                                    currency = "USD"
-                                    // En dólares esto se guarda como suscripción, y una suscripción es
-                                    // SIEMPRE un cobro. Forzar el tipo al tocar el chip (y no callarlo
-                                    // al guardar) es lo que evita el peor caso: elegir Ingreso, después
-                                    // Dólares, y que se guarde un gasto — el flujo libre se movía al
-                                    // revés por el doble del monto, sin que nada lo dijera.
-                                    // Si eso le pisó una elección al dueño, se le dice (ver la nota).
-                                    tipoCambiadoPorSerSuscripcion = selectedType == TransactionType.INCOME
-                                    selectedType = TransactionType.EXPENSE
-                                },
-                            )
-                        }
-                        Spacer(Modifier.height(18.dp))
-                    }
-
-                    // --- CADA CUÁNTO --- (Ola 16)
-                    // La segunda pregunta del mundo real que decide dónde se guarda esto, y la
-                    // que evita el error de doce veces: un cobro anual anotado como mensual le
-                    // dice al dueño que gasta $369.900 al mes en HBO Max. Ver el KDoc de la hoja.
-                    //
-                    // Ola 18: al EDITAR una suscripción sí se muestra —el `PUT` sí escribe esta
-                    // columna—, y hace falta: un cobro que Movi detectó nace mensual, así que un
-                    // anual mal clasificado solo se puede arreglar acá.
-                    if (!isEditMode || editandoSuscripcion) {
-                        SheetSectionLabel("CADA CUÁNTO")
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            SheetChip(
-                                label = "Todos los meses",
-                                selected = periodicidad == PeriodicidadDeCobro.MENSUAL,
-                                onClick = {
-                                    periodicidad = PeriodicidadDeCobro.MENSUAL
-                                    // Simétrico del chip «Pesos»: en dólares el aviso sigue valiendo.
-                                    if (!enDolares) tipoCambiadoPorSerSuscripcion = false
-                                },
-                            )
-                            SheetChip(
-                                label = "Una vez al año",
-                                selected = periodicidad == PeriodicidadDeCobro.ANUAL,
-                                onClick = {
-                                    periodicidad = PeriodicidadDeCobro.ANUAL
-                                    // Mismo motivo exacto que en «Dólares»: esto pasa a guardarse
-                                    // como suscripción, y una suscripción es siempre un cobro.
-                                    tipoCambiadoPorSerSuscripcion = selectedType == TransactionType.INCOME
-                                    selectedType = TransactionType.EXPENSE
-                                },
-                            )
-                        }
-                        Spacer(Modifier.height(18.dp))
-                    }
-
-                    // --- MONTO ---
-                    // En un cobro anual el rótulo lo dice: lo que va acá es el cobro COMPLETO, el
-                    // que llega al extracto una vez al año — no la doceava parte. Pedir el número
-                    // que el dueño puede verificar y hacer nosotros la división es lo que impide
-                    // que quede guardada una cifra que no existe en ninguna parte del mundo real.
-                    SheetSectionLabel(if (esAnual) "MONTO DEL COBRO ANUAL" else "MONTO")
-                    Spacer(Modifier.height(8.dp))
-                    // V12: en Colombia "$20" se lee veinte pesos. Si el cobro es en dólares, el campo
-                    // lo dice mientras se escribe — igual que después lo dice la fila de la lista.
-                    MoneyField(
-                        value = amount,
-                        onValueChange = { amount = it },
-                        prefix = if (enDolares) "US$" else "$",
-                        placeholder = if (enDolares) "US$ 0" else "$ 0",
-                    )
-
-                    Spacer(Modifier.height(18.dp))
-
-                    // --- DÍA DEL MES ---
-                    // En un cobro anual esto es el día, pero Movi no guarda el MES: el modelo de
-                    // suscripciones tiene `dayOfMonth` y nada más. La consecuencia se dice abajo,
-                    // en la nota, en vez de dejar que el dueño la deduzca cuando el aviso no llegue.
-                    SheetSectionLabel("DÍA DEL MES")
-                    Spacer(Modifier.height(8.dp))
-                    DayOfMonthPicker(
-                        selected = dayOfMonth,
-                        enabled = !saving,
-                        onPick = { dayOfMonth = it },
-                    )
-
-                    Spacer(Modifier.height(18.dp))
-
-                    // --- TIPO ---
-                    // Siempre visible, también cuando esto se va a guardar como suscripción. Ahí
-                    // «Ingreso» queda deshabilitado en vez de desaparecer: el dueño VE que la opción
-                    // existe y que no aplica, en lugar de elegirla y que Movi la cambie por atrás. (Un
-                    // ingreso recurrente en dólares, o uno anual, no se puede registrar hoy — el
-                    // modelo de suscripciones es de cobros. Ver la nota de abajo.)
-                    SheetSectionLabel("TIPO")
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        SheetChip(
-                            label = "Gasto",
-                            selected = selectedType == TransactionType.EXPENSE,
-                            onClick = { selectedType = TransactionType.EXPENSE },
-                        )
-                        SheetChip(
-                            label = "Ingreso",
-                            selected = selectedType == TransactionType.INCOME,
-                            enabled = !seGuardaComoSuscripcion,
-                            onClick = { selectedType = TransactionType.INCOME },
-                        )
-                    }
-
-                    Spacer(Modifier.height(18.dp))
-
-                    if (seGuardaComoSuscripcion) {
-                        // No se ocultan los campos en silencio: esto se guarda como suscripción, y
-                        // una suscripción es siempre un cobro, sin categoría y sin recordatorio.
-                        // Decirlo es más honesto que hacer desaparecer tres secciones.
-                        if (tipoCambiadoPorSerSuscripcion) {
-                            Text(
-                                text = "Cambiamos el tipo a Gasto: esto se guarda como suscripción, " +
-                                    "y una suscripción es siempre un cobro.",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.aviso,
-                                lineHeight = 17.sp,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                        }
-                        Text(
-                            // Ola 17: la cuenta salió de esta lista de renuncias. Ya no se
-                            // pierde — se guarda igual que en una regla— y decir que sí se
-                            // guarda es parte de lo mismo que esta frase viene haciendo: no
-                            // esconder qué se lleva y qué no.
-                            text = "Guardamos el nombre, el monto, el día y la cuenta que lo paga: " +
-                                "sin categoría y sin recordatorio.",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            lineHeight = 17.sp,
-                        )
-                        if (enDolares) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "Para el total del mes lo convertimos a pesos con la tasa de " +
-                                    "cambio más reciente que pudimos consultar.",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                                lineHeight = 17.sp,
-                            )
-                        }
-                        if (esAnual) {
-                            Spacer(Modifier.height(8.dp))
-                            // Las dos cosas que hay que decir de un cobro anual, y la segunda es la
-                            // incómoda: hoy las suscripciones no alimentan «Próximos pagos» ni los
-                            // recordatorios, así que el cobro del año que viene no le va a avisar a
-                            // nadie. Callarlo dejaría al dueño confiando en un aviso que no existe.
-                            Text(
-                                text = "Anota el cobro completo del año: para tus totales del mes lo " +
-                                    "dividimos en 12. Guardamos el día, pero no el mes, así que este " +
-                                    "cobro no te va a generar un recordatorio.",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                                lineHeight = 17.sp,
-                            )
-                        }
-                    } else {
-                        // --- CATEGORÍA ---
-                        // F35: campo libre con sugerencias — antes arrancaba en "Otros" sin ninguna ayuda.
-                        // Filtra por el tipo elegido arriba (Gasto/Ingreso) para no sugerir "Salario" en
-                        // una regla de gasto.
-                        CategoryField(
-                            value = category,
-                            onValueChange = { category = it; categoriaElegidaAMano = true },
-                            type = selectedType,
-                            usedCategories = usedCategories,
-                            prefs = categoryPrefs,
-                            usos = UsedCategoriesCache.usosRecientes,
-                            label = "CATEGORÍA",
-                            placeholder = "Ej: Vivienda, Suscripción, Salud",
-                        )
-                    }
-
-                    Spacer(Modifier.height(18.dp))
-
-                    // --- CUENTA (opcional) ---
-                    //
-                    // Para qué tiene que servir la cuenta, en un solo lugar: lo lee el selector y
-                    // lo vigila el efecto de abajo.
-                    val uso = if (selectedType == TransactionType.EXPENSE) {
-                        UsoDeCuenta.ORIGEN_DE_GASTO
-                    } else {
-                        UsoDeCuenta.DESTINO_DE_INGRESO
-                    }
-                    //
-                    // **Ola 17 — este selector está FUERA del `if`, y ahí está el arreglo.** Vivía
-                    // dentro de la rama de regla, así que la hoja le preguntaba de qué cuenta sale
-                    // el cobro a todo el mundo MENOS a quien anota una suscripción — justo el caso
-                    // donde el dueño paga cuatro servicios con la misma tarjeta y quiere poder
-                    // mirarlo. Peor: el estado `accountId` seguía vivo, así que elegir la cuenta y
-                    // recién después tocar «Dólares» o «Una vez al año» hacía desaparecer el
-                    // selector con su valor puesto, y el alta lo tiraba en silencio.
-                    //
-                    // Una sola instancia y no una copia por rama: si fueran dos, la primera
-                    // corrección que se le haga a una la va a dejar distinta de la otra.
-                    //
-                    // **Y si cambia para qué sirve la cuenta, la elegida se suelta.** Sacar el
-                    // selector del `if` abrió un agujero que antes no existía: elegir «Ingreso»,
-                    // marcar ahí una cuenta de inversión (que para un ingreso es válida), y recién
-                    // después tocar «Dólares» o «Una vez al año». Esos chips fuerzan el tipo a
-                    // Gasto, pero `accountId` quedaba intacto — y `cuentasPara(..., conservar)`
-                    // deja la elegida visible y marcada aunque ya no sirva, así que se guardaba una
-                    // suscripción cobrada de una cuenta de la que no sale plata. Antes no podía
-                    // pasar porque el selector desaparecía en esa rama.
-                    //
-                    // Va acá y no adentro de los dos `onClick` a propósito: la regla es «cambió el
-                    // uso», no «tocaron este chip». Cualquier camino nuevo que mueva el tipo queda
-                    // cubierto sin acordarse de esto.
-                    //
-                    // Solo suelta lo que YA NO SIRVE, y nunca en la primera composición: una regla
-                    // vieja que quedó con una cuenta que hoy no calificaría se abre como está, y
-                    // que el dueño la vea es mejor que borrársela sin avisar al abrir la hoja.
-                    var usoAnterior by remember { mutableStateOf(uso) }
-                    LaunchedEffect(uso) {
-                        if (uso != usoAnterior) {
-                            if (!laCuentaSobreviveAlUso(accounts.firstOrNull { it.id == accountId }, uso)) {
-                                accountId = null
-                                elDuenoEligioSinCuenta = false
-                            }
-                            usoAnterior = uso
-                        }
-                    }
-                    AccountPickerField(
-                        accounts = accounts,
-                        // Ola 15: una regla de gasto se cobra de donde sale plata (efectivo,
-                        // banco, tarjeta) y una de ingreso entra donde entra plata (efectivo,
-                        // banco, inversión). Mismo criterio que la hoja de «Agregar», y por
-                        // eso sale de la misma función de `:core` en vez de repetirse acá.
-                        //
-                        // En la rama de suscripción esto siempre da ORIGEN_DE_GASTO sin que haga
-                        // falta un caso aparte: una suscripción es siempre un cobro, y los chips
-                        // «Dólares» / «Una vez al año» ya fuerzan `selectedType` a EXPENSE.
-                        uso = uso,
-                        cuentasLeidas = cuentasLeidas,
-                        fallaronLasCuentas = fallaronLasCuentas,
-                        selectedId = accountId,
-                        open = accountPickerOpen,
-                        enabled = !saving,
-                        onToggle = { accountPickerOpen = !accountPickerOpen },
-                        onPick = {
-                            accountId = it
-                            // Tocar «Sin cuenta» (it == null) es la ÚNICA forma de pedir que
-                            // se quite la cuenta. Volver a elegir una cuenta lo deshace.
-                            //
-                            // Esa distinción es de la rama de REGLA, que edita filas existentes
-                            // (ver [cuentaParaElWire]). El alta de una suscripción no tiene fila
-                            // previa que pisar: ahí «Sin cuenta» y «no elegí» son los dos `null`.
-                            elDuenoEligioSinCuenta = it == null
-                            accountPickerOpen = false
-                        },
-                    )
-
-                    if (!seGuardaComoSuscripcion) {
-                        Spacer(Modifier.height(18.dp))
-
-                        // --- RECORDATORIO ---
-                        // Una regla de INGRESO no genera recordatorio (el barrido solo mira gastos, ver
-                        // selectDueForReminder), así que ofrecer la casilla ahí sería prometer un aviso que
-                        // nunca sale. Se muestra solo en Gasto.
-                        if (selectedType == TransactionType.EXPENSE) {
-                            ReminderOptInField(
-                                checked = remindMe,
-                                onCheckedChange = { remindMe = it },
-                                enabled = !saving,
-                            )
-                        } else {
-                            // V10: antes la casilla simplemente se esfumaba al tocar «Ingreso». Que un
-                            // control desaparezca sin decir nada deja al dueño preguntándose si lo
-                            // imaginó; se explica, igual que se explica lo que se pierde en dólares.
-                            Text(
-                                text = "Los recordatorios son para lo que tienes que pagar, así que un " +
-                                    "ingreso no lleva aviso.",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                                lineHeight = 17.sp,
-                            )
-                        }
-                    }
-
-                }
-
-                Spacer(Modifier.height(20.dp))
-
-                // El error del guardado va FIJO, junto al botón, y no dentro del área que
-                // scrollea. En el caso Gasto —el que desborda— el contenido queda rodado hacia
-                // arriba y el dueño nunca baja, porque el botón ya es fijo: si el POST fallaba,
-                // el texto rojo se agregaba al fondo, fuera de vista, y el botón volvía a decir
-                // «Crear recurrente». Tocaba, no pasaba nada, y volvía a tocar.
-                if (error != null) {
+                Text(
+                    text = when {
+                        editandoSuscripcion -> "Editar suscripción"
+                        isEditMode -> "Editar recurrente"
+                        else -> "Nuevo recurrente"
+                    },
+                    style = Movi.textos.titulo,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.texto,
+                    modifier = Modifier.weight(1f),
+                )
+                // `existing != null` y no `isEditMode`: desde que editar una
+                // suscripción también hace `isEditMode`, este enlace se pintaba sobre una
+                // hoja donde `delete()` sale en la primera línea (`existing == null`).
+                // Un enlace rojo destructivo que no hacía absolutamente nada, ni siquiera
+                // fallar. Para una suscripción el camino es «Quitar» desde la fila, que
+                // además sabe distinguir borrar de marcar DISMISSED.
+                if (existing != null) {
                     Text(
-                        text = error!!,
-                        style = Movi.textos.apoyo,
+                        text = if (saving) "…" else "Eliminar",
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.sale,
-                        modifier = Modifier.padding(bottom = 8.dp),
+                        modifier = Modifier.clickable(enabled = !saving) { pidiendoBorrar = true },
                     )
                 }
+            }
+            if (pidiendoBorrar && existing != null) {
+                ConfirmacionEnLinea(
+                    pregunta = "¿Eliminar el recurrente «${existing.name}»?",
+                    detalle = "Deja de avisarte y de contar en el flujo libre. Los movimientos que ya anotaste no se tocan. No se puede deshacer.",
+                    textoConfirmar = "Eliminar",
+                    ocupado = saving,
+                    onConfirmar = { delete() },
+                    onCancelar = { pidiendoBorrar = false },
+                    modifier = Modifier.padding(bottom = 18.dp),
+                )
+            }
 
-                // --- CTA --- (fijo al pie, fuera del área que scrollea)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                        .clickable(enabled = canSave) { save() },
-                    contentAlignment = Alignment.Center,
+            // --- NOMBRE ---
+            SheetSectionLabel("NOMBRE")
+            Spacer(Modifier.height(8.dp))
+            SheetInputBox {
+                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                // [esAtajoDeSeleccionarTodo].
+                val campo = rememberCampoConSeleccion(name) { name = it }
+                BasicTextField(
+                    value = campo.valor,
+                    onValueChange = campo::alCambiar,
+                    cursorBrush = SolidColor(Movi.colores.texto),
+                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
+                    decorationBox = { inner ->
+                        if (name.isEmpty()) {
+                            Text("Ej: Arriendo, Netflix, Gym", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                        }
+                        inner()
+                    },
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // --- MONEDA ---
+            // La única pregunta que decide dónde se guarda esto, y es una pregunta del mundo
+            // real: cualquiera sabe si le cobran en pesos o en dólares. Al editar no aparece —
+            // editar es siempre editar una regla (ver KDoc).
+            // La moneda se pregunta solo al CREAR. Editando una regla no aplica (siempre
+            // es COP) y editando una suscripción el `PUT` no escribe esa columna — ver el
+            // KDoc de [existingSub].
+            if (!isEditMode) {
+                SheetSectionLabel("MONEDA")
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        text = when {
-                            saving       -> if (isEditMode) "Guardando…" else "Creando…"
-                            isEditMode   -> "Guardar cambios"
-                            else         -> "Crear recurrente"
+                    SheetChip(
+                        label = "Pesos",
+                        selected = currency == "COP",
+                        onClick = {
+                            currency = "COP"
+                            // Volver a pesos solo deshace el aviso si lo que mandaba a la
+                            // rama de suscripción era la moneda: con ANUAL elegido, esto
+                            // se sigue guardando como suscripción y sigue siendo un cobro.
+                            if (!esAnual) tipoCambiadoPorSerSuscripcion = false
                         },
-                        style = Movi.textos.titulo,
-                        fontWeight = FontWeight.Medium,
-                        color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
+                    )
+                    SheetChip(
+                        label = "Dólares",
+                        selected = currency == "USD",
+                        onClick = {
+                            currency = "USD"
+                            // En dólares esto se guarda como suscripción, y una suscripción es
+                            // SIEMPRE un cobro. Forzar el tipo al tocar el chip (y no callarlo
+                            // al guardar) es lo que evita el peor caso: elegir Ingreso, después
+                            // Dólares, y que se guarde un gasto — el flujo libre se movía al
+                            // revés por el doble del monto, sin que nada lo dijera.
+                            // Si eso le pisó una elección al dueño, se le dice (ver la nota).
+                            tipoCambiadoPorSerSuscripcion = selectedType == TransactionType.INCOME
+                            selectedType = TransactionType.EXPENSE
+                        },
                     )
                 }
-                if (!canSave && !saving && missingFieldMessage != null) {
+                Spacer(Modifier.height(18.dp))
+            }
+
+            // --- CADA CUÁNTO --- (Ola 16)
+            // La segunda pregunta del mundo real que decide dónde se guarda esto, y la
+            // que evita el error de doce veces: un cobro anual anotado como mensual le
+            // dice al dueño que gasta $369.900 al mes en HBO Max. Ver el KDoc de la hoja.
+            //
+            // Ola 18: al EDITAR una suscripción sí se muestra —el `PUT` sí escribe esta
+            // columna—, y hace falta: un cobro que Movi detectó nace mensual, así que un
+            // anual mal clasificado solo se puede arreglar acá.
+            if (!isEditMode || editandoSuscripcion) {
+                SheetSectionLabel("CADA CUÁNTO")
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SheetChip(
+                        label = "Todos los meses",
+                        selected = periodicidad == PeriodicidadDeCobro.MENSUAL,
+                        onClick = {
+                            periodicidad = PeriodicidadDeCobro.MENSUAL
+                            // Simétrico del chip «Pesos»: en dólares el aviso sigue valiendo.
+                            if (!enDolares) tipoCambiadoPorSerSuscripcion = false
+                        },
+                    )
+                    SheetChip(
+                        label = "Una vez al año",
+                        selected = periodicidad == PeriodicidadDeCobro.ANUAL,
+                        onClick = {
+                            periodicidad = PeriodicidadDeCobro.ANUAL
+                            // Mismo motivo exacto que en «Dólares»: esto pasa a guardarse
+                            // como suscripción, y una suscripción es siempre un cobro.
+                            tipoCambiadoPorSerSuscripcion = selectedType == TransactionType.INCOME
+                            selectedType = TransactionType.EXPENSE
+                        },
+                    )
+                }
+                Spacer(Modifier.height(18.dp))
+            }
+
+            // --- MONTO ---
+            // En un cobro anual el rótulo lo dice: lo que va acá es el cobro COMPLETO, el
+            // que llega al extracto una vez al año — no la doceava parte. Pedir el número
+            // que el dueño puede verificar y hacer nosotros la división es lo que impide
+            // que quede guardada una cifra que no existe en ninguna parte del mundo real.
+            SheetSectionLabel(if (esAnual) "MONTO DEL COBRO ANUAL" else "MONTO")
+            Spacer(Modifier.height(8.dp))
+            // V12: en Colombia "$20" se lee veinte pesos. Si el cobro es en dólares, el campo
+            // lo dice mientras se escribe — igual que después lo dice la fila de la lista.
+            MoneyField(
+                value = amount,
+                onValueChange = { amount = it },
+                prefix = if (enDolares) "US$" else "$",
+                placeholder = if (enDolares) "US$ 0" else "$ 0",
+            )
+
+            Spacer(Modifier.height(18.dp))
+
+            // --- DÍA DEL MES ---
+            // En un cobro anual esto es el día, pero Movi no guarda el MES: el modelo de
+            // suscripciones tiene `dayOfMonth` y nada más. La consecuencia se dice abajo,
+            // en la nota, en vez de dejar que el dueño la deduzca cuando el aviso no llegue.
+            SheetSectionLabel("DÍA DEL MES")
+            Spacer(Modifier.height(8.dp))
+            DayOfMonthPicker(
+                selected = dayOfMonth,
+                enabled = !saving,
+                onPick = { dayOfMonth = it },
+            )
+
+            Spacer(Modifier.height(18.dp))
+
+            // --- TIPO ---
+            // Siempre visible, también cuando esto se va a guardar como suscripción. Ahí
+            // «Ingreso» queda deshabilitado en vez de desaparecer: el dueño VE que la opción
+            // existe y que no aplica, en lugar de elegirla y que Movi la cambie por atrás. (Un
+            // ingreso recurrente en dólares, o uno anual, no se puede registrar hoy — el
+            // modelo de suscripciones es de cobros. Ver la nota de abajo.)
+            SheetSectionLabel("TIPO")
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SheetChip(
+                    label = "Gasto",
+                    selected = selectedType == TransactionType.EXPENSE,
+                    onClick = { selectedType = TransactionType.EXPENSE },
+                )
+                SheetChip(
+                    label = "Ingreso",
+                    selected = selectedType == TransactionType.INCOME,
+                    enabled = !seGuardaComoSuscripcion,
+                    onClick = { selectedType = TransactionType.INCOME },
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            if (seGuardaComoSuscripcion) {
+                // No se ocultan los campos en silencio: esto se guarda como suscripción, y
+                // una suscripción es siempre un cobro, sin categoría y sin recordatorio.
+                // Decirlo es más honesto que hacer desaparecer tres secciones.
+                if (tipoCambiadoPorSerSuscripcion) {
+                    Text(
+                        text = "Cambiamos el tipo a Gasto: esto se guarda como suscripción, " +
+                            "y una suscripción es siempre un cobro.",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.aviso,
+                        lineHeight = 17.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+                Text(
+                    // Ola 17: la cuenta salió de esta lista de renuncias. Ya no se
+                    // pierde — se guarda igual que en una regla— y decir que sí se
+                    // guarda es parte de lo mismo que esta frase viene haciendo: no
+                    // esconder qué se lleva y qué no.
+                    text = "Guardamos el nombre, el monto, el día y la cuenta que lo paga: " +
+                        "sin categoría y sin recordatorio.",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    lineHeight = 17.sp,
+                )
+                if (enDolares) {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = missingFieldMessage,
+                        text = "Para el total del mes lo convertimos a pesos con la tasa de " +
+                            "cambio más reciente que pudimos consultar.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        lineHeight = 17.sp,
                     )
                 }
-
-                Spacer(Modifier.height(14.dp))
+                if (esAnual) {
+                    Spacer(Modifier.height(8.dp))
+                    // Las dos cosas que hay que decir de un cobro anual, y la segunda es la
+                    // incómoda: hoy las suscripciones no alimentan «Próximos pagos» ni los
+                    // recordatorios, así que el cobro del año que viene no le va a avisar a
+                    // nadie. Callarlo dejaría al dueño confiando en un aviso que no existe.
+                    Text(
+                        text = "Anota el cobro completo del año: para tus totales del mes lo " +
+                            "dividimos en 12. Guardamos el día, pero no el mes, así que este " +
+                            "cobro no te va a generar un recordatorio.",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        lineHeight = 17.sp,
+                    )
+                }
+            } else {
+                // --- CATEGORÍA ---
+                // F35: campo libre con sugerencias — antes arrancaba en "Otros" sin ninguna ayuda.
+                // Filtra por el tipo elegido arriba (Gasto/Ingreso) para no sugerir "Salario" en
+                // una regla de gasto.
+                CategoryField(
+                    value = category,
+                    onValueChange = { category = it; categoriaElegidaAMano = true },
+                    type = selectedType,
+                    usedCategories = usedCategories,
+                    prefs = categoryPrefs,
+                    usos = UsedCategoriesCache.usosRecientes,
+                    label = "CATEGORÍA",
+                    placeholder = "Ej: Vivienda, Suscripción, Salud",
+                )
             }
+
+            Spacer(Modifier.height(18.dp))
+
+            // --- CUENTA (opcional) ---
+            //
+            // Para qué tiene que servir la cuenta, en un solo lugar: lo lee el selector y
+            // lo vigila el efecto de abajo.
+            val uso = if (selectedType == TransactionType.EXPENSE) {
+                UsoDeCuenta.ORIGEN_DE_GASTO
+            } else {
+                UsoDeCuenta.DESTINO_DE_INGRESO
+            }
+            //
+            // **Ola 17 — este selector está FUERA del `if`, y ahí está el arreglo.** Vivía
+            // dentro de la rama de regla, así que la hoja le preguntaba de qué cuenta sale
+            // el cobro a todo el mundo MENOS a quien anota una suscripción — justo el caso
+            // donde el dueño paga cuatro servicios con la misma tarjeta y quiere poder
+            // mirarlo. Peor: el estado `accountId` seguía vivo, así que elegir la cuenta y
+            // recién después tocar «Dólares» o «Una vez al año» hacía desaparecer el
+            // selector con su valor puesto, y el alta lo tiraba en silencio.
+            //
+            // Una sola instancia y no una copia por rama: si fueran dos, la primera
+            // corrección que se le haga a una la va a dejar distinta de la otra.
+            //
+            // **Y si cambia para qué sirve la cuenta, la elegida se suelta.** Sacar el
+            // selector del `if` abrió un agujero que antes no existía: elegir «Ingreso»,
+            // marcar ahí una cuenta de inversión (que para un ingreso es válida), y recién
+            // después tocar «Dólares» o «Una vez al año». Esos chips fuerzan el tipo a
+            // Gasto, pero `accountId` quedaba intacto — y `cuentasPara(..., conservar)`
+            // deja la elegida visible y marcada aunque ya no sirva, así que se guardaba una
+            // suscripción cobrada de una cuenta de la que no sale plata. Antes no podía
+            // pasar porque el selector desaparecía en esa rama.
+            //
+            // Va acá y no adentro de los dos `onClick` a propósito: la regla es «cambió el
+            // uso», no «tocaron este chip». Cualquier camino nuevo que mueva el tipo queda
+            // cubierto sin acordarse de esto.
+            //
+            // Solo suelta lo que YA NO SIRVE, y nunca en la primera composición: una regla
+            // vieja que quedó con una cuenta que hoy no calificaría se abre como está, y
+            // que el dueño la vea es mejor que borrársela sin avisar al abrir la hoja.
+            var usoAnterior by remember { mutableStateOf(uso) }
+            LaunchedEffect(uso) {
+                if (uso != usoAnterior) {
+                    if (!laCuentaSobreviveAlUso(accounts.firstOrNull { it.id == accountId }, uso)) {
+                        accountId = null
+                        elDuenoEligioSinCuenta = false
+                    }
+                    usoAnterior = uso
+                }
+            }
+            AccountPickerField(
+                accounts = accounts,
+                // Ola 15: una regla de gasto se cobra de donde sale plata (efectivo,
+                // banco, tarjeta) y una de ingreso entra donde entra plata (efectivo,
+                // banco, inversión). Mismo criterio que la hoja de «Agregar», y por
+                // eso sale de la misma función de `:core` en vez de repetirse acá.
+                //
+                // En la rama de suscripción esto siempre da ORIGEN_DE_GASTO sin que haga
+                // falta un caso aparte: una suscripción es siempre un cobro, y los chips
+                // «Dólares» / «Una vez al año» ya fuerzan `selectedType` a EXPENSE.
+                uso = uso,
+                cuentasLeidas = cuentasLeidas,
+                fallaronLasCuentas = fallaronLasCuentas,
+                selectedId = accountId,
+                open = accountPickerOpen,
+                enabled = !saving,
+                onToggle = { accountPickerOpen = !accountPickerOpen },
+                onPick = {
+                    accountId = it
+                    // Tocar «Sin cuenta» (it == null) es la ÚNICA forma de pedir que
+                    // se quite la cuenta. Volver a elegir una cuenta lo deshace.
+                    //
+                    // Esa distinción es de la rama de REGLA, que edita filas existentes
+                    // (ver [cuentaParaElWire]). El alta de una suscripción no tiene fila
+                    // previa que pisar: ahí «Sin cuenta» y «no elegí» son los dos `null`.
+                    elDuenoEligioSinCuenta = it == null
+                    accountPickerOpen = false
+                },
+            )
+
+            if (!seGuardaComoSuscripcion) {
+                Spacer(Modifier.height(18.dp))
+
+                // --- RECORDATORIO ---
+                // Una regla de INGRESO no genera recordatorio (el barrido solo mira gastos, ver
+                // selectDueForReminder), así que ofrecer la casilla ahí sería prometer un aviso que
+                // nunca sale. Se muestra solo en Gasto.
+                if (selectedType == TransactionType.EXPENSE) {
+                    ReminderOptInField(
+                        checked = remindMe,
+                        onCheckedChange = { remindMe = it },
+                        enabled = !saving,
+                    )
+                } else {
+                    // V10: antes la casilla simplemente se esfumaba al tocar «Ingreso». Que un
+                    // control desaparezca sin decir nada deja al dueño preguntándose si lo
+                    // imaginó; se explica, igual que se explica lo que se pierde en dólares.
+                    Text(
+                        text = "Los recordatorios son para lo que tienes que pagar, así que un " +
+                            "ingreso no lleva aviso.",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        lineHeight = 17.sp,
+                    )
+                }
+            }
+
         }
+
+        Spacer(Modifier.height(20.dp))
+
+        // El error del guardado va FIJO, junto al botón, y no dentro del área que
+        // scrollea. En el caso Gasto —el que desborda— el contenido queda rodado hacia
+        // arriba y el dueño nunca baja, porque el botón ya es fijo: si el POST fallaba,
+        // el texto rojo se agregaba al fondo, fuera de vista, y el botón volvía a decir
+        // «Crear recurrente». Tocaba, no pasaba nada, y volvía a tocar.
+        if (error != null) {
+            Text(
+                text = error!!,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.sale,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+
+        // --- CTA --- (fijo al pie, fuera del área que scrollea)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                .clickable(enabled = canSave) { save() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = when {
+                    saving       -> if (isEditMode) "Guardando…" else "Creando…"
+                    isEditMode   -> "Guardar cambios"
+                    else         -> "Crear recurrente"
+                },
+                style = Movi.textos.titulo,
+                fontWeight = FontWeight.Medium,
+                color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
+            )
+        }
+        if (!canSave && !saving && missingFieldMessage != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = missingFieldMessage,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+        }
+
+        Spacer(Modifier.height(14.dp))
     }
 }
 
@@ -1088,7 +1078,8 @@ private fun RowScope.SheetChip(
  *    lo cite como precedente de que «abrir en su lugar no molesta».
  *
  * El alto no queda librado a nada: cinco filas fijas dentro del `verticalScroll` de la hoja, con
- * el botón «Crear recurrente» fuera del scroll (ver el comentario del `BoxWithConstraints`).
+ * el botón «Crear recurrente» fuera del scroll (ver el comentario sobre el tope del 92 %, arriba
+ * de `MarcoDeHoja`).
  */
 @Composable
 private fun DayOfMonthPicker(

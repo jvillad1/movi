@@ -20,6 +20,8 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.ui.components.anchoMaximoDeLaPantalla
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -360,9 +362,11 @@ class InicioDeUnVistazoTest {
 
     @Test
     fun `solo el Inicio se ensancha en escritorio`() {
-        assertEquals(1_200.dp, anchoMaximoDeLaPantalla(Screen.Dashboard))
-        assertEquals(600.dp, anchoMaximoDeLaPantalla(Screen.Transactions()))
-        assertEquals(600.dp, anchoMaximoDeLaPantalla(Screen.Accounts))
+        // Desde la Ola W1 el tope depende también de la clase de ancho (la tabla completa está en
+        // `DisposicionTest`); acá queda lo que dice el nombre: en escritorio, solo el Inicio.
+        assertEquals(1_280.dp, anchoMaximoDeLaPantalla(Screen.Dashboard, WindowWidthClass.Expanded))
+        assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.Transactions(), WindowWidthClass.Expanded))
+        assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.Accounts, WindowWidthClass.Expanded))
     }
 
     // ── La cifra que cuenta ──────────────────────────────────────────────────

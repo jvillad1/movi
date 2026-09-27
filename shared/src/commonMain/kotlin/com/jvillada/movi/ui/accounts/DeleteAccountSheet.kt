@@ -11,14 +11,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.formatMoney
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -104,136 +103,118 @@ fun DeleteAccountSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !deleting, onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !deleting) {
+        // El contenido de la hoja se desplaza.
+        //
+        // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+        // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+        // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+        // propia hoja. Sin manera de llegar a él.
+        //
+        // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+        // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+        // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .verticalScroll(rememberScrollState())
+                .weight(1f, fill = false),
         ) {
-            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
-            SheetHandleWithClose(onClose = onDismiss, enabled = !deleting)
-            // El contenido de la hoja se desplaza.
-            //
-            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
-            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
-            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
-            // propia hoja. Sin manera de llegar a él.
-            //
-            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
-            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
-            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .weight(1f, fill = false),
-            ) {
 
-                Text(
-                    text = "Eliminar cuenta",
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
-                )
+            Text(
+                text = "Eliminar cuenta",
+                style = Movi.textos.titulo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.texto,
+                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+            )
 
-                // F55: la consecuencia real, con el conteo real — no un genérico "¿estás seguro?".
+            // F55: la consecuencia real, con el conteo real — no un genérico "¿estás seguro?".
+            Text(
+                text = "Se borra \"$accountName\" y ${eventCountLabel(eventCount)}. " +
+                    "Esto no se puede deshacer.",
+                style = Movi.textos.cuerpo,
+                // Un párrafo de explicación: con el peso de una fila se leería pesado.
+                fontWeight = FontWeight.Normal,
+                color = Movi.colores.textoMedio,
+            )
+
+            // Y la consecuencia que no cabe en la frase de arriba, porque no ocurre en esta
+            // cuenta sino en otra: la mitad del traspaso que sobrevive. Solo aparece si la hay.
+            //
+            // Se despega del párrafo rutinario a propósito —bloque con fondo propio, mismo cuerpo
+            // de letra, color de texto pleno— porque es lo que justifica la pausa. Con el gris
+            // apagado y un punto más chico, los dos párrafos se leían como uno solo y el aviso se
+            // perdía justo en la hoja donde hay que leerlo.
+            //
+            // Ola 15: son DOS avisos posibles y van en UN solo bloque, separados por un renglón en
+            // blanco. Dos cajas seguidas competirían entre sí justo donde hay que leer despacio, y
+            // el orden importa: primero lo que le pasa al patrimonio (la cifra grande, la que no
+            // se puede deshacer), después lo que le pasa a los movimientos de las otras cuentas.
+            val avisos = listOfNotNull(
+                balanceWarningLabel(accountBalance, accountIsDebt, accountBalanceCurrency),
+                if (transferCount > 0) {
+                    transferWarningLabel(transferCount, transferAmount, transferCurrency, accountIsDebt)
+                } else {
+                    null
+                },
+            )
+            if (avisos.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "Se borra \"$accountName\" y ${eventCountLabel(eventCount)}. " +
-                        "Esto no se puede deshacer.",
+                    text = avisos.joinToString("\n\n"),
+                    // El mismo cuerpo que el párrafo de arriba (ver el comentario del bloque).
                     style = Movi.textos.cuerpo,
-                    // Un párrafo de explicación: con el peso de una fila se leería pesado.
                     fontWeight = FontWeight.Normal,
-                    color = Movi.colores.textoMedio,
+                    color = Movi.colores.texto,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Movi.colores.tarjeta)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
                 )
+            }
 
-                // Y la consecuencia que no cabe en la frase de arriba, porque no ocurre en esta
-                // cuenta sino en otra: la mitad del traspaso que sobrevive. Solo aparece si la hay.
-                //
-                // Se despega del párrafo rutinario a propósito —bloque con fondo propio, mismo cuerpo
-                // de letra, color de texto pleno— porque es lo que justifica la pausa. Con el gris
-                // apagado y un punto más chico, los dos párrafos se leían como uno solo y el aviso se
-                // perdía justo en la hoja donde hay que leerlo.
-                //
-                // Ola 15: son DOS avisos posibles y van en UN solo bloque, separados por un renglón en
-                // blanco. Dos cajas seguidas competirían entre sí justo donde hay que leer despacio, y
-                // el orden importa: primero lo que le pasa al patrimonio (la cifra grande, la que no
-                // se puede deshacer), después lo que le pasa a los movimientos de las otras cuentas.
-                val avisos = listOfNotNull(
-                    balanceWarningLabel(accountBalance, accountIsDebt, accountBalanceCurrency),
-                    if (transferCount > 0) {
-                        transferWarningLabel(transferCount, transferAmount, transferCurrency, accountIsDebt)
-                    } else {
-                        null
-                    },
-                )
-                if (avisos.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
+            if (error != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Movi.colores.tarjeta)
+                        .clickable(enabled = !deleting, onClick = onDismiss),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("Cancelar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1.4f)
+                        .height(50.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(if (!deleting) Movi.colores.sale.copy(alpha = 0.14f) else Movi.colores.tarjeta)
+                        .clickable(enabled = !deleting) { doDelete() },
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
-                        text = avisos.joinToString("\n\n"),
-                        // El mismo cuerpo que el párrafo de arriba (ver el comentario del bloque).
+                        text = if (deleting) "Eliminando…" else "Eliminar cuenta",
                         style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Normal,
-                        color = Movi.colores.texto,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Movi.colores.tarjeta)
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        fontWeight = FontWeight.Medium,
+                        color = if (!deleting) Movi.colores.sale else Movi.colores.textoApagado,
                     )
                 }
-
-                if (error != null) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
-
-                Spacer(Modifier.height(20.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Movi.colores.tarjeta)
-                            .clickable(enabled = !deleting, onClick = onDismiss),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("Cancelar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1.4f)
-                            .height(50.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(if (!deleting) Movi.colores.sale.copy(alpha = 0.14f) else Movi.colores.tarjeta)
-                            .clickable(enabled = !deleting) { doDelete() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = if (deleting) "Eliminando…" else "Eliminar cuenta",
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = if (!deleting) Movi.colores.sale else Movi.colores.textoApagado,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(14.dp))
             }
+
+            Spacer(Modifier.height(14.dp))
         }
     }
 }

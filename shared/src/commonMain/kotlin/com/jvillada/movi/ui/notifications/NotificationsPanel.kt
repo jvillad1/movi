@@ -1,21 +1,17 @@
 package com.jvillada.movi.ui.notifications
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.CardRow
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.dashboard.NotificationRow
 
@@ -34,67 +30,50 @@ fun NotificationsPanel(
     onDismiss: () -> Unit,
     onRowClick: (Screen) -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-
+    MarcoDeHoja(onDismiss = onDismiss) {
+        // El contenido de la hoja se desplaza.
+        //
+        // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+        // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+        // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+        // propia hoja. Sin manera de llegar a él.
+        //
+        // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+        // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+        // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .verticalScroll(rememberScrollState())
+                .weight(1f, fill = false),
         ) {
-            SheetHandleWithClose(onClose = onDismiss)
-            // El contenido de la hoja se desplaza.
-            //
-            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
-            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
-            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
-            // propia hoja. Sin manera de llegar a él.
-            //
-            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
-            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
-            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .weight(1f, fill = false),
-            ) {
 
+            Text(
+                text = "Notificaciones",
+                style = Movi.textos.titulo,
+                color = Movi.colores.texto,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
+            if (rows.isEmpty()) {
+                // Estado vacío: una línea anclada acá, no un snackbar flotante — la queja
+                // original de F5.
                 Text(
-                    text = "Notificaciones",
-                    style = Movi.textos.titulo,
-                    color = Movi.colores.texto,
-                    modifier = Modifier.padding(bottom = 8.dp),
+                    text = "No tienes notificaciones por ahora",
+                    // Una frase, no el rótulo de una fila: la talla del cuerpo con el peso de la prosa.
+                    style = Movi.textos.cuerpo,
+                    fontWeight = FontWeight.Normal,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.padding(bottom = 24.dp),
                 )
-
-                if (rows.isEmpty()) {
-                    // Estado vacío: una línea anclada acá, no un snackbar flotante — la queja
-                    // original de F5.
-                    Text(
-                        text = "No tienes notificaciones por ahora",
-                        // Una frase, no el rótulo de una fila: la talla del cuerpo con el peso de la prosa.
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Normal,
-                        color = Movi.colores.textoMedio,
-                        modifier = Modifier.padding(bottom = 24.dp),
-                    )
-                } else {
-                    Column(modifier = Modifier.padding(bottom = 8.dp)) {
-                        rows.forEachIndexed { index, row ->
-                            CardRow(
-                                left = { Text(row.text, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
-                                showChevron = true,
-                                isLast = index == rows.lastIndex,
-                                onClick = { onDismiss(); onRowClick(row.target) },
-                            )
-                        }
+            } else {
+                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                    rows.forEachIndexed { index, row ->
+                        CardRow(
+                            left = { Text(row.text, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
+                            showChevron = true,
+                            isLast = index == rows.lastIndex,
+                            onClick = { onDismiss(); onRowClick(row.target) },
+                        )
                     }
                 }
             }

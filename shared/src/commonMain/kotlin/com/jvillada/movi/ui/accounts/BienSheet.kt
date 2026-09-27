@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -44,8 +43,8 @@ import com.jvillada.movi.shared.model.normalizarBien
 import com.jvillada.movi.shared.model.problemaDelBien
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ConfirmacionEnLinea
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.MoneyField
-import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
@@ -152,180 +151,168 @@ fun BienSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !guardando, onClick = onDismiss),
+    MarcoDeHoja(
+        onDismiss = onDismiss,
+        dismissEnabled = !guardando,
+        // Escape (la web) cierra primero el calendario abierto, después la hoja. Ver [MarcoDeHoja].
+        onEscape = { if (eligiendoFecha) eligiendoFecha = false else if (!guardando) onDismiss() },
     ) {
-        Box(modifier = Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = Movi.formas.amplia, topEnd = Movi.formas.amplia))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = Movi.espacios.margen)
-                .clickable(enabled = false) {},
-        ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = !guardando)
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Text(
+                text = if (existente == null) "Nuevo bien" else "Actualizar bien",
+                style = Movi.textos.titulo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.texto,
+            )
+            Spacer(Modifier.height(Movi.espacios.minimo))
+            Text(
+                text = "Suma a tu patrimonio, no a Tu plata: con la casa no se paga el mercado.",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
 
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Spacer(Modifier.height(Movi.espacios.margen))
+            Rotulo("NOMBRE")
+            Spacer(Modifier.height(Movi.espacios.corto))
+            CampoDeTexto(nombre, onCambio = { nombre = it }, placeholder = "Ej: Casa Almendros")
+
+            Spacer(Modifier.height(Movi.espacios.margen))
+            Rotulo("QUÉ ES")
+            Spacer(Modifier.height(Movi.espacios.corto))
+            Row(horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
+                ClaseDeBien.entries.forEach { opcion ->
+                    Opcion(
+                        texto = opcion.nombre,
+                        elegida = clase == opcion,
+                        modifier = Modifier.weight(1f),
+                        onClick = { clase = opcion },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(Movi.espacios.margen))
+            Rotulo("CUÁNTO VALE")
+            Spacer(Modifier.height(Movi.espacios.corto))
+            MoneyField(value = valor, onValueChange = { valor = it })
+
+            Spacer(Modifier.height(Movi.espacios.margen))
+            Rotulo("DE CUÁNDO ES ESE VALOR")
+            Spacer(Modifier.height(Movi.espacios.corto))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
                 Text(
-                    text = if (existente == null) "Nuevo bien" else "Actualizar bien",
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
+                    // «avalúo del 28 de agosto», con la MISMA función que la lista de Bienes.
+                    text = textoDelAvaluo(fecha?.toString(), hoy)?.replaceFirstChar { it.uppercase() }
+                        ?: "Sin fecha",
+                    style = Movi.textos.cuerpo,
+                    color = if (fecha == null) Movi.colores.textoMedio else Movi.colores.texto,
+                    modifier = Modifier.weight(1f),
                 )
+                if (fecha != null && !eligiendoFecha) {
+                    Enlace("Quitar", enabled = !guardando) { fecha = null }
+                    Spacer(Modifier.width(Movi.espacios.corto))
+                }
+                Enlace(if (eligiendoFecha) "Listo" else "Elegir", enabled = !guardando) {
+                    eligiendoFecha = !eligiendoFecha
+                }
+            }
+            if (eligiendoFecha) {
+                Spacer(Modifier.height(Movi.espacios.medio))
+                SelectorDeFecha(
+                    seleccionada = fecha ?: hoy,
+                    hoy = hoy,
+                    onPick = { fecha = it; eligiendoFecha = false },
+                    enabled = !guardando,
+                )
+            }
+
+            if (deudas.isNotEmpty()) {
+                Spacer(Modifier.height(Movi.espacios.margen))
+                Rotulo("LO FINANCIA (OPCIONAL)")
                 Spacer(Modifier.height(Movi.espacios.minimo))
                 Text(
-                    text = "Suma a tu patrimonio, no a Tu plata: con la casa no se paga el mercado.",
+                    text = "Con la deuda al lado, Patrimonio te muestra cuánto de este bien es tuyo de verdad. " +
+                        "No cambia tu patrimonio.",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                 )
-
-                Spacer(Modifier.height(Movi.espacios.margen))
-                Rotulo("NOMBRE")
                 Spacer(Modifier.height(Movi.espacios.corto))
-                CampoDeTexto(nombre, onCambio = { nombre = it }, placeholder = "Ej: Casa Almendros")
-
-                Spacer(Modifier.height(Movi.espacios.margen))
-                Rotulo("QUÉ ES")
-                Spacer(Modifier.height(Movi.espacios.corto))
-                Row(horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
-                    ClaseDeBien.entries.forEach { opcion ->
+                Column(verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
+                    Opcion(
+                        texto = "Ninguna",
+                        elegida = deudaId == null,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { deudaId = null },
+                    )
+                    deudas.forEach { deuda ->
                         Opcion(
-                            texto = opcion.nombre,
-                            elegida = clase == opcion,
-                            modifier = Modifier.weight(1f),
-                            onClick = { clase = opcion },
+                            texto = deuda.name,
+                            elegida = deudaId == deuda.id,
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { deudaId = deuda.id },
                         )
                     }
                 }
+            }
 
-                Spacer(Modifier.height(Movi.espacios.margen))
-                Rotulo("CUÁNTO VALE")
+            error?.let {
                 Spacer(Modifier.height(Movi.espacios.corto))
-                MoneyField(value = valor, onValueChange = { valor = it })
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            }
 
-                Spacer(Modifier.height(Movi.espacios.margen))
-                Rotulo("DE CUÁNDO ES ESE VALOR")
-                Spacer(Modifier.height(Movi.espacios.corto))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+            Spacer(Modifier.height(Movi.espacios.margen))
+            if (confirmandoBorrar) {
+                ConfirmacionEnLinea(
+                    pregunta = "¿Eliminar ${existente?.name ?: "este bien"}?",
+                    detalle = "Deja de sumar a tu patrimonio. La deuda que lo financia no se toca.",
+                    textoConfirmar = "Eliminar",
+                    ocupado = guardando,
+                    onConfirmar = { borrar() },
+                    onCancelar = { confirmandoBorrar = false },
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(Movi.espacios.encabezado)
+                        .clip(RoundedCornerShape(Movi.formas.pleno))
+                        .background(if (puedeGuardar) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                        .clickable(enabled = puedeGuardar) { guardar() },
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        // «avalúo del 28 de agosto», con la MISMA función que la lista de Bienes.
-                        text = textoDelAvaluo(fecha?.toString(), hoy)?.replaceFirstChar { it.uppercase() }
-                            ?: "Sin fecha",
-                        style = Movi.textos.cuerpo,
-                        color = if (fecha == null) Movi.colores.textoMedio else Movi.colores.texto,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (fecha != null && !eligiendoFecha) {
-                        Enlace("Quitar", enabled = !guardando) { fecha = null }
-                        Spacer(Modifier.width(Movi.espacios.corto))
-                    }
-                    Enlace(if (eligiendoFecha) "Listo" else "Elegir", enabled = !guardando) {
-                        eligiendoFecha = !eligiendoFecha
-                    }
-                }
-                if (eligiendoFecha) {
-                    Spacer(Modifier.height(Movi.espacios.medio))
-                    SelectorDeFecha(
-                        seleccionada = fecha ?: hoy,
-                        hoy = hoy,
-                        onPick = { fecha = it; eligiendoFecha = false },
-                        enabled = !guardando,
+                        text = when {
+                            guardando -> "Guardando…"
+                            existente == null -> "Crear bien"
+                            else -> "Guardar"
+                        },
+                        style = Movi.textos.titulo,
+                        fontWeight = FontWeight.Medium,
+                        color = if (puedeGuardar) Movi.colores.marca else Movi.colores.textoApagado,
                     )
                 }
-
-                if (deudas.isNotEmpty()) {
-                    Spacer(Modifier.height(Movi.espacios.margen))
-                    Rotulo("LO FINANCIA (OPCIONAL)")
-                    Spacer(Modifier.height(Movi.espacios.minimo))
+                if (!guardando && loQueFalta != null) {
+                    Spacer(Modifier.height(Movi.espacios.corto))
                     Text(
-                        text = "Con la deuda al lado, Patrimonio te muestra cuánto de este bien es tuyo de verdad. " +
-                            "No cambia tu patrimonio.",
+                        text = loQueFalta,
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
-                    Spacer(Modifier.height(Movi.espacios.corto))
-                    Column(verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
-                        Opcion(
-                            texto = "Ninguna",
-                            elegida = deudaId == null,
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = { deudaId = null },
-                        )
-                        deudas.forEach { deuda ->
-                            Opcion(
-                                texto = deuda.name,
-                                elegida = deudaId == deuda.id,
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = { deudaId = deuda.id },
-                            )
+                }
+                if (existente != null) {
+                    Spacer(Modifier.height(Movi.espacios.medio))
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Enlace("Eliminar bien", enabled = !guardando, color = Movi.colores.sale) {
+                            confirmandoBorrar = true
                         }
                     }
                 }
-
-                error?.let {
-                    Spacer(Modifier.height(Movi.espacios.corto))
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
-
-                Spacer(Modifier.height(Movi.espacios.margen))
-                if (confirmandoBorrar) {
-                    ConfirmacionEnLinea(
-                        pregunta = "¿Eliminar ${existente?.name ?: "este bien"}?",
-                        detalle = "Deja de sumar a tu patrimonio. La deuda que lo financia no se toca.",
-                        textoConfirmar = "Eliminar",
-                        ocupado = guardando,
-                        onConfirmar = { borrar() },
-                        onCancelar = { confirmandoBorrar = false },
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(Movi.espacios.encabezado)
-                            .clip(RoundedCornerShape(Movi.formas.pleno))
-                            .background(if (puedeGuardar) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                            .clickable(enabled = puedeGuardar) { guardar() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = when {
-                                guardando -> "Guardando…"
-                                existente == null -> "Crear bien"
-                                else -> "Guardar"
-                            },
-                            style = Movi.textos.titulo,
-                            fontWeight = FontWeight.Medium,
-                            color = if (puedeGuardar) Movi.colores.marca else Movi.colores.textoApagado,
-                        )
-                    }
-                    if (!guardando && loQueFalta != null) {
-                        Spacer(Modifier.height(Movi.espacios.corto))
-                        Text(
-                            text = loQueFalta,
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            modifier = Modifier.align(Alignment.CenterHorizontally),
-                        )
-                    }
-                    if (existente != null) {
-                        Spacer(Modifier.height(Movi.espacios.medio))
-                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Enlace("Eliminar bien", enabled = !guardando, color = Movi.colores.sale) {
-                                confirmandoBorrar = true
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(Movi.espacios.amplio))
             }
+            Spacer(Modifier.height(Movi.espacios.amplio))
         }
     }
 }

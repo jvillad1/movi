@@ -938,32 +938,17 @@ private fun BudgetSheet(
         else -> null
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Esta hoja NO tenía scroll, y con la lista de movimientos deja de alcanzar: bajo
-                // ella van el teclado (192 dp) y «Guardar»/«Eliminar», así que con tres
-                // movimientos los botones caían fuera de la pantalla, recortados por el `clip` de
-                // la propia hoja — el presupuesto quedaba imposible de editar. Y la lista existe
-                // justamente para las categorías con muchos movimientos. Lo midió la revisión
-                // antes de que llegara a producción.
-                .verticalScroll(rememberScrollState())
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
-        ) {
-            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
-            SheetHandleWithClose(onClose = onDismiss)
-
+    MarcoDeHoja(onDismiss = onDismiss) {
+        // Esta hoja NO tenía scroll, y con la lista de movimientos deja de alcanzar: bajo ella van el
+        // teclado (192 dp) y «Guardar»/«Eliminar», así que con tres movimientos los botones caían
+        // fuera de la pantalla, recortados por el `clip` de la propia hoja — el presupuesto quedaba
+        // imposible de editar. Y la lista existe justamente para las categorías con muchos
+        // movimientos. Lo midió la revisión antes de que llegara a producción.
+        //
+        // Ola W1: el desplazamiento era el del panel entero; ahora es el del cuerpo, como en las
+        // demás hojas (`weight(1f, fill = false)`), y la X queda fija arriba. Hace falta además
+        // para la hoja centrada de la web, que se topa al 90 % del alto.
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text(
                 text = title,
                 style = Movi.textos.titulo,

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
@@ -34,7 +32,7 @@ import com.jvillada.movi.shared.model.rechazoDelDestino
 import com.jvillada.movi.shared.model.soloLosDigitos
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ConfirmacionEnLinea
-import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.credits.FieldBox
 import com.jvillada.movi.ui.credits.SectionLabel
@@ -112,137 +110,126 @@ fun DestinoSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !guardando, onClick = onDismiss),
+    MarcoDeHoja(
+        onDismiss = onDismiss,
+        dismissEnabled = !guardando,
+        // Escape (la web) retira primero la pregunta de borrar, después la hoja. Ver [MarcoDeHoja].
+        onEscape = { if (pidiendoBorrar) pidiendoBorrar = false else if (!guardando) onDismiss() },
     ) {
-        Box(modifier = Modifier.weight(1f))
+        // `weight(1f, fill = false)`: la hoja crece con su contenido y recién ahí desplaza,
+        // igual que el resto de las hojas de Movi — sin esto, con el teclado abierto en un
+        // teléfono chico el botón de guardar queda fuera de la pantalla y recortado.
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .verticalScroll(rememberScrollState())
+                .weight(1f, fill = false),
         ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = !guardando)
-            // `weight(1f, fill = false)`: la hoja crece con su contenido y recién ahí desplaza,
-            // igual que el resto de las hojas de Movi — sin esto, con el teclado abierto en un
-            // teléfono chico el botón de guardar queda fuera de la pantalla y recortado.
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .weight(1f, fill = false),
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = if (editando) "Editar cuenta de otro" else "Nueva cuenta de otro",
-                        style = Movi.textos.titulo,
-                        color = Movi.colores.texto,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (editando) {
-                        Text(
-                            text = if (guardando) "…" else "Eliminar",
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.sale,
-                            modifier = Modifier.clickable(enabled = !guardando) { pidiendoBorrar = true },
-                        )
-                    }
-                }
-                if (pidiendoBorrar && existente != null) {
-                    ConfirmacionEnLinea(
-                        pregunta = "¿Eliminar «${existente.nombre}»?",
-                        detalle = "Se borra el nombre y la agrupación. Tus movimientos no se tocan: " +
-                            "siguen ahí, con el nombre que tengan. No se puede deshacer.",
-                        textoConfirmar = "Eliminar",
-                        ocupado = guardando,
-                        onConfirmar = { borrar() },
-                        onCancelar = { pidiendoBorrar = false },
-                        modifier = Modifier.padding(bottom = 18.dp),
-                    )
-                }
-
                 Text(
-                    QUE_ES_ESTO,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
+                    text = if (editando) "Editar cuenta de otro" else "Nueva cuenta de otro",
+                    style = Movi.textos.titulo,
+                    color = Movi.colores.texto,
+                    modifier = Modifier.weight(1f),
+                )
+                if (editando) {
+                    Text(
+                        text = if (guardando) "…" else "Eliminar",
+                        style = Movi.textos.cuerpo,
+                        color = Movi.colores.sale,
+                        modifier = Modifier.clickable(enabled = !guardando) { pidiendoBorrar = true },
+                    )
+                }
+            }
+            if (pidiendoBorrar && existente != null) {
+                ConfirmacionEnLinea(
+                    pregunta = "¿Eliminar «${existente.nombre}»?",
+                    detalle = "Se borra el nombre y la agrupación. Tus movimientos no se tocan: " +
+                        "siguen ahí, con el nombre que tengan. No se puede deshacer.",
+                    textoConfirmar = "Eliminar",
+                    ocupado = guardando,
+                    onConfirmar = { borrar() },
+                    onCancelar = { pidiendoBorrar = false },
                     modifier = Modifier.padding(bottom = 18.dp),
                 )
-
-                SectionLabel("NOMBRE")
-                Spacer(Modifier.height(8.dp))
-                FieldBox("Ej: Caro", nombre, { nombre = it })
-
-                Spacer(Modifier.height(18.dp))
-
-                SectionLabel("NÚMERO DE LA CUENTA")
-                Spacer(Modifier.height(8.dp))
-                // Se acepta pegado como lo mandó el banco («*31973270756», con guiones o espacios)
-                // y se guardan solo los dígitos: dos formas del mismo número no pueden verse como
-                // dos destinos distintos. Ver `soloLosDigitos`.
-                FieldBox("Ej: *31973270756", numero, { numero = it })
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Puedes pegarlo como te lo manda el banco. Movi se queda solo con los dígitos.",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoApagado,
-                )
-
-                Spacer(Modifier.height(18.dp))
-
-                SectionLabel("DE QUIÉN ES (OPCIONAL)")
-                Spacer(Modifier.height(8.dp))
-                FieldBox("Ej: esposa, papá", deQuien, { deQuien = it })
-
-                if (error != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
-
-                Spacer(Modifier.height(20.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(
-                            if (sePuedeGuardar) Movi.colores.marca.copy(alpha = 0.16f)
-                            else Movi.colores.tarjeta,
-                        )
-                        .clickable(enabled = sePuedeGuardar) { guardar() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = when {
-                            guardando -> if (editando) "Guardando…" else "Guardando…"
-                            editando -> "Guardar cambios"
-                            else -> "Guardar cuenta"
-                        },
-                        style = Movi.textos.titulo,
-                        color = if (sePuedeGuardar) Movi.colores.marca else Movi.colores.textoApagado,
-                    )
-                }
-                // Mismo patrón que el resto de las hojas: se dice LO PRIMERO que falta, no un botón
-                // gris sin explicación.
-                if (!sePuedeGuardar && !guardando && loQueFalta != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = loQueFalta,
-                        style = Movi.textos.apoyo,
-                        color = if (propia != null) Movi.colores.sale else Movi.colores.textoMedio,
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                    )
-                }
-
-                Spacer(Modifier.height(14.dp))
             }
+
+            Text(
+                QUE_ES_ESTO,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.padding(bottom = 18.dp),
+            )
+
+            SectionLabel("NOMBRE")
+            Spacer(Modifier.height(8.dp))
+            FieldBox("Ej: Caro", nombre, { nombre = it })
+
+            Spacer(Modifier.height(18.dp))
+
+            SectionLabel("NÚMERO DE LA CUENTA")
+            Spacer(Modifier.height(8.dp))
+            // Se acepta pegado como lo mandó el banco («*31973270756», con guiones o espacios)
+            // y se guardan solo los dígitos: dos formas del mismo número no pueden verse como
+            // dos destinos distintos. Ver `soloLosDigitos`.
+            FieldBox("Ej: *31973270756", numero, { numero = it })
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Puedes pegarlo como te lo manda el banco. Movi se queda solo con los dígitos.",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoApagado,
+            )
+
+            Spacer(Modifier.height(18.dp))
+
+            SectionLabel("DE QUIÉN ES (OPCIONAL)")
+            Spacer(Modifier.height(8.dp))
+            FieldBox("Ej: esposa, papá", deQuien, { deQuien = it })
+
+            if (error != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        if (sePuedeGuardar) Movi.colores.marca.copy(alpha = 0.16f)
+                        else Movi.colores.tarjeta,
+                    )
+                    .clickable(enabled = sePuedeGuardar) { guardar() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = when {
+                        guardando -> if (editando) "Guardando…" else "Guardando…"
+                        editando -> "Guardar cambios"
+                        else -> "Guardar cuenta"
+                    },
+                    style = Movi.textos.titulo,
+                    color = if (sePuedeGuardar) Movi.colores.marca else Movi.colores.textoApagado,
+                )
+            }
+            // Mismo patrón que el resto de las hojas: se dice LO PRIMERO que falta, no un botón
+            // gris sin explicación.
+            if (!sePuedeGuardar && !guardando && loQueFalta != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = loQueFalta,
+                    style = Movi.textos.apoyo,
+                    color = if (propia != null) Movi.colores.sale else Movi.colores.textoMedio,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
         }
     }
 }

@@ -39,8 +39,16 @@ import com.jvillada.movi.theme.*
  */
 enum class NavTab { HOY, MOVIMIENTOS, ADD, PLAN, PATRIMONIO }
 
-/** Un destino principal: pestaña + rótulo + ícono. */
-data class DestinoPrincipal(val tab: NavTab, val label: String, val icon: ImageVector)
+/**
+ * Un destino principal: pestaña + rótulo + ícono. [rotuloCorto] es el del rail compacto de una
+ * ventana mediana (80 dp de ancho, ver [MinNavRail]): ahí «Movimientos» no entra.
+ */
+data class DestinoPrincipal(
+    val tab: NavTab,
+    val label: String,
+    val icon: ImageVector,
+    val rotuloCorto: String = label,
+)
 
 /**
  * Las cuatro pestañas, en orden. Es la ÚNICA fuente: la barra del teléfono ([MinBottomNav]) pinta
@@ -52,7 +60,7 @@ data class DestinoPrincipal(val tab: NavTab, val label: String, val icon: ImageV
  */
 val destinosPrincipales: List<DestinoPrincipal> = listOf(
     DestinoPrincipal(NavTab.HOY, "Hoy", Icons.Rounded.Today),
-    DestinoPrincipal(NavTab.MOVIMIENTOS, "Movimientos", Icons.Rounded.SwapVert),
+    DestinoPrincipal(NavTab.MOVIMIENTOS, "Movimientos", Icons.Rounded.SwapVert, rotuloCorto = "Movs"),
     DestinoPrincipal(NavTab.PLAN, "Plan", Icons.AutoMirrored.Rounded.EventNote),
     DestinoPrincipal(NavTab.PATRIMONIO, "Patrimonio", Icons.Rounded.AccountBalance),
 )
@@ -62,10 +70,11 @@ fun MinBottomNav(
     active: NavTab?,
     onTabSelected: (NavTab) -> Unit,
 ) {
-    // En pantalla ancha el rail de la raíz (MinNavRail) toma el lugar de la barra.
+    // Desde 600 dp el rail de la raíz (MinNavRail, compacto en una ventana mediana) toma el lugar
+    // de la barra: la barra es solo del teléfono (Ola W1).
     // Desde la Ola 4 esta barra la pinta SOLO App.kt, una vez, debajo de la pantalla activa;
     // ninguna pantalla la llama por su cuenta.
-    if (LocalWindowWidthClass.current == WindowWidthClass.Expanded) return
+    if (LocalWindowWidthClass.current != WindowWidthClass.Compact) return
     val (antes, despues) = destinosPrincipales.chunked(2).let { it[0] to it[1] }
     Column(
         modifier = Modifier

@@ -822,52 +822,36 @@ private fun DebtTypeChooserSheet(
     onLoan: () -> Unit,
     onCard: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
+    MarcoDeHoja(onDismiss = onDismiss) {
+        // El contenido de la hoja se desplaza.
+        //
+        // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+        // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+        // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+        // propia hoja. Sin manera de llegar a él.
+        //
+        // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+        // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+        // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .verticalScroll(rememberScrollState())
+                .weight(1f, fill = false),
         ) {
-            SheetHandleWithClose(onClose = onDismiss)
-            // El contenido de la hoja se desplaza.
-            //
-            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
-            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
-            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
-            // propia hoja. Sin manera de llegar a él.
-            //
-            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
-            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
-            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .weight(1f, fill = false),
-            ) {
-                Text("¿Qué deuda quieres registrar?", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                Spacer(Modifier.height(14.dp))
-                DebtTypeOption(
-                    title = "Préstamo",
-                    subtitle = "Cuota fija, tasa y plazo — libranza, libre inversión, vehículo",
-                    onClick = onLoan,
-                )
-                Spacer(Modifier.height(8.dp))
-                DebtTypeOption(
-                    title = "Tarjeta de crédito",
-                    subtitle = "Cupo, día de corte y día de pago",
-                    onClick = onCard,
-                )
-                Spacer(Modifier.height(24.dp))
-            }
+            Text("¿Qué deuda quieres registrar?", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Spacer(Modifier.height(14.dp))
+            DebtTypeOption(
+                title = "Préstamo",
+                subtitle = "Cuota fija, tasa y plazo — libranza, libre inversión, vehículo",
+                onClick = onLoan,
+            )
+            Spacer(Modifier.height(8.dp))
+            DebtTypeOption(
+                title = "Tarjeta de crédito",
+                subtitle = "Cupo, día de corte y día de pago",
+                onClick = onCard,
+            )
+            Spacer(Modifier.height(24.dp))
         }
     }
 }

@@ -16,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -181,141 +180,122 @@ fun CreateAccountSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !saving, onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-
-        Column(
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
+        // --- NOMBRE ---
+        SectionLabel("NOMBRE")
+        Spacer(Modifier.height(8.dp))
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 14.dp),
         ) {
-            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
-            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
+            // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+            // [esAtajoDeSeleccionarTodo].
+            val campo = rememberCampoConSeleccion(name) { name = it }
+            BasicTextField(
+                value = campo.valor,
+                onValueChange = campo::alCambiar,
+                cursorBrush = SolidColor(Movi.colores.texto),
+                textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+                    .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
+                decorationBox = { inner ->
+                    if (name.isEmpty()) {
+                        Text("Ej: Bancolombia Ahorros", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                    }
+                    inner()
+                },
+            )
+        }
 
-            // --- NOMBRE ---
-            SectionLabel("NOMBRE")
-            Spacer(Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Movi.colores.tarjeta)
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
-            ) {
-                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                // [esAtajoDeSeleccionarTodo].
-                val campo = rememberCampoConSeleccion(name) { name = it }
-                BasicTextField(
-                    value = campo.valor,
-                    onValueChange = campo::alCambiar,
-                    cursorBrush = SolidColor(Movi.colores.texto),
-                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                    decorationBox = { inner ->
-                        if (name.isEmpty()) {
-                            Text("Ej: Bancolombia Ahorros", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                        }
-                        inner()
+        Spacer(Modifier.height(18.dp))
+
+        // --- TIPO ---
+        SectionLabel("TIPO")
+        Spacer(Modifier.height(8.dp))
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TYPE_OPTIONS.forEach { option ->
+                TypeCard(
+                    option = option,
+                    selected = selectedType == option.type,
+                    onClick = {
+                        selectedType = option.type
+                        // El selector de moneda es solo de Inversión; cualquier otro tipo
+                        // (Dinero) queda fijo en COP.
                     },
                 )
             }
-
-            Spacer(Modifier.height(18.dp))
-
-            // --- TIPO ---
-            SectionLabel("TIPO")
-            Spacer(Modifier.height(8.dp))
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TYPE_OPTIONS.forEach { option ->
-                    TypeCard(
-                        option = option,
-                        selected = selectedType == option.type,
-                        onClick = {
-                            selectedType = option.type
-                            // El selector de moneda es solo de Inversión; cualquier otro tipo
-                            // (Dinero) queda fijo en COP.
-                        },
-                    )
-                }
-                if (onElegirBien != null) {
-                    // Nunca «elegido»: tocarlo cambia de hoja, no de tipo. Ver [onElegirBien].
-                    TypeCard(option = OPCION_BIEN, selected = false, onClick = { onElegirBien(name.trim()) })
-                }
+            if (onElegirBien != null) {
+                // Nunca «elegido»: tocarlo cambia de hoja, no de tipo. Ver [onElegirBien].
+                TypeCard(option = OPCION_BIEN, selected = false, onClick = { onElegirBien(name.trim()) })
             }
+        }
+        Spacer(Modifier.height(8.dp))
+        // F52: nota, no botón — Créditos vive en Más, no acá.
+        Text(
+            text = "¿Tarjetas o préstamos? Se cargan en Créditos",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+        )
+
+        Spacer(Modifier.height(18.dp))
+
+        // --- SALDO INICIAL --- (ya no hay tipo de deuda en este selector, ver F51/F52)
+        SectionLabel("SALDO INICIAL")
+        Spacer(Modifier.height(8.dp))
+        MoneyField(
+            value = initialBalance,
+            onValueChange = { initialBalance = it },
+        )
+
+
+        // Inline error display
+        if (error != null) {
             Spacer(Modifier.height(8.dp))
-            // F52: nota, no botón — Créditos vive en Más, no acá.
             Text(
-                text = "¿Tarjetas o préstamos? Se cargan en Créditos",
+                text = error!!,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.sale,
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        // --- CTA ---
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                .clickable(enabled = canSave) { save() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (saving) "Creando…" else "Crear cuenta",
+                style = Movi.textos.titulo,
+                fontWeight = FontWeight.Medium,
+                color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
+            )
+        }
+        if (!canSave && !saving && missingFieldMessage != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = missingFieldMessage,
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
             )
-
-            Spacer(Modifier.height(18.dp))
-
-            // --- SALDO INICIAL --- (ya no hay tipo de deuda en este selector, ver F51/F52)
-            SectionLabel("SALDO INICIAL")
-            Spacer(Modifier.height(8.dp))
-            MoneyField(
-                value = initialBalance,
-                onValueChange = { initialBalance = it },
-            )
-
-
-            // Inline error display
-            if (error != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = error!!,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.sale,
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            // --- CTA ---
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                    .clickable(enabled = canSave) { save() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (saving) "Creando…" else "Crear cuenta",
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
-                )
-            }
-            if (!canSave && !saving && missingFieldMessage != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = missingFieldMessage,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
-            }
-
-            Spacer(Modifier.height(14.dp))
         }
+
+        Spacer(Modifier.height(14.dp))
     }
 }
 

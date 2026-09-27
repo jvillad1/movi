@@ -80,10 +80,11 @@ class LasCuatroPestanasTest {
         }
     }
 
-    private fun montarRail() {
+    private fun montarRail(compacto: Boolean = false) {
         composeRule.setContent {
-            CompositionLocalProvider(LocalWindowWidthClass provides WindowWidthClass.Expanded) {
-                MoviTheme { MinNavRail(active = NavTab.PLAN, onTabSelected = { elegida = it }) }
+            val clase = if (compacto) WindowWidthClass.Medium else WindowWidthClass.Expanded
+            CompositionLocalProvider(LocalWindowWidthClass provides clase) {
+                MoviTheme { MinNavRail(active = NavTab.PLAN, onTabSelected = { elegida = it }, compacto = compacto) }
             }
         }
     }
@@ -233,5 +234,46 @@ class LasCuatroPestanasTest {
         )
         assertEquals(HeaderLeading.Back(Screen.Accounts), leadingFor(Screen.Credits, ir, fallback = Screen.Accounts))
         assertEquals(HeaderLeading.Back(Screen.Mas), leadingFor(Screen.Categorias, ir, fallback = Screen.Mas))
+    }
+
+    // ── El rail compacto de una ventana mediana (Ola W1) ──────────────────────
+
+    /**
+     * Entre 600 y 999 dp ni la barra del teléfono ni el rail de 216 dp: un rail de 80 dp con las
+     * mismas cuatro pestañas, con su rótulo corto, y el «+» arriba.
+     */
+    @Test
+    fun `el rail compacto pinta las mismas cuatro con su rotulo corto y el boton de agregar`() {
+        montarRail(compacto = true)
+
+        // El lector de pantalla oye el nombre entero una vez; el rótulo corto es solo lo que se ve.
+        destinosPrincipales.forEach {
+            composeRule.onNodeWithContentDescription(it.label, useUnmergedTree = true).assertIsDisplayed()
+        }
+        composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).assertIsDisplayed()
+        loQueYaNoEsPestana.filter { it != "Movs" }
+            .forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
+    }
+
+    @Test
+    fun `tocar una entrada del rail compacto la elige, y el mas abre Agregar`() {
+        montarRail(compacto = true)
+
+        composeRule.onNodeWithContentDescription("Movimientos", useUnmergedTree = true).performClick()
+        assertEquals(NavTab.MOVIMIENTOS, elegida)
+        composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).performClick()
+        assertEquals(NavTab.ADD, elegida)
+    }
+
+    /** La barra del teléfono no se pinta desde 600 dp: ahí manda el rail, aunque sea el compacto. */
+    @Test
+    fun `la barra inferior no se pinta en una ventana mediana`() {
+        composeRule.setContent {
+            CompositionLocalProvider(LocalWindowWidthClass provides WindowWidthClass.Medium) {
+                MoviTheme { MinBottomNav(active = NavTab.HOY, onTabSelected = {}) }
+            }
+        }
+
+        rotulos.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
     }
 }

@@ -327,445 +327,432 @@ fun CreditTermsSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !saving, onClick = onDismiss),
+    MarcoDeHoja(
+        onDismiss = onDismiss,
+        dismissEnabled = !saving,
+        // Escape (la web) retira primero la pregunta de borrar, después la hoja. Ver [MarcoDeHoja].
+        onEscape = { if (pidiendoBorrar) pidiendoBorrar = false else if (!saving) onDismiss() },
     ) {
-        Box(modifier = Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
-        ) {
-            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
-            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
-
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                if (editing != null) {
-                    SectionLabel("CRÉDITO")
-                    Spacer(Modifier.height(8.dp))
-                    // Editable, no un rótulo: ver [nombreEditado].
-                    FieldBox("Nombre del crédito", nombreEditado, { nombreEditado = it })
-                    Spacer(Modifier.height(16.dp))
-                } else {
-                    // F25: el selector "CUENTA DEL PRÉSTAMO · + Nueva cuenta de préstamo"
-                    // desapareció del flujo normal — era la estructura interna (cuenta +
-                    // términos) asomándose, ruido para quien solo quiere anotar un crédito
-                    // nuevo. Nombre y deuda actual pasan a ser los primeros campos, sin
-                    // sección aparte. Solo si existen cuentas LOAN sin términos aparece,
-                    // arriba y discreta, la opción de adjuntar los términos a una de ellas.
-                    if (candidates.isNotEmpty()) {
-                        Text(
-                            "Ya tienes una deuda cargada como cuenta, ¿es esta?",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        candidates.forEach { acc ->
-                            SelectRow(
-                                label = acc.name,
-                                selected = !newAccountMode && selectedAccountId == acc.id,
-                                onClick = {
-                                    if (!newAccountMode && selectedAccountId == acc.id) {
-                                        // Tocar de nuevo la ya elegida vuelve a "cuenta nueva" —
-                                        // sin esto no había forma de deshacer la selección.
-                                        newAccountMode = true
-                                        selectedAccountId = null
-                                    } else {
-                                        newAccountMode = false
-                                        selectedAccountId = acc.id
-                                    }
-                                },
-                            )
-                            Spacer(Modifier.height(6.dp))
-                        }
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    if (newAccountMode) {
-                        // ── La pregunta, y va PRIMERA ────────────────────────────────────
-                        //
-                        // Antes acá había un campo «Deuda actual (COP, opcional)» con una ayuda
-                        // debajo que decía «si te acaban de desembolsar este crédito, déjala en
-                        // blanco». Esa frase le pedía al dueño entender el mecanismo interno
-                        // (qué evento crea la deuda) para contestar bien. Esta pregunta le pide
-                        // un hecho que él sabe sin pensarlo: ¿esta plata te acaba de llegar?
-                        //
-                        // Redacción: «recibir la plata», no «desembolso» ni «traspaso». El
-                        // dueño usa la palabra desembolso, pero la hoja no puede depender de
-                        // que la use. Las dos opciones son afirmaciones completas y no un
-                        // «sí/no» suelto: cada una se entiende sola, leída sin la pregunta.
-                        //
-                        // **Ninguna de las dos afirma un hecho que no sabemos.** La primera
-                        // versión de la segunda opción decía «No, ya lo venía pagando · Viene de
-                        // antes y ya le has pagado cuotas», y eso es falso para un caso real: un
-                        // crédito desembolsado hace tres meses al que todavía no se le pagó
-                        // ninguna cuota entra igual por acá, y las dos líneas le decían que ya
-                        // había pagado. Lo único que esta pregunta necesita separar es si la
-                        // plata acaba de entrar a una cuenta suya, así que eso es lo único que
-                        // dicen las opciones.
-                        Text(
-                            "¿Acabas de recibir la plata de este crédito?",
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        OpcionDeAlta(
-                            titulo = "Sí, me la acaban de depositar",
-                            detalle = "Es un crédito nuevo y el banco ya giró la plata.",
-                            selected = recienRecibido == true,
-                            enabled = !saving,
-                            onClick = { recienRecibido = true },
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        OpcionDeAlta(
-                            titulo = "No, ya lo tenía desde antes",
-                            detalle = "Viene de antes; la plata no acaba de entrar a tu cuenta.",
-                            selected = recienRecibido == false,
-                            enabled = !saving,
-                            onClick = { recienRecibido = false },
-                        )
-                        Spacer(Modifier.height(12.dp))
-
-                        FieldBox("Nombre (p.ej. Crédito Vehículo Santander)", newAccountName, { newAccountName = it })
-                        // La deuda actual solo tiene sentido en el crédito que ya venía: en el
-                        // recién recibido la deuda la arma el desembolso, y pedir las dos cosas
-                        // es exactamente cómo se contaba dos veces. Sigue siendo opcional, igual
-                        // que desde la ola 14: se puede anotar un crédito sin saber todavía el
-                        // saldo exacto y cuadrarlo después con «Ajustar saldo».
-                        if (recienRecibido == false) {
-                            Spacer(Modifier.height(8.dp))
-                            MoneyField(newAccountDebt, { newAccountDebt = it }, placeholder = "Deuda actual (COP, opcional)")
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                "Lo que tu banco dice que debes hoy. Si no lo tienes a mano, " +
-                                    "déjalo en blanco y cuádralo después con «Ajustar saldo».",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                }
-
-                SectionLabel("TÉRMINOS")
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            if (editing != null) {
+                SectionLabel("CRÉDITO")
                 Spacer(Modifier.height(8.dp))
-                FieldBox("Banco", bank, { bank = it })
-                Spacer(Modifier.height(8.dp))
-                MoneyField(principal, { principal = it }, placeholder = "Capital original (COP)")
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Sin intereses no hay tasa que pedir: el campo se va y el plazo ocupa la fila.
-                    if (!sinIntereses) {
-                        Box(Modifier.weight(1f)) {
-                            // F23/F24: solo dígitos y un único punto — el "%" lo pinta RateFieldBox,
-                            // nunca lo escribe la persona.
-                            RateFieldBox("18,5", rateEa, { rateEa = filterRateInput(it) }, rotulo = "Tasa % EA")
-                        }
-                    }
-                    Box(Modifier.weight(1f)) {
-                        FieldBox("60", termMonths, { termMonths = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number, rotulo = "Plazo (meses)")
-                    }
-                }
-                // Pegada a la tasa, que es lo que reemplaza.
-                CasillaConExplicacion(
-                    marcada = sinIntereses,
-                    titulo = "No cobra intereses",
-                    explicacion = if (sinIntereses) {
-                        "Toda la cuota, menos el seguro y otros cargos, baja la deuda, y Movi te " +
-                            "muestra cuándo terminas de pagarla."
-                    } else {
-                        "Márcalo si es un préstamo sin intereses, por ejemplo de tu familia. Si no " +
-                            "sabes la tasa, déjalo sin marcar: no es lo mismo."
-                    },
-                    habilitada = !saving,
-                    alCambiar = { sinIntereses = !sinIntereses },
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f)) { MoneyField(installment, { installment = it }, label = "Cuota mensual", placeholder = "$ 0") }
-                    Box(Modifier.weight(1f)) {
-                        FieldBox("5", dayOfMonth, { dayOfMonth = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number, rotulo = "Día de pago")
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                // El seguro va PEGADO a la cuota, no al final con las notas: es plata que está
-                // adentro de la cifra de arriba, y leerlas juntas es lo que hace evidente qué se
-                // está declarando. Ver `desglosarCuota` en :core para qué hace con él.
-                MoneyField(seguroMensual, { seguroMensual = it }, placeholder = "Seguro mensual (COP, opcional)")
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Si tu cuota incluye seguro de vida deudor, escríbelo aquí. Esa parte no baja " +
-                        "la deuda, así que sin este dato Movi te mostraría menos deuda de la que tienes.",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                )
-                Spacer(Modifier.height(8.dp))
-                // El cuarto renglón, pegado al seguro y no al final: los dos son plata que está
-                // adentro de la cuota de arriba, y se leen juntos o no se entienden. Campo aparte
-                // del seguro porque el extracto los nombra distinto, y un dato que no se puede
-                // contrastar contra el papel del banco es un dato que nadie verifica.
-                MoneyField(otrosCargos, { otrosCargos = it }, placeholder = "Otros cargos mensuales (COP, opcional)")
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Algunos créditos cobran algo más dentro de la cuota que no es interés, ni " +
-                        "seguro, ni abono: en el extracto suele decir «otros conceptos». Escríbelo " +
-                        "aquí para que Movi no lo cuente como abono a tu deuda.",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                )
-                Spacer(Modifier.height(8.dp))
-                // F23/F24: solo dígitos y guiones — sin selector de calendario todavía
-                // (pendiente, ver KDoc de isValidCreditDate más abajo).
-                FieldBox("Desembolso (AAAA-MM-DD)", startDate, { startDate = filterDateInput(it) })
-                Spacer(Modifier.height(8.dp))
-                FieldBox("Notas (opcional)", notes, { notes = it })
-
-                // ── El desembolso ────────────────────────────────────────────────────────
-                //
-                // Va DESPUÉS de los términos, y no pegado a la pregunta, por una razón concreta:
-                // el monto viene con el capital puesto por defecto, y un valor por defecto que
-                // no se ve no es un valor por defecto. Acá el capital ya está escrito, así que
-                // el campo aparece con la cifra correcta y el caso común —desembolso completo—
-                // es no tocar nada. La pregunta, arriba, ya anunció que esto venía.
-                if (preguntaVisible && recienRecibido == true) {
-                    Spacer(Modifier.height(20.dp))
-                    SectionLabel("LA PLATA QUE TE ENTRÓ")
-                    Spacer(Modifier.height(8.dp))
-                    when {
-                        !cuentasCargadas -> Text("Cargando tus cuentas…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                        // Un fallo de red NO es «no tienes cuentas»: acá se dice lo que pasó y se
-                        // ofrece volver a intentar, en vez de mandar a crear una cuenta que ya
-                        // existe. Ver [falloCargarCuentas].
-                        falloCargarCuentas -> {
-                            Text(NO_PUDIMOS_CARGAR_TUS_CUENTAS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                "Reintentar",
-                                style = Movi.textos.cuerpo,
-                                color = Movi.colores.texto,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier
-                                    .clickable(enabled = !saving) { intentoDeCarga++ }
-                                    .padding(vertical = 4.dp),
-                            )
-                        }
-                        // Sin ninguna cuenta en pesos no hay dónde poner la plata, y el alta se
-                        // detiene acá a propósito. La alternativa —crear el crédito igual, sin
-                        // desembolso— dejaría exactamente el estado que esta rama vino a matar:
-                        // un crédito en $0 que la tarjeta anuncia como «100% pagado», y encima
-                        // después de que el dueño dijo que la plata sí le entró.
-                        sinCuentasDestino -> Text(
-                            SIN_CUENTA_PARA_EL_DESEMBOLSO,
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                        )
-                        else -> {
-                            Text("¿A qué cuenta te entró?", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                            Spacer(Modifier.height(8.dp))
-                            cuentasDestino.forEach { acc ->
-                                SelectRow(
-                                    label = acc.name,
-                                    selected = cuentaDelDesembolso == acc.id,
-                                    onClick = { cuentaDelDesembolso = acc.id },
-                                )
-                                Spacer(Modifier.height(6.dp))
-                            }
-                            Spacer(Modifier.height(6.dp))
-                            MoneyField(
-                                montoDesembolso,
-                                { montoDesembolsoEditado = it },
-                                placeholder = "Cuánto te entró (COP)",
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            // La aritmética, antes de guardar y con las dos cifras a la vista.
-                            // Mismo recurso que `deudaDespuesDelTraspaso` en la hoja de Agregar,
-                            // y por el mismo motivo: un aviso genérico se lee y se olvida; dos
-                            // números se discuten solos contra lo que el dueño sabe que le
-                            // entró. Acá además es lo único que explica de dónde sale la
-                            // diferencia cuando el banco desembolsa neto de costos.
-                            val explicacion = explicacionDelDesembolso(
-                                capital = principal,
-                                entro = montoDesembolso,
-                                destino = destinoDelDesembolso?.name,
-                            )
-                            Text(
-                                explicacion?.texto ?: "Por defecto es el capital del crédito. Cámbialo si " +
-                                    "el banco te depositó menos porque descontó costos.",
-                                style = Movi.textos.apoyo,
-                                // Una brecha implausible se pinta distinto: es lo único que
-                                // separa a la vista «esto está bien» de «revisa lo que
-                                // escribiste». Ver [ExplicacionDelDesembolso].
-                                color = if (explicacion?.esAdvertencia == true) Movi.colores.sale else Movi.colores.textoMedio,
-                            )
-                        }
-                    }
-                }
-
+                // Editable, no un rótulo: ver [nombreEditado].
+                FieldBox("Nombre del crédito", nombreEditado, { nombreEditado = it })
                 Spacer(Modifier.height(16.dp))
-                // Libranza. Va ANTES del recordatorio porque lo desactiva: a una cuota que el
-                // empleador ya descontó no tiene sentido recordarla.
-                CasillaConExplicacion(
-                    marcada = esLibranza,
-                    titulo = "Se descuenta de mi nómina",
-                    explicacion = "La cuota se retiene del sueldo antes de que la plata llegue a tu " +
-                        "cuenta. Movi deja de pedirte que la registres como gasto —tu sueldo ya " +
-                        "viene neto— y en su lugar te ofrece bajar la deuda con un toque.",
-                    habilitada = !saving,
-                    alCambiar = { esLibranza = !esLibranza },
-                )
-
-                // ¿La paga otro? Va justo debajo de la libranza porque contesta la MISMA pregunta
-                // —«¿esta cuota sale de tu cuenta?»— con la otra respuesta posible, y se esconde
-                // cuando la libranza ya la contestó: ofrecer las dos a la vez invitaría a marcar
-                // ambas y a tener que decidir después cuál gana.
-                //
-                // Texto libre y no un menú: quién paga la cuota de alguien es una lista que nadie
-                // puede enumerar de antemano. El dueño tiene tres casos y ninguno se parece —una
-                // pensión voluntaria, su esposa, su papá.
-                if (!esLibranza) {
-                    Spacer(Modifier.height(16.dp))
+            } else {
+                // F25: el selector "CUENTA DEL PRÉSTAMO · + Nueva cuenta de préstamo"
+                // desapareció del flujo normal — era la estructura interna (cuenta +
+                // términos) asomándose, ruido para quien solo quiere anotar un crédito
+                // nuevo. Nombre y deuda actual pasan a ser los primeros campos, sin
+                // sección aparte. Solo si existen cuentas LOAN sin términos aparece,
+                // arriba y discreta, la opción de adjuntar los términos a una de ellas.
+                if (candidates.isNotEmpty()) {
                     Text(
-                        "¿LA PAGA ALGUIEN MÁS?",
+                        "Ya tienes una deuda cargada como cuenta, ¿es esta?",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 0.4.sp,
                     )
                     Spacer(Modifier.height(8.dp))
-                    // El tope es el de la columna (`varchar(60)`). Sin él, un nombre más largo
-                    // hacía fallar el INSERT en Postgres y se caía el guardado ENTERO del
-                    // crédito con un 500 sin mensaje —no hay StatusPages—: el dueño perdía la
-                    // edición completa por haber escrito de más en un rótulo. El server recorta
-                    // igual, por si llega de otro cliente; acá se corta antes para que ni
-                    // siquiera se pueda escribir de más.
-                    // El texto de ayuda NO puede empezar con «Yo».
-                    //
-                    // Decía «Yo — o escribe quién: Skandia, Caro…», y el dueño escribió
-                    // literalmente «Yo» en el campo de su crédito del carro. Es la respuesta
-                    // correcta a la pregunta y la incorrecta para este campo: un nombre acá
-                    // significa que la cuota la paga UN TERCERO, así que Movi dejó de contar sus
-                    // $4.215.223 mensuales como gasto suyo y de recordarle el pago.
-                    //
-                    // El campo tiene dos estados —vacío o un nombre— y el vacío es el normal. Un
-                    // marcador que empieza nombrando el caso normal invita a escribirlo.
-                    FieldBox(
-                        "Skandia, Caro, mi papá…",
-                        quienPaga,
-                        { quienPaga = it.take(60) },
-                    )
-                    // El texto de abajo cambia según el estado, en vez de aparecer solo cuando ya
-                    // se escribió algo: la duda («¿esto qué hace?») llega ANTES de escribir.
-                    Spacer(Modifier.height(6.dp))
-                    if (quienPaga.isBlank()) {
-                        Text(
-                            text = "Déjalo vacío si la pagas tú. Escribe un nombre solo si la cuota la " +
-                                "paga otra persona o sale de otra bolsa — una pensión voluntaria, tu " +
-                                "pareja, un familiar.",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            lineHeight = 16.sp,
+                    candidates.forEach { acc ->
+                        SelectRow(
+                            label = acc.name,
+                            selected = !newAccountMode && selectedAccountId == acc.id,
+                            onClick = {
+                                if (!newAccountMode && selectedAccountId == acc.id) {
+                                    // Tocar de nuevo la ya elegida vuelve a "cuenta nueva" —
+                                    // sin esto no había forma de deshacer la selección.
+                                    newAccountMode = true
+                                    selectedAccountId = null
+                                } else {
+                                    newAccountMode = false
+                                    selectedAccountId = acc.id
+                                }
+                            },
                         )
-                    } else {
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (newAccountMode) {
+                    // ── La pregunta, y va PRIMERA ────────────────────────────────────
+                    //
+                    // Antes acá había un campo «Deuda actual (COP, opcional)» con una ayuda
+                    // debajo que decía «si te acaban de desembolsar este crédito, déjala en
+                    // blanco». Esa frase le pedía al dueño entender el mecanismo interno
+                    // (qué evento crea la deuda) para contestar bien. Esta pregunta le pide
+                    // un hecho que él sabe sin pensarlo: ¿esta plata te acaba de llegar?
+                    //
+                    // Redacción: «recibir la plata», no «desembolso» ni «traspaso». El
+                    // dueño usa la palabra desembolso, pero la hoja no puede depender de
+                    // que la use. Las dos opciones son afirmaciones completas y no un
+                    // «sí/no» suelto: cada una se entiende sola, leída sin la pregunta.
+                    //
+                    // **Ninguna de las dos afirma un hecho que no sabemos.** La primera
+                    // versión de la segunda opción decía «No, ya lo venía pagando · Viene de
+                    // antes y ya le has pagado cuotas», y eso es falso para un caso real: un
+                    // crédito desembolsado hace tres meses al que todavía no se le pagó
+                    // ninguna cuota entra igual por acá, y las dos líneas le decían que ya
+                    // había pagado. Lo único que esta pregunta necesita separar es si la
+                    // plata acaba de entrar a una cuenta suya, así que eso es lo único que
+                    // dicen las opciones.
+                    Text(
+                        "¿Acabas de recibir la plata de este crédito?",
+                        style = Movi.textos.cuerpo,
+                        fontWeight = FontWeight.Medium,
+                        color = Movi.colores.texto,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OpcionDeAlta(
+                        titulo = "Sí, me la acaban de depositar",
+                        detalle = "Es un crédito nuevo y el banco ya giró la plata.",
+                        selected = recienRecibido == true,
+                        enabled = !saving,
+                        onClick = { recienRecibido = true },
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OpcionDeAlta(
+                        titulo = "No, ya lo tenía desde antes",
+                        detalle = "Viene de antes; la plata no acaba de entrar a tu cuenta.",
+                        selected = recienRecibido == false,
+                        enabled = !saving,
+                        onClick = { recienRecibido = false },
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    FieldBox("Nombre (p.ej. Crédito Vehículo Santander)", newAccountName, { newAccountName = it })
+                    // La deuda actual solo tiene sentido en el crédito que ya venía: en el
+                    // recién recibido la deuda la arma el desembolso, y pedir las dos cosas
+                    // es exactamente cómo se contaba dos veces. Sigue siendo opcional, igual
+                    // que desde la ola 14: se puede anotar un crédito sin saber todavía el
+                    // saldo exacto y cuadrarlo después con «Ajustar saldo».
+                    if (recienRecibido == false) {
+                        Spacer(Modifier.height(8.dp))
+                        MoneyField(newAccountDebt, { newAccountDebt = it }, placeholder = "Deuda actual (COP, opcional)")
+                        Spacer(Modifier.height(6.dp))
                         Text(
-                            text = "La deuda sigue siendo tuya y suma entera en tu deuda total. Lo que " +
-                                "cambia es que la cuota deja de contar como gasto tuyo del mes y Movi " +
-                                "deja de recordártela — en su lugar te ofrece bajar la deuda con un toque.",
+                            "Lo que tu banco dice que debes hoy. Si no lo tienes a mano, " +
+                                "déjalo en blanco y cuádralo después con «Ajustar saldo».",
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
-                            lineHeight = 16.sp,
                         )
                     }
                 }
-
-                // El recordatorio no aplica a una libranza ni a una cuota que paga otro: en los
-                // dos casos ya se pagó sola.
-                if (!esLibranza && quienPaga.isBlank()) {
-                    Spacer(Modifier.height(16.dp))
-                    // La cuota de este crédito entra al barrido de recordatorios salvo que el dueño
-                    // diga que no. Casilla, no diálogo: no interrumpe el alta.
-                    ReminderOptInField(
-                        checked = remindMe,
-                        onCheckedChange = { remindMe = it },
-                        enabled = !saving,
-                    )
-                }
-
+                Spacer(Modifier.height(16.dp))
             }
 
-            // **El error del guardado vive junto al botón, no adentro del scroll.**
+            SectionLabel("TÉRMINOS")
+            Spacer(Modifier.height(8.dp))
+            FieldBox("Banco", bank, { bank = it })
+            Spacer(Modifier.height(8.dp))
+            MoneyField(principal, { principal = it }, placeholder = "Capital original (COP)")
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Sin intereses no hay tasa que pedir: el campo se va y el plazo ocupa la fila.
+                if (!sinIntereses) {
+                    Box(Modifier.weight(1f)) {
+                        // F23/F24: solo dígitos y un único punto — el "%" lo pinta RateFieldBox,
+                        // nunca lo escribe la persona.
+                        RateFieldBox("18,5", rateEa, { rateEa = filterRateInput(it) }, rotulo = "Tasa % EA")
+                    }
+                }
+                Box(Modifier.weight(1f)) {
+                    FieldBox("60", termMonths, { termMonths = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number, rotulo = "Plazo (meses)")
+                }
+            }
+            // Pegada a la tasa, que es lo que reemplaza.
+            CasillaConExplicacion(
+                marcada = sinIntereses,
+                titulo = "No cobra intereses",
+                explicacion = if (sinIntereses) {
+                    "Toda la cuota, menos el seguro y otros cargos, baja la deuda, y Movi te " +
+                        "muestra cuándo terminas de pagarla."
+                } else {
+                    "Márcalo si es un préstamo sin intereses, por ejemplo de tu familia. Si no " +
+                        "sabes la tasa, déjalo sin marcar: no es lo mismo."
+                },
+                habilitada = !saving,
+                alCambiar = { sinIntereses = !sinIntereses },
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) { MoneyField(installment, { installment = it }, label = "Cuota mensual", placeholder = "$ 0") }
+                Box(Modifier.weight(1f)) {
+                    FieldBox("5", dayOfMonth, { dayOfMonth = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number, rotulo = "Día de pago")
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            // El seguro va PEGADO a la cuota, no al final con las notas: es plata que está
+            // adentro de la cifra de arriba, y leerlas juntas es lo que hace evidente qué se
+            // está declarando. Ver `desglosarCuota` en :core para qué hace con él.
+            MoneyField(seguroMensual, { seguroMensual = it }, placeholder = "Seguro mensual (COP, opcional)")
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Si tu cuota incluye seguro de vida deudor, escríbelo aquí. Esa parte no baja " +
+                    "la deuda, así que sin este dato Movi te mostraría menos deuda de la que tienes.",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
+            Spacer(Modifier.height(8.dp))
+            // El cuarto renglón, pegado al seguro y no al final: los dos son plata que está
+            // adentro de la cuota de arriba, y se leen juntos o no se entienden. Campo aparte
+            // del seguro porque el extracto los nombra distinto, y un dato que no se puede
+            // contrastar contra el papel del banco es un dato que nadie verifica.
+            MoneyField(otrosCargos, { otrosCargos = it }, placeholder = "Otros cargos mensuales (COP, opcional)")
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Algunos créditos cobran algo más dentro de la cuota que no es interés, ni " +
+                    "seguro, ni abono: en el extracto suele decir «otros conceptos». Escríbelo " +
+                    "aquí para que Movi no lo cuente como abono a tu deuda.",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
+            Spacer(Modifier.height(8.dp))
+            // F23/F24: solo dígitos y guiones — sin selector de calendario todavía
+            // (pendiente, ver KDoc de isValidCreditDate más abajo).
+            FieldBox("Desembolso (AAAA-MM-DD)", startDate, { startDate = filterDateInput(it) })
+            Spacer(Modifier.height(8.dp))
+            FieldBox("Notas (opcional)", notes, { notes = it })
+
+            // ── El desembolso ────────────────────────────────────────────────────────
             //
-            // El dueño: «le doy guardar y no pasa nada». Pasaba: el guardado fallaba y el mensaje
-            // se pintaba al final del bloque que se DESPLAZA, o sea debajo de lo que se ve. El
-            // botón —que está afuera del scroll, fijo abajo— no cambiaba, así que desde donde él
-            // miraba el toque no había hecho nada.
-            //
-            // El aviso de «falta tal campo» de acá abajo ya vivía afuera y por eso sí se veía.
-            // Que el error del server, que es MÁS importante, estuviera adentro era la asimetría.
-            // Mismo defecto que la hoja de editar documentos, y la misma cura.
-            error?.let {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = it,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.sale,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            // Va DESPUÉS de los términos, y no pegado a la pregunta, por una razón concreta:
+            // el monto viene con el capital puesto por defecto, y un valor por defecto que
+            // no se ve no es un valor por defecto. Acá el capital ya está escrito, así que
+            // el campo aparece con la cifra correcta y el caso común —desembolso completo—
+            // es no tocar nada. La pregunta, arriba, ya anunció que esto venía.
+            if (preguntaVisible && recienRecibido == true) {
+                Spacer(Modifier.height(20.dp))
+                SectionLabel("LA PLATA QUE TE ENTRÓ")
+                Spacer(Modifier.height(8.dp))
+                when {
+                    !cuentasCargadas -> Text("Cargando tus cuentas…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    // Un fallo de red NO es «no tienes cuentas»: acá se dice lo que pasó y se
+                    // ofrece volver a intentar, en vez de mandar a crear una cuenta que ya
+                    // existe. Ver [falloCargarCuentas].
+                    falloCargarCuentas -> {
+                        Text(NO_PUDIMOS_CARGAR_TUS_CUENTAS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Reintentar",
+                            style = Movi.textos.cuerpo,
+                            color = Movi.colores.texto,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .clickable(enabled = !saving) { intentoDeCarga++ }
+                                .padding(vertical = 4.dp),
+                        )
+                    }
+                    // Sin ninguna cuenta en pesos no hay dónde poner la plata, y el alta se
+                    // detiene acá a propósito. La alternativa —crear el crédito igual, sin
+                    // desembolso— dejaría exactamente el estado que esta rama vino a matar:
+                    // un crédito en $0 que la tarjeta anuncia como «100% pagado», y encima
+                    // después de que el dueño dijo que la plata sí le entró.
+                    sinCuentasDestino -> Text(
+                        SIN_CUENTA_PARA_EL_DESEMBOLSO,
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                    )
+                    else -> {
+                        Text("¿A qué cuenta te entró?", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        Spacer(Modifier.height(8.dp))
+                        cuentasDestino.forEach { acc ->
+                            SelectRow(
+                                label = acc.name,
+                                selected = cuentaDelDesembolso == acc.id,
+                                onClick = { cuentaDelDesembolso = acc.id },
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        MoneyField(
+                            montoDesembolso,
+                            { montoDesembolsoEditado = it },
+                            placeholder = "Cuánto te entró (COP)",
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        // La aritmética, antes de guardar y con las dos cifras a la vista.
+                        // Mismo recurso que `deudaDespuesDelTraspaso` en la hoja de Agregar,
+                        // y por el mismo motivo: un aviso genérico se lee y se olvida; dos
+                        // números se discuten solos contra lo que el dueño sabe que le
+                        // entró. Acá además es lo único que explica de dónde sale la
+                        // diferencia cuando el banco desembolsa neto de costos.
+                        val explicacion = explicacionDelDesembolso(
+                            capital = principal,
+                            entro = montoDesembolso,
+                            destino = destinoDelDesembolso?.name,
+                        )
+                        Text(
+                            explicacion?.texto ?: "Por defecto es el capital del crédito. Cámbialo si " +
+                                "el banco te depositó menos porque descontó costos.",
+                            style = Movi.textos.apoyo,
+                            // Una brecha implausible se pinta distinto: es lo único que
+                            // separa a la vista «esto está bien» de «revisa lo que
+                            // escribiste». Ver [ExplicacionDelDesembolso].
+                            color = if (explicacion?.esAdvertencia == true) Movi.colores.sale else Movi.colores.textoMedio,
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(16.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
-                    .clickable(enabled = canSave) { save() }
-                    .padding(vertical = 15.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(if (saving) "Guardando…" else "Guardar crédito", color = Movi.colores.fondo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium)
-            }
-            // F24: antes el botón se apagaba en silencio. Ahora dice la primera cosa que falta.
-            if (!canSave && !saving && missingFieldMessage != null) {
-                Spacer(Modifier.height(8.dp))
+            // Libranza. Va ANTES del recordatorio porque lo desactiva: a una cuota que el
+            // empleador ya descontó no tiene sentido recordarla.
+            CasillaConExplicacion(
+                marcada = esLibranza,
+                titulo = "Se descuenta de mi nómina",
+                explicacion = "La cuota se retiene del sueldo antes de que la plata llegue a tu " +
+                    "cuenta. Movi deja de pedirte que la registres como gasto —tu sueldo ya " +
+                    "viene neto— y en su lugar te ofrece bajar la deuda con un toque.",
+                habilitada = !saving,
+                alCambiar = { esLibranza = !esLibranza },
+            )
+
+            // ¿La paga otro? Va justo debajo de la libranza porque contesta la MISMA pregunta
+            // —«¿esta cuota sale de tu cuenta?»— con la otra respuesta posible, y se esconde
+            // cuando la libranza ya la contestó: ofrecer las dos a la vez invitaría a marcar
+            // ambas y a tener que decidir después cuál gana.
+            //
+            // Texto libre y no un menú: quién paga la cuota de alguien es una lista que nadie
+            // puede enumerar de antemano. El dueño tiene tres casos y ninguno se parece —una
+            // pensión voluntaria, su esposa, su papá.
+            if (!esLibranza) {
+                Spacer(Modifier.height(16.dp))
                 Text(
-                    text = missingFieldMessage,
+                    "¿LA PAGA ALGUIEN MÁS?",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.4.sp,
                 )
-            }
-            if (editing?.terms != null) {
                 Spacer(Modifier.height(8.dp))
-                if (pidiendoBorrar) {
-                    // Borrar pregunta antes (ver [ConfirmacionEnLinea]).
-                    ConfirmacionEnLinea(
-                        pregunta = "¿Eliminar los términos de «${editing.account.name}»?",
-                        detalle = "Se borran la tasa, el plazo, la cuota y el día de pago. La cuenta, su deuda y sus movimientos no se tocan. No se puede deshacer.",
-                        textoConfirmar = "Eliminar",
-                        ocupado = saving,
-                        onConfirmar = { deleteTerms() },
-                        onCancelar = { pidiendoBorrar = false },
+                // El tope es el de la columna (`varchar(60)`). Sin él, un nombre más largo
+                // hacía fallar el INSERT en Postgres y se caía el guardado ENTERO del
+                // crédito con un 500 sin mensaje —no hay StatusPages—: el dueño perdía la
+                // edición completa por haber escrito de más en un rótulo. El server recorta
+                // igual, por si llega de otro cliente; acá se corta antes para que ni
+                // siquiera se pueda escribir de más.
+                // El texto de ayuda NO puede empezar con «Yo».
+                //
+                // Decía «Yo — o escribe quién: Skandia, Caro…», y el dueño escribió
+                // literalmente «Yo» en el campo de su crédito del carro. Es la respuesta
+                // correcta a la pregunta y la incorrecta para este campo: un nombre acá
+                // significa que la cuota la paga UN TERCERO, así que Movi dejó de contar sus
+                // $4.215.223 mensuales como gasto suyo y de recordarle el pago.
+                //
+                // El campo tiene dos estados —vacío o un nombre— y el vacío es el normal. Un
+                // marcador que empieza nombrando el caso normal invita a escribirlo.
+                FieldBox(
+                    "Skandia, Caro, mi papá…",
+                    quienPaga,
+                    { quienPaga = it.take(60) },
+                )
+                // El texto de abajo cambia según el estado, en vez de aparecer solo cuando ya
+                // se escribió algo: la duda («¿esto qué hace?») llega ANTES de escribir.
+                Spacer(Modifier.height(6.dp))
+                if (quienPaga.isBlank()) {
+                    Text(
+                        text = "Déjalo vacío si la pagas tú. Escribe un nombre solo si la cuota la " +
+                            "paga otra persona o sale de otra bolsa — una pensión voluntaria, tu " +
+                            "pareja, un familiar.",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        lineHeight = 16.sp,
                     )
                 } else {
                     Text(
-                        "Eliminar términos",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.sale,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = 8.dp),
+                        text = "La deuda sigue siendo tuya y suma entera en tu deuda total. Lo que " +
+                            "cambia es que la cuota deja de contar como gasto tuyo del mes y Movi " +
+                            "deja de recordártela — en su lugar te ofrece bajar la deuda con un toque.",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        lineHeight = 16.sp,
                     )
                 }
             }
-            Spacer(Modifier.height(20.dp))
+
+            // El recordatorio no aplica a una libranza ni a una cuota que paga otro: en los
+            // dos casos ya se pagó sola.
+            if (!esLibranza && quienPaga.isBlank()) {
+                Spacer(Modifier.height(16.dp))
+                // La cuota de este crédito entra al barrido de recordatorios salvo que el dueño
+                // diga que no. Casilla, no diálogo: no interrumpe el alta.
+                ReminderOptInField(
+                    checked = remindMe,
+                    onCheckedChange = { remindMe = it },
+                    enabled = !saving,
+                )
+            }
+
         }
+
+        // **El error del guardado vive junto al botón, no adentro del scroll.**
+        //
+        // El dueño: «le doy guardar y no pasa nada». Pasaba: el guardado fallaba y el mensaje
+        // se pintaba al final del bloque que se DESPLAZA, o sea debajo de lo que se ve. El
+        // botón —que está afuera del scroll, fijo abajo— no cambiaba, así que desde donde él
+        // miraba el toque no había hecho nada.
+        //
+        // El aviso de «falta tal campo» de acá abajo ya vivía afuera y por eso sí se veía.
+        // Que el error del server, que es MÁS importante, estuviera adentro era la asimetría.
+        // Mismo defecto que la hoja de editar documentos, y la misma cura.
+        error?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = it,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.sale,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
+                .clickable(enabled = canSave) { save() }
+                .padding(vertical = 15.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(if (saving) "Guardando…" else "Guardar crédito", color = Movi.colores.fondo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium)
+        }
+        // F24: antes el botón se apagaba en silencio. Ahora dice la primera cosa que falta.
+        if (!canSave && !saving && missingFieldMessage != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = missingFieldMessage,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (editing?.terms != null) {
+            Spacer(Modifier.height(8.dp))
+            if (pidiendoBorrar) {
+                // Borrar pregunta antes (ver [ConfirmacionEnLinea]).
+                ConfirmacionEnLinea(
+                    pregunta = "¿Eliminar los términos de «${editing.account.name}»?",
+                    detalle = "Se borran la tasa, el plazo, la cuota y el día de pago. La cuenta, su deuda y sus movimientos no se tocan. No se puede deshacer.",
+                    textoConfirmar = "Eliminar",
+                    ocupado = saving,
+                    onConfirmar = { deleteTerms() },
+                    onCancelar = { pidiendoBorrar = false },
+                )
+            } else {
+                Text(
+                    "Eliminar términos",
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.sale,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = 8.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(20.dp))
     }
 }
 

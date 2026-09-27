@@ -20,7 +20,12 @@ import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ConClaseDeAncho
+import com.jvillada.movi.EsqueletoDeLaCascara
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.NavTab
+import com.jvillada.movi.ui.components.RelevoDeScroll
+import androidx.compose.runtime.remember
 import com.jvillada.movi.ui.ai.preguntasSugeridas
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import org.junit.Rule
@@ -123,6 +128,55 @@ class InicioDeUnVistazoEnPantallaTest {
         // El patrimonio también a la derecha; las categorías, a la izquierda debajo del hero.
         assertEquals(izquierda("PREGÚNTALE A MOVI"), izquierda("TU PATRIMONIO"))
         assertTrue(izquierda("EN QUÉ SE VA").value < preguntaleIzq.value)
+    }
+
+    /**
+     * Ola W1: en la cáscara real. A 1.280 dp el rail ancho se lleva 216 y a Hoy —un tablero— le
+     * quedan 1.064, sobre el umbral de 900 del contenido: dos columnas.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h1200dp-mdpi")
+    fun `a 1280 dp en la cascara, dos columnas`() {
+        montarEnLaCascara()
+
+        assertTrue(
+            izquierda("PREGÚNTALE A MOVI").value > izquierda(veredicto).value + 300f,
+            "Pregúntale a Movi va en la columna derecha",
+        )
+    }
+
+    /**
+     * Y en una ventana mediana (768 dp, rail compacto de 80) quedan 688 dp: por debajo del umbral,
+     * una columna, en el orden del teléfono.
+     */
+    @Test
+    @Config(qualifiers = "w768dp-h2400dp-mdpi")
+    fun `a 768 dp en la cascara, una columna`() {
+        montarEnLaCascara()
+
+        assertEquals(izquierda("PREGÚNTALE A MOVI"), izquierda("TU PATRIMONIO"))
+        assertTrue(arriba(veredicto) < arriba("PREGÚNTALE A MOVI"), "Pregúntale a Movi va debajo del hero")
+    }
+
+    private fun montarEnLaCascara() {
+        composeRule.setContent {
+            ConClaseDeAncho {
+                EsqueletoDeLaCascara(
+                    pantalla = Screen.Dashboard,
+                    activeTab = NavTab.HOY,
+                    conNavegacion = true,
+                    onTabSelected = {},
+                    relevoDeScroll = remember { RelevoDeScroll() },
+                ) {
+                    SduiRenderer(
+                        definition = defaultDashboardDefinition(),
+                        data = datos,
+                        modifier = Modifier.fillMaxSize(),
+                        onNavigate = { navegoA = it },
+                    )
+                }
+            }
+        }
     }
 
     @Test

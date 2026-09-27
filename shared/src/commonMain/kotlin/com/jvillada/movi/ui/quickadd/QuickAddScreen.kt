@@ -336,6 +336,10 @@ fun QuickAddScreen(
     /** El cuerpo del editor está compuesto y medible: no hay ningún sub-picker tapándolo. */
     val cuerpoCompuesto = pickers.cuerpoCompuesto
 
+    // Escape con un sub-picker de Traspaso abierto: ese estado vive adentro de [TransferBody], así
+    // que se le pide que lo cierre subiendo este contador.
+    var pedidosDeCerrarElDeTraspaso by remember { mutableStateOf(0) }
+
     // Dónde estaba la hoja ANTES de abrir un sub-picker. Ver [recordarScroll].
     var scrollAntesDelPicker by remember { mutableStateOf(0) }
 
@@ -814,384 +818,379 @@ fun QuickAddScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
-                .clickable(enabled = !saving, onClick = onDismiss),
+        // La X de la hoja la dibuja `MarcoDeHoja` y queda FUERA de lo que se desplaza (ver el bloque
+        // de abajo): en iOS la X es la única salida de esta hoja —no hay botón atrás, y el gesto de
+        // atrás cierra la hoja entera perdiendo lo escrito— así que no puede irse de la pantalla solo
+        // porque el dueño bajó hasta el botón de guardar. En la web la hoja va centrada y un poco
+        // más ancha que las demás (600 dp): el teclado numérico respira mejor.
+        MarcoDeHoja(
+            onDismiss = onDismiss,
+            dismissEnabled = !saving,
+            anchoMaximo = ANCHO_DE_LA_HOJA_DE_AGREGAR,
+            // Escape (la web) sale del sub-editor abierto —Nota, Categoría, Cuenta, Fecha o los de
+            // Traspaso— y solo sin ninguno cierra la hoja: cerrarla desde la Nota perdía el
+            // movimiento entero. Mismo destino que la X de cada sub-editor.
+            onEscape = {
+                when {
+                    pickers.propio != Picker.None -> pasarA(pickers.cerrar())
+                    pickers.deTraspaso -> pedidosDeCerrarElDeTraspaso++
+                    !saving -> onDismiss()
+                }
+            },
         ) {
-            Box(modifier = Modifier.weight(1f))
-
+            // ── Ola 12 — SI LA HOJA NO ENTRA, SE PUEDE LLEGAR IGUAL AL BOTÓN ────────────
+            //
+            // Esta hoja está anclada abajo y NO se podía desplazar: lo que no entraba en el
+            // hueco quedaba cortado contra la barra inferior, sin ninguna forma de alcanzarlo.
+            // **No era un arreglo de iOS: era un bug vivo en las tres plataformas**, y lo
+            // único que cambiaba entre ellas era cuánto sobraba.
+            //
+            // Medido (no estimado) con la hoja instrumentada, cuenta elegida y el renglón
+            // «Por defecto» reservado. En el navegador la densidad es 2, así que un dp es un
+            // píxel CSS; en el AVD la densidad es 2,625:
+            //
+            //   cuerpo del editor «Gasto»       678,5 dp
+            //   + selector de tipo y respiro     63,0 dp  →  741,5 dp que se desplazan
+            //   + manija con su X                44,0 dp  →  785,5 dp de hoja
+            //     (`SheetHandle.kt:40` es `height(44.dp)` y `MinBottomNav.kt:63` es
+            //      `height(64.dp)`: los dos, leídos del código, no estimados a ojo)
+            //
+            //   hueco = alto de la ventana − 64 de barra inferior − 44 de manija
+            //           − las barras del sistema, donde las haya
+            //
+            //   navegador 800×1000 → tope 892 dp, contenido 741,5 → SOBRAN 150,5 dp (entra
+            //                        holgado, y el scroll no tiene a dónde ir: `maxValue` 0)
+            //   navegador 375×812  → hueco 704 dp → desborde  37,5 dp (cortaba «Falta el monto»)
+            //   navegador 800×620  → hueco 512 dp → desborde 229,5 dp (corta en «7 8 9»)
+            //   AVD Movi_Sensor    → hueco 551 dp → desborde 190,5 dp
+            //     (411×731 dp; ahí las barras del sistema se comen 72 dp más — 24 de estado y
+            //      48 de navegación: 731 − 64 − 44 − 72 = 551, que es lo que midió la sonda)
+            //
+            // El AVD es el caso que importa: **la fila «7 8 9» es el último renglón visible y
+            // «Guardar movimiento» queda entero afuera** — verificado a ojo en `Movi_Sensor`,
+            // que es el AVD que manda usar la nota del proyecto. O sea que en el APK 1.7 que
+            // el dueño ya tiene instalado se podía llenar el formulario entero y quedarse sin
+            // forma de guardar. En la PWA depende del alto de la ventana: **a 375×812 el botón
+            // SÍ se ve** —lo que se cortaba eran los 37 dp de «Falta el monto»— y hay que
+            // bajar hasta ~620 de alto para que el botón se vaya de la pantalla. En iOS, que
+            // es donde se vio primero, sobra todavía menos que en el navegador porque a la
+            // barra inferior se le suman la barra de estado y el indicador de inicio; nadie
+            // volvió a medirlo con este código.
+            //
+            // `verticalScroll` no mueve nada mientras el contenido entra: a 800×1000 el
+            // `maxValue` del scroll es 0, así que no hay a dónde desplazarse.
+            //
+            // **El precio, dicho en voz alta.** La disciplina de la Ola 8 —la hoja no cambia
+            // de alto, así que nada se mueve bajo el dedo— era estructural porque la hoja era
+            // inamovible. Ahora lo que desborda se puede correr: 37 dp a 812 (tres cuartos de
+            // una tecla, que miden 50 dp) y 190,5 dp en el AVD. Un ARRASTRE sobre el teclado que
+            // pase el umbral desplaza en vez de teclear, y el toque siguiente en el mismo punto
+            // cae en otra tecla: el modo de falla exacto de la Ola 8. Con toques no se
+            // consiguió provocar un dígito equivocado (un toque no llega al umbral), así que
+            // es RIESGO, no defecto observado. Lo que sí quedó cerrado con código es el viaje
+            // de ida y vuelta a un sub-picker (ver [recordarScroll]), que era el camino seguro
+            // a que el teclado se moviera — **en las tres pestañas**: la de traspaso tiene su
+            // propio `picking` adentro de [TransferBody] y por eso se le pasan el tope del
+            // alto fijado y el aviso de apertura, si no quedaba con el bug entero (medido a
+            // 800×620: la hoja se corría 190 dp y no volvía). Si el arrastre llega a doler,
+            // el arreglo barato es que el área del teclado no desplace (un `pointerInput` que
+            // consuma el arrastre vertical ahí), no sacar el scroll y volver a dejar el botón
+            // inalcanzable.
+            //
+            // **Lo que la restauración todavía no garantiza.** Al cerrar se espera a que el
+            // cuerpo se vuelva a medir (`snapshotFlow` sobre `maxValue`) y recién ahí se
+            // restaura, con un timeout de un segundo como seguro; si ese timeout venciera, la
+            // posición se pierde y el teclado queda corrido. En el navegador no se pudo
+            // provocar; **en iOS —donde el reloj de cuadros es más caprichoso— y en el AVD
+            // nadie probó ese camino**. Y queda un fogonazo de un cuadro con la hoja saltada
+            // al tope antes de volver a su lugar: se ve, no rompe nada, y arreglarlo pide
+            // dibujar el sub-picker sin tocar el desplazamiento.
+            //
+            // **Por qué el scroll va en una Column interna con `weight(1f, fill = false)`.**
+            // Es el idioma de las demás hojas que se desplazan —`EditProfileSheet:92`,
+            // `ChangePasswordSheet:121`, `CreditTermsSheet:176`, `CardTermsSheet:140`,
+            // `CreditBalanceSheet:88`, `CreateRecurringRuleSheet:284`, y los cuerpos que les
+            // pasan los andamios de `CategorySheets.kt` y `CategoriasScreen.kt`— y de paso
+            // deja la manija con su X afuera del desplazamiento. (No doy un total: los
+            // andamios compartidos se usan desde varios llamadores y el número dependería de
+            // cuál de ellos se cuente.) **Ojo con el atajo de pegar ese modificador en la Column de la
+            // hoja**: ahí NO es equivalente, porque su hermano es el `Box(weight(1f))` que la
+            // empuja contra el borde, y dos hijos con peso se reparten el alto. Probado: con
+            // el peso puesto en la Column de la hoja, a 800×1000 el hueco cae de 741 a 424 dp
+            // —la mitad— y el teclado entero queda fuera de la pantalla en una ventana donde
+            // hoy entra todo.
+            //
+            // **Quién recibe la altura infinita de este contenedor, y quién no.** Hasta la
+            // Ola 13 no la recibía nadie: los dos sub-pickers con scroll propio —la lista de
+            // cuentas de [WalletPicker], `heightIn(max = 360.dp)`, y las sugerencias de
+            // `CategoryField`, `heightIn(max = 220.dp)`— tenían el alto acotado ANTES de su
+            // scroll. [WalletPicker] sigue así.
+            //
+            // **Las sugerencias de categoría ya NO** (Ola 14, y desde la Ola B la cuadrícula
+            // de [SelectorDeCategoria]): no traen scroll propio y sí se estiran con la altura
+            // infinita de acá — que es exactamente el arreglo, porque el tope de 220 dp era lo
+            // que dejaba 4 categorías a la vista con una losa vacía debajo. Lo que las
+            // contiene no es un tope propio sino el desplazamiento de la hoja, uno solo. Por
+            // eso la cuadrícula no es una `LazyVerticalGrid` (ver el KDoc del selector).
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .background(Movi.colores.tarjeta)
-                    .padding(horizontal = 20.dp)
-                    .clickable(enabled = false) {},
+                    // El peso va primero por lectura: no mide nada, solo le dice a la Column
+                    // de la hoja que este hijo se lleva lo que sobre (y nada más).
+                    .weight(1f, fill = false)
+                    // AFUERA del scroll: el alto que la hoja ocupa DE VERDAD en pantalla.
+                    .onSizeChanged { huecoVisiblePx = it.height }
+                    .verticalScroll(sheetScroll)
+                    // ADENTRO del scroll: el alto del contenido, que puede pasarse del hueco.
+                    .onSizeChanged { if (cuerpoCompuesto) contenidoPx = it.height },
             ) {
-                // F37: manija + X para cerrar, el mismo componente en toda la app — 16 sitios
-                // llaman a `SheetHandleWithClose` (contado con grep el 2026-08-27; el «8 hojas»
-                // que decía acá y que sigue copiado en otras pantallas ya no era cierto).
-                // Queda FUERA de lo que se desplaza (ver el bloque de abajo): en iOS la X es la
-                // única salida de esta hoja —no hay botón atrás, y el gesto de atrás cierra la
-                // hoja entera perdiendo lo escrito— así que no puede irse de la pantalla solo
-                // porque el dueño bajó hasta el botón de guardar.
-                SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
+                // Ola 8 · V2 — LA HOJA NO CAMBIA DE ALTURA AL ABRIR UN SUB-PICKER, Y NINGÚN
+                // CONTROL APARECE DEBAJO DE LA X DEL SUB-PICKER.
+                //
+                // Esta hoja está anclada abajo (el `Box(weight(1f))` de arriba la empuja contra
+                // el borde inferior), así que **cualquier cambio de alto le mueve TODO el
+                // contenido bajo el dedo**. Y los sub-pickers son mucho más bajos que el
+                // editor: abrir «Nota» encogía la hoja a una franja y cerrarla la volvía a
+                // estirar de golpe, dejando la tecla «9» justo donde estaba la X.
+                //
+                // Son DOS problemas y hacen falta dos arreglos, porque el primero solo no
+                // alcanza (revisión de la Ola 8, N3):
+                //
+                // 1. **El alto.** Se le pone al sub-picker un alto MÍNIMO igual al del hueco
+                //    donde se ve el cuerpo, así la hoja mide siempre lo mismo y nada se
+                //    teletransporta. (Ola 12: ese mínimo era el alto del CUERPO, que desde que
+                //    la hoja se desplaza puede ser más grande que la pantalla — ver el cálculo
+                //    de `pinnedHeight` unas líneas más abajo.)
+                //
+                // 2. **La posición de la X.** Fijar el alto mató el salto pero no el
+                //    solapamiento: la X del `PickerHeader` quedaba sobre la fila
+                //    «Gasto · Ingreso · Traspaso», y un toque impaciente después de cerrar
+                //    saltaba a «Traspaso» y se llevaba el monto de la vista. Por eso
+                //    [SelectorSegmentado] vive AHORA fuera de este `Box`: la franja de arriba es la
+                //    misma en los dos estados, el sub-picker empieza por debajo de ella y su X
+                //    cae sobre el monto — un `Text` sin `clickable`, donde un segundo toque no
+                //    hace nada.
+                //
+                //    **Ola 12: esto ya NO es geometría garantizada, y hay que decirlo.** Era
+                //    una garantía porque la hoja no se movía: la X del sub-picker caía siempre
+                //    en el mismo punto, y en ese punto había un `Text`. Ahora, al restaurar el
+                //    desplazamiento, ese punto puede caer sobre cualquier cosa: a scroll 459,
+                //    donde estaba la X queda la fila «Cuenta», y un toque ahí abre el selector
+                //    de cuentas. La revisión lo comprobó a esa altura (no en la x exacta de la
+                //    X, así que el «segundo toque impaciente» quedó como probable, no como
+                //    demostrado). Lo que sigue en pie es lo de siempre: el selector de tipo
+                //    está afuera del `Box`, así que ninguna de las tres pestañas se cambia
+                //    sola. Recuperar la garantía entera pediría no restaurar el
+                //    desplazamiento, que es peor: mueve el teclado, que es el bug caro.
+                //
+                //    **Ola 14 — y ahora la X del sub-picker se puede ir de la pantalla.**
+                //    Con la lista de categorías estirada, bajar hasta el final la saca de la
+                //    ventana: medido, su `top` pasa de 94 dp a −120,5 dp. Lo incómodo no es
+                //    que se vaya (se recupera subiendo) sino lo que queda en su lugar: la
+                //    única X visible arriba a la derecha pasa a ser la de LA HOJA ENTERA, así
+                //    que quien se arrepiente a media lista y va «a la X» descarta el
+                //    movimiento en vez de cerrar el sub-picker. Queda ANOTADO y no arreglado:
+                //    las salidas (fijar el encabezado fuera del desplazamiento, o volver a
+                //    acotar la lista) son cambios de disposición de esta hoja, que es la que
+                //    ya se llevó nueve rondas — y ninguna se toca de pasada. Ojo también con
+                //    lo que NO cubre `HojaAgregarGeometriaTest`: su prueba de la X mira el
+                //    sub-picker **al abrirlo**, no después de desplazarlo.
+                //
+                // Que el cuerpo no esté compuesto durante un picker (el `when` lo reemplaza)
+                // ya garantiza además que no haya teclado fantasma debajo: no hay eventos que
+                // atravesar porque no hay nada atrás.
+                //
+                // El selector de tipo elige entre DOS formularios distintos: un movimiento
+                // (gasto/ingreso) y un traspaso, que no tiene ni categoría ni tipo pero sí dos
+                // cuentas — por eso decide qué se dibuja abajo en vez de vivir en [EditorBody].
+                SelectorSegmentado(
+                    // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
+                    // habla igual — Inicio y Movimientos también dicen «Gastos».
+                    // «Cuota» y no «Pago de cuota»: son cuatro segmentos en una fila que en
+                    // un teléfono de 375 px reparte ~90 px a cada uno. La palabra completa no
+                    // entra; la corta se entiende en contexto y el formulario lo dice entero.
+                    labels = listOf("Gasto", "Ingreso", "Traspaso", "Cuota"),
+                    selected = pickers.typeIndex,
+                    // Cambiar de pestaña saca de composición al formulario de la pestaña
+                    // vieja: si era Traspaso, su sub-picker se fue con él y el estado tiene
+                    // que enterarse. Eso lo hace `conTipo` — ver [PickersDeLaHoja].
+                    onSelect = { pasarA(pickers.conTipo(it)) },
+                    enabled = !saving,
+                )
 
-                // ── Ola 12 — SI LA HOJA NO ENTRA, SE PUEDE LLEGAR IGUAL AL BOTÓN ────────────
-                //
-                // Esta hoja está anclada abajo y NO se podía desplazar: lo que no entraba en el
-                // hueco quedaba cortado contra la barra inferior, sin ninguna forma de alcanzarlo.
-                // **No era un arreglo de iOS: era un bug vivo en las tres plataformas**, y lo
-                // único que cambiaba entre ellas era cuánto sobraba.
-                //
-                // Medido (no estimado) con la hoja instrumentada, cuenta elegida y el renglón
-                // «Por defecto» reservado. En el navegador la densidad es 2, así que un dp es un
-                // píxel CSS; en el AVD la densidad es 2,625:
-                //
-                //   cuerpo del editor «Gasto»       678,5 dp
-                //   + selector de tipo y respiro     63,0 dp  →  741,5 dp que se desplazan
-                //   + manija con su X                44,0 dp  →  785,5 dp de hoja
-                //     (`SheetHandle.kt:40` es `height(44.dp)` y `MinBottomNav.kt:63` es
-                //      `height(64.dp)`: los dos, leídos del código, no estimados a ojo)
-                //
-                //   hueco = alto de la ventana − 64 de barra inferior − 44 de manija
-                //           − las barras del sistema, donde las haya
-                //
-                //   navegador 800×1000 → tope 892 dp, contenido 741,5 → SOBRAN 150,5 dp (entra
-                //                        holgado, y el scroll no tiene a dónde ir: `maxValue` 0)
-                //   navegador 375×812  → hueco 704 dp → desborde  37,5 dp (cortaba «Falta el monto»)
-                //   navegador 800×620  → hueco 512 dp → desborde 229,5 dp (corta en «7 8 9»)
-                //   AVD Movi_Sensor    → hueco 551 dp → desborde 190,5 dp
-                //     (411×731 dp; ahí las barras del sistema se comen 72 dp más — 24 de estado y
-                //      48 de navegación: 731 − 64 − 44 − 72 = 551, que es lo que midió la sonda)
-                //
-                // El AVD es el caso que importa: **la fila «7 8 9» es el último renglón visible y
-                // «Guardar movimiento» queda entero afuera** — verificado a ojo en `Movi_Sensor`,
-                // que es el AVD que manda usar la nota del proyecto. O sea que en el APK 1.7 que
-                // el dueño ya tiene instalado se podía llenar el formulario entero y quedarse sin
-                // forma de guardar. En la PWA depende del alto de la ventana: **a 375×812 el botón
-                // SÍ se ve** —lo que se cortaba eran los 37 dp de «Falta el monto»— y hay que
-                // bajar hasta ~620 de alto para que el botón se vaya de la pantalla. En iOS, que
-                // es donde se vio primero, sobra todavía menos que en el navegador porque a la
-                // barra inferior se le suman la barra de estado y el indicador de inicio; nadie
-                // volvió a medirlo con este código.
-                //
-                // `verticalScroll` no mueve nada mientras el contenido entra: a 800×1000 el
-                // `maxValue` del scroll es 0, así que no hay a dónde desplazarse.
-                //
-                // **El precio, dicho en voz alta.** La disciplina de la Ola 8 —la hoja no cambia
-                // de alto, así que nada se mueve bajo el dedo— era estructural porque la hoja era
-                // inamovible. Ahora lo que desborda se puede correr: 37 dp a 812 (tres cuartos de
-                // una tecla, que miden 50 dp) y 190,5 dp en el AVD. Un ARRASTRE sobre el teclado que
-                // pase el umbral desplaza en vez de teclear, y el toque siguiente en el mismo punto
-                // cae en otra tecla: el modo de falla exacto de la Ola 8. Con toques no se
-                // consiguió provocar un dígito equivocado (un toque no llega al umbral), así que
-                // es RIESGO, no defecto observado. Lo que sí quedó cerrado con código es el viaje
-                // de ida y vuelta a un sub-picker (ver [recordarScroll]), que era el camino seguro
-                // a que el teclado se moviera — **en las tres pestañas**: la de traspaso tiene su
-                // propio `picking` adentro de [TransferBody] y por eso se le pasan el tope del
-                // alto fijado y el aviso de apertura, si no quedaba con el bug entero (medido a
-                // 800×620: la hoja se corría 190 dp y no volvía). Si el arrastre llega a doler,
-                // el arreglo barato es que el área del teclado no desplace (un `pointerInput` que
-                // consuma el arrastre vertical ahí), no sacar el scroll y volver a dejar el botón
-                // inalcanzable.
-                //
-                // **Lo que la restauración todavía no garantiza.** Al cerrar se espera a que el
-                // cuerpo se vuelva a medir (`snapshotFlow` sobre `maxValue`) y recién ahí se
-                // restaura, con un timeout de un segundo como seguro; si ese timeout venciera, la
-                // posición se pierde y el teclado queda corrido. En el navegador no se pudo
-                // provocar; **en iOS —donde el reloj de cuadros es más caprichoso— y en el AVD
-                // nadie probó ese camino**. Y queda un fogonazo de un cuadro con la hoja saltada
-                // al tope antes de volver a su lugar: se ve, no rompe nada, y arreglarlo pide
-                // dibujar el sub-picker sin tocar el desplazamiento.
-                //
-                // **Por qué el scroll va en una Column interna con `weight(1f, fill = false)`.**
-                // Es el idioma de las demás hojas que se desplazan —`EditProfileSheet:92`,
-                // `ChangePasswordSheet:121`, `CreditTermsSheet:176`, `CardTermsSheet:140`,
-                // `CreditBalanceSheet:88`, `CreateRecurringRuleSheet:284`, y los cuerpos que les
-                // pasan los andamios de `CategorySheets.kt` y `CategoriasScreen.kt`— y de paso
-                // deja la manija con su X afuera del desplazamiento. (No doy un total: los
-                // andamios compartidos se usan desde varios llamadores y el número dependería de
-                // cuál de ellos se cuente.) **Ojo con el atajo de pegar ese modificador en la Column de la
-                // hoja**: ahí NO es equivalente, porque su hermano es el `Box(weight(1f))` que la
-                // empuja contra el borde, y dos hijos con peso se reparten el alto. Probado: con
-                // el peso puesto en la Column de la hoja, a 800×1000 el hueco cae de 741 a 424 dp
-                // —la mitad— y el teclado entero queda fuera de la pantalla en una ventana donde
-                // hoy entra todo.
-                //
-                // **Quién recibe la altura infinita de este contenedor, y quién no.** Hasta la
-                // Ola 13 no la recibía nadie: los dos sub-pickers con scroll propio —la lista de
-                // cuentas de [WalletPicker], `heightIn(max = 360.dp)`, y las sugerencias de
-                // `CategoryField`, `heightIn(max = 220.dp)`— tenían el alto acotado ANTES de su
-                // scroll. [WalletPicker] sigue así.
-                //
-                // **Las sugerencias de categoría ya NO** (Ola 14, y desde la Ola B la cuadrícula
-                // de [SelectorDeCategoria]): no traen scroll propio y sí se estiran con la altura
-                // infinita de acá — que es exactamente el arreglo, porque el tope de 220 dp era lo
-                // que dejaba 4 categorías a la vista con una losa vacía debajo. Lo que las
-                // contiene no es un tope propio sino el desplazamiento de la hoja, uno solo. Por
-                // eso la cuadrícula no es una `LazyVerticalGrid` (ver el KDoc del selector).
-                Column(
+                val density = LocalDensity.current
+                // El alto que el sub-picker va a respetar: NO el del cuerpo entero, sino el
+                // del HUECO donde el cuerpo se ve. `bodyHeightPx` se mide con altura
+                // infinita (está adentro del scroll), así que en una pantalla corta vale más
+                // que la pantalla — fijarlo tal cual dejaba el sub-picker 229 dp más alto que
+                // el hueco en una ventana de 620, o sea una losa vacía: se abría «Cuenta»
+                // después de bajar hasta el botón y se veía la cola de la lista y nada más,
+                // sin el título ni su X. `contenidoPx - bodyHeightPx` es todo
+                // lo demás que hay adentro del scroll (el selector de tipo y el respiro de
+                // abajo), medido y no calculado a mano, así que sigue siendo correcto si
+                // mañana cambia. Cuando el contenido SÍ entra, `huecoVisiblePx` es el
+                // contenido entero y esto da exactamente `bodyHeightPx`: el comportamiento
+                // viejo, intacto.
+                val pinnedHeight = with(density) {
+                    (huecoVisiblePx - (contenidoPx - bodyHeightPx)).coerceAtLeast(0).toDp()
+                }
+                Box(
                     modifier = Modifier
-                        // El peso va primero por lectura: no mide nada, solo le dice a la Column
-                        // de la hoja que este hijo se lleva lo que sobre (y nada más).
-                        .weight(1f, fill = false)
-                        // AFUERA del scroll: el alto que la hoja ocupa DE VERDAD en pantalla.
-                        .onSizeChanged { huecoVisiblePx = it.height }
-                        .verticalScroll(sheetScroll)
-                        // ADENTRO del scroll: el alto del contenido, que puede pasarse del hueco.
-                        .onSizeChanged { if (cuerpoCompuesto) contenidoPx = it.height },
+                        .fillMaxWidth()
+                        // Mira el picker DE ESTA PANTALLA y no `hayPicker` a propósito: el
+                        // de traspaso no reemplaza este `Box`, vive adentro del cuerpo y se
+                        // fija su propio alto con el mismo tope (`alturaVisible`).
+                        .then(if (pickers.propio == Picker.None) Modifier else Modifier.heightIn(min = pinnedHeight)),
                 ) {
-                    // Ola 8 · V2 — LA HOJA NO CAMBIA DE ALTURA AL ABRIR UN SUB-PICKER, Y NINGÚN
-                    // CONTROL APARECE DEBAJO DE LA X DEL SUB-PICKER.
+                when (pickers.propio) {
+                    // Ola B · Task 4: la cuadrícula de categorías, con la búsqueda SIN foco al
+                    // abrir. Antes (Ola 2 #3c) este sub-picker pedía el foco del campo apenas se
+                    // abría: elegir «Comida» con un toque levantaba el teclado del sistema y le
+                    // partía la ventana al medio. Ver [SelectorDeCategoria].
                     //
-                    // Esta hoja está anclada abajo (el `Box(weight(1f))` de arriba la empuja contra
-                    // el borde inferior), así que **cualquier cambio de alto le mueve TODO el
-                    // contenido bajo el dedo**. Y los sub-pickers son mucho más bajos que el
-                    // editor: abrir «Nota» encogía la hoja a una franja y cerrarla la volvía a
-                    // estirar de golpe, dejando la tecla «9» justo donde estaba la X.
-                    //
-                    // Son DOS problemas y hacen falta dos arreglos, porque el primero solo no
-                    // alcanza (revisión de la Ola 8, N3):
-                    //
-                    // 1. **El alto.** Se le pone al sub-picker un alto MÍNIMO igual al del hueco
-                    //    donde se ve el cuerpo, así la hoja mide siempre lo mismo y nada se
-                    //    teletransporta. (Ola 12: ese mínimo era el alto del CUERPO, que desde que
-                    //    la hoja se desplaza puede ser más grande que la pantalla — ver el cálculo
-                    //    de `pinnedHeight` unas líneas más abajo.)
-                    //
-                    // 2. **La posición de la X.** Fijar el alto mató el salto pero no el
-                    //    solapamiento: la X del `PickerHeader` quedaba sobre la fila
-                    //    «Gasto · Ingreso · Traspaso», y un toque impaciente después de cerrar
-                    //    saltaba a «Traspaso» y se llevaba el monto de la vista. Por eso
-                    //    [SelectorSegmentado] vive AHORA fuera de este `Box`: la franja de arriba es la
-                    //    misma en los dos estados, el sub-picker empieza por debajo de ella y su X
-                    //    cae sobre el monto — un `Text` sin `clickable`, donde un segundo toque no
-                    //    hace nada.
-                    //
-                    //    **Ola 12: esto ya NO es geometría garantizada, y hay que decirlo.** Era
-                    //    una garantía porque la hoja no se movía: la X del sub-picker caía siempre
-                    //    en el mismo punto, y en ese punto había un `Text`. Ahora, al restaurar el
-                    //    desplazamiento, ese punto puede caer sobre cualquier cosa: a scroll 459,
-                    //    donde estaba la X queda la fila «Cuenta», y un toque ahí abre el selector
-                    //    de cuentas. La revisión lo comprobó a esa altura (no en la x exacta de la
-                    //    X, así que el «segundo toque impaciente» quedó como probable, no como
-                    //    demostrado). Lo que sigue en pie es lo de siempre: el selector de tipo
-                    //    está afuera del `Box`, así que ninguna de las tres pestañas se cambia
-                    //    sola. Recuperar la garantía entera pediría no restaurar el
-                    //    desplazamiento, que es peor: mueve el teclado, que es el bug caro.
-                    //
-                    //    **Ola 14 — y ahora la X del sub-picker se puede ir de la pantalla.**
-                    //    Con la lista de categorías estirada, bajar hasta el final la saca de la
-                    //    ventana: medido, su `top` pasa de 94 dp a −120,5 dp. Lo incómodo no es
-                    //    que se vaya (se recupera subiendo) sino lo que queda en su lugar: la
-                    //    única X visible arriba a la derecha pasa a ser la de LA HOJA ENTERA, así
-                    //    que quien se arrepiente a media lista y va «a la X» descarta el
-                    //    movimiento en vez de cerrar el sub-picker. Queda ANOTADO y no arreglado:
-                    //    las salidas (fijar el encabezado fuera del desplazamiento, o volver a
-                    //    acotar la lista) son cambios de disposición de esta hoja, que es la que
-                    //    ya se llevó nueve rondas — y ninguna se toca de pasada. Ojo también con
-                    //    lo que NO cubre `HojaAgregarGeometriaTest`: su prueba de la X mira el
-                    //    sub-picker **al abrirlo**, no después de desplazarlo.
-                    //
-                    // Que el cuerpo no esté compuesto durante un picker (el `when` lo reemplaza)
-                    // ya garantiza además que no haya teclado fantasma debajo: no hay eventos que
-                    // atravesar porque no hay nada atrás.
-                    //
-                    // El selector de tipo elige entre DOS formularios distintos: un movimiento
-                    // (gasto/ingreso) y un traspaso, que no tiene ni categoría ni tipo pero sí dos
-                    // cuentas — por eso decide qué se dibuja abajo en vez de vivir en [EditorBody].
-                    SelectorSegmentado(
-                        // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
-                        // habla igual — Inicio y Movimientos también dicen «Gastos».
-                        // «Cuota» y no «Pago de cuota»: son cuatro segmentos en una fila que en
-                        // un teléfono de 375 px reparte ~90 px a cada uno. La palabra completa no
-                        // entra; la corta se entiende en contexto y el formulario lo dice entero.
-                        labels = listOf("Gasto", "Ingreso", "Traspaso", "Cuota"),
-                        selected = pickers.typeIndex,
-                        // Cambiar de pestaña saca de composición al formulario de la pestaña
-                        // vieja: si era Traspaso, su sub-picker se fue con él y el estado tiene
-                        // que enterarse. Eso lo hace `conTipo` — ver [PickersDeLaHoja].
-                        onSelect = { pasarA(pickers.conTipo(it)) },
-                        enabled = !saving,
-                    )
-
-                    val density = LocalDensity.current
-                    // El alto que el sub-picker va a respetar: NO el del cuerpo entero, sino el
-                    // del HUECO donde el cuerpo se ve. `bodyHeightPx` se mide con altura
-                    // infinita (está adentro del scroll), así que en una pantalla corta vale más
-                    // que la pantalla — fijarlo tal cual dejaba el sub-picker 229 dp más alto que
-                    // el hueco en una ventana de 620, o sea una losa vacía: se abría «Cuenta»
-                    // después de bajar hasta el botón y se veía la cola de la lista y nada más,
-                    // sin el título ni su X. `contenidoPx - bodyHeightPx` es todo
-                    // lo demás que hay adentro del scroll (el selector de tipo y el respiro de
-                    // abajo), medido y no calculado a mano, así que sigue siendo correcto si
-                    // mañana cambia. Cuando el contenido SÍ entra, `huecoVisiblePx` es el
-                    // contenido entero y esto da exactamente `bodyHeightPx`: el comportamiento
-                    // viejo, intacto.
-                    val pinnedHeight = with(density) {
-                        (huecoVisiblePx - (contenidoPx - bodyHeightPx)).coerceAtLeast(0).toDp()
-                    }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            // Mira el picker DE ESTA PANTALLA y no `hayPicker` a propósito: el
-                            // de traspaso no reemplaza este `Box`, vive adentro del cuerpo y se
-                            // fija su propio alto con el mismo tope (`alturaVisible`).
-                            .then(if (pickers.propio == Picker.None) Modifier else Modifier.heightIn(min = pinnedHeight)),
-                    ) {
-                    when (pickers.propio) {
-                        // Ola B · Task 4: la cuadrícula de categorías, con la búsqueda SIN foco al
-                        // abrir. Antes (Ola 2 #3c) este sub-picker pedía el foco del campo apenas se
-                        // abría: elegir «Comida» con un toque levantaba el teclado del sistema y le
-                        // partía la ventana al medio. Ver [SelectorDeCategoria].
-                        //
-                        // Tocar una celda elige y cierra, y cuenta como elección a mano — igual que
-                        // un chip de frecuentes ([elegirCategoriaAMano]). Con la cuadrícula no hay
-                        // cambios de texto que filtrar: lo único que llega acá es un toque.
-                        Picker.Category -> Column(modifier = Modifier.fillMaxWidth()) {
-                            PickerHeader("Categoría", onClose = { pasarA(pickers.cerrar()) })
-                            SelectorDeCategoria(
-                                elegida = category,
-                                onElegir = {
-                                    elegirCategoriaAMano(it)
-                                    pasarA(pickers.cerrar())
-                                },
-                                tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
-                                usadas = usedCategories,
-                                prefs = categoryPrefs,
-                                usos = usosRecientes,
-                                pedidosDeFoco = pedidosDeFocoDeCategoria,
-                            )
-                            // La cuadrícula no tiene tope ni scroll propio: se estira y la
-                            // desplaza la hoja, un solo desplazamiento (Ola 14 — «al hacer scroll
-                            // desaparecen»). Ver el KDoc de [SelectorDeCategoria].
-                            Spacer(Modifier.height(8.dp))
-                            EnlaceAdministrarCategorias()
-                            Spacer(Modifier.height(4.dp))
-                        }
-                        Picker.Wallet -> WalletPicker(
-                            cuentas = cuentasDelPicker,
-                            uso = usoDeCuenta,
-                            selectedId = selectedAccountId,
-                            onPick = {
-                                selectedAccountId = it
-                                // Elegida a mano: la reconciliación de arriba ya no la pisa, y el
-                                // aviso «Última usada» desaparece — ya no lo decidió la app.
-                                origenCuenta = OrigenCuenta.ELEGIDA
+                    // Tocar una celda elige y cierra, y cuenta como elección a mano — igual que
+                    // un chip de frecuentes ([elegirCategoriaAMano]). Con la cuadrícula no hay
+                    // cambios de texto que filtrar: lo único que llega acá es un toque.
+                    Picker.Category -> Column(modifier = Modifier.fillMaxWidth()) {
+                        PickerHeader("Categoría", onClose = { pasarA(pickers.cerrar()) })
+                        SelectorDeCategoria(
+                            elegida = category,
+                            onElegir = {
+                                elegirCategoriaAMano(it)
                                 pasarA(pickers.cerrar())
                             },
-                            onClose = { pasarA(pickers.cerrar()) },
+                            tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
+                            usadas = usedCategories,
+                            prefs = categoryPrefs,
+                            usos = usosRecientes,
+                            pedidosDeFoco = pedidosDeFocoDeCategoria,
                         )
-                        // Ola 13: el selector de fecha entra como sub-picker, igual que Categoría,
-                        // Cuenta y Nota — reemplaza el cuerpo adentro del Box de alto fijado, así que
-                        // abrirlo no cambia el alto de la hoja ni corre el teclado. Elegir un día ES
-                        // la acción completa (no hay nada más que decidir), así que cierra al toque,
-                        // como una sugerencia de categoría.
-                        Picker.Date -> Column(modifier = Modifier.fillMaxWidth()) {
-                            PickerHeader("Fecha", onClose = { pasarA(pickers.cerrar()) })
-                            SelectorDeFecha(
-                                seleccionada = fecha,
-                                hoy = hoy,
-                                onPick = { fecha = it; pasarA(pickers.cerrar()) },
+                        // La cuadrícula no tiene tope ni scroll propio: se estira y la
+                        // desplaza la hoja, un solo desplazamiento (Ola 14 — «al hacer scroll
+                        // desaparecen»). Ver el KDoc de [SelectorDeCategoria].
+                        Spacer(Modifier.height(8.dp))
+                        EnlaceAdministrarCategorias()
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    Picker.Wallet -> WalletPicker(
+                        cuentas = cuentasDelPicker,
+                        uso = usoDeCuenta,
+                        selectedId = selectedAccountId,
+                        onPick = {
+                            selectedAccountId = it
+                            // Elegida a mano: la reconciliación de arriba ya no la pisa, y el
+                            // aviso «Última usada» desaparece — ya no lo decidió la app.
+                            origenCuenta = OrigenCuenta.ELEGIDA
+                            pasarA(pickers.cerrar())
+                        },
+                        onClose = { pasarA(pickers.cerrar()) },
+                    )
+                    // Ola 13: el selector de fecha entra como sub-picker, igual que Categoría,
+                    // Cuenta y Nota — reemplaza el cuerpo adentro del Box de alto fijado, así que
+                    // abrirlo no cambia el alto de la hoja ni corre el teclado. Elegir un día ES
+                    // la acción completa (no hay nada más que decidir), así que cierra al toque,
+                    // como una sugerencia de categoría.
+                    Picker.Date -> Column(modifier = Modifier.fillMaxWidth()) {
+                        PickerHeader("Fecha", onClose = { pasarA(pickers.cerrar()) })
+                        SelectorDeFecha(
+                            seleccionada = fecha,
+                            hoy = hoy,
+                            onPick = { fecha = it; pasarA(pickers.cerrar()) },
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Picker.Note -> NoteEditor(
+                        initial = note,
+                        onSave = { note = it; pasarA(pickers.cerrar()) },
+                        onClose = { pasarA(pickers.cerrar()) },
+                    )
+                    Picker.None -> Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // El alto que los sub-pickers van a respetar (ver el comentario de
+                            // arriba). Se mide acá y no se calcula a mano: así sigue siendo
+                            // correcto si mañana el cuerpo gana o pierde una fila.
+                            .onSizeChanged { if (cuerpoCompuesto) bodyHeightPx = it.height },
+                    ) {
+                        if (pickers.typeIndex >= TIPO_TRASPASO) {
+                            TransferBody(
+                                accounts = accounts,
+                                accountsLoaded = accountsLoaded,
+                                // Las dos mitades de la disciplina, prestadas a la pestaña de
+                                // traspaso: el tope del alto fijado y el aviso de que se abrió
+                                // o cerró su sub-picker (su `picking` no se ve desde acá).
+                                alturaVisible = pinnedHeight,
+                                onPickerAbierto = { abierto ->
+                                    pasarA(pickers.conPickerDeTraspaso(abierto))
+                                },
+                                pedidosDeCerrarPicker = pedidosDeCerrarElDeTraspaso,
+                                // Ola 11: si la hoja se abrió desde el detalle de una cuenta, ese
+                                // contexto vale también para el ORIGEN del traspaso — es la
+                                // cuenta que el dueño estaba mirando cuando tocó «Agregar».
+                                presetAccountId = presetAccountId,
+                                // La misma hoja sirve las dos pestañas: un pago de cuota es un
+                                // traspaso con otras categorías y otro endpoint. Ver
+                                // [ModoDeTraspaso].
+                                modo = if (pickers.typeIndex == TIPO_PAGO_CUOTA) {
+                                    ModoDeTraspaso.PAGO_DE_CUOTA
+                                } else {
+                                    ModoDeTraspaso.TRASPASO
+                                },
+                                onSaved = onSaved,
                             )
-                            Spacer(Modifier.height(8.dp))
-                        }
-                        Picker.Note -> NoteEditor(
-                            initial = note,
-                            onSave = { note = it; pasarA(pickers.cerrar()) },
-                            onClose = { pasarA(pickers.cerrar()) },
-                        )
-                        Picker.None -> Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                // El alto que los sub-pickers van a respetar (ver el comentario de
-                                // arriba). Se mide acá y no se calcula a mano: así sigue siendo
-                                // correcto si mañana el cuerpo gana o pierde una fila.
-                                .onSizeChanged { if (cuerpoCompuesto) bodyHeightPx = it.height },
-                        ) {
-                            if (pickers.typeIndex >= TIPO_TRASPASO) {
-                                TransferBody(
-                                    accounts = accounts,
-                                    accountsLoaded = accountsLoaded,
-                                    // Las dos mitades de la disciplina, prestadas a la pestaña de
-                                    // traspaso: el tope del alto fijado y el aviso de que se abrió
-                                    // o cerró su sub-picker (su `picking` no se ve desde acá).
-                                    alturaVisible = pinnedHeight,
-                                    onPickerAbierto = { abierto ->
-                                        pasarA(pickers.conPickerDeTraspaso(abierto))
-                                    },
-                                    // Ola 11: si la hoja se abrió desde el detalle de una cuenta, ese
-                                    // contexto vale también para el ORIGEN del traspaso — es la
-                                    // cuenta que el dueño estaba mirando cuando tocó «Agregar».
-                                    presetAccountId = presetAccountId,
-                                    // La misma hoja sirve las dos pestañas: un pago de cuota es un
-                                    // traspaso con otras categorías y otro endpoint. Ver
-                                    // [ModoDeTraspaso].
-                                    modo = if (pickers.typeIndex == TIPO_PAGO_CUOTA) {
-                                        ModoDeTraspaso.PAGO_DE_CUOTA
-                                    } else {
-                                        ModoDeTraspaso.TRASPASO
-                                    },
-                                    onSaved = onSaved,
-                                )
-                            } else {
-                                EditorBody(
-                            amount = amount,
-                            moneda = monedaDeLaCuenta(accounts, selectedAccountId),
-                            onKey = ::onKey,
-                            category = category,
-                            // Task 5: solo se muestra la sugerencia que Movi puso, no cualquier
-                            // "Movi la reconoce" persistente — desaparece apenas el dueño elige a
-                            // mano ([elegirCategoriaAMano] pone esto en `null`).
-                            categoriaSugeridaHint = sugerenciaVigente?.let { "Movi la reconoce: ${it.nombre}" },
-                            categoriasFrecuentes = categoriasFrecuentesDelTipo,
-                            onPickCategoriaFrecuente = ::elegirCategoriaAMano,
-                            // **Anotado, no arreglado (B3, y es de master):** si `getAccounts()`
-                            // falla y la hoja se abrió con `presetAccountId`, `selectedAccount` es
-                            // null —la lista está vacía— así que esto dice «Seleccionar cuenta»,
-                            // pero `canSave` mira `selectedAccountId`, que SÍ tiene el preset: el
-                            // botón queda habilitado y el movimiento se guarda en la cuenta
-                            // correcta, sin que el dueño haya llegado a ver cuál era. Arreglarlo
-                            // bien pide resolver el nombre sin la lista (o bloquear el guardado, que
-                            // sería peor: hoy se guarda, y se guarda bien).
-                            walletLabel = selectedAccount?.name ?: "Seleccionar cuenta",
-                            // Ola 11: solo dice algo cuando el valor lo puso la app y hay más de una
-                            // cuenta donde anotar (ver [avisoDeCuenta]).
-                            walletHint = if (selectedAccount == null) null
-                                else avisoDeCuenta(origenCuenta, accounts.size),
-                            walletHintReserved = accounts.size > 1,
-                            note = note,
-                            dateLabel = etiquetaDeFecha(fecha, hoy),
-                            onPickDate = { pasarA(pickers.abrir(Picker.Date)) },
-                            onPickCategory = {
-                                pedidosDeFocoDeCategoria = 0
-                                pasarA(pickers.abrir(Picker.Category))
-                            },
-                            onNuevaCategoria = {
-                                pedidosDeFocoDeCategoria += 1
-                                pasarA(pickers.abrir(Picker.Category))
-                            },
-                            onPickWallet = { pasarA(pickers.abrir(Picker.Wallet)) },
-                            onEditNote = { pasarA(pickers.abrir(Picker.Note)) },
-                            onOcr = { onNavigate(Screen.OCRCapture) },
-                            canSave = canSave,
-                            missingFieldMessage = missingFieldMessage,
-                            saving = saving,
-                            error = error,
-                            onSave = ::save,
-                                    hasNoAccounts = accountsLoaded && accounts.isEmpty(),
-                                    onCreateAccount = { showCreateSheet = true },
-                                )
-                            }
+                        } else {
+                            EditorBody(
+                        amount = amount,
+                        moneda = monedaDeLaCuenta(accounts, selectedAccountId),
+                        onKey = ::onKey,
+                        category = category,
+                        // Task 5: solo se muestra la sugerencia que Movi puso, no cualquier
+                        // "Movi la reconoce" persistente — desaparece apenas el dueño elige a
+                        // mano ([elegirCategoriaAMano] pone esto en `null`).
+                        categoriaSugeridaHint = sugerenciaVigente?.let { "Movi la reconoce: ${it.nombre}" },
+                        categoriasFrecuentes = categoriasFrecuentesDelTipo,
+                        onPickCategoriaFrecuente = ::elegirCategoriaAMano,
+                        // **Anotado, no arreglado (B3, y es de master):** si `getAccounts()`
+                        // falla y la hoja se abrió con `presetAccountId`, `selectedAccount` es
+                        // null —la lista está vacía— así que esto dice «Seleccionar cuenta»,
+                        // pero `canSave` mira `selectedAccountId`, que SÍ tiene el preset: el
+                        // botón queda habilitado y el movimiento se guarda en la cuenta
+                        // correcta, sin que el dueño haya llegado a ver cuál era. Arreglarlo
+                        // bien pide resolver el nombre sin la lista (o bloquear el guardado, que
+                        // sería peor: hoy se guarda, y se guarda bien).
+                        walletLabel = selectedAccount?.name ?: "Seleccionar cuenta",
+                        // Ola 11: solo dice algo cuando el valor lo puso la app y hay más de una
+                        // cuenta donde anotar (ver [avisoDeCuenta]).
+                        walletHint = if (selectedAccount == null) null
+                            else avisoDeCuenta(origenCuenta, accounts.size),
+                        walletHintReserved = accounts.size > 1,
+                        note = note,
+                        dateLabel = etiquetaDeFecha(fecha, hoy),
+                        onPickDate = { pasarA(pickers.abrir(Picker.Date)) },
+                        onPickCategory = {
+                            pedidosDeFocoDeCategoria = 0
+                            pasarA(pickers.abrir(Picker.Category))
+                        },
+                        onNuevaCategoria = {
+                            pedidosDeFocoDeCategoria += 1
+                            pasarA(pickers.abrir(Picker.Category))
+                        },
+                        onPickWallet = { pasarA(pickers.abrir(Picker.Wallet)) },
+                        onEditNote = { pasarA(pickers.abrir(Picker.Note)) },
+                        onOcr = { onNavigate(Screen.OCRCapture) },
+                        canSave = canSave,
+                        missingFieldMessage = missingFieldMessage,
+                        saving = saving,
+                        error = error,
+                        onSave = ::save,
+                                hasNoAccounts = accountsLoaded && accounts.isEmpty(),
+                                onCreateAccount = { showCreateSheet = true },
+                            )
                         }
                     }
-                    } // Box del alto fijado
-
-                    Spacer(Modifier.height(14.dp))
                 }
+                } // Box del alto fijado
+
+                Spacer(Modifier.height(14.dp))
             }
         }
 

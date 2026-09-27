@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -25,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -40,7 +38,7 @@ import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.MarcoDeHoja
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
 
@@ -125,125 +123,109 @@ fun InicioDelPeriodoSheet(
         rangoLegibleDe(periodo, ajustes.conInicioPropio(periodo, elegido.toString()))
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
+    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+            modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false),
         ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false),
-            ) {
-                Text(
-                    text = "¿Cuándo empezó ${nombreDe(periodo)}?",
-                    style = Movi.textos.titulo,
-                    color = Movi.colores.texto,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Normalmente arranca el ${natural.dayOfMonth}. Si este mes tu sueldo entró " +
-                        "antes o después, dilo aquí: el mes anterior se cierra solo ese mismo día.",
-                    // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Normal,
-                    color = Movi.colores.textoMedio,
-                )
-                Spacer(Modifier.height(16.dp))
+            Text(
+                text = "¿Cuándo empezó ${nombreDe(periodo)}?",
+                style = Movi.textos.titulo,
+                color = Movi.colores.texto,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Normalmente arranca el ${natural.dayOfMonth}. Si este mes tu sueldo entró " +
+                    "antes o después, dilo aquí: el mes anterior se cierra solo ese mismo día.",
+                // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
+                style = Movi.textos.cuerpo,
+                fontWeight = FontWeight.Normal,
+                color = Movi.colores.textoMedio,
+            )
+            Spacer(Modifier.height(16.dp))
 
-                // Solo los días del mes en que ESTE período puede arrancar. Ver el KDoc.
-                (1..diasDelMes).chunked(7).forEach { fila ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        fila.forEach { d ->
-                            val esElElegido = d == dia
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(if (esElElegido) Movi.colores.marca else Movi.colores.tarjeta)
-                                    .clickable(enabled = !saving) { dia = d },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = d.toString(),
-                                    style = Movi.textos.cuerpo,
-                                    fontWeight = if (esElElegido) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (esElElegido) Movi.colores.fondo else Movi.colores.texto,
-                                    textAlign = TextAlign.Center,
-                                )
-                            }
+            // Solo los días del mes en que ESTE período puede arrancar. Ver el KDoc.
+            (1..diasDelMes).chunked(7).forEach { fila ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    fila.forEach { d ->
+                        val esElElegido = d == dia
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(if (esElElegido) Movi.colores.marca else Movi.colores.tarjeta)
+                                .clickable(enabled = !saving) { dia = d },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = d.toString(),
+                                style = Movi.textos.cuerpo,
+                                fontWeight = if (esElElegido) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (esElElegido) Movi.colores.fondo else Movi.colores.texto,
+                                textAlign = TextAlign.Center,
+                            )
                         }
                     }
-                    Spacer(Modifier.height(6.dp))
                 }
-
-                previsualizacion?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
-                error?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
-
-                Spacer(Modifier.height(18.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (!saving) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                        .clickable(enabled = !saving) { onSave(elegido.toString()) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = if (saving) "Guardando…" else "Este mes empezó el $dia",
-                        style = Movi.textos.cuerpo,
-                        color = if (!saving) Movi.colores.marca else Movi.colores.textoApagado,
-                    )
-                }
-
-                // La vuelta atrás, y solo cuando hay algo que deshacer: quitar la excepción es tan
-                // necesario como ponerla —«me equivoqué, este mes sí empezó cuando siempre»— y sin
-                // esta fila la única salida sería declarar a mano el día natural.
-                if (periodo.prefijo in ajustes.iniciosPropios) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = if (saving) "Guardando…" else "Volver al día ${natural.dayOfMonth} de siempre",
-                        style = Movi.textos.apoyo,
-                        fontWeight = FontWeight.Medium,
-                        color = if (saving) Movi.colores.textoApagado else Movi.colores.marca,
-                        modifier = Modifier.clickable(enabled = !saving) { onSave(null) },
-                    )
-                }
-
-                // Quien se pregunta «¿de cuándo a cuándo va este mes?» —la
-                // pregunta que abrió esta hoja— es quien más puede querer comparar con los
-                // anteriores.
-                if (onVerPeriodos != null) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = "Ver tus períodos",
-                        style = Movi.textos.apoyo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.marca,
-                        modifier = Modifier.clickable(enabled = !saving, onClick = onVerPeriodos),
-                    )
-                }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(6.dp))
             }
+
+            previsualizacion?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+            error?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (!saving) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                    .clickable(enabled = !saving) { onSave(elegido.toString()) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (saving) "Guardando…" else "Este mes empezó el $dia",
+                    style = Movi.textos.cuerpo,
+                    color = if (!saving) Movi.colores.marca else Movi.colores.textoApagado,
+                )
+            }
+
+            // La vuelta atrás, y solo cuando hay algo que deshacer: quitar la excepción es tan
+            // necesario como ponerla —«me equivoqué, este mes sí empezó cuando siempre»— y sin
+            // esta fila la única salida sería declarar a mano el día natural.
+            if (periodo.prefijo in ajustes.iniciosPropios) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = if (saving) "Guardando…" else "Volver al día ${natural.dayOfMonth} de siempre",
+                    style = Movi.textos.apoyo,
+                    fontWeight = FontWeight.Medium,
+                    color = if (saving) Movi.colores.textoApagado else Movi.colores.marca,
+                    modifier = Modifier.clickable(enabled = !saving) { onSave(null) },
+                )
+            }
+
+            // Quien se pregunta «¿de cuándo a cuándo va este mes?» —la
+            // pregunta que abrió esta hoja— es quien más puede querer comparar con los
+            // anteriores.
+            if (onVerPeriodos != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Ver tus períodos",
+                    style = Movi.textos.apoyo,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.marca,
+                    modifier = Modifier.clickable(enabled = !saving, onClick = onVerPeriodos),
+                )
+            }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }

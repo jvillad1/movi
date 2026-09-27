@@ -5,19 +5,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
 
@@ -67,27 +65,17 @@ fun ConfirmarEnHoja(
     onConfirmar: () -> Unit,
     onCancelar: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !ocupado, onClick = onCancelar),
+    MarcoDeHoja(
+        onDismiss = onCancelar,
+        dismissEnabled = !ocupado,
+        relleno = PaddingValues(horizontal = 20.dp, vertical = 22.dp),
+        conCierre = false,
     ) {
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .clickable(enabled = false) {}
-                .padding(horizontal = 20.dp, vertical = 22.dp),
-        ) {
-            Text(pregunta, style = Movi.textos.titulo, color = Movi.colores.texto)
-            Spacer(Modifier.height(8.dp))
-            Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(20.dp))
-            BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar)
-        }
+        Text(pregunta, style = Movi.textos.titulo, color = Movi.colores.texto)
+        Spacer(Modifier.height(8.dp))
+        Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        Spacer(Modifier.height(20.dp))
+        BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar)
     }
 }
 

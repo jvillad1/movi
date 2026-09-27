@@ -1,13 +1,13 @@
 package com.jvillada.movi.ui.dashboard
 
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.Patrimonio
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.ANCHO_PARA_DOS_COLUMNAS
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
@@ -298,32 +298,9 @@ fun destinoDelTramo(tramo: TramoDelPatrimonio): Screen = if (tramo.esDeuda) Scre
 
 // ── En escritorio, dos columnas ──────────────────────────────────────────────
 
-/**
- * Desde qué ancho el Inicio se parte en dos columnas. 900 dp: con el rail de la izquierda, dos
- * columnas de ~400 dp, que es lo que una tarjeta del Inicio necesita para que «$14,4M de $13,8M» no
- * se parta. Por debajo, una columna.
- */
-val ANCHO_PARA_DOS_COLUMNAS: Dp = 900.dp
-
-/**
- * El ancho máximo del Inicio. Las demás pantallas siguen en la columna de 600 dp de siempre (ver
- * [anchoMaximoDeLaPantalla]); el Inicio es el único que tiene algo que poner al lado.
- */
-val ANCHO_MAXIMO_DEL_INICIO: Dp = 1200.dp
-
-/** El ancho de la columna de siempre, la del teléfono. */
-val ANCHO_DE_UNA_COLUMNA: Dp = 600.dp
-
-/**
- * El ancho máximo del contenido de [pantalla] en la cáscara (`App.kt`).
- *
- * En escritorio el Inicio era una tira de 500 px en el medio de un lienzo de 1.400: el dueño tiene
- * la web abierta en el computador, y ahí todo lo que mira quedaba apretado en un tercio de la
- * pantalla. Solo el Inicio se ensancha: una lista de movimientos a 1.200 dp de ancho no se lee mejor,
- * se lee peor.
- */
-fun anchoMaximoDeLaPantalla(pantalla: Screen): Dp =
-    if (pantalla == Screen.Dashboard) ANCHO_MAXIMO_DEL_INICIO else ANCHO_DE_UNA_COLUMNA
+// Los anchos (el umbral de las dos columnas, el tope del Inicio y el de una columna) viven desde
+// la Ola W1 en `ui/components/Disposicion.kt`, con la tabla de topes de todas las pantallas: el
+// Inicio es un `Disposicion.Tablero`, y lo que mide lo decide la cáscara con esa tabla.
 
 /**
  * Qué va en la columna derecha en escritorio: lo que **viene** y lo que se **pregunta**. La izquierda

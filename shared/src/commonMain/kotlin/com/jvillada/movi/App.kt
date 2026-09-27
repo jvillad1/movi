@@ -2,7 +2,7 @@ package com.jvillada.movi
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -18,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.data.RecurringOfferGate
@@ -83,7 +83,10 @@ import com.jvillada.movi.ui.components.LocalRelevoDeScroll
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.MinBottomNav
 import com.jvillada.movi.ui.components.MinNavRail
-import com.jvillada.movi.ui.dashboard.anchoMaximoDeLaPantalla
+import com.jvillada.movi.ui.components.anchoMaximoDeLaPantalla
+import com.jvillada.movi.ui.components.CascaraDeAncho
+import com.jvillada.movi.ui.components.AnfitrionDeHojas
+import com.jvillada.movi.ui.components.LocalAnfitrionDeHojas
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.RelevoDeScroll
 import com.jvillada.movi.ui.components.WindowWidthClass
@@ -245,57 +248,35 @@ fun App() {
             }
 
             val saveableStateHolder = rememberSaveableStateHolder()
-            // Outer Box paints the background full-bleed across desktop.
-            // Compact (< 840dp): the classic centered "phone column" capped at
-            // 600dp, with ONE MinBottomNav drawn here under the active screen
-            // (Ola 4: the screens no longer draw their own). Expanded: a root
-            // MinNavRail on the left with the same capped column centered in the
-            // remaining space. Both read the active tab from navTabFor().
-            BoxWithConstraints(
+            // El fondo va de borde a borde en toda ventana. La clase de ancho se decide UNA vez,
+            // acá ([CascaraDeAncho]), y le llega a toda la app por `LocalWindowWidthClass`; el
+            // esqueleto —rail, columna topada, barra inferior— lo arma [EsqueletoDeLaCascara].
+            CascaraDeAncho(
                 modifier = Modifier.fillMaxSize().background(Movi.colores.fondo),
             ) {
-                val widthClass = if (maxWidth < 840.dp) WindowWidthClass.Compact else WindowWidthClass.Expanded
                 val activeTab = navTabFor(currentScreen)
                 // Ola C: Ajustes y lo que cuelga de ahí no marcan pestaña pero sí llevan la
                 // barra — ver [muestraLaNavegacion].
                 val conNavegacion = muestraLaNavegacion(currentScreen)
-                val showRail = widthClass == WindowWidthClass.Expanded && conNavegacion
-                val showBottomNav = widthClass == WindowWidthClass.Compact && conNavegacion
-                val tecladoALaVista = elTecladoEstaALaVista()
                 val onTabSelected: (NavTab) -> Unit = { tab -> navigate(screenForTab(tab)) }
 
-                // Los márgenes a los lados de la columna de 600 dp reenvían la rueda del mouse a
-                // la lista de la pantalla activa. Ver [RelevoDeScroll] para el bug y el porqué.
+                // Los márgenes a los lados de la columna reenvían la rueda del mouse a la lista de
+                // la pantalla activa. Ver [RelevoDeScroll] para el bug y el porqué.
                 val relevoDeScroll = remember { RelevoDeScroll() }
                 CompositionLocalProvider(
-                    LocalWindowWidthClass provides widthClass,
                     LocalRefreshTick provides refreshTick,
                     LocalRelevoDeScroll provides relevoDeScroll,
                     // Para que cualquier pantalla pueda anotar su hoja sin que App.kt tenga que
                     // conocerla (Perfil y sus cuatro overlays). Ver [PilaDeHojas].
                     LocalPilaDeHojas provides pilaDeHojas,
                 ) {
-                Row(modifier = Modifier.fillMaxSize()) {
-                if (showRail) {
-                    MinNavRail(active = activeTab, onTabSelected = onTabSelected)
-                }
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxHeight().recibeElScrollDeLosMargenes(relevoDeScroll),
-                    contentAlignment = Alignment.TopCenter,
+                EsqueletoDeLaCascara(
+                    pantalla = currentScreen,
+                    activeTab = activeTab,
+                    conNavegacion = conNavegacion,
+                    onTabSelected = onTabSelected,
+                    relevoDeScroll = relevoDeScroll,
                 ) {
-                // **`imePadding()` es lo que hace que el teclado no tape lo que estás
-                // escribiendo.** Movi dibuja de borde a borde (`enableEdgeToEdge`), y con eso el
-                // `adjustResize` del manifiesto deja de encoger la ventana: Android manda el alto
-                // del teclado como un inset y la app tiene que descontarlo. Nadie lo descontaba, y
-                // el chat de Movi AI se abría con el campo de texto debajo del teclado.
-                //
-                // Va acá, en la columna raíz, y no en cada pantalla: el agujero era de TODAS las
-                // que tienen un campo abajo, y una sola línea las cubre a todas — incluidas las
-                // hojas, que se dibujan adentro de este mismo hueco.
-                // El Inicio es la única pantalla más ancha que la columna de 600 dp: en escritorio
-                // se parte en dos columnas (ver `anchoMaximoDeLaPantalla` y `columnasDelInicio`).
-                Column(modifier = Modifier.widthIn(max = anchoMaximoDeLaPantalla(currentScreen)).fillMaxSize().statusBarsPadding().imePadding()) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 saveableStateHolder.SaveableStateProvider(key = currentScreen.toString()) {
                 CompositionLocalProvider(LocalGoBack provides goBackTo, LocalNavigate provides navigate) {
                 when (currentScreen) {
@@ -432,7 +413,73 @@ fun App() {
                         prefill = propuesta,
                     )
                 }
-                } // screen slot
+                } // EsqueletoDeLaCascara (el hueco de la pantalla)
+                } // CompositionLocalProvider
+            }
+        }
+    }
+}
+
+/**
+ * # El esqueleto de la cáscara: rail, columna topada y barra inferior
+ *
+ * Lee la clase de ancho que decidió [CascaraDeAncho] y arma alrededor de [contenido] (la pantalla
+ * activa y las hojas que App.kt dibuja encima):
+ *
+ * - **Compacto** (< 600 dp): la columna va llena y [MinBottomNav] debajo.
+ * - **Mediano** (600–999 dp): [MinNavRail] compacto a la izquierda, sin barra inferior.
+ * - **Expandido** (≥ 1000 dp): el rail ancho de siempre.
+ *
+ * En los dos anchos la columna se topa según la [disposicionDe] de la pantalla (ver
+ * [anchoMaximoDeLaPantalla]) y se centra en lo que deja el rail. Vive en este archivo y no en
+ * `ui/components` porque dos pruebas de fuente (`ElTecladoNoTapaLoQueEscribisTest`) leen App.kt
+ * buscando las dos líneas que protegen el teclado.
+ */
+@Composable
+internal fun EsqueletoDeLaCascara(
+    pantalla: Screen,
+    activeTab: NavTab?,
+    conNavegacion: Boolean,
+    onTabSelected: (NavTab) -> Unit,
+    relevoDeScroll: RelevoDeScroll,
+    contenido: @Composable BoxScope.() -> Unit,
+) {
+    val widthClass = LocalWindowWidthClass.current
+    val showRail = widthClass != WindowWidthClass.Compact && conNavegacion
+    val showBottomNav = widthClass == WindowWidthClass.Compact && conNavegacion
+    val tecladoALaVista = elTecladoEstaALaVista()
+    // Las hojas centradas (mediano y expandido) se dibujan acá, encima de todo — ver
+    // [AnfitrionDeHojas]. Así su velo tapa también el rail y los márgenes.
+    val anfitrionDeHojas = remember { AnfitrionDeHojas() }
+    CompositionLocalProvider(LocalAnfitrionDeHojas provides anfitrionDeHojas) {
+    Box(modifier = Modifier.fillMaxSize()) {
+    Row(modifier = Modifier.fillMaxSize()) {
+        if (showRail) {
+            MinNavRail(
+                active = activeTab,
+                onTabSelected = onTabSelected,
+                compacto = widthClass == WindowWidthClass.Medium,
+            )
+        }
+        Box(
+            modifier = Modifier.weight(1f).fillMaxHeight().recibeElScrollDeLosMargenes(relevoDeScroll),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            // **`imePadding()` es lo que hace que el teclado no tape lo que estás
+            // escribiendo.** Movi dibuja de borde a borde (`enableEdgeToEdge`), y con eso el
+            // `adjustResize` del manifiesto deja de encoger la ventana: Android manda el alto
+            // del teclado como un inset y la app tiene que descontarlo. Nadie lo descontaba, y
+            // el chat de Movi AI se abría con el campo de texto debajo del teclado.
+            //
+            // Va acá, en la columna raíz, y no en cada pantalla: el agujero era de TODAS las
+            // que tienen un campo abajo, y una sola línea las cubre a todas — incluidas las
+            // hojas, que se dibujan adentro de este mismo hueco.
+            // El tope depende de la pantalla y del ancho (ver `anchoMaximoDeLaPantalla`).
+            // Desde 600 dp no hay barra inferior que descuente la barra de navegación del sistema
+            // (la de Android, abajo o al costado en horizontal): la descuenta la columna.
+            val sinBarraInferior = if (widthClass == WindowWidthClass.Compact) Modifier else Modifier.navigationBarsPadding()
+            Column(modifier = Modifier.widthIn(max = anchoMaximoDeLaPantalla(pantalla, widthClass)).fillMaxSize().statusBarsPadding().then(sinBarraInferior).imePadding()) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), content = contenido)
 
                 // Y con el teclado arriba la barra se esconde: no sirve para nada mientras se
                 // escribe, y son 60 dp de los pocos que quedan — con ella puesta, en un teléfono
@@ -440,11 +487,10 @@ fun App() {
                 if (showBottomNav && !tecladoALaVista) {
                     MinBottomNav(active = activeTab, onTabSelected = onTabSelected)
                 }
-                } // inner Column (max-width container + bottom nav)
-                } // content area
-                } // Row (rail + content)
-                } // CompositionLocalProvider
             }
         }
     }
+    anfitrionDeHojas.Hojas()
+    } // Box (esqueleto + hojas centradas)
+    } // CompositionLocalProvider(LocalAnfitrionDeHojas)
 }
