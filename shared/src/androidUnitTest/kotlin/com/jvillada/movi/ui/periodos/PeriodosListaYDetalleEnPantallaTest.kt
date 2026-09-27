@@ -1,6 +1,16 @@
 package com.jvillada.movi.ui.periodos
 
+import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollTo
+import com.jvillada.movi.EsqueletoDeLaCascara
+import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.ui.components.NavTab
+import com.jvillada.movi.ui.components.RelevoDeScroll
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
@@ -85,7 +95,9 @@ class PeriodosListaYDetalleEnPantallaTest {
 
     private fun detalleDe(resumen: ResumenDePeriodo) = DetalleDePeriodo(
         resumen = resumen,
-        porCategoria = listOf(GastoDeCategoria("Mercado", 400_000L)),
+        // Varias categorías: el detalle tiene que ser más alto que la ventana para poder bajarlo.
+        porCategoria = listOf("Mercado", "Comida", "Transporte", "Salud", "Hogar", "Ropa", "Fútbol", "Hija")
+            .mapIndexed { i, categoria -> GastoDeCategoria(categoria, 400_000L - i * 10_000L) },
         pagosFijos = listOf(
             PagoFijoDelPeriodo("r1", "Arriendo", 1_500_000L, esIngreso = false, vencimiento = "${resumen.id}-05",
                 estado = PAGO_FIJO_PENDIENTE),
@@ -120,8 +132,21 @@ class PeriodosListaYDetalleEnPantallaTest {
         val repo = ConPeriodos()
         navegado.clear()
         Repositories.sustitutoDePrueba = repo
+        // Dentro de la cáscara de verdad: el rail (216 dp en escritorio) y el tope de 1440 son parte
+        // de la cuenta. Sin ellos el panel del detalle medía 879 dp a 1280 en vez de los 703 reales.
+        val pantalla = if (idPedido == null) Screen.Periodos else Screen.DetalleDePeriodo(idPedido)
         composeRule.setContent {
-            ConClaseDeAncho { PeriodosListaYDetalle(onNavigate = { navegado += it }, idPedido = idPedido) }
+            ConClaseDeAncho {
+                EsqueletoDeLaCascara(
+                    pantalla = pantalla,
+                    activeTab = NavTab.PLAN,
+                    conNavegacion = true,
+                    onTabSelected = {},
+                    relevoDeScroll = remember { RelevoDeScroll() },
+                ) {
+                    PeriodosListaYDetalle(onNavigate = { navegado += it }, idPedido = idPedido)
+                }
+            }
         }
         composeRule.waitForIdle()
         return repo
@@ -162,8 +187,9 @@ class PeriodosListaYDetalleEnPantallaTest {
         val lista = limites(TAG_PANEL_DE_LA_LISTA)
         val detalle = limites(TAG_PANEL_DEL_DETALLE)
         assertTrue(detalle.left >= lista.right, "el detalle empieza donde termina la lista: $lista / $detalle")
-        assertEquals(400f, lista.width, 0.5f)
-        assertTrue(detalle.width > 800f, "el detalle se lleva lo que sobra: ${detalle.width}")
+        assertEquals(360f, lista.width, 0.5f)
+        // 1280 − 216 del rail − 360 de la lista − 1 del divisor.
+        assertEquals(703f, detalle.width, 0.5f, "el detalle se lleva lo que sobra")
         // Al lado de la lista no hay a dónde volver: el detalle no lleva flecha. La lista sí.
         assertEquals(1, flechasDeVolver(), "solo la flecha de la lista")
     }
@@ -198,11 +224,41 @@ class PeriodosListaYDetalleEnPantallaTest {
 
     @Test
     @Config(qualifiers = "w1280dp-h900dp-mdpi")
-    fun `con el panel de 840 dp o mas las dos columnas del detalle van una al lado de la otra`() {
+    fun `a 1280 dp las dos columnas del detalle van una al lado de la otra`() {
         montar()
         esperar(gastoDe(periodos.first()))
 
-        assertTrue(limites(TAG_PANEL_DEL_DETALLE).width >= 840f)
+        val izquierda = limites(TAG_COLUMNA_IZQUIERDA_DEL_DETALLE)
+        val derecha = limites(TAG_COLUMNA_DERECHA_DEL_DETALLE)
+        assertTrue(derecha.left >= izquierda.right, "$izquierda / $derecha")
+        // Cada columna mide al menos lo que el teléfono más chico.
+        assertTrue(izquierda.width >= 320f && derecha.width >= 320f, "$izquierda / $derecha")
+    }
+
+    @Test
+    @Config(qualifiers = "w1024dp-h900dp-mdpi")
+    fun `a 1024 dp el detalle va en una sola columna`() {
+        montar()
+        esperar(gastoDe(periodos.first()))
+        assertTrue(!hayTag(TAG_COLUMNA_IZQUIERDA_DEL_DETALLE), "panel de 447: una columna")
+        assertTrue(!hayTag(TAG_COLUMNA_DERECHA_DEL_DETALLE))
+    }
+
+    @Test
+    @Config(qualifiers = "w1200dp-h900dp-mdpi")
+    fun `a 1200 dp el detalle va en una sola columna`() {
+        montar()
+        esperar(gastoDe(periodos.first()))
+        assertTrue(!hayTag(TAG_COLUMNA_IZQUIERDA_DEL_DETALLE), "panel de 623: una columna")
+        assertTrue(!hayTag(TAG_COLUMNA_DERECHA_DEL_DETALLE))
+    }
+
+    @Test
+    @Config(qualifiers = "w1440dp-h900dp-mdpi")
+    fun `a 1440 dp las columnas van lado a lado, la cabecera a la izquierda y los pagos a la derecha`() {
+        montar()
+        esperar(gastoDe(periodos.first()))
+
         val izquierda = limites(TAG_COLUMNA_IZQUIERDA_DEL_DETALLE)
         val derecha = limites(TAG_COLUMNA_DERECHA_DEL_DETALLE)
         assertTrue(derecha.left >= izquierda.right, "$izquierda / $derecha")
@@ -237,6 +293,44 @@ class PeriodosListaYDetalleEnPantallaTest {
         val primera = composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText(periodos.first().nombre)), useUnmergedTree = true)
             .fetchSemanticsNodes()
         assertTrue(primera.isEmpty() || primera.single().boundsInRoot.bottom <= limites(TAG_PANEL_DE_LA_LISTA).top + 1f)
+    }
+
+    /** Cuánto bajó el scroll del detalle (el del panel de la derecha). */
+    private fun desplazamientoDelDetalle(): Float =
+        composeRule.onNode(
+            hasAnyAncestor(hasTestTag(TAG_PANEL_DEL_DETALLE)) and
+                SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange),
+            useUnmergedTree = true,
+        ).fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
+
+    /**
+     * El detalle nuevo arranca desde arriba aunque el anterior se haya bajado. Con sesión, para que
+     * el período al que se vuelve se pinte desde el caché en el primer cuadro con su largo entero:
+     * sin eso el esqueleto, más corto, dejaba el scroll en cero de todas formas y la prueba no
+     * distinguía nada.
+     */
+    @Test
+    @Config(qualifiers = "w1200dp-h600dp-mdpi")
+    fun `al elegir otro periodo el detalle vuelve arriba`() {
+        SessionManager.save(token = "tok", userId = "u1", name = "Juan", email = "juan@ejemplo.com")
+        val enCurso = periodos.first()
+        val agosto = periodos[1]
+        montar()
+        esperar(gastoDe(enCurso))
+        // Agosto queda en el caché, y se vuelve al en curso.
+        fila(agosto).performClick()
+        esperar(gastoDe(agosto))
+        fila(enCurso).performClick()
+        esperar(gastoDe(enCurso))
+
+        composeRule.onNodeWithTag(TAG_VER_MOVIMIENTOS_DEL_PERIODO, useUnmergedTree = true).performScrollTo()
+        composeRule.waitForIdle()
+        assertTrue(desplazamientoDelDetalle() > 0f, "el detalle del en curso quedó bajado")
+
+        fila(agosto).performClick()
+        esperar(gastoDe(agosto))
+
+        assertEquals(0f, desplazamientoDelDetalle(), "el de agosto arranca arriba")
     }
 
     // ── Teléfono ────────────────────────────────────────────────────────────────

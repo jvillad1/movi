@@ -295,8 +295,9 @@ const val TAG_COLUMNA_DERECHA_DEL_DETALLE: String = "detalle-de-periodo-columna-
  * dónde volver). [perfilCompartido] es el perfil que ya leyó la lista de al lado.
  *
  * En el teléfono se compone exactamente como siempre. En mediano y expandido mide el panel que le
- * tocó: desde [ANCHO_PARA_DETALLE_EN_DOS_COLUMNAS] las secciones van en dos columnas (arriba de las
- * acciones, que siguen a lo ancho).
+ * tocó: si a cada columna le quedan al menos [ANCHO_MINIMO_DE_COLUMNA_DEL_DETALLE] (ver
+ * [detalleEnDosColumnas]) las secciones van en dos columnas, arriba de las acciones, que siguen a lo
+ * ancho.
  */
 @Composable
 internal fun ContenidoDelDetalleDePeriodo(

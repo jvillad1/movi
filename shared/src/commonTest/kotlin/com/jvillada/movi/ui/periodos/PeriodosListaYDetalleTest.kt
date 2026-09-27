@@ -67,9 +67,10 @@ class PeriodosListaYDetalleTest {
     // ── Los anchos ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `la lista mide 360 en mediano y 400 en expandido`() {
+    fun `la lista mide 360 en mediano y en expandido`() {
+        // Una tarjeta de teléfono de 328: lo que sobra se lo lleva el detalle.
         assertEquals(360.dp, anchoDeLaListaDePeriodos(WindowWidthClass.Medium))
-        assertEquals(400.dp, anchoDeLaListaDePeriodos(WindowWidthClass.Expanded))
+        assertEquals(360.dp, anchoDeLaListaDePeriodos(WindowWidthClass.Expanded))
     }
 
     @Test
@@ -82,11 +83,26 @@ class PeriodosListaYDetalleTest {
         assertFalse(hayLugarParaListaYDetalle(679.dp))
     }
 
+    /**
+     * Dos columnas cuando a cada una le quedan 320 dp (el teléfono más chico que se soporta),
+     * descontados los 16 + 16 de relleno y los 16 entre columnas: un panel de 688 dp.
+     */
     @Test
-    fun `el detalle se parte en dos columnas desde 840 dp de panel`() {
-        assertTrue(detalleEnDosColumnas(840.dp))
-        assertTrue(detalleEnDosColumnas(1_040.dp))
-        assertFalse(detalleEnDosColumnas(839.dp))
-        assertFalse(detalleEnDosColumnas(680.dp))
+    fun `el detalle se parte en dos columnas cuando cada una mide al menos 320 dp`() {
+        assertEquals(320.dp, ANCHO_MINIMO_DE_COLUMNA_DEL_DETALLE)
+        assertTrue(detalleEnDosColumnas(688.dp))
+        assertFalse(detalleEnDosColumnas(687.dp))
+    }
+
+    /** Ventana − rail ancho (216) − lista (360) − divisor (1), con el tope de 1440 del contenido. */
+    @Test
+    fun `en una laptop de 1280 dp o mas el detalle va en dos columnas, y en 1024 o 1200 en una`() {
+        fun panel(ventana: Int) = minOf(ventana - 216, 1_440).dp - 360.dp - 1.dp
+        assertFalse(detalleEnDosColumnas(panel(1_024)), "1024 → panel 447")
+        assertFalse(detalleEnDosColumnas(panel(1_200)), "1200 → panel 623")
+        assertTrue(detalleEnDosColumnas(panel(1_280)), "1280 → panel 703, columnas de ~327")
+        assertTrue(detalleEnDosColumnas(panel(1_366)), "1366 → panel 789")
+        assertTrue(detalleEnDosColumnas(panel(1_440)), "1440 → panel 863, columnas de ~407")
+        assertTrue(detalleEnDosColumnas(panel(1_920)), "1920 → panel 1079")
     }
 }

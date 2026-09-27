@@ -61,11 +61,14 @@ import kotlinx.datetime.LocalDate
 const val TAG_PANEL_DE_LA_LISTA: String = "periodos-panel-de-la-lista"
 const val TAG_PANEL_DEL_DETALLE: String = "periodos-panel-del-detalle"
 
-/** El ancho de la lista en una ventana mediana. */
+/** El ancho de la lista en una ventana mediana: una tarjeta de teléfono de 328 dp. */
 val ANCHO_DE_LA_LISTA_EN_MEDIANO: Dp = 360.dp
 
-/** El ancho de la lista en escritorio. */
-val ANCHO_DE_LA_LISTA_EN_EXPANDIDO: Dp = 400.dp
+/**
+ * El ancho de la lista en escritorio: el mismo que en mediano. Más ancha no se lee mejor, y cada dp
+ * que se lleva la lista le falta al detalle para partirse en dos columnas en una laptop de 1280.
+ */
+val ANCHO_DE_LA_LISTA_EN_EXPANDIDO: Dp = 360.dp
 
 /**
  * Por debajo de este ancho de contenido la lista no va al lado del detalle: 360 de lista más 320 de
@@ -74,10 +77,17 @@ val ANCHO_DE_LA_LISTA_EN_EXPANDIDO: Dp = 400.dp
 val ANCHO_MINIMO_PARA_LISTA_Y_DETALLE: Dp = 680.dp
 
 /**
- * Desde este ancho del panel del detalle sus secciones van en dos columnas: ~410 dp cada una, lo que
- * una tarjeta del detalle necesita para que ni un monto ni el nombre de un pago fijo se corten.
+ * Lo mínimo que tiene que medir cada columna del detalle para partirlo en dos: 320 dp, el teléfono
+ * más chico que se soporta (el mismo de [ANCHO_MINIMO_PARA_LISTA_Y_DETALLE]). Las secciones del
+ * detalle ya se leen en una tarjeta de ese ancho; más angostas no.
  */
-val ANCHO_PARA_DETALLE_EN_DOS_COLUMNAS: Dp = 840.dp
+val ANCHO_MINIMO_DE_COLUMNA_DEL_DETALLE: Dp = 320.dp
+
+/**
+ * Lo que del panel no es columna: el relleno de 16 a cada lado y los 16 entre las dos
+ * (`Movi.espacios.amplio`).
+ */
+private val RELLENO_DE_LAS_DOS_COLUMNAS: Dp = 48.dp
 
 /** El ancho fijo de la lista de períodos al lado del detalle. */
 fun anchoDeLaListaDePeriodos(clase: WindowWidthClass): Dp =
@@ -86,8 +96,17 @@ fun anchoDeLaListaDePeriodos(clase: WindowWidthClass): Dp =
 /** Si en [anchoDelContenido] caben la lista y el detalle lado a lado. */
 fun hayLugarParaListaYDetalle(anchoDelContenido: Dp): Boolean = anchoDelContenido >= ANCHO_MINIMO_PARA_LISTA_Y_DETALLE
 
-/** Si el detalle, en un panel de [anchoDelPanel], va en dos columnas. */
-fun detalleEnDosColumnas(anchoDelPanel: Dp): Boolean = anchoDelPanel >= ANCHO_PARA_DETALLE_EN_DOS_COLUMNAS
+/**
+ * Si el detalle, en un panel de [anchoDelPanel], va en dos columnas: cuando a cada una le quedan al
+ * menos [ANCHO_MINIMO_DE_COLUMNA_DEL_DETALLE], o sea con un panel de 688 dp o más. Se decide por el
+ * ancho de la columna y no del panel porque es la columna la que tiene que caber.
+ *
+ * En la web con el rail ancho (216) y la lista (360 + 1 de divisor): 1024 dp de ventana → panel
+ * 447, una columna; 1200 → 623, una; **1280 → 703, dos de ~327**; 1440 → 863, dos de ~407; 1920
+ * (contenido topado en 1440) → 1079, dos de ~515. En mediano el panel no pasa de 479: una columna.
+ */
+fun detalleEnDosColumnas(anchoDelPanel: Dp): Boolean =
+    (anchoDelPanel - RELLENO_DE_LAS_DOS_COLUMNAS) / 2 >= ANCHO_MINIMO_DE_COLUMNA_DEL_DETALLE
 
 /**
  * El período que muestra el panel de la derecha: el [elegido] (un id pedido, o una fila tocada); si
