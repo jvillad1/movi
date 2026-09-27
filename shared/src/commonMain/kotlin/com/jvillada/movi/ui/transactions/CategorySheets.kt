@@ -89,6 +89,27 @@ private fun BottomSheetScaffold(
     }
 }
 
+/**
+ * El marco del cuerpo de un movimiento según [lugar]: la hoja modal de siempre, o el panel de la
+ * derecha de Movimientos (Ola W4). El panel lleva la misma X arriba a la derecha —cierra el panel y
+ * deja la invitación a elegir— y el resto del alto para el contenido, que trae su propio scroll.
+ */
+@Composable
+private fun MarcoDelMovimiento(
+    lugar: LugarDelMovimiento,
+    onDismiss: () -> Unit,
+    dismissEnabled: Boolean,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    when (lugar) {
+        LugarDelMovimiento.Hoja -> BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = dismissEnabled, content = content)
+        LugarDelMovimiento.Panel -> Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+            SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled, conManija = false)
+            content()
+        }
+    }
+}
+
 @Composable
 private fun SheetLabel(text: String) {
     Text(
@@ -263,6 +284,49 @@ fun ChangeCategorySheet(
      */
     onEditarRecurrente: ((RecurringRule) -> Unit)? = null,
 ) {
+    ContenidoDelMovimiento(
+        event = event,
+        lugar = LugarDelMovimiento.Hoja,
+        onDismiss = onDismiss,
+        cuentas = cuentas,
+        onEventChanged = onEventChanged,
+        onVerCuenta = onVerCuenta,
+        onAnular = onAnular,
+        onMarcarComoRecurrente = onMarcarComoRecurrente,
+        onEditarRecurrente = onEditarRecurrente,
+    )
+}
+
+/**
+ * Dónde se dibuja el cuerpo de un movimiento: en su hoja modal (el teléfono, y toda pantalla que
+ * no tenga lugar al lado), o en el panel de la derecha de Movimientos en pantalla ancha (Ola W4,
+ * ver `MovimientosListaYDetalle`).
+ */
+internal enum class LugarDelMovimiento { Hoja, Panel }
+
+/**
+ * **El cuerpo de [ChangeCategorySheet]**, sacado de la hoja para poder dibujarse también en el
+ * panel de al lado de la lista (Ola W4) — el mismo criterio con el que la Ola W2 sacó
+ * `ContenidoDelDetalleDePeriodo`. Las cuatro ramas (traspaso, saldo inicial, la pregunta de los
+ * parecidos y el movimiento común) son las mismas en los dos lugares; lo único que cambia es el
+ * marco ([MarcoDelMovimiento]).
+ *
+ * En la hoja, [onEventChanged] la cierra. **En el panel no se cierra nada**: quien lo muestra relee
+ * el movimiento y el panel sigue abierto con la versión nueva. Por eso lo que en la hoja se iba con
+ * ella —el editor del monto abierto, la pregunta de los parecidos— acá se cierra a mano al terminar.
+ */
+@Composable
+internal fun ContenidoDelMovimiento(
+    event: FinancialEvent,
+    lugar: LugarDelMovimiento,
+    onDismiss: () -> Unit,
+    cuentas: List<Account>,
+    onEventChanged: (FinancialEvent) -> Unit,
+    onVerCuenta: (() -> Unit)?,
+    onAnular: (() -> Unit)?,
+    onMarcarComoRecurrente: ((RecurringPrefill) -> Unit)?,
+    onEditarRecurrente: ((RecurringRule) -> Unit)?,
+) {
     val coroutine = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -296,6 +360,20 @@ fun ChangeCategorySheet(
     }
     /** El segundo paso: no nulo mientras se pregunta si el cambio va también para los parecidos. */
     var oferta by remember(event.id) { mutableStateOf<OfertaDeLote?>(null) }
+    // **En el panel, dejar la pregunta sin contestar también avisa** (revisión final de la W4,
+    // I-1). Cuando se pregunta por los parecidos, la categoría de ESTE movimiento ya quedó
+    // guardada. En la hoja las únicas salidas son contestar o cerrarla, y las dos avisan
+    // ([onEventChanged]); en el panel hay una tercera —tocar otra fila de la lista, o achicar la
+    // ventana— que lo desmonta sin pasar por ahí, y la lista se quedaba con la categoría vieja. Al
+    // desmontarse con la pregunta pendiente, se avisa con el movimiento ya cambiado: los parecidos
+    // quedan como están, que es lo mismo que «No, solo este».
+    if (lugar == LugarDelMovimiento.Panel) {
+        val ofertaPendiente by rememberUpdatedState(oferta)
+        val avisar by rememberUpdatedState(onEventChanged)
+        DisposableEffect(Unit) {
+            onDispose { ofertaPendiente?.let { avisar(it.movimiento) } }
+        }
+    }
 
     fun choose(category: String) {
         if (category == event.category || saving) return
@@ -332,7 +410,10 @@ fun ChangeCategorySheet(
             // cierra igual y el error del lote se muestra en la pantalla de atrás. Dejarlo acá
             // adentro obligaría a distinguir dos éxitos parciales en la misma hoja.
             result
-                .onSuccess { onEventChanged(o.movimiento) }
+                .onSuccess {
+                    oferta = null
+                    onEventChanged(o.movimiento)
+                }
                 .onFailure { error = it.toUserMessage(); saving = false }
         }
     }
@@ -342,7 +423,7 @@ fun ChangeCategorySheet(
     // contando la mitad de un movimiento que nunca ocurrió. El server también lo rechaza (422);
     // acá se explica en vez de ofrecer una lista que iba a fallar al tocarla.
     if (isTransferLeg(event)) {
-        BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = true) {
+        MarcoDelMovimiento(lugar, onDismiss = onDismiss, dismissEnabled = true) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 // El rótulo dice QUÉ es, y no «TRASPASO» para todo: la mitad de una cuota se abre
                 // por esta misma rama —es una pata de un par— y llamarla traspaso contradice al
@@ -380,7 +461,7 @@ fun ChangeCategorySheet(
                     event = event,
                     cuentas = cuentas,
                     onError = { errorDeEdicion = it },
-                    onGuardado = onEventChanged,
+                    onGuardado = { edicionAbierta = false; onEventChanged(it) },
                     abierto = edicionAbierta,
                     onAbiertoChange = { edicionAbierta = it },
                 )
@@ -439,7 +520,7 @@ fun ChangeCategorySheet(
     // opening mal fechado no rompe ningún saldo (el saldo suma todos los eventos sin mirar el
     // día) pero sí manda la fila a un día que no es, y no hay otro lugar donde arreglarlo.
     if (isOpeningBalance(event)) {
-        BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = true) {
+        MarcoDelMovimiento(lugar, onDismiss = onDismiss, dismissEnabled = true) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 SheetLabel("SALDO INICIAL")
                 Spacer(Modifier.height(8.dp))
@@ -480,7 +561,12 @@ fun ChangeCategorySheet(
     // encima —una hoja no puede abrir otra sobre sí misma— y cerrarla por afuera equivale a «solo
     // este», que es la opción conservadora.
     oferta?.let { o ->
-        BottomSheetScaffold(onDismiss = { onEventChanged(o.movimiento) }, dismissEnabled = !saving) {
+        // En el panel la pregunta no se va sola con la hoja: se cierra al contestarla.
+        val terminar = {
+            oferta = null
+            onEventChanged(o.movimiento)
+        }
+        MarcoDelMovimiento(lugar, onDismiss = terminar, dismissEnabled = !saving) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 SheetLabel("¿Y LOS PARECIDOS?")
                 Spacer(Modifier.height(8.dp))
@@ -541,7 +627,7 @@ fun ChangeCategorySheet(
                         .fillMaxWidth()
                         .height(46.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .clickable(enabled = !saving) { onEventChanged(o.movimiento) },
+                        .clickable(enabled = !saving) { terminar() },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text("No, solo este", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
@@ -553,7 +639,7 @@ fun ChangeCategorySheet(
         return
     }
 
-    BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = !saving) {
+    MarcoDelMovimiento(lugar, onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             NombreQueSeEdita(event.description) { edicionAbierta = true }
             Spacer(Modifier.height(12.dp))
@@ -584,7 +670,7 @@ fun ChangeCategorySheet(
                 event = event,
                 cuentas = cuentas,
                 onError = { errorDeEdicion = it },
-                onGuardado = onEventChanged,
+                onGuardado = { edicionAbierta = false; onEventChanged(it) },
                 abierto = edicionAbierta,
                 onAbiertoChange = { edicionAbierta = it },
             )
@@ -1535,7 +1621,10 @@ private fun SeccionDeFecha(
                 )
             }
             guardando = false
-            result.onSuccess { onFechaCambiada(it) }.onFailure { error = it.toUserMessage() }
+            // Cerrado al guardar: en la hoja no se notaba (se cerraba entera), pero en el panel de
+            // Movimientos el movimiento sigue a la vista y el selector quedaba abierto con
+            // «Mover a …» habilitado hasta que llegaba la relectura.
+            result.onSuccess { abierto = false; onFechaCambiada(it) }.onFailure { error = it.toUserMessage() }
         }
     }
 

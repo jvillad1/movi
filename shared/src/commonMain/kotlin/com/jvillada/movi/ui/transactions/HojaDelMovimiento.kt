@@ -73,6 +73,64 @@ fun HojaDelMovimiento(
      */
     onResuelto: (FinancialEvent) -> Unit = {},
 ) {
+    JuegoDelMovimiento(
+        event = event,
+        lugar = LugarDelMovimiento.Hoja,
+        cuentas = cuentas,
+        onDismiss = onDismiss,
+        onCambiado = onCambiado,
+        onVerCuenta = onVerCuenta,
+        onResuelto = onResuelto,
+        onAnulado = {},
+    )
+}
+
+/**
+ * **El mismo juego, en el panel de la derecha de Movimientos** (Ola W4, ver
+ * `MovimientosListaYDetalle`): el cuerpo de la hoja ([ContenidoDelMovimiento]) va en el panel, y
+ * anular y el formulario de recurrente se siguen abriendo como diálogo encima de todo —son
+ * `MarcoDeHoja`, que fuera del teléfono se dibuja en la cáscara—.
+ *
+ * El contrato cambia en una cosa: [onCambiado] **no cierra nada**. Quien lo muestra relee el
+ * movimiento por id y el panel sigue abierto con la versión nueva. [onAnulado] avisa que el
+ * movimiento dejó de existir en la lista (se llama antes que [onCambiado]): el panel vuelve a la
+ * invitación a elegir sin esperar a la relectura. [onCerrar] es la X del panel.
+ *
+ * Quien lo muestra lo envuelve en `key(event.id)`: cambiar de movimiento reinicia todo su estado,
+ * así que un campo a medio escribir no pasa al siguiente.
+ */
+@Composable
+internal fun PanelDelMovimiento(
+    event: FinancialEvent,
+    cuentas: List<Account>,
+    onCerrar: () -> Unit,
+    onCambiado: () -> Unit,
+    onAnulado: () -> Unit,
+    onVerCuenta: (() -> Unit)? = null,
+) {
+    JuegoDelMovimiento(
+        event = event,
+        lugar = LugarDelMovimiento.Panel,
+        cuentas = cuentas,
+        onDismiss = onCerrar,
+        onCambiado = onCambiado,
+        onVerCuenta = onVerCuenta,
+        onResuelto = {},
+        onAnulado = onAnulado,
+    )
+}
+
+@Composable
+private fun JuegoDelMovimiento(
+    event: FinancialEvent,
+    lugar: LugarDelMovimiento,
+    cuentas: List<Account>,
+    onDismiss: () -> Unit,
+    onCambiado: () -> Unit,
+    onVerCuenta: (() -> Unit)?,
+    onResuelto: (FinancialEvent) -> Unit,
+    onAnulado: () -> Unit,
+) {
     var pidioAnular by remember(event.id) { mutableStateOf(false) }
     var prefillRecurrente by remember(event.id) { mutableStateOf<RecurringPrefill?>(null) }
     // PR 1 del rediseño de Recurrentes: la regla que el dueño pidió editar desde acá mismo —ver
@@ -82,8 +140,9 @@ fun HojaDelMovimiento(
     // los dos a la vez, porque los dos nacen del mismo botón de `SeccionEstoSeRepite`.
     var reglaAEditar by remember(event.id) { mutableStateOf<RecurringRule?>(null) }
 
-    ChangeCategorySheet(
+    ContenidoDelMovimiento(
         event = event,
+        lugar = lugar,
         cuentas = cuentas,
         onDismiss = onDismiss,
         onEventChanged = { actualizado ->
@@ -141,6 +200,7 @@ fun HojaDelMovimiento(
             onVoided = {
                 pidioAnular = false
                 onResuelto(event)
+                onAnulado()
                 onCambiado()
             },
         )

@@ -115,6 +115,9 @@ class ScrollDesdeLosMargenesTest {
      * Ola W1: lo mismo con el esqueleto real de App.kt. A 1.200 dp la ventana es de escritorio: el
      * rail ancho se lleva 216 y la columna de lectura mide 720, así que quedan 132 dp de margen a
      * cada lado. Se arrastra sobre el de la derecha.
+     *
+     * Con «Por revisar», que sigue siendo una columna de lectura: desde la Ola W4 Movimientos es
+     * lista y detalle y a 1.200 dp llena todo el ancho, sin margen que probar.
      */
     @Test
     fun `en la cascara real el margen derecho mueve la lista`() {
@@ -123,7 +126,7 @@ class ScrollDesdeLosMargenesTest {
             ConClaseDeAncho {
                 CompositionLocalProvider(LocalRelevoDeScroll provides relevo) {
                     EsqueletoDeLaCascara(
-                        pantalla = Screen.Transactions(),
+                        pantalla = Screen.PorRevisar,
                         activeTab = NavTab.MOVIMIENTOS,
                         conNavegacion = true,
                         onTabSelected = {},

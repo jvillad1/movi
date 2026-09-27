@@ -364,9 +364,10 @@ class InicioDeUnVistazoTest {
     fun `el Inicio se ensancha en escritorio y una pantalla de lectura no`() {
         // Desde la Ola W1 el tope depende también de la clase de ancho (la tabla completa está en
         // `DisposicionTest`). Desde la W3 Patrimonio, Créditos y Plan también son tableros; una
-        // lista como Movimientos sigue en su columna de lectura.
+        // lista sola como «Por revisar» sigue en su columna de lectura (Movimientos dejó de serlo en
+        // la W4: es lista y detalle).
         assertEquals(1_280.dp, anchoMaximoDeLaPantalla(Screen.Dashboard, WindowWidthClass.Expanded))
-        assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.Transactions(), WindowWidthClass.Expanded))
+        assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.PorRevisar, WindowWidthClass.Expanded))
         assertEquals(1_280.dp, anchoMaximoDeLaPantalla(Screen.Accounts, WindowWidthClass.Expanded))
     }
 

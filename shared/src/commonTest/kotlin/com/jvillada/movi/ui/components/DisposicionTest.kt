@@ -49,7 +49,6 @@ class DisposicionTest {
         listOf(Screen.Dashboard, Screen.Accounts, Screen.Credits, Screen.Plan())
             .forEach { assertEquals(Disposicion.Tablero, disposicionDe(it), "$it") }
         listOf(
-            Screen.Transactions(),
             Screen.Mas, Screen.Profile, Screen.Categorias, Screen.Login, Screen.PorRevisar,
         ).forEach { assertEquals(Disposicion.Lectura, disposicionDe(it), "$it") }
     }
@@ -95,7 +94,9 @@ class DisposicionTest {
     fun `el tope de una pantalla es el de su disposicion`() {
         assertEquals(1_280.dp, anchoMaximoDeLaPantalla(Screen.Dashboard, WindowWidthClass.Expanded))
         assertEquals(840.dp, anchoMaximoDeLaPantalla(Screen.Dashboard, WindowWidthClass.Medium))
-        assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.Transactions(), WindowWidthClass.Expanded))
+        // Ola W4: Movimientos pasó a lista y detalle (ver `MovimientosListaYDetalleTest`).
+        assertEquals(1_440.dp, anchoMaximoDeLaPantalla(Screen.Transactions(), WindowWidthClass.Expanded))
+        assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.PorRevisar, WindowWidthClass.Expanded))
         assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.Profile, WindowWidthClass.Medium))
         assertEquals(Dp.Infinity, anchoMaximoDeLaPantalla(Screen.Dashboard, WindowWidthClass.Compact))
     }
