@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -85,7 +86,7 @@ class LoQueLlegaDelBancoEligeLaCuentaTest {
     fun desde_un_sms_sin_cuenta_se_puede_elegir_una_con_el_dedo() {
         montarSms(cuentas = todas)
 
-        tocar("Cambiar")
+        cambiarLaCuentaDelSms()
         tocar("AMEX 9208")
 
         composeRule.onNodeWithText("AMEX 9208").assertIsDisplayed()
@@ -101,7 +102,7 @@ class LoQueLlegaDelBancoEligeLaCuentaTest {
     fun el_selector_del_sms_no_ofrece_el_credito_pero_no_lo_esconde() {
         montarSms(cuentas = todas)
 
-        tocar("Cambiar")
+        cambiarLaCuentaDelSms()
 
         // La AMEX y no la cuenta de ahorros: esa ya está arriba, en el resumen, y buscarla por
         // texto encontraría dos nodos. La tarjeta solo puede estar en la lista.
@@ -216,6 +217,12 @@ class LoQueLlegaDelBancoEligeLaCuentaTest {
      * composable —no falla, simplemente no pasa nada—, así que una prueba escrita con
      * `performClick` sería verde sin haber probado nada.
      */
+    /** Ola L: la fila «Categoría» también dice «Cambiar»; la de la cuenta es la primera. */
+    private fun cambiarLaCuentaDelSms() {
+        composeRule.onAllNodesWithText("Cambiar")[0].performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
     private fun tocar(texto: String) {
         composeRule.onNodeWithText(texto).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
