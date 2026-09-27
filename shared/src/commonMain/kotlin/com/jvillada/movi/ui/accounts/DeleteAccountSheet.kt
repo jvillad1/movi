@@ -171,7 +171,7 @@ fun DeleteAccountSheet(
                 val avisos = listOfNotNull(
                     balanceWarningLabel(accountBalance, accountIsDebt, accountBalanceCurrency),
                     if (transferCount > 0) {
-                        transferWarningLabel(transferCount, transferAmount, transferCurrency)
+                        transferWarningLabel(transferCount, transferAmount, transferCurrency, accountIsDebt)
                     } else {
                         null
                     },
@@ -264,9 +264,7 @@ internal fun balanceWarningLabel(balance: Long, isDebt: Boolean, currency: Strin
     return if (isDebt) {
         "Con la cuenta desaparece su deuda de $cuanto, así que tu patrimonio va a subir esa misma " +
             "cifra sin que hayas pagado nada: la plata prestada sigue en tus otras cuentas. Si el " +
-            "banco te la sigue cobrando, vuelve a crear el crédito. Y si con este crédito te " +
-            "desembolsaron plata, ese desembolso deja de sumar en lo que entró de su período: " +
-            "queda suelto, como un movimiento de una cuenta eliminada."
+            "banco te la sigue cobrando, vuelve a crear el crédito."
     } else {
         "Con la cuenta desaparecen sus $cuanto, así que tu patrimonio va a bajar esa misma cifra."
     }
@@ -304,7 +302,7 @@ internal fun balanceWarningLabel(balance: Long, isDebt: Boolean, currency: Strin
  * no algo que este aviso introduzca; el borrado del server igual desenlaza todas las patas, así
  * que el dato que puede quedar corto es el aviso, nunca la base.
  */
-internal fun transferWarningLabel(count: Int, amount: Long, currency: String): String {
+internal fun transferWarningLabel(count: Int, amount: Long, currency: String, isDebt: Boolean = false): String {
     // Ola 14 — el monto entra al aviso. Antes decía cuántos movimientos eran, no cuánta plata:
     // suficiente cuando un traspaso era entre dos cuentas de dinero, insuficiente desde que una
     // punta puede ser un crédito y ese renglón puede valer el crédito entero. «1 movimiento» y
@@ -313,17 +311,26 @@ internal fun transferWarningLabel(count: Int, amount: Long, currency: String): S
     // cuenta, por $257.000.000 en total,. Esa cuenta…». Preexistente, y visible en la única hoja
     // donde el dueño lee con lupa.
     val cuanto = if (amount > 0L) ", por ${formatMoney(amount, currency)} en total" else ""
+    // Borrar un crédito saca de «Entró» su desembolso (la pata del dinero queda suelta y rotulada):
+    // antes sumaba como plata que entró, y hay que decirlo aunque el crédito ya esté en saldo cero,
+    // que es cuando el aviso del saldo no aparece.
+    val desembolso = if (isDebt) {
+        " Si uno de esos movimientos es el desembolso de este crédito, deja de sumar en lo que " +
+            "entró de su período."
+    } else {
+        ""
+    }
     return if (count == 1) {
         "1 de esos movimientos es un traspaso con otra cuenta$cuanto. Esa cuenta conserva su " +
             "mitad y su saldo no cambia, pero ese movimiento deja de ser un traspaso: queda " +
             "suelto, en la categoría «$ORPHANED_LEG_CATEGORY». No suma a tus gastos ni a tus " +
             "ingresos del mes; si esa plata sí se movió de verdad, puedes cambiarle la categoría " +
-            "después."
+            "después.$desembolso"
     } else {
         "$count de esos movimientos son traspasos con otras cuentas$cuanto. Esas cuentas " +
             "conservan su mitad y sus saldos no cambian, pero esos movimientos dejan de ser " +
             "traspasos: quedan sueltos, en la categoría «$ORPHANED_LEG_CATEGORY». No suman a tus " +
             "gastos ni a tus ingresos del mes; si esa plata sí se movió de verdad, puedes " +
-            "cambiarles la categoría después."
+            "cambiarles la categoría después.$desembolso"
     }
 }

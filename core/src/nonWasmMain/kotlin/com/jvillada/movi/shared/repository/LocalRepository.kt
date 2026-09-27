@@ -9,8 +9,8 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.Instant
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.shared.model.CATEGORY_RESERVED_NOT_MANUAL
-import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
+import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.db.MoviDatabase
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
@@ -520,7 +520,7 @@ class LocalRepository(
             throw ApiException(422, TRANSFER_LEG_NOT_STANDALONE)
         }
         // El desembolso cuenta como ingreso: suelto inflaría «Entró». Misma guarda que el server.
-        if (event.category.trim() == DESEMBOLSO_CATEGORY) {
+        if (esCategoriaDelDesembolso(event.category)) {
             throw ApiException(400, DESEMBOLSO_CATEGORY_NOT_MANUAL)
         }
         // Y el monto, por el mismo motivo que la guarda de arriba: este espejo escribe PRIMERO. Si
@@ -1174,7 +1174,7 @@ class LocalRepository(
         // ni siquiera muestra la lista de categorías). Se deja igualar el orden para cuando se
         // toque el server, en vez de mover una guarda de plata por un texto de error.
         if (category == ORPHANED_LEG_CATEGORY) throw ApiException(422, ORPHANED_LEG_NOT_MANUAL)
-        if (category == DESEMBOLSO_CATEGORY) throw ApiException(422, DESEMBOLSO_CATEGORY_NOT_MANUAL)
+        if (esCategoriaDelDesembolso(category)) throw ApiException(422, DESEMBOLSO_CATEGORY_NOT_MANUAL)
         // Ola 16 · las dos guardas del saldo inicial, y **este par sí está en el mismo orden que
         // el server** (a diferencia del de arriba): primero la categoría de destino, después la
         // del evento. Es a propósito y vale escribir por qué. Con este orden, los tres cruces

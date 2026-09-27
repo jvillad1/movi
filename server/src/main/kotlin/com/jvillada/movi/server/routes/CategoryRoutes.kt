@@ -25,7 +25,6 @@ import com.jvillada.movi.shared.model.CategoryPrefsRequest
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
-import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
 import com.jvillada.movi.shared.model.MergeCategoryRequest
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
@@ -35,6 +34,7 @@ import com.jvillada.movi.shared.model.categoriaDestinoInexistenteMensaje
 import com.jvillada.movi.shared.model.categoriaDestinoOcupadoMensaje
 import com.jvillada.movi.shared.model.categoriaQueSostieneReglasMensaje
 import com.jvillada.movi.shared.model.categoriaReservadaMensaje
+import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.nombreSostieneReglasDePlata
 import com.jvillada.movi.shared.model.isReservedCategory
 import io.ktor.http.HttpStatusCode
@@ -130,7 +130,7 @@ fun Route.categoryRoutes() {
         if (nombreSostieneReglasDePlata(from)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaQueSostieneReglasMensaje(from))
         }
-        if (to.equals(DESEMBOLSO_CATEGORY, ignoreCase = true)) {
+        if (esCategoriaDelDesembolso(to)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, DESEMBOLSO_CATEGORY_NOT_MANUAL)
         }
         if (PREDEFINED_CATEGORIES.any { it.name == from }) {
@@ -191,7 +191,7 @@ fun Route.categoryRoutes() {
         if (nombreSostieneReglasDePlata(from)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaQueSostieneReglasMensaje(from))
         }
-        if (into.equals(DESEMBOLSO_CATEGORY, ignoreCase = true)) {
+        if (esCategoriaDelDesembolso(into)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, DESEMBOLSO_CATEGORY_NOT_MANUAL)
         }
         if (from == into) {

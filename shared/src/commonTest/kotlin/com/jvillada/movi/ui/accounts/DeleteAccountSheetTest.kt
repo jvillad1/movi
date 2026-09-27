@@ -28,11 +28,19 @@ class DeleteAccountSheetTest {
         assertTrue("sin que hayas pagado nada" in aviso)
     }
 
-    /** Borrar el crédito saca el desembolso de «Entró»: hay que decirlo antes del botón rojo. */
+    /**
+     * Borrar el crédito saca el desembolso de «Entró»: hay que decirlo antes del botón rojo, y también
+     * con la deuda en cero (el aviso del saldo no sale) — por eso vive en el aviso de los traspasos.
+     */
     @Test
-    fun `el aviso de una deuda dice que el desembolso deja de sumar en lo que entro`() {
-        val aviso = balanceWarningLabel(10_000_000L, isDebt = true, currency = "COP")!!
-        assertTrue("desembolso deja de sumar en lo que entró" in aviso, aviso)
+    fun `el aviso de traspasos de un credito dice que el desembolso deja de sumar en lo que entro`() {
+        val deUnCredito = transferWarningLabel(1, 10_000_000L, "COP", isDebt = true)
+        assertTrue("desembolso de este crédito, deja de sumar en lo que entró" in deUnCredito, deUnCredito)
+        assertTrue(",." !in deUnCredito, deUnCredito)
+        assertNull(balanceWarningLabel(0L, isDebt = true, currency = "COP"))
+        // Una cuenta que no es deuda no habla de desembolsos.
+        assertTrue("desembolso" !in transferWarningLabel(2, 1_000_000L, "COP", isDebt = false))
+        assertTrue("desembolso de este crédito" in transferWarningLabel(3, 1_000_000L, "COP", isDebt = true))
     }
 
     /** El caso normal: borrar una cuenta con plata. También se dice, aunque no sorprenda. */

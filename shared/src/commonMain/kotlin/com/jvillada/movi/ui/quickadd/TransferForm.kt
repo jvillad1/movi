@@ -1111,7 +1111,7 @@ internal fun TransferBody(
             Text(
                 text = if (claseDeTraspaso == TransferKind.DESEMBOLSO) {
                     "Desembolso: la plata que el banco te prestó entra a tu cuenta y suma en «Entró» " +
-                        "de este período; la deuda del crédito sube, no baja."
+                        "del período de su fecha; la deuda del crédito sube, no baja."
                 } else {
                     "Abono extraordinario: plata extra que baja el capital. La cuota mensual no va " +
                         "aquí — esa se anota como gasto en Agregar."

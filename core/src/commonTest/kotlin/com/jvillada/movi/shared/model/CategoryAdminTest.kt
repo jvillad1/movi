@@ -32,6 +32,14 @@ class CategoryAdminTest {
         assertFalse(isReservedCategory(CUOTA_CATEGORY))
         assertTrue(nombreSostieneReglasDePlata(DESEMBOLSO_CATEGORY))
         assertTrue(nombreSostieneReglasDePlata("  cuota de crédito "))
+        // Sin distinguir mayúsculas ni tildes: todas las guardas comparan igual.
+        assertTrue(esCategoriaDelDesembolso("desembolso de credito"))
+        assertTrue(esCategoriaDelDesembolso(" DESEMBOLSO DE CRÉDITO "))
+        assertFalse(esCategoriaDelDesembolso("Desembolso"))
+        assertTrue(esCategoriaDeCuota("CUOTA DE CREDITO"))
+        // Un texto por categoría: la cuota la elige el dueño, el desembolso solo lo escribe Movi.
+        assertTrue("la escribe Movi" in categoriaQueSostieneReglasMensaje(DESEMBOLSO_CATEGORY))
+        assertFalse("la escribe Movi" in categoriaQueSostieneReglasMensaje(CUOTA_CATEGORY))
         assertFalse(nombreSostieneReglasDePlata("Comida"))
         // Y el desembolso sí cuenta como flujo de caja donde entra plata: una cuenta de dinero.
         assertTrue(isCashFlow(AccountType.SAVINGS, TransactionType.INCOME, DESEMBOLSO_CATEGORY))

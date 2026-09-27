@@ -409,6 +409,7 @@ class CategoryRoutesTest {
         }
         // Hacia el desembolso, nadie; hacia la cuota, sí (es el destino de «Crédito» y parecidas).
         assertEquals(HttpStatusCode.UnprocessableEntity, rename("Carro", DESEMBOLSO_CATEGORY).status)
+        assertEquals(HttpStatusCode.UnprocessableEntity, rename("Carro", "desembolso de credito").status)
         assertEquals(HttpStatusCode.UnprocessableEntity, merge("Carro", DESEMBOLSO_CATEGORY).status)
         assertEquals(HttpStatusCode.OK, merge("Carro", CUOTA_CATEGORY).status)
         assertEquals(CUOTA_CATEGORY, categoriaEnEventos("e-carro"))

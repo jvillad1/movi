@@ -250,20 +250,32 @@ class FuentesQueNoSonIngresoTest {
     }
 
     /**
-     * Un desembolso guardado ANTES de la regla —«Traspaso» desde el crédito— sigue diciendo cuánto
-     * es crédito mientras la migración de datos no corra, aunque todavía no sume en «Entró».
+     * Un desembolso guardado ANTES de la regla —«Traspaso» desde el crédito— todavía no está en
+     * «Entró», así que tampoco puede aparecer en «Incluye…»: `creditosRecibidos` es siempre parte de
+     * `entradas`. La migración de datos lo pasa a «Desembolso de crédito» y desde ahí suma y se dice.
      */
     @Test
-    fun `un desembolso viejo anotado como traspaso cuenta en creditos recibidos`() {
+    fun `un desembolso viejo anotado como traspaso no cuenta en creditos recibidos`() {
         movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
         traspaso("tr-viejo", dia(9, 1), 10_000_000, desde = credito, hacia = ahorros)
-        // Entre cuentas propias y un abono al crédito no son desembolsos.
+        // Entre cuentas propias y un abono al crédito tampoco.
         traspaso("tr-al-cdt", dia(9, 3), 2_000_000, desde = ahorros, hacia = cdt)
         traspaso("tr-abono", dia(9, 6), 500_000, desde = ahorros, hacia = credito)
 
         val septiembre = detalle("2026-09").resumen
-        assertEquals(10_000_000, septiembre.creditosRecibidos)
+        assertEquals(0, septiembre.creditosRecibidos)
         assertEquals(0, septiembre.entradas)
+    }
+
+    /** Lo invariante: lo desembolsado nunca es más que lo que entró. */
+    @Test
+    fun `los creditos recibidos nunca pasan de lo que entro`() {
+        movimiento("ev-julio", dia(7, 10), 10_000, ahorros)
+        desembolso("tr-nuevo", dia(9, 1), 4_000_000, desde = credito, hacia = ahorros)
+        traspaso("tr-viejo", dia(9, 2), 10_000_000, desde = credito, hacia = nu)
+        movimiento("ev-sueldo", dia(9, 3), 3_000_000, ahorros, tipo = "INCOME", categoria = "Salario")
+        lista().forEach { assertTrue(it.creditosRecibidos <= it.entradas, it.id) }
+        assertEquals(4_000_000, lista().single { it.id == "2026-09" }.creditosRecibidos)
     }
 
     /** La lista dice lo mismo que el detalle: un desembolso y dos saldos iniciales en septiembre. */

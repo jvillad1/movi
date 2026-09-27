@@ -1609,7 +1609,7 @@ fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color = when (tono
  *
  * Sin `+` ni `−` a propósito: la plata no entró ni salió del bolsillo, solo cambió de cuenta.
  * (El desembolso de un crédito es la excepción: entró plata prestada, va en verde con «+» y una
- * nota que aclara que no cuenta como ingreso — ver [esDesembolso].)
+ * nota que aclara que es prestada — suma en «Entró» — ver [esDesembolso].)
  * Ponerle un signo obligaría a elegir el punto de vista de una de las dos cuentas, que es
  * exactamente la confusión que este renglón viene a sacar. El signo de cada pata sí aparece, con
  * su cuenta al lado, en el detalle de cada cuenta. El color, en cambio, sí distingue esto de un

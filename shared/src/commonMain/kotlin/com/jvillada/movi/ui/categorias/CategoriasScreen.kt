@@ -67,7 +67,7 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
-import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
+import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.categoriaQueSostieneReglasMensaje
 import com.jvillada.movi.shared.model.nombreSostieneReglasDePlata
@@ -1424,7 +1424,7 @@ private fun HojaUnificar(
             .filter {
                 // «Desembolso de crédito» no recibe: unificar movimientos sueltos en ella inflaría «Entró».
                 !it.reserved && it.name != categoria.name && (!soloVisibles || !it.hidden) &&
-                    !it.name.equals(DESEMBOLSO_CATEGORY, ignoreCase = true)
+                    !esCategoriaDelDesembolso(it.name)
             }
     }
 

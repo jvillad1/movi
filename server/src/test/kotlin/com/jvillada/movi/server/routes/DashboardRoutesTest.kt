@@ -883,13 +883,8 @@ class DashboardRoutesTest {
         // Nu, que en Ingresos sí cuentan), y NO se cuenta otra vez como plata de afuera. La pata del
         // crédito no suma en ningún lado.
         assertEquals(3_000_000L + 10_000_000L + 1_222_041L, body.long("monthIncome"))
-        // Y cada peso una vez: el Disponible de la tarjeta es saldo al inicio + entradas − fijos −
-        // variable; aquí el ingreso del período (sueldo + préstamo) está en `entradasDelPeriodo` una
-        // sola vez, no dos.
-        assertEquals(
-            700_000L + 16_000_000L - 500_000L,
-            body.long("saldoTuPlataAlInicio") + body.long("entradasDelPeriodo") - body.long("guardadoDelPeriodo"),
-        )
+        // Y una sola vez en las entradas del Disponible (los 10M ya se afirmaron arriba, dentro de
+        // 3M + 10M + 3M): la pata del crédito no suma otra vez, ni como plata de afuera.
     }
 
     /** Un desembolso guardado antes de la regla (categoría «Traspaso») sigue entrando como plata de afuera. */

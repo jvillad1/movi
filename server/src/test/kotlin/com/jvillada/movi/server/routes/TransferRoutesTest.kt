@@ -1074,6 +1074,19 @@ class TransferRoutesTest {
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertEquals(DESEMBOLSO_CATEGORY_NOT_MANUAL, response.bodyAsText())
         assertEquals(before, eventCount())
+
+        // Sin mayúsculas ni tildes tampoco: la misma comparación que renombrar y unificar.
+        val enMinuscula = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"id":"ev-suelto-d2","accountId":"$ahorrosId","type":"INCOME","amount":10000000,""" +
+                    """"category":"desembolso de credito","description":"ingreso inventado",""" +
+                    """"timestamp":${System.currentTimeMillis()}}""",
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, enMinuscula.status)
+        assertEquals(before, eventCount())
     }
 
     @Test
@@ -1086,6 +1099,13 @@ class TransferRoutesTest {
         }
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
         assertEquals(DESEMBOLSO_CATEGORY_NOT_MANUAL, response.bodyAsText())
+
+        val enMinuscula = client.put("/api/events/ev-apertura-ahorros/category") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"category":"DESEMBOLSO DE CRÉDITO"}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, enMinuscula.status)
     }
 
     /** Anular un desembolso anula las dos patas: lo que había sumado en «Ingresos» se va con él. */

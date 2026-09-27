@@ -9,8 +9,8 @@ import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
 import com.jvillada.movi.server.reminders.periodoDelDueno
 import org.jetbrains.exposed.sql.update
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
-import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
+import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
@@ -109,7 +109,7 @@ internal fun categoriaQueMoviEscribeSola(category: String): String? = when {
         "«Pago de un tercero» la escribe Movi cuando registras la cuota de un crédito que paga otro"
     category == OPENING_CATEGORY -> OPENING_CATEGORY_RESERVED
     // No es reservada (cuenta como ingreso), pero una pata suelta inflaría «Entró» sin deuda detrás.
-    category == DESEMBOLSO_CATEGORY -> DESEMBOLSO_CATEGORY_NOT_MANUAL
+    esCategoriaDelDesembolso(category) -> DESEMBOLSO_CATEGORY_NOT_MANUAL
     // Y todas las demás, **sin distinguir mayúsculas**: comparar exacto dejaba pasar «traspaso» en
     // minúscula, y con eso un gasto real de $200.000 salía de «Gastos del mes» sin decir nada.
     category != CARD_PAYMENT_CATEGORY && isReservedCategory(category) ->
@@ -190,7 +190,7 @@ fun Route.eventRoutes() {
 
             // El desembolso cuenta como ingreso, así que un movimiento suelto con esta categoría
             // inflaría «Entró» sin la deuda que lo respalda: solo nace con su par.
-            if (body.category.trim() == DESEMBOLSO_CATEGORY) {
+            if (esCategoriaDelDesembolso(body.category)) {
                 return@post call.respond(HttpStatusCode.BadRequest, DESEMBOLSO_CATEGORY_NOT_MANUAL)
             }
 

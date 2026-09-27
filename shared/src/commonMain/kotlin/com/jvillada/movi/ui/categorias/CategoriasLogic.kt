@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.categorias
 import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
+import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
@@ -426,7 +427,7 @@ fun propuestasDeOrden(
             if (totalMovimientos(destino) == 0) continue
             // «Cuota de crédito» solo puede recibir: ver [SOSTIENEN_REGLAS_DE_PLATA]. Y «Desembolso
             // de crédito» ni eso: unificar movimientos sueltos en ella inflaría «Entró».
-            if (sostieneReglasDePlata(origen) || normalizarParaBuscar(destino.name) == normalizarParaBuscar(DESEMBOLSO_CATEGORY)) continue
+            if (sostieneReglasDePlata(origen) || esCategoriaDelDesembolso(destino.name)) continue
             unificarParecidas += PropuestaDeOrden.UnificarParecidas(origen, destino)
         }
     }

@@ -15,6 +15,7 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.StatementImports
 import com.jvillada.movi.server.db.StatementImportMatches
 import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.TipoDeDocumento
@@ -783,7 +784,8 @@ private fun Transaction.escribirElImporte(
                 // la pata de traspaso: este `Events.update` no pasa por la guarda del
                 // `PUT /api/events/{id}/category`, así que la validación tiene que estar acá.
                 val categoriaDelExtractoEsSegura =
-                    !esPataDeTraspaso && !isReservedCategory(dec.parsed.category)
+                    !esPataDeTraspaso && !isReservedCategory(dec.parsed.category) &&
+                        !esCategoriaDelDesembolso(dec.parsed.category)
                 val finalCategory    = if (dec.categorySource    == FieldSource.STATEMENT && categoriaDelExtractoEsSegura) dec.parsed.category    else existCat
                 val finalDescription = if (dec.descriptionSource == FieldSource.STATEMENT) dec.parsed.description else existDesc
                 val finalMerchant    = if (dec.merchantSource    == FieldSource.STATEMENT) dec.parsed.merchant    else existMerchant
@@ -910,7 +912,8 @@ private fun Transaction.createEventFromParsed(tx: ParsedTransaction, accountId: 
         it[category]             = when {
             tx.category == CARD_PAYMENT_CATEGORY && tx.type == TransactionType.EXPENSE &&
                 looksLikeCardPayment(tx.description + " " + tx.rawText, category = "") -> CARD_PAYMENT_CATEGORY
-            isReservedCategory(tx.category) -> FALLBACK_CATEGORY
+            // El desembolso cuenta como ingreso y solo nace con su par: una fila suelta la inflaría.
+            isReservedCategory(tx.category) || esCategoriaDelDesembolso(tx.category) -> FALLBACK_CATEGORY
             else -> tx.category
         }
         it[description]          = tx.description

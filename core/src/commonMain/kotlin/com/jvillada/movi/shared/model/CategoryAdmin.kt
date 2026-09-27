@@ -266,12 +266,33 @@ fun categoriaReservadaMensaje(name: String): String =
  * les cierra la puerta de renombrar/unificar como **origen**.
  */
 fun nombreSostieneReglasDePlata(name: String): Boolean =
-    name.trim().equals(CUOTA_CATEGORY, ignoreCase = true) ||
-        name.trim().equals(DESEMBOLSO_CATEGORY, ignoreCase = true)
+    esCategoriaDeCuota(name) || esCategoriaDelDesembolso(name)
 
+/**
+ * ¿Este nombre es [DESEMBOLSO_CATEGORY]? Sin distinguir mayúsculas ni tildes (la misma normalización
+ * con la que la app busca): todas las guardas de esta categoría —crear, recategorizar, renombrar,
+ * unificar, importar un extracto— preguntan por acá, para que ninguna deje pasar un nombre que otra
+ * rechaza.
+ */
+fun esCategoriaDelDesembolso(name: String): Boolean =
+    normalizarParaBuscar(name) == normalizarParaBuscar(DESEMBOLSO_CATEGORY)
+
+/** ¿Este nombre es [CUOTA_CATEGORY]? Misma comparación que [esCategoriaDelDesembolso]. */
+fun esCategoriaDeCuota(name: String): Boolean =
+    normalizarParaBuscar(name) == normalizarParaBuscar(CUOTA_CATEGORY)
+
+/**
+ * Por qué no se renombra ni se unifica en otra una categoría de [nombreSostieneReglasDePlata]. Un
+ * texto por categoría: la cuota el dueño la elige a mano, el desembolso solo lo escribe Movi.
+ */
 fun categoriaQueSostieneReglasMensaje(name: String): String =
-    "«$name» la escribe Movi al pagar la cuota o al desembolsar un crédito, y de su nombre " +
-        "exacto dependen las cifras de tu mes. No se puede renombrar ni unificar en otra."
+    if (esCategoriaDelDesembolso(name)) {
+        "«$name» la escribe Movi cuando registras el desembolso de un crédito, y de su nombre " +
+            "exacto dependen las cifras de tu mes. No se puede renombrar ni unificar en otra."
+    } else {
+        "«$name» es la categoría de las cuotas de tus créditos, y de su nombre exacto dependen las " +
+            "cifras de tu mes. No se puede renombrar ni unificar en otra."
+    }
 
 const val CATEGORY_CATALOG_RENAME_BLOCKED: String =
     "Las categorías del catálogo de Movi no se renombran: el catálogo es el mismo para todos y " +
