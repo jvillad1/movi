@@ -1,5 +1,7 @@
 package com.jvillada.movi.aislamiento
 
+import com.jvillada.movi.data.CacheDeLecturas
+import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.FormaDeCategorias
@@ -118,6 +120,10 @@ class ElForkLlegaLimpioTest {
             name = "Otra Prueba",
             email = "otra@ejemplo.com",
         )
+        // Lo último que leyó cada pantalla: solo se guarda con la sesión de quien leyó puesta, así
+        // que va después de `save`. Dos claves, para que no alcance con limpiar una sola.
+        CacheDeLecturas.guardar(ClaveDeLectura.EventosPorDia, emptyList(), "u1", ahora = 1_700_000_000_000L)
+        CacheDeLecturas.guardar(ClaveDeLectura.Cuentas, emptyList(), "u1", ahora = 1_700_000_000_000L)
         // La instantánea del Inicio NO es un `object` en memoria: vive en el `Settings` del
         // aparato, que sobrevive a todo menos al logout. Acá, en un almacén de mentira que es
         // estático de este archivo (sobrevive de un método al siguiente, como el de verdad). La
@@ -151,6 +157,7 @@ class ElForkLlegaLimpioTest {
         assertNotNull("El lector de huellas de prueba no quedó enchufado", Huella.sustitutoDePrueba)
         assertNotNull("El repositorio de Compartir de prueba no quedó enchufado", Repositories.sustitutoDeCompartirDePrueba)
         assertTrue("«Entrar con huella» no quedó prendida", SessionManager.huellaActivada)
+        assertEquals("Las lecturas recordadas no quedaron guardadas", 2, CacheDeLecturas.cuantas)
         assertNotNull("La instantánea del Inicio no quedó guardada", InstantaneaDelInicio.delAparato.datos("u1"))
         assertNotNull("La definición del Inicio no quedó guardada", InstantaneaDelInicio.delAparato.definicion("u1"))
         assertNotNull("La forma de Créditos no quedó guardada", FormaRecordada.delAparato.creditos("u1"))
@@ -165,6 +172,7 @@ class ElForkLlegaLimpioTest {
         assertEquals("Los usos recientes de categoría traen resaca", emptyMap<String, Int>(), UsedCategoriesCache.usosRecientes)
         assertNull("ScreenDefCache trae resaca", ScreenDefCache.dashboard)
         assertNull("DashboardDataCache trae resaca", DashboardDataCache.data)
+        assertEquals("CacheDeLecturas trae las lecturas de otra prueba", 0, CacheDeLecturas.cuantas)
         assertEquals("DashboardDataCache trae la marca de tiempo anterior", 0L, DashboardDataCache.cargadoEn)
         assertEquals("DashboardDataCache trae el tick anterior", 0, DashboardDataCache.tickDeLaCarga)
         assertEquals("DashboardDataCache trae entradas ya hechas", emptySet<String>(), DashboardDataCache.entradasHechas)

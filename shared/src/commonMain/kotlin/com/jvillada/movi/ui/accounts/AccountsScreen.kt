@@ -12,7 +12,6 @@ import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.RequestQuote
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -29,7 +28,9 @@ import com.jvillada.movi.data.FormaDeCuentas
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.intentar
+import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -43,7 +44,6 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.ui.transactions.CHIP_ENTRE_CUENTAS
 import com.jvillada.movi.ui.components.*
-import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.cuadre.cuentasSinCuadrar
 import com.jvillada.movi.ui.cuadre.textoDelAvisoDeCuadre
 import com.jvillada.movi.ui.dashboard.heroBalance
@@ -56,21 +56,25 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.ui.graphics.Color
-import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
 @Composable
 fun AccountsScreen(onNavigate: (Screen) -> Unit) {
-    // `null` = la lectura todavía no contestó bien; `emptyList()` = contestó y no hay ninguna. Ola B:
-    // antes era una lista vacía más un `cuentasLeidas` aparte; con `null` las dos preguntas («¿llegó?»
-    // y «¿está vacía?») son una sola variable y no se pueden desalinear. Una vez leída no vuelve a
-    // `null`: una recarga que falla sigue mostrando lo último que se supo.
-    var accounts by remember { mutableStateOf<List<Account>?>(null) }
-    // `true` desde el primer cuadro: el efecto de abajo arranca la lectura en ese mismo cuadro, y
-    // con `false` el primer cuadro caía en «no se pudo leer» antes de que la lectura empezara.
-    var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
+    // **Lo último que se vio, al primer cuadro** (ver [rememberLectura]): las cuentas, las deudas y
+    // las cuentas de otros arrancan con lo que dejó la visita anterior y se releen igual. Se releen
+    // con `refreshKey` (el «Reintentar» de esta pantalla, o que algo se guardó desde ella) y con
+    // `LocalRefreshTick` (se guardó algo desde la hoja de Agregar, que es una modal: esta pantalla
+    // nunca sale de la composición).
+    val cuentasLeidas = rememberLectura(ClaveDeLectura.Cuentas, reintento = refreshKey) { Repositories.wallets.getAccounts() }
+    // `null` = la lectura todavía no contestó bien (ni en esta visita ni en una reciente);
+    // `emptyList()` = contestó y no hay ninguna. Una vez leída no vuelve a `null`: una recarga que
+    // falla sigue mostrando lo último que se supo, y lo dice (ver `noSePudoActualizar`).
+    val accounts = cuentasLeidas.valor
+    // `true` desde el primer cuadro: la lectura arranca en ese mismo cuadro, y con `false` el
+    // primer cuadro caía en «no se pudo leer» antes de que la lectura empezara.
+    val loading = cuentasLeidas.actualizando
     var showCreateSheet by remember { mutableStateOf(false) }
     // La hoja de un bien abierta: `existente = null` es uno nuevo (desde «Nueva cuenta» → «Bien»).
     var bienAbierto by remember { mutableStateOf<BienAbierto?>(null) }
@@ -85,20 +89,16 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     // Se lee una vez, al montar.
     val formaRecordada = remember { FormaRecordada.delAparato.cuentas(SessionManager.userId) }
 
-    // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
-    // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
-    // así que sin esto seguiría mostrando los datos de antes. Ver [LocalRefreshTick].
-    val refreshTick = LocalRefreshTick.current
-    LaunchedEffect(refreshKey, refreshTick) {
-        loading = true
-        error = null
-        intentar { Repositories.wallets.getAccounts() }
-            .onSuccess {
-                accounts = it
-                FormaRecordada.delAparato.guardarCuentas(SessionManager.userId, formaDeCuentas(it))
-            }
-            .onFailure { e -> error = e.toUserMessage() }
-        loading = false
+    // Cada lista de cuentas que llega (leída o recordada) deja su forma para el próximo esqueleto.
+    LaunchedEffect(accounts) {
+        val leidas = accounts ?: return@LaunchedEffect
+        FormaRecordada.delAparato.guardarCuentas(SessionManager.userId, formaDeCuentas(leidas))
+    }
+    // El snackbar de siempre, solo sin nada a la vista: con cuentas pintadas lo dice
+    // [NoSePudoActualizar] arriba de la lista, que no se va solo como el snackbar.
+    LaunchedEffect(cuentasLeidas.error) {
+        val e = cuentasLeidas.error ?: return@LaunchedEffect
+        if (accounts == null) error = e.toUserMessage()
     }
 
     LaunchedEffect(error) {
@@ -112,27 +112,26 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     // Créditos, leídos acá para no navegar hasta Créditos solo para saber si hay algo que ver.
     // Lectura propia —`null` = no contestó, no vacía por default— e independiente de `accounts`:
     // esta tarjeta tiene que poder aparecer aunque Cuentas siga cargando o se haya rendido.
-    var creditos by remember { mutableStateOf<List<CreditSummary>?>(null) }
-    var tarjetasDeCredito by remember { mutableStateOf<List<CardSummary>?>(null) }
-    var cargandoDeudas by remember { mutableStateOf(true) }
-    LaunchedEffect(refreshKey, refreshTick) {
-        cargandoDeudas = true
-        val prestamos = launch { intentar { Repositories.wallets.getCredits() }.onSuccess { creditos = it } }
-        val tarjetas = launch { intentar { Repositories.wallets.getCards() }.onSuccess { tarjetasDeCredito = it } }
-        prestamos.join()
-        tarjetas.join()
-        cargandoDeudas = false
-    }
+    val creditosLeidos = rememberLectura(ClaveDeLectura.Creditos, reintento = refreshKey) { Repositories.wallets.getCredits() }
+    val tarjetasLeidas = rememberLectura(ClaveDeLectura.Tarjetas, reintento = refreshKey) { Repositories.wallets.getCards() }
+    // Un «Sin deudas registradas» recordado no se afirma si la lectura de esta visita falló: se
+    // trata como no leído (el «No pudimos cargar» de la sección). Con deudas a la vista se quedan.
+    val creditos = creditosLeidos.valor.takeUnless { creditosLeidos.fallo && it.isNullOrEmpty() }
+    val tarjetasDeCredito = tarjetasLeidas.valor.takeUnless { tarjetasLeidas.fallo && it.isNullOrEmpty() }
+    val cargandoDeudas = creditosLeidos.actualizando || tarjetasLeidas.actualizando
 
     // ── «Te deben» (Ola C, tarea 4): cuántas cuentas de otros hay guardadas — mismo dato que
     // muestra `DestinosScreen`, leído acá y no recalculado.
-    var destinosGuardados by remember { mutableStateOf<List<DestinoConocido>?>(null) }
-    var cargandoTeDeben by remember { mutableStateOf(true) }
-    LaunchedEffect(refreshKey, refreshTick) {
-        cargandoTeDeben = true
-        intentar { Repositories.wallets.getDestinos() }.onSuccess { destinosGuardados = it }
-        cargandoTeDeben = false
-    }
+    val destinosLeidos = rememberLectura(ClaveDeLectura.Destinos, reintento = refreshKey) { Repositories.wallets.getDestinos() }
+    val destinosGuardados = destinosLeidos.valor.takeUnless { destinosLeidos.fallo && it.isNullOrEmpty() }
+    val cargandoTeDeben = destinosLeidos.actualizando
+
+    val lecturas = listOf(cuentasLeidas, creditosLeidos, tarjetasLeidas, destinosLeidos)
+    // Se está pintando algo que esta visita todavía no confirmó (lo recordado, o lo de antes de un
+    // «Reintentar»): lo dice «Actualizando…» en la cabecera, como el Inicio.
+    val actualizandoConAlgoALaVista = lecturas.any { it.actualizando && it.valor != null }
+    // Alguna lectura falló con lo de antes a la vista: se dice una vez, arriba, hasta que contesten.
+    val noSePudoActualizar = lecturas.any { it.falloConAlgoALaVista }
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -151,21 +150,27 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Patrimonio",
                 leading = HeaderLeading.Avatar(onNavigate),
-                action = { NewItemButton(label = "Nueva cuenta", onClick = { showCreateSheet = true }) },
+                // Mientras dice «Actualizando…» no lleva «Nueva cuenta»: las dos juntas no entran a
+                // 390 dp sin cortar el título en «Patr…». El botón vuelve apenas la lectura contesta.
+                action = {
+                    if (actualizandoConAlgoALaVista) {
+                        ActualizandoEnLaCabecera()
+                    } else {
+                        NewItemButton(label = "Nueva cuenta", onClick = { showCreateSheet = true })
+                    }
+                },
             )
 
-            // Task 7: la primera carga (sin una sola cuenta pintada todavía) ya no dice «cargando»
-            // con una barra — dice CON QUÉ FORMA va a llegar, con las filas esqueleto de más abajo.
-            // Una recarga con cuentas ya en pantalla (tocar «Reintentar», volver de crear una) sigue
-            // con la barra de siempre: ahí no hay esqueleto que la reemplace.
-            if (loading && !accounts.isNullOrEmpty()) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Movi.colores.marca.copy(alpha = 0.16f),
-                    trackColor = Movi.colores.tarjeta,
+            // La primera carga (sin una sola cuenta pintada todavía) no dice «cargando» con una
+            // barra: dice CON QUÉ FORMA va a llegar, con las filas esqueleto de más abajo. Una
+            // recarga con cuentas ya en pantalla lo dice «Actualizando…» en la cabecera; el alto de
+            // la barra que había acá se conserva para que nada de abajo se mueva.
+            Spacer(Modifier.height(4.dp))
+            if (noSePudoActualizar) {
+                NoSePudoActualizar(
+                    onReintentar = { refreshKey++ },
+                    modifier = Modifier.padding(horizontal = 16.dp).padding(top = 8.dp),
                 )
-            } else {
-                Spacer(Modifier.height(4.dp))
             }
 
             LazyColumn(
@@ -190,6 +195,9 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     item {
                         NoSePudoLeer("No pudimos cargar tus cuentas", onReintentar = { refreshKey++ })
                     }
+                } else if (cuentas.isEmpty() && cuentasLeidas.falloConAlgoALaVista) {
+                    // Lo recordado era «ninguna cuenta» y la lectura de esta visita falló: ese vacío
+                    // es de otra visita y no se afirma. Queda el aviso de arriba con «Reintentar».
                 } else if (cuentas.isEmpty()) {
                     // Sin una sola cuenta, ni un bien ni una deuda —una cuenta LOAN
                     // o CREDIT_CARD también está en `cuentas`, así que vacía de verdad implica las

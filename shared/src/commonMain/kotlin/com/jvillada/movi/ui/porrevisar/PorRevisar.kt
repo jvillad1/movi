@@ -1,14 +1,12 @@
 package com.jvillada.movi.ui.porrevisar
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import com.jvillada.movi.data.ClaveDeLectura
+import com.jvillada.movi.data.Lectura
 import com.jvillada.movi.data.Repositories
-import com.jvillada.movi.data.intentar
+import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
@@ -104,42 +102,37 @@ fun avisoDeCapturaEnLaBandeja(mensajes: List<SmsMessage>?, silenciada: Boolean?)
  * a pago de tarjeta. Los movimientos no están acá porque Movimientos ya los lee para su lista, y
  * leerlos dos veces sería pagar la misma lectura por el renglón.
  *
- * Cada valor en `null` hasta que su lectura contestó bien; `leyendo*` distingue «todavía no» de
- * «falló». Un reintento que falla conserva lo último leído.
+ * Cada valor en `null` hasta que su lectura contestó bien (en esta visita o en una reciente, ver
+ * [rememberLectura]); `leyendo*` distingue «todavía no» de «falló». Un reintento que falla conserva
+ * lo último leído.
  */
 @Stable
-class LecturasPorRevisar internal constructor() {
-    var mensajes: List<SmsMessage>? by mutableStateOf(null)
-        internal set
-    var candidatos: List<FinancialEvent>? by mutableStateOf(null)
-        internal set
-    var leyendoMensajes: Boolean by mutableStateOf(true)
-        internal set
-    var leyendoCandidatos: Boolean by mutableStateOf(true)
-        internal set
+class LecturasPorRevisar internal constructor(
+    private val deMensajes: Lectura<List<SmsMessage>>,
+    private val deCandidatos: Lectura<List<FinancialEvent>>,
+) {
+    val mensajes: List<SmsMessage>? get() = deMensajes.valor
+    val candidatos: List<FinancialEvent>? get() = deCandidatos.valor
+    val leyendoMensajes: Boolean get() = deMensajes.actualizando
+    val leyendoCandidatos: Boolean get() = deCandidatos.actualizando
 
     /** Las dos lecturas terminaron, bien o mal: ya se puede decidir qué pintar. */
     val terminaron: Boolean get() = !leyendoMensajes && !leyendoCandidatos
+
+    /** Alguna falló con lo de antes a la vista: lo que se ve es lo último que vimos. */
+    val falloConAlgoALaVista: Boolean get() = deMensajes.falloConAlgoALaVista || deCandidatos.falloConAlgoALaVista
 }
 
 /**
- * Lee [LecturasPorRevisar] y las vuelve a leer cuando cambia [recarga] o cuando se guardó algo
- * desde una ventana modal ([LocalRefreshTick]). `intentar` y no `runCatching`: una lectura
- * cancelada (se navegó a otro lado, cambió la clave) no puede quedar contada como contestada.
+ * Lee [LecturasPorRevisar] —empezando por lo último que se vio— y las vuelve a leer cuando cambia
+ * [recarga] o cuando se guardó algo desde una ventana modal ([LocalRefreshTick], adentro de
+ * [rememberLectura]).
  */
 @Composable
 fun rememberLecturasPorRevisar(recarga: Int): LecturasPorRevisar {
-    val lecturas = remember { LecturasPorRevisar() }
-    val refreshTick = LocalRefreshTick.current
-    LaunchedEffect(recarga, refreshTick) {
-        lecturas.leyendoMensajes = true
-        intentar { Repositories.wallets.getSmsMessages() }.onSuccess { lecturas.mensajes = it }
-        lecturas.leyendoMensajes = false
+    val mensajes = rememberLectura(ClaveDeLectura.MensajesDelBanco, recarga) { Repositories.wallets.getSmsMessages() }
+    val candidatos = rememberLectura(ClaveDeLectura.CandidatosPagoDeTarjeta, recarga) {
+        Repositories.wallets.getCardPaymentCandidates()
     }
-    LaunchedEffect(recarga, refreshTick) {
-        lecturas.leyendoCandidatos = true
-        intentar { Repositories.wallets.getCardPaymentCandidates() }.onSuccess { lecturas.candidatos = it }
-        lecturas.leyendoCandidatos = false
-    }
-    return lecturas
+    return remember(mensajes, candidatos) { LecturasPorRevisar(mensajes, candidatos) }
 }

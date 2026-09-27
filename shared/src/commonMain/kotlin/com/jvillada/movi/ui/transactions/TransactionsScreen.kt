@@ -22,7 +22,6 @@ import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -41,12 +40,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.intentar
+import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -355,12 +356,6 @@ const val CHIP_ENTRE_CUENTAS = 4
  * aun así llegara a Movimientos, [chipInicialDeMovimientos] lo trata como «Todo».
  */
 const val CHIP_RECURRENTES = 5
-
-/**
- * El tag de la barra de carga de Movimientos (Task 7, fix round 1): la que se pinta cuando se
- * recarga con la lista ya en pantalla — sin tag, una prueba no tiene cómo distinguirla.
- */
-const val TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS: String = "barra-de-carga-de-movimientos"
 
 /**
  * El tag de un renglón suelto de Movimientos (Task 3, Ola B): sin él, una prueba no tiene forma de
@@ -879,27 +874,48 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     // tiene que mover esta lista. Ver [ScrollDesdeLosMargenes].
     ScrollDesdeLosMargenes(listState)
 
-    var allDays by remember { mutableStateOf<List<EventDay>>(emptyList()) }
+    var refreshKey by remember { mutableStateOf(0) }
+    // **Lo último que se vio, al primer cuadro.** El perfil, la historia y las cuentas arrancan con
+    // lo que la visita anterior dejó en [CacheDeLecturas] (si es de esta sesión y reciente) y se
+    // releen igual: mientras la lectura nueva viaja la cabecera dice «Actualizando…», y si trae lo
+    // mismo no se recompone nada. Se releen con `refreshKey` (el «Reintentar» de esta pantalla, o que
+    // algo se guardó desde ella) y con `LocalRefreshTick` (se guardó algo desde la hoja de Agregar,
+    // que es una modal: esta pantalla nunca sale de la composición). Ver [rememberLectura].
+    val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = refreshKey) { Repositories.wallets.getUserProfile() }
+    val eventos = rememberLectura(ClaveDeLectura.EventosPorDia, reintento = refreshKey) { Repositories.wallets.getEventsByDay() }
+    val cuentas = rememberLectura(ClaveDeLectura.Cuentas, reintento = refreshKey) { Repositories.wallets.getAccounts() }
+    /**
+     * El perfil a la vista: el leído, el recordado, o el que devolvió guardar el arranque de un
+     * período desde esta pantalla (ver [Lectura.anotar] más abajo).
+     */
+    val perfilVigente = perfil.valor
     /**
      * El día en que arranca el mes del dueño. Sale de su perfil, igual que en Presupuestos; si la
      * lectura falla queda en 1 —mes de calendario—, que es el comportamiento de siempre.
      */
-    var cutoffDay by remember { mutableStateOf(1) }
+    val cutoffDay = perfilVigente?.periodCutoffDay ?: 1
     /** Los períodos que el dueño declaró que arrancaron otro día. Ver `PeriodSettings.iniciosPropios`. */
-    var iniciosPropios by remember { mutableStateOf(emptyMap<String, String>()) }
+    val iniciosPropios = perfilVigente?.periodStarts ?: emptyMap()
     // Ola B, tarea 2: distingue «todavía no sabemos el corte» (`cutoffDay` en su default de 1) de
     // «ya se leyó y de verdad es corte 1» — sin esto, la línea del rango (`rangoLegibleDe`)
     // aparecía recién cuando el perfil contestaba y empujaba toda la lista de abajo. Se prende con
-    // éxito O con fallo del perfil: los dos son «ya sabemos qué mostrar».
-    var perfilLeido by remember { mutableStateOf(false) }
+    // un perfil a la vista (leído o recordado) O con su lectura terminada, aunque haya fallado: los
+    // dos son «ya sabemos qué mostrar».
+    val perfilLeido = perfilVigente != null || perfil.terminada
     /**
-     * Whole-branch review, final fix wave: distinto de [perfilLeido] — este solo se prende con una
-     * lectura que salió BIEN, porque es lo único que vale la pena recordar en `FormaRecordada`
-     * (ver su KDoc: «los números... la última vez que su lectura salió bien»). Grabar también un
-     * fallo dejaría una `FormaDeMovimientos` mintiendo sobre el corte real la próxima vez que se
-     * abra la pantalla.
+     * Distinto de [perfilLeido]: este solo vale con un perfil
+     * que salió BIEN de una lectura (de esta visita o recordada de una anterior), porque es lo único
+     * que vale la pena recordar en `FormaRecordada` (ver su KDoc: «los números... la última vez que
+     * su lectura salió bien»). Grabar también un fallo dejaría una `FormaDeMovimientos` mintiendo
+     * sobre el corte real la próxima vez que se abra la pantalla.
      */
-    var perfilOk by remember { mutableStateOf(false) }
+    val perfilOk = perfilVigente != null
+    /**
+     * La historia, recién cuando el perfil ya se sabe: filtrarla por período con el corte por
+     * defecto y volver a filtrarla cuando llega el de verdad sería una lista que cambia de mes
+     * delante del dueño. Con los dos recordados, están los dos al primer cuadro.
+     */
+    val allDays = if (perfilLeido) eventos.valor.orEmpty() else emptyList()
     /**
      * Si la última carga que salió bien mostraba la línea del rango del período, o nunca la
      * mostró (corte 1). `null` la primera vez en este aparato: reserva la línea, como siempre.
@@ -912,13 +928,22 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     var guardandoInicio by remember { mutableStateOf(false) }
     var errorDelInicio by remember { mutableStateOf<String?>(null) }
     var editandoElInicio by remember { mutableStateOf(false) }
-    var loading by remember { mutableStateOf(true) }  // true de entrada: antes de la primera lectura no se afirma ni vacío ni error
+    // Hay una lectura en vuelo. Arranca prendido: antes de la primera lectura no se afirma ni vacío
+    // ni error. Con algo ya pintado es «Actualizando…»; sin nada, el esqueleto.
+    val loading = eventos.actualizando || perfil.actualizando
     val errorDeLaPantalla = remember { mutableStateOf<String?>(null) }
     var error by errorDeLaPantalla
-    var refreshKey by remember { mutableStateOf(0) }
-    // Se prende solo cuando `getEventsByDay` contestó de verdad (ver [NoSePudoLeer]). Sin esto, una
-    // lectura caída dejaba «Sin movimientos aún · + Registrar el primero» a quien tiene cientos.
-    var diasLeidos by remember { mutableStateOf(false) }
+    // Solo vale cuando `getEventsByDay` contestó de verdad, en esta visita o en una reciente (ver
+    // [NoSePudoLeer]). Sin esto, una lectura caída dejaba «Sin movimientos aún · + Registrar el
+    // primero» a quien tiene cientos.
+    val diasLeidos = eventos.valor != null
+    /**
+     * **Lo que se ve es lo último que vimos, no lo actual**: falló la lectura de la historia, o la
+     * del perfil —que decide qué días entran en el período— con uno recordado a la vista. Lo dice
+     * [NoSePudoActualizar] encima de la lista hasta que una lectura conteste.
+     */
+    val noSePudoActualizar = eventos.valor != null &&
+        (eventos.fallo || (perfil.fallo && perfil.valor != null))
     /** Lo anotado en este teléfono que el server rechazó (ver [textoDeRechazados]). */
     var rechazados by remember { mutableStateOf<List<MovimientoRechazado>>(emptyList()) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -926,18 +951,16 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     // F10: el estado vacío necesita saber si hay cuentas para elegir entre "+ Registrar el
     // primero" y "Crear una cuenta primero" — sin esto no hay forma de saber si el problema es
     // "no hay movimientos" o "no hay dónde anotarlos".
-    var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
+    // Una lectura secundaria: si falla no se dice nada, igual que siempre.
+    val accounts = cuentas.valor.orEmpty()
     // Solo se ofrece «Crear una cuenta primero» cuando la lista llegó y vino vacía; mientras
     // carga (o si falló) se ofrece registrar, que es la acción segura.
-    var accountsLoaded by remember { mutableStateOf(false) }
+    val accountsLoaded = cuentas.valor != null
     var showCreateSheet by remember { mutableStateOf(false) }
     // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
     // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
     // así que sin esto seguiría mostrando la lista de antes. Ver [LocalRefreshTick].
     val refreshTick = LocalRefreshTick.current
-    LaunchedEffect(refreshKey, refreshTick) {
-        runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it; accountsLoaded = true }
-    }
     // Los nombres de las cuentas, para que el renglón de un traspaso diga de dónde a dónde fue la
     // plata (ver [transferRowSubtitle]). Un evento suelto no los necesita: la cuenta no se muestra.
     val accountNames = remember(accounts) { accounts.associate { it.id to it.name } }
@@ -950,31 +973,32 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
 
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
 
-    LaunchedEffect(refreshKey, refreshTick) {
-        loading = true
-        error = null
-        runCatching { Repositories.wallets.getUserProfile() }
-            .onSuccess { cutoffDay = it.periodCutoffDay; iniciosPropios = it.periodStarts; perfilOk = true }
+    // Los avisos de una lectura caída, con el «Reintentar» de siempre — solo cuando NO hay nada a
+    // la vista. Con la lista pintada (de esta visita o recordada) lo dice [NoSePudoActualizar]
+    // encima de la lista, que no se va con el snackbar: una lista vieja sin nada que lo diga se
+    // haría pasar por actual. Cada falla es una instancia nueva, así que un segundo intento caído
+    // vuelve a avisar.
+    LaunchedEffect(perfil.error, eventos.error) {
+        val deLosEventos = eventos.error
+        error = when {
+            deLosEventos != null && eventos.valor == null -> deLosEventos.toUserMessage()
             // Sin el perfil la pantalla cae al mes de calendario, y con corte 25 eso es mostrar
-            // otro período con otro total. Se dice, con el mismo «Reintentar» de siempre; si
-            // además fallan los movimientos, ese error (abajo) es el que manda.
-            .onFailure { error = PERIODO_NO_LEIDO }
-        perfilLeido = true
-        runCatching { Repositories.wallets.getEventsByDay() }
-            .onSuccess {
-                allDays = it
-                diasLeidos = true
-                // F35: de paso, alimenta el caché de "categorías ya usadas" que lee
-                // CategoryField — esta pantalla ya carga los movimientos. Ola 9 · A3: con el
-                // tipo de cada uno, para poder ofrecerlas del lado correcto.
-                UsedCategoriesCache.recordAll(it.flatMap { d -> d.items }.map { ev -> ev.category to ev.type })
-            }
-            .onFailure { e -> error = e.toUserMessage() }
-        loading = false
+            // otro período con otro total. Se dice; si además fallan los movimientos, ese error
+            // (arriba) es el que manda.
+            perfil.error != null && perfil.valor == null && deLosEventos == null -> PERIODO_NO_LEIDO
+            else -> return@LaunchedEffect
+        }
+    }
+    // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField — esta
+    // pantalla ya carga los movimientos. Ola 9 · A3: con el tipo de cada uno, para poder ofrecerlas
+    // del lado correcto.
+    LaunchedEffect(eventos.valor) {
+        val dias = eventos.valor ?: return@LaunchedEffect
+        UsedCategoriesCache.recordAll(dias.flatMap { d -> d.items }.map { ev -> ev.category to ev.type })
     }
 
     LaunchedEffect(refreshKey, refreshTick) {
-        runCatching { Repositories.wallets.getMovimientosRechazados() }.onSuccess { rechazados = it }
+        intentar { Repositories.wallets.getMovimientosRechazados() }.onSuccess { rechazados = it }
     }
 
     // Ola C, tarea 5: los mensajes del banco y los candidatos a pago de tarjeta, solo para contar
@@ -1043,6 +1067,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
             title = "Movimientos",
             leading = HeaderLeading.Avatar(onNavigate),
             action = {
+                // Se está pintando algo que esta visita todavía no confirmó (lo recordado, o la lista
+                // de antes de un «Reintentar»). Sin nada pintado lo dice el esqueleto.
+                if (loading && visibleDays.isNotEmpty()) ActualizandoEnLaCabecera()
                 Icon(
                     imageVector = Icons.Filled.Search,
                     contentDescription = "Buscar",
@@ -1241,7 +1268,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
         // Durante una recarga (cada «Reintentar», cada guardado desde Agregar) se queda con el
         // último número que se contó: desmontarlo mientras se lee hacía saltar la lista ~56 dp y
         // volver. Solo se va cuando una lectura que terminó dice cero.
-        val conteoFresco = if (!loading && porRevisar.terminaron) {
+        //
+        // Con lo recordado de la visita anterior —las tres fuentes a la vista desde el primer cuadro—
+        // se cuenta ya, como se pinta ya la lista: esperar a que contesten haría aparecer el renglón
+        // DESPUÉS de la lista y la empujaría hacia abajo.
+        val lasTresALaVista = perfilLeido && diasLeidos && porRevisar.mensajes != null && porRevisar.candidatos != null
+        val conteoFresco = if ((!loading && porRevisar.terminaron) || lasTresALaVista) {
             cuantosPorRevisar(
                 mensajes = porRevisar.mensajes,
                 dias = if (diasLeidos) allDays else null,
@@ -1288,12 +1320,15 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
             }
         }
 
-        // Task 7, fix round 1: con algo ya pintado (volver a este chip, un reintento con la lista
-        // de antes en pantalla) la barra de siempre; sin nada pintado todavía, las filas esqueleto
-        // de más abajo ya dicen «cargando» con la forma de lo que viene, y la barra sería la misma
-        // señal dos veces.
-        if (loading && visibleDays.isNotEmpty()) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().testTag(TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS))
+        // Con algo ya pintado, recargar lo dice «Actualizando…» en la cabecera (arriba), como el
+        // Inicio; sin nada pintado todavía, las filas esqueleto de más abajo ya dicen «cargando» con
+        // la forma de lo que viene. Lo que sí va acá es la lectura que FALLÓ con la lista a la vista:
+        // lo que se ve es lo último que vimos, y tiene que decirlo hasta que una lectura conteste.
+        if (noSePudoActualizar) {
+            NoSePudoActualizar(
+                onReintentar = { refreshKey++ },
+                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
+            )
         }
 
         LazyColumn(
@@ -1308,7 +1343,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                 movimientosEsqueleto()
             }
 
-            if (!loading && visibleDays.isEmpty()) {
+            // Con el aviso de arriba puesto, un vacío no se afirma: saldría de lo que se leyó en
+            // otra visita, y «Sin movimientos aún» tiene que venir de una lectura que contestó en
+            // esta. Queda solo el aviso, con su «Reintentar».
+            if (!loading && visibleDays.isEmpty() && !noSePudoActualizar) {
                 item {
                     if (!diasLeidos) {
                         NoSePudoLeer(
@@ -1557,8 +1595,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                     alcanceDeLaPantalla.launch {
                         intentar { guardarInicioDelPeriodo(periodo, inicio) }
                             .onSuccess {
-                                cutoffDay = it.periodCutoffDay
-                                iniciosPropios = it.periodStarts
+                                perfil.anotar(it)
                                 editandoElInicio = false
                             }
                             .onFailure { errorDelInicio = it.toUserMessage() }

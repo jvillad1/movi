@@ -37,14 +37,21 @@ import com.jvillada.movi.ui.dashboard.DashboardDataCache
  * Se invalida **después** de que la escritura salió bien: si el server rechaza, no cambió nada y
  * no hay nada que refrescar.
  *
- * Las lecturas (`get*`) pasan derecho por la delegación `by delegado` y no se listan acá.
+ * Las lecturas (`get*`, `isScreenAdmin`, `parseSms`) pasan derecho por la delegación `by delegado` y no se
+ * listan acá. Toda otra función del repositorio tiene que estar abajo: `CadaEscrituraVaciaLoRecordadoTest`
+ * lo comprueba contra la interfaz, así que una escritura nueva que nadie envuelva se pone roja.
  */
 internal class InvalidaElInicioAlEscribir(
     private val delegado: WalletRepository,
 ) : WalletRepository by delegado {
 
+    // Y lo último que recordaba cada pantalla (ver [CacheDeLecturas]), por la misma regla: lo que
+    // una escritura propia volvió viejo no se vuelve a pintar como «lo último», ni un cuadro.
     private inline fun <T> trasEscribir(bloque: () -> T): T =
-        bloque().also { DashboardDataCache.invalidar() }
+        bloque().also {
+            DashboardDataCache.invalidar()
+            CacheDeLecturas.borrarTodo()
+        }
 
     override suspend fun createCredit(request: CreateCreditRequest): CreditSummary = trasEscribir { delegado.createCredit(request) }
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = trasEscribir { delegado.putCreditTerms(terms) }
@@ -62,7 +69,8 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun createGoal(goal: Goal): Goal = trasEscribir { delegado.createGoal(goal) }
     override suspend fun updateGoal(id: String, goal: Goal): Goal = trasEscribir { delegado.updateGoal(id, goal) }
     override suspend fun deleteGoal(id: String): Unit = trasEscribir { delegado.deleteGoal(id) }
-    override suspend fun parseSms(id: String): ParsedSms = trasEscribir { delegado.parseSms(id) }
+    // `parseSms` NO invalida: es un GET que interpreta el mensaje, no escribe nada. Envuelto, abrir
+    // un mensaje del banco desde Por revisar y volver dejaba la bandeja y Movimientos en esqueleto.
     override suspend fun confirmSms(id: String): Unit = trasEscribir { delegado.confirmSms(id) }
     override suspend fun ignoreSms(id: String): Unit = trasEscribir { delegado.ignoreSms(id) }
     override suspend fun createBudget(budget: Budget): Budget = trasEscribir { delegado.createBudget(budget) }
@@ -82,6 +90,11 @@ internal class InvalidaElInicioAlEscribir(
     // cambia el checklist del Inicio igual que un sello: entra por la misma puerta.
     override suspend fun rechazarOcurrencia(ruleId: String, eventId: String): Unit = trasEscribir { delegado.rechazarOcurrencia(ruleId, eventId) }
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = trasEscribir { delegado.chatAi(request) }
+    // Las cuentas ajenas se muestran en Patrimonio: registrarlas, editarlas o borrarlas tiene que
+    // vaciar lo recordado igual que cualquier otra escritura. Faltaban acá.
+    override suspend fun createDestino(destino: DestinoConocido): DestinoConocido = trasEscribir { delegado.createDestino(destino) }
+    override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido = trasEscribir { delegado.updateDestino(id, destino) }
+    override suspend fun deleteDestino(id: String): Unit = trasEscribir { delegado.deleteDestino(id) }
     override suspend fun createAccount(account: Account): Account = trasEscribir { delegado.createAccount(account) }
     override suspend fun deleteAccount(id: String): Unit = trasEscribir { delegado.deleteAccount(id) }
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent = trasEscribir { delegado.postEvent(event) }

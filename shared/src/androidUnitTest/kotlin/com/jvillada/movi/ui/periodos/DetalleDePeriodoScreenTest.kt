@@ -39,6 +39,7 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
+import com.jvillada.movi.data.Lectura
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -322,7 +323,8 @@ class DetalleDePeriodoScreenTest {
         val repo = ConDetalle(mapOf("2026-10" to octubre))
         Repositories.sustitutoDePrueba = repo
         val estado = EstadoDelDetalleDePeriodo(CoroutineScope(Dispatchers.Unconfined), "2026-10") { reloj }
-        estado.cargar()
+        // Lo que la composición conecta al montar la pantalla, ya leído.
+        estado.conectar(LecturasDelDetalle(perfil = Lectura(perfil), detalle = Lectura(octubre), cuentas = Lectura(listOf(banco))))
         estado.abrirConfirmacion()
         assertEquals(LocalDate(2026, 10, 20), estado.hoyDeLaConfirmacion)
 
