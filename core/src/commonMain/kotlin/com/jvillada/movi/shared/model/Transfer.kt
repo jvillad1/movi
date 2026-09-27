@@ -57,6 +57,18 @@ const val TRANSFER_LEG_NOT_STANDALONE =
     "Un traspaso se registra completo, con sus dos puntas: abre Agregar y elige Traspaso."
 
 /**
+ * Lo que se le dice a quien intenta escribir a mano la categoría [DESEMBOLSO_CATEGORY]: sea creando
+ * un movimiento suelto (400 en `POST /api/events`) o recategorizando uno (422 en `PUT
+ * /api/events/{id}/category`).
+ *
+ * No es reservada como las demás, porque cuenta en el mes; pero una sola pata suelta inflaría
+ * «Entró» sin la deuda que la respalda. Por eso solo la escribe [transferLegsFor].
+ */
+const val DESEMBOLSO_CATEGORY_NOT_MANUAL =
+    "«Desembolso de crédito» la escribe Movi cuando registras el desembolso de un crédito: " +
+        "abre Agregar, elige Traspaso y pon el crédito como origen."
+
+/**
  * Lo que se le dice a un cliente que reusa un `transferId` que ya tiene patas de OTRO traspaso.
  *
  * No es el reintento del dedo —ese manda los mismos tres ids y se responde con las patas que ya

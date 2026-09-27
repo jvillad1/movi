@@ -25,13 +25,17 @@ import com.jvillada.movi.shared.model.CategoryPrefsRequest
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
 import com.jvillada.movi.shared.model.MergeCategoryRequest
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.RenameCategoryRequest
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.categoriaDestinoInexistenteMensaje
 import com.jvillada.movi.shared.model.categoriaDestinoOcupadoMensaje
+import com.jvillada.movi.shared.model.categoriaQueSostieneReglasMensaje
 import com.jvillada.movi.shared.model.categoriaReservadaMensaje
+import com.jvillada.movi.shared.model.nombreSostieneReglasDePlata
 import com.jvillada.movi.shared.model.isReservedCategory
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
@@ -121,6 +125,14 @@ fun Route.categoryRoutes() {
         if (isReservedCategory(to)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaReservadaMensaje(to))
         }
+        // «Cuota de crédito» y «Desembolso de crédito» no son reservadas (cuentan en el mes), pero
+        // de su nombre dependen las cifras: renombrarlas las saca de la regla en silencio.
+        if (nombreSostieneReglasDePlata(from)) {
+            return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaQueSostieneReglasMensaje(from))
+        }
+        if (to.equals(DESEMBOLSO_CATEGORY, ignoreCase = true)) {
+            return@post call.respond(HttpStatusCode.UnprocessableEntity, DESEMBOLSO_CATEGORY_NOT_MANUAL)
+        }
         if (PREDEFINED_CATEGORIES.any { it.name == from }) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, CATEGORY_CATALOG_RENAME_BLOCKED)
         }
@@ -173,6 +185,14 @@ fun Route.categoryRoutes() {
         }
         if (isReservedCategory(into)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaReservadaMensaje(into))
+        }
+        // Ver la nota del renombrado: aquí también es origen prohibido, y «Desembolso de crédito»
+        // tampoco recibe (unificar movimientos sueltos en ella inflaría «Entró»).
+        if (nombreSostieneReglasDePlata(from)) {
+            return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaQueSostieneReglasMensaje(from))
+        }
+        if (into.equals(DESEMBOLSO_CATEGORY, ignoreCase = true)) {
+            return@post call.respond(HttpStatusCode.UnprocessableEntity, DESEMBOLSO_CATEGORY_NOT_MANUAL)
         }
         if (from == into) {
             return@post call.respond(HttpStatusCode.BadRequest, CATEGORY_MERGE_SAME)

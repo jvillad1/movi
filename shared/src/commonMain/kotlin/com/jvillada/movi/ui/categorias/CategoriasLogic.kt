@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.categorias
 
 import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
@@ -330,9 +331,11 @@ private fun comparteTipoEfectivo(a: CategoryUsage, b: CategoryUsage): Boolean {
 
 /**
  * Las categorías **que no son reservadas pero sostienen reglas de plata por su nombre exacto**: el
- * dueño las puede elegir y renombrar como cualquier otra, pero el orden automático no puede
- * hacerlas desaparecer. Hoy es una sola, [CUOTA_CATEGORY]: la escribe el pago de una cuota, y con
- * ese nombre el server la saca del gasto variable (`GastoVariable`), tilda las cuotas del checklist
+ * dueño las puede elegir como cualquier otra, pero ni el orden automático ni el server (renombrar y
+ * unificar la rechazan como origen) las pueden hacer desaparecer. Hoy son dos:
+ * [DESEMBOLSO_CATEGORY] (cuenta como ingreso, y ni siquiera puede recibir: unificar movimientos
+ * sueltos en ella inflaría «Entró») y [CUOTA_CATEGORY]: la escribe el pago de una cuota, y con ese
+ * nombre el server la saca del gasto variable (`GastoVariable`), tilda las cuotas del checklist
  * (`PagosDelChecklist`), la manda a «Préstamos» en `PlataDelPeriodo` y decide qué se puede editar
  * de la pata (`EdicionDeMovimiento`). Si «Ordena tus categorías» la unificara EN otra, todo eso
  * dejaría de verla en silencio.
@@ -345,7 +348,7 @@ private fun comparteTipoEfectivo(a: CategoryUsage, b: CategoryUsage): Boolean {
  * Pago de tarjeta, Ajuste de saldo, Descuento de nómina, Pago de un tercero, Cuenta eliminada) ya
  * son reservadas y ni siquiera llegan a las reglas.
  */
-private val SOSTIENEN_REGLAS_DE_PLATA: Set<String> = setOf(normalizarParaBuscar(CUOTA_CATEGORY))
+private val SOSTIENEN_REGLAS_DE_PLATA: Set<String> = setOf(normalizarParaBuscar(CUOTA_CATEGORY), normalizarParaBuscar(DESEMBOLSO_CATEGORY))
 
 private fun sostieneReglasDePlata(c: CategoryUsage): Boolean =
     normalizarParaBuscar(c.name) in SOSTIENEN_REGLAS_DE_PLATA
@@ -421,8 +424,9 @@ fun propuestasDeOrden(
                 else -> b to a
             }
             if (totalMovimientos(destino) == 0) continue
-            // «Cuota de crédito» solo puede recibir: ver [SOSTIENEN_REGLAS_DE_PLATA].
-            if (sostieneReglasDePlata(origen)) continue
+            // «Cuota de crédito» solo puede recibir: ver [SOSTIENEN_REGLAS_DE_PLATA]. Y «Desembolso
+            // de crédito» ni eso: unificar movimientos sueltos en ella inflaría «Entró».
+            if (sostieneReglasDePlata(origen) || normalizarParaBuscar(destino.name) == normalizarParaBuscar(DESEMBOLSO_CATEGORY)) continue
             unificarParecidas += PropuestaDeOrden.UnificarParecidas(origen, destino)
         }
     }

@@ -255,6 +255,24 @@ fun categoriaReservadaMensaje(name: String): String =
         "iniciales, pagos de tarjeta y cuentas eliminadas, y de su nombre exacto dependen las " +
         "cifras de tu mes. No se puede renombrar, unificar ni esconder."
 
+/**
+ * **Las categorías que no son reservadas pero de cuyo nombre exacto depende una regla de plata**:
+ * [CUOTA_CATEGORY] (la cuota cuenta como gasto y tilda el checklist) y [DESEMBOLSO_CATEGORY] (el
+ * desembolso cuenta como ingreso). Renombrarlas o unificarlas EN otra las saca de esas reglas en
+ * silencio y sin vuelta atrás, porque `rewriteCategory` reescribe la historia.
+ *
+ * No están en [RESERVED_CATEGORIES] a propósito: eso las sacaría de las listas y de los
+ * presupuestos, y aquí la idea es la contraria —cuentan como cualquier categoría normal—. Solo se
+ * les cierra la puerta de renombrar/unificar como **origen**.
+ */
+fun nombreSostieneReglasDePlata(name: String): Boolean =
+    name.trim().equals(CUOTA_CATEGORY, ignoreCase = true) ||
+        name.trim().equals(DESEMBOLSO_CATEGORY, ignoreCase = true)
+
+fun categoriaQueSostieneReglasMensaje(name: String): String =
+    "«$name» la escribe Movi al pagar la cuota o al desembolsar un crédito, y de su nombre " +
+        "exacto dependen las cifras de tu mes. No se puede renombrar ni unificar en otra."
+
 const val CATEGORY_CATALOG_RENAME_BLOCKED: String =
     "Las categorías del catálogo de Movi no se renombran: el catálogo es el mismo para todos y " +
         "volvería a sugerirte el nombre viejo. Si quieres juntarla con otra, únela; si no la " +

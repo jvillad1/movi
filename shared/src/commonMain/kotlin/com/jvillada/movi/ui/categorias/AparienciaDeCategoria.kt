@@ -18,6 +18,7 @@ import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
@@ -113,6 +114,9 @@ internal val TABLA_POR_NOMBRE: List<PorNombre> = listOf(
     PorNombre(listOf("Familia"), "familia", "rosa"),
     PorNombre(listOf("Celular"), "celular", "azul"),
     PorNombre(listOf(CUOTA_CATEGORY, "Crédito"), "credito", "violeta"),
+    // El mismo ícono de crédito que la cuota, pero verde: es plata que ENTRÓ (ver
+    // [DESEMBOLSO_CATEGORY]), y en Movi el verde es lo que entra.
+    PorNombre(listOf(DESEMBOLSO_CATEGORY), "credito", "verde"),
     PorNombre(listOf(CARD_PAYMENT_CATEGORY), "tarjeta", "violeta"),
     PorNombre(listOf("Comisiones del banco"), "banco", "gris"),
     PorNombre(listOf("Impuestos"), "impuestos", "gris"),
