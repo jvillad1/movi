@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
@@ -26,8 +27,10 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.CeldaDeCategoria
 import com.jvillada.movi.ui.components.TAG_BUSCAR_CATEGORIA
 import com.jvillada.movi.ui.components.TAG_CREAR_CATEGORIA
+import com.jvillada.movi.ui.components.contenidoDelSelectorDeCategoria
 import com.jvillada.movi.ui.components.tagDeCeldaDeCategoria
 import org.junit.After
 import org.junit.Rule
@@ -104,6 +107,9 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
                         cuentas = listOf(banco),
                         onDismiss = {},
                         onEventChanged = onCambiado,
+                        // Como en producción ([HojaDelMovimiento] siempre lo pasa): un gasto muestra
+                        // además «¿Se repite todos los meses?», encima de la categoría.
+                        onMarcarComoRecurrente = {},
                     )
                 }
             }
@@ -160,7 +166,8 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
         suyas()
         montar()
 
-        // Sin `performScrollTo`: si estuviera bajo veinte filas, en 731 dp no se vería.
+        // Sin `performScrollTo`: si estuviera bajo veinte filas, en 731 dp no se vería. Y con la
+        // sección «¿Se repite?» montada, que es como la ve el dueño.
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed()
     }
 
@@ -169,7 +176,11 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
         suyas()
         montar(gasto("Importada del extracto"))
 
-        composeRule.onNodeWithText("Importada del extracto", useUnmergedTree = true).assertExists()
+        // No solo el texto: la fila tiene que estar declarada como la elegida.
+        composeRule.onNode(
+            isSelected() and hasAnyDescendant(hasText("Importada del extracto")),
+            useUnmergedTree = true,
+        ).assertExists()
     }
 
     @Test
@@ -198,14 +209,34 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
     }
 
     @Test
-    fun una_reservada_escrita_no_se_puede_guardar() {
+    fun una_reservada_escrita_no_ofrece_crear_y_se_explica() {
         suyas()
         montar()
 
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performScrollTo().performTextInput("Saldo inicial")
         composeRule.waitForIdle()
 
-        assertTrue(repo.pedidas.isEmpty())
         composeRule.onNodeWithTag(TAG_CREAR_CATEGORIA).assertDoesNotExist()
+        composeRule.onNodeWithText("«Saldo inicial» la usa Movi sola", useUnmergedTree = true).assertExists()
+        assertTrue(repo.pedidas.isEmpty(), "escribir no guarda nada")
+    }
+
+    /** Ola L, revisión: lo creado acá tiene que conocerse en el siguiente movimiento. */
+    @Test
+    fun una_categoria_creada_queda_en_el_cache_y_no_se_vuelve_a_ofrecer_como_crear() {
+        suyas()
+        montar()
+
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performScrollTo().performTextInput("Colegio")
+        composeRule.waitForIdle()
+        tocarCelda(TAG_CREAR_CATEGORIA)
+
+        assertTrue("Colegio" in UsedCategoriesCache.used.keys, "el caché no la conoce: ${UsedCategoriesCache.used.keys}")
+        val siguiente = contenidoDelSelectorDeCategoria(
+            "Colegio", TransactionType.EXPENSE, UsedCategoriesCache.used, UsedCategoriesCache.prefs,
+            UsedCategoriesCache.usosRecientes,
+        )
+        assertTrue(siguiente.celdas.none { it is CeldaDeCategoria.Crear }, "se vuelve a ofrecer «Crear»")
+        assertTrue(siguiente.celdas.any { it is CeldaDeCategoria.Existente && it.nombre == "Colegio" })
     }
 }

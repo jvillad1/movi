@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -36,6 +37,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * # Ola L — crear una categoría nueva al anotar un movimiento
@@ -124,6 +126,25 @@ class CrearCategoriaEnAgregarTest {
         tocar("Guardar movimiento")
 
         assertEquals("Mascota", publicados.single().category)
+    }
+
+    /** Un usuario nuevo, o un arranque en frío antes del Inicio, no tiene frecuentes: igual la ve. */
+    @Test
+    fun la_pastilla_nueva_se_ve_aunque_no_haya_frecuentes() {
+        montar(conFrecuentes = false)
+
+        composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR).assertIsDisplayed()
+        tocar("+ Nueva")
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed().assertIsFocused()
+    }
+
+    @Test
+    fun la_pastilla_nueva_va_antes_que_los_chips_de_uso() {
+        montar(conFrecuentes = true)
+
+        val nueva = composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR).getUnclippedBoundsInRoot()
+        val hija = composeRule.onNodeWithText("Hija").getUnclippedBoundsInRoot()
+        assertTrue(nueva.left < hija.left, "«+ Nueva» tiene que ir primera")
     }
 
     @Test

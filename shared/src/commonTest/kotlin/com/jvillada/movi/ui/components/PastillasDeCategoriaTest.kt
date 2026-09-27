@@ -1,8 +1,8 @@
 package com.jvillada.movi.ui.components
 
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
 import com.jvillada.movi.shared.model.CategoryPref
-import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -85,10 +85,14 @@ class PastillasDeCategoriaTest {
     }
 
     @Test
-    fun `sin usos cae en propias y catalogo alfabeticos`() {
+    fun `sin usos cae en propias y catalogo, cada grupo alfabetico`() {
         val r = categoriasParaPastillas(emptyList(), gasto, propias, emptyMap(), emptyMap(), cuantas = 50)
-        assertTrue("Hija" in r)
-        assertTrue(PREDEFINED_CATEGORIES.first { it.type == "EXPENSE" && !it.name.startsWith("Pago") }.name in r)
+        // Las propias del lado del gasto primero, alfabéticas: «Gardenera» es de ingreso.
+        assertEquals(listOf("Fútbol", "Gimnasio", "Hija", "Mercado extra"), r.take(4))
+        // Después el catálogo, alfabético.
+        val catalogo = r.drop(4)
+        assertEquals(catalogo.sortedWith(CATEGORY_NAME_ORDER), catalogo, "el catálogo no va alfabético: $catalogo")
+        assertTrue("Comida" in catalogo && "Educación" in catalogo)
     }
 
     @Test

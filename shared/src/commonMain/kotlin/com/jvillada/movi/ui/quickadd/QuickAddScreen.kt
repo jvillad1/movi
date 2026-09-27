@@ -33,6 +33,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontFamily
@@ -676,14 +677,15 @@ fun QuickAddScreen(
         )
     }
 
+    // Ola L: quién abrió el selector de categoría. «+ Nueva» viene a escribir un nombre y lo abre con
+    // el cursor en la búsqueda (un contador, ver [SelectorDeCategoria]); la fila «Categoría ›» lo
+    // abre como siempre, sin teclado.
+    var pedidosDeFocoDeCategoria by remember { mutableStateOf(0) }
+
     /**
      * Tocar un chip de frecuentes o una celda del selector de «Categoría»: pone la categoría Y la
      * marca como elegida a mano (ver [categoriaElegidaAMano]).
      */
-    // Ola L: quién abrió el selector de categoría. «+ Nueva» viene a escribir un nombre y lo abre con
-    // el cursor en la búsqueda; la fila «Categoría ›» lo abre como siempre, sin teclado.
-    var abrirParaCrearCategoria by remember { mutableStateOf(false) }
-
     fun elegirCategoriaAMano(nombre: String) {
         category = nombre
         categoriaElegidaAMano = true
@@ -1061,7 +1063,7 @@ fun QuickAddScreen(
                                 usadas = usedCategories,
                                 prefs = categoryPrefs,
                                 usos = usosRecientes,
-                                enfocarBusqueda = abrirParaCrearCategoria,
+                                pedidosDeFoco = pedidosDeFocoDeCategoria,
                             )
                             // La cuadrícula no tiene tope ni scroll propio: se estira y la
                             // desplaza la hoja, un solo desplazamiento (Ola 14 — «al hacer scroll
@@ -1165,11 +1167,11 @@ fun QuickAddScreen(
                             dateLabel = etiquetaDeFecha(fecha, hoy),
                             onPickDate = { pasarA(pickers.abrir(Picker.Date)) },
                             onPickCategory = {
-                                abrirParaCrearCategoria = false
+                                pedidosDeFocoDeCategoria = 0
                                 pasarA(pickers.abrir(Picker.Category))
                             },
                             onNuevaCategoria = {
-                                abrirParaCrearCategoria = true
+                                pedidosDeFocoDeCategoria += 1
                                 pasarA(pickers.abrir(Picker.Category))
                             },
                             onPickWallet = { pasarA(pickers.abrir(Picker.Wallet)) },
@@ -1364,21 +1366,18 @@ private fun EditorBody(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth().padding(bottom = Movi.espacios.corto),
             )
-            if (categoriasFrecuentes.isEmpty()) Hairline()
         }
         // Ola A: los chips de frecuentes, entre «Categoría» y «Cuenta» — justo debajo de la
-        // categoría que resumen, y antes de la fila que decide dónde sale la plata. Vacía = no
-        // se dibuja nada y `CardRow` de arriba sigue con su hairline pegado al de «Cuenta», que
-        // es exactamente el aspecto de hoy para quien no tiene ningún dato de uso todavía.
-        if (categoriasFrecuentes.isNotEmpty()) {
-            CategoriaChipsRow(
-                categorias = categoriasFrecuentes,
-                categoriaElegida = category,
-                onPick = onPickCategoriaFrecuente,
-                onNueva = onNuevaCategoria,
-            )
-            Hairline()
-        }
+        // categoría que resumen, y antes de la fila que decide dónde sale la plata.
+        // Ola L: la fila se dibuja SIEMPRE porque lleva «+ Nueva», la puerta a crear una categoría.
+        // Sin datos de uso solo tiene esa pastilla.
+        CategoriaChipsRow(
+            categorias = categoriasFrecuentes,
+            categoriaElegida = category,
+            onPick = onPickCategoriaFrecuente,
+            onNueva = onNuevaCategoria,
+        )
+        Hairline()
         CardRow(
             left = {
                 Text("Cuenta", style = Movi.textos.titulo, color = Movi.colores.textoMedio)
@@ -1589,8 +1588,8 @@ private fun EditorBody(
 }
 
 /**
- * Ola A: hasta 6 chips con las categorías que más se usan para este tipo — ver
- * [categoriasFrecuentes], que es la que decide cuáles y en qué orden. Tocar uno la elige sin
+ * «+ Nueva» y hasta 6 chips con las categorías que más se usan para este tipo — ver
+ * [categoriasFrecuentes], que es la que decide cuáles y en qué orden (Ola A). Tocar uno la elige sin
  * abrir el sub-picker de «Categoría»; la elegida se ve activa.
  *
  * Mismo lenguaje visual que [SheetChip] de `CreateRecurringRuleSheet.kt` (fondo tenue de
@@ -1626,6 +1625,26 @@ private fun CategoriaChipsRow(
         // este token en Tokens.kt — este es el caso para el que existe.
         horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
     ) {
+        // Ola L: «+ Nueva», PRIMERA de la fila: al final quedaba detrás de los chips, fuera de pantalla en un teléfono. Las categorías se creaban escribiendo en el selector, pero
+        // nada en esta hoja lo decía: el dueño no encontraba dónde. Abre ese mismo selector con el
+        // cursor en «Buscar o crear categoría».
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(Movi.formas.pleno))
+                .border(1.dp, Movi.colores.marca, RoundedCornerShape(Movi.formas.pleno))
+                .clickable(role = Role.Button, onClick = onNueva)
+                .testTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR)
+                .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "+ Nueva",
+                style = Movi.textos.apoyo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.marca,
+                maxLines = 1,
+            )
+        }
         categorias.forEach { nombre ->
             val activa = nombre == categoriaElegida
             Box(
@@ -1636,7 +1655,7 @@ private fun CategoriaChipsRow(
                         if (!activa) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.pleno))
                         else Modifier,
                     )
-                    .clickable { onPick(nombre) }
+                    .clickable(role = Role.Button) { onPick(nombre) }
                     // Horizontal: el 14dp original quedaba justo entre `medio` (12dp) y `amplio`
                     // (16dp) — misma distancia a los dos. Se eligió `medio`, "el respiro de
                     // adentro de una fila", que es justo lo que es esto: el respiro de adentro de
@@ -1655,26 +1674,6 @@ private fun CategoriaChipsRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-        // Ola L: «+ Nueva», al final. Las categorías se creaban escribiendo en el selector, pero
-        // nada en esta hoja lo decía: el dueño no encontraba dónde. Abre ese mismo selector con el
-        // cursor en «Buscar o crear categoría».
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(Movi.formas.pleno))
-                .border(1.dp, Movi.colores.marca, RoundedCornerShape(Movi.formas.pleno))
-                .clickable(onClick = onNueva)
-                .testTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR)
-                .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "+ Nueva",
-                style = Movi.textos.apoyo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.marca,
-                maxLines = 1,
-            )
         }
     }
 }

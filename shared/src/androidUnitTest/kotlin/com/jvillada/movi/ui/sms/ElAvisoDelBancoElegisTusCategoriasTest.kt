@@ -4,7 +4,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -24,9 +29,12 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.CeldaDeCategoria
 import com.jvillada.movi.ui.components.TAG_BUSCAR_CATEGORIA
 import com.jvillada.movi.ui.components.TAG_CREAR_CATEGORIA
+import com.jvillada.movi.ui.components.contenidoDelSelectorDeCategoria
 import com.jvillada.movi.ui.components.tagDeCeldaDeCategoria
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -35,6 +43,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * # Ola L — reconciliar un aviso del banco elige categoría como todas las pantallas
@@ -66,7 +75,10 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
 
     @After fun limpiar() { Repositories.sustitutoDePrueba = null }
 
-    private fun montar() {
+    private fun montar(
+        propuesta: String = "Otros",
+        lectura: CompletableDeferred<Unit>? = null,
+    ) {
         // Movi propone «Otros»; el catálogo tiene diez o más nombres alfabéticamente antes de «Hija».
         UsedCategoriesCache.recordFromServer(
             listOf(
@@ -79,8 +91,10 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(cuenta)
             override suspend fun getSms(id: String): SmsMessage = aviso
-            override suspend fun parseSms(id: String): ParsedSms =
-                ParsedSms(480_000.0, "COLEGIO LA SALLE", TransactionType.EXPENSE, "Otros")
+            override suspend fun parseSms(id: String): ParsedSms {
+                lectura?.await()
+                return ParsedSms(480_000.0, "COLEGIO LA SALLE", TransactionType.EXPENSE, propuesta)
+            }
             override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = emptyList()
             override suspend fun postEvent(event: FinancialEvent): FinancialEvent = event.also { publicados += it }
             override suspend fun confirmSms(id: String) {}
@@ -96,9 +110,9 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
         composeRule.waitForIdle()
     }
 
-    /** «Cambiar» de la fila Categoría: el segundo, después del de Cuenta. */
+    /** «Cambiar» de la fila Categoría, por su rótulo y no por su posición. */
     private fun cambiarLaCategoria() {
-        composeRule.onAllNodesWithText("Cambiar")[1].performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNodeWithTag(tagDeFilaDelSms("Categoría")).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 
@@ -168,15 +182,80 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed().assertIsFocused()
     }
 
-    @Test
-    fun la_propuesta_de_movi_sigue_primera_aunque_no_este_en_ningun_catalogo() {
-        // Lo cubre CategoriasDelSmsTest a nivel de función; acá, que se ve en la fila.
-        montar()
-        composeRule.onAllNodesWithText("Otros").assertCountAtLeast(1)
-    }
-}
+    /** Los nombres de las pastillas de categoría, de izquierda a derecha. */
+    private fun pastillas(): List<String> =
+        composeRule.onAllNodes(esUnaPastilla()).fetchSemanticsNodes()
+            .map { it.config[SemanticsProperties.TestTag].removePrefix(tagDePastillaDeCategoriaDelSms("")) }
 
-private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountAtLeast(n: Int) {
-    val real = fetchSemanticsNodes().size
-    kotlin.test.assertTrue(real >= n, "se esperaban al menos $n nodos y hay $real")
+    private fun esUnaPastilla() = SemanticsMatcher("es una pastilla de categoría") {
+        it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(tagDePastillaDeCategoriaDelSms("")) == true
+    }
+
+    @Test
+    fun la_propuesta_de_movi_es_la_primera_pastilla_aunque_no_este_en_ningun_catalogo() {
+        montar(propuesta = "Colegio La Salle")
+
+        assertEquals("Colegio La Salle", pastillas().first())
+        // Y «Hija», la más usada, viene enseguida.
+        assertEquals("Hija", pastillas()[1])
+    }
+
+    @Test
+    fun elegir_otra_no_pierde_la_propuesta_de_movi() {
+        montar(propuesta = "Colegio La Salle")
+
+        tocar("Fútbol")
+
+        assertEquals(listOf("Colegio La Salle", "Fútbol"), pastillas().take(2))
+    }
+
+    @Test
+    fun la_pastilla_nueva_es_la_primera_de_la_fila() {
+        montar()
+
+        composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA).assertIsDisplayed()
+        val primera = composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA).getUnclippedBoundsInRoot()
+        val hija = composeRule.onNodeWithTag(tagDePastillaDeCategoriaDelSms("Hija")).getUnclippedBoundsInRoot()
+        assertTrue(primera.left < hija.left, "«+ Nueva» tiene que ir antes que las pastillas de uso")
+    }
+
+    /** Antes de leer el aviso no se sabe si es gasto o ingreso: no hay de dónde elegir todavía. */
+    @Test
+    fun antes_de_que_llegue_la_lectura_no_se_ofrece_cambiar_ni_nueva() {
+        val lectura = CompletableDeferred<Unit>()
+        montar(lectura = lectura)
+
+        composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA).assertDoesNotExist()
+        composeRule.onAllNodesWithText("Cambiar").assertCountEquals(1) // solo el de la cuenta
+
+        lectura.complete(Unit)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Cambiar").assertCountEquals(2)
+    }
+
+    /** Ola L, revisión: crear «Colegio» en un aviso la deja conocida para el siguiente. */
+    @Test
+    fun una_categoria_creada_en_un_aviso_queda_conocida_para_el_siguiente() {
+        montar()
+
+        cambiarLaCategoria()
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performTextInput("Colegio")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_CREAR_CATEGORIA).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        tocar("Confirmar")
+
+        assertTrue("Colegio" in UsedCategoriesCache.used.keys, "el caché no la conoce: ${UsedCategoriesCache.used.keys}")
+        val siguiente = categoriasParaElegirEnElSms(
+            propuesta = "Otros", tipo = TransactionType.EXPENSE, usadas = UsedCategoriesCache.used,
+            prefs = UsedCategoriesCache.prefs, usos = UsedCategoriesCache.usosRecientes, cuantas = 50,
+        )
+        assertTrue("Colegio" in siguiente, "el siguiente aviso no la ofrece: $siguiente")
+        val selector = contenidoDelSelectorDeCategoria(
+            "Colegio", TransactionType.EXPENSE, UsedCategoriesCache.used, UsedCategoriesCache.prefs,
+        )
+        assertTrue(selector.celdas.none { it is CeldaDeCategoria.Crear }, "se vuelve a ofrecer «Crear»")
+    }
 }

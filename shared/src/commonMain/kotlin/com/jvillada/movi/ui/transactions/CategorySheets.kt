@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -44,8 +46,6 @@ import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.ORPHANED_LEG_EXPLAINER
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
-import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.theme.*
@@ -130,6 +130,8 @@ private fun CategoryRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled, onClick = onClick)
+            // El check dibujado no dice nada por sí solo: la fila declara que está elegida.
+            .semantics { this.selected = selected }
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -321,6 +323,10 @@ fun ChangeCategorySheet(
             saving = false
             result
                 .onSuccess { actualizado ->
+                    // Una categoría creada acá tiene que ser conocida al abrir el siguiente
+                    // movimiento: la hoja también se abre desde «Por revisar» y desde el detalle de
+                    // una cuenta, que no recargan el caché.
+                    UsedCategoriesCache.record(category, actualizado.type)
                     // Arreglar uno puede arreglar a los parecidos — pero no sin preguntar: son
                     // movimientos que el dueño no está mirando, y cambiarlos solos sería mover
                     // cifras suyas a sus espaldas.
