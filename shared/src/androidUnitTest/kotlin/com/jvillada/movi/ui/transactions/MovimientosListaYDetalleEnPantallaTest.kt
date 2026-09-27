@@ -41,6 +41,13 @@ import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.LocalRelevoDeScroll
 import com.jvillada.movi.ui.components.RelevoDeScroll
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.geometry.Offset
 import com.jvillada.movi.ui.components.TAG_PANEL_DE_HOJA
@@ -106,6 +113,13 @@ class MovimientosListaYDetalleEnPantallaTest {
             eventos = eventos.map { if (it.id == id) it.copy(category = category) else it }
             return eventos.first { it.id == id }
         }
+        /** Los «parecidos» que el server devolvería por movimiento; por defecto, ninguno. */
+        var parecidos: Map<String, List<FinancialEvent>> = emptyMap()
+        override suspend fun getParecidos(id: String): List<FinancialEvent> = parecidos[id].orEmpty()
+        override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent {
+            eventos = eventos.map { if (it.id == id) it.copy(timestamp = timestamp) else it }
+            return eventos.first { it.id == id }
+        }
         override suspend fun voidEvent(id: String, reason: String?): VoidEvent {
             anulados += id
             eventos = eventos.filterNot { it.id == id }
@@ -115,13 +129,19 @@ class MovimientosListaYDetalleEnPantallaTest {
 
     private fun montar(): ConMovimientos = montar2("Señor Gol")
 
-    private fun montar2(primera: String): ConMovimientos {
+    /** El ancho de la ventana, para poder achicarla en medio de una prueba. `null` = la del qualifier. */
+    private val anchoDeLaVentana = mutableStateOf<Int?>(null)
+
+    private fun montar2(primera: String, antes: (ConMovimientos) -> Unit = {}): ConMovimientos {
         DiasPlegadosStore.clear()
         val repo = ConMovimientos()
+        antes(repo)
         Repositories.sustitutoDePrueba = repo
         composeRule.setContent {
             // El relevo de los márgenes puesto como en App.kt: la lista se registra en él.
             val relevo = remember { RelevoDeScroll() }
+            val ancho = anchoDeLaVentana.value
+            Box(if (ancho == null) Modifier.fillMaxSize() else Modifier.fillMaxHeight().requiredWidth(ancho.dp)) {
             ConClaseDeAncho {
                 CompositionLocalProvider(LocalRelevoDeScroll provides relevo) {
                     EsqueletoDeLaCascara(
@@ -134,6 +154,7 @@ class MovimientosListaYDetalleEnPantallaTest {
                         TransactionsScreen(onNavigate = {})
                     }
                 }
+            }
             }
         }
         esperar { filaDe(primera).fetchSemanticsNodes().isNotEmpty() }
@@ -405,6 +426,86 @@ class MovimientosListaYDetalleEnPantallaTest {
 
         val despues = filaDe("Gasto número 1").fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
         assertTrue(despues == null || despues < antes - 1f, "la lista tenía que moverse: $antes / $despues")
+    }
+
+    /**
+     * Revisión final, I-1. Con parecidos, la categoría ya quedó guardada cuando el panel pregunta
+     * «¿Y los parecidos?». En la hoja la única salida era contestar o cerrar (que avisa); en el
+     * panel hay otra —tocar otra fila— y la lista se quedaba con la categoría vieja.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `tocar otra fila sin contestar lo de los parecidos igual actualiza la lista`() {
+        val repo = montar2("Señor Gol") {
+            it.parecidos = mapOf("e1" to listOf(gasto("p1", "Señor Gol Centro", 30_000L, "Comida")))
+        }
+        elegir("Señor Gol")
+        val celda = composeRule.onAllNodes(hasText("Mercado") and enElPanel, useUnmergedTree = true).onFirst()
+        celda.performScrollTo()
+        celda.performClick()
+        esperar { hayEnElPanel("¿Y LOS PARECIDOS?") }
+        assertEquals(listOf("e1" to "Mercado"), repo.categoriasCambiadas)
+
+        // Sin contestar: otra fila.
+        elegir("Las Doce")
+
+        esperar { filaConSubtitulo("Señor Gol", "Mercado · Bancolombia") }
+        assertTrue(!hayEnElPanel("¿Y LOS PARECIDOS?"))
+    }
+
+    /** Revisión final, M-2: en el panel el selector de fecha se cierra al guardar, como en la hoja. */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `guardar una fecha en el panel cierra el selector`() {
+        montar()
+        elegir("Las Doce")
+        // La fila de FECHA: su «Cambiar» es el segundo del panel (el primero es el del monto).
+        val cambiarFecha = composeRule.onAllNodes(hasText("Cambiar") and enElPanel, useUnmergedTree = true)[1]
+        cambiarFecha.performScrollTo()
+        cambiarFecha.performClick()
+        val ayer = composeRule.onNode(hasText("Ayer") and enElPanel, useUnmergedTree = true)
+        ayer.performScrollTo()
+        ayer.performClick()
+        val mover = composeRule.onNode(hasText("Mover a", substring = true) and enElPanel, useUnmergedTree = true)
+        mover.performScrollTo()
+        mover.performClick()
+
+        esperar { !hayEnElPanel("Mover a", substring = true) && !hayEnElPanel("Guardando…") }
+        composeRule.waitForIdle()
+        assertTrue(!hayEnElPanel("Elige otro día"), "el selector se cerró")
+        assertTrue(!hayEnElPanel("Mover a", substring = true))
+        assertTrue(hayEnElPanel("Las Doce"), "el panel sigue con el movimiento")
+    }
+
+    /**
+     * Revisión final, M-3: achicar la ventana con un movimiento en el panel no abre una hoja modal
+     * que nadie pidió. Después, tocar una fila en el teléfono sí la abre.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `achicar la ventana con un movimiento elegido no abre la hoja sola`() {
+        montar()
+        elegir("Las Doce")
+
+        anchoDeLaVentana.value = 390
+        composeRule.waitForIdle()
+        assertTrue(!hayTag(TAG_PANEL_DEL_MOVIMIENTO), "ya no hay panel")
+        assertTrue(!hayTag(TAG_PANEL_DE_HOJA), "y no se abrió ninguna hoja")
+
+        fila("Señor Gol").performClick()
+        esperar { hayTag(TAG_PANEL_DE_HOJA) }
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `pasar a una ventana mediana angosta con un movimiento elegido tampoco abre la hoja`() {
+        montar()
+        elegir("Las Doce")
+
+        anchoDeLaVentana.value = 800
+        composeRule.waitForIdle()
+        assertTrue(!hayTag(TAG_PANEL_DEL_MOVIMIENTO))
+        assertTrue(!hayTag(TAG_PANEL_DE_HOJA))
     }
 
     // ── Sin lugar al lado: como hoy ─────────────────────────────────────────────

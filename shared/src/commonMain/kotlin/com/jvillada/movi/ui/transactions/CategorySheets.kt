@@ -360,6 +360,20 @@ internal fun ContenidoDelMovimiento(
     }
     /** El segundo paso: no nulo mientras se pregunta si el cambio va también para los parecidos. */
     var oferta by remember(event.id) { mutableStateOf<OfertaDeLote?>(null) }
+    // **En el panel, dejar la pregunta sin contestar también avisa** (revisión final de la W4,
+    // I-1). Cuando se pregunta por los parecidos, la categoría de ESTE movimiento ya quedó
+    // guardada. En la hoja las únicas salidas son contestar o cerrarla, y las dos avisan
+    // ([onEventChanged]); en el panel hay una tercera —tocar otra fila de la lista, o achicar la
+    // ventana— que lo desmonta sin pasar por ahí, y la lista se quedaba con la categoría vieja. Al
+    // desmontarse con la pregunta pendiente, se avisa con el movimiento ya cambiado: los parecidos
+    // quedan como están, que es lo mismo que «No, solo este».
+    if (lugar == LugarDelMovimiento.Panel) {
+        val ofertaPendiente by rememberUpdatedState(oferta)
+        val avisar by rememberUpdatedState(onEventChanged)
+        DisposableEffect(Unit) {
+            onDispose { ofertaPendiente?.let { avisar(it.movimiento) } }
+        }
+    }
 
     fun choose(category: String) {
         if (category == event.category || saving) return
@@ -1607,7 +1621,10 @@ private fun SeccionDeFecha(
                 )
             }
             guardando = false
-            result.onSuccess { onFechaCambiada(it) }.onFailure { error = it.toUserMessage() }
+            // Cerrado al guardar: en la hoja no se notaba (se cerraba entera), pero en el panel de
+            // Movimientos el movimiento sigue a la vista y el selector quedaba abierto con
+            // «Mover a …» habilitado hasta que llegaba la relectura.
+            result.onSuccess { abierto = false; onFechaCambiada(it) }.onFailure { error = it.toUserMessage() }
         }
     }
 

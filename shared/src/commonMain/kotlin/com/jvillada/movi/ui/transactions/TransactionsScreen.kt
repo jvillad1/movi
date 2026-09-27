@@ -984,6 +984,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
      */
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
     val focusManager = LocalFocusManager.current
+    /** Si [selectedEvent] se eligió en el panel de al lado (y no para abrir la hoja). */
+    var elegidoEnElPanel by remember { mutableStateOf(false) }
     /** A dónde va el foco al cambiar de movimiento en el panel (ver `elegir`). */
     val focoDelPanel = remember { FocusRequester() }
 
@@ -1130,7 +1132,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
             if (runCatching { focoDelPanel.requestFocus() }.isFailure) focusManager.clearFocus()
         }
         selectedEvent = evento
+        elegidoEnElPanel = conPanel
     }
+    // Revisión final de la W4, M-3: lo elegido en el panel es del panel. Si la ventana se achica
+    // (o una tablet rota) hasta quedar sin lugar al lado, no se abre una hoja modal que nadie
+    // tocó —y menos sobre un movimiento que quizás ya no existe—: se suelta la elección.
+    val soltarLoDelPanel = !conPanel && elegidoEnElPanel && selectedEvent != null
+    if (soltarLoDelPanel) SideEffect { selectedEvent = null; elegidoEnElPanel = false }
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
     ListaYPanelDeMovimientos(
         conPanel = conPanel,
@@ -1662,7 +1670,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     )
 
     // Con el panel al lado, el movimiento elegido va ahí y no se abre ninguna hoja.
-    if (!conPanel) selectedEvent?.let { event ->
+    if (!conPanel && !soltarLoDelPanel) selectedEvent?.let { event ->
         // El mismo juego de hojas que abre el detalle de la cuenta — categoría, fecha, monto,
         // cuenta, concepto, «esto se repite» y anular — porque es el mismo movimiento tocado.
         // Ver [HojaDelMovimiento] para por qué está afuera de esta pantalla.
