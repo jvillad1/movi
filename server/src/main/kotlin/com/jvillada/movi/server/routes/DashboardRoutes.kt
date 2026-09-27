@@ -23,6 +23,7 @@ import com.jvillada.movi.server.reminders.emparejadasComoSellos
 import com.jvillada.movi.server.reminders.periodosPorRegla
 import com.jvillada.movi.server.reminders.unirOcurridos
 import com.jvillada.movi.server.reminders.cuotasDelChecklistPagadas
+import com.jvillada.movi.server.reminders.pagosDeDeudaAlrededorDe
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.time.epochMillisToAppDate
@@ -256,7 +257,12 @@ internal fun Transaction.disponibleDelServidor(
         pagosDeDeudaFueraDelChecklist = pagosDeDeudaFueraDelChecklist(
             eventos = eventosDelPeriodo,
             cuentas = cuentas,
-            enLosFijos = parteFija + cuotasDelChecklistPagadas(reglasDeCredito, eventosDelPeriodo, hoy, periodo),
+            enLosFijos = parteFija + cuotasDelChecklistPagadas(
+                reglasDeCredito, eventosDelPeriodo, hoy, periodo,
+                // El pago del período anterior decide a qué cuota se le atribuye uno de este: ver
+                // `periodoQueSalda`. No está en `eventosDelPeriodo`.
+                historialDePagosDeDeuda = if (reglasDeCredito.isEmpty()) emptyList() else pagosDeDeudaAlrededorDe(uid, hoy),
+            ),
         ),
     )
 }

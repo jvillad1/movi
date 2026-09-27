@@ -287,17 +287,32 @@ private fun esCuotaQueSaleDelBolsillo(evento: FinancialEvent): Boolean =
  * checklist del cliente.
  *
  * Lo usa `pagosDeDeudaFueraDelChecklist` (en :core) para no restar dos veces una cuota que ya está
- * en los fijos. Todo en memoria sobre los movimientos del período que la ruta ya leyó.
+ * en los fijos. Todo en memoria sobre lo que la ruta ya leyó.
+ *
+ * @param historialDePagosDeDeuda los pagos de deuda alrededor de [hoy], con la misma franja que usan
+ *   `/api/payments/occurrences` y «Próximos» (`pagosDeDeudaAlrededorDe`). **Sin valor por defecto
+ *   a propósito.** A qué vencimiento se le atribuye un pago depende de si el período ANTERIOR ya
+ *   tenía el suyo (ver [periodoQueSalda]), y ese pago no está en [eventos], que son solo los del
+ *   período: con corte 25, la cuota de Crediágil pagada el 5-sep y otra vez el 27-sep se leía, desde
+ *   el período de octubre, como un solo pago de septiembre — el ítem del 15-oct quedaba sin pagar y
+ *   el Disponible restaba el pago dos veces (como fijo y como otro pago de deuda). Un default vacío
+ *   dejaría pasar ese mismo error, en silencio, en el próximo call site.
  */
 fun cuotasDelChecklistPagadas(
     reglasDeCredito: List<RecurringRule>,
     eventos: List<FinancialEvent>,
     hoy: LocalDate,
     settings: PeriodSettings,
+    historialDePagosDeDeuda: List<FinancialEvent>,
     zone: ZoneId = AppClock.zone,
 ): Map<String, Long> {
     if (reglasDeCredito.isEmpty()) return emptyMap()
-    val pagos = eventos.filter { it.category in CATEGORIAS_QUE_SALDAN }
+    // Los dos juntos: el historial para saber qué período ya estaba saldado, y los del período por si
+    // alguno quedara fuera de la franja (un período armado a mano más largo que un mes). Un mismo
+    // movimiento viene en los dos: se cuenta una vez.
+    val pagos = (eventos + historialDePagosDeDeuda)
+        .filter { it.category in CATEGORIAS_QUE_SALDAN }
+        .distinctBy { it.id }
     val dias = diasDelPeriodo(hoy, settings, zone)
     return pagosDeDeudaPorPeriodo(reglasDeCredito, pagos, zone = zone, settings = settings)
         .mapNotNull { (ruleId, porPeriodo) ->
