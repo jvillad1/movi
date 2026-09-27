@@ -258,15 +258,24 @@ fun tonoDelEvento(event: FinancialEvent): TonoDelMonto = when {
 
 /**
  * El tono de un renglón. Un **par** —traspaso, cuota, pago de tarjeta, leído como un solo hecho—
- * es siempre `ENTRE_CUENTAS`, nunca gasto ni ingreso: la plata no entró ni salió, cambió de
+ * es `ENTRE_CUENTAS`, ni gasto ni ingreso (la única excepción es el desembolso de un crédito, que
+ * es `INGRESO`: la plata prestada sí entró a tu cuenta): la plata no entró ni salió, cambió de
  * cuenta. Ponerle un signo obligaría a elegir el punto de vista de una de las dos cuentas, que es
  * justo la confusión que el renglón doble vino a sacar (ver [TransferRow]) — pero eso solo dice
  * que no lleva signo, no que tenga que verse igual que un NEUTRO real (la apertura de una cuenta,
  * una pata huérfana): son un hecho identificable y el dueño los quiere distinguibles a simple
  * vista (ver [TonoDelMonto]).
  */
-fun tonoDelRenglon(row: MovementRow): TonoDelMonto = when (row) {
-    is MovementRow.Transfer -> TonoDelMonto.ENTRE_CUENTAS
+fun tonoDelRenglon(
+    row: MovementRow,
+    accountTypes: Map<String, AccountType> = emptyMap(),
+): TonoDelMonto = when (row) {
+    // **El desembolso de un crédito sí es plata que entró a tu cuenta**, aunque no cuente como
+    // ingreso del mes (es deuda): sin verde ni «+», la fila se leía como un movimiento cualquiera
+    // y el dueño no encontraba de dónde había salido la plata que gastó. Sin los tipos de cuenta
+    // todavía, se queda neutro como siempre — ver [transferRowTitle].
+    is MovementRow.Transfer ->
+        if (esDesembolso(row, accountTypes)) TonoDelMonto.INGRESO else TonoDelMonto.ENTRE_CUENTAS
     is MovementRow.Single -> tonoDelEvento(row.event)
     // Un grupo de ajustes no movió plata del bolsillo — ninguno de sus renglones lo hizo, por
     // `isCashFlow` — así que el gris es literal, no una elección estética.
@@ -795,9 +804,28 @@ fun transferRowTitle(row: MovementRow.Transfer, accountTypes: Map<String, Accoun
     // llegar a ella, así que distingue exacto.
     row.out.category == CUOTA_CATEGORY -> "Cuota de crédito"
     row.out.category == CARD_PAYMENT_CATEGORY -> "Pago de tarjeta"
-    accountTypes[row.out.accountId] == AccountType.LOAN -> "Desembolso"
+    accountTypes[row.out.accountId] == AccountType.LOAN -> TITULO_DE_DESEMBOLSO
     accountTypes[row.into.accountId] == AccountType.LOAN -> "Abono extraordinario"
     else -> "Traspaso"
+}
+
+/** ¿Este par es el desembolso de un crédito: la plata prestada que entró a una cuenta tuya? */
+fun esDesembolso(row: MovementRow.Transfer, accountTypes: Map<String, AccountType>): Boolean =
+    transferRowTitle(row, accountTypes) == TITULO_DE_DESEMBOLSO
+
+private const val TITULO_DE_DESEMBOLSO = "Desembolso"
+
+/**
+ * Lo que el renglón de un desembolso aclara: la plata entró, pero es deuda y no suma como ingreso.
+ * Va en su propia línea, encima del «De X a Y», para que el nombre del crédito no lo recorte la
+ * elipsis.
+ */
+const val NOTA_DE_DESEMBOLSO: String = "Crédito · plata prestada, no cuenta como ingreso"
+
+/** El monto grande del par: con «+» si es un desembolso (entró plata), sin signo en los demás. */
+fun textoDelMontoDeTraspaso(row: MovementRow.Transfer, accountTypes: Map<String, AccountType>): String {
+    val monto = formatMoney(row.amount, row.out.currency)
+    return if (esDesembolso(row, accountTypes)) "+$monto" else monto
 }
 
 /**
@@ -1566,6 +1594,8 @@ fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color = when (tono
  * el azul de [TonoDelMonto.ENTRE_CUENTAS].
  *
  * Sin `+` ni `−` a propósito: la plata no entró ni salió del bolsillo, solo cambió de cuenta.
+ * (El desembolso de un crédito es la excepción: entró plata prestada, va en verde con «+» y una
+ * nota que aclara que no cuenta como ingreso — ver [esDesembolso].)
  * Ponerle un signo obligaría a elegir el punto de vista de una de las dos cuentas, que es
  * exactamente la confusión que este renglón viene a sacar. El signo de cada pata sí aparece, con
  * su cuenta al lado, en el detalle de cada cuenta. El color, en cambio, sí distingue esto de un
@@ -1617,6 +1647,15 @@ internal fun TransferRow(
                 letterSpacing = (-0.1).sp,
             )
             Spacer(Modifier.height(2.dp))
+            if (esDesembolso(row, accountTypes)) {
+                Text(
+                    text = NOTA_DE_DESEMBOLSO,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1643,10 +1682,10 @@ internal fun TransferRow(
         }
         Text(
             // En la moneda del movimiento: un traspaso de la Master Black USD no son pesos.
-            text = formatMoney(row.amount, row.out.currency),
+            text = textoDelMontoDeTraspaso(row, accountTypes),
             style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
-            color = colorDelTono(tonoDelRenglon(row), Movi.colores),
+            color = colorDelTono(tonoDelRenglon(row, accountTypes), Movi.colores),
         )
     }
 }
