@@ -23,6 +23,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 
 /**
@@ -132,6 +133,14 @@ import java.time.ZoneId
  * el periodo está saldado igual. Ver [pagosDeDeudaPorPeriodo], que ordena por fecha para que «el
  * último» sea el último de verdad y no el que la base devolvió primero.
  *
+ * ### Con corte: el tope es el período del pago, cuando el anterior ya tiene el suyo
+ *
+ * Con corte 25 el mes de calendario del pago y el período del dueño se separan del 25 a fin de mes,
+ * y el tope por calendario le atribuía a septiembre la cuota de Crediágil pagada el 27-sep aunque
+ * septiembre ya estuviera pagado desde el 5: la del 15-oct quedaba sin pagar para siempre. Cerrado
+ * en [periodoQueSalda] («Después del corte»), sin tocar el caso AMEX: un pago así salda la cuota de
+ * su período solo si otro pago de la misma deuda cae en el período del vencimiento anterior.
+ *
  * ## Y el riesgo de «marcar de más»
  *
  * El resto de este subsistema repite que dar por ocurrido algo que no ocurrió cuesta plata,
@@ -159,7 +168,8 @@ val CATEGORIAS_QUE_SALDAN: List<String> = listOf(CUOTA_CATEGORY, CARD_PAYMENT_CA
 
 /**
  * **El periodo que salda un pago hecho el [fecha]**: el del vencimiento que estaba vigente ese día,
- * topeado al día del pago — porque **un pago no salda un vencimiento que todavía no llegó**.
+ * topeado al día del pago — porque **un pago no salda un vencimiento que todavía no llegó** — salvo
+ * que el período anterior ya tenga su pago (ver «Después del corte», abajo).
  *
  * Ver el KDoc de arriba para el porqué de cada mitad, para el caso AMEX y para lo que el tope no
  * cierra. `occurredPeriods` va vacío a propósito: acá se pregunta a qué vencimiento apuntaba el
@@ -169,13 +179,76 @@ val CATEGORIAS_QUE_SALDAN: List<String> = listOf(CUOTA_CATEGORY, CARD_PAYMENT_CA
  * fijar es la REGLA —el vencimiento vigente, nunca uno futuro— y no la coincidencia. Y eso ya pagó:
  * desde que `dueDateFor` mira el vencimiento del mes pasado que sigue en gracia, un pago del 2 de
  * octubre sobre una cuota del 30 salda septiembre sin que esta función cambiara.
+ *
+ * ## Después del corte: la cuota del período en que se pagó, si la anterior ya tenía su pago
+ *
+ * El tope compara con el día del pago, y `periodOf` de ese día es su **mes de calendario**. Con
+ * corte 25 eso no alcanza: el 27 de septiembre es septiembre por calendario, pero es el período de
+ * OCTUBRE del dueño (25-sep a 24-oct), cuya cuota es la del 15 de octubre. El dueño pagó Crediágil
+ * (día 15) el 5 de septiembre y otra vez el 27; los dos pagos caían en «2026-09», el `Map` se quedaba
+ * con el último, y la cuota del 15-oct no la saldaba nadie: seguía en «Falta por pagar» y el
+ * Disponible restaba el pago dos veces (como fijo, y como otro pago de deuda porque nadie lo
+ * reclamaba).
+ *
+ * El pago del 27 es, por forma, idéntico al de AMEX del 30 de agosto: pasado el vencimiento de su
+ * mes y su gracia, antes del siguiente. Lo que los distingue no es la fecha sino **lo que ya pasó
+ * antes**: el 16 de agosto de AMEX no tenía ningún pago, así que el del 30 puede ser ese pago tarde
+ * y se elige el lado barato; el 15 de septiembre de Crediágil ya lo había pagado el 5, así que el
+ * del 27 no tiene otra cuota a la que pagar tarde que la del período en que se hizo.
+ *
+ * La regla, entonces: si el tope movió el pago (el vencimiento vigente era posterior al pago) **y**
+ * el vencimiento de su mes ya había pasado **y** el período del pago tiene una cuota posterior a
+ * esa, el pago salda la cuota de su período **cuando otro pago de esta misma deuda cae dentro del
+ * período del vencimiento anterior** ([fechasDeLosPagos]). Si no, todo sigue como antes.
+ *
+ * Por qué «un pago dentro del período anterior» y no «el vencimiento anterior ya quedó saldado»
+ * recorriendo los pagos en orden, que parece lo mismo:
+ *
+ *  - **No se encadena.** Con la versión encadenada, a quien paga siempre después del corte (27-jul,
+ *    27-ago, 27-sep) la respuesta de HOY le dependía del primer pago de la franja que se cargó: el
+ *    día que ese pago saliera de la franja de [cargarPagosDeDeuda], todos corrían un mes y la cuota
+ *    del 15-oct volvía a figurar pendiente sin que nada hubiera pasado. Mirando un solo período
+ *    hacia atrás, la respuesta cabe entera en la franja y no se mueve.
+ *  - **Dos partes de la misma cuota nunca se separan.** El período del vencimiento anterior es
+ *    estrictamente anterior al del pago, así que un pago del mismo período no cuenta como evidencia
+ *    para otro: la libranza pagada en dos partes cae entera en un vencimiento, sea cual sea.
+ *
+ * **Con mes de calendario no cambia nada**: el período del pago es su mes, y su cuota es la del mes.
+ * Tampoco toca el segundo abono dentro de la gracia (ahí el vencimiento vigente todavía es el que
+ * pasó, así que el tope no movió nada), ni a Nu pagada el 1 y el 7 con corte 25 (los dos son del
+ * mismo período, que no tiene otra cuota que la del 1-sep).
+ *
+ * El costo aceptado es el del caso AMEX, del otro lado: con septiembre ya pagado el 5, un segundo
+ * abono del 27 que en realidad completaba septiembre apaga el aviso del 15-oct. Movi no conoce el
+ * extracto para distinguirlo, y ese abono se hizo en el período de octubre del dueño, que es como él
+ * cuenta su plata: en ese período ya se lee como la cuota de octubre en Movimientos y en Disponible.
+ *
+ * @param fechasDeLosPagos las fechas de TODOS los pagos de esta misma deuda que se leyeron (puede
+ *   incluir [fecha]: nunca cae en el período anterior). Sin valor por defecto a propósito: vacío es
+ *   exactamente el error que esto vino a cerrar.
  */
 fun periodoQueSalda(
     rule: RecurringRule,
     fecha: LocalDate,
+    fechasDeLosPagos: Collection<LocalDate>,
     graceDays: Int = DEFAULT_GRACE_DAYS,
     settings: PeriodSettings = PeriodSettings(),
-): String = periodOf(minOf(dueDateFor(rule, fecha, graceDays, settings = settings), fecha))
+    zone: ZoneId = AppClock.zone,
+): String {
+    val vigente = dueDateFor(rule, fecha, graceDays, settings = settings)
+    val topeado = periodOf(minOf(vigente, fecha))
+    // El tope no movió nada: el vencimiento vigente ya había llegado (en su día o en la gracia).
+    if (!vigente.isAfter(fecha)) return topeado
+    // El vencimiento del mes del pago todavía no llegó: es el que este pago adelanta, sin ambigüedad.
+    val delMes = occurrenceInMonth(YearMonth.from(fecha), rule.dayOfMonth)
+    if (delMes.isAfter(fecha)) return topeado
+    // La cuota del período en que se pagó. Con calendario es `delMes`, y acá termina.
+    val delPeriodo = ocurrenciaEnJuego(fecha, rule.dayOfMonth, settings, zone) ?: return topeado
+    if (!delPeriodo.isAfter(delMes) || !ruleIsActiveOn(rule, delPeriodo, settings, zone)) return topeado
+    val periodoAnterior = diasDelPeriodo(delMes, settings, zone)
+    val laAnteriorYaTienePago = fechasDeLosPagos.any { it in periodoAnterior }
+    return if (laAnteriorYaTienePago) periodOf(delPeriodo) else topeado
+}
 
 /**
  * Para cada regla sintética de [rules], **qué movimiento saldó cada periodo**.
@@ -198,15 +271,19 @@ fun pagosDeDeudaPorPeriodo(
     .mapNotNull { rule ->
         val cuenta = cuentaDeLaDeudaDe(rule.id) ?: return@mapNotNull null
         val categoria = categoriaQueSalda(rule.id) ?: return@mapNotNull null
-        val porPeriodo = pagos
-            .asSequence()
+        val deEstaDeuda = pagos
             // Las tres puertas del KDoc: la cuenta de la deuda, la categoría del pago, y que de
             // verdad BAJE la deuda (en una cuenta de deuda eso es INCOME).
             .filter { it.accountId == cuenta }
             .filter { it.category == categoria }
             .filter { it.type == TransactionType.INCOME }
             .sortedBy { it.timestamp }
-            .associateBy { periodoQueSalda(rule, epochMillisToAppDate(it.timestamp, zone), graceDays, settings) }
+        // Las fechas de los pagos de ESTA deuda: con corte, un pago después del corte salda la cuota
+        // de su período si el período anterior ya tenía el suyo (ver [periodoQueSalda]).
+        val fechas = deEstaDeuda.map { epochMillisToAppDate(it.timestamp, zone) }
+        val porPeriodo = deEstaDeuda.indices.associate { i ->
+            periodoQueSalda(rule, fechas[i], fechas, graceDays, settings, zone) to deEstaDeuda[i]
+        }
         if (porPeriodo.isEmpty()) null else rule.id to porPeriodo
     }
     .toMap()
@@ -263,12 +340,16 @@ fun unirOcurridos(
 /**
  * Cuántos meses hacia atrás y hacia adelante se buscan pagos.
  *
- * Dos para cada lado. Con el tope de [periodoQueSalda] un pago salda el mes en que se hizo, así
- * que para lo que hoy se lee —el periodo en curso— alcanzaría con el mes en curso; la franja
- * sobra a propósito, porque es una guarda para que el índice `(user_id, timestamp)` resuelva la
- * consulta y no un criterio de negocio. Quien decide a qué periodo va cada pago es
- * [periodoQueSalda], y el día que esa función mire un vencimiento más viejo, los datos ya están
- * acá en vez de faltar en silencio. Hacia adelante, por un pago anotado con fecha futura.
+ * Dos para cada lado. Un pago salda el vencimiento de su mes o, con corte, el de su período — y
+ * para decidir lo segundo [periodoQueSalda] mira si **el período anterior** ya tenía un pago. Así
+ * que lo que hoy se lee necesita el período en curso y el anterior entero. Con corte 25, para
+ * cualquier hoy del período 25-sep a 24-oct el anterior es 25-ago a 24-sep, y esta franja arranca
+ * el 1-jul o el 1-ago: lo cubre con holgura. El resto sobra a propósito: es una guarda para que el
+ * índice `(user_id, timestamp)` resuelva la consulta, no un criterio de negocio. Hacia adelante,
+ * por un pago anotado con fecha futura.
+ *
+ * **Achicar esta franja no es gratis**: sin el pago del período anterior, la cuota pagada después
+ * del corte vuelve a leerse como el pago tarde del mes viejo y el Plan la muestra pendiente.
  */
 private const val MESES_DE_PAGOS: Long = 2
 
@@ -280,12 +361,21 @@ private const val MESES_DE_PAGOS: Long = 2
  * anotados esto es un puñado de filas por mes, no la vida entera del usuario.
  */
 suspend fun cargarPagosDeDeuda(uid: String, hoy: LocalDate): List<FinancialEvent> = dbQuery {
+    pagosDeDeudaAlrededorDe(uid, hoy)
+}
+
+/**
+ * Lo mismo que [cargarPagosDeDeuda], dentro de un `dbQuery` ya abierto — y con la MISMA franja, que
+ * es lo que importa: el Disponible del Inicio decide qué cuota del checklist está pagada con esto, y
+ * `/api/payments/occurrences` con aquello. Si cada uno mirara una franja distinta, «Falta por pagar»
+ * y «Disponible» podrían atribuirle el mismo pago a vencimientos distintos.
+ */
+fun Transaction.pagosDeDeudaAlrededorDe(uid: String, hoy: LocalDate): List<FinancialEvent> =
     loadPagosDeDeudaEntre(
         uid = uid,
         desde = appDateToEpochMillis(hoy.minusMonths(MESES_DE_PAGOS).withDayOfMonth(1)),
         hastaExclusivo = appDateToEpochMillis(hoy.plusMonths(MESES_DE_PAGOS).withDayOfMonth(1)),
     )
-}
 
 /**
  * La consulta de [cargarPagosDeDeuda], como extensión de `Transaction` para poder llamarla desde
