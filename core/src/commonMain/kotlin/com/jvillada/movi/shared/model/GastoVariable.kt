@@ -18,7 +18,11 @@ package com.jvillada.movi.shared.model
  *   (`PagosDeDeuda.kt`). El pago de tarjeta no hace falta nombrarlo: ya no es flujo de caja.
  * - **lo que paga un recurrente del checklist** sale en la parte que diga [parteFija], que arma
  *   el server (`PagosDelChecklist.kt`) con el mismo emparejador que la pantalla usa para el «¿Es
- *   este?». Es una parte y no un sí/no porque la regla tiene un monto y el movimiento otro: un
+ *   este?» — pero solo con lo que **dice el nombre** del recurrente (o lo que Movi emparejó solo):
+ *   un gasto que comparte apenas la categoría no es evidencia de que sea su pago, y si saliera
+ *   del variable, «Mercado» ($2.000.000, Comida) se comería todo el gasto de Comida y dejaría el
+ *   disponible en $0 mientras el fijo sigue restando su monto entero. Ese gasto cuenta como
+ *   variable hasta que el dueño confirme que fue el pago. Es una parte y no un sí/no porque la regla tiene un monto y el movimiento otro: un
  *   colegio de $4.000.000 pagado con $3.000.000 + $1.000.000 saca los dos; un gimnasio de
  *   $180.000 pagado con un movimiento de $200.000 saca $180.000 y deja $20.000 como variable. Así
  *   fijos + variable suman siempre lo que de verdad salió, sin contar nada dos veces ni perderlo.
