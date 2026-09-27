@@ -116,10 +116,23 @@ asume.
 - `:server:test` con `--tests` acotado a `com.jvillada.movi.server.reminders.*` +
   `LaCuotaPagadaNoEstaVencidaTest` + `PagoTardioPasadaLaGraciaTest` +
   `DisponibleVeLoEmparejadoTest`: BUILD SUCCESSFUL, sin fallas.
-- CI completo (`--rerun-tasks :core:jvmTest :server:test :shared:testDebugUnitTest
-  :shared:compileKotlinWasmJs`) pendiente de correr — Ola P esta usando Gradle ahora mismo
-  (maquina de un solo Gradle a la vez). Se corre apenas se libere y se actualiza este reporte.
+- **CI completo corrido**: `JAVA_HOME=.../jbrsdk-21 ./gradlew --rerun-tasks :core:jvmTest
+  :server:test :shared:testDebugUnitTest :shared:compileKotlinWasmJs` -> **BUILD SUCCESSFUL en
+  5m 26s** (70 tareas, 70 ejecutadas), sobre la rama ya rebasada contra `origin/master`
+  (incluye la Ola R recien mergeada, commit `1376b1a8`).
 
 ## Commits
 
-- (pendiente de listar tras el primer commit — ver git log de la rama)
+- `646fa18d` — "Ola S: la cuota de un credito/tarjeta usa CUOTA_CATEGORY, no \"Creditos\""
+  (rebasado sobre `origin/master` tras el push inicial; el hash cambio de `19b43d05` a
+  `646fa18d` por el rebase, sin cambiar el contenido).
+- Pusheado a `origin/ola-s-cuotas-de-credito-emparejan`.
+
+## Estado final: DONE_WITH_CONCERNS
+
+Ver el hallazgo arriba: el cambio esta hecho, probado (rojo/verde) y el CI completo pasa, pero
+no cierra por si solo el sintoma exacto de "Credito Mama" en el checklist de Plan salvo que
+"Credito Mama" resulte ser la regla sintetica Y el pago se haga con las dos patas (flujo "Pagar
+cuota"), que ya funcionaba antes de este cambio. Recomiendo que quien retome esto verifique en
+la base de produccion (fuera de mi alcance) cual de los dos escenarios del hallazgo es el real
+antes de dar el reclamo del dueno por cerrado.
