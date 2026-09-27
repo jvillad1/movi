@@ -13,7 +13,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import com.jvillada.movi.ui.LocalRefreshTick
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,10 +28,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.FormaDeCreditos
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -45,7 +46,6 @@ import com.jvillada.movi.shared.model.resumirDeudas
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
-import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
 /**
@@ -55,18 +55,32 @@ import kotlinx.datetime.Clock
  */
 @Composable
 fun CreditosScreen(onNavigate: (Screen) -> Unit) {
-    // `null` = la lectura todavía no contestó bien; `emptyList()` = contestó y no hay ninguno. Son
-    // dos cosas distintas y la pantalla las dice distinto: la primera con el esqueleto (o con
-    // [NoSePudoLeer] si ya se rindió), la segunda con el vacío de siempre. Antes las dos eran una
-    // lista vacía, y mientras cargaba se leía «Deuda total $0 · Sin créditos registrados» a quien
-    // debe $2.191 millones en 12 préstamos. Una vez leídas no vuelven a `null`: si un reintento
-    // falla se sigue mostrando lo último que se supo, como antes con `creditosLeidos`.
-    var credits by remember { mutableStateOf<List<CreditSummary>?>(null) }
-    var cards by remember { mutableStateOf<List<CardSummary>?>(null) }
-    // El perfil ya contestó (bien o mal) al menos una vez. Hasta entonces el mes de la última cuota
-    // se diría con el corte 1 y cambiaría de nombre cuando llegue el corte del dueño — ver
-    // [ajustesDelPeriodo]. Si falla se sigue con el corte 1, como siempre: esto solo espera.
-    var perfilContestado by remember { mutableStateOf(false) }
+    var reloadKey by remember { mutableStateOf(0) }
+    // **Lo último que se vio, al primer cuadro** (ver [rememberLectura]): los préstamos, las tarjetas
+    // y el perfil arrancan con lo que dejó la visita anterior y se releen igual, con `reloadKey`
+    // (los cambios hechos EN esta pantalla) y con `LocalRefreshTick` (se guardó algo desde la hoja
+    // de Agregar: un desembolso o un abono extraordinario mueven la deuda, y la hoja es una modal,
+    // así que esta pantalla nunca sale de la composición — verificado en el navegador: sin el tick,
+    // Créditos seguía diciendo $70.000.000 después de un abono de $5.000.000).
+    val creditosLeidos = rememberLectura(ClaveDeLectura.Creditos, reintento = reloadKey) { Repositories.wallets.getCredits() }
+    val tarjetasLeidas = rememberLectura(ClaveDeLectura.Tarjetas, reintento = reloadKey) { Repositories.wallets.getCards() }
+    // Si el perfil no se puede leer, se queda el corte 1 (el mes de calendario) y no se dice: acá el
+    // período no cambia ninguna cifra de plata, solo el NOMBRE del mes de la última cuota. Un error
+    // a pantalla completa por un mes corrido sería más ruido que el defecto.
+    val perfilLeido = rememberLectura(ClaveDeLectura.Perfil, reintento = reloadKey) { Repositories.wallets.getUserProfile() }
+    // `null` = la lectura todavía no contestó bien (ni en esta visita ni en una reciente);
+    // `emptyList()` = contestó y no hay ninguno. Son dos cosas distintas y la pantalla las dice
+    // distinto: la primera con el esqueleto (o con [NoSePudoLeer] si ya se rindió), la segunda con
+    // el vacío de siempre. Antes las dos eran una lista vacía, y mientras cargaba se leía «Deuda
+    // total $0 · Sin créditos registrados» a quien debe $2.191 millones en 12 préstamos. Una vez
+    // leídas no vuelven a `null`: si un reintento falla se sigue mostrando lo último que se supo, y
+    // se dice (ver `noSePudoActualizar`).
+    val credits = creditosLeidos.valor
+    val cards = tarjetasLeidas.valor
+    // El perfil ya se sabe (leído, recordado, o su lectura terminó aunque haya fallado). Hasta
+    // entonces el mes de la última cuota se diría con el corte 1 y cambiaría de nombre cuando llegue
+    // el corte del dueño — ver [ajustesDelPeriodo]. Si falla se sigue con el corte 1: esto solo espera.
+    val perfilContestado = perfilLeido.valor != null || perfilLeido.terminada
     var showTypeChooser by remember { mutableStateOf(false) }
     var showLoanSheet by remember { mutableStateOf(false) }
     var editingLoan by remember { mutableStateOf<CreditSummary?>(null) }
@@ -81,43 +95,17 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     // pedir confirmación sería ceremonia sobre algo que no se puede duplicar.
     var descontando by remember { mutableStateOf<CreditSummary?>(null) }
     var errorDescuento by remember { mutableStateOf<String?>(null) }
-    var reloadKey by remember { mutableStateOf(0) }
     // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
     // parpadeaba un instante antes de que llegaran los créditos reales.
-    var loading by remember { mutableStateOf(true) }
-    // Ola 14 — Créditos también escucha el «se guardó algo» de la hoja de Agregar.
-    //
-    // Hasta esta rama no hacía falta: nada de lo que se podía guardar desde Agregar movía la
-    // deuda de un crédito, así que `reloadKey` (los cambios hechos EN esta pantalla) alcanzaba.
-    // Ahora un desembolso o un abono extraordinario sí la mueven, y sin este tick la pantalla
-    // se quedaba mostrando la deuda vieja —verificado en el navegador: se guardó el abono de
-    // $5.000.000 y Créditos siguió diciendo $70.000.000 hasta salir y volver a entrar—. Mismo
-    // mecanismo que ya usaba Movimientos, y por el mismo motivo: la hoja es una modal y esta
-    // pantalla nunca sale de la composición.
-    val refreshTick = LocalRefreshTick.current
+    val loading = creditosLeidos.actualizando || tarjetasLeidas.actualizando || perfilLeido.actualizando
     // El día de corte del dueño y los inicios que movió a mano — lo mismo que cargan Movimientos,
     // el Inicio y Presupuestos. Ver [ajustesDelPeriodo] para por qué esta pantalla los necesita.
-    var cutoffDay by remember { mutableStateOf(1) }
-    var iniciosPropios by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    LaunchedEffect(reloadKey, refreshTick) {
-        loading = true
-        val loans = launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it } }
-        val tarjetas = launch { runCatching { Repositories.wallets.getCards() }.onSuccess { cards = it } }
-        // Si el perfil no se puede leer, se queda el corte 1 (el mes de calendario) y no se dice:
-        // acá el período no cambia ninguna cifra de plata, solo el NOMBRE del mes de la última
-        // cuota. Un error a pantalla completa por un mes corrido sería más ruido que el defecto.
-        val perfil = launch {
-            runCatching { Repositories.wallets.getUserProfile() }.onSuccess {
-                cutoffDay = it.periodCutoffDay
-                iniciosPropios = it.periodStarts
-            }
-            perfilContestado = true
-        }
-        loans.join()
-        tarjetas.join()
-        perfil.join()
-        loading = false
-    }
+    val cutoffDay = perfilLeido.valor?.periodCutoffDay ?: 1
+    val iniciosPropios = perfilLeido.valor?.periodStarts ?: emptyMap()
+    // Alguna lectura falló con lo de antes a la vista: lo que se ve es lo último que vimos, y se
+    // dice arriba hasta que contesten.
+    val noSePudoActualizar = creditosLeidos.falloConAlgoALaVista || tarjetasLeidas.falloConAlgoALaVista ||
+        perfilLeido.falloConAlgoALaVista
     // Sin las DOS respuestas no se sabe si hay deudas: «Deuda total $0 · Sin créditos» con el botón
     // de crear uno era mentirle a quien sí debe, e invitarlo a duplicar. Ver [NoSePudoLeer].
     val noSeLeyo = !loading && (credits == null || cards == null)
@@ -127,7 +115,20 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     val creditosListos = credits.takeIf { perfilContestado }
     val tarjetasListas = cards.takeIf { perfilContestado }
     val cargando = !noSeLeyo && (creditosListos == null || tarjetasListas == null)
-    val isEmpty = creditosListos?.isEmpty() == true && tarjetasListas?.isEmpty() == true
+    // Las dos listas a la vista y vacías. NO es lo mismo que [isEmpty]: esto dice qué hay pintado,
+    // aquello si se puede AFIRMAR que no hay deudas. Todo lo que presupone deudas —la tarjeta de
+    // «Deuda total», el «Nuevo crédito» compacto— mira esto: con las listas vacías y una lectura
+    // caída, «Deuda total $0» sería una cifra salida de una lectura que falló.
+    val sinDeudas = creditosListos?.isEmpty() == true && tarjetasListas?.isEmpty() == true
+    // Un vacío solo se afirma con préstamos y tarjetas que contestaron en ESTA visita: uno recordado
+    // con la lectura de ahora caída sería el de otra visita (queda el aviso, con su «Reintentar»).
+    // Una falla del perfil no cuenta: el perfil solo nombra el mes de la última cuota.
+    val isEmpty = sinDeudas && !creditosLeidos.falloConAlgoALaVista && !tarjetasLeidas.falloConAlgoALaVista
+    // Hay algo pintado que esta visita todavía no confirmó: «Actualizando…» en la cabecera.
+    val actualizandoConAlgoALaVista = loading && creditosListos != null && tarjetasListas != null
+    // El alta compacta. Mientras dice «Actualizando…» la cabecera no la lleva: las dos juntas no
+    // entran a 390 dp sin cortar el título en «Cré…», y el alta vuelve en cuanto la lectura contesta.
+    val nuevoEnLaCabecera = !sinDeudas && !noSeLeyo && !actualizandoConAlgoALaVista
     // El plan de cada préstamo (interés de la cuota, si amortiza, cuándo termina). Se calcula acá
     // una sola vez y baja a las tarjetas: la aritmética vive en `:core` para que el server y los
     // tres clientes vean el mismo número. Ver [PlanDelCredito].
@@ -195,10 +196,20 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Créditos",
                 leading = leadingFor(Screen.Credits, onNavigate, fallback = Screen.Accounts),
-                action = if (!isEmpty && !noSeLeyo) {
+                action = if (actualizandoConAlgoALaVista) {
+                    { ActualizandoEnLaCabecera() }
+                } else if (nuevoEnLaCabecera) {
                     { NewItemButton(label = "Nuevo crédito", onClick = { showTypeChooser = true }) }
                 } else null,
             )
+            // Un solo aviso: sin nada que mostrar, el de «No pudimos cargar» de abajo ya lo dice todo.
+            if (noSePudoActualizar && !noSeLeyo) {
+                Spacer(Modifier.height(14.dp))
+                NoSePudoActualizar(
+                    onReintentar = { reloadKey++ },
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
             if (noSeLeyo) {
                 Spacer(Modifier.height(14.dp))
                 NoSePudoLeer(
@@ -223,7 +234,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 // Sin un solo crédito ni tarjeta no hay deuda que resumir — «Deuda total $0»
                 // arriba del vacío que enseña presentaba un cero como si fuera un hecho. Con
                 // cualquier crédito o tarjeta, esta tarjeta sigue apareciendo igual que siempre.
-                if (!isEmpty) {
+                if (!sinDeudas) {
                     item {
                         MinCard(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
