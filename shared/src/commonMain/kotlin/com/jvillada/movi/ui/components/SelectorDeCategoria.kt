@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
@@ -233,8 +236,8 @@ internal fun modoDelRotulo(anchoDePalabra: Float, anchoDisponible: Float): ModoD
  *
  * Ola B · Task 4. Reemplaza a la lista de sugerencias de texto que se abría bajo el campo de
  * categoría. Lo usan todas las pantallas que eligen una categoría, desde un solo lugar: el
- * sub-picker de «Agregar» directamente, y Presupuestos, Recurrentes y la hoja de recategorizar a
- * través de [CategoryField].
+ * sub-picker de «Agregar», la hoja de recategorizar y el detalle de un aviso del banco directamente,
+ * y Presupuestos y Recurrentes a través de [CategoryField].
  *
  * **La búsqueda NO toma el foco al abrir.** El sub-picker viejo pedía el foco del campo apenas se
  * abría, así que elegir «Comida» —una sola decisión, un toque— levantaba el teclado del sistema,
@@ -267,8 +270,19 @@ fun SelectorDeCategoria(
     prefs: Map<String, CategoryPref>,
     usos: Map<String, Int>,
     modifier: Modifier = Modifier,
+    /**
+     * Ola L: cuántas veces se pidió el cursor en «Buscar o crear categoría». `0` (lo normal) = ninguna
+     * —un toque a «Comida» no puede levantar el teclado, ver el KDoc de arriba—; `1` o más = quien
+     * tocó «+ Nueva» viene a escribir un nombre. Es un contador y no un booleano para que un segundo
+     * toque, con el teclado ya abajo, vuelva a enfocar: un `true` que ya era `true` no relanza nada.
+     */
+    pedidosDeFoco: Int = 0,
 ) {
     var busqueda by remember { mutableStateOf("") }
+    val focoDeLaBusqueda = remember { FocusRequester() }
+    if (pedidosDeFoco > 0) {
+        LaunchedEffect(pedidosDeFoco) { runCatching { focoDeLaBusqueda.requestFocus() } }
+    }
     // El tope es el de la COLUMNA (`varchar(100)`): una categoría más larga reventaba el insert del
     // server. Se corta acá, en lo único que se puede escribir, y así vale para todas las pantallas.
     val campo = rememberCampoConSeleccion(busqueda) { busqueda = it.take(MAX_CATEGORIA_LENGTH) }
@@ -309,6 +323,7 @@ fun SelectorDeCategoria(
                 modifier = Modifier
                     .weight(1f)
                     .testTag(TAG_BUSCAR_CATEGORIA)
+                    .focusRequester(focoDeLaBusqueda)
                     // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
                     .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                 decorationBox = { inner ->
