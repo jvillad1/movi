@@ -313,7 +313,7 @@ fun QuickAddScreen(
      * desplazamiento en el toque — antes de que el cambio de estado vuelva a medir la hoja.
      */
     var pickers by remember {
-        // Un sueldo no se paga: llega. Abrir «Anotar el movimiento» de un recurrente de ingreso en
+        // Un sueldo no se paga: llega. Abrir «Anotar este pago» de un recurrente de ingreso en
         // la pestaña «Gasto» lo anotaría con el signo al revés, que es el error más caro que esta
         // hoja puede cometer en silencio.
         mutableStateOf(PickersDeLaHoja(typeIndex = if (presetEsIngreso) 1 else 0))

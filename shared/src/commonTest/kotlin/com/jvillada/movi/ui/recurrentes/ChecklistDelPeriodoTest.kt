@@ -558,7 +558,7 @@ class ChecklistDelPeriodoTest {
         assertEquals("2026-09", fila.periodoDelSello, "sin esto no habría qué borrar")
     }
 
-    // ── «Anotar el movimiento» ───────────────────────────────────────────────
+    // ── «Anotar este pago» ───────────────────────────────────────────────
 
     /**
      * La salida que el dueño eligió para la fila sin evidencia: que el movimiento EXISTA. La hoja

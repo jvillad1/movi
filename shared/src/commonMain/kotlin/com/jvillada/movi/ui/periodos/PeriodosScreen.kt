@@ -280,18 +280,24 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, onClick: () -> Unit) {
 
 /**
  * La línea que explica el hueco de un período que salió más de lo que entró: «Lo demás lo cubrieron
- * $22,2M de saldos que ya tenías.» `null` cuando no salió de más o no hay saldos que decir — ni «$0»
- * ni una explicación que no existe. La cifra es la de [ResumenDePeriodo.saldosIniciales], la misma que
- * el detalle nombra cuenta por cuenta en «De dónde salió lo que faltó»; sin ella, «Te quedó −$11,5M»
- * se lee como haber gastado de más cuando lo pagó plata que ya estaba en las cuentas.
+ * $1,5M de saldos que ya tenías.» `null` cuando no salió de más o no hay saldos que decir — ni «$0»
+ * ni una explicación que no existe.
+ *
+ * **La cifra es lo que faltó, como mucho:** `minOf(saldosIniciales, salidas − entradas)`. Los saldos
+ * que Movi conoció en el período pueden ser muchísimo más que el hueco ($22,2M contra un faltante
+ * de $1,5M), y decir «lo cubrieron $22,2M» al lado de «Te quedó −$1,5M» se lee como un hueco de
+ * $22,2M. Los saldos no cubren más de lo que faltó. El detalle nombra las cuentas en «De dónde salió
+ * lo que faltó» ([filasDeLoQueFalto]) con el mismo tope.
  *
  * Los créditos ya no van acá: el desembolso es plata que entró y suma en «Entró»; su parte se dice
  * aparte, en [textoDeCreditosDesembolsados].
  */
 internal fun loQueCubrioLoDemas(resumen: ResumenDePeriodo): String? {
-    if (resumen.salidas <= resumen.entradas) return null
-    val saldos = resumen.saldosIniciales.takeIf { it > 0 } ?: return null
-    return "Lo demás lo cubrieron ${formatMoneyCompact(saldos)} de saldos que ya tenías."
+    val faltante = resumen.salidas - resumen.entradas
+    if (faltante <= 0) return null
+    val cubierto = minOf(resumen.saldosIniciales, faltante)
+    if (cubierto <= 0) return null
+    return "Lo demás lo cubrieron ${formatMoneyCompact(cubierto)} de saldos que ya tenías."
 }
 
 /**

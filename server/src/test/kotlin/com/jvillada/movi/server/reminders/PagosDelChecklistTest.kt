@@ -350,4 +350,108 @@ class PagosDelChecklistTest {
         assertNull(parte["ev_0926"])
         assertEquals(1_000_000, gastoTotal(listOf(pago), parte))
     }
+
+    // ── Solo el NOMBRE absorbe ───────────────────────────────────────────────
+
+    /**
+     * **El caso del dueño (26-sep).** La regla «Mercado» de $2.000.000 en «Comida», sin pagar, y
+     * cuatro gastos de Comida —$94.800 entre todos— que solo comparten la categoría. Antes la
+     * pasada de candidatos los daba por pago de Mercado: el variable quedaba en $0 y la tarjeta
+     * decía «Período/Semana/Hoy $0» mientras el fijo seguía restando sus $2.000.000 enteros.
+     */
+    @Test
+    fun `gastos que solo comparten la categoria con un fijo sin pagar siguen siendo variable`() {
+        val mercado = regla("rr_mercado", "Mercado", "Comida", 2_000_000, 25)
+        val eventos = listOf(
+            evento("c1", "Almuerzo", 44_000, "2026-09-24", "Comida"),
+            evento("c2", "Domicilio", 29_000, "2026-09-25", "Comida"),
+            evento("c3", "Panadería", 15_100, "2026-09-25", "Comida"),
+            evento("c4", "Café", 6_700, "2026-09-26", "Comida"),
+        )
+        val hoyDelDueno = LocalDate.of(2026, 9, 26)
+        val parte = parteFija(listOf(mercado), emptyList(), eventos, hoy = hoyDelDueno)
+        assertEquals(emptyMap(), parte)
+        assertEquals(94_800L, gastoTotal(eventos, parte))
+    }
+
+    /**
+     * Empezar con el nombre («Mercado Éxito», «Mercado D1») no alcanza por sí solo: son otras compras
+     * que nombran el mismo lugar, y absorberlas devolvería el «$0» con el fijo restando sus
+     * $2.000.000 enteros. Solo completan el ítem si el pago ya se ve por su nombre.
+     */
+    @Test
+    fun `una compra que solo empieza con el nombre no se absorbe sin un pago que lo diga entero`() {
+        val mercado = regla("rr_mercado", "Mercado", "Comida", 2_000_000, 25)
+        val eventos = listOf(
+            evento("exito", "Mercado Éxito", 150_000, "2026-09-25", "Comida"),
+            evento("d1", "Mercado D1", 80_000, "2026-09-26", "Comida"),
+        )
+        val hoyDelDueno = LocalDate.of(2026, 9, 26)
+        val parte = parteFija(listOf(mercado), emptyList(), eventos, hoy = hoyDelDueno)
+        assertEquals(emptyMap(), parte)
+        assertEquals(230_000L, gastoTotal(eventos, parte))
+    }
+
+    @Test
+    fun `con un pago que dice el nombre entero, lo que empieza con el nombre completa el item`() {
+        val mercado = regla("rr_mercado", "Mercado", "Comida", 2_000_000, 25)
+        val eventos = listOf(
+            evento("grande", "Mercado", 1_500_000, "2026-09-25", "Comida"),
+            evento("exito", "Mercado Éxito", 500_000, "2026-09-26", "Comida"),
+        )
+        val parte = parteFija(listOf(mercado), emptyList(), eventos, hoy = LocalDate.of(2026, 9, 26))
+        assertEquals(mapOf("grande" to 1_500_000L, "exito" to 500_000L), parte)
+    }
+
+    /** Lo mismo con la cuenta de la regla: categoría + cuenta suman 2 y siguen sin ser el nombre. */
+    @Test
+    fun `categoria mas cuenta no bastan para absorber, el nombre si`() {
+        val mercado = RecurringRule(
+            "rr_mercado", "Mercado", "Comida", 2_000_000, 25, TransactionType.EXPENSE, accountId = "ahorros",
+        )
+        val hoyDelDueno = LocalDate.of(2026, 9, 26)
+        val solo = listOf(evento("almuerzo", "Almuerzo", 44_000, "2026-09-25", "Comida"))
+        assertEquals(emptyMap(), parteFija(listOf(mercado), emptyList(), solo, hoy = hoyDelDueno))
+
+        val conNombre = solo + evento("mercado", "Mercado", 1_500_000, "2026-09-25", "Comida")
+        assertEquals(
+            mapOf("mercado" to 1_500_000L),
+            parteFija(listOf(mercado), emptyList(), conNombre, hoy = hoyDelDueno),
+        )
+    }
+
+    /** El pago en partes con el nombre de la regla sigue absorbiéndose, y la categoría suelta no. */
+    @Test
+    fun `un pago en partes con el nombre de la regla se absorbe y un gasto de su categoria no`() {
+        val colegio = regla("rr_colegio", "Colegio Hija", "Hija", 4_000_000, 25)
+        val eventos = listOf(
+            evento("tres", "Colegio Hija", 3_000_000, "2026-08-31", "Hija"),
+            evento("uno", "Colegio Hija · parte desde Bancolombia", 1_000_000, "2026-08-31", "Hija"),
+            evento("uniforme", "Uniforme", 250_000, "2026-09-02", "Hija"),
+        )
+        // Sin sello: los dos movimientos con el nombre no son concluyentes (son dos) y se reparten.
+        val parte = parteFija(listOf(colegio), emptyList(), eventos)
+        assertEquals(mapOf("tres" to 3_000_000L, "uno" to 1_000_000L), parte)
+        assertEquals(250_000L, gastoTotal(eventos, parte))
+    }
+
+    /**
+     * Un candidato solo de categoría + cuenta + monto exacto sigue siendo concluyente para
+     * `emparejadasComoSellos` (eso no cambió): ahí el emparejador lo sella y `automaticas` lo saca
+     * entero del variable. Esta pasada solo cambia lo que NO llega a concluyente.
+     */
+    @Test
+    fun `lo que Movi emparejo solo sale del variable aunque no diga el nombre`() {
+        val mercado = RecurringRule(
+            "rr_mercado", "Mercado", "Comida", 2_000_000, 25, TransactionType.EXPENSE, accountId = "ahorros",
+        )
+        val pago = evento("pago", "Éxito", 2_000_000, "2026-09-25", "Comida")
+        val hoyDelDueno = LocalDate.of(2026, 9, 26)
+        val sellos = listOf(sello("rr_mercado", "2026-09", "pago"))
+        val parte = parteFijaDelChecklist(
+            listOf(mercado), sellos, ocurridosDe(sellos), listOf(pago), hoyDelDueno, corte25,
+            automaticas = setOf("rr_mercado" to "2026-09"),
+        )
+        assertEquals(mapOf("pago" to 2_000_000L), parte)
+    }
 }

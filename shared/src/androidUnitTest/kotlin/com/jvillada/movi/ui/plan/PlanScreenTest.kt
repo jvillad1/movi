@@ -1,6 +1,11 @@
 package com.jvillada.movi.ui.plan
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import com.jvillada.movi.theme.EspaciosDeMovi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.Text
@@ -190,10 +195,14 @@ class PlanScreenTest {
 
     private val navegado = mutableListOf<Screen>()
 
-    private fun montar(segmento: Int = SEGMENTO_PAGOS, onNavigate: (Screen) -> Unit = {}) {
+    /** [escala]: la escala de letra que `App.kt` le suma a toda la app (×1,12). */
+    private fun montar(segmento: Int = SEGMENTO_PAGOS, escala: Float = 1f, onNavigate: (Screen) -> Unit = {}) {
         composeRule.setContent {
             MoviTheme {
-                Box(Modifier.fillMaxSize()) { PlanScreen(onNavigate = onNavigate, segmento = segmento) }
+                val base = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * escala)) {
+                    Box(Modifier.fillMaxSize()) { PlanScreen(onNavigate = onNavigate, segmento = segmento) }
+                }
             }
         }
         composeRule.waitForIdle()
@@ -497,6 +506,83 @@ class PlanScreenTest {
 
         composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true).performClick()
         assertEquals(Screen.Periodos, navegado.single())
+    }
+
+    // ── El aire entre las piezas de Plan ─────────────────────────────────────
+
+    /** Con el Inicio fresco en memoria: la tarjeta, la línea del período y todo lo de arriba, sin esperar. */
+    private fun conElInicioFresco() {
+        DashboardDataCache.data = datosDelInicio()
+        DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
+        DashboardDataCache.tickDeLaCarga = 0
+    }
+
+    private fun comprobarElAire() {
+        val espacios = EspaciosDeMovi()
+        val titulo = composeRule.onNodeWithText("Plan", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val linea = composeRule.onNodeWithTag(TAG_LINEA_DEL_PERIODO_DE_PLAN, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val tarjeta = composeRule.onNodeWithTag(TAG_TARJETA_DEL_DISPONIBLE, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val periodos = composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true).getUnclippedBoundsInRoot()
+
+        // Entre el título y la línea del período: el respiro de abajo del encabezado (`medio`) MÁS el
+        // aire propio de la línea (`corto`). Antes era solo el del encabezado y la línea se leía pegada.
+        val debajoDelTitulo = linea.top - titulo.bottom
+        val minimoDeLinea = espacios.medio + espacios.corto
+        assertTrue(
+            debajoDelTitulo >= minimoDeLinea,
+            "La línea del período está a ${debajoDelTitulo.value} dp del título; mínimo ${minimoDeLinea.value} dp",
+        )
+        // Entre la tarjeta del disponible y «Tus períodos»: el de cualquier par de secciones.
+        val entreSecciones = periodos.top - tarjeta.bottom
+        assertTrue(
+            entreSecciones >= espacios.seccion - 0.5.dp,
+            "«Tus períodos» está a ${entreSecciones.value} dp de la tarjeta; mínimo ${espacios.seccion.value} dp",
+        )
+    }
+
+    @Test
+    fun `la linea del periodo y Tus periodos tienen aire a la escala de letra de la app`() {
+        conElInicioFresco()
+        montar(escala = 1.12f)
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_FILA_DE_TUS_PERIODOS) == 1 }
+        comprobarElAire()
+    }
+
+    @Test
+    @Config(qualifiers = "w1000dp-h2400dp-xhdpi")
+    fun `en pantalla ancha el aire es el mismo`() {
+        conElInicioFresco()
+        montar(escala = 1.12f)
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_FILA_DE_TUS_PERIODOS) == 1 }
+        comprobarElAire()
+    }
+
+    /** El esqueleto reserva el mismo aire: al llegar los datos ni «Tus períodos» ni el selector se corren. */
+    @Test
+    fun `al llegar los datos Tus periodos no salta, a la escala de letra de la app`() {
+        montar(escala = 1.12f)
+        assertEquals(1, contarTag(TAG_ESQUELETO_DEL_DISPONIBLE))
+        val periodosCargando = composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true)
+            .getUnclippedBoundsInRoot().top
+        val selectorCargando = composeRule.onNodeWithText("Pagos del mes", useUnmergedTree = true)
+            .getUnclippedBoundsInRoot().top
+
+        puerta.complete(Unit)
+        composeRule.waitForIdle()
+        assertTrue(hay("\$5M"))
+
+        val periodosCargado = composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true)
+            .getUnclippedBoundsInRoot().top
+        val selectorCargado = composeRule.onNodeWithText("Pagos del mes", useUnmergedTree = true)
+            .getUnclippedBoundsInRoot().top
+        assertTrue(
+            abs(periodosCargado.value - periodosCargando.value) <= 8f,
+            "«Tus períodos» se corrió ${abs(periodosCargado.value - periodosCargando.value)} dp al llegar los datos",
+        )
+        assertTrue(
+            abs(selectorCargado.value - selectorCargando.value) <= 8f,
+            "El selector se corrió ${abs(selectorCargado.value - selectorCargando.value)} dp al llegar los datos",
+        )
     }
 
     @Test

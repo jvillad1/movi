@@ -51,7 +51,7 @@ import kotlinx.serialization.Serializable
  *   **La app ya no crea ninguno.** El dueño lo cortó: *«no me debería dejar hacer check sin que el
  *   movimiento asociado exista»*, y tenía razón por donde más duele — un sello sin evidencia apaga
  *   el aviso de una deuda que puede seguir viva, y después no queda nada en pantalla que permita
- *   notarlo. Donde antes había un «ya lo pagué» ahora hay un «Anotar el movimiento», que abre la
+ *   notarlo. Donde antes había un «ya lo pagué» ahora hay un «Anotar este pago», que abre la
  *   hoja de Agregar con los datos del recurrente puestos. Esta rama sigue acá porque en la base de
  *   producción hay sellos viejos hechos así: se muestran diciendo que están marcados a mano y con
  *   un «Quitar la marca», que es la única forma honesta de deshacer algo que no tiene nada detrás.

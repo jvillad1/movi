@@ -2,6 +2,9 @@ package com.jvillada.movi.ui.recurrentes
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasAnyDescendant
@@ -15,6 +18,9 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import kotlin.test.assertEquals
@@ -74,7 +80,7 @@ class ChecklistDiceCuantoDeboPagarTest {
         periodoDelSello = "2026-09",
     )
 
-    /** Las filas que pidieron «Anotar el movimiento». */
+    /** Las filas que pidieron «Anotar este pago». */
     private val aAnotar = mutableListOf<String>()
 
     private fun montar(conCreditos: Boolean) {
@@ -201,7 +207,7 @@ class ChecklistDiceCuantoDeboPagarTest {
     }
 
     /**
-     * **La fila dejó de ser tocable, y lo que la reemplazó es «Anotar el movimiento».**
+     * **La fila dejó de ser tocable, y lo que la reemplazó es «Anotar este pago».**
      *
      * Tildarla sellaba el período sin ninguna evidencia. El dueño lo cortó: *«no me debería dejar
      * hacer check sin que el movimiento asociado exista»*. Lo que queda es la salida honesta —que
@@ -231,5 +237,67 @@ class ChecklistDiceCuantoDeboPagarTest {
         botones[0].performSemanticsAction(SemanticsActions.OnClick)
 
         assertEquals(listOf("credit_acc_8761"), aAnotar)
+    }
+
+    /**
+     * **Un sueldo no se paga: llega.** La fila de «Por cobrar» sin movimiento no dice «pago» —ni
+     * «Anotar este pago»—: el mismo criterio del título de la propuesta («¿Ya te llegó…?»).
+     */
+    @Test
+    fun una_fila_de_ingreso_sin_movimiento_dice_ingreso_y_no_pago() {
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    SeccionChecklistDelPeriodo(
+                        checklist = listOf(
+                            PagoDelPeriodo(
+                                "r_sueldo", "Sueldo", 9_000_000, pagado = false, diasParaVencer = -1,
+                                esIngreso = true, periodoDelSello = "2026-09",
+                            ),
+                        ),
+                        cargando = false,
+                        pudoLeer = true,
+                        marcando = emptySet(),
+                        onConfirmar = { _, _ -> },
+                        onNoFueEste = { _, _ -> },
+                        onAnotarMovimiento = { pago -> aAnotar += pago.ruleId },
+                        onQuitarLaMarca = {},
+                        onReintentar = {},
+                    )
+                }
+            }
+        }
+
+        assertTrue(hay("Por cobrar".uppercase()) || hay("Por cobrar"), "el ingreso está en su grupo")
+        assertTrue(hay(TEXTO_SIN_MOVIMIENTO_DE_INGRESO))
+        assertTrue(hay(ETIQUETA_ANOTAR_INGRESO))
+        assertTrue(!hay(TEXTO_SIN_MOVIMIENTO), "un ingreso no dice «de este pago»")
+        assertTrue(!hay(ETIQUETA_ANOTAR), "ni «Anotar este pago»")
+    }
+
+    /** «Próximos»: la salida de una regla de ingreso sin propuesta dice ingreso, la de un gasto pago. */
+    @Test
+    fun la_propuesta_de_un_ingreso_ofrece_anotar_el_ingreso() {
+        fun regla(tipo: TransactionType) =
+            RecurringRule("r", "Sueldo", "Salario", 9_000_000L, 25, tipo)
+        val estado = OccurrenceState(ruleId = "r", period = "2026-09", dueDate = "2026-09-25", occurred = false, candidates = emptyList())
+        var tipo by mutableStateOf(TransactionType.INCOME)
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    PropuestaOcurrencia(
+                        estado = estado, rule = regla(tipo), propuesta = null, enVuelo = false,
+                        onConfirmar = {}, onDescartar = {}, onAnotarMovimiento = {},
+                    )
+                }
+            }
+        }
+        assertTrue(hay(ETIQUETA_ANOTAR_INGRESO))
+        assertTrue(!hay(ETIQUETA_ANOTAR))
+
+        tipo = TransactionType.EXPENSE
+        composeRule.waitForIdle()
+        assertTrue(hay(ETIQUETA_ANOTAR))
+        assertTrue(!hay(ETIQUETA_ANOTAR_INGRESO))
     }
 }

@@ -414,11 +414,33 @@ class DetalleDePeriodoScreenTest {
         assertTrue(hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(hay("De dónde salió lo que faltó"))
         assertTrue(!hay("Créditos que te desembolsaron", substring = true))
-        assertTrue(hay("Saldos que ya tenías y cargaste en el período · \$22,2M — Nu, AFC Davibank, Bancolombia Ahorros 0031"))
+        // El faltante es $11,5M (entró $22,5M, salió $34M): los $22,2M de saldos no se dicen enteros.
+        assertTrue(hay("Saldos que ya tenías y cargaste en el período · \$11,5M — Nu, AFC Davibank, Bancolombia Ahorros 0031"))
+        assertTrue(!hay("22,2", substring = true))
         assertTrue(
             hay(
                 "Esta plata ya estaba en tus cuentas cuando Movi la conoció, así que no cuenta como ingreso.",
             ),
+        )
+    }
+
+    /** Agosto: el hueco es $529.368 y los saldos $471.600, menos que el hueco: se dicen enteros. */
+    @Test
+    fun `si los saldos son menos que lo que falto se dicen enteros`() {
+        val agosto = DetalleDePeriodo(
+            resumen = septiembreQueFalto.resumen.copy(entradas = 10_000_000L, salidas = 10_529_368L, creditosRecibidos = 0),
+            fuentesQueNoSonIngreso = listOf(FuenteDePlata(FUENTE_SALDO_INICIAL, 471_600L, listOf("Nu"))),
+        )
+        assertEquals(listOf("Saldos que ya tenías y cargaste en el período · \$471.600 — Nu"), filasDeLoQueFalto(agosto))
+    }
+
+    /** Septiembre completo: entró $32,5M, salió $34M, saldos $22,2M: la fila dice $1,5M. */
+    @Test
+    fun `con saldos mucho mayores que el faltante la fila dice el faltante`() {
+        val septiembre = septiembreQueFalto.copy(resumen = septiembreQueFalto.resumen.copy(entradas = 32_500_000L))
+        assertEquals(
+            listOf("Saldos que ya tenías y cargaste en el período · \$1,5M — Nu, AFC Davibank, Bancolombia Ahorros 0031"),
+            filasDeLoQueFalto(septiembre),
         )
     }
 
@@ -473,8 +495,9 @@ class DetalleDePeriodoScreenTest {
     @Test
     fun `cada fuente dice cuanto y de donde, y una sin nombres no deja un guion colgando`() {
         assertEquals(
+            // El faltante es $11,5M: la fila dice eso y las cuentas se listan enteras.
             listOf(
-                "Saldos que ya tenías y cargaste en el período · \$22,2M — Nu, AFC Davibank, Bancolombia Ahorros 0031",
+                "Saldos que ya tenías y cargaste en el período · \$11,5M — Nu, AFC Davibank, Bancolombia Ahorros 0031",
             ),
             filasDeLoQueFalto(septiembreQueFalto),
         )

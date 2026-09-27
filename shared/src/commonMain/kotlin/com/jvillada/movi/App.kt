@@ -378,7 +378,7 @@ fun App() {
                             onNavigate = navigate,
                             presetAccountId = request.presetAccountId,
                             // El resto del prellenado: lo manda el checklist del período cuando
-                            // una fila sin movimiento ofrece «Anotar el movimiento». Ver
+                            // una fila sin movimiento ofrece «Anotar este pago». Ver
                             // [Screen.QuickAdd].
                             presetNota = request.presetNota,
                             presetMonto = request.presetMonto,

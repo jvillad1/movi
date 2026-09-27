@@ -46,7 +46,7 @@ sealed class Screen {
      * QuickAdd caía siempre en la primera cuenta de la lista, sin importar desde dónde se entró.
      *
      * El resto de los `preset*` son la misma idea llevada hasta el final, y nacen del checklist del
-     * período: ahí una fila sin movimiento ofrece **«Anotar el movimiento»**, y lo que hace es
+     * período: ahí una fila sin movimiento ofrece **«Anotar este pago»**, y lo que hace es
      * abrir esta hoja con lo que el recurrente ya sabe (el nombre, el monto, la categoría, la
      * cuenta y la fecha en que vencía). Sin ellos, «anotar el movimiento» significaba teclear a
      * mano cinco datos que la app tenía en pantalla — y cualquiera de los cinco escrito distinto

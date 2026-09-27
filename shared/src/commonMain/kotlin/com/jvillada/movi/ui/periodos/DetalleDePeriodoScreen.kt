@@ -410,7 +410,9 @@ private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
 
 /**
  * Una fila por cada fuente de plata que no es ingreso, **solo si el período salió más de lo que
- * entró** — «Saldos que ya tenías y cargaste en el período · $22,2M — Nu, AFC Davibank». Vacía cuando entró lo
+ * entró** — «Saldos que ya tenías y cargaste en el período · $1,5M — Nu, AFC Davibank». El monto de
+ * la fila no pasa de lo que faltó (con $22,2M de saldos y un faltante de $1,5M dice $1,5M); las
+ * cuentas se listan enteras. Vacía cuando entró lo
  * mismo o más (no faltó nada que explicar), sin fuentes, o con fuentes que esta versión no conoce o
  * que vienen en cero: la tarjeta no dice «$0» ni nombra un tipo que no sabe leer. Los créditos ya no
  * son una fila: el desembolso suma en «Entró» y se dice bajo el encabezado.
@@ -420,14 +422,21 @@ private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
  * solo cuenta de dónde salió la diferencia (ver [DetalleDePeriodo.fuentesQueNoSonIngreso]).
  */
 internal fun filasDeLoQueFalto(detalle: DetalleDePeriodo): List<String> {
-    if (detalle.resumen.salidas <= detalle.resumen.entradas) return emptyList()
+    val faltante = detalle.resumen.salidas - detalle.resumen.entradas
+    if (faltante <= 0) return emptyList()
+    // Lo que se dice haber cubierto no pasa de lo que faltó (ver [loQueCubrioLoDemas]): las cuentas
+    // se listan enteras, pero el total de cada fila se topa con lo que quede por explicar.
+    var porExplicar = faltante
     return detalle.fuentesQueNoSonIngreso.mapNotNull { fuente ->
         if (fuente.monto <= 0) return@mapNotNull null
         val rotulo = when (fuente.tipo) {
             FUENTE_SALDO_INICIAL -> "Saldos que ya tenías y cargaste en el período"
             else -> return@mapNotNull null
         }
-        val base = "$rotulo · ${formatMoneyCompact(fuente.monto)}"
+        if (porExplicar <= 0) return@mapNotNull null
+        val cubierto = minOf(fuente.monto, porExplicar)
+        porExplicar -= cubierto
+        val base = "$rotulo · ${formatMoneyCompact(cubierto)}"
         if (fuente.detalle.isEmpty()) base else "$base — ${fuente.detalle.joinToString(", ")}"
     }
 }
