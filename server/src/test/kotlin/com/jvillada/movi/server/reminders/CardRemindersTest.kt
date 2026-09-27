@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.reminders
 
 import com.jvillada.movi.server.fx.TasaUsdCop
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.TransactionType
 import java.time.LocalDate
@@ -23,7 +24,8 @@ class CardRemindersTest {
         val rule = virtualRuleForCard(terms, accountName = "Visa Bancolombia", currentDebt = 3_450_000, accountCurrency = "COP", tasa = null)
         assertEquals("card_acc-card-1", rule.id)
         assertEquals("Pago tarjeta Visa Bancolombia", rule.name)
-        assertEquals("Créditos", rule.category)
+        // Ola S: era "Créditos" (ver el KDoc de `virtualRuleForCard`).
+        assertEquals(CUOTA_CATEGORY, rule.category)
         assertEquals(3_450_000, rule.amount)
         assertEquals(25, rule.dayOfMonth)
         assertEquals(TransactionType.EXPENSE, rule.type)

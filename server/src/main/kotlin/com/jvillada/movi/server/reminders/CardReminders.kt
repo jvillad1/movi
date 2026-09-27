@@ -10,6 +10,7 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.fx.TasaUsdCop
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -49,7 +50,18 @@ fun virtualRuleForCard(
     RecurringRule(
         id         = "$CARD_RULE_PREFIX${terms.accountId}",
         name       = "Pago tarjeta $accountName",
-        category   = "Créditos",
+        // **Ola S (2026-09-27):** era `"Créditos"`, el mismo texto que llevaba la regla sintética
+        // de un crédito y que ningún movimiento real usa — ver el KDoc gemelo en `virtualRuleFor`.
+        // El pago de una tarjeta hecho por `pagoDeCuotaLegs` de verdad queda con
+        // `CARD_PAYMENT_CATEGORY` («Pago de tarjeta»), que es una categoría RESERVADA y por eso
+        // `candidatosPuntuados` la excluye siempre (`isReservedCategory`), pase lo que pase acá:
+        // para ese camino esta categoría no cambia nada. Lo que sí cambia es un pago anotado
+        // suelto —o importado por SMS/notificación— que el dueño categorizó a mano como [CUOTA_CATEGORY]
+        // (la categoría normal que la app ofrece para pagar una deuda, la misma que un crédito):
+        // antes ni el nombre ni la categoría pegaban con esta regla y ese pago nunca entraba como
+        // candidato. Se deja igual que `virtualRuleFor` por consistencia y porque es lo que pidió
+        // el hallazgo original, no porque esta categoría en particular abra el camino MÁS común.
+        category   = CUOTA_CATEGORY,
         amount     = currentDebt,
         // Es el SALDO, no la cuota: quien lo muestre tiene que saberlo. Ver `montoEsSaldo`.
         montoEsSaldo = true,
