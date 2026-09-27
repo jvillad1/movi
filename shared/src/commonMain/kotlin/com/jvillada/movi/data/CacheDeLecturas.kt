@@ -27,18 +27,44 @@ import kotlin.concurrent.Volatile
  * recordada y no tres copias de lo mismo.
  */
 sealed interface ClaveDeLectura<T : Any> {
+
+    /**
+     * Lo que vuelve se lee EN un período: sus cifras («En curso», el gasto del mes) o la pantalla
+     * que las pinta cambian cuando el período cambia. Estas claves **no se guardan ni se muestran
+     * sin un período**: [CacheDeLecturas.guardar] las rechaza sin él y [CacheDeLecturas.ultima]
+     * devuelve `null` si no se le dice cuál es el vigente. Sin esa regla, una pantalla que todavía
+     * no sabe su período (el perfil no contestó) pintaría lo del período que sea que quedó guardado.
+     */
+    val dependeDelPeriodo: Boolean get() = false
+
     data object EventosPorDia : ClaveDeLectura<List<EventDay>>
     data object Cuentas : ClaveDeLectura<List<Account>>
     data object Creditos : ClaveDeLectura<List<CreditSummary>>
     data object Tarjetas : ClaveDeLectura<List<CardSummary>>
     data object Destinos : ClaveDeLectura<List<DestinoConocido>>
-    data object Presupuestos : ClaveDeLectura<List<Budget>>
+
+    /** Los límites no cambian con el período, pero Presupuestos los pinta junto al gasto de uno. */
+    data object Presupuestos : ClaveDeLectura<List<Budget>> {
+        override val dependeDelPeriodo: Boolean get() = true
+    }
     data object Perfil : ClaveDeLectura<UserProfile>
-    data object Periodos : ClaveDeLectura<List<ResumenDePeriodo>>
-    data class DetalleDePeriodo(val id: String) : ClaveDeLectura<DetalleDePeriodoLeido>
+
+    /** Cuál es el período «En curso» depende de hoy. */
+    data object Periodos : ClaveDeLectura<List<ResumenDePeriodo>> {
+        override val dependeDelPeriodo: Boolean get() = true
+    }
+
+    /** El detalle del período en curso cambia de naturaleza cuando cierra. */
+    data class DetalleDePeriodo(val id: String) : ClaveDeLectura<DetalleDePeriodoLeido> {
+        override val dependeDelPeriodo: Boolean get() = true
+    }
     data object MensajesDelBanco : ClaveDeLectura<List<SmsMessage>>
     data object CandidatosPagoDeTarjeta : ClaveDeLectura<List<FinancialEvent>>
-    data class ResumenDelTablero(val scope: Scope) : ClaveDeLectura<DashboardSummary>
+
+    /** El gasto y el ingreso «del mes»: los del período vigente. */
+    data class ResumenDelTablero(val scope: Scope) : ClaveDeLectura<DashboardSummary> {
+        override val dependeDelPeriodo: Boolean get() = true
+    }
 }
 
 /**
@@ -57,8 +83,9 @@ sealed interface ClaveDeLectura<T : Any> {
  * - **es de otra persona**: la entrada lleva el id de quien la leyó y se compara con la sesión;
  * - **es vieja**: más de [EDAD_MAXIMA_PARA_MOSTRAR]. Pasado ese rato, pintar lo de antes aunque sea
  *   un instante se parece más a mentir que a recordar;
- * - **es de otro período**: las lecturas cuyas cifras dependen del período vigente se guardan con
- *   él, y si el período cambió desde entonces lo guardado describe el mes anterior;
+ * - **es de otro período**: las lecturas cuyas cifras dependen del período vigente
+ *   ([ClaveDeLectura.dependeDelPeriodo]) se guardan con él, y si el período cambió desde entonces
+ *   lo guardado describe el mes anterior. Sin período vigente, esas no se muestran nunca;
  * - **una escritura propia la volvió vieja**: [borrarTodo] corre tras CUALQUIER escritura que pasa
  *   por `Repositories.wallets` (ver `InvalidaElInicioAlEscribir`). Anular un movimiento y volver a
  *   Movimientos no puede mostrar, ni un cuadro, el movimiento que se acaba de anular.
@@ -109,16 +136,21 @@ object CacheDeLecturas {
      * mostrar (ver el KDoc del objeto para los cuatro motivos).
      *
      * @param ahora epoch ms; se pasa para que las pruebas no dependan del reloj.
-     * @param periodoVigente el id del período que la pantalla está por mostrar, para las lecturas
-     *   que dependen de él. Si se pasa, lo guardado tiene que ser de ese mismo período.
+     * @param periodoVigente el id del período que la pantalla está por mostrar. Obligatorio para las
+     *   claves que [dependen de él][ClaveDeLectura.dependeDelPeriodo] (sin él, `null`); si se pasa,
+     *   lo guardado tiene que ser de ese mismo período.
      */
     fun <T : Any> ultima(clave: ClaveDeLectura<T>, ahora: Long, periodoVigente: String? = null): T? {
+        if (clave.dependeDelPeriodo && periodoVigente == null) return null
         val entrada = entradas[clave] ?: return null
         val usuario = SessionManager.userId ?: return null
-        if (entrada.usuario != usuario) return null
         val edad = ahora - entrada.cargadoEn
         // Una edad negativa es un reloj que se movió para atrás: no se sabe cuán vieja es.
-        if (edad < 0 || edad > EDAD_MAXIMA_PARA_MOSTRAR) return null
+        if (entrada.usuario != usuario || edad < 0 || edad > EDAD_MAXIMA_PARA_MOSTRAR) {
+            // Ya no se va a mostrar nunca: se suelta, que puede ser la historia entera.
+            olvidar(clave, entrada)
+            return null
+        }
         if (periodoVigente != null && entrada.periodo != periodoVigente) return null
         @Suppress("UNCHECKED_CAST") // la clave fija el tipo: solo [guardar] escribe, y con el mismo T
         return entrada.valor as T
@@ -129,8 +161,9 @@ object CacheDeLecturas {
      *
      * No guarda nada si la sesión ya no es la de [usuario] —una lectura que vuelve tarde, después
      * de cerrar sesión o de entrar con otra cuenta, no puede dejarle al siguiente la plata del
-     * anterior—, si no hay sesión, o si desde que salió la lectura hubo una escritura
-     * ([generacionAlLeer], ver [generacion]).
+     * anterior—, si no hay sesión, si desde que salió la lectura hubo una escritura
+     * ([generacionAlLeer], ver [generacion]), o si la clave [depende del período]
+     * [ClaveDeLectura.dependeDelPeriodo] y no se dice de cuál es.
      */
     fun <T : Any> guardar(
         clave: ClaveDeLectura<T>,
@@ -142,7 +175,14 @@ object CacheDeLecturas {
     ) {
         if (usuario == null || SessionManager.userId != usuario) return
         if (generacionAlLeer != generacion) return
+        if (clave.dependeDelPeriodo && periodo == null) return
         entradas = entradas + (clave to Entrada(valor, ahora, usuario, periodo))
+    }
+
+    /** Suelta [entrada] solo si sigue siendo la de [clave]: otra más nueva no se toca. */
+    private fun olvidar(clave: ClaveDeLectura<*>, entrada: Entrada) {
+        val actuales = entradas
+        if (actuales[clave] === entrada) entradas = actuales - clave
     }
 
     /**

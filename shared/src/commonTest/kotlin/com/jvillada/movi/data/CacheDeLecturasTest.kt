@@ -2,7 +2,11 @@ package com.jvillada.movi.data
 
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.DashboardSummary
+import com.jvillada.movi.shared.model.DetalleDePeriodo
 import com.jvillada.movi.shared.model.EventDay
+import com.jvillada.movi.shared.model.ResumenDePeriodo
+import com.jvillada.movi.shared.model.Scope
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -22,6 +26,9 @@ import kotlin.test.assertTrue
 class CacheDeLecturasTest {
 
     private val t0 = 1_758_000_000_000L
+    private val DETALLE = DetalleDePeriodo(
+        resumen = ResumenDePeriodo(id = "2026-08", nombre = "agosto", desde = "2026-07-25", hasta = "2026-08-24"),
+    )
     private val dias = listOf(EventDay(date = "2026-09-20", total = 25_000L, items = emptyList()))
 
     @BeforeTest fun limpiarAntes() = SessionManager.clear()
@@ -126,10 +133,50 @@ class CacheDeLecturasTest {
     }
 
     @Test
-    fun `lo guardado sin periodo no pasa por de un periodo`() {
+    fun `las claves que dependen del periodo no se muestran sin decir cual es el vigente`() {
+        entrarComo("u1")
+        CacheDeLecturas.guardar(ClaveDeLectura.Periodos, emptyList(), "u1", t0, periodo = "2026-09")
+        CacheDeLecturas.guardar(ClaveDeLectura.Presupuestos, emptyList(), "u1", t0, periodo = "2026-09")
+        assertNull(CacheDeLecturas.ultima(ClaveDeLectura.Periodos, t0))
+        assertNull(CacheDeLecturas.ultima(ClaveDeLectura.Presupuestos, t0))
+    }
+
+    @Test
+    fun `las claves que dependen del periodo no se guardan sin periodo`() {
         entrarComo("u1")
         CacheDeLecturas.guardar(ClaveDeLectura.Periodos, emptyList(), "u1", t0)
-        assertNull(CacheDeLecturas.ultima(ClaveDeLectura.Periodos, t0, periodoVigente = "2026-09"))
+        CacheDeLecturas.guardar(ClaveDeLectura.Presupuestos, emptyList(), "u1", t0)
+        CacheDeLecturas.guardar(ClaveDeLectura.DetalleDePeriodo("2026-09"), DETALLE, "u1", t0)
+        CacheDeLecturas.guardar(ClaveDeLectura.ResumenDelTablero(Scope.SELF), DashboardSummary(), "u1", t0)
+        assertEquals(0, CacheDeLecturas.cuantas)
+    }
+
+    @Test
+    fun `cuales dependen del periodo`() {
+        assertTrue(ClaveDeLectura.Periodos.dependeDelPeriodo)
+        assertTrue(ClaveDeLectura.Presupuestos.dependeDelPeriodo)
+        assertTrue(ClaveDeLectura.DetalleDePeriodo("2026-09").dependeDelPeriodo)
+        assertTrue(ClaveDeLectura.ResumenDelTablero(Scope.SELF).dependeDelPeriodo)
+        assertFalse(ClaveDeLectura.EventosPorDia.dependeDelPeriodo)
+        assertFalse(ClaveDeLectura.Perfil.dependeDelPeriodo)
+        assertFalse(ClaveDeLectura.Cuentas.dependeDelPeriodo)
+    }
+
+    @Test
+    fun `el detalle de un periodo se muestra en ese periodo`() {
+        entrarComo("u1")
+        CacheDeLecturas.guardar(ClaveDeLectura.DetalleDePeriodo("2026-08"), DETALLE, "u1", t0, periodo = "2026-09")
+        assertEquals(DETALLE, CacheDeLecturas.ultima(ClaveDeLectura.DetalleDePeriodo("2026-08"), t0, periodoVigente = "2026-09"))
+        assertNull(CacheDeLecturas.ultima(ClaveDeLectura.DetalleDePeriodo("2026-08"), t0, periodoVigente = "2026-10"))
+    }
+
+    @Test
+    fun `lo vencido se suelta al encontrarlo`() {
+        entrarComo("u1")
+        CacheDeLecturas.guardar(ClaveDeLectura.EventosPorDia, dias, "u1", t0)
+        CacheDeLecturas.guardar(ClaveDeLectura.Cuentas, emptyList(), "u1", t0 + 10)
+        assertNull(CacheDeLecturas.ultima(ClaveDeLectura.EventosPorDia, t0 + CacheDeLecturas.EDAD_MAXIMA_PARA_MOSTRAR + 1))
+        assertEquals(1, CacheDeLecturas.cuantas, "la historia vencida ya no ocupa memoria; las cuentas siguen")
     }
 
     // ── Lectura ──────────────────────────────────────────────────────────────────────────────

@@ -113,10 +113,18 @@ class Lectura<T : Any> internal constructor(recordado: T?) {
  * Vuelve a leer cuando cambia [reintento] (el «Reintentar» de la pantalla, o que algo se guardó
  * desde ella) y cuando cambia `LocalRefreshTick` (se guardó algo desde la hoja de Agregar).
  *
- * [periodoVigente] es para las lecturas cuyas cifras dependen del período (ver
- * [CacheDeLecturas.ultima]): lo recordado de otro período no se muestra, y lo que se lee se guarda
- * con él. Si cambia, la lectura empieza de nuevo: lo que había era de otro período. Por eso
- * conviene pasarlo recién cuando se sabe (con el perfil ya leído o recordado).
+ * [periodoVigente] es para las claves que [dependen del período][ClaveDeLectura.dependeDelPeriodo]:
+ * lo recordado de otro período no se muestra, y lo que se lee se guarda con él. **Mientras sea
+ * `null` —el período todavía no se sabe— esas claves no muestran nada ni leen nada**: la
+ * [Lectura] se queda sin valor y [Lectura.actualizando], o sea el esqueleto. Mostrar algo sin saber
+ * de qué período es sería arriesgarse a pintar el mes pasado como si fuera este. Cuando el período
+ * llega (el perfil leído o recordado) la lectura empieza, y si después cambia empieza de nuevo: lo
+ * que había era de otro período. Para las demás claves [periodoVigente] no se usa.
+ *
+ * Si mientras la lectura viajaba hubo una escritura (ver [CacheDeLecturas.generacion]), lo que trae
+ * pudo haberse leído antes de ella: no se muestra como confirmado —pisaría, por ejemplo, lo que
+ * [Lectura.anotar] acaba de poner— y se lee otra vez. Tras [REINTENTOS_POR_ESCRITURAS] vueltas
+ * así se muestra lo último que trajo, sin guardarlo.
  *
  * La lectura usa [intentar] y no `runCatching`: una navegación que cancela la lectura no es una
  * falla, y no puede dejar un aviso rojo que nadie tuvo.
@@ -134,19 +142,33 @@ fun <T : Any> rememberLectura(
     val leerAhora by rememberUpdatedState(leer)
     val tick = LocalRefreshTick.current
     LaunchedEffect(lectura, reintento, tick) {
+        // Sin período no se sabe qué mostrar: ni se lee (ver el KDoc).
+        if (clave.dependeDelPeriodo && periodoVigente == null) return@LaunchedEffect
         lectura.alEmpezar()
-        // Se anotan AL SALIR: si mientras viaja se cierra la sesión o se escribe algo, lo que
-        // vuelva no se recuerda (ver [CacheDeLecturas.guardar]).
-        val usuario = SessionManager.userId
-        val generacion = CacheDeLecturas.generacion
-        intentar { leerAhora() }
-            .onSuccess { nuevo ->
-                lectura.alContestar(nuevo)
-                CacheDeLecturas.guardar(clave, nuevo, usuario, ahoraEnMs(), periodoVigente, generacion)
-            }
-            .onFailure { lectura.alFallar(it) }
+        var vueltas = 0
+        while (true) {
+            // Se anotan AL SALIR: si mientras viaja se cierra la sesión o se escribe algo, lo que
+            // vuelva no se recuerda (ver [CacheDeLecturas.guardar]).
+            val usuario = SessionManager.userId
+            val generacion = CacheDeLecturas.generacion
+            val resultado = intentar { leerAhora() }
+            val cruzoUnaEscritura = CacheDeLecturas.generacion != generacion
+            if (resultado.isSuccess && cruzoUnaEscritura && ++vueltas < REINTENTOS_POR_ESCRITURAS) continue
+            resultado
+                .onSuccess { nuevo ->
+                    lectura.alContestar(nuevo)
+                    // Lo que quedó a la vista (la instancia de antes, si era igual): una sola copia
+                    // de la historia en memoria, no dos.
+                    CacheDeLecturas.guardar(clave, lectura.valor ?: nuevo, usuario, ahoraEnMs(), periodoVigente, generacion)
+                }
+                .onFailure { lectura.alFallar(it) }
+            break
+        }
     }
     return lectura
 }
+
+/** Cuántas veces se vuelve a leer una lectura que se cruzó con escrituras antes de rendirse. */
+internal const val REINTENTOS_POR_ESCRITURAS: Int = 3
 
 private fun ahoraEnMs(): Long = Clock.System.now().toEpochMilliseconds()

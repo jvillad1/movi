@@ -893,7 +893,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     // dos son «ya sabemos qué mostrar».
     val perfilLeido = perfilVigente != null || perfil.terminada
     /**
-     * Whole-branch review, final fix wave: distinto de [perfilLeido] — este solo vale con un perfil
+     * Distinto de [perfilLeido]: este solo vale con un perfil
      * que salió BIEN de una lectura (de esta visita o recordada de una anterior), porque es lo único
      * que vale la pena recordar en `FormaRecordada` (ver su KDoc: «los números... la última vez que
      * su lectura salió bien»). Grabar también un fallo dejaría una `FormaDeMovimientos` mintiendo
@@ -927,6 +927,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     // [NoSePudoLeer]). Sin esto, una lectura caída dejaba «Sin movimientos aún · + Registrar el
     // primero» a quien tiene cientos.
     val diasLeidos = eventos.valor != null
+    /**
+     * **Lo que se ve es lo último que vimos, no lo actual**: falló la lectura de la historia, o la
+     * del perfil —que decide qué días entran en el período— con uno recordado a la vista. Lo dice
+     * [NoSePudoActualizar] encima de la lista hasta que una lectura conteste.
+     */
+    val noSePudoActualizar = eventos.valor != null &&
+        (eventos.fallo || (perfil.fallo && perfil.valor != null))
     /** Lo anotado en este teléfono que el server rechazó (ver [textoDeRechazados]). */
     var rechazados by remember { mutableStateOf<List<MovimientoRechazado>>(emptyList()) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -981,7 +988,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     }
 
     LaunchedEffect(refreshKey, refreshTick) {
-        runCatching { Repositories.wallets.getMovimientosRechazados() }.onSuccess { rechazados = it }
+        intentar { Repositories.wallets.getMovimientosRechazados() }.onSuccess { rechazados = it }
     }
 
     // Ola C, tarea 5: los mensajes del banco y los candidatos a pago de tarjeta, solo para contar
@@ -1302,7 +1309,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
         // Inicio; sin nada pintado todavía, las filas esqueleto de más abajo ya dicen «cargando» con
         // la forma de lo que viene. Lo que sí va acá es la lectura que FALLÓ con la lista a la vista:
         // lo que se ve es lo último que vimos, y tiene que decirlo hasta que una lectura conteste.
-        if (eventos.fallo && eventos.valor != null) {
+        if (noSePudoActualizar) {
             NoSePudoActualizar(
                 onReintentar = { refreshKey++ },
                 modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
@@ -1321,7 +1328,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                 movimientosEsqueleto()
             }
 
-            if (!loading && visibleDays.isEmpty()) {
+            // Con el aviso de arriba puesto, un vacío no se afirma: saldría de lo que se leyó en
+            // otra visita, y «Sin movimientos aún» tiene que venir de una lectura que contestó en
+            // esta. Queda solo el aviso, con su «Reintentar».
+            if (!loading && visibleDays.isEmpty() && !noSePudoActualizar) {
                 item {
                     if (!diasLeidos) {
                         NoSePudoLeer(

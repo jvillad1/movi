@@ -38,7 +38,7 @@ import com.jvillada.movi.ui.dashboard.DashboardDataCache
  * no hay nada que refrescar.
  *
  * Las lecturas (`get*`, `isScreenAdmin`) pasan derecho por la delegación `by delegado` y no se
- * listan acá. Toda otra función del repositorio tiene que estar abajo: `CadaEscrituraInvalidaTest`
+ * listan acá. Toda otra función del repositorio tiene que estar abajo: `CadaEscrituraVaciaLoRecordadoTest`
  * lo comprueba contra la interfaz, así que una escritura nueva que nadie envuelva se pone roja.
  */
 internal class InvalidaElInicioAlEscribir(

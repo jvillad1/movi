@@ -71,9 +71,11 @@ class MovimientosRecuerdaLoUltimoTest {
     /** Cómo contesta `getEventsByDay` en cada visita; por defecto, enseguida y con [dias]. */
     private var eventos: suspend () -> List<EventDay> = { dias }
     private var pedidosDeEventos = 0
+    /** Cómo contesta `getUserProfile`; por defecto, enseguida y con [perfil]. */
+    private var leerPerfil: suspend () -> UserProfile = { perfil }
 
     private val repositorio = object : RepositorioDePrueba() {
-        override suspend fun getUserProfile(): UserProfile = perfil
+        override suspend fun getUserProfile(): UserProfile = leerPerfil()
         override suspend fun getEventsByDay(): List<EventDay> { pedidosDeEventos++; return eventos() }
         override suspend fun getAccounts(): List<com.jvillada.movi.shared.model.Account> = emptyList()
         override suspend fun voidEvent(id: String, reason: String?): VoidEvent =
@@ -202,5 +204,44 @@ class MovimientosRecuerdaLoUltimoTest {
         assertEquals(0, cuantas("Almuerzo"))
         assertTrue(filasEsqueleto() > 0)
         puerta.complete(emptyList())
+    }
+
+    /**
+     * El perfil decide qué días entran en el período: si su lectura falla y se está usando el
+     * recordado, lo que se ve tampoco está confirmado, aunque la historia sí haya contestado.
+     */
+    @Test
+    fun `si falla el perfil con uno recordado a la vista, tambien se dice`() {
+        primeraVisitaYSalir { dias }
+        leerPerfil = { error("sin red") }
+
+        enPantalla = true
+        composeRule.waitForIdle()
+
+        assertEquals(1, cuantas("Almuerzo"))
+        assertEquals(1, cuantas(TEXTO_NO_PUDIMOS_ACTUALIZAR))
+    }
+
+    /**
+     * Lo recordado era una lista vacía y la lectura de esta visita falló: «Sin movimientos aún»
+     * saldría de la visita anterior. Queda solo el aviso con su «Reintentar».
+     */
+    @Test
+    fun `si falla con una lista recordada vacia, no se afirma el vacio`() {
+        eventos = { emptyList() }
+        montar()
+        composeRule.waitForIdle()
+        assertTrue(cuantas("Sin movimientos aún") + cuantas("Crear una cuenta primero") > 0, "la primera visita sí contestó vacía")
+        enPantalla = false
+        composeRule.waitForIdle()
+        eventos = { error("sin red") }
+
+        enPantalla = true
+        composeRule.waitForIdle()
+
+        assertEquals(1, cuantas(TEXTO_NO_PUDIMOS_ACTUALIZAR))
+        assertEquals(0, composeRule.onAllNodesWithText("Sin movimientos", substring = true, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithText("Crear una cuenta primero", substring = true, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, filasEsqueleto())
     }
 }
