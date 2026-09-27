@@ -8,6 +8,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -397,6 +399,13 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     // segundo toque vuelve a enfocar aunque el teclado ya esté abajo); «Cambiar», a mirar.
     var eligiendoCategoria by remember { mutableStateOf(false) }
     var pedidosDeFoco by remember { mutableStateOf(0) }
+    // Ola Q: el dueño tocaba «Cambiar» y el selector se abría debajo de la fila, empujando
+    // «Ignorar»/«Confirmar» fuera de lo visible sin que nada le avisara que había más abajo.
+    // Este `BringIntoViewRequester` se ancla a la tarjeta del selector (ver más abajo) y el
+    // `LaunchedEffect` de [eligiendoCategoria] lo dispara SOLO al abrirse — nunca al escribir en
+    // la búsqueda ni en cada recomposición, porque la clave es el booleano, no algo que cambie con
+    // cada letra.
+    val categoriaBringIntoViewRequester = remember { BringIntoViewRequester() }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     /**
@@ -825,9 +834,17 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 }
 
                 if (eligiendoCategoria) {
+                    // Se dispara una sola vez al abrirse (la clave es el booleano): sin esto, cada
+                    // letra tecleada en la búsqueda de adentro recompondría este bloque y saltaría
+                    // el scroll una y otra vez debajo del dedo.
+                    LaunchedEffect(eligiendoCategoria) {
+                        categoriaBringIntoViewRequester.bringIntoView()
+                    }
                     Spacer(Modifier.height(8.dp))
                     MinCard(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(categoriaBringIntoViewRequester),
                         variant = MinCardVariant.Default,
                         padding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
                     ) {
