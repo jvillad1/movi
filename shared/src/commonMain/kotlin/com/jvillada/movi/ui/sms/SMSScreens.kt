@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
-import com.jvillada.movi.ui.components.suggestCategoryMatches
+import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.momentoDelSms
@@ -390,6 +390,11 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     // —ver [resolverCuentaDelBanco]— y por eso vive acá y no adentro del cálculo.
     var cuentaElegida by remember { mutableStateOf<String?>(null) }
     var eligiendoCuenta by remember { mutableStateOf(false) }
+    // Ola L: «Cambiar» en la fila Categoría abre el mismo selector de todas las pantallas
+    // ([SelectorDeCategoria]). `enfocarAlCrear` distingue quién lo abrió: «+ Nueva» viene a
+    // escribir un nombre y lo abre con el cursor en la búsqueda; «Cambiar», a mirar.
+    var eligiendoCategoria by remember { mutableStateOf(false) }
+    var enfocarAlCrear by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     /**
@@ -494,18 +499,20 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      *
      * Acá había ocho nombres fijos —«Restaurantes», «Mercado», «Suscripción», «Hogar»— de los
      * cuales el dueño no usa ninguno: sus movimientos están en «Comida», «Fútbol», «Hija»,
-     * «Gardenera». Para poner una de esas tenía que salir de esta pantalla. Ahora salen del mismo
-     * catálogo que el resto de la app ([suggestCategoryMatches], con sus propias adelante), con la
-     * que Movi propone siempre primera.
+     * «Gardenera». Para poner una de esas tenía que salir de esta pantalla. Ahora salen de la misma
+     * regla que el resto de la app ([categoriasParaPastillas]: la propuesta de Movi primero, luego
+     * las que él más usa, luego el resto de las suyas).
      *
-     * Se muestran hasta diez porque la fila rueda en horizontal; el tope está para que la lista no
-     * se vuelva un buscador sin buscador.
+     * Ola L: el orden ya no es alfabético —con `take(10)`, «Hija» y «Fútbol» quedaban fuera del
+     * corte— y lo que no cabe en la fila está en «Cambiar» (el selector completo, que también crea).
      */
     val categoryOptions: List<String> = categoriasParaElegirEnElSms(
         propuesta = selectedCategory ?: parsed?.category,
         tipo = parsed?.type,
         usadas = UsedCategoriesCache.used,
         prefs = UsedCategoriesCache.prefs,
+        usos = UsedCategoriesCache.usosRecientes,
+        cuantas = CATEGORIAS_EN_LAS_PASTILLAS_DEL_SMS,
     )
 
     /**
@@ -798,8 +805,37 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         // que se explica se puede rechazar; una que no, solo se obedece. Se calla
                         // en cuanto él elige otra — ya no está explicando lo que se ve.
                         hint = parsed?.aprendidoDe?.takeIf { selectedCategory == parsed?.category },
+                        // Ola L: antes esta fila era de solo lectura y las pastillas de abajo eran
+                        // el único camino — sin forma de ver todas ni de crear una nueva.
+                        action = if (eligiendoCategoria) "Cerrar" else "Cambiar",
+                        onClick = {
+                            enfocarAlCrear = false
+                            eligiendoCategoria = !eligiendoCategoria
+                        },
                         isLast = true,
                     )
+                }
+
+                if (eligiendoCategoria) {
+                    Spacer(Modifier.height(8.dp))
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Default,
+                        padding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
+                    ) {
+                        SelectorDeCategoria(
+                            elegida = selectedCategory ?: "",
+                            onElegir = {
+                                selectedCategory = it
+                                eligiendoCategoria = false
+                            },
+                            tipo = parsed?.type,
+                            usadas = UsedCategoriesCache.used,
+                            prefs = UsedCategoriesCache.prefs,
+                            usos = UsedCategoriesCache.usosRecientes,
+                            enfocarBusqueda = enfocarAlCrear,
+                        )
+                    }
                 }
 
                 // El selector, en el mismo lugar donde antes había un dato de solo lectura. Es lo
@@ -858,6 +894,21 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             ) {
                                 Text(opt, style = Movi.textos.apoyo, color = if (on) Movi.colores.fondo else Movi.colores.texto, fontWeight = FontWeight.Medium)
                             }
+                        }
+                        // «+ Nueva»: la puerta a crear una categoría. Abre el selector de siempre
+                        // con el cursor en la búsqueda, donde «Crear "…"» hace el resto.
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .border(1.dp, Movi.colores.marca, RoundedCornerShape(999.dp))
+                                .clickable {
+                                    enfocarAlCrear = true
+                                    eligiendoCategoria = true
+                                }
+                                .testTag(TAG_PASTILLA_NUEVA_CATEGORIA)
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                        ) {
+                            Text("+ Nueva", style = Movi.textos.apoyo, color = Movi.colores.marca, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
@@ -1097,16 +1148,22 @@ internal fun categoriasParaElegirEnElSms(
     tipo: TransactionType?,
     usadas: Map<String, Set<TransactionType>>,
     prefs: Map<String, CategoryPref>,
+    usos: Map<String, Int> = emptyMap(),
     cuantas: Int = 10,
-): List<String> {
-    val delCatalogo = suggestCategoryMatches(
-        query = "",
-        type = tipo,
-        usedCategories = usadas,
-        prefs = prefs,
-    )
-    return (listOfNotNull(propuesta?.takeIf { it.isNotBlank() }) + delCatalogo).distinct().take(cuantas)
-}
+): List<String> = categoriasParaPastillas(
+    primeras = listOf(propuesta),
+    tipo = tipo,
+    usadas = usadas,
+    prefs = prefs,
+    usos = usos,
+    cuantas = cuantas,
+)
+
+/** Cuántas pastillas rueda la fila del detalle de un SMS: el resto está en «Cambiar». */
+internal const val CATEGORIAS_EN_LAS_PASTILLAS_DEL_SMS: Int = 12
+
+/** La pastilla «+ Nueva» del detalle de un SMS. */
+const val TAG_PASTILLA_NUEVA_CATEGORIA: String = "sms:pastilla-nueva-categoria"
 
 internal fun movimientoConfirmadoDelSms(
     id: String,

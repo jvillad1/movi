@@ -29,6 +29,8 @@ import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CategoryPref
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
@@ -147,6 +149,20 @@ private fun CategoryRow(
 }
 
 /**
+ * ¿Se le ofrece a este movimiento marcarse como «Pago de tarjeta»? Las mismas dos condiciones que
+ * tenía el catálogo de la hoja de recategorizar: que el dueño no la haya escondido, y que el tipo
+ * del movimiento esté entre los que la categoría sirve ([effectiveCategoryTypes] — lo fijado por él
+ * gana sobre el catálogo). Aparte del `@Composable` para poder probarla.
+ */
+internal fun puedeMarcarsePagoDeTarjeta(tipo: TransactionType, prefs: Map<String, CategoryPref>): Boolean {
+    val pref = prefs.entries
+        .firstOrNull { it.key.trim().equals(CARD_PAYMENT_CATEGORY, ignoreCase = true) }?.value
+    if (pref?.hidden == true) return false
+    val efectivos = effectiveCategoryTypes(CARD_PAYMENT_CATEGORY, pref?.pinnedType)
+    return efectivos.isEmpty() || tipo in efectivos
+}
+
+/**
  * ¿Se guarda lo que el dueño eligió en el campo de [ChangeCategorySheet]? (Hasta la revisión final
  * de la Ola B era «¿se dibuja el botón "Usar …"?»: ahora tocar la celda ya elige, y esta es la
  * guarda que decide si ese toque llega al `PUT`.)
@@ -184,18 +200,18 @@ fun ofreceCategoriaEscritaAMano(freeText: String, currentCategory: String): Bool
 /**
  * Cambia la categoría de un movimiento ya registrado.
  *
- * Lista las [PREDEFINED_CATEGORIES] del mismo lado que el movimiento (gasto vs. ingreso):
- * cambiar un gasto a una categoría de ingreso no significa nada en Movi. Elegir una llama a
- * [com.jvillada.movi.shared.repository.WalletRepository.updateEventCategory] — el server
- * recalcula `countsAsCashFlow`, esta hoja nunca lo manda.
+ * **Ola L — una sola forma de elegir categoría.** La categoría se elige con el mismo
+ * [SelectorDeCategoria] que usan «Agregar», Presupuestos y Recurrentes: la actual marcada, la
+ * búsqueda arriba, las frecuentes primero, todas las propias del dueño del mismo lado que el
+ * movimiento (gasto vs. ingreso: cambiar un gasto a una categoría de ingreso no significa nada en
+ * Movi) y «Crear "…"» para una nueva. Antes esta hoja tenía su propia lista, armada con
+ * [com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES]: no traía «Fútbol», «Hija» ni ninguna
+ * categoría propia, y el campo de buscar o crear quedaba plegado debajo de veinte filas.
  *
- * Ola 2 #7: la lista del catálogo sigue arriba como atajo, PERO abajo también hay un
- * [com.jvillada.movi.ui.components.CategoryField] (texto libre con sugerencias) — si el dueño
- * ya creó "Colegio" a mano desde QuickAdd, tiene que poder mover ahí un gasto que entró por SMS
- * o extracto, no solo elegir entre el catálogo fijo. Elegir de la lista o escribir en el campo
- * hacen lo mismo ([choose]). El caso que el campo libre no resuelve solo — la categoría actual
- * del movimiento cuando no está en el catálogo (viene de un extracto importado, ver
- * `currentIsKnown` abajo) — lo sigue resolviendo la lista, agregándola como opción marcada.
+ * Tocar una celda llama a [com.jvillada.movi.shared.repository.WalletRepository.updateEventCategory]
+ * — el server recalcula `countsAsCashFlow`, esta hoja nunca lo manda. La categoría actual se ve
+ * marcada aunque no esté en ningún catálogo (viene de un extracto importado). «Pago de tarjeta»
+ * es la única reservada que se ofrece, en su propia fila ([puedeMarcarsePagoDeTarjeta]).
  */
 @Composable
 fun ChangeCategorySheet(
@@ -276,32 +292,10 @@ fun ChangeCategorySheet(
     var errorDeEdicion by remember(event.id) { mutableStateOf<String?>(null) }
     // Ver [SeccionDelMovimiento]: tocar el nombre abre el editor, así que el estado vive acá.
     var edicionAbierta by remember(event.id) { mutableStateOf(false) }
-    // Ola 2 #7: el campo libre de abajo no comete nada al tipear — recién se guarda con el
-    // botón "Usar esta categoría" (mismo criterio que la lista de arriba, que sí guarda al
-    // toque porque ahí elegir ES la acción completa).
-    var freeText by remember { mutableStateOf("") }
-
-    // Ola 10: el atajo del catálogo respeta lo que el dueño decidió en «Más → Categorías» —
-    // misma regla única que las sugerencias ([effectiveCategoryTypes]). Sin esto, una categoría
-    // escondida seguiría apareciendo acá y «esconder» habría sido media promesa.
+    // Ola L: la lista de categorías ya no sale del catálogo fijo. Sale del mismo [SelectorDeCategoria]
+    // que usan «Agregar», Presupuestos y Recurrentes —las propias del dueño, respetando lo que
+    // escondió y el tipo—, así que las tres pantallas ofrecen lo mismo. Ver más abajo.
     val categoryPrefs = UsedCategoriesCache.prefs
-    val options = remember(event.type, categoryPrefs) {
-        PREDEFINED_CATEGORIES.filter { cat ->
-            val pref = categoryPrefs.entries
-                .firstOrNull { it.key.trim().equals(cat.name, ignoreCase = true) }?.value
-            if (pref?.hidden == true) return@filter false
-            val efectivos = effectiveCategoryTypes(cat.name, pref?.pinnedType)
-            efectivos.isEmpty() || event.type in efectivos
-        }
-            // La tercera lista de categorías que ve el dueño, y la misma queja: el catálogo se
-            // mostraba en el orden en que alguien lo escribió. Alfabético, igual que las
-            // sugerencias de `CategoryField` y que «Más → Categorías».
-            .sortedWith(compareBy(CATEGORY_NAME_ORDER) { it.name })
-    }
-    // Los extractos importados traen categorías libres del parser (ver ClaudeStatementParser)
-    // que pueden no estar en el catálogo. Si la actual no aparece en `options`, se agrega igual
-    // como la opción ya marcada — perderla acá sería más confuso que una entrada de más.
-    val currentIsKnown = options.any { it.name == event.category }
 
     /**
      * **Los otros movimientos del mismo destinatario**, con la categoría que tienen hoy. Se piden
@@ -621,56 +615,48 @@ fun ChangeCategorySheet(
             Spacer(Modifier.height(20.dp))
             Hairline()
             Spacer(Modifier.height(16.dp))
-            SheetLabel("CAMBIAR CATEGORÍA")
+            SheetLabel("CATEGORÍA")
+            Spacer(Modifier.height(4.dp))
+            // La actual, marcada, SIEMPRE: si viene de un extracto y no está en ningún catálogo,
+            // o si el dueño la escondió, igual se ve cuál tiene hoy el movimiento.
+            CategoryRow(name = event.category, selected = true, enabled = false, onClick = {})
             Spacer(Modifier.height(12.dp))
-
-            if (!currentIsKnown) {
-                CategoryRow(name = event.category, selected = true, enabled = false, onClick = {})
-                Hairline()
-            }
-            options.forEachIndexed { i, cat ->
-                CategoryRow(
-                    name = cat.name,
-                    selected = cat.name == event.category,
-                    enabled = !saving,
-                    onClick = { choose(cat.name) },
-                    // Ola 10: «Pago de tarjeta» sigue estando acá a propósito —es el camino real
-                    // para arreglar un «No es» tocado por error— pero elegirla saca el movimiento
-                    // de las cifras del mes, y eso no se puede dejar mudo: en el campo de
-                    // categoría la misma palabra está prohibida, así que sin este renglón la
-                    // asimetría se lee como un descuido en vez de una decisión.
-                    subtitle = if (cat.name == CARD_PAYMENT_CATEGORY) {
-                        "Deja de contar en tus gastos del mes: la compra ya se contó al usar la tarjeta"
-                    } else null,
-                )
-                if (i < options.size - 1) Hairline()
-            }
-
-            Spacer(Modifier.height(16.dp))
-            SheetLabel("O BUSCA OTRA")
-            Spacer(Modifier.height(8.dp))
-            // Ola 2 #7: para categorías propias del dueño (creadas a mano en QuickAdd/Presupuestos/
-            // Recurrentes) que no están en el catálogo de arriba.
+            // Ola L · **Una sola forma de elegir categoría.** Acá había una lista de filas armada
+            // con `PREDEFINED_CATEGORIES` (sin «Fútbol», «Hija», «Gardenera»: las del dueño) y, bajo
+            // ella, un campo plegado para buscar o crear que nadie veía. Ahora es la cuadrícula de
+            // siempre, con la búsqueda arriba y las frecuentes primero; una celda toca y guarda
+            // (elegir ES la acción completa) y «Crear "…"» crea una nueva.
             //
-            // Revisión final de la Ola B: desde la tarea 4 este campo ya no es texto libre — es la
-            // cuadrícula del selector, y `onValueChange` solo llega cuando el dueño TOCA una celda
-            // (una existente, «Crear "…"» o «Usar "…"»). Esa ya es la decisión: antes la hoja
-            // la guardaba en el campo y pedía un segundo toque en «Usar "…"», dos toques para lo
-            // que en la lista de arriba es uno. La guarda de reservadas se queda igual —el selector
-            // ya no ofrece ninguna, pero esta hoja es la puerta del `PUT` y no confía en eso.
-            CategoryField(
-                value = freeText,
-                onValueChange = { elegida ->
-                    freeText = elegida
+            // La guarda de reservadas se queda: el selector ya no ofrece ninguna, pero esta hoja es
+            // la puerta del `PUT` y no confía en eso.
+            SelectorDeCategoria(
+                elegida = event.category,
+                onElegir = { elegida ->
                     if (!saving && ofreceCategoriaEscritaAMano(elegida, event.category)) choose(elegida.trim())
                 },
-                type = event.type,
-                usedCategories = UsedCategoriesCache.used,
-                prefs = UsedCategoriesCache.prefs,
+                tipo = event.type,
+                usadas = UsedCategoriesCache.used,
+                prefs = categoryPrefs,
                 usos = UsedCategoriesCache.usosRecientes,
-                label = null,
-                placeholder = "Buscar o crear categoría",
             )
+            // «Pago de tarjeta» sigue estando acá a propósito —es el camino real para arreglar un
+            // «No es» tocado por error— pero elegirla saca el movimiento de las cifras del mes, y
+            // eso no se puede dejar mudo. No cabe en el selector (es reservada: nada reservado se
+            // ofrece ahí), así que es su propia fila.
+            if (event.category != CARD_PAYMENT_CATEGORY && puedeMarcarsePagoDeTarjeta(event.type, categoryPrefs)) {
+                Spacer(Modifier.height(8.dp))
+                Hairline()
+                CategoryRow(
+                    name = CARD_PAYMENT_CATEGORY,
+                    selected = false,
+                    enabled = !saving,
+                    onClick = { choose(CARD_PAYMENT_CATEGORY) },
+                    subtitle = "Deja de contar en tus gastos del mes: la compra ya se contó al usar la tarjeta",
+                )
+                Hairline()
+            }
+            Spacer(Modifier.height(4.dp))
+            EnlaceAdministrarCategorias()
 
             if (saving) {
                 Spacer(Modifier.height(10.dp))

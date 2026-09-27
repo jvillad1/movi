@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
@@ -267,8 +270,18 @@ fun SelectorDeCategoria(
     prefs: Map<String, CategoryPref>,
     usos: Map<String, Int>,
     modifier: Modifier = Modifier,
+    /**
+     * Ola L: abrir con el cursor en «Buscar o crear categoría». Es lo que pide quien tocó «+ Nueva»:
+     * viene a escribir un nombre, y el teclado es justo lo que quiere. Por defecto NO —un toque a
+     * «Comida» no puede levantar el teclado—, ver el KDoc de arriba.
+     */
+    enfocarBusqueda: Boolean = false,
 ) {
     var busqueda by remember { mutableStateOf("") }
+    val focoDeLaBusqueda = remember { FocusRequester() }
+    if (enfocarBusqueda) {
+        LaunchedEffect(Unit) { runCatching { focoDeLaBusqueda.requestFocus() } }
+    }
     // El tope es el de la COLUMNA (`varchar(100)`): una categoría más larga reventaba el insert del
     // server. Se corta acá, en lo único que se puede escribir, y así vale para todas las pantallas.
     val campo = rememberCampoConSeleccion(busqueda) { busqueda = it.take(MAX_CATEGORIA_LENGTH) }
@@ -309,6 +322,7 @@ fun SelectorDeCategoria(
                 modifier = Modifier
                     .weight(1f)
                     .testTag(TAG_BUSCAR_CATEGORIA)
+                    .focusRequester(focoDeLaBusqueda)
                     // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
                     .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                 decorationBox = { inner ->

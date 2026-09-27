@@ -103,9 +103,10 @@ class OfrecerLosParecidosTest {
     }
 
     private fun elegir(categoria: String) {
-        composeRule.onNodeWithText(categoria, useUnmergedTree = true).performScrollTo()
-        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText(categoria)), useUnmergedTree = true)
-            .onLast().performSemanticsAction(SemanticsActions.OnClick)
+        // Ola L: la categoría se elige en la cuadrícula del selector; su celda tiene un tag propio
+        // (con el texto, «Comida» ahora también sale como la categoría actual de otras hojas).
+        composeRule.onNodeWithTag(tagDeCeldaDeCategoria(categoria)).performScrollTo()
+            .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 

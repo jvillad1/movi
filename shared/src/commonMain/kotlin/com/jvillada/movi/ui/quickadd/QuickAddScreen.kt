@@ -680,6 +680,10 @@ fun QuickAddScreen(
      * Tocar un chip de frecuentes o una celda del selector de «Categoría»: pone la categoría Y la
      * marca como elegida a mano (ver [categoriaElegidaAMano]).
      */
+    // Ola L: quién abrió el selector de categoría. «+ Nueva» viene a escribir un nombre y lo abre con
+    // el cursor en la búsqueda; la fila «Categoría ›» lo abre como siempre, sin teclado.
+    var abrirParaCrearCategoria by remember { mutableStateOf(false) }
+
     fun elegirCategoriaAMano(nombre: String) {
         category = nombre
         categoriaElegidaAMano = true
@@ -1057,6 +1061,7 @@ fun QuickAddScreen(
                                 usadas = usedCategories,
                                 prefs = categoryPrefs,
                                 usos = usosRecientes,
+                                enfocarBusqueda = abrirParaCrearCategoria,
                             )
                             // La cuadrícula no tiene tope ni scroll propio: se estira y la
                             // desplaza la hoja, un solo desplazamiento (Ola 14 — «al hacer scroll
@@ -1159,7 +1164,14 @@ fun QuickAddScreen(
                             note = note,
                             dateLabel = etiquetaDeFecha(fecha, hoy),
                             onPickDate = { pasarA(pickers.abrir(Picker.Date)) },
-                            onPickCategory = { pasarA(pickers.abrir(Picker.Category)) },
+                            onPickCategory = {
+                                abrirParaCrearCategoria = false
+                                pasarA(pickers.abrir(Picker.Category))
+                            },
+                            onNuevaCategoria = {
+                                abrirParaCrearCategoria = true
+                                pasarA(pickers.abrir(Picker.Category))
+                            },
                             onPickWallet = { pasarA(pickers.abrir(Picker.Wallet)) },
                             onEditNote = { pasarA(pickers.abrir(Picker.Note)) },
                             onOcr = { onNavigate(Screen.OCRCapture) },
@@ -1217,6 +1229,8 @@ private fun EditorBody(
      */
     categoriasFrecuentes: List<String> = emptyList(),
     onPickCategoriaFrecuente: (String) -> Unit = {},
+    /** Ola L: la pastilla «+ Nueva» del final de los chips — abre el selector listo para crear. */
+    onNuevaCategoria: () -> Unit = {},
     walletLabel: String,
     walletHint: String? = null,
     /** Si el renglón del aviso ocupa su lugar aunque hoy no diga nada — ver la fila «Cuenta». */
@@ -1361,6 +1375,7 @@ private fun EditorBody(
                 categorias = categoriasFrecuentes,
                 categoriaElegida = category,
                 onPick = onPickCategoriaFrecuente,
+                onNueva = onNuevaCategoria,
             )
             Hairline()
         }
@@ -1599,6 +1614,7 @@ private fun CategoriaChipsRow(
     categorias: List<String>,
     categoriaElegida: String,
     onPick: (String) -> Unit,
+    onNueva: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -1640,8 +1656,31 @@ private fun CategoriaChipsRow(
                 )
             }
         }
+        // Ola L: «+ Nueva», al final. Las categorías se creaban escribiendo en el selector, pero
+        // nada en esta hoja lo decía: el dueño no encontraba dónde. Abre ese mismo selector con el
+        // cursor en «Buscar o crear categoría».
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(Movi.formas.pleno))
+                .border(1.dp, Movi.colores.marca, RoundedCornerShape(Movi.formas.pleno))
+                .clickable(onClick = onNueva)
+                .testTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR)
+                .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "+ Nueva",
+                style = Movi.textos.apoyo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.marca,
+                maxLines = 1,
+            )
+        }
     }
 }
+
+/** La pastilla «+ Nueva» de los chips de frecuentes de «Agregar». */
+const val TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR: String = "agregar:pastilla-nueva-categoria"
 
 /**
  * El renglón chiquito de «Última usada» / «Por defecto», debajo de la etiqueta de
