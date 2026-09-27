@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
@@ -70,7 +71,7 @@ class MovimientosEnUnPeriodoPedidoTest {
 
     private fun montar(periodoInicial: String?) {
         DiasPlegadosStore.clear()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getAccounts(): List<Account> = listOf(banco)
             override suspend fun getEventsByDay(): List<EventDay> = listOf(
                 EventDay(

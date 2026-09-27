@@ -15,6 +15,7 @@ import com.jvillada.movi.data.FormaDeMovimientos
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.formaEnMemoria
 import com.jvillada.movi.shared.model.EventDay
@@ -65,7 +66,7 @@ class EsqueletoDeMovimientosTest {
 
     private val puerta = CompletableDeferred<List<EventDay>>()
 
-    private fun repositorio() = object : RepositorioDePrueba() {
+    private fun repositorio() = object : RepositorioDePruebaDeMovimientos() {
         override suspend fun getUserProfile(): UserProfile =
             UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "morado")
         override suspend fun getEventsByDay(): List<EventDay> = puerta.await()
@@ -187,7 +188,7 @@ class EsqueletoDeMovimientosTest {
     @Test
     fun `la linea del rango se reserva antes de que el perfil conteste`() {
         val puertaPerfil = CompletableDeferred<UserProfile>()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getUserProfile(): UserProfile = puertaPerfil.await()
             override suspend fun getEventsByDay(): List<EventDay> = puerta.await()
         }
@@ -235,7 +236,7 @@ class EsqueletoDeMovimientosTest {
         FormaRecordada.delAparato.guardarMovimientos("u-forma", FormaDeMovimientos(lineaDePeriodo = false))
 
         val puertaPerfil = CompletableDeferred<UserProfile>()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getUserProfile(): UserProfile = puertaPerfil.await()
             override suspend fun getEventsByDay(): List<EventDay> = puerta.await()
         }
@@ -260,7 +261,7 @@ class EsqueletoDeMovimientosTest {
         FormaRecordada.sustitutoDePrueba = formaEnMemoria(mutableMapOf())
 
         val puertaPerfil = CompletableDeferred<UserProfile>()
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getUserProfile(): UserProfile = puertaPerfil.await()
             override suspend fun getEventsByDay(): List<EventDay> = puerta.await()
         }
@@ -279,7 +280,7 @@ class EsqueletoDeMovimientosTest {
      */
     @Test
     fun `sin movimientos de verdad, el vacio de siempre y ningun esqueleto`() {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getUserProfile(): UserProfile =
                 UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "morado")
             override suspend fun getEventsByDay(): List<EventDay> = emptyList()
@@ -304,7 +305,7 @@ class EsqueletoDeMovimientosTest {
      */
     @Test
     fun `sin cuentas, el vacio ofrece crear una cuenta primero y abre la hoja al tocarlo`() {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getUserProfile(): UserProfile =
                 UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "morado")
             override suspend fun getEventsByDay(): List<EventDay> = emptyList()
@@ -329,7 +330,7 @@ class EsqueletoDeMovimientosTest {
      */
     @Test
     fun `con cuenta pero sin movimientos, el vacio ofrece registrar el primero y navega a Agregar`() {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getUserProfile(): UserProfile =
                 UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "morado")
             override suspend fun getEventsByDay(): List<EventDay> = emptyList()

@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
@@ -70,7 +71,7 @@ class InicioDelPeriodoNoBorraLosDemasTest {
     private val sinPerfil = PeriodSettings()
     private val mesVisible = periodoActual(Clock.System.now().toEpochMilliseconds(), sinPerfil)
 
-    private inner class Repo(private val lecturaDelPerfil: (Int) -> UserProfile) : RepositorioDePrueba() {
+    private inner class Repo(private val lecturaDelPerfil: (Int) -> UserProfile) : RepositorioDePruebaDeMovimientos() {
         var lecturas = 0
         val escrituras = mutableListOf<UpdateProfileRequest>()
         override suspend fun getAccounts(): List<Account> = listOf(banco)

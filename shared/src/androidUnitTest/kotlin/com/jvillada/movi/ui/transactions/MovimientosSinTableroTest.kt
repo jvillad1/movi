@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
@@ -62,7 +63,7 @@ class MovimientosSinTableroTest {
 
     private var lecturasDeVencimientos = 0
 
-    private inner class Repo : RepositorioDePrueba() {
+    private inner class Repo : RepositorioDePruebaDeMovimientos() {
         override suspend fun getAccounts(): List<Account> = listOf(bancolombia)
         override suspend fun getEventsByDay(): List<EventDay> = listOf(
             EventDay(

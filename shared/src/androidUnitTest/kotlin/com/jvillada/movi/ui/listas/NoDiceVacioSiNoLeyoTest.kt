@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CardSummary
@@ -79,7 +80,7 @@ class NoDiceVacioSiNoLeyoTest {
     @Test
     fun `Creditos sin respuesta no dice deuda cero ni ofrece crear, y al reintentar aparecen`() {
         var hayRed = false
-        montar(object : RepositorioDePrueba() {
+        montar(object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getCredits(): List<CreditSummary> = if (hayRed) emptyList() else throw caida
             override suspend fun getCards(): List<CardSummary> = emptyList()
         }) { CreditosScreen(onNavigate = {}) }
@@ -97,7 +98,7 @@ class NoDiceVacioSiNoLeyoTest {
 
     @Test
     fun `Metas sin respuesta no dice que no hay metas`() {
-        montar(object : RepositorioDePrueba() {
+        montar(object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getGoals(): List<Goal> = throw caida
             override suspend fun getAccounts(): List<Account> = emptyList()
         }) { MetasScreen(onNavigate = {}) }
@@ -110,7 +111,7 @@ class NoDiceVacioSiNoLeyoTest {
     @Test
     fun `Presupuestos sin respuesta no dice gastado cero ni ofrece crear`() {
         var lecturas = 0
-        montar(object : RepositorioDePrueba() {
+        montar(object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getBudgets(): List<Budget> { lecturas++; throw caida }
             override suspend fun getEventsByDay(): List<EventDay> = emptyList()
         }) { PresupuestosScreen(onNavigate = {}) }
@@ -132,7 +133,7 @@ class NoDiceVacioSiNoLeyoTest {
 
     @Test
     fun `Movimientos sin respuesta no ofrece registrar el primero`() {
-        montar(object : RepositorioDePrueba() {}) { TransactionsScreen(onNavigate = {}) }
+        montar(object : RepositorioDePruebaDeMovimientos() {}) { TransactionsScreen(onNavigate = {}) }
         esperar("No pudimos cargar tus movimientos")
         assertTrue(!hay("Sin movimientos aún"))
         assertTrue(!hay("Registrar el primero"))
@@ -140,7 +141,7 @@ class NoDiceVacioSiNoLeyoTest {
 
     @Test
     fun `Categorias sin respuesta no dice cero categorias`() {
-        montar(object : RepositorioDePrueba() {}) { CategoriasScreen(onNavigate = {}) }
+        montar(object : RepositorioDePruebaDeMovimientos() {}) { CategoriasScreen(onNavigate = {}) }
         esperar("No pudimos cargar tus categorías")
         assertTrue(!hay("Nada por aquí todavía"))
         assertTrue(!hay("0 categorías"))
@@ -149,7 +150,7 @@ class NoDiceVacioSiNoLeyoTest {
     @Test
     fun `Documentos sin respuesta no queda en blanco y se puede reintentar`() {
         var hayRed = false
-        montar(object : RepositorioDePrueba() {
+        montar(object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getDocuments(): List<Documento> = if (hayRed) emptyList() else throw caida
         }) { DocumentosScreen(onNavigate = {}) }
         esperar("No pudimos cargar tus documentos")
@@ -160,7 +161,7 @@ class NoDiceVacioSiNoLeyoTest {
 
     @Test
     fun `la bandeja de SMS sin respuesta no dice cero por confirmar`() {
-        montar(object : RepositorioDePrueba() {}) { CapturaDelBancoScreen(onNavigate = {}) }
+        montar(object : RepositorioDePruebaDeMovimientos() {}) { CapturaDelBancoScreen(onNavigate = {}) }
         esperar("No pudimos cargar tus mensajes")
         assertTrue(!hay("0 por confirmar"))
     }
@@ -168,7 +169,7 @@ class NoDiceVacioSiNoLeyoTest {
     /** Sin el perfil, Movimientos cae al mes de calendario; eso se dice en vez de callarlo. */
     @Test
     fun `Movimientos avisa cuando no pudo leer el periodo`() {
-        montar(object : RepositorioDePrueba() {
+        montar(object : RepositorioDePruebaDeMovimientos() {
             override suspend fun getEventsByDay(): List<EventDay> = emptyList()
             override suspend fun getAccounts(): List<Account> = emptyList()
         }) { TransactionsScreen(onNavigate = {}) }

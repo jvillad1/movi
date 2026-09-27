@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
@@ -140,7 +141,7 @@ class CuotasRecurrentesEnMovimientosTest {
         amount = 10_000_000L, dayOfMonth = 1, type = TransactionType.EXPENSE, esPagoUnico = true,
     )
 
-    private inner class Repo : RepositorioDePrueba() {
+    private inner class Repo : RepositorioDePruebaDeMovimientos() {
         override suspend fun getAccounts(): List<Account> = listOf(bancolombia, vehiculo, nubank)
         override suspend fun getEventsByDay(): List<EventDay> = listOf(dia)
         override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
