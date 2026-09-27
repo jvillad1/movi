@@ -2,6 +2,14 @@ package com.jvillada.movi.ui.dashboard
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.unit.dp
+import com.jvillada.movi.ui.sdui.TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -158,7 +166,47 @@ class InicioDeUnVistazoEnPantallaTest {
         assertTrue(arriba(veredicto) < arriba("PREGÚNTALE A MOVI"), "Pregúntale a Movi va debajo del hero")
     }
 
-    private fun montarEnLaCascara() {
+    /** Un lugar para la guía de primeros pasos: lo que importa acá es dónde cae, no qué dice. */
+    private val guia: @Composable () -> Unit = {
+        Box(Modifier.fillMaxWidth().height(120.dp).testTag("guia"))
+    }
+
+    private fun limitesDeLaGuia() = composeRule.onNodeWithTag("guia", useUnmergedTree = true).getUnclippedBoundsInRoot()
+
+    /**
+     * Ola W3: con dos columnas la guía de primeros pasos va arriba de la izquierda, con sus bordes, y
+     * no centrada en 720 encima de las dos (a 1.280 caía entre las dos columnas, sin alinear con
+     * ninguna).
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h1200dp-mdpi")
+    fun `a 1280 dp la guia va arriba de la columna izquierda`() {
+        montarEnLaCascara(header = guia)
+
+        val laGuia = limitesDeLaGuia()
+        val derecha = izquierda("PREGÚNTALE A MOVI")
+        assertEquals(216f, laGuia.left.value, 0.5f, "empieza en el borde izquierdo del panel, junto al rail")
+        assertTrue(laGuia.right <= derecha, "no se mete en la columna derecha: ${laGuia.right} / $derecha")
+        assertTrue(laGuia.bottom <= arriba(veredicto), "va arriba del hero")
+        // La derecha arranca arriba, sin esperar a la guía.
+        assertTrue(arriba("PREGÚNTALE A MOVI") < laGuia.bottom, "la columna derecha no baja por la guía")
+    }
+
+    /** En una columna la guía sigue como siempre: arriba de todo, con el ancho de la columna. */
+    @Test
+    @Config(qualifiers = "w768dp-h2400dp-mdpi")
+    fun `a 768 dp la guia va arriba de la unica columna`() {
+        montarEnLaCascara(header = guia)
+
+        val laGuia = limitesDeLaGuia()
+        assertTrue(laGuia.bottom <= arriba(veredicto))
+        // 768 − 80 del rail compacto = 688, menos que la columna de 720: la guía llena el panel.
+        assertEquals(80f, laGuia.left.value, 0.5f)
+        assertEquals(688f, (laGuia.right - laGuia.left).value, 0.5f)
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA, useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
+    private fun montarEnLaCascara(header: (@Composable () -> Unit)? = null) {
         composeRule.setContent {
             ConClaseDeAncho {
                 EsqueletoDeLaCascara(
@@ -173,6 +221,7 @@ class InicioDeUnVistazoEnPantallaTest {
                         data = datos,
                         modifier = Modifier.fillMaxSize(),
                         onNavigate = { navegoA = it },
+                        header = header,
                     )
                 }
             }

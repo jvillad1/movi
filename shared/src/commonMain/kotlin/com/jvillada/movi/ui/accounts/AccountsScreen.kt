@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
@@ -133,7 +134,16 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     // Alguna lectura falló con lo de antes a la vista: se dice una vez, arriba, hasta que contesten.
     val noSePudoActualizar = lecturas.any { it.falloConAlgoALaVista }
 
+    // La lista de las cuentas (la única, en una columna; la de la derecha, en dos): la rueda del
+    // mouse sobre los márgenes la mueve (ver [ScrollDesdeLosMargenes]).
+    val estadoDeLaLista = rememberLazyListState()
+    val estadoDelResumen = rememberLazyListState()
+    ScrollDesdeLosMargenes(estadoDeLaLista)
+
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+        // Ola W3: en pantalla ancha, el resumen a la izquierda y las cuentas a la derecha. El ancho
+        // lo mide el panel, ya sin el rail — ver [patrimonioEnDosColumnas] para la cuenta completa.
+        PanelDeTablero(enDosColumnas = { patrimonioEnDosColumnas(it) && hayCuentasParaLaDerecha(accounts, loading) }) { dosColumnas ->
         Column(modifier = Modifier.fillMaxSize()) {
             // F60: encabezado único — esta pantalla es la raíz de la pestaña Patrimonio (Ola C),
             // así que lleva avatar y el MISMO rótulo que la pestaña.
@@ -173,32 +183,29 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 )
             }
 
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 12.dp,
-                    bottom = 80.dp,
-                ),
-            ) {
+            // Lo que pinta cada lista: todo, en una columna; el resumen o las cuentas, en dos. El
+            // orden dentro de cada parte es el de una columna, así que el teléfono no cambia.
+            fun LazyListScope.itemsDePatrimonio(parte: ParteDePatrimonio) {
+                val conResumen = parte != ParteDePatrimonio.Cuentas
+                val conCuentas = parte != ParteDePatrimonio.Resumen
                 val cuentas = accounts
                 if (cuentas == null && loading) {
                     // Ola B: la forma REAL de la pantalla, no filas sueltas. Solo mientras la
                     // lectura no contestó nunca — con algo ya pintado, la barra de arriba basta y
                     // esta lista sigue mostrando lo que ya tenía. Ver [cuentasEsqueleto].
-                    cuentasEsqueleto(formaRecordada)
+                    cuentasEsqueleto(formaRecordada, conTarjeta = conResumen, conGrupos = conCuentas)
                 } else if (cuentas == null) {
                     // No se pudo leer y no hay nada que mostrar: se dice eso, y nada más. El
                     // botón acá sería «Reintentar», no «Crear primera cuenta» — proponer crear
                     // una cuenta sin saber si ya existe es como se fabrican los duplicados.
-                    item {
+                    if (conResumen) item {
                         NoSePudoLeer("No pudimos cargar tus cuentas", onReintentar = { refreshKey++ })
                     }
                 } else if (cuentas.isEmpty() && cuentasLeidas.falloConAlgoALaVista) {
                     // Lo recordado era «ninguna cuenta» y la lectura de esta visita falló: ese vacío
                     // es de otra visita y no se afirma. Queda el aviso de arriba con «Reintentar».
                 } else if (cuentas.isEmpty()) {
+                    if (conResumen) {
                     // Sin una sola cuenta, ni un bien ni una deuda —una cuenta LOAN
                     // o CREDIT_CARD también está en `cuentas`, así que vacía de verdad implica las
                     // tres— no hay «Patrimonio neto» que mostrar. Reemplaza al «Sin cuentas aún»
@@ -216,9 +223,10 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         )
                         Spacer(Modifier.height(20.dp))
                     }
+                    }
                 } else {
                     // Total assets card
-                    item {
+                    if (conResumen) item {
                         // **La MISMA función que el hero del Inicio**, no `assetsDebtsNet` por su
                         // cuenta. Con «Activos» sumando todo, esta tarjeta decía $137.625.167 al
                         // lado de un Inicio que ya decía «Tu plata $31.625.167» — dos pantallas
@@ -307,7 +315,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 }
                             }
                         }
-                        Spacer(Modifier.height(20.dp))
+                        // En la columna del resumen lo que sigue ya trae su propio aire arriba.
+                        if (parte == ParteDePatrimonio.Todo) Spacer(Modifier.height(20.dp))
                     }
 
                     // F61: Inversiones dejó de ser sección — Cuentas muestra DOS grupos con
@@ -318,8 +327,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     val inversion = cuentasDeInversion(cuentas)
                     val bienes = bienesDe(cuentas)
 
-                    item { AccountsGroup(title = "Dinero", accounts = dinero, onNavigate = onNavigate) }
-                    item {
+                    if (conCuentas) item { AccountsGroup(title = "Dinero", accounts = dinero, onNavigate = onNavigate) }
+                    if (conCuentas) item {
                         Spacer(Modifier.height(20.dp))
                         AccountsGroup(title = "Inversión", accounts = inversion, onNavigate = onNavigate)
                     }
@@ -327,7 +336,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     // —a diferencia de Dinero e Inversión, que dicen «Sin cuentas… aún»—: la puerta
                     // para crear uno es «Nueva cuenta» → «Bien», y una sección vacía más en la
                     // pantalla que más se mira sería ruido para quien no tiene casa ni carro.
-                    if (bienes.isNotEmpty()) {
+                    if (conCuentas && bienes.isNotEmpty()) {
                         item {
                             Spacer(Modifier.height(20.dp))
                             SeccionDeBienes(
@@ -345,7 +354,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 // enseña o navega por su cuenta, y Cuadre de saldos tiene su propio vacío que
                 // enseña cuando no hay nada que comparar. Van juntas y fuera del `if` de arriba
                 // porque las dos solo necesitan que `cuentas` haya contestado, vacía o no.
-                if (cuentas != null) {
+                if (conResumen && cuentas != null) {
                     // **La puerta al cuadre de saldos**, justo debajo de las cuentas cuyo saldo
                     // se acaba de leer: si alguno de esos números está corrido, esta es la fila
                     // que lo arregla. Cuando hay cuentas que llevan más de un período sin
@@ -418,6 +427,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 // Lecturas propias, así que aparecen (o su esqueleto, o su error) sin importar en
                 // qué estado esté `cuentas` arriba — Cuentas puede seguir cargando o haberse
                 // rendido y estas dos puertas igual contestan.
+                if (!conResumen) return
                 item {
                     Spacer(Modifier.height(20.dp))
                     SeccionDeDeudas(
@@ -438,7 +448,37 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     )
                 }
             }
+
+            if (dosColumnas) {
+                // Cada columna con su propio scroll: el resumen es corto y queda a la vista mientras
+                // se recorren las cuentas. Los rellenos suman los 48 de [RELLENO_DE_DOS_COLUMNAS]:
+                // 16 afuera de cada una y 8 + 8 entre las dos.
+                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(
+                        state = estadoDelResumen,
+                        modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DEL_RESUMEN_DE_PATRIMONIO),
+                        contentPadding = PaddingValues(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 80.dp),
+                    ) { itemsDePatrimonio(ParteDePatrimonio.Resumen) }
+                    LazyColumn(
+                        state = estadoDeLaLista,
+                        modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LAS_CUENTAS),
+                        contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 12.dp, bottom = 80.dp),
+                    ) { itemsDePatrimonio(ParteDePatrimonio.Cuentas) }
+                }
+            } else {
+                LazyColumn(
+                    state = estadoDeLaLista,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 12.dp,
+                        bottom = 80.dp,
+                    ),
+                ) { itemsDePatrimonio(ParteDePatrimonio.Todo) }
+            }
         }
+        } // PanelDeTablero
 
         SnackbarHost(
             hostState = snackbarHostState,
@@ -782,10 +822,10 @@ internal fun formaDeCuentas(cuentas: List<Account>): FormaDeCuentas {
  * primera vez— cuatro renglones (el caso del dueño: quien no tiene bienes ni deudas ve la tarjeta
  * encoger un poco al llegar, nunca crecer) y un grupo de [FILAS_DEL_GRUPO_ESQUELETO] filas.
  */
-private fun LazyListScope.cuentasEsqueleto(forma: FormaDeCuentas?) {
+private fun LazyListScope.cuentasEsqueleto(forma: FormaDeCuentas?, conTarjeta: Boolean = true, conGrupos: Boolean = true) {
     val renglones = forma?.renglonesDelPatrimonio ?: 4
     val grupos = forma?.filasPorGrupo ?: listOf(FILAS_DEL_GRUPO_ESQUELETO)
-    item {
+    if (conTarjeta) item {
         MinCard(
             modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_PATRIMONIO),
             variant = MinCardVariant.Elevated,
@@ -808,9 +848,10 @@ private fun LazyListScope.cuentasEsqueleto(forma: FormaDeCuentas?) {
                 )
             }
         }
-        Spacer(Modifier.height(20.dp))
+        // Sin los grupos debajo (la columna del resumen) lo que sigue trae su propio aire.
+        if (conGrupos) Spacer(Modifier.height(20.dp))
     }
-    grupos.forEachIndexed { g, filasDelGrupo ->
+    if (conGrupos) grupos.forEachIndexed { g, filasDelGrupo ->
         val filas = filasDelGrupo.coerceAtMost(MAX_FILAS_DEL_GRUPO_ESQUELETO)
         item {
             // Los 20 dp que [AccountsScreen] pone antes del segundo grupo.
