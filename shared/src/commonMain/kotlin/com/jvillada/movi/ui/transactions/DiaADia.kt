@@ -89,7 +89,7 @@ internal suspend fun leerDatosDelDiaADia(perfil: UserProfile, ahora: Long): Dash
  * Aparte de la entrada del cache porque [rememberLectura] vuelve a guardar lo que contesta cada
  * visita, y con eso la edad de la entrada se reiniciaría en cada vuelta a Movimientos: lo viejo no
  * se dejaría envejecer nunca. Con este sello, lo recordado se reusa hasta
- * [CacheDeLecturas.EDAD_MAXIMA_PARA_MOSTRAR] después de la lectura real, y una escritura propia
+ * [LecturaDelDiaADia.EDAD_MAXIMA] después de la lectura real, y una escritura propia
  * (que vacía el cache) lo invalida antes.
  */
 internal object LecturaDelDiaADia {
@@ -118,7 +118,7 @@ internal object LecturaDelDiaADia {
  * cara del server, y esta es la pantalla más transitada. En orden:
  *
  * 1. lo recordado bajo la clave propia, si se leyó de verdad hace menos de
- *    [CacheDeLecturas.EDAD_MAXIMA_PARA_MOSTRAR] (Plan también lo deja ahí, ver
+ *    [LecturaDelDiaADia.EDAD_MAXIMA] (Plan también lo deja ahí, ver
  *    [recordarParaElDiaADia]; una escritura propia lo vacía);
  * 2. lo que dejó el Inicio en [DashboardDataCache], con la misma vara que usa el propio Inicio
  *    ([debeRecargarElInicio]);
