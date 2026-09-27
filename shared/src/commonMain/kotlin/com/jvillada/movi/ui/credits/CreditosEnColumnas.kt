@@ -13,8 +13,8 @@ import com.jvillada.movi.ui.components.cabenDosColumnasIguales
  * dos grupos, sus tarjetas se reparten en las dos columnas bajo un solo título: una columna vacía
  * al lado de otra llena no es un tablero, es un hueco.
  *
- * Sin deudas (el vacío que enseña de la Ola I) o sin poder leerlas, la pantalla va en una sola
- * columna de lectura, como en una ventana angosta ([hayDeudasParaDosColumnas]).
+ * Sin deudas (el vacío que enseña de la Ola I), con una sola (quedaría sola a la izquierda) o sin
+ * poder leerlas, la pantalla va en una sola columna de lectura, como en una ventana angosta ([hayDeudasParaDosColumnas]).
  *
  * ### La cuenta, desde la ventana (con el rail, SIEMPRE)
  *
@@ -53,10 +53,13 @@ fun creditosEnDosColumnas(anchoDelPanel: Dp): Boolean =
  * Si hay algo que repartir en dos columnas: las deudas, o su esqueleto mientras cargan. **No** con
  * las dos listas vacías ([sinDeudas], el mismo criterio de la Ola I que decide la tarjeta de «Deuda
  * total»: sin deudas no hay resumen, y el vacío que enseña va solo), ni cuando no se pudo leer
- * ([noSeLeyo]: queda el aviso con «Reintentar»). En esos casos, una columna de lectura.
+ * ([noSeLeyo]: queda el aviso con «Reintentar»), **ni con una sola deuda** ([cuantasDeudas] < 2): esa
+ * tarjeta quedaría sola a la izquierda con la columna derecha vacía al lado. En esos casos, una
+ * columna de lectura. Mientras carga no se sabe cuántas hay: el esqueleto va en dos, que es la forma
+ * de quien tiene deudas.
  */
-internal fun hayDeudasParaDosColumnas(cargando: Boolean, sinDeudas: Boolean, noSeLeyo: Boolean): Boolean =
-    !noSeLeyo && (cargando || !sinDeudas)
+internal fun hayDeudasParaDosColumnas(cargando: Boolean, sinDeudas: Boolean, noSeLeyo: Boolean, cuantasDeudas: Int): Boolean =
+    !noSeLeyo && (cargando || (!sinDeudas && cuantasDeudas >= 2))
 
 /** Las dos columnas debajo del resumen, para medirlas en una prueba. */
 const val TAG_COLUMNA_IZQUIERDA_DE_CREDITOS: String = "creditos-columna-izquierda"

@@ -187,7 +187,12 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     // está a la vista (ver [ScrollDesdeLosMargenes]).
     val estadoDeLaLista = rememberLazyListState()
     val scrollDeDosColumnas = rememberScrollState()
-    val conDeudasParaRepartir = hayDeudasParaDosColumnas(cargando = cargando, sinDeudas = sinDeudas, noSeLeyo = noSeLeyo)
+    val conDeudasParaRepartir = hayDeudasParaDosColumnas(
+        cargando = cargando,
+        sinDeudas = sinDeudas,
+        noSeLeyo = noSeLeyo,
+        cuantasDeudas = creditosListos.orEmpty().size + tarjetasListas.orEmpty().size,
+    )
     Box(modifier = Modifier.fillMaxSize()) {
         // Ola W3: en pantalla ancha, Préstamos y Tarjetas lado a lado debajo del resumen. El ancho lo
         // mide el panel, ya sin el rail — ver [creditosEnDosColumnas] para la cuenta completa.

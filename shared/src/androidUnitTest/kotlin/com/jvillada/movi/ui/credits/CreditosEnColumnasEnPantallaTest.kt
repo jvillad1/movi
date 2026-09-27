@@ -185,6 +185,25 @@ class CreditosEnColumnasEnPantallaTest {
         assertTrue(vacio.left >= centroDelPanel - 360f - 0.5f && vacio.right <= centroDelPanel + 360f + 0.5f, "$vacio")
     }
 
+    /**
+     * Una sola deuda: en dos columnas quedaría a la izquierda con la derecha vacía. Va en la columna
+     * de lectura, centrada en el panel, con su resumen encima.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `con una sola deuda a 1280 dp va en una columna de lectura`() {
+        montar(creditos = listOf(libreInversion), tarjetas = emptyList())
+        esperar("Libre inversión 9695")
+        assertTrue(!hayTag(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS))
+        assertTrue(!hayTag(TAG_COLUMNA_DERECHA_DE_CREDITOS))
+        val resumen = limites(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA)
+        assertEquals(720f - 32f, resumen.width, 0.5f, "el resumen va en la columna de lectura: $resumen")
+        val centroDelPanel = 216f + 1_064f / 2
+        assertEquals(centroDelPanel, (resumen.left + resumen.right) / 2, 0.5f, "centrada en el panel")
+        val prestamo = limitesDelTexto("Libre inversión 9695")
+        assertTrue(prestamo.left >= resumen.left - 0.5f && prestamo.right <= resumen.right + 0.5f, "$prestamo")
+    }
+
     /** Solo préstamos: se reparten en las dos columnas bajo un solo título, sin una columna vacía. */
     @Test
     @Config(qualifiers = "w1280dp-h900dp-mdpi")

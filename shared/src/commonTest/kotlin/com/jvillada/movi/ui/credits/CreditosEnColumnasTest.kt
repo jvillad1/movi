@@ -41,11 +41,13 @@ class CreditosEnColumnasTest {
     }
 
     @Test
-    fun `sin deudas o sin poder leerlas va en una columna`() {
-        assertTrue(hayDeudasParaDosColumnas(cargando = true, sinDeudas = false, noSeLeyo = false), "cargando: el esqueleto")
-        assertTrue(hayDeudasParaDosColumnas(cargando = false, sinDeudas = false, noSeLeyo = false))
-        assertFalse(hayDeudasParaDosColumnas(cargando = false, sinDeudas = true, noSeLeyo = false), "el vacío que enseña")
-        assertFalse(hayDeudasParaDosColumnas(cargando = false, sinDeudas = false, noSeLeyo = true), "no se pudo leer")
+    fun `sin deudas, con una sola o sin poder leerlas va en una columna`() {
+        assertTrue(hayDeudasParaDosColumnas(cargando = true, sinDeudas = false, noSeLeyo = false, cuantasDeudas = 3), "cargando: el esqueleto")
+        assertTrue(hayDeudasParaDosColumnas(cargando = false, sinDeudas = false, noSeLeyo = false, cuantasDeudas = 3))
+        assertFalse(hayDeudasParaDosColumnas(cargando = false, sinDeudas = true, noSeLeyo = false, cuantasDeudas = 0), "el vacío que enseña")
+        assertFalse(hayDeudasParaDosColumnas(cargando = false, sinDeudas = false, noSeLeyo = true, cuantasDeudas = 3), "no se pudo leer")
+        assertFalse(hayDeudasParaDosColumnas(cargando = false, sinDeudas = false, noSeLeyo = false, cuantasDeudas = 1), "una sola deuda")
+        assertTrue(hayDeudasParaDosColumnas(cargando = false, sinDeudas = false, noSeLeyo = false, cuantasDeudas = 2))
     }
 
     @Test
