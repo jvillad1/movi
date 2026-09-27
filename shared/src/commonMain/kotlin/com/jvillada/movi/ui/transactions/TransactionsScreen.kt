@@ -32,10 +32,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -974,7 +977,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     // Se calcula una vez por composición y no dentro del bucle de días.
     val hoyIso = remember { todayIsoInAppZone() }
 
+    /**
+     * El movimiento tocado. En el teléfono (y sin lugar al lado) abre su hoja; en pantalla ancha es
+     * el que muestra el panel de la derecha (Ola W4, ver `MovimientosListaYDetalle`), releído por id
+     * cada vez que la lista se relee ([movimientoDelPanel]).
+     */
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
+    val focusManager = LocalFocusManager.current
 
     // Los avisos de una lectura caída, con el «Reintentar» de siempre — solo cuando NO hay nada a
     // la vista. Con la lista pintada (de esta visita o recordada) lo dice [NoSePudoActualizar]
@@ -1100,7 +1109,23 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
         else diasDelPeriodo(filtrados, periodoVisible, ajustesDelPeriodo)
     }
 
+    // Ola W4: en pantalla ancha, la lista a la izquierda y el movimiento elegido a la derecha. Ver
+    // `MovimientosListaYDetalle` para la cuenta del ancho; en el teléfono, todo como siempre.
+    MedirPanelDeMovimientos { conPanel ->
+    /**
+     * Elegir un movimiento. Con el panel, **primero se suelta el foco**: si un campo del panel
+     * (la búsqueda de categorías, el monto) lo tenía, en la web el `<input>` oculto de Compose sigue
+     * recibiendo lo que se teclea y lo pegaba al campo del movimiento anterior. Ver
+     * `movi-teclado-en-la-web`. Sin panel se abre la hoja, como siempre.
+     */
+    val elegir: (FinancialEvent?) -> Unit = { evento ->
+        if (conPanel) focusManager.clearFocus()
+        selectedEvent = evento
+    }
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+    ListaYPanelDeMovimientos(
+        conPanel = conPanel,
+        lista = {
     Column(modifier = Modifier.fillMaxSize()) {
         // F60: encabezado único — Movimientos es raíz: avatar + rótulo del menú + la lupa.
         MinScreenHeader(
@@ -1548,7 +1573,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                                             // explica por qué. Es la única acción que un traspaso
                                             // ofrece hoy desde acá, y es mejor que un renglón
                                             // muerto que no responde al toque.
-                                            onClick = { selectedEvent = row.out },
+                                            elegido = conPanel && selectedEvent?.id == row.out.id,
+                                            onClick = { elegir(row.out) },
                                         )
                                         is MovementRow.Single -> MovementSingleRow(
                                             tx = row.event,
@@ -1558,7 +1584,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                                                 reglasRecurrentes,
                                                 nombresDeSuscripcionesActivas,
                                             ) != null,
-                                            onClick = { selectedEvent = row.event },
+                                            elegido = conPanel && selectedEvent?.id == row.event.id,
+                                            onClick = { elegir(row.event) },
                                         )
                                         is MovementRow.Ajustes -> {
                                             val abierto = row.key in ajustesAbiertos
@@ -1578,7 +1605,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                                                 MovementSingleRow(
                                                     tx = ajuste,
                                                     accountNames = accountNames,
-                                                    onClick = { selectedEvent = ajuste },
+                                                    elegido = conPanel && selectedEvent?.id == ajuste.id,
+                                                    onClick = { elegir(ajuste) },
                                                 )
                                             }
                                         }
@@ -1593,13 +1621,38 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
         }
 
     }
+        },
+        panel = {
+            val enElPanel = movimientoDelPanel(selectedEvent, eventos.valor)
+            if (enElPanel == null) {
+                InvitacionAElegirUnMovimiento()
+            } else {
+                // `key`: otro movimiento es otro panel, con su estado desde cero (un campo a medio
+                // escribir no pasa al siguiente). El mismo movimiento releído conserva el suyo.
+                key(enElPanel.id) {
+                    PanelDelMovimiento(
+                        event = enElPanel,
+                        cuentas = accounts,
+                        onCerrar = { elegir(null) },
+                        // No cierra nada: relee, y el panel sigue al movimiento por id.
+                        onCambiado = { refreshKey++ },
+                        onAnulado = { elegir(null) },
+                        onVerCuenta = accountTypes[enElPanel.accountId]?.let { tipo ->
+                            { onNavigate(Screen.AccountDetail(enElPanel.accountId, tipo.group)) }
+                        },
+                    )
+                }
+            }
+        },
+    )
 
     SnackbarHost(
         hostState = snackbarHostState,
         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
     )
 
-    selectedEvent?.let { event ->
+    // Con el panel al lado, el movimiento elegido va ahí y no se abre ninguna hoja.
+    if (!conPanel) selectedEvent?.let { event ->
         // El mismo juego de hojas que abre el detalle de la cuenta — categoría, fecha, monto,
         // cuenta, concepto, «esto se repite» y anular — porque es el mismo movimiento tocado.
         // Ver [HojaDelMovimiento] para por qué está afuera de esta pantalla.
@@ -1660,6 +1713,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
         )
     }
     }
+    } // MedirPanelDeMovimientos
 }
 
 /**
@@ -1721,11 +1775,13 @@ internal fun TransferRow(
     accountNames: Map<String, String>,
     accountTypes: Map<String, AccountType>,
     esRecurrente: Boolean = false,
+    elegido: Boolean = false,
     onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .marcaDeElegido(elegido)
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1861,6 +1917,8 @@ internal fun MovementSingleRow(
     tx: FinancialEvent,
     accountNames: Map<String, String>,
     esRecurrente: Boolean = false,
+    /** Es el que muestra el panel de la derecha (Ola W4). Solo en pantalla ancha. */
+    elegido: Boolean = false,
     onClick: () -> Unit,
 ) {
     // Rojo gasto, verde ingreso, gris lo que no movió plata del bolsillo — la apertura de una
@@ -1873,6 +1931,7 @@ internal fun MovementSingleRow(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(TAG_FILA_DE_MOVIMIENTO_SUELTO)
+            .marcaDeElegido(elegido)
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1947,3 +2006,15 @@ internal fun MovementSingleRow(
         )
     }
 }
+
+/**
+ * La fila que muestra el panel de la derecha (Ola W4): un fondo de la marca, tenue, y la semántica
+ * de «elegida» — el mismo papel que el borde de la fila elegida en «Tus períodos».
+ */
+@Composable
+private fun Modifier.marcaDeElegido(elegido: Boolean): Modifier =
+    if (!elegido) this
+    else this
+        .semantics { selected = true }
+        .clip(RoundedCornerShape(8.dp))
+        .background(Movi.colores.marca.copy(alpha = 0.10f))

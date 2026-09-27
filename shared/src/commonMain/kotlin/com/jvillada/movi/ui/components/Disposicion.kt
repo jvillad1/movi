@@ -38,12 +38,13 @@ enum class Disposicion {
 /**
  * La disposición de [pantalla]. En la Ola W1 solo Hoy es un [Disposicion.Tablero]; en la W2 Tus
  * períodos y su detalle pasan a [Disposicion.ListaYDetalle] (ver `PeriodosListaYDetalle`); en la W3
- * Patrimonio, Créditos y Plan son tableros (ver `PanelDeTablero`). Movimientos y el resto se suman
- * acá a medida que su composición interna aprende a usar el ancho.
+ * Patrimonio, Créditos y Plan son tableros (ver `PanelDeTablero`); en la W4 Movimientos es lista y
+ * detalle (ver `MovimientosListaYDetalle`). El resto se suma acá a medida que su composición
+ * interna aprende a usar el ancho.
  */
 fun disposicionDe(pantalla: Screen): Disposicion = when (pantalla) {
     Screen.Dashboard, Screen.Accounts, Screen.Credits, is Screen.Plan -> Disposicion.Tablero
-    Screen.Periodos, is Screen.DetalleDePeriodo -> Disposicion.ListaYDetalle
+    Screen.Periodos, is Screen.DetalleDePeriodo, is Screen.Transactions -> Disposicion.ListaYDetalle
     else -> Disposicion.Lectura
 }
 
