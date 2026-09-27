@@ -210,9 +210,10 @@ fun Route.creditRoutes() {
             val opening = openingEventFor(cuentaAlAbrir, now = System.currentTimeMillis())
             // Las patas se construyen con `transferLegsFor`, la MISMA función que usa
             // `POST /api/transfers` (vive en :core justamente para eso): misma categoría
-            // reservada, mismo `countsAsCashFlow = false`, y el encabezado «Desembolso a
-            // Bancolombia» / «Desembolso desde Libranza» que ya sabe poner cuando una punta es un
-            // préstamo. Un desembolso no es un ingreso, y eso lo garantiza esa función, no esta.
+            // (`DESEMBOLSO_CATEGORY`), el mismo `countsAsCashFlow` por pata —la del dinero cuenta como
+            // plata que entró, la del crédito no— y el encabezado «Desembolso a Bancolombia» /
+            // «Desembolso desde Libranza» que ya sabe poner cuando una punta es un préstamo. Eso lo
+            // garantiza esa función, no esta.
             val legs = if (disbursement == null || destino == null || desembolsoMillis == null) null else
                 transferLegsFor(
                     CreateTransferRequest(

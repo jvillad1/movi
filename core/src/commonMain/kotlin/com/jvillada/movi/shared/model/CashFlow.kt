@@ -98,8 +98,9 @@ const val ADJUSTMENT_CATEGORY = "Ajuste de saldo"
  *   mensuales en los datos reales) porque esta categoría vive en cuentas de activo, donde
  *   la regla por tipo de cuenta de abajo diría `true`.
  *
- * - **LOAN → nunca.** Un desembolso, la causación de intereses o un ajuste al saldo real
- *   del banco no son consumo; y el abono a la cuota, que llega como INCOME porque baja la
+ * - **LOAN → nunca.** La pata del crédito de un desembolso, la causación de intereses o un ajuste
+ *   al saldo real del banco no son consumo (la pata del DINERO de un desembolso sí es plata que
+ *   entró: cae en la regla de las cuentas de activo, ver [DESEMBOLSO_CATEGORY]); y el abono a la cuota, que llega como INCOME porque baja la
  *   deuda, mucho menos es un ingreso. Contarlos convertía un ajuste de $60.000.000 en
  *   "Ingresos del mes: $60.000.000". A diferencia de la tarjeta, aquí NO hay una compra
  *   previa ya contada en otro evento — la cuota es el único momento en que ese consumo

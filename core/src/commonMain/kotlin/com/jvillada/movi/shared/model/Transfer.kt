@@ -38,6 +38,14 @@ const val TRANSFER_RECATEGORIZE_BLOCKED =
         "ni un ingreso. Si te equivocaste, anúlalo y vuelve a hacerlo."
 
 /**
+ * Lo mismo para un desembolso ([DESEMBOLSO_CATEGORY]): a diferencia de un traspaso, este SÍ es plata
+ * que entró y suma en «Entró», así que el texto no dice que no sea un ingreso.
+ */
+const val DESEMBOLSO_RECATEGORIZE_BLOCKED =
+    "Un desembolso no se puede recategorizar: es plata prestada que entró a tu cuenta y la deuda " +
+        "del crédito sube con ella. Si te equivocaste, anúlalo y vuelve a hacerlo."
+
+/**
  * Lo que se le dice a alguien que intenta *entrar* a [TRANSFER_CATEGORY] recategorizando.
  *
  * Sin flecha: «→» sale como ▯ en wasm (la fuente del canvas no trae el glifo), y este texto se le
@@ -55,6 +63,18 @@ const val TRANSFER_CATEGORY_RESERVED =
  */
 const val TRANSFER_LEG_NOT_STANDALONE =
     "Un traspaso se registra completo, con sus dos puntas: abre Agregar y elige Traspaso."
+
+/**
+ * Lo que se le dice a quien intenta escribir a mano la categoría [DESEMBOLSO_CATEGORY]: sea creando
+ * un movimiento suelto (400 en `POST /api/events`) o recategorizando uno (422 en `PUT
+ * /api/events/{id}/category`).
+ *
+ * No es reservada como las demás, porque cuenta en el mes; pero una sola pata suelta inflaría
+ * «Entró» sin la deuda que la respalda. Por eso solo la escribe [transferLegsFor].
+ */
+const val DESEMBOLSO_CATEGORY_NOT_MANUAL =
+    "«Desembolso de crédito» la escribe Movi cuando registras el desembolso de un crédito: " +
+        "abre Agregar, elige Traspaso y pon el crédito como origen."
 
 /**
  * Lo que se le dice a un cliente que reusa un `transferId` que ya tiene patas de OTRO traspaso.
@@ -240,10 +260,12 @@ data class TransferResult(
  * | **Desembolso** — el banco deposita el crédito | préstamo: la deuda **sube** | cuenta: el efectivo **sube** |
  * | **Abono extraordinario** — plata extra contra el capital | cuenta: el efectivo **baja** | préstamo: la deuda **baja** |
  *
- * Los cuatro signos salen bien sin tocar una línea de `signedDelta`/`computeBalances`, y las dos
- * patas quedan fuera del mes por [TRANSFER_CATEGORY] — que es justo lo que hacía falta: **un
- * desembolso no es un ingreso.** Anotar la libranza de $257.000.000 como ingreso decía que el mes
- * había entrado $257 millones sin que el dueño ganara un peso.
+ * Los cuatro signos salen bien sin tocar una línea de `signedDelta`/`computeBalances`. El abono
+ * extraordinario queda fuera del mes por [TRANSFER_CATEGORY]. **El desembolso, en cambio, cuenta
+ * como plata que ENTRÓ** ([DESEMBOLSO_CATEGORY]): el dueño lo decidió porque, sin eso, un mes con
+ * desembolso salía más de lo que entraba. Solo cuenta la pata del dinero; la del crédito la excluye
+ * el tipo de cuenta, así que no hay doble conteo, y [PlataDelPeriodo] y Movi AI dicen cuánto de lo
+ * que entró es deuda para que no se lea como sueldo.
  *
  * La primera mitad del argumento —la duplicación— **sí se sostiene para la tarjeta**, y por eso
  * la tarjeta se sigue rechazando: pagar el extracto ya tiene su camino ([CARD_PAYMENT_CATEGORY])
@@ -324,7 +346,8 @@ const val TRANSFER_BOTH_LOANS_BLOCKED =
 
 /**
  * Las dos patas de un traspaso: un EXPENSE en [from] y un INCOME en [to], enlazados por
- * [CreateTransferRequest.transferId] y los dos con la categoría reservada [TRANSFER_CATEGORY].
+ * [CreateTransferRequest.transferId] y los dos con la categoría reservada [TRANSFER_CATEGORY] — o
+ * con [DESEMBOLSO_CATEGORY] si [from] es un crédito (el desembolso cuenta como ingreso).
  *
  * **Por qué dos eventos normales y no un tipo de movimiento nuevo:** los saldos se derivan de
  * los eventos vía `signedDelta`/`computeBalances`, y así cada pata es un evento común y corriente
@@ -351,13 +374,22 @@ fun transferLegsFor(
 ): Pair<FinancialEvent, FinancialEvent> {
     val note = request.note?.trim().orEmpty()
     fun describe(base: String) = if (note.isEmpty()) base else "$base · $note"
-    fun leg(id: String, accountId: String, type: TransactionType, description: String) = FinancialEvent(
+    // Un desembolso es plata que entró (ver [DESEMBOLSO_CATEGORY]); los otros dos tipos siguen
+    // siendo un traspaso puro, fuera del mes.
+    val categoria =
+        if (transferKindFor(from, to) == TransferKind.DESEMBOLSO) DESEMBOLSO_CATEGORY else TRANSFER_CATEGORY
+    fun leg(
+        id: String,
+        cuenta: Account,
+        type: TransactionType,
+        description: String,
+    ) = FinancialEvent(
         id = id,
-        accountId = accountId,
+        accountId = cuenta.id,
         type = type,
         amount = request.amount,
         currency = from.currency,
-        category = TRANSFER_CATEGORY,
+        category = categoria,
         description = description,
         timestamp = request.timestamp,
         source = EventSource.MANUAL,
@@ -367,11 +399,12 @@ fun transferLegsFor(
         transferId = request.transferId,
         // Redundante con isCashFlow (el server la vuelve a derivar en cada lectura), pero deja
         // el objeto que devuelve esta función coherente consigo mismo desde el primer instante.
-        countsAsCashFlow = false,
+        // Se deriva por pata y no se fija en `false`: en un desembolso la pata del dinero SÍ cuenta.
+        countsAsCashFlow = isCashFlow(cuenta.type, type, categoria),
     )
     val (haciaAlla, desdeAca) = transferLegHeadlines(from, to)
-    return leg(request.fromEventId, from.id, TransactionType.EXPENSE, describe(haciaAlla)) to
-        leg(request.toEventId, to.id, TransactionType.INCOME, describe(desdeAca))
+    return leg(request.fromEventId, from, TransactionType.EXPENSE, describe(haciaAlla)) to
+        leg(request.toEventId, to, TransactionType.INCOME, describe(desdeAca))
 }
 
 /**

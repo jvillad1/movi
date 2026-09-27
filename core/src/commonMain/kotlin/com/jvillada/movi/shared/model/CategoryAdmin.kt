@@ -255,6 +255,45 @@ fun categoriaReservadaMensaje(name: String): String =
         "iniciales, pagos de tarjeta y cuentas eliminadas, y de su nombre exacto dependen las " +
         "cifras de tu mes. No se puede renombrar, unificar ni esconder."
 
+/**
+ * **Las categorías que no son reservadas pero de cuyo nombre exacto depende una regla de plata**:
+ * [CUOTA_CATEGORY] (la cuota cuenta como gasto y tilda el checklist) y [DESEMBOLSO_CATEGORY] (el
+ * desembolso cuenta como ingreso). Renombrarlas o unificarlas EN otra las saca de esas reglas en
+ * silencio y sin vuelta atrás, porque `rewriteCategory` reescribe la historia.
+ *
+ * No están en [RESERVED_CATEGORIES] a propósito: eso las sacaría de las listas y de los
+ * presupuestos, y aquí la idea es la contraria —cuentan como cualquier categoría normal—. Solo se
+ * les cierra la puerta de renombrar/unificar como **origen**.
+ */
+fun nombreSostieneReglasDePlata(name: String): Boolean =
+    esCategoriaDeCuota(name) || esCategoriaDelDesembolso(name)
+
+/**
+ * ¿Este nombre es [DESEMBOLSO_CATEGORY]? Sin distinguir mayúsculas ni tildes (la misma normalización
+ * con la que la app busca): todas las guardas de esta categoría —crear, recategorizar, renombrar,
+ * unificar, importar un extracto— preguntan por acá, para que ninguna deje pasar un nombre que otra
+ * rechaza.
+ */
+fun esCategoriaDelDesembolso(name: String): Boolean =
+    normalizarParaBuscar(name) == normalizarParaBuscar(DESEMBOLSO_CATEGORY)
+
+/** ¿Este nombre es [CUOTA_CATEGORY]? Misma comparación que [esCategoriaDelDesembolso]. */
+fun esCategoriaDeCuota(name: String): Boolean =
+    normalizarParaBuscar(name) == normalizarParaBuscar(CUOTA_CATEGORY)
+
+/**
+ * Por qué no se renombra ni se unifica en otra una categoría de [nombreSostieneReglasDePlata]. Un
+ * texto por categoría: la cuota el dueño la elige a mano, el desembolso solo lo escribe Movi.
+ */
+fun categoriaQueSostieneReglasMensaje(name: String): String =
+    if (esCategoriaDelDesembolso(name)) {
+        "«$name» la escribe Movi cuando registras el desembolso de un crédito, y de su nombre " +
+            "exacto dependen las cifras de tu mes. No se puede renombrar ni unificar en otra."
+    } else {
+        "«$name» es la categoría de las cuotas de tus créditos, y de su nombre exacto dependen las " +
+            "cifras de tu mes. No se puede renombrar ni unificar en otra."
+    }
+
 const val CATEGORY_CATALOG_RENAME_BLOCKED: String =
     "Las categorías del catálogo de Movi no se renombran: el catálogo es el mismo para todos y " +
         "volvería a sugerirte el nombre viejo. Si quieres juntarla con otra, únela; si no la " +

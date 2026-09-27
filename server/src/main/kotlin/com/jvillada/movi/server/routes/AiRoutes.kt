@@ -10,6 +10,7 @@ import com.anthropic.models.messages.TextBlockParam
 import com.jvillada.movi.server.ai.cargarDocumentosParaContexto
 import com.jvillada.movi.server.ai.contextoDelPeriodoDe
 import com.jvillada.movi.server.ai.conSaldos
+import com.jvillada.movi.server.ai.lineaDeCreditosDesembolsados
 import com.jvillada.movi.server.ai.render
 import com.jvillada.movi.server.ai.BUSCAR_DOCUMENTOS
 import com.jvillada.movi.server.balance.cuentasConSaldo
@@ -467,6 +468,7 @@ internal fun DatosDelUsuario.comoContexto(): String {
         appendLine()
         appendLine("== Resumen del mes en curso ==")
         appendLine("- Ingresos: \$$ingresos")
+        delPeriodo.lineaDeCreditosDesembolsados { "\$$it" }?.let { appendLine(it) }
         appendLine("- Gastos: \$$egresos")
         appendLine("- Flujo: \$${ingresos - egresos}")
         appendLine()

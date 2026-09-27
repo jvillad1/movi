@@ -67,7 +67,10 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
+import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.categoriaQueSostieneReglasMensaje
+import com.jvillada.movi.shared.model.nombreSostieneReglasDePlata
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.NoSePudoLeer
@@ -1038,31 +1041,44 @@ private fun HojaDetalle(
 
             Column(modifier = Modifier.padding(top = 20.dp, bottom = 20.dp)) {
                 Hairline()
-                if (categoria.scope == CategoryScope.CUSTOM) {
-                    AccionDeHoja(
-                        titulo = "Renombrar",
-                        detalle = "Cambia el nombre en todos tus movimientos, tu presupuesto y tus recurrentes.",
-                        onClick = onRenombrar,
-                    )
-                    Hairline()
-                } else {
+                if (nombreSostieneReglasDePlata(categoria.name)) {
+                    // La cuota y el desembolso de un crédito cuentan por su nombre exacto: el
+                    // server rechaza renombrarlas o unificarlas, así que ni se ofrecen.
                     Text(
-                        "Las categorías del catálogo de Movi no se renombran: el catálogo es el " +
-                            "mismo para todos y volvería a sugerirte el nombre viejo. Si quieres " +
-                            "juntarla con otra, únela; si no la usas, escóndela.",
+                        categoriaQueSostieneReglasMensaje(categoria.name),
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         lineHeight = 15.sp,
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
                     Hairline()
+                } else {
+                    if (categoria.scope == CategoryScope.CUSTOM) {
+                        AccionDeHoja(
+                            titulo = "Renombrar",
+                            detalle = "Cambia el nombre en todos tus movimientos, tu presupuesto y tus recurrentes.",
+                            onClick = onRenombrar,
+                        )
+                        Hairline()
+                    } else {
+                        Text(
+                            "Las categorías del catálogo de Movi no se renombran: el catálogo es el " +
+                                "mismo para todos y volvería a sugerirte el nombre viejo. Si quieres " +
+                                "juntarla con otra, únela; si no la usas, escóndela.",
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                        )
+                        Hairline()
+                    }
+                    AccionDeHoja(
+                        titulo = "Unificar en otra",
+                        detalle = "Todo lo que dice «${categoria.name}» pasa a decir la que elijas. No se borra nada.",
+                        onClick = onUnificar,
+                    )
+                    Hairline()
                 }
-                AccionDeHoja(
-                    titulo = "Unificar en otra",
-                    detalle = "Todo lo que dice «${categoria.name}» pasa a decir la que elijas. No se borra nada.",
-                    onClick = onUnificar,
-                )
-                Hairline()
                 AccionDeHoja(
                     titulo = if (categoria.hidden) "Volver a sugerirla" else "Esconder",
                     detalle = if (categoria.hidden)
@@ -1405,7 +1421,11 @@ private fun HojaUnificar(
 
     val candidatas = remember(existentes, busqueda, categoria, soloVisibles) {
         filtrarCategorias(existentes, CategoryFilter.TODAS, busqueda)
-            .filter { !it.reserved && it.name != categoria.name && (!soloVisibles || !it.hidden) }
+            .filter {
+                // «Desembolso de crédito» no recibe: unificar movimientos sueltos en ella inflaría «Entró».
+                !it.reserved && it.name != categoria.name && (!soloVisibles || !it.hidden) &&
+                    !esCategoriaDelDesembolso(it.name)
+            }
     }
 
     HojaBase(onDismiss = onDismiss) {

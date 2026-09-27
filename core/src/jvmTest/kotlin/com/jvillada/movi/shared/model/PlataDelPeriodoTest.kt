@@ -73,16 +73,37 @@ class PlataDelPeriodoTest {
         assertEquals(1_207_420, saldo)
     }
 
-    /** La Gardenera: un préstamo de su papá, anotado como traspaso desde la cuenta del crédito. */
+    /** Las dos patas de un desembolso de [desde] (un crédito) a [hacia]: la del dinero cuenta como ingreso. */
+    private fun desembolso(id: String, desde: String, hacia: String, monto: Long) = listOf(
+        evento("$id-sale", desde, TransactionType.EXPENSE, monto, DESEMBOLSO_CATEGORY, traspaso = id),
+        evento("$id-entra", hacia, TransactionType.INCOME, monto, DESEMBOLSO_CATEGORY, traspaso = id),
+    )
+
+    /** La Gardenera: un préstamo de su papá, desembolsado desde la cuenta del crédito. */
     @Test
-    fun `el desembolso de un prestamo entra, y el gasto que paga se sigue contando aparte`() {
+    fun `el desembolso de un prestamo entra como ingreso, y el gasto que paga se sigue contando aparte`() {
         val p = calcular(
-            traspaso("t-techo", desde = "techo", hacia = "ahorros", monto = 10_000_000),
+            desembolso("t-techo", desde = "techo", hacia = "ahorros", monto = 10_000_000),
             listOf(evento("gardenera", "ahorros", TransactionType.EXPENSE, 9_960_000, "Hogar")),
         )
+        assertEquals(10_000_000, p.ingresos)
+        assertEquals(0, p.desdeFuera, "ya no es un traspaso desde afuera: es un ingreso")
+        assertEquals(10_000_000, p.entradas, "la pata del crédito no suma otra vez")
+        assertEquals(0, p.pagadoDesdeFuera, "el gasto salió de Tu plata: no lo financia nadie de afuera")
+    }
+
+    /** Un desembolso guardado antes de la regla nueva (categoría «Traspaso») sigue entrando por «desde afuera». */
+    @Test
+    fun `un desembolso viejo anotado como traspaso sigue entrando`() {
+        val p = calcular(traspaso("t-techo", desde = "techo", hacia = "ahorros", monto = 10_000_000))
         assertEquals(10_000_000, p.desdeFuera)
         assertEquals(10_000_000, p.entradas)
-        assertEquals(0, p.pagadoDesdeFuera, "el gasto salió de Tu plata: no lo financia nadie de afuera")
+    }
+
+    @Test
+    fun `un desembolso a una cuenta condicionada no entra a Tu plata`() {
+        val p = calcular(desembolso("t-nu", desde = "techo", hacia = "nu", monto = 4_000_000))
+        assertEquals(0, p.entradas)
     }
 
     /** El colegio: $3M directo desde Nu, que es ahorro condicionado. */

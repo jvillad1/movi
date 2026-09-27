@@ -630,6 +630,26 @@ class CategoriasLogicTest {
         assertEquals("Cuota de crédito", unificar.destino.name)
     }
 
+    /**
+     * «Desembolso de crédito» cuenta como ingreso, así que ni puede ser el origen (se saldría de la
+     * regla) ni el destino (unificar movimientos sueltos en ella inflaría «Entró»).
+     */
+    @Test
+    fun `Desembolso de credito nunca es ni origen ni destino de una unificacion`() {
+        val desembolso = cat("Desembolso de crédito", movements = 4)
+        val suelta = cat("Desembolso", movements = 1)
+        val propuestas = propuestasDeOrden(listOf(desembolso, suelta))
+        assertTrue(propuestas.filterIsInstance<PropuestaDeOrden.UnificarParecidas>().isEmpty())
+        val origen = propuestasDeOrden(listOf(cat("Desembolso de crédito", movements = 1), cat("Crédito", movements = 3)))
+        assertTrue(origen.filterIsInstance<PropuestaDeOrden.UnificarParecidas>().isEmpty())
+    }
+
+    @Test
+    fun `Desembolso de credito nunca se propone esconder ni como un solo uso`() {
+        assertTrue(propuestasDeOrden(listOf(cat("Desembolso de crédito", scope = CategoryScope.PREDEFINED))).isEmpty())
+        assertTrue(propuestasDeOrden(listOf(cat("desembolso de credito", movements = 1))).isEmpty())
+    }
+
     @Test
     fun `Cuota de credito nunca se propone esconder ni como un solo uso`() {
         val delCatalogoSinUso = cat("Cuota de crédito", scope = CategoryScope.PREDEFINED)

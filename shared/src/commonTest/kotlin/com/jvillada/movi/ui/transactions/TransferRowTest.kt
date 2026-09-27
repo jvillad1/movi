@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
@@ -155,6 +156,16 @@ class TransferRowTest {
         val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patas()).single())
         val conCredito = soloCuentas + ("acc_ahorros" to AccountType.LOAN)
         assertEquals("Desembolso", transferRowTitle(fila, conCredito))
+    }
+
+    /** La categoría del desembolso manda: dice «Desembolso» incluso sin la lista de cuentas. */
+    @Test
+    fun `un par con la categoria del desembolso dice Desembolso aunque no lleguen los tipos`() {
+        val fila = assertIs<MovementRow.Transfer>(
+            collapseTransfers(patas().map { it.copy(category = DESEMBOLSO_CATEGORY) }).single(),
+        )
+        assertEquals("Desembolso", transferRowTitle(fila, emptyMap()))
+        assertEquals("Desembolso", transferRowTitle(fila, soloCuentas))
     }
 
     @Test

@@ -5,11 +5,10 @@ import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.shared.model.CuentaDelDisponible
-import com.jvillada.movi.shared.model.FUENTE_CREDITO
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.FUENTE_SALDO_INICIAL
 import com.jvillada.movi.shared.model.FuenteDePlata
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
-import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.reminders.arranqueDeLaRegla
 import com.jvillada.movi.server.reminders.ocurrenciaAnteriorQuePisaElPeriodo
@@ -120,8 +119,12 @@ internal fun Transaction.resumenesDePeriodos(uid: String, ahora: Long, ajustes: 
     val ventanas = periodos.map { it to ventanaDe(it, ajustes) }
     val porPeriodo = movimientos.groupBy { m -> ventanas.firstOrNull { (_, v) -> m.timestamp in v }?.first }
     // Lo que no es ingreso, por período, con la MISMA regla que el detalle y en una sola lectura.
-    val fuentes = fuentesQueNoSonIngresoPorVentana(uid, ventanas.map { it.second }, anulados, cuentasDelDisponible(uid))
-    return periodos.mapIndexed { i, periodo -> resumenDe(periodo, ajustes, enCurso, porPeriodo[periodo].orEmpty(), fuentes[i]) }
+    val cuentas = cuentasDelDisponible(uid)
+    val fuentes = fuentesQueNoSonIngresoPorVentana(uid, ventanas.map { it.second }, anulados, cuentas)
+    val creditos = creditosDesembolsadosPorVentana(uid, ventanas.map { it.second }, anulados, cuentas)
+    return periodos.mapIndexed { i, periodo ->
+        resumenDe(periodo, ajustes, enCurso, porPeriodo[periodo].orEmpty(), fuentes[i], creditos[i])
+    }
 }
 
 /**
@@ -156,9 +159,10 @@ internal fun Transaction.detalleDePeriodo(
     val cierre = if (enCurso) minOf(hasta, appDateToEpochMillis(hoy.plusDays(1))) else hasta
     val (alEmpezar, alCerrar) = saldosDeTuPlataAntesDe(uid, listOf(desde, cierre), anulados, cuentas)
     val fuentes = fuentesQueNoSonIngresoPorVentana(uid, listOf(ventana), anulados, cuentas).single()
+    val creditos = creditosDesembolsadosPorVentana(uid, listOf(ventana), anulados, cuentas).single()
 
     return DetalleDePeriodo(
-        resumen = resumenDe(periodo, ajustes, periodos.first(), movimientos, fuentes),
+        resumen = resumenDe(periodo, ajustes, periodos.first(), movimientos, fuentes, creditos),
         porCategoria = gastoPorCategoria.entries
             .sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key })
             .map { GastoDeCategoria(it.key, it.value) },
@@ -186,21 +190,20 @@ internal fun Transaction.detalleDePeriodo(
  * **La plata que entró a tus cuentas en cada una de las [ventanas] y no es ingreso** — lo que explica
  * un período que salió más de lo que entró sin que se haya gastado de más. Devuelve una lista por
  * ventana, en el mismo orden; el detalle de un período la llama con una ventana y la lista de
- * «Tus períodos» con todas, así que las dos cuentan con UNA regla:
+ * «Tus períodos» con todas, así que las dos cuentan con UNA regla.
  *
- * - [FUENTE_CREDITO]: los desembolsos. La pata que ENTRA (INCOME, categoría [TRANSFER_CATEGORY]) a
- *   una cuenta que no es deuda, cuya hermana por `transfer_id` sale de una cuenta LOAN. Un traspaso
- *   entre cuentas propias (ahorros ↔ CDT) no es: esa plata ya estaba en tus cuentas.
- * - [FUENTE_SALDO_INICIAL]: el «Saldo inicial» ([OPENING_CATEGORY], INCOME) de una cuenta de dinero
- *   —ni deuda, ni inversión, ni un bien— que Movi conoció en el período. Condicionada o no: el AFC
- *   también paga gastos. Una inversión no, porque su saldo (Skandia, $106M) taparía todo lo demás y
- *   no es plata con la que se paga el mes.
+ * Hoy es una sola fuente, [FUENTE_SALDO_INICIAL]: el «Saldo inicial» ([OPENING_CATEGORY], INCOME) de
+ * una cuenta de dinero —ni deuda, ni inversión, ni un bien— que Movi conoció en el período.
+ * Condicionada o no: el AFC también paga gastos. Una inversión no, porque su saldo (Skandia, $106M)
+ * taparía todo lo demás y no es plata con la que se paga el mes.
  *
- * Solo en pesos y sin anulados, como toda suma de Movi. Una lectura de los eventos con esas dos
- * categorías entre la primera y la última ventana; las hermanas de los traspasos vienen en la misma
- * lectura (las dos patas nacen en el mismo instante), y solo si alguna quedó afuera (una pata que se
- * movió de fecha) se busca aparte. El [FuenteDePlata.detalle] nombra las cuentas de la más grande a
- * la más chica. Solo las fuentes con monto; sin ninguna, la lista de esa ventana es vacía.
+ * **El desembolso de un crédito ya no está acá**: el dueño decidió que es plata que entró y suma en
+ * «Entró» (ver [com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY]); cuánto de eso son créditos lo
+ * cuenta [creditosDesembolsadosPorVentana].
+ *
+ * Solo en pesos y sin anulados, como toda suma de Movi. El [FuenteDePlata.detalle] nombra las cuentas
+ * de la más grande a la más chica. Solo las fuentes con monto; sin ninguna, la lista de esa ventana es
+ * vacía.
  */
 private fun Transaction.fuentesQueNoSonIngresoPorVentana(
     uid: String,
@@ -211,52 +214,21 @@ private fun Transaction.fuentesQueNoSonIngresoPorVentana(
     if (ventanas.isEmpty()) return emptyList()
     val desde = ventanas.minOf { it.first }
     val hastaExclusivo = ventanas.maxOf { it.last } + 1
-    val filas = Events.select(
-        Events.id, Events.accountId, Events.type, Events.amount, Events.category, Events.transferId, Events.timestamp,
-    )
+    val filas = Events.select(Events.id, Events.accountId, Events.amount, Events.timestamp)
         .where {
             (Events.userId eq uid) and
                 (Events.currency eq "COP") and
+                (Events.type eq TransactionType.INCOME.name) and
                 (Events.timestamp greaterEq desde) and
                 (Events.timestamp less hastaExclusivo) and
-                (Events.category inList listOf(TRANSFER_CATEGORY, OPENING_CATEGORY))
+                (Events.category eq OPENING_CATEGORY)
         }
         .filterNot { it[Events.id] in anulados }
-        .map {
-            PataSinIngreso(
-                it[Events.accountId], it[Events.type], it[Events.amount], it[Events.category],
-                it[Events.transferId], it[Events.timestamp],
-            )
-        }
     if (filas.isEmpty()) return ventanas.map { emptyList() }
 
     fun esDeDinero(cuenta: CuentaDelDisponible?) =
         cuenta != null && !cuenta.esDeuda && !cuenta.esBien && cuenta.tipo != AccountType.INVESTMENT
-    val entradas = filas.filter { it.tipo == TransactionType.INCOME.name }
-    val saldosIniciales = entradas.filter { it.categoria == OPENING_CATEGORY && esDeDinero(cuentas[it.cuenta]) }
-    val entradasDeTraspaso = entradas.filter {
-        it.categoria == TRANSFER_CATEGORY && it.traspaso != null && cuentas[it.cuenta]?.esDeuda == false
-    }
-
-    // De qué cuenta salió cada traspaso: casi siempre en la misma lectura; si no, por `transfer_id`.
-    val origenDe: MutableMap<String, String> = filas
-        .filter { it.tipo == TransactionType.EXPENSE.name && it.categoria == TRANSFER_CATEGORY && it.traspaso != null }
-        .associateTo(mutableMapOf()) { it.traspaso!! to it.cuenta }
-    val faltan = entradasDeTraspaso.mapNotNull { it.traspaso }.filterNot { it in origenDe }.distinct()
-    if (faltan.isNotEmpty()) {
-        Events.select(Events.id, Events.accountId, Events.transferId)
-            .where {
-                (Events.userId eq uid) and (Events.transferId inList faltan) and
-                    (Events.type eq TransactionType.EXPENSE.name) and (Events.category eq TRANSFER_CATEGORY)
-            }
-            .filterNot { it[Events.id] in anulados }
-            .forEach { fila -> fila[Events.transferId]?.let { origenDe[it] = fila[Events.accountId] } }
-    }
-    // Cada desembolso: la entrada, con la cuenta de crédito de la que salió.
-    val desembolsos = entradasDeTraspaso.mapNotNull { entrada ->
-        val origen = origenDe[entrada.traspaso] ?: return@mapNotNull null
-        if (cuentas[origen]?.tipo == AccountType.LOAN) origen to entrada else null
-    }
+    val saldosIniciales = filas.filter { esDeDinero(cuentas[it[Events.accountId]]) }
 
     val nombres: Map<String, String> by lazy {
         Accounts.select(Accounts.id, Accounts.name)
@@ -274,21 +246,52 @@ private fun Transaction.fuentesQueNoSonIngresoPorVentana(
     }
     return ventanas.map { ventana ->
         listOfNotNull(
-            fuente(FUENTE_CREDITO, desembolsos.filter { it.second.momento in ventana }.map { it.first to it.second.monto }),
-            fuente(FUENTE_SALDO_INICIAL, saldosIniciales.filter { it.momento in ventana }.map { it.cuenta to it.monto }),
+            fuente(
+                FUENTE_SALDO_INICIAL,
+                saldosIniciales.filter { it[Events.timestamp] in ventana }.map { it[Events.accountId] to it[Events.amount] },
+            ),
         )
     }
 }
 
-/** Lo que [fuentesQueNoSonIngresoPorVentana] necesita de cada evento. */
-private class PataSinIngreso(
-    val cuenta: String,
-    val tipo: String,
-    val monto: Long,
-    val categoria: String,
-    val traspaso: String?,
-    val momento: Long,
-)
+/**
+ * **Cuánto de lo que entró en cada una de las [ventanas] es un crédito desembolsado** (deuda, no
+ * sueldo): la suma de las patas INCOME de [DESEMBOLSO_CATEGORY] en una cuenta que no es deuda. Ese
+ * dinero ya está en [ResumenDePeriodo.entradas]; esto solo dice cuánto — así que la cifra siempre
+ * es parte de «Entró» y nunca puede pasarla.
+ *
+ * Un desembolso guardado antes de la regla (categoría «Traspaso») NO se cuenta: no está en
+ * [ResumenDePeriodo.entradas] (sigue siendo un traspaso) y decir «incluye $10M de créditos» de una
+ * plata que «Entró» no trae se contradiría. La migración de datos lo pasa a [DESEMBOLSO_CATEGORY] y
+ * desde ahí aparece.
+ *
+ * Solo en pesos y sin anulados.
+ */
+private fun Transaction.creditosDesembolsadosPorVentana(
+    uid: String,
+    ventanas: List<LongRange>,
+    anulados: Set<String>,
+    cuentas: Map<String, CuentaDelDisponible>,
+): List<Long> {
+    if (ventanas.isEmpty()) return emptyList()
+    val desde = ventanas.minOf { it.first }
+    val hastaExclusivo = ventanas.maxOf { it.last } + 1
+    val entradas = Events.select(Events.id, Events.accountId, Events.amount, Events.timestamp)
+        .where {
+            (Events.userId eq uid) and
+                (Events.currency eq "COP") and
+                (Events.type eq TransactionType.INCOME.name) and
+                (Events.timestamp greaterEq desde) and
+                (Events.timestamp less hastaExclusivo) and
+                (Events.category eq DESEMBOLSO_CATEGORY)
+        }
+        .filterNot { it[Events.id] in anulados }
+        .filter { cuentas[it[Events.accountId]]?.esDeuda == false }
+
+    return ventanas.map { ventana ->
+        entradas.filter { it[Events.timestamp] in ventana }.sumOf { it[Events.amount] }
+    }
+}
 
 /**
  * **Los pagos fijos de [periodo]**: cada ocurrencia de cada recurrente real que vence adentro —con el
@@ -534,6 +537,7 @@ private fun resumenDe(
     enCurso: PeriodoFinanciero,
     movimientos: List<MovimientoDeFlujo>,
     fuentes: List<FuenteDePlata>,
+    creditosRecibidos: Long,
 ): ResumenDePeriodo {
     val ventana = ventanaDe(periodo, ajustes)
     val (entradas, gastoPorCategoria) = flujoDeCaja(movimientos)
@@ -550,7 +554,7 @@ private fun resumenDe(
         entradas = entradas,
         salidas = gastoPorCategoria.values.sum(),
         movimientos = movimientos.size,
-        creditosRecibidos = fuentes.filter { it.tipo == FUENTE_CREDITO }.sumOf { it.monto },
+        creditosRecibidos = creditosRecibidos,
         saldosIniciales = fuentes.filter { it.tipo == FUENTE_SALDO_INICIAL }.sumOf { it.monto },
     )
 }

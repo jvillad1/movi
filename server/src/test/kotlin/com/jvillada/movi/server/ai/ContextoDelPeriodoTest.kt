@@ -15,6 +15,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.routes.buildUserContext
 import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.planDeUnaDeuda
 import kotlinx.coroutines.runBlocking
@@ -137,6 +138,46 @@ class ContextoDelPeriodoTest {
         // 12.920.200 / 20.000.000 = 64,6 % de los gastos; 12.920.200 / 22.217.770 = 58,2 % de los ingresos.
         assertTrue("Cuota de crédito: \$12920200 (65 % de los gastos; 58 % de los ingresos)" in texto, texto)
         assertTrue("Hija: \$7079800 (35 % de los gastos; 32 % de los ingresos)" in texto, texto)
+    }
+
+    /**
+     * El desembolso de un crédito suma en «Ingresos» —es plata que entró a la cuenta—, y el contexto
+     * dice cuánto de eso es deuda para que el asistente no lo tome por ganancia. La pata del
+     * crédito (una cuenta LOAN) no suma en ningún lado.
+     */
+    @Test
+    fun `los ingresos incluyen lo desembolsado y el contexto dice que es deuda`() {
+        transaction {
+            Accounts.insert {
+                it[id] = "credito"; it[userId] = dueno; it[name] = "Crédito Techo"; it[type] = "LOAN"
+            }
+            listOf(
+                Triple("d-sale", "credito", TransactionType.EXPENSE),
+                Triple("d-entra", "a1", TransactionType.INCOME),
+            ).forEach { (evento, cuenta, tipo) ->
+                Events.insert {
+                    it[Events.id] = evento; it[userId] = dueno; it[accountId] = cuenta
+                    it[type] = tipo.name; it[amount] = 10_000_000L; it[currency] = "COP"
+                    it[category] = DESEMBOLSO_CATEGORY; it[description] = "Desembolso"; it[timestamp] = ahora
+                    it[reconciliationStatus] = "RECONCILED"; it[transferId] = "t-1"
+                }
+            }
+        }
+
+        val periodo = runBlocking { contextoDelPeriodoDe(dueno) }
+        assertEquals(10_000_000L, periodo.ingresos)
+        assertEquals(10_000_000L, periodo.creditosDesembolsados)
+        assertEquals(emptyMap(), periodo.gastoPorCategoria)
+
+        val texto = contexto()
+        assertTrue("- Ingresos del período: \$10000000" in texto, texto)
+        assertTrue("Los ingresos incluyen \$10000000 de créditos desembolsados (deuda, no sueldo)." in texto, texto)
+    }
+
+    @Test
+    fun `sin desembolsos el contexto no habla de creditos desembolsados`() {
+        gasto("Mercado", 100_000)
+        assertFalse("créditos desembolsados" in contexto())
     }
 
     /** Un movimiento anulado no cuenta en el Inicio; tampoco puede contar acá. */

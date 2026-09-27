@@ -29,6 +29,7 @@ import com.jvillada.movi.shared.model.OPENING_CATEGORY_RESERVED
 import com.jvillada.movi.shared.model.OPENING_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
 import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
@@ -850,13 +851,16 @@ class LocalRepositoryTest {
         )
         val idDelCredito = summary.account.id
 
-        // Las dos patas quedaron, una en cada cuenta, con la categoría reservada.
+        // Las dos patas quedaron, una en cada cuenta, con la categoría del desembolso: la del dinero
+        // cuenta como plata que entró; la del crédito no (el tipo de cuenta la excluye).
         val delCredito = repo.getEvents(idDelCredito).single()
         val deLaCuenta = repo.getEvents("acc-corriente").single()
         assertEquals(TransactionType.EXPENSE, delCredito.type)
         assertEquals(TransactionType.INCOME, deLaCuenta.type)
-        assertEquals(TRANSFER_CATEGORY, deLaCuenta.category)
-        assertFalse(deLaCuenta.countsAsCashFlow)
+        assertEquals(DESEMBOLSO_CATEGORY, deLaCuenta.category)
+        assertEquals(DESEMBOLSO_CATEGORY, delCredito.category)
+        assertTrue(deLaCuenta.countsAsCashFlow)
+        assertFalse(delCredito.countsAsCashFlow)
         assertEquals(delCredito.transferId, deLaCuenta.transferId)
 
         // El efectivo subió lo que entró…

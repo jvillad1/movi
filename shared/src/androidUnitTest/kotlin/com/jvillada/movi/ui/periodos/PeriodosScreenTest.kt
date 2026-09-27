@@ -185,37 +185,40 @@ class PeriodosScreenTest {
 
     @Test
     fun `un periodo que salio de mas dice que lo cubrio, con los textos exactos`() {
-        assertEquals(
-            "Lo demás lo cubrieron $10M de créditos y $22,2M de saldos que ya tenías.",
-            loQueCubrioLoDemas(septiembreDelDueno),
-        )
-        assertEquals(
-            "Lo demás lo cubrieron $10M de créditos.",
-            loQueCubrioLoDemas(septiembreDelDueno.copy(saldosIniciales = 0)),
-        )
+        // Los créditos ya no cubren lo demás: suman en «Entró» y se dicen aparte.
         assertEquals(
             "Lo demás lo cubrieron $22,2M de saldos que ya tenías.",
-            loQueCubrioLoDemas(septiembreDelDueno.copy(creditosRecibidos = 0)),
+            loQueCubrioLoDemas(septiembreDelDueno),
         )
+        assertEquals(null, loQueCubrioLoDemas(septiembreDelDueno.copy(saldosIniciales = 0)))
     }
 
     @Test
-    fun `sin salir de mas o sin fuentes no dice nada`() {
+    fun `sin salir de mas o sin saldos no dice nada`() {
         assertEquals(null, loQueCubrioLoDemas(septiembreDelDueno.copy(creditosRecibidos = 0, saldosIniciales = 0)))
-        // Entró lo mismo o más: no falta nada que explicar, aunque haya fuentes.
+        // Entró lo mismo o más: no falta nada que explicar, aunque haya saldos.
         assertEquals(null, loQueCubrioLoDemas(septiembreDelDueno.copy(entradas = 34_000_000L)))
         assertEquals(null, loQueCubrioLoDemas(septiembreDelDueno.copy(entradas = 40_000_000L)))
         // Un período sin flujo tampoco.
-        assertEquals(null, loQueCubrioLoDemas(sinFlujo.copy(creditosRecibidos = 5_000_000L)))
+        assertEquals(null, loQueCubrioLoDemas(sinFlujo.copy(saldosIniciales = 5_000_000L)))
     }
 
     @Test
-    fun `la linea aparece solo en la fila que salio de mas`() {
-        montarConRepo(ConPeriodos(listOf(septiembreDelDueno, enCurso.copy(id = "2026-08", nombre = "Agosto 2026", enCurso = false, creditosRecibidos = 1_000_000L))))
+    fun `los creditos desembolsados se dicen como parte de lo que entro`() {
+        assertEquals("Incluye $10M de créditos desembolsados.", textoDeCreditosDesembolsados(septiembreDelDueno))
+        // Sin créditos, o sin nada que haya entrado, no hay línea.
+        assertEquals(null, textoDeCreditosDesembolsados(septiembreDelDueno.copy(creditosRecibidos = 0)))
+        assertEquals(null, textoDeCreditosDesembolsados(septiembreDelDueno.copy(entradas = 0)))
+    }
+
+    @Test
+    fun `la fila dice cuanto de lo que entro son creditos, y lo que cubrieron los saldos`() {
+        montarConRepo(ConPeriodos(listOf(septiembreDelDueno, enCurso.copy(id = "2026-08", nombre = "Agosto 2026", enCurso = false, saldosIniciales = 1_000_000L))))
         esperarTexto("Septiembre 2026")
 
-        assertTrue(hay("Lo demás lo cubrieron $10M de créditos y $22,2M de saldos que ya tenías."))
-        // Agosto entró más de lo que salió: sus créditos no se nombran.
+        assertTrue(hay("Incluye $10M de créditos desembolsados."))
+        assertTrue(hay("Lo demás lo cubrieron $22,2M de saldos que ya tenías."))
+        // Agosto entró más de lo que salió: sus saldos no se nombran.
         assertEquals(1, composeRule.onAllNodesWithText("Lo demás lo cubrieron", substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes().size)
     }
@@ -225,5 +228,6 @@ class PeriodosScreenTest {
         montarConRepo(ConPeriodos(periodos))
         esperarTexto("Septiembre 2026")
         assertTrue(!hay("Lo demás lo cubrieron", substring = true))
+        assertTrue(!hay("Incluye", substring = true))
     }
 }

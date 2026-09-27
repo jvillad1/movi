@@ -393,16 +393,15 @@ class DetalleDePeriodoScreenTest {
     // ── De dónde salió lo que faltó ──────────────────────────────────────────
 
     /**
-     * El septiembre del dueño: entró $22,5M, salió $34M. Lo que faltó lo pagaron el crédito Techo
-     * Gardenera y los saldos que Movi conoció a mitad del período.
+     * El septiembre del dueño: entró $22,5M (con $10M del crédito Techo Gardenera), salió $34M. Lo que
+     * faltó lo pagaron los saldos que Movi conoció a mitad del período.
      */
     private val septiembreQueFalto = DetalleDePeriodo(
         resumen = ResumenDePeriodo(
             id = "2026-09", nombre = "Septiembre 2026", desde = "2026-08-25", hasta = "2026-09-23",
-            entradas = 22_500_000L, salidas = 34_000_000L, movimientos = 40,
+            entradas = 22_500_000L, salidas = 34_000_000L, movimientos = 40, creditosRecibidos = 10_000_000L,
         ),
         fuentesQueNoSonIngreso = listOf(
-            FuenteDePlata(FUENTE_CREDITO, 10_000_000L, listOf("Crédito Techo Gardenera")),
             FuenteDePlata(FUENTE_SALDO_INICIAL, 22_200_211L, listOf("Nu", "AFC Davibank", "Bancolombia Ahorros 0031")),
         ),
     )
@@ -414,12 +413,11 @@ class DetalleDePeriodoScreenTest {
 
         assertTrue(hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(hay("De dónde salió lo que faltó"))
-        assertTrue(hay("Créditos que te desembolsaron · \$10M — Crédito Techo Gardenera"))
+        assertTrue(!hay("Créditos que te desembolsaron", substring = true))
         assertTrue(hay("Saldos que ya tenías y cargaste en el período · \$22,2M — Nu, AFC Davibank, Bancolombia Ahorros 0031"))
         assertTrue(
             hay(
-                "Esta plata entró a tus cuentas pero no cuenta como ingreso: un crédito es deuda y un saldo " +
-                    "inicial ya era tuyo.",
+                "Esta plata ya estaba en tus cuentas cuando Movi la conoció, así que no cuenta como ingreso.",
             ),
         )
     }
@@ -432,7 +430,24 @@ class DetalleDePeriodoScreenTest {
 
         assertTrue(!hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(!hay("De dónde salió lo que faltó"))
-        assertTrue(!hay("Créditos que te desembolsaron", substring = true))
+        assertTrue(!hay("Saldos que ya tenías", substring = true))
+    }
+
+    /** Bajo el encabezado se dice cuánto de lo que entró es crédito; con o sin fuentes. */
+    @Test
+    fun `el encabezado dice cuanto de lo que entro son creditos desembolsados`() {
+        montar(ConDetalle(mapOf("2026-09" to septiembreQueFalto)), "2026-09")
+        esperarTexto("PAGOS FIJOS")
+        assertTrue(hayTag(TAG_INCLUYE_CREDITOS))
+        assertTrue(hay("Incluye \$10M de créditos desembolsados."))
+    }
+
+    @Test
+    fun `sin creditos el encabezado no dice nada de creditos`() {
+        val sinCreditos = septiembreQueFalto.copy(resumen = septiembreQueFalto.resumen.copy(creditosRecibidos = 0))
+        montar(ConDetalle(mapOf("2026-09" to sinCreditos)), "2026-09")
+        esperarTexto("PAGOS FIJOS")
+        assertTrue(!hayTag(TAG_INCLUYE_CREDITOS))
     }
 
     @Test
@@ -459,19 +474,23 @@ class DetalleDePeriodoScreenTest {
     fun `cada fuente dice cuanto y de donde, y una sin nombres no deja un guion colgando`() {
         assertEquals(
             listOf(
-                "Créditos que te desembolsaron · \$10M — Crédito Techo Gardenera",
                 "Saldos que ya tenías y cargaste en el período · \$22,2M — Nu, AFC Davibank, Bancolombia Ahorros 0031",
             ),
             filasDeLoQueFalto(septiembreQueFalto),
         )
         assertEquals(
-            listOf("Créditos que te desembolsaron · \$500.000"),
-            filasDeLoQueFalto(septiembreQueFalto.copy(fuentesQueNoSonIngreso = listOf(FuenteDePlata(FUENTE_CREDITO, 500_000L)))),
+            listOf("Saldos que ya tenías y cargaste en el período · \$500.000"),
+            filasDeLoQueFalto(septiembreQueFalto.copy(fuentesQueNoSonIngreso = listOf(FuenteDePlata(FUENTE_SALDO_INICIAL, 500_000L)))),
         )
         // Un monto en cero no se dice: «$0» no explica nada.
         assertEquals(
             emptyList(),
-            filasDeLoQueFalto(septiembreQueFalto.copy(fuentesQueNoSonIngreso = listOf(FuenteDePlata(FUENTE_CREDITO, 0L)))),
+            filasDeLoQueFalto(septiembreQueFalto.copy(fuentesQueNoSonIngreso = listOf(FuenteDePlata(FUENTE_SALDO_INICIAL, 0L)))),
+        )
+        // Lo que mandaba un server anterior (un crédito como fuente) ya no se dice.
+        assertEquals(
+            emptyList(),
+            filasDeLoQueFalto(septiembreQueFalto.copy(fuentesQueNoSonIngreso = listOf(FuenteDePlata(FUENTE_CREDITO, 500_000L)))),
         )
     }
 

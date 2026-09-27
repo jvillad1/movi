@@ -35,10 +35,9 @@ data class ResumenDePeriodo(
     /** Cuántos movimientos suman en [entradas] y [salidas]. */
     val movimientos: Int = 0,
     /**
-     * Lo que entró a tus cuentas como desembolso de un crédito ([FUENTE_CREDITO]), en pesos: no suma
-     * en [entradas] (es deuda), pero paga gastos que sí suman en [salidas]. Es lo mismo que el
-     * detalle dice en [DetalleDePeriodo.fuentesQueNoSonIngreso], para que la lista pueda explicar el
-     * hueco sin abrir cada período.
+     * **Cuánto de [entradas] es un crédito desembolsado**, en pesos: deuda, no sueldo. El desembolso
+     * suma en [entradas] (es plata que entró, ver [DESEMBOLSO_CATEGORY]); esto solo dice cuánto de
+     * lo que entró vino de ahí, para que la lista lo aclare sin abrir cada período.
      */
     val creditosRecibidos: Long = 0,
     /** Lo mismo para los saldos que ya tenías y Movi conoció a mitad del período ([FUENTE_SALDO_INICIAL]). */
@@ -66,12 +65,12 @@ data class DetalleDePeriodo(
     /** Lo mismo al cerrar el período; en el período en curso, lo que hay hoy (hasta el final del día). */
     val tuPlataAlCerrar: Long? = null,
     /**
-     * **La plata que entró a tus cuentas en el período y no es ingreso**: los desembolsos de un
-     * crédito ([FUENTE_CREDITO]) y los saldos que ya tenías y Movi conoció a mitad del período
-     * ([FUENTE_SALDO_INICIAL]). Ninguna de las dos suma en [ResumenDePeriodo.entradas] —un crédito es
-     * deuda y un saldo inicial ya era tuyo—, pero las dos pagan gastos que sí suman en
-     * [ResumenDePeriodo.salidas]. Sin esto, un período que se financió con un crédito se lee como si
-     * hubieras gastado más de lo que tenías. Solo las fuentes con monto; sin ninguna, vacía.
+     * **La plata que entró a tus cuentas en el período y no es ingreso**: hoy solo los saldos que ya
+     * tenías y Movi conoció a mitad del período ([FUENTE_SALDO_INICIAL]). No suma en
+     * [ResumenDePeriodo.entradas] —ya era tuyo—, pero paga gastos que sí suman en
+     * [ResumenDePeriodo.salidas]. Sin esto, un período así se lee como si hubieras gastado más de lo
+     * que tenías. Los desembolsos de un crédito ya no van acá: suman en [ResumenDePeriodo.entradas].
+     * Solo las fuentes con monto; sin ninguna, vacía.
      */
     val fuentesQueNoSonIngreso: List<FuenteDePlata> = emptyList(),
 )
@@ -82,7 +81,8 @@ data class DetalleDePeriodo(
  *
  * [tipo] es un `String` y no un enum por la misma razón que [PagoFijoDelPeriodo.estado]: un valor
  * nuevo mañana no puede romper la deserialización de un cliente instalado. Hoy vale
- * [FUENTE_CREDITO] o [FUENTE_SALDO_INICIAL]; un cliente que no conozca un tipo lo salta.
+ * [FUENTE_SALDO_INICIAL] ([FUENTE_CREDITO] lo mandaba una versión anterior del server); un cliente
+ * que no conozca un tipo lo salta.
  */
 @Serializable
 data class FuenteDePlata(
@@ -92,7 +92,11 @@ data class FuenteDePlata(
     val detalle: List<String> = emptyList(),
 )
 
-/** El desembolso de un crédito: un traspaso desde una cuenta de crédito a una cuenta tuya. */
+/**
+ * El desembolso de un crédito. Ya no se manda: el desembolso suma en [ResumenDePeriodo.entradas] y
+ * su parte se cuenta en [ResumenDePeriodo.creditosRecibidos]. Queda la constante para leer lo que
+ * mande un server anterior.
+ */
 const val FUENTE_CREDITO: String = "CREDITO"
 
 /** El saldo con el que Movi conoció una cuenta de dinero: plata que ya tenías. */

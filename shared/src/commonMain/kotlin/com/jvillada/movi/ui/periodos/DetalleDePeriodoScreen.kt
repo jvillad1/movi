@@ -44,7 +44,6 @@ import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.DetalleDePeriodo
-import com.jvillada.movi.shared.model.FUENTE_CREDITO
 import com.jvillada.movi.shared.model.FUENTE_SALDO_INICIAL
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PAGO_FIJO_CON_DUDAS
@@ -399,6 +398,7 @@ private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
             Text(text = "En curso", style = Movi.textos.apoyo, color = Movi.colores.marca, fontWeight = FontWeight.Medium)
         }
         CifrasDelPeriodo(resumen)
+        LineaDeCreditosDesembolsados(resumen)
         lineaDeTuPlata(detalle)?.let {
             Spacer(Modifier.height(10.dp))
             Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -410,12 +410,13 @@ private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
 
 /**
  * Una fila por cada fuente de plata que no es ingreso, **solo si el período salió más de lo que
- * entró** — «Créditos que te desembolsaron · $10M — Crédito Techo Gardenera». Vacía cuando entró lo
+ * entró** — «Saldos que ya tenías y cargaste en el período · $22,2M — Nu, AFC Davibank». Vacía cuando entró lo
  * mismo o más (no faltó nada que explicar), sin fuentes, o con fuentes que esta versión no conoce o
- * que vienen en cero: la tarjeta no dice «$0» ni nombra un tipo que no sabe leer.
+ * que vienen en cero: la tarjeta no dice «$0» ni nombra un tipo que no sabe leer. Los créditos ya no
+ * son una fila: el desembolso suma en «Entró» y se dice bajo el encabezado.
  *
  * Existe porque «Te quedó −$11,5M» se lee como si se hubiera gastado de más, cuando lo que faltó lo
- * pagó un crédito o un saldo que ya estaba en las cuentas. Las cifras de arriba no cambian: esto
+ * pagó un saldo que ya estaba en las cuentas. Las cifras de arriba no cambian: esto
  * solo cuenta de dónde salió la diferencia (ver [DetalleDePeriodo.fuentesQueNoSonIngreso]).
  */
 internal fun filasDeLoQueFalto(detalle: DetalleDePeriodo): List<String> {
@@ -423,7 +424,6 @@ internal fun filasDeLoQueFalto(detalle: DetalleDePeriodo): List<String> {
     return detalle.fuentesQueNoSonIngreso.mapNotNull { fuente ->
         if (fuente.monto <= 0) return@mapNotNull null
         val rotulo = when (fuente.tipo) {
-            FUENTE_CREDITO -> "Créditos que te desembolsaron"
             FUENTE_SALDO_INICIAL -> "Saldos que ya tenías y cargaste en el período"
             else -> return@mapNotNull null
         }
@@ -458,8 +458,8 @@ private fun DeDondeSalioLoQueFalto(detalle: DetalleDePeriodo) {
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            text = "Esta plata entró a tus cuentas pero no cuenta como ingreso: un crédito es deuda y un " +
-                "saldo inicial ya era tuyo.",
+            text = "Esta plata ya estaba en tus cuentas cuando Movi la conoció, así que no cuenta como " +
+                "ingreso.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )
