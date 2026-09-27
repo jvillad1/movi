@@ -20,10 +20,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +61,7 @@ import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.TramoDelPatrimonio
 import com.jvillada.movi.ui.dashboard.cifraContando
+import com.jvillada.movi.ui.dashboard.CuentaHero
 import com.jvillada.movi.ui.dashboard.cuentasDelHero
 import com.jvillada.movi.ui.dashboard.destinoDelTramo
 import com.jvillada.movi.ui.dashboard.fraccionQueEntro
@@ -100,12 +106,17 @@ private val ALTO_MINIMO_DEL_HERO_VACIO = 238.dp
  *
  * Antes esta tarjeta tenía Tu plata, el uso condicionado, la lista de cuentas, el patrimonio neto
  * con su explicación y tres cifras más (ingresos, gastos, flujo). Todo eso sigue en el Inicio, pero
- * no acá: los tramos del patrimonio y las cuentas van a la tarjeta «Tu patrimonio», y el flujo lo dice
- * el veredicto en palabras. Lo que queda contesta una sola pregunta.
+ * no acá: los tramos del patrimonio van a la tarjeta «Tu patrimonio», y el flujo lo dice el veredicto
+ * en palabras. Lo que queda contesta una sola pregunta.
  *
  * - **La cifra entra contando** (ver [rememberProgresoDeEntrada]): una vez por proceso, y solo cuando
- *   las cuentas ya contestaron — mientras tanto, un guion. Tocarla lleva a Cuentas, que es donde está
- *   cada saldo.
+ *   las cuentas ya contestaron — mientras tanto, un guion. Toda la tarjeta lleva a «Tus períodos».
+ * - **Con más de una cuenta de Tu plata**, un chevron junto a la cifra despliega, inline, el saldo de
+ *   cada cuenta ([cuentasDelHero] — la MISMA lista que ya arma «Tu patrimonio», no una copia). Es el
+ *   pedido del dueño de vuelta en el hero: *«eso debería quedar explícito en la tarjeta de Tu Plata»*.
+ *   Con una sola cuenta no hay nada que desglosar, y el chevron ni se pinta — el desglose no
+ *   intercepta el toque de la tarjeta: es su propio nodo, para que tocar la cifra o el veredicto
+ *   siga yendo a «Tus períodos» como siempre.
  * - **El veredicto** es [veredictoDelInicio]: una frase, de una sola regla, coherente con la tarjeta
  *   del disponible de más abajo.
  * - **La barra** tiene dos tramos, entró (verde) y salió (coral), y crece al cargar. Debajo, las dos
@@ -163,6 +174,11 @@ internal fun HeroDeUnVistazo(
     }
 
     val balance = heroBalance(data.accounts.orEmpty())
+    // La MISMA lista que ya arma «Tu patrimonio» (ver [PatrimonioSection]) — no una copia de la
+    // query de saldos por cuenta. `null` mientras `accounts` no contesta; con una sola cuenta no
+    // hay nada que desglosar (ver el KDoc de esta función).
+    val cuentasHero = cuentasDelHero(data.accounts)
+    var desgloseAbierto by remember { mutableStateOf(false) }
     val entradaDeLaCifra = rememberProgresoDeEntrada("hero.cifra", listo = data.accounts != null)
     val entradaDeLaBarra = rememberProgresoDeEntrada("hero.barra", listo = data.summary != null)
     val veredicto = veredictoDelInicio(data, hoy)
@@ -229,12 +245,44 @@ internal fun HeroDeUnVistazo(
                 modifier = Modifier.testTag(TAG_ESQUELETO_CIFRA_DEL_HERO),
             )
         } else {
-            CifraProtagonista(
-                // Un guion mientras las cuentas no contestan (ni están en camino): un «$0» de
-                // 42 sp es la afirmación más fuerte de la pantalla, y sería falsa.
-                text = if (data.accounts == null) "—" else formatCOP(cifraContando(balance.tuPlata, entradaDeLaCifra)),
-                color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CifraProtagonista(
+                    // Un guion mientras las cuentas no contestan (ni están en camino): un «$0» de
+                    // 42 sp es la afirmación más fuerte de la pantalla, y sería falsa.
+                    text = if (data.accounts == null) "—" else formatCOP(cifraContando(balance.tuPlata, entradaDeLaCifra)),
+                    color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
+                )
+                // Solo con más de una cuenta: con una sola, el desglose diría exactamente lo que
+                // ya dice la cifra grande (mismo criterio que [PatrimonioSection]). El ícono es SU
+                // PROPIO nodo semántico (con su propio `clickable`) — a propósito, para no volver
+                // clickeable la cifra ni el resto de la fila: la tarjeta entera sigue yendo a «Tus
+                // períodos» al tocar la cifra, el veredicto o la barra (ver
+                // `InicioDeUnVistazoEnPantallaTest`).
+                if (cuentasHero != null && cuentasHero.size > 1) {
+                    Spacer(Modifier.width(Movi.espacios.corto))
+                    val rotulo = if (desgloseAbierto) "Ocultar el detalle de tu plata" else "Ver el detalle de tu plata"
+                    Icon(
+                        imageVector = if (desgloseAbierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                        contentDescription = rotulo,
+                        tint = Movi.colores.textoMedio,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = rotulo,
+                                onClick = { desgloseAbierto = !desgloseAbierto },
+                            ),
+                    )
+                }
+            }
+            if (desgloseAbierto && cuentasHero != null && cuentasHero.size > 1) {
+                Spacer(Modifier.height(Movi.espacios.minimo))
+                Column {
+                    cuentasHero.forEach { cuenta ->
+                        FilaDeCuentaDelHero(cuenta, modifier = Modifier.padding(bottom = Movi.espacios.minimo))
+                    }
+                }
+            }
         }
         if (resumenCargando) {
             Spacer(Modifier.height(Movi.espacios.medio))
@@ -298,6 +346,31 @@ internal fun HeroDeUnVistazo(
                 )
             }
         }
+    }
+}
+
+/**
+ * Una fila del desglose de «Tu plata»: el nombre de la cuenta y su saldo ya formateado
+ * ([CuentaHero]). La usan el hero (desplegado inline, ver [HeroDeUnVistazo]) y «Tu patrimonio»
+ * ([PatrimonioSection]) — mismo dato ([cuentasDelHero]), mismo diseño de fila, para que las dos
+ * listas no puedan desalinearse entre sí. [modifier] es lo único que cambia entre las dos: el
+ * hero no sangra, «Tu patrimonio» sangra bajo su tramo «Tu plata».
+ */
+@Composable
+private fun FilaDeCuentaDelHero(cuenta: CuentaHero, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = cuenta.nombre,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            maxLines = 1,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(Movi.espacios.corto))
+        Cifra(cuenta.monto, Movi.textos.apoyo, color = Movi.colores.textoMedio)
     }
 }
 
@@ -543,9 +616,9 @@ private fun CampoParaPreguntar(onClick: () -> Unit) {
  *   pérdida de este período. Misma regla que siempre tuvo esta cifra en el hero y en Cuentas.
  * - Los tramos van con su nombre —tu plata, uso condicionado, bienes, deudas— y cada uno lleva a
  *   donde se mira: las deudas a Créditos, lo demás a Cuentas ([destinoDelTramo]).
- * - Debajo de «Tu plata», el saldo de cada cuenta. Lo pidió el dueño («no el total sino el disponible
- *   en cada cuenta») cuando vivía en el hero; el hero ahora contesta una sola pregunta y la lista se
- *   mudó acá, al lado de la cifra que desglosa.
+ * - Debajo de «Tu plata», el saldo de cada cuenta, siempre a la vista (a diferencia del hero, donde
+ *   el mismo desglose —[FilaDeCuentaDelHero], la MISMA lista— se pliega bajo un chevron: ver
+ *   [HeroDeUnVistazo]). Lo pidió el dueño («no el total sino el disponible en cada cuenta»).
  */
 @Composable
 internal fun PatrimonioSection(
@@ -592,22 +665,10 @@ internal fun PatrimonioSection(
                 FilaDeTramo(tramo) { onNavigate(destinoDelTramo(tramo)) }
                 if (tramo.nombre == "Tu plata" && cuentas.size > 1) {
                     cuentas.forEach { cuenta ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = Movi.espacios.margen, bottom = Movi.espacios.minimo),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = cuenta.nombre,
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                                maxLines = 1,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Spacer(Modifier.width(Movi.espacios.corto))
-                            Cifra(cuenta.monto, Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                        }
+                        FilaDeCuentaDelHero(
+                            cuenta,
+                            modifier = Modifier.padding(start = Movi.espacios.margen, bottom = Movi.espacios.minimo),
+                        )
                     }
                 }
             }
