@@ -35,16 +35,18 @@ import java.time.ZoneId
  * 1. **el movimiento de su sello**, si lo tiene — y lo que Movi emparejó solo cuenta como un sello
  *    (`emparejadasComoSellos`): el checklist ya lo da por pagado;
  * 2. si falta monto (sellado sin movimiento, sin sellar, o pagado en partes), **los candidatos del
- *    «¿Es este?» cuyo NOMBRE pega con la regla** — el mismo [candidatosPuntuados] que la pantalla
- *    de Recurrentes usa para proponer, con sus mismas cuatro puertas, pero sin bajar a la seña
- *    mínima de esa pantalla (nombre o categoría): compartir solo la categoría (y la cuenta) sirve
- *    para proponerle el movimiento al dueño, no para darlo por pagado acá. La regla «Mercado» de
- *    $2.000.000 en «Comida» absorbía así todo el gasto de Comida del período y el variable
- *    —«Período/Semana/Hoy»— se quedaba en $0. Un movimiento que solo *empieza* con el nombre
- *    («Mercado Éxito») completa el ítem únicamente si el pago ya se ve por su nombre (un sello con
- *    movimiento, o un candidato que lo dice entero): «Colegio Hija» $3.000.000 + «Colegio Hija ·
- *    parte…» $1.000.000 sí; «Mercado Éxito» contra un «Mercado» sin pagos, no. No hay un
- *    emparejador nuevo.
+ *    «¿Es este?» cuya IDENTIDAD pega tan fuerte como el nombre** (`CandidatoPuntuado.identidadFuerte`
+ *    — el nombre, o Ola V el destino asociado con el monto EXACTO) — el mismo [candidatosPuntuados]
+ *    que la pantalla de Recurrentes usa para proponer, pero sin bajar a la seña mínima de esa
+ *    pantalla (nombre, categoría o destino): compartir solo la categoría (y la cuenta), o el
+ *    destino sin el monto exacto, sirve para proponerle el movimiento al dueño, no para darlo por
+ *    pagado acá. La regla «Mercado» de $2.000.000 en «Comida» absorbía así todo el gasto de Comida
+ *    del período y el variable —«Período/Semana/Hoy»— se quedaba en $0; y una regla con destino
+ *    asociado absorbía cualquier transferencia a esa persona, aunque fuera por otro motivo (ver el
+ *    KDoc de `identidadFuerte`). Un movimiento que solo *empieza* con el nombre («Mercado Éxito»)
+ *    completa el ítem únicamente si el pago ya se ve por su nombre (un sello con movimiento, o un
+ *    candidato que lo dice entero): «Colegio Hija» $3.000.000 + «Colegio Hija · parte…» $1.000.000
+ *    sí; «Mercado Éxito» contra un «Mercado» sin pagos, no. No hay un emparejador nuevo.
  *
  *    Costo aceptado: el faltante de un ítem ya sellado que se pagó con un movimiento que NO dice el
  *    nombre («Transferencia colegio») no se le propone al dueño —un sello guarda un solo
@@ -149,6 +151,10 @@ fun parteFijaDelChecklist(
     zone: ZoneId = AppClock.zone,
     automaticas: Set<Pair<String, String>> = emptySet(),
     rechazados: Set<Pair<String, String>> = emptySet(),
+    // Ola V: mismo parámetro que `candidatosPuntuados` — un movimiento que solo trae el número de
+    // un destino asociado a la regla absorbe el fijo igual que si dijera su nombre. Ver el KDoc de
+    // `RecurringRule.destinoConocidoId`.
+    destinos: Map<String, com.jvillada.movi.shared.model.DestinoConocido> = emptyMap(),
 ): Map<String, Long> {
     val porId = eventos.associateBy { it.id }
     val reglaPorId = reglas.associateBy { it.id }
@@ -212,25 +218,29 @@ fun parteFijaDelChecklist(
     val elegibles = eventos.filter { (cuentaComoGastoVariable(it) || esCuotaQueSaleDelBolsillo(it)) && it.id !in parte }
     val pares = falta.keys.flatMap { ruleId ->
         val regla = reglaPorId.getValue(ruleId)
-        val candidatos = candidatosPuntuados(regla, vencimientos.getValue(ruleId), elegibles, usados, zone, settings = settings)
+        val candidatos = candidatosPuntuados(regla, vencimientos.getValue(ruleId), elegibles, usados, zone, settings = settings, destinos = destinos)
             // El dueño ya dijo «no fue este» para este par exacto: no puede absorber el ítem, ni
-            // siquiera por nombre. Antes del filtro de SENA_DEL_NOMBRE para que tampoco cuente como
-            // evidencia de que el pago «ya se ve» (yaSeVeElPago, más abajo).
+            // siquiera por nombre. Antes del filtro de `identidadFuerte` para que tampoco cuente
+            // como evidencia de que el pago «ya se ve» (yaSeVeElPago, más abajo).
             .filterNot { (ruleId to it.event.id) in rechazados }
-        // Solo el NOMBRE absorbe. Un movimiento que comparte apenas la categoría (y la cuenta) no es
-        // evidencia de que pague este fijo: si lo absorbiera, «Mercado» ($2.000.000, sin pagar) se
-        // comería los gastos de Comida y el variable quedaría en $0 mientras el fijo sigue restando
-        // sus $2.000.000 enteros. Ese movimiento sigue siendo variable y el checklist se lo propone
-        // al dueño; al confirmarlo queda sellado y ahí sí sale.
+        // Solo lo que identifica tan bien como el NOMBRE absorbe (`identidadFuerte`: el nombre, o
+        // Ola V — el destino asociado con el monto EXACTO). Un movimiento que comparte apenas la
+        // categoría (y la cuenta) no es evidencia de que pague este fijo: si lo absorbiera,
+        // «Mercado» ($2.000.000, sin pagar) se comería los gastos de Comida y el variable quedaría
+        // en $0 mientras el fijo sigue restando sus $2.000.000 enteros. Ese movimiento sigue siendo
+        // variable y el checklist se lo propone al dueño; al confirmarlo queda sellado y ahí sí
+        // sale. Por el mismo motivo el destino SIN monto exacto tampoco basta acá: la esposa del
+        // dueño recibe plata por motivos distintos a la misma cuenta, y `identidadFuerte` ya exige
+        // el monto exacto para el destino — ver su KDoc en `OccurrenceMatching.kt`.
         //
         // Un movimiento que solo EMPIEZA con el nombre («Mercado Éxito» contra «Mercado») tampoco
         // basta por sí solo: es otra compra que nombra el mismo lugar. Completa el ítem únicamente
         // si el pago ya está a la vista por su nombre: un sello con movimiento, o un candidato que
         // dice el nombre entero («Colegio Hija» $3.000.000 + «Colegio Hija · parte desde
         // Bancolombia» $1.000.000).
-        val yaSeVeElPago = ruleId in conPagoYaVisto || candidatos.any { it.senas >= SENA_DEL_NOMBRE }
+        val yaSeVeElPago = ruleId in conPagoYaVisto || candidatos.any { it.identidadFuerte }
         candidatos
-            .filter { it.senas >= SENA_DEL_NOMBRE || (yaSeVeElPago && empiezaConElNombre(regla, it.event)) }
+            .filter { it.identidadFuerte || (yaSeVeElPago && empiezaConElNombre(regla, it.event)) }
             .map { ruleId to it }
     }
     val orden = compareBy(ORDEN_DE_CANDIDATOS) { par: Pair<String, CandidatoPuntuado> -> par.second }

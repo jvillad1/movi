@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.KnownDestinations
+import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.DestinoConocido
@@ -133,6 +134,14 @@ fun Route.destinoRoutes() {
             val uid = call.userId()
             val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest, "Falta el id")
             val borradas = dbQuery {
+                // Ola V — las reglas recurrentes que apuntaban acá NO se borran con el destino: se
+                // sueltan, mismo criterio que ya usa `AccountRoutes` con `RecurringRule.accountId`
+                // (ver su KDoc). «Tía Caro, día 1, $100.000» sigue siendo un plan real aunque el
+                // dueño borre el registro de «Caro» — lo único que se pierde es la seña extra del
+                // número de cuenta en el emparejador, no la regla.
+                RecurringRules.update({
+                    (RecurringRules.userId eq uid) and (RecurringRules.destinoConocidoId eq id)
+                }) { it[RecurringRules.destinoConocidoId] = null }
                 KnownDestinations.deleteWhere { (KnownDestinations.id eq id) and (KnownDestinations.userId eq uid) }
             }
             // Borrar un destino **no toca un solo movimiento**: lo que se olvida es el nombre y la

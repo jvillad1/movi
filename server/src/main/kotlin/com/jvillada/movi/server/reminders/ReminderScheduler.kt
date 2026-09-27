@@ -344,6 +344,10 @@ private fun ResultRow.toRulePair(): Pair<RecurringRule, String?> {
         // uno y no en el otro es exactamente cómo «Próximos pagos» y el correo terminan diciendo
         // cosas distintas del mismo pago.
         activeFrom = this[RecurringRules.activeFrom],
+        // Ola V: por el mismo motivo que `activeFrom` — este barrido no llama a `candidatosPuntuados`
+        // hoy, pero si algún día lo hiciera (para decidir SI avisar), que ya lea la columna evita
+        // exactamente la trampa que el comentario de arriba describe.
+        destinoConocidoId = this[RecurringRules.destinoConocidoId],
     )
     val lastReminded = this[RecurringRules.lastRemindedPeriod]
     return rule to lastReminded

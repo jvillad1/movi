@@ -29,8 +29,14 @@ import kotlin.test.assertEquals
  * ficha ve el dueño.
  *
  * PR 2 del rediseño de Recurrentes (2026-09): «Recurrentes» dejó de tener entrada acá. Ola C: salió
- * también todo lo que ahora es una pestaña (Cuentas, el cuadre, Créditos y «Cuentas de otros» son
- * Patrimonio; Presupuestos es Plan), y la pantalla pasó a abrirse desde el avatar.
+ * también todo lo que ahora es una pestaña (Cuentas, el cuadre, Créditos y Presupuestos), y la
+ * pantalla pasó a abrirse desde el avatar.
+ *
+ * **Ola V — «Cuentas de otros» es la única excepción a esa regla, y es a propósito.** Sigue siendo
+ * la pantalla de Patrimonio que ya era (`Screen.Destinos`, con su pestaña de siempre): esta ficha
+ * no la duplica, es una SEGUNDA puerta hacia la misma pantalla. Se agregó porque el dueño la buscó
+ * en Ajustes y no la encontró — Patrimonio → «Te deben» era la única entrada, un lugar que no dice
+ * «registra quién es esta cuenta».
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h731dp-xhdpi")
@@ -38,9 +44,11 @@ class MasScreenTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val lasDeAjustes = listOf("Perfil", "Categorías", "Documentos", "Compartir", "Movi AI", "Captura del banco")
+    private val lasDeAjustes = listOf(
+        "Perfil", "Categorías", "Documentos", "Cuentas de otros", "Compartir", "Movi AI", "Captura del banco",
+    )
     private val lasQueSonPestana = listOf(
-        "Cuentas", "Cuadre de saldos", "Presupuestos", "Créditos", "Cuentas de otros", "Recurrentes",
+        "Cuentas", "Cuadre de saldos", "Presupuestos", "Créditos", "Recurrentes",
     )
 
     @Test
@@ -101,6 +109,19 @@ class MasScreenTest {
         composeRule.onNodeWithText("Perfil", useUnmergedTree = true).performClick()
 
         assertEquals(Screen.Profile, navegoA)
+    }
+
+    /** Ola V: la segunda puerta hacia `Screen.Destinos` — ver el KDoc de la clase. */
+    @Test
+    fun `tocar Cuentas de otros abre Destinos`() {
+        var navegoA: Screen? = null
+        composeRule.setContent {
+            MoviTheme { MasScreen(onNavigate = { navegoA = it }) }
+        }
+
+        composeRule.onNodeWithText("Cuentas de otros", useUnmergedTree = true).performClick()
+
+        assertEquals(Screen.Destinos, navegoA)
     }
 
     /**

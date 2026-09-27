@@ -309,6 +309,10 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 dayOfMonth = fila[RecurringRules.dayOfMonth],
                 type = TransactionType.valueOf(fila[RecurringRules.type]),
                 activeFrom = fila[RecurringRules.activeFrom],
+                // Ola V: mismo motivo que en `ReminderScheduler.toRulePair` — este mapeador no
+                // decide ocurrencias (eso ya lo resolvió `estadosDeLasOcurrenciasReales` arriba),
+                // pero que quede completo evita el «campo leído en uno y no en el otro».
+                destinoConocidoId = fila[RecurringRules.destinoConocidoId],
             )
             // `null` = este período no tiene ninguna ocurrencia que preguntar (un período acortado
             // a mano que no alcanza a contener el día de la regla). Ahí no hay sello que mirar.

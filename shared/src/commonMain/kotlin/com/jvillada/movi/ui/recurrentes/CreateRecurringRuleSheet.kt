@@ -23,6 +23,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
+import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Subscription
@@ -165,6 +166,18 @@ fun CreateRecurringRuleSheet(
     // vino a sacar, en chiquito.
     var cuentasLeidas by remember { mutableStateOf(false) }
     var fallaronLasCuentas by remember { mutableStateOf(false) }
+    // Ola V: a qué destino conocido va este traspaso — solo tiene columna en `RecurringRule`
+    // (una suscripción no la tiene, ver `existingSub` más abajo), así que solo se prellena desde
+    // `existing`. Mismo criterio de tres estados que la cuenta, ver [elDuenoEligioSinDestino] y
+    // [destinoParaElWire].
+    var destinoConocidoId by remember { mutableStateOf(existing?.destinoConocidoId) }
+    var destinosConocidos by remember { mutableStateOf<List<DestinoConocido>>(emptyList()) }
+    var destinoPickerOpen by remember { mutableStateOf(false) }
+    var elDuenoEligioSinDestino by remember { mutableStateOf(false) }
+    // Revisión final, M3: distingue «todavía no llegó / falló» de «de verdad no tiene ninguno» —
+    // mismo criterio que [fallaronLasCuentas]. Sin esto, una lectura fallida se leía igual que
+    // «Aún no tienes ninguna cuenta guardada», la misma mentira en chiquito que la cuenta ya evita.
+    var fallaronLosDestinos by remember { mutableStateOf(false) }
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existing?.remindMe ?: true) }
     var currency by remember { mutableStateOf(existingSub?.currency ?: "COP") }
@@ -195,6 +208,14 @@ fun CreateRecurringRuleSheet(
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { list -> accounts = list; cuentasLeidas = true }
             .onFailure { fallaronLasCuentas = true }
+    }
+    // Ola V: los destinos conocidos, para el selector de abajo. Si falla, el selector se queda
+    // sin nombres para elegir uno nuevo — el que la regla ya tenía se conserva y se manda de
+    // vuelta tal cual, mismo criterio que las cuentas de arriba.
+    LaunchedEffect(Unit) {
+        runCatching { Repositories.wallets.getDestinos() }
+            .onSuccess { destinosConocidos = it }
+            .onFailure { fallaronLosDestinos = true }
     }
 
     // Ola 9 · D: si el nombre coincide con una categoría del catálogo, se propone esa en vez de
@@ -349,6 +370,11 @@ fun CreateRecurringRuleSheet(
                         // acá no se habló de cuentas. Ver [cuentaParaElWire] — antes esto era
                         // `accountId ?: ""` y una lectura fallida bastaba para borrar la cuenta.
                         accountId = cuentaParaElWire(accountId, elDuenoEligioSinCuenta),
+                        // Ola V: los mismos tres estados, para el destino conocido. Ver
+                        // [destinoParaElWire] — y, como con la cuenta, `destinoConocidoId` ya
+                        // quedó en `null` si el tipo dejó de ser GASTO (ver el efecto de arriba),
+                        // así que esto nunca manda un destino para un ingreso.
+                        destinoConocidoId = destinoParaElWire(destinoConocidoId, elDuenoEligioSinDestino),
                         // **Desde cuándo corre la regla**: el PERÍODO del movimiento que la
                         // originó es el primero que existe, y los anteriores no (ver
                         // `RecurringRule.activeFrom`). Una regla escrita a mano desde Recurrentes
@@ -744,6 +770,29 @@ fun CreateRecurringRuleSheet(
                     usoAnterior = uso
                 }
             }
+            // Ola V: mismo agujero que el de arriba, para el destino conocido — si el tipo deja
+            // de ser GASTO (o esto pasa a guardarse como suscripción), la sección desaparece pero
+            // el estado seguía vivo, así que un vaivén Gasto→Ingreso→Gasto sin tocar el selector
+            // dejaba la elección puesta. `seMuestra` y no `uso` porque acá lo que importa no es
+            // PARA QUÉ sirve la cuenta, es si la sección de destino existe en pantalla.
+            //
+            // **`elDuenoEligioSinDestino = true`, no `false`** (revisión final, M2): al editar una
+            // regla que YA tenía un destino asociado, pasar a Ingreso tiene que mandar `""` —«quitá
+            // el destino»— y no `null` —«no lo toques»—, porque el `null` habría dejado el destino
+            // puesto en el server sobre una regla que ahora es de ingreso. `vaHaciaElDestino` nunca
+            // lo iba a leer ahí (exige GASTO), pero si más adelante la regla vuelve a Gasto sin
+            // tocar el selector, el destino viejo reaparecía solo, sin que el dueño lo hubiera
+            // elegido de nuevo. En un alta (sin regla previa) `""` y `null` significan lo mismo,
+            // así que esto no le cambia nada a quien crea una regla nueva.
+            val seMuestraElDestino = selectedType == TransactionType.EXPENSE && !seGuardaComoSuscripcion
+            var seMostrabaAntes by remember { mutableStateOf(seMuestraElDestino) }
+            LaunchedEffect(seMuestraElDestino) {
+                if (!seMuestraElDestino && seMostrabaAntes) {
+                    destinoConocidoId = null
+                    elDuenoEligioSinDestino = true
+                }
+                seMostrabaAntes = seMuestraElDestino
+            }
             AccountPickerField(
                 accounts = accounts,
                 // Ola 15: una regla de gasto se cobra de donde sale plata (efectivo,
@@ -775,6 +824,32 @@ fun CreateRecurringRuleSheet(
             )
 
             if (!seGuardaComoSuscripcion) {
+                // --- DESTINO CONOCIDO (opcional) ---
+                //
+                // Ola V: un gasto puede ser un traspaso a un tercero ya registrado en «Cuentas de
+                // otros» («Tía Caro» → el destino «Caro»). Asociarlo acá es lo que le permite al
+                // emparejador reconocer un pago futuro por el número de esa cuenta, aunque el
+                // texto del banco no repita el nombre de la regla (ver `OccurrenceMatching.kt`).
+                //
+                // Solo en GASTO: una suscripción no tiene esta columna, y un ingreso no es algo
+                // que se «mande» a nadie (mismo criterio que `vaHaciaElDestino` en `:core`).
+                if (selectedType == TransactionType.EXPENSE) {
+                    Spacer(Modifier.height(18.dp))
+                    DestinoConocidoPickerField(
+                        destinos = destinosConocidos,
+                        selectedId = destinoConocidoId,
+                        fallaronLosDestinos = fallaronLosDestinos,
+                        open = destinoPickerOpen,
+                        enabled = !saving,
+                        onToggle = { destinoPickerOpen = !destinoPickerOpen },
+                        onPick = {
+                            destinoConocidoId = it
+                            elDuenoEligioSinDestino = it == null
+                            destinoPickerOpen = false
+                        },
+                    )
+                }
+
                 Spacer(Modifier.height(18.dp))
 
                 // --- RECORDATORIO ---
@@ -970,6 +1045,91 @@ private fun AccountPickerField(
                     onToggle = { verTodas = !verTodas },
                     modifier = Modifier.padding(horizontal = 14.dp),
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Ola V — **a qué destino conocido va este traspaso, si el dueño ya lo registró.** Mismo dibujo y
+ * mismo criterio que [AccountPickerField]: se abre y se cierra en su lugar (nada de hoja sobre
+ * hoja) y «Sin destino» es una opción de primera clase, no un error.
+ *
+ * **A diferencia de la cuenta, no hay «se conserva sin nombre»**: un destino que ya no resuelve
+ * (la lista falló, o el dueño lo borró) simplemente no se ofrece — el id sigue viajando en el
+ * `save()` de todos modos (ver `destinoConocidoId` en la hoja), así que no se pierde nada; lo que
+ * no hay es un renglón que mostrar por él. Es una decisión más chica que la de la cuenta porque
+ * esto es una seña EXTRA del emparejador, no un dato que la regla necesite para tener sentido.
+ */
+@Composable
+private fun DestinoConocidoPickerField(
+    destinos: List<DestinoConocido>,
+    selectedId: String?,
+    /** Revisión final, M3: ¿la lectura falló? Distingue «todavía no llegó / falló» de «no tiene». */
+    fallaronLosDestinos: Boolean,
+    open: Boolean,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+    onPick: (String?) -> Unit,
+) {
+    val selected = destinos.firstOrNull { it.id == selectedId }
+    val destinoSinNombre = selected == null && selectedId != null
+    // Con un destino ya puesto el selector se abre aunque la lista esté vacía o no haya llegado,
+    // por el mismo motivo que en `AccountPickerField`: quitarlo tiene que poder pedirse siempre.
+    val sePuedeElegir = destinos.isNotEmpty() || selectedId != null
+    SheetSectionLabel("DESTINO CONOCIDO (OPCIONAL)")
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Si esto es una transferencia a alguien que ya tienes guardado en «Cuentas de otros», " +
+            "asócialo: Movi va a reconocer el pago aunque el banco no repita este nombre.",
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
+        modifier = Modifier.padding(bottom = 8.dp),
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled && sePuedeElegir, onClick = onToggle)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = when {
+                    selected != null -> selected.nombre
+                    destinoSinNombre -> "Se conserva el destino elegido"
+                    fallaronLosDestinos -> "No pudimos cargar tus cuentas guardadas"
+                    destinos.isEmpty() -> "Aún no tienes ninguna cuenta guardada"
+                    else -> "Sin destino"
+                },
+                style = Movi.textos.cuerpo,
+                color = if (selected != null) Movi.colores.texto else Movi.colores.textoMedio,
+                modifier = Modifier.weight(1f),
+            )
+            if (sePuedeElegir) {
+                Text(if (open) "Cerrar" else "Elegir", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+        }
+    }
+    if (open && sePuedeElegir) {
+        Spacer(Modifier.height(6.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Movi.colores.tarjeta)
+                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp)),
+        ) {
+            AccountPickerRow(label = "Sin destino", selected = selectedId == null) { onPick(null) }
+            destinos.forEach { destino ->
+                AccountPickerRow(label = destino.nombre, selected = destino.id == selectedId) {
+                    onPick(destino.id)
+                }
             }
         }
     }

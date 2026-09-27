@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.KnownDestinations
 import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
@@ -90,9 +91,20 @@ class ReminderRoutesTest {
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards,
+                KnownDestinations,
             )
-            SchemaUtils.drop(Cards, Credits, RecurringOccurrences, OccurrenceRejections, RecurringRules, Users, Accounts)
-            SchemaUtils.create(Users, Accounts, RecurringRules, RecurringOccurrences, OccurrenceRejections, Credits, Cards)
+            // Ola V: `KnownDestinations` entra en el MISMO ciclo drop+create que el resto — nace
+            // en la primera prueba de la clase y sigue viva (H2 `DB_CLOSE_DELAY=-1` conserva los
+            // datos entre pruebas, no solo el esquema), así que sin el drop la segunda prueba que
+            // llama a `sembrarDestino` con el mismo id choca contra la fila que dejó la anterior.
+            SchemaUtils.drop(
+                Cards, Credits, RecurringOccurrences, OccurrenceRejections, RecurringRules,
+                KnownDestinations, Users, Accounts,
+            )
+            SchemaUtils.create(
+                Users, Accounts, RecurringRules, RecurringOccurrences, OccurrenceRejections,
+                Credits, Cards, KnownDestinations,
+            )
 
             Users.insert {
                 it[id]           = userAId
@@ -547,6 +559,139 @@ class ReminderRoutesTest {
         assertEquals(null, editada.body<RecurringRule>().accountId)
     }
 
+    // ── Ola V: el destino conocido de la regla ────────────────────────────────────────
+    //
+    // Mismos tres estados de wire que la cuenta, y por el mismo motivo — ver los tests de arriba
+    // y el KDoc de `RecurringRule.destinoConocidoId`.
+
+    private fun sembrarDestino(
+        id: String,
+        owner: String,
+        nombre: String = "Caro",
+        numero: String = "31973270756",
+    ) = transaction {
+        KnownDestinations.insert {
+            it[KnownDestinations.id] = id
+            it[KnownDestinations.userId] = owner
+            it[KnownDestinations.nombre] = nombre
+            it[KnownDestinations.numero] = numero
+            it[KnownDestinations.createdAt] = System.currentTimeMillis()
+        }
+    }
+
+    @Test
+    fun `una regla guarda el destino cuando es del mismo usuario`() = testApplication {
+        sembrarDestino("dst-a", userAId)
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val creada = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Tía Caro", "Familia", 100_000, 1,
+                    TransactionType.EXPENSE, destinoConocidoId = "dst-a",
+                ),
+            )
+        }.body<RecurringRule>()
+        assertEquals("dst-a", creada.destinoConocidoId)
+
+        val listadas = client.get("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<RecurringRule>>()
+        assertEquals("dst-a", listadas.first { it.id == creada.id }.destinoConocidoId)
+    }
+
+    /** Un destino de OTRO usuario no se guarda — mismo criterio que una cuenta ajena. */
+    @Test
+    fun `un destino ajeno no se guarda, y la regla se crea igual sin destino`() = testApplication {
+        sembrarDestino("dst-b", userBId)
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val resp = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Tía Caro", "Familia", 100_000, 1,
+                    TransactionType.EXPENSE, destinoConocidoId = "dst-b",
+                ),
+            )
+        }
+        assertEquals(HttpStatusCode.Created, resp.status)
+        assertEquals(null, resp.body<RecurringRule>().destinoConocidoId)
+    }
+
+    /** Un PUT sin `destinoConocidoId` (`null`) conserva el que la regla ya tenía. */
+    @Test
+    fun `un PUT sin destinoConocidoId conserva el destino que ya tenia la regla`() = testApplication {
+        sembrarDestino("dst-a", userAId)
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val creada = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Tía Caro", "Familia", 100_000, 1,
+                    TransactionType.EXPENSE, destinoConocidoId = "dst-a",
+                ),
+            )
+        }.body<RecurringRule>()
+
+        // Cuerpo tal cual lo manda un cliente que no conoce el campo: sin `destinoConocidoId`.
+        val cuerpoViejo = """
+            {"id":"${creada.id}","name":"Tía Caro","category":"Familia","amount":150000,
+             "dayOfMonth":1,"type":"EXPENSE","remindMe":true}
+        """.trimIndent().replace("\n", "")
+        val respuesta = client.put("/api/recurring-rules/${creada.id}") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            setBody(TextContent(cuerpoViejo, ContentType.Application.Json))
+        }
+        assertEquals(HttpStatusCode.OK, respuesta.status, respuesta.bodyAsText())
+        assertEquals("dst-a", respuesta.body<RecurringRule>().destinoConocidoId)
+
+        val guardada = client.get("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<RecurringRule>>().first { it.id == creada.id }
+        assertEquals("dst-a", guardada.destinoConocidoId, "el destino sobrevive al cliente viejo")
+        assertEquals(150_000L, guardada.amount, "y el cambio que sí pidió se guardó")
+    }
+
+    /** Y `destinoConocidoId = ""` sí lo quita: es una elección explícita del dueño. */
+    @Test
+    fun `un PUT con destinoConocidoId vacio quita el destino`() = testApplication {
+        sembrarDestino("dst-a", userAId)
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val creada = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Tía Caro", "Familia", 100_000, 1,
+                    TransactionType.EXPENSE, destinoConocidoId = "dst-a",
+                ),
+            )
+        }.body<RecurringRule>()
+
+        val respuesta = client.put("/api/recurring-rules/${creada.id}") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(creada.copy(destinoConocidoId = ""))
+        }
+        assertEquals(HttpStatusCode.OK, respuesta.status)
+        assertEquals(null, respuesta.body<RecurringRule>().destinoConocidoId)
+    }
+
     // ── «Esto ya ocurrió» ────────────────────────────────────────────────────────────
     //
     // El caso del dueño, de punta a punta: su recurrente de ingreso aparecía vencido mientras el
@@ -581,18 +726,131 @@ class ReminderRoutesTest {
         accountId: String = accountOwnedByA,
         owner: String = userAId,
         transferId: String? = null,
+        type: String = "INCOME",
     ) = transaction {
         Events.insert {
             it[Events.id] = id
             it[Events.userId] = owner
             it[Events.accountId] = accountId
-            it[Events.type] = "INCOME"
+            it[Events.type] = type
             it[Events.amount] = amount
             it[Events.category] = category
             it[Events.description] = description
             it[Events.timestamp] = appDateToEpochMillis(hoy)
             it[Events.transferId] = transferId
         }
+    }
+
+    // ── Ola V, de punta a punta: el destino asociado a través de /api/payments/occurrences ──
+    //
+    // El caso del brief: «Tía Caro» ($100.000/mes) asociada al destino «Caro» (*31973270756). Acá
+    // se prueba lo que de verdad importa — el endpoint que lee el checklist —, no solo las
+    // funciones sueltas de `OccurrenceMatchingTest`.
+
+    /** Con el MONTO EXACTO, el traspaso se empareja solo: `occurred = true` sin que nadie tildara nada. */
+    @Test
+    fun `un traspaso al destino asociado por el monto exacto cierra la regla sola`() = testApplication {
+        sembrarDestino("dst-caro", userAId, nombre = "Caro", numero = "31973270756")
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val tiaCaro = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Tía Caro", "Familia", 100_000, hoy.dayOfMonth,
+                    TransactionType.EXPENSE, destinoConocidoId = "dst-caro",
+                ),
+            )
+        }.body<RecurringRule>()
+        // El texto real de un SMS de Bancolombia: nombra el número, nunca «Tía Caro».
+        sembrarMovimiento(
+            "ev-tia-caro", amount = 100_000, category = "Otra categoría",
+            description = "Transferencia a la cuenta *31973270756", type = "EXPENSE",
+        )
+
+        val estado = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == tiaCaro.id }
+
+        assertTrue(estado.occurred, "el monto exacto tiene que cerrar la regla sola")
+        assertEquals("ev-tia-caro", estado.eventId)
+    }
+
+    /**
+     * Con OTRO monto a la MISMA cuenta (el mercado, no la mesada de la tía), el checklist NO lo da
+     * por pagado solo — pero sí se lo propone al dueño como candidato. Es exactamente el escenario
+     * que motivó el arreglo: la cuenta de «Caro» recibe plata por motivos distintos.
+     */
+    @Test
+    fun `un traspaso al destino asociado por OTRO monto no cierra la regla, pero se propone`() = testApplication {
+        // Ola V: número PROPIO de esta prueba — `Events` no se limpia entre pruebas de esta clase
+        // (solo `RecurringRules`/`KnownDestinations` sí, ver `setUp`), así que dos pruebas que
+        // compartieran el mismo número de cuenta se contaminarían la una a la otra por la seña del
+        // destino, que empareja por el número sin importar en qué prueba se sembró el movimiento.
+        sembrarDestino("dst-caro-2", userAId, nombre = "Caro", numero = "31973270757")
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val tiaCaro = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Tía Caro", "Familia", 100_000, hoy.dayOfMonth,
+                    TransactionType.EXPENSE, destinoConocidoId = "dst-caro-2",
+                ),
+            )
+        }.body<RecurringRule>()
+        sembrarMovimiento(
+            "ev-mercado", amount = 2_000_000, category = "Otra categoría",
+            description = "Transferencia a la cuenta *31973270757", type = "EXPENSE",
+        )
+
+        val estado = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == tiaCaro.id }
+
+        assertFalse(estado.occurred, "sin el monto exacto, el destino no puede cerrar la regla solo")
+        assertTrue(estado.candidates.any { it.id == "ev-mercado" }, "pero sí se propone")
+    }
+
+    /**
+     * **El escenario del brief.** «Tía Caro» sigue SIN pagar este mes hasta que la mesada de
+     * verdad llega, con el monto exacto — la misma cuenta que ya recibió el mercado (arriba).
+     */
+    @Test
+    fun `una vez que llega el monto exacto, Tia Caro sale pagada aunque antes hubiera otro traspaso`() = testApplication {
+        sembrarDestino("dst-caro-3", userAId, nombre = "Caro", numero = "31973270758")
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val tiaCaro = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Tía Caro", "Familia", 100_000, hoy.dayOfMonth,
+                    TransactionType.EXPENSE, destinoConocidoId = "dst-caro-3",
+                ),
+            )
+        }.body<RecurringRule>()
+        sembrarMovimiento(
+            "ev-mercado-2", amount = 2_000_000, category = "Otra categoría",
+            description = "Transferencia a la cuenta *31973270758", type = "EXPENSE",
+        )
+        sembrarMovimiento(
+            "ev-mesada", amount = 100_000, category = "Otra categoría",
+            description = "Transferencia a la cuenta *31973270758", type = "EXPENSE",
+        )
+
+        val estado = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == tiaCaro.id }
+
+        assertTrue(estado.occurred)
+        assertEquals("ev-mesada", estado.eventId, "el de monto exacto, no el del mercado")
     }
 
     /**

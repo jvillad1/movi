@@ -13,6 +13,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.server.reminders.loadOccurredBy
 import com.jvillada.movi.server.reminders.loadOccurrenceRows
@@ -285,10 +286,11 @@ internal fun Transaction.parteFijaDelDisponible(
     // monto entero, que es el que el cliente resta como fijo—: el pago de una ocurrencia anterior no
     // está en los fijos de este Disponible (ver `PagosDelChecklist.kt`).
     val emparejadas = emparejadasComoSellos(uid, hoy, periodo)
+    val reglas = RecurringRules.selectAll()
+        .where { RecurringRules.userId eq uid }
+        .map { it.toRule() }
     return parteFijaDelChecklist(
-        reglas = RecurringRules.selectAll()
-            .where { RecurringRules.userId eq uid }
-            .map { it.toRule() },
+        reglas = reglas,
         sellos = sellos + emparejadas,
         ocurridos = unirOcurridos(loadOccurredBy(uid, sellos), emparejadas.periodosPorRegla()),
         eventos = eventosDelPeriodo,
@@ -299,6 +301,16 @@ internal fun Transaction.parteFijaDelDisponible(
         // una regla podía absorberse igual por nombre, y el Disponible salía mejor de lo que es
         // (ver el KDoc de `parteFijaDelChecklist` en `PagosDelChecklist.kt`).
         rechazados = loadRejectedPairs(uid),
+        // Ola V: mismos destinos conocidos que ya resuelve `emparejadasComoSellos` (por dentro de
+        // `ocurrenciasReales`) — sin esto, un movimiento nuevo que solo trae el número del destino
+        // seguía contando como variable hasta la próxima lectura que ya lo hubiera sellado. Solo
+        // se lee `known_destinations` si hace falta — ver el comentario homónimo en
+        // `ReminderRoutes.ocurrenciasReales`.
+        destinos = if (reglas.any { it.destinoConocidoId != null }) {
+            destinosDelDueno(uid).associateBy { it.id }
+        } else {
+            emptyMap()
+        },
     )
 }
 

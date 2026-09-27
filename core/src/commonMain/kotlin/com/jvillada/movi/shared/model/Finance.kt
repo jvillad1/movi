@@ -698,6 +698,39 @@ data class RecurringRule(
      * `com.jvillada.movi.server.reminders.selectDueForReminder`.
      */
     val remindMe: Boolean = true,
+    /**
+     * Ola V: **a qué [DestinoConocido] va esto todos los meses** — un traspaso a un tercero ya
+     * registrado («Tía Caro» → el destino «Caro»). Antes de este campo, Movi solo sabía reconocer
+     * un pago de este tipo por el NOMBRE que el dueño escribió (`nombreDeMovimientoPegaConRegla`),
+     * y un traspaso real casi nunca lo repite: el banco solo nombra el número de la cuenta que
+     * recibe, y el SMS no dice «Tía Caro» en ningún lado. `destinoQueNombra` ya sabía resolver ese
+     * número contra `known_destinations` para PONERLE nombre al mensaje — este campo es la mitad
+     * que faltaba: que una regla recurrente pueda decir «yo soy ESE destino» y que el emparejador
+     * lo use como una seña de identidad. Ver `OccurrenceMatching.kt`, que es quien la usa.
+     *
+     * **Opcional, y solo tiene sentido en una regla de GASTO.** No se valida acá —el modelo no
+     * conoce `type` en el momento de construirse— pero un destino asociado a una regla de INGRESO
+     * simplemente no hace nada: `vaHaciaElDestino` (la función que se reusa) exige `EXPENSE` y
+     * responde `false` para cualquier otro tipo, así que el peor caso es un campo guardado que
+     * nunca se lee, no una regla rota.
+     *
+     * **Los mismos tres estados de wire que [accountId], por la misma razón** (un cliente viejo
+     * no puede borrar en silencio lo que otro cliente puso):
+     *  - `null` → «no lo toques» (default; un cliente que no conoce el campo).
+     *  - `""` → «quitá el destino»: el dueño lo desasoció a propósito.
+     *  - un id → ese destino, si es del dueño; si no lo es, se guarda `null` y la respuesta lo dice.
+     *
+     * En un POST no hay nada que preservar: `null` y `""` significan lo mismo (sin destino).
+     *
+     * **Columna nueva, nullable, y por eso DDL seguro**: `createMissingTablesAndColumns` emite
+     * `ADD COLUMN destino_conocido_id VARCHAR(50) NULL` sobre `recurring_rules`, y toda regla que
+     * ya existe —incluida «Tía Caro» antes de asociarla a mano— queda en NULL, que es la verdad:
+     * hasta hoy no había ningún destino que asociarle. Sin FK a `known_destinations`, por el mismo
+     * motivo que [accountId] no la tiene con `accounts`: si el destino se borra, la regla no se
+     * borra con él — se suelta la referencia (ver `DestinoRoutes`, que tiene que replicar esa
+     * misma limpieza).
+     */
+    val destinoConocidoId: String? = null,
 )
 
 @Serializable

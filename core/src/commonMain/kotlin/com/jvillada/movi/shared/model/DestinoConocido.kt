@@ -282,18 +282,43 @@ fun conElDestinoConocido(
 }
 
 /**
- * **¿Este movimiento fue a este destino?**
+ * **¿El texto de [evento] nombra el NÚMERO de cuenta de [destino]?** Mira el concepto, el nombre del
+ * banco y el texto crudo del que salió ([FinancialEvent.rawPayload], que guardan el SMS confirmado y
+ * la fila de extracto importada). Es la señal fuerte de [vaHaciaElDestino]: **sobrevive a que el
+ * dueño le cambie el nombre al movimiento**, porque el texto del banco no se reescribe nunca.
+ *
+ * **Solo esto — no el nombre del destino como palabra suelta** (ver [vaHaciaElDestino] para esa
+ * segunda señal, más floja). Existe separada porque Ola V la reusa donde un falso positivo no es
+ * gratis: `OccurrenceMatching.kt` la usa para decidir SOLO si un movimiento es la ocurrencia de una
+ * regla recurrente, y ahí «Almuerzo caro» no puede pegar con el destino «Caro» solo porque «caro» es
+ * un adjetivo común en español — el número, en cambio, es un hecho del banco.
+ *
+ * **Solo gastos**, por lo mismo que [conElDestinoConocido]: lo que entró no es lo que se mandó.
+ */
+fun nombraElNumeroDelDestino(evento: FinancialEvent, destino: DestinoConocido): Boolean {
+    if (evento.type != TransactionType.EXPENSE) return false
+    val cola = ultimosCuatro(destino.numero) ?: return false
+    val textos = listOfNotNull(evento.description, evento.merchant, evento.rawPayload)
+    return textos.any { texto ->
+        NUMEROS_QUE_NOMBRA_EL_TEXTO.findAll(texto)
+            .any { it.groupValues[1].takeLast(MIN_DIGITOS_DEL_NUMERO) == cola }
+    }
+}
+
+/**
+ * **¿Este movimiento fue a este destino?** Usado para AGRUPAR «lo que le mandaste» en «Cuentas de
+ * otros» (ver [movimientosHaciaElDestino]/[totalesHaciaElDestino]) — no para decidir sola la
+ * ocurrencia de un recurrente, que es un problema con otro perfil de riesgo (ver
+ * [nombraElNumeroDelDestino]).
  *
  * Dos señales, y cualquiera alcanza:
  *
- * 1. **El número, en cualquiera de los textos del movimiento** — el concepto, el nombre del banco o
- *    el texto crudo del que salió ([FinancialEvent.rawPayload], que guardan el SMS confirmado y la
- *    fila de extracto importada). Esta es la señal fuerte: **sobrevive a que el dueño le cambie el
- *    nombre al movimiento**, que es justo lo que hizo con los tres que ya tiene («Mercado»,
- *    «Colegio Hija», «Cuota de Cotrafa»). El texto del banco no se reescribe nunca.
+ * 1. **El número** — [nombraElNumeroDelDestino].
  * 2. **El nombre del destino, como palabra completa en el concepto o en el nombre.** Es lo que hace
  *    que «Cuota de Cotrafa 5413 · transferida a Caro» cuente, y lo que hace que un movimiento
- *    anotado a mano se pueda enganchar sin tocar código: se le escribe el nombre y ya.
+ *    anotado a mano se pueda enganchar sin tocar código: se le escribe el nombre y ya. Esta señal es
+ *    **a propósito más suelta** que la del número: acá un falso positivo solo infla un total que se
+ *    ve en pantalla, nunca sella nada ni apaga un aviso.
  *
  * **Palabra completa y no subcadena**: sin eso «Caro» se llevaría «Carolina», «Carozo» y cualquier
  * palabra que la contenga. Y un nombre de menos de tres letras no participa de esta segunda señal —
@@ -302,14 +327,8 @@ fun conElDestinoConocido(
  * **Solo gastos**, por lo mismo que [conElDestinoConocido]: lo que entró no es lo que se mandó.
  */
 fun vaHaciaElDestino(evento: FinancialEvent, destino: DestinoConocido): Boolean {
+    if (nombraElNumeroDelDestino(evento, destino)) return true
     if (evento.type != TransactionType.EXPENSE) return false
-    val cola = ultimosCuatro(destino.numero) ?: return false
-    val textos = listOfNotNull(evento.description, evento.merchant, evento.rawPayload)
-    val porElNumero = textos.any { texto ->
-        NUMEROS_QUE_NOMBRA_EL_TEXTO.findAll(texto)
-            .any { it.groupValues[1].takeLast(MIN_DIGITOS_DEL_NUMERO) == cola }
-    }
-    if (porElNumero) return true
     val nombre = enPalabras(destino.nombre)
     if (nombre.trim().length < 3) return false
     return listOfNotNull(evento.description, evento.merchant).any { enPalabras(it).contains(nombre) }
