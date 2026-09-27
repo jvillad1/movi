@@ -260,10 +260,12 @@ data class TransferResult(
  * | **Desembolso** — el banco deposita el crédito | préstamo: la deuda **sube** | cuenta: el efectivo **sube** |
  * | **Abono extraordinario** — plata extra contra el capital | cuenta: el efectivo **baja** | préstamo: la deuda **baja** |
  *
- * Los cuatro signos salen bien sin tocar una línea de `signedDelta`/`computeBalances`, y las dos
- * patas quedan fuera del mes por [TRANSFER_CATEGORY] — que es justo lo que hacía falta: **un
- * desembolso no es un ingreso.** Anotar la libranza de $257.000.000 como ingreso decía que el mes
- * había entrado $257 millones sin que el dueño ganara un peso.
+ * Los cuatro signos salen bien sin tocar una línea de `signedDelta`/`computeBalances`. El abono
+ * extraordinario queda fuera del mes por [TRANSFER_CATEGORY]. **El desembolso, en cambio, cuenta
+ * como plata que ENTRÓ** ([DESEMBOLSO_CATEGORY]): el dueño lo decidió porque, sin eso, un mes con
+ * desembolso salía más de lo que entraba. Solo cuenta la pata del dinero; la del crédito la excluye
+ * el tipo de cuenta, así que no hay doble conteo, y [PlataDelPeriodo] y Movi AI dicen cuánto de lo
+ * que entró es deuda para que no se lea como sueldo.
  *
  * La primera mitad del argumento —la duplicación— **sí se sostiene para la tarjeta**, y por eso
  * la tarjeta se sigue rechazando: pagar el extracto ya tiene su camino ([CARD_PAYMENT_CATEGORY])
@@ -344,7 +346,8 @@ const val TRANSFER_BOTH_LOANS_BLOCKED =
 
 /**
  * Las dos patas de un traspaso: un EXPENSE en [from] y un INCOME en [to], enlazados por
- * [CreateTransferRequest.transferId] y los dos con la categoría reservada [TRANSFER_CATEGORY].
+ * [CreateTransferRequest.transferId] y los dos con la categoría reservada [TRANSFER_CATEGORY] — o
+ * con [DESEMBOLSO_CATEGORY] si [from] es un crédito (el desembolso cuenta como ingreso).
  *
  * **Por qué dos eventos normales y no un tipo de movimiento nuevo:** los saldos se derivan de
  * los eventos vía `signedDelta`/`computeBalances`, y así cada pata es un evento común y corriente
