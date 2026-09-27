@@ -18,6 +18,26 @@ import kotlinx.serialization.Serializable
 const val CUOTA_CATEGORY = "Cuota de crédito"
 
 /**
+ * La categoría de las dos patas de un desembolso: la plata que un crédito le puso a una cuenta
+ * del dueño.
+ *
+ * **Tampoco es reservada, por el mismo motivo que [CUOTA_CATEGORY]:** el dueño decidió que lo
+ * desembolsado es plata que **entró** —*«entraron 10 millones del desembolso»*— y suma en
+ * «Entró»/«Ingresos» de su período, igual que la cuota ya suma como gasto. Si no contara, en un
+ * mes con desembolso salía más de lo que entraba, que es imposible en una cuenta de dinero. Con
+ * la regla el flujo cuadra: desembolso (+), lo gastado con eso (−), cuotas (−).
+ *
+ * Que no sea reservada es lo que la hace contar: [isCashFlow] la deja caer en el `else` de una
+ * cuenta de dinero. Su contraparte —la pata que sube la deuda— vive en una cuenta LOAN, que
+ * [isCashFlow] excluye por tipo, así que no hay doble conteo. El abono extraordinario (dinero →
+ * crédito) sigue siendo un traspaso puro.
+ *
+ * Solo la escribe [transferLegsFor], y `POST /api/events` rechaza escribirla suelta (sin
+ * `transferId`): una pata sola inflaría «Entró» sin la deuda que la respalda.
+ */
+const val DESEMBOLSO_CATEGORY = "Desembolso de crédito"
+
+/**
  * Pagar la cuota de un crédito, o el extracto de una tarjeta, en **una sola acción**.
  *
  * ### El problema que resuelve

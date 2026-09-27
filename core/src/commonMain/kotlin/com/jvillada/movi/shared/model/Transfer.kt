@@ -351,13 +351,22 @@ fun transferLegsFor(
 ): Pair<FinancialEvent, FinancialEvent> {
     val note = request.note?.trim().orEmpty()
     fun describe(base: String) = if (note.isEmpty()) base else "$base · $note"
-    fun leg(id: String, accountId: String, type: TransactionType, description: String) = FinancialEvent(
+    // Un desembolso es plata que entró (ver [DESEMBOLSO_CATEGORY]); los otros dos tipos siguen
+    // siendo un traspaso puro, fuera del mes.
+    val categoria =
+        if (transferKindFor(from, to) == TransferKind.DESEMBOLSO) DESEMBOLSO_CATEGORY else TRANSFER_CATEGORY
+    fun leg(
+        id: String,
+        cuenta: Account,
+        type: TransactionType,
+        description: String,
+    ) = FinancialEvent(
         id = id,
-        accountId = accountId,
+        accountId = cuenta.id,
         type = type,
         amount = request.amount,
         currency = from.currency,
-        category = TRANSFER_CATEGORY,
+        category = categoria,
         description = description,
         timestamp = request.timestamp,
         source = EventSource.MANUAL,
@@ -367,11 +376,12 @@ fun transferLegsFor(
         transferId = request.transferId,
         // Redundante con isCashFlow (el server la vuelve a derivar en cada lectura), pero deja
         // el objeto que devuelve esta función coherente consigo mismo desde el primer instante.
-        countsAsCashFlow = false,
+        // Se deriva por pata y no se fija en `false`: en un desembolso la pata del dinero SÍ cuenta.
+        countsAsCashFlow = isCashFlow(cuenta.type, type, categoria),
     )
     val (haciaAlla, desdeAca) = transferLegHeadlines(from, to)
-    return leg(request.fromEventId, from.id, TransactionType.EXPENSE, describe(haciaAlla)) to
-        leg(request.toEventId, to.id, TransactionType.INCOME, describe(desdeAca))
+    return leg(request.fromEventId, from, TransactionType.EXPENSE, describe(haciaAlla)) to
+        leg(request.toEventId, to, TransactionType.INCOME, describe(desdeAca))
 }
 
 /**
