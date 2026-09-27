@@ -569,7 +569,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     LaunchedEffect(resolvedAccount?.id, currentSms?.time) {
         val cuenta = resolvedAccount ?: run { antesDeLaCuenta = null; return@LaunchedEffect }
         val cuando = currentSms?.time ?: return@LaunchedEffect
-        antesDeLaCuenta = runCatching { Repositories.wallets.getEvents(cuenta.id) }
+        antesDeLaCuenta = intentar { Repositories.wallets.getEvents(cuenta.id) }
             .map { inicioDeLaCuentaSiElSmsEsAnterior(momentoDelSms(cuando, ahora = Clock.System.now().toEpochMilliseconds()), it) }
             .getOrNull()
     }
@@ -578,7 +578,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         working = true
         error = null
         coroutine.launch {
-            val result = runCatching { Repositories.wallets.ignoreSms(smsId) }
+            val result = intentar { Repositories.wallets.ignoreSms(smsId) }
             working = false
             result.onSuccess {
                 sms = sms?.copy(state = SMS_STATE_IGNORED)
