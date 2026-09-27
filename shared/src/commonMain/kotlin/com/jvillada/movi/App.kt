@@ -51,8 +51,7 @@ import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.ai.AIChatScreen
 import com.jvillada.movi.ui.plan.PlanScreen
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
-import com.jvillada.movi.ui.periodos.PeriodosScreen
-import com.jvillada.movi.ui.periodos.DetalleDePeriodoScreen
+import com.jvillada.movi.ui.periodos.PeriodosListaYDetalle
 import com.jvillada.movi.ui.categorias.CategoriasScreen
 import com.jvillada.movi.ui.destinos.DestinosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
@@ -334,8 +333,10 @@ fun App() {
                     importId = currentScreen.importId,
                 )
                 Screen.ScreenEditor      -> ScreenEditorScreen(navigate)
-                Screen.Periodos          -> PeriodosScreen(navigate)
-                is Screen.DetalleDePeriodo -> DetalleDePeriodoScreen(navigate, currentScreen.id)
+                // Ola W2: en el teléfono son las dos pantallas de siempre; en la web, una lista con
+                // el detalle del período elegido al lado (ver [PeriodosListaYDetalle]).
+                Screen.Periodos          -> PeriodosListaYDetalle(navigate, idPedido = null)
+                is Screen.DetalleDePeriodo -> PeriodosListaYDetalle(navigate, idPedido = currentScreen.id)
                 }
                 } // CompositionLocalProvider(LocalGoBack)
                 } // SaveableStateProvider

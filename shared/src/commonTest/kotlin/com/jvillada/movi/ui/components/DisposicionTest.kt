@@ -43,12 +43,22 @@ class DisposicionTest {
     // ── Qué tipo de pantalla es cada una ───────────────────────────────────────
 
     @Test
-    fun `en W1 Hoy es un tablero y todo lo demas se lee en columna`() {
+    fun `Hoy es un tablero y lo que no se adapto todavia se lee en columna`() {
         assertEquals(Disposicion.Tablero, disposicionDe(Screen.Dashboard))
         listOf(
-            Screen.Transactions(), Screen.Accounts, Screen.Credits, Screen.Plan(), Screen.Periodos,
+            Screen.Transactions(), Screen.Accounts, Screen.Credits, Screen.Plan(),
             Screen.Mas, Screen.Profile, Screen.Categorias, Screen.Login, Screen.PorRevisar,
         ).forEach { assertEquals(Disposicion.Lectura, disposicionDe(it), "$it") }
+    }
+
+    /** Ola W2: la lista de períodos a la izquierda y el detalle del elegido a la derecha. */
+    @Test
+    fun `Tus periodos y su detalle son lista y detalle`() {
+        assertEquals(Disposicion.ListaYDetalle, disposicionDe(Screen.Periodos))
+        assertEquals(Disposicion.ListaYDetalle, disposicionDe(Screen.DetalleDePeriodo("2026-09")))
+        assertEquals(1_440.dp, anchoMaximoDeLaPantalla(Screen.Periodos, WindowWidthClass.Expanded))
+        assertEquals(840.dp, anchoMaximoDeLaPantalla(Screen.DetalleDePeriodo("2026-09"), WindowWidthClass.Medium))
+        assertEquals(Dp.Infinity, anchoMaximoDeLaPantalla(Screen.Periodos, WindowWidthClass.Compact))
     }
 
     // ── La tabla de topes ─────────────────────────────────────────────────────

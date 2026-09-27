@@ -41,6 +41,13 @@ sealed class HeaderLeading {
      */
     data class Avatar(val onNavigate: (Screen) -> Unit) : HeaderLeading()
     data class Back(val fallback: Screen) : HeaderLeading()
+
+    /**
+     * Nada a la izquierda del título. Ola W2: el detalle de un período, cuando va al lado de su
+     * lista en la web, no tiene a dónde volver — la lista ya está a la vista —, así que no lleva la
+     * flecha. La lista, a su izquierda, conserva la suya.
+     */
+    data object Ninguno : HeaderLeading()
 }
 
 /**
@@ -96,6 +103,7 @@ fun MinScreenHeader(
                         .size(22.dp),
                 )
             }
+            HeaderLeading.Ninguno -> Unit
         }
         Column(modifier = Modifier.weight(1f)) {
             // `titular` es 19.sp contra los 17 de antes, y semibold contra medium. El título de
