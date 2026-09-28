@@ -221,6 +221,9 @@ class DetalleDePeriodoScreenTest {
                     estado = PAGO_FIJO_PENDIENTE),
                 PagoFijoDelPeriodo("r3", "Cotrafa", 410_000L, esIngreso = false, vencimiento = "2026-09-22",
                     estado = PAGO_FIJO_PENDIENTE),
+                // Con dudas: en un período cerrado no se puede afirmar que no se pagó.
+                PagoFijoDelPeriodo("r4", "Coomeva", 350_000L, esIngreso = false, vencimiento = "2026-09-20",
+                    estado = PAGO_FIJO_CON_DUDAS),
             ),
         )
         montar(ConDetalle(mapOf("2026-09" to cerrado)), "2026-09")
@@ -232,6 +235,8 @@ class DetalleDePeriodoScreenTest {
         assertTrue(hay("venció el 22 de septiembre"))
         assertTrue(hay("Con un movimiento de ${formatCOP(1_204_064L)}"))
         assertTrue(hay("vencía el 5 de septiembre"))
+        assertTrue(hay("$TITULO_SIN_CONFIRMAR · 1"), "lo que tiene dudas no va bajo «No se pagó»")
+        assertTrue(hay(TEXTO_CON_DUDAS))
     }
 
     @Test

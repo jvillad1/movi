@@ -107,6 +107,7 @@ import com.jvillada.movi.ui.recurrentes.fechaLegibleDelChecklist
 import com.jvillada.movi.ui.recurrentes.textoDelMontoDelChecklist
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.HighlightOff
 import androidx.compose.material.icons.rounded.Schedule
@@ -685,24 +686,36 @@ internal fun comoPagoDelPeriodo(pago: PagoFijoDelPeriodo, hoy: LocalDate?): Pago
 
 /**
  * Los grupos del detalle: lo que falta (o no se pagó), lo pagado, y lo mismo para los ingresos.
- * Lo que tiene dudas va con lo que falta —todavía no se sabe que se pagó—, diciendo por qué.
+ *
+ * **Lo que tiene dudas depende de si el período sigue abierto.** En curso va con lo que falta —como
+ * en Plan, donde la fila pregunta «¿fue este?»—. En un período cerrado NO puede ir bajo «No se
+ * pagó»: Movi encontró movimientos que podrían ser el pago, así que afirmar que no se pagó sería
+ * inventar. Va en [sinConfirmar], con su propio título.
  */
 internal data class GruposDePagosFijos(
     val faltan: List<PagoFijoDelPeriodo>,
     val pagados: List<PagoFijoDelPeriodo>,
     val porCobrar: List<PagoFijoDelPeriodo>,
     val recibidos: List<PagoFijoDelPeriodo>,
+    val sinConfirmar: List<PagoFijoDelPeriodo> = emptyList(),
 )
 
-internal fun gruposDePagosFijos(pagos: List<PagoFijoDelPeriodo>): GruposDePagosFijos {
+internal fun gruposDePagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean = true): GruposDePagosFijos {
     val (listos, abiertos) = pagos.sortedBy { it.vencimiento }.partition { it.estado == PAGO_FIJO_LISTO }
+    val (dudosos, sinPago) =
+        if (enCurso) emptyList<PagoFijoDelPeriodo>() to abiertos
+        else abiertos.partition { it.estado == PAGO_FIJO_CON_DUDAS }
     return GruposDePagosFijos(
-        faltan = abiertos.filter { !it.esIngreso },
+        faltan = sinPago.filter { !it.esIngreso },
         pagados = listos.filter { !it.esIngreso },
-        porCobrar = abiertos.filter { it.esIngreso },
+        porCobrar = sinPago.filter { it.esIngreso },
         recibidos = listos.filter { it.esIngreso },
+        sinConfirmar = dudosos,
     )
 }
+
+/** El título de lo que, en un período cerrado, Movi no pudo dar ni por pagado ni por no pagado. */
+const val TITULO_SIN_CONFIRMAR = "Sin confirmar"
 
 /** El título de lo abierto: en el período en curso todavía falta; en uno cerrado, no se pagó. */
 internal fun tituloDeLoQueFalta(enCurso: Boolean, ingresos: Boolean): String = when {
@@ -762,7 +775,7 @@ private fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: L
             )
             return@Column
         }
-        val grupos = gruposDePagosFijos(pagos)
+        val grupos = gruposDePagosFijos(pagos, enCurso)
         val fila: @Composable (PagoFijoDelPeriodo) -> Unit = { FilaDePagoFijo(it, enCurso, hoy) }
         MinCard(
             modifier = Modifier.fillMaxWidth(),
@@ -799,6 +812,18 @@ private fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: L
                     fila = fila,
                 )
             }
+            if (grupos.sinConfirmar.isNotEmpty()) {
+                Spacer(Modifier.height(Movi.espacios.amplio))
+                GrupoDePagos(
+                    titulo = TITULO_SIN_CONFIRMAR,
+                    icono = Icons.AutoMirrored.Rounded.HelpOutline,
+                    colorDelIcono = Movi.colores.aviso,
+                    // Sin total: no se sabe si es plata que salió o que faltó.
+                    total = null,
+                    filas = grupos.sinConfirmar,
+                    fila = fila,
+                )
+            }
         }
     }
 }
@@ -809,6 +834,8 @@ private fun FilaDePagoFijo(pago: PagoFijoDelPeriodo, enCurso: Boolean, hoy: Loca
     FilaDePagoDelPeriodo(
         estado = when {
             comoFila.pagado -> EstadoVisualDelPago.PAGADO
+            // Con dudas no se afirma nada: ni pagado ni «no se pagó».
+            pago.estado == PAGO_FIJO_CON_DUDAS && !enCurso -> EstadoVisualDelPago.FALTA
             !enCurso -> EstadoVisualDelPago.NO_SE_PAGO
             comoFila.vencido -> EstadoVisualDelPago.VENCIDO
             else -> EstadoVisualDelPago.FALTA
@@ -816,10 +843,12 @@ private fun FilaDePagoFijo(pago: PagoFijoDelPeriodo, enCurso: Boolean, hoy: Loca
         esIngreso = pago.esIngreso,
         nombre = pago.nombre,
         fecha = fechaDePagoFijo(pago, enCurso, hoy),
-        monto = (if (pago.esIngreso) "+" else "") + textoDelMontoDelChecklist(comoFila),
+        // Sin «+» en el ingreso y rojo en lo vencido: igual que la fila de Plan.
+        monto = textoDelMontoDelChecklist(comoFila),
         colorDelMonto = when {
             comoFila.pagado -> Movi.colores.textoMedio
             pago.esIngreso -> Movi.colores.entra
+            comoFila.vencido && pago.estado != PAGO_FIJO_CON_DUDAS -> Movi.colores.sale
             else -> Movi.colores.texto
         },
         evidencia = evidenciaDePagoFijo(pago),
