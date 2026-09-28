@@ -356,31 +356,11 @@ class RecurrentesLogicTest {
         assertEquals(2, completo.items.size)
     }
 
-    // ── V8 · «Próximos» deja de ser una copia de la lista de abajo ─────────────
-
     private fun vence(nombre: String, estado: PaymentStatus, remindMe: Boolean = true) =
         UpcomingPayment(
             rule = regla(nombre, 1_000).copy(remindMe = remindMe),
             dueDate = "2026-08-25", daysUntil = 2, status = estado,
         )
-
-    @Test
-    fun `Proximos solo trae lo que urge, no la lista entera`() {
-        val todo = listOf(
-            vence("Arriendo", PaymentStatus.UPCOMING),
-            vence("Colegio", PaymentStatus.DUE_SOON),
-            vence("Gimnasio", PaymentStatus.DUE_TODAY),
-            vence("Internet", PaymentStatus.OVERDUE),
-        )
-        val urgentes = proximosQueUrgen(todo).map { it.rule.name }
-        assertEquals(listOf("Colegio", "Gimnasio", "Internet"), urgentes)
-    }
-
-    @Test
-    fun `sin nada por vencer Proximos queda vacio en vez de repetir todo`() {
-        val todo = listOf(vence("Arriendo", PaymentStatus.UPCOMING))
-        assertTrue(proximosQueUrgen(todo).isEmpty())
-    }
 
     // ── V9 · el aviso de recordatorios mira lo PEDIDO ──────────────────────────
 

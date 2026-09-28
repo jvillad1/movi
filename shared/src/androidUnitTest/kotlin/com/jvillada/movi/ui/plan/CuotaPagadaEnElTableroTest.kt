@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -28,6 +29,7 @@ import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.periodoDeLaFecha
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Before
@@ -39,16 +41,21 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
 /**
- * **La cuota que ya se pagó, en la pantalla.**
+ * **La cuota que ya se pagó, en la lista del período.**
  *
  * El dueño lo dijo mirando su plata: *«"Ya ocurrieron · 1" esto es falso, de hecho todos los que
- * registran movimientos ocurrieron»*. El server ya deriva esas ocurrencias del movimiento que bajó
- * la deuda (ver `PagosDeDeuda.kt`); lo que se prueba acá es la otra mitad, la que se ve:
+ * registran movimientos ocurrieron»*. El server deriva esas ocurrencias del movimiento que bajó la
+ * deuda (ver `PagosDeDeuda.kt`); lo que se prueba acá es la mitad que se ve. Desde la ola «una sola
+ * lista» ya no hay sección «Ya ocurrieron»: la cuota está en «Ya pagaste», y
  *
- *  - la fila **aparece** en «Ya ocurrieron», y dice que sale de un movimiento;
- *  - y **no ofrece «Deshacer»**. No hay ningún sello que borrar: el DELETE contestaría 404 y la
- *    fila se quedaría igual. Un control muerto es peor que la ausencia del control, y en este repo
- *    eso ya pasó una vez.
+ *  - dice que la prueba un pago, y de cuánto;
+ *  - **no ofrece nada que la quite** (ni «No fue este» ni «Quitar la marca»): no hay sello que
+ *    borrar, se revierte borrando el movimiento. Un control muerto es peor que la ausencia del
+ *    control, y en este repo eso ya pasó una vez;
+ *  - y el sello a mano de al lado sí conserva su salida: «Quitar la marca» (el «Deshacer» de antes).
+ *
+ * Con el período fijo en septiembre: las fechas del fixture son de septiembre de 2026 y sin esto la
+ * prueba pasaría o no según el día en que corra.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h731dp-xhdpi")
@@ -128,7 +135,11 @@ class CuotaPagadaEnElTableroTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = {})
+                    TableroDeRecurrentesDePrueba(
+                        ajustesDelPeriodo = PeriodSettings(),
+                        periodoFijo = periodoDeLaFecha("2026-09-20", PeriodSettings()),
+                        onNavigate = {},
+                    )
                 }
             }
         }
@@ -147,58 +158,46 @@ class CuotaPagadaEnElTableroTest {
      * tendría cómo notar que pagó una parte. Ver `PagosDeDeuda.kt`.
      */
     @Test
-    fun `la cuota pagada aparece en Ya ocurrieron diciendo cuanto prueba el movimiento`() {
+    fun `la cuota pagada aparece en ya pagaste diciendo cuanto prueba el movimiento`() {
         montar()
-        esperarTexto("YA OCURRIERON")
+        esperarTexto("Ya pagaste · 2")
 
-        // `onAllNodes` y no `onNode`: desde que el tablero encabeza con el checklist del período, una
-        // cuota pagada dentro del período en curso se nombra dos veces —tildada arriba y con su
-        // explicación acá—. Cuántas veces salga el nombre depende del calendario del día en que
-        // corra la prueba; lo que esta prueba afirma es que la fila de «Ya ocurrieron» está.
-        assertEquals(
-            true,
-            composeRule.onAllNodesWithText("Cuota Crediágil 3090", useUnmergedTree = true)
-                .fetchSemanticsNodes().isNotEmpty(),
-        )
-        composeRule
-            .onNodeWithText("Ya ocurrió en septiembre · lo prueba un pago de $26.485", useUnmergedTree = true)
-            .assertIsDisplayed()
-    }
-
-    /**
-     * **El control muerto que no puede existir.** Una ocurrencia derivada no se desmarca: para
-     * quitarla hay que borrar el movimiento, y la fila lo dice en vez de ofrecer un botón que no
-     * haría nada.
-     */
-    @Test
-    fun `la cuota pagada no ofrece Deshacer`() {
-        montar()
-        esperarTexto("YA OCURRIERON")
-
-        composeRule.onNodeWithText("Se quita borrando", substring = true, useUnmergedTree = true)
-            .assertIsDisplayed()
-        // Hay exactamente UN «Deshacer» en la sección, y es el del sello a mano.
         assertEquals(
             1,
-            composeRule.onAllNodesWithText("Deshacer", useUnmergedTree = true).fetchSemanticsNodes().size,
-            "Solo la ocurrencia sellada a mano puede ofrecer «Deshacer»",
+            composeRule.onAllNodesWithText("Cuota Crediágil 3090", useUnmergedTree = true).fetchSemanticsNodes().size,
+            "la cuota sale una sola vez",
         )
+        composeRule.onNodeWithText("Lo prueba un pago de $26.485", useUnmergedTree = true).assertExists()
     }
 
     /**
-     * Y el «Deshacer» que sí existe sigue funcionando: esto no rompió el camino de vuelta.
-     *
-     * Por la acción semántica y no con un clic real: «Ya ocurrieron» vive debajo del checklist y de
-     * «Próximos», así que en la pantalla de prueba queda más abajo de lo que se ve y un clic por
-     * coordenadas no llega — se vio, el toque no hacía nada y la prueba moría esperando. Y en el
-     * árbol MEZCLADO, porque el `Modifier.clickable` va sobre el propio `Text`.
+     * **El control muerto que no puede existir.** Una ocurrencia derivada no se desmarca: la fila
+     * no ofrece nada que la quite. El único «Quitar la marca» es el del sello a mano.
      */
     @Test
-    fun `el sello a mano sigue teniendo su Deshacer`() {
+    fun `la cuota pagada no ofrece nada que la quite`() {
         montar()
-        esperarTexto("YA OCURRIERON")
+        esperarTexto("Ya pagaste · 2")
 
-        composeRule.onAllNodes(hasText("Deshacer") and hasClickAction())
+        assertEquals(
+            1,
+            composeRule.onAllNodesWithText("Quitar la marca", useUnmergedTree = true).fetchSemanticsNodes().size,
+            "solo el sello a mano puede quitarse",
+        )
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("No fue este", useUnmergedTree = true).fetchSemanticsNodes().size,
+            "una cuota probada por su pago no se discute",
+        )
+    }
+
+    /** Y el sello a mano sigue teniendo su salida: esto no rompió el camino de vuelta. */
+    @Test
+    fun `el sello a mano sigue teniendo su quitar la marca`() {
+        montar()
+        esperarTexto("Marcado a mano, sin movimiento")
+
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Quitar la marca")), useUnmergedTree = true)
             .onFirst().performSemanticsAction(SemanticsActions.OnClick)
 
         composeRule.waitUntil(timeoutMillis = 5_000) { desmarcadas == 1 }

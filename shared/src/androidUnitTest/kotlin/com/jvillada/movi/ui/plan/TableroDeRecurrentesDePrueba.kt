@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.ui.Screen
 import kotlinx.datetime.Clock
@@ -32,10 +33,16 @@ fun TableroDeRecurrentesDePrueba(
     ajustesDelPeriodo: PeriodSettings,
     onNavigate: (Screen) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * El período «de hoy», fijo. Sin él sale del reloj de la máquina, y una prueba con fechas del
+     * dueño (septiembre/octubre de 2026) pasaría o no según el día en que corra. Las fechas relativas
+     * de cada fila salen de `daysUntil`, no del reloj, así que fijar esto alcanza.
+     */
+    periodoFijo: PeriodoFinanciero? = null,
 ) {
     val solo = rememberTableroMontadoSolo()
-    val periodoDeHoy = remember(ajustesDelPeriodo) {
-        periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
+    val periodoDeHoy = remember(ajustesDelPeriodo, periodoFijo) {
+        periodoFijo ?: periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
     }
 
     Box(modifier = modifier) {

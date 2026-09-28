@@ -43,6 +43,7 @@ import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodo
+import com.jvillada.movi.ui.dashboard.pendientesDePeriodosAnteriores
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.ETIQUETA_MINIMOS_DE_TARJETA
 import com.jvillada.movi.ui.recurrentes.OrigenDeSuscripcion
@@ -50,9 +51,6 @@ import com.jvillada.movi.ui.recurrentes.Recurrente
 import com.jvillada.movi.ui.recurrentes.ReminderWarningBanner
 import com.jvillada.movi.ui.recurrentes.ResumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.SeccionChecklistDelPeriodo
-import com.jvillada.movi.ui.recurrentes.SeccionProximosPagos
-import com.jvillada.movi.ui.recurrentes.SeccionSinConfirmar
-import com.jvillada.movi.ui.recurrentes.SeccionYaOcurrieron
 import com.jvillada.movi.ui.recurrentes.avisoDeCandidataDuplicada
 import com.jvillada.movi.ui.recurrentes.avisoDeMinimosQueFaltan
 import com.jvillada.movi.ui.recurrentes.candidatasSinConfirmar
@@ -64,10 +62,7 @@ import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
 import com.jvillada.movi.ui.recurrentes.hojaParaAnotar
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
 import com.jvillada.movi.ui.recurrentes.notaDeProrrateo
-import com.jvillada.movi.ui.recurrentes.ocurrenciasAbiertasSinUrgencia
-import com.jvillada.movi.ui.recurrentes.ocurrenciasSelladas
 import com.jvillada.movi.ui.recurrentes.planesDeLasCuotas
-import com.jvillada.movi.ui.recurrentes.proximosQueUrgen
 import com.jvillada.movi.ui.recurrentes.quitarBorraLaSuscripcion
 import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.shouldShowReminderWarning
@@ -208,13 +203,12 @@ class EstadoDelTableroDeRecurrentes internal constructor(
     internal var pushStatus by mutableStateOf(PushOptIn.status())
     internal var pushRefreshTick by mutableStateOf(0)
     /**
-     * La regla que el dueño pidió editar tocando su renglón en «Próximos».
+     * La regla que el dueño pidió editar tocando su fila en la lista del período.
      *
-     * En la pantalla «Recurrentes» —la que el rediseño de 2026-09 disolvió acá adentro— ese toque
-     * abría la hoja de editar, y esa es la única acción que la fila prometía: relocalizarla como
-     * «no hace nada» habría sido perder función, y mandarla a la pantalla vieja habría sido justo
-     * lo que el rediseño venía a terminar. Es la misma hoja, en modo edición, que ya abre
-     * `HojaDelMovimiento` desde el detalle de un movimiento (PR 1).
+     * Era el toque sobre un renglón de «Próximos»; esa sección se fue en la ola «una sola lista» y
+     * el toque se mudó a la fila del período, que es donde la regla aparece ahora (una sola vez). Es
+     * la misma hoja, en modo edición, que ya abre `HojaDelMovimiento` desde el detalle de un
+     * movimiento.
      *
      * La regla que se pasa sale de `upcomingRecurrentes`, que se recarga al activar el tablero y tras
      * cada cambio (`recargas`) — la precaución que esa pantalla documentaba: prellenar el
@@ -297,23 +291,6 @@ class EstadoDelTableroDeRecurrentes internal constructor(
         reglasRecurrentes.map { claveDeNombre(it.name) }.toSet()
     }
 
-    // «Próximos» muestra lo que URGE, no todas las reglas: el server manda una entrada por regla
-    // (ver [proximosQueUrgen]). Y lo ya sellado va aparte, con su «Deshacer» — apenas se sella, el
-    // recurrente desaparece de «Próximos», así que sin esa sección marcar por error no tendría
-    // vuelta atrás hasta el mes siguiente (ver [SeccionYaOcurrieron]).
-    internal val proximos by derivedStateOf { proximosQueUrgen(upcomingRecurrentes) }
-    internal val selladas by derivedStateOf {
-        if (ocurrenciasOk) ocurrenciasSelladas(upcomingRecurrentes, ocurrencias) else emptyList()
-    }
-    // Y lo que quedó abierto pero ya no urge: una regla sale de «Próximos» apenas pasan los días
-    // de gracia aunque nadie la haya confirmado, y su periodo sigue abierto igual. Sin esto, un
-    // recurrente de principio de mes no tenía dónde confirmarse hasta el mes siguiente — ver
-    // [ocurrenciasAbiertasSinUrgencia].
-    internal val abiertas by derivedStateOf {
-        if (ocurrenciasOk) {
-            ocurrenciasAbiertasSinUrgencia(upcomingRecurrentes, ocurrencias, proximos)
-        } else emptyList()
-    }
     // El aviso ámbar mira lo que se PIDIÓ, no lo que existe: promete una promesa rota, y sin
     // promesa no hay nada que anunciar. Ver [hayRecordatoriosPedidos].
     internal val pidieronRecordatorios by derivedStateOf { hayRecordatoriosPedidos(upcomingRecurrentes) }
@@ -539,7 +516,7 @@ fun rememberEstadoDelTableroDeRecurrentes(
 
     // `recarga` también: es la clave del «Reintentar» del snackbar y de anular/editar un
     // movimiento desde su hoja. Sin ella, reintentar después de un fallo acá no volvía a pedir
-    // nada y «Próximos» quedaba cargando para siempre.
+    // nada y la lista del período quedaba cargando para siempre.
     LaunchedEffect(activo, estado.recargas, refreshTick, recarga) {
         if (!activo) return@LaunchedEffect
         intentar { Repositories.wallets.getSubscriptions() }
@@ -630,12 +607,14 @@ fun rememberEstadoDelTableroDeRecurrentes(
  *
  * ── El orden: primero lo que pide algo, después lo que solo informa ──────
  *
- * El dueño abre este tablero para responder «¿qué se repite, y qué necesita algo de mí?». Así que
- * arriba va lo accionable —el aviso de que sus recordatorios no van a llegar, los pagos que urgen
- * con su «¿ya ocurrió?», las candidatas por confirmar— y el resumen pasivo queda abajo. En el orden
- * anterior (PR 2) el «Flujo libre» era lo único que había y por eso encabezaba; con la mudanza del
- * PR 3, dejar una cifra que no pide nada por encima de una propuesta abierta sería enterrar lo
- * urgente bajo lo bonito.
+ * El dueño abre este tablero para responder «¿qué me falta por pagar y qué ya pagué en este
+ * período?». Así que arriba va el aviso de que sus recordatorios no van a llegar y **la lista del
+ * período** —una sola, con cada pago fijo una vez (ver [SeccionChecklistDelPeriodo])— y debajo lo
+ * que contesta otra cosa: las candidatas por confirmar y el resumen de lo que se repite al mes.
+ *
+ * Hasta la ola «una sola lista» (27-sep) había además «Próximos», «Sin confirmar» y «Ya
+ * ocurrieron». Repetían las reglas del checklist con otra forma y la última mezclaba meses («Celular
+ * — Ya ocurrió en septiembre» en la pantalla de octubre). Sus acciones se mudaron a la fila.
  *
  * El PR 5 agrega «Suscripciones activas» al FINAL, debajo del «Flujo libre»: es el desglose de ese
  * total, no una decisión pendiente. Ver [SeccionSuscripcionesActivas].
@@ -684,15 +663,14 @@ fun LazyListScope.tableroDeRecurrentes(
     // Esa lista trae TODO lo que el server tiene del dueño, `DISMISSED` incluido —un cobro que
     // el dueño ya miró y descartó («Uber no es una suscripción»), que no es una candidata ni
     // suma en ningún lado—, así que mirarla entera dejaba a alguien con cero reglas y un solo
-    // descarte sin ver nunca el vacío: caía de nuevo en el checklist/«Próximos»/«Flujo libre»
+    // descarte sin ver nunca el vacío: caía de nuevo en la lista del período/«Flujo libre»
     // en `$0` que este vacío existe para evitar. `candidatas` y `activas` ya filtran por estado (ver
     // sus `derivedStateOf` más arriba) y son las mismas listas que las secciones de abajo usan
     // para decidir si tienen algo que pintar.
     //
-    // Reemplaza al checklist, a «Próximos» y al «Flujo libre» de abajo —los tres solo dirían
-    // «nada» o «$0», ver [ResumenFlujoLibreCard]— por una sola tarjeta. El resto de las secciones
-    // (sin confirmar, ya ocurrieron, suscripciones activas) ya se cuidan solas con este vacío: sin
-    // reglas ni suscripciones activas o candidatas no tienen nada que enumerar y no pintan nada.
+    // Reemplaza a la lista del período y al «Flujo libre» de abajo —los dos solo dirían «nada» o
+    // «$0», ver [ResumenFlujoLibreCard]— por una sola tarjeta. Las suscripciones activas ya se
+    // cuidan solas con este vacío: sin ninguna no tienen nada que enumerar y no pintan nada.
     val sinPagosFijos = estado.vencimientosOk && estado.subsParaRecurrentesOk &&
         estado.upcomingRecurrentes.isEmpty() && estado.candidatas.isEmpty() && estado.activas.isEmpty()
     if (sinPagosFijos) {
@@ -709,14 +687,12 @@ fun LazyListScope.tableroDeRecurrentes(
         return
     }
 
-    // ── El checklist del período ────────────────────────────────────────────
+    // ── La lista del período: UNA, con cada pago fijo una vez ────────────────
     //
-    // Va PRIMERO, y es el destino del «Ver todos» del Inicio: el dueño llegaba acá
-    // buscando «los recurrentes tipo checklist del mes, con valor y fecha» y se
-    // encontraba las mismas obligaciones repartidas en tres tarjetas, ninguna de las
-    // cuales enumera el período entero. Las tres siguen abajo, porque contestan otra
-    // cosa (qué movimiento fue cada pago, qué quedó sin confirmar, de dónde salió cada
-    // sello). Ver [SeccionChecklistDelPeriodo].
+    // Va PRIMERO, y es el destino del «Ver todos» del Inicio. Lo que antes repartían «Próximos»,
+    // «Sin confirmar» y «Ya ocurrieron» está acá, agrupado: falta por pagar, ya pagaste, por
+    // cobrar, ya recibiste, y al final lo que un período anterior dejó abierto, diciendo cuál.
+    // Ver [SeccionChecklistDelPeriodo].
     //
     // **Solo para el período en curso.** Quien lo monta podría mirar meses anteriores, pero
     // `/api/payments/upcoming` y `/api/payments/occurrences` contestan sobre HOY: pintar sus filas
@@ -740,15 +716,29 @@ fun LazyListScope.tableroDeRecurrentes(
                 checklistDelPeriodo(
                     upcoming = estado.upcomingRecurrentes,
                     // Con la lectura de ocurrencias a medias no se tilda nada: un «ya pagado» que en
-                    // realidad no se pudo leer sería una afirmación sin respaldo — la misma regla que
-                    // gobierna las propuestas de «Próximos».
+                    // realidad no se pudo leer sería una afirmación sin respaldo.
                     ocurrencias = if (estado.ocurrenciasOk) estado.ocurrencias else emptyList(),
+                    periodo = periodoVisible,
+                    settings = ajustesDelPeriodo,
+                )
+            }
+            // Lo que era «Sin confirmar»: ocurrencias de un período anterior que el server sigue
+            // preguntando. Solo con la lectura de ocurrencias completa — sin ella no hay nada que
+            // preguntar.
+            val anteriores = remember(
+                estado.upcomingRecurrentes, estado.ocurrencias, estado.ocurrenciasOk, periodoVisible, ajustesDelPeriodo,
+            ) {
+                if (!estado.ocurrenciasOk) emptyList()
+                else pendientesDePeriodosAnteriores(
+                    upcoming = estado.upcomingRecurrentes,
+                    ocurrencias = estado.ocurrencias,
                     periodo = periodoVisible,
                     settings = ajustesDelPeriodo,
                 )
             }
             SeccionChecklistDelPeriodo(
                 checklist = checklist,
+                anteriores = anteriores,
                 cargando = !estado.recurrentesNoSePudieronLeer && !(estado.vencimientosOk && estado.ocurrenciasOk),
                 pudoLeer = !estado.recurrentesNoSePudieronLeer,
                 marcando = estado.marcando,
@@ -768,6 +758,17 @@ fun LazyListScope.tableroDeRecurrentes(
                 onQuitarLaMarca = { pago ->
                     pago.periodoDelSello?.let { estado.deshacerOcurrio(pago.ruleId, it) }
                 },
+                // El toque que antes tenía el renglón de «Próximos»: abrir la regla. La cuota de un
+                // crédito y el pago de una tarjeta son reglas sintéticas del server — se gestionan
+                // en Créditos, no en la hoja de editar.
+                onAbrir = { pago ->
+                    if (pago.ruleId.startsWith(CREDIT_RULE_PREFIX) || pago.ruleId.startsWith(CARD_RULE_PREFIX)) {
+                        onNavigate(Screen.Credits)
+                    } else {
+                        estado.upcomingRecurrentes.firstOrNull { it.rule.id == pago.ruleId }
+                            ?.let { estado.reglaRecurrenteAEditar = it.rule }
+                    }
+                },
                 onReintentar = { estado.recargar() },
                 modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
                 planesDeCuotas = estado.planesDeCuotas,
@@ -775,68 +776,14 @@ fun LazyListScope.tableroDeRecurrentes(
         }
     }
 
-    // ── Próximos + «¿esto ya ocurrió?» ──────────────────────────────────────
-    item {
-        SeccionProximosPagos(
-            proximos = estado.proximos,
-            ocurrencias = estado.ocurrencias,
-            ocurrenciasOk = estado.ocurrenciasOk,
-            descartadas = estado.descartadas,
-            marcando = estado.marcando,
-            // «Todavía no llegó la lista», no «la pantalla está cargando»: mientras
-            // no haya respuesta no se dibuja una tarjeta vacía que diga que no hay
-            // nada por vencer, porque eso no se sabe todavía.
-            cargando = !estado.vencimientosOk,
-            conteoVisible = estado.vencimientosOk,
-            onAbrirPago = { payment ->
-                // F20: la cuota de un crédito y el pago de una tarjeta son reglas
-                // sintéticas del server, no algo que se edite acá — se gestionan en
-                // Créditos. Misma distinción que hacía la pantalla vieja.
-                if (payment.rule.id.startsWith(CREDIT_RULE_PREFIX) ||
-                    payment.rule.id.startsWith(CARD_RULE_PREFIX)
-                ) {
-                    onNavigate(Screen.Credits)
-                } else {
-                    estado.reglaRecurrenteAEditar = payment.rule
-                }
-            },
-            onMarcar = { ruleId, period, eventId -> estado.marcarOcurrio(ruleId, period, eventId) },
-            // El «no» ahora se guarda: sin eso, el emparejamiento automático volvería a
-            // proponer lo mismo en la siguiente lectura. Ver [EstadoDelTableroDeRecurrentes.noFueEste].
-            onDescartarPropuesta = { ruleId, eventId -> estado.noFueEste(ruleId, eventId, null) },
-            onAnotarMovimiento = { pago -> onNavigate(hojaParaAnotar(pago.rule, pago.dueDate)) },
-            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-        )
-    }
-
-    // ── Sin confirmar · abiertos que ya no urgen ────────────────────────────
-    val abiertas = estado.abiertas
-    if (abiertas.isNotEmpty()) {
-        item {
-            SeccionSinConfirmar(
-                abiertas = abiertas,
-                descartadas = estado.descartadas,
-                marcando = estado.marcando,
-                onMarcar = { ruleId, period, eventId -> estado.marcarOcurrio(ruleId, period, eventId) },
-                onDescartarPropuesta = { ruleId, eventId -> estado.noFueEste(ruleId, eventId, null) },
-                onAnotarMovimiento = { rule ->
-                    // La fecha sale de la ocurrencia abierta de ESA regla, que es la que
-                    // esta sección está preguntando; el `dueDate` de «Próximos» ya rodó.
-                    val vence = abiertas.firstOrNull { it.first.id == rule.id }
-                        ?.second?.dueDate.orEmpty()
-                    onNavigate(hojaParaAnotar(rule, vence))
-                },
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-            )
-        }
-    }
-
-    // ── Detectadas · por confirmar ──────────────────────────────────────────
+    // ── Cobros detectados · por confirmar ───────────────────────────────────
+    // Debajo de la lista del período y con un rótulo que no habla de pagos: son candidatas a
+    // suscripción que Movi encontró en los movimientos, no pagos de este período.
     val candidatas = estado.candidatas
     if (candidatas.isNotEmpty()) {
         item {
             Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-                MinSectionHeader(title = "Detectadas · por confirmar", count = candidatas.size)
+                MinSectionHeader(title = TITULO_COBROS_DETECTADOS, count = candidatas.size)
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     candidatas.forEach { s ->
                         CandidataSuscripcionCard(
@@ -860,27 +807,16 @@ fun LazyListScope.tableroDeRecurrentes(
         }
     }
 
-    // ── Ya ocurrieron · con su «Deshacer» ───────────────────────────────────
-    val selladas = estado.selladas
-    if (selladas.isNotEmpty()) {
-        item {
-            SeccionYaOcurrieron(
-                selladas = selladas,
-                marcando = estado.marcando,
-                onDeshacer = { ruleId, period -> estado.deshacerOcurrio(ruleId, period) },
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-            )
-        }
-    }
-
     // ── El resumen, abajo, pegado a lo que resume ───────────────────────────
     item {
         Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
             // «Buscar cobros» va en este encabezado —que se pinta siempre con el tablero
             // a la vista— y no en el de las candidatas, que solo existe cuando ya hay
             // alguna. Ver [EstadoDelTableroDeRecurrentes.buscarCobros].
+            // «Lo que se repite al mes» y no «Recurrentes»: son totales mensuales, no pagos del
+            // período, y debajo de la lista del período el rótulo tiene que decir eso.
             MinSectionHeader(
-                title = "Recurrentes",
+                title = TITULO_LO_QUE_SE_REPITE,
                 action = if (estado.buscandoCobros) "Buscando…" else "Buscar cobros",
                 onAction = { estado.buscarCobros() },
             )
@@ -953,7 +889,7 @@ fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes) {
         )
     }
 
-    // Editar un recurrente desde su renglón de «Próximos» — la misma hoja, en modo edición, que
+    // Editar un recurrente desde su fila en la lista del período — la misma hoja, en modo edición, que
     // abre el detalle de un movimiento. Al guardar se invalida el cache del gate y se recarga la
     // sección: el monto o el día nuevos tienen que verse en el mismo renglón que se acaba de
     // tocar, no en la próxima visita.
@@ -1050,20 +986,26 @@ fun rememberTableroMontadoSolo(activo: Boolean = true, vencimientosSiempre: Bool
     return remember(estado, aviso) { TableroMontadoSolo(estado, aviso, cuentas) }
 }
 
+/** El rótulo de las candidatas a suscripción, debajo de la lista del período. */
+const val TITULO_COBROS_DETECTADOS: String = "Cobros detectados · por confirmar"
+
+/** El rótulo del resumen de lo que se repite cada mes («Flujo libre»). */
+const val TITULO_LO_QUE_SE_REPITE: String = "Lo que se repite al mes"
+
 /** Cada fila esqueleto del tablero, para contarlas sin depender de ningún texto. */
 const val TAG_ESQUELETO_DEL_TABLERO: String = "esqueleto-del-tablero"
 
 /**
  * **El tablero mientras su primera lectura viaja** (ver
- * [EstadoDelTableroDeRecurrentes.primeraLecturaEnCurso]): el rótulo y la tarjeta del checklist con
- * cuatro filas, y los de «Próximos» con dos. Sin ningún título real: «Checklist del período» sobre
- * una tarjeta vacía ya diría que hay (o que no hay) pagos.
+ * [EstadoDelTableroDeRecurrentes.primeraLecturaEnCurso]): el rótulo y la tarjeta de la lista del
+ * período, con seis filas. Una sola tarjeta, como la lista que reemplaza. Sin ningún título real:
+ * «Pagos del período» sobre una tarjeta vacía ya diría que hay (o que no hay) pagos.
  *
  * Mismos rellenos que las secciones reales (16 dp a los lados y abajo) y la fila de siempre
  * ([FilaDeListaEsqueleto]). Lo pinta Plan.
  */
 fun LazyListScope.tableroDeRecurrentesEsqueleto() {
-    listOf(4, 2).forEach { filas ->
+    listOf(6).forEach { filas ->
         item {
             Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
                 RotuloDeSeccionEsqueleto()
@@ -1299,14 +1241,14 @@ private fun ResumenFlujoLibreCard(
         // Y la cuota que se paga una sola vez, que es la otra mitad de decir la verdad sobre las
         // cuotas: entró la del carro, no entró la del «Techo Gardenera» —$10.000.000 a un mes—
         // porque no es un gasto de todos los meses. Se cuenta y se dice por el mismo motivo que
-        // `sinConvertir`: es una fila que existe, vence y sale en «Próximos», y este total no la
+        // `sinConvertir`: es una fila que existe, vence y sale en la lista del período, y este total no la
         // suma a propósito. Ver [ResumenRecurrentes.pagosUnicosFuera].
         if (cifras != null && cifras.pagosUnicosFuera > 0) {
             Spacer(Modifier.height(12.dp))
             Text(
-                // Sin prometer dónde se ve: «Próximos» muestra lo que URGE (ver
-                // `proximosQueUrgen`), así que un pago único con fecha lejana no está ahí todavía,
-                // y el aviso depende de que el dueño lo haya pedido. Una frase que no se pueda
+                // Sin prometer dónde se ve: la lista del período solo muestra lo que vence en él,
+                // así que un pago único con fecha lejana no está ahí todavía, y el aviso depende
+                // de que el dueño lo haya pedido. Una frase que no se pueda
                 // desmentir en la misma pantalla vale más que una que ayude a buscarlo.
                 text = if (cifras.pagosUnicosFuera == 1) {
                     "Un crédito tuyo se paga de una sola vez, así que su cuota no entra en este " +

@@ -181,12 +181,20 @@ class DetalleDePeriodoScreenTest {
         assertTrue(hay("Mercado"))
         assertTrue(hay(formatMoneyCompact(600_000L)))
 
-        // Pagos fijos: 1 de 3 listos; el listo con otro monto dice el real y lo que decía la regla.
-        assertTrue(hay("PAGOS FIJOS · 1 DE 3"))
+        // Pagos fijos: con los grupos y los textos de Plan. En el período en curso lo abierto
+        // «falta»; el listo con otro monto dice el real, con qué se sabe y lo que decía la regla.
+        assertTrue(hay("PAGOS DEL PERÍODO"))
+        assertTrue(hay(" · 3"), "el encabezado cuenta los tres pagos fijos")
+        assertTrue(hay("Falta por pagar · 2"))
+        assertTrue(hay("Ya pagaste · 1"))
         assertTrue(hay(formatCOP(1_550_000L)))
-        assertTrue(hay("✓ la regla dice ${formatCOP(1_500_000L)}"))
-        assertTrue(hay("pendiente"))
-        assertTrue(hay("con dudas"))
+        assertTrue(hay("Con un movimiento de ${formatCOP(1_550_000L)} · la regla dice ${formatCOP(1_500_000L)}"))
+        assertTrue(hay("vence el 22 de octubre"), "el Celular todavía no vence (hoy es 20 de octubre)")
+        assertTrue(hay("venció hace 10 días"), "el Gimnasio venció el 10")
+        assertTrue(hay(TEXTO_CON_DUDAS))
+        // El vocabulario viejo no queda en ningún lado.
+        assertTrue(!hay("PAGOS FIJOS", substring = true))
+        assertTrue(!hay("pendiente", substring = true))
 
         // Presupuestos, gastado de límite.
         assertTrue(hay("PRESUPUESTOS"))
@@ -195,6 +203,40 @@ class DetalleDePeriodoScreenTest {
         // Los más grandes.
         assertTrue(hay("Éxito Laureles"))
         assertTrue(hay("Cena de cumpleaños"))
+    }
+
+    /**
+     * **Un período cerrado dice «No se pagó»**, no «Falta por pagar»: ya no falta, pasó. Y la fecha
+     * es el día («venció el 22 de septiembre»), no una cuenta de días desde hoy sobre un período
+     * que ya terminó. Mismo vocabulario que la lista de Plan — el caso del dueño: Celular y Cotrafa
+     * sin pagar en el período de septiembre, Crediágil pagado.
+     */
+    @Test
+    fun `un periodo cerrado agrupa en ya pagaste y no se pago`() {
+        val cerrado = septiembre.copy(
+            pagosFijos = listOf(
+                PagoFijoDelPeriodo("r1", "Crediágil", 1_204_064L, esIngreso = false, vencimiento = "2026-09-05",
+                    estado = PAGO_FIJO_LISTO, eventId = "ev-crediagil", montoReal = 1_204_064L),
+                PagoFijoDelPeriodo("r2", "Celular", 53_000L, esIngreso = false, vencimiento = "2026-09-22",
+                    estado = PAGO_FIJO_PENDIENTE),
+                PagoFijoDelPeriodo("r3", "Cotrafa", 410_000L, esIngreso = false, vencimiento = "2026-09-22",
+                    estado = PAGO_FIJO_PENDIENTE),
+                // Con dudas: en un período cerrado no se puede afirmar que no se pagó.
+                PagoFijoDelPeriodo("r4", "Coomeva", 350_000L, esIngreso = false, vencimiento = "2026-09-20",
+                    estado = PAGO_FIJO_CON_DUDAS),
+            ),
+        )
+        montar(ConDetalle(mapOf("2026-09" to cerrado)), "2026-09")
+        esperarTexto("PAGOS DEL PERÍODO")
+
+        assertTrue(hay("No se pagó · 2"))
+        assertTrue(hay("Ya pagaste · 1"))
+        assertTrue(!hay("Falta por pagar", substring = true), "en un período cerrado ya no falta: no se pagó")
+        assertTrue(hay("venció el 22 de septiembre"))
+        assertTrue(hay("Con un movimiento de ${formatCOP(1_204_064L)}"))
+        assertTrue(hay("vencía el 5 de septiembre"))
+        assertTrue(hay("$TITULO_SIN_CONFIRMAR · 1"), "lo que tiene dudas no va bajo «No se pagó»")
+        assertTrue(hay(TEXTO_CON_DUDAS))
     }
 
     @Test
@@ -208,7 +250,7 @@ class DetalleDePeriodoScreenTest {
     fun `un periodo pasado no ofrece empezar hoy, y sus vacios ensenan`() {
         montar(ConDetalle(mapOf("2026-09" to septiembre)), "2026-09")
         esperarTexto("Septiembre 2026")
-        esperarTexto("PAGOS FIJOS")
+        esperarTexto("PAGOS DEL PERÍODO")
 
         assertTrue(!hayTag(TAG_EMPEZAR_PERIODO_HOY))
         assertTrue(hayTag(TAG_VER_MOVIMIENTOS_DEL_PERIODO))
@@ -409,7 +451,7 @@ class DetalleDePeriodoScreenTest {
     @Test
     fun `si salio mas de lo que entro, la tarjeta dice de donde salio lo que falto`() {
         montar(ConDetalle(mapOf("2026-09" to septiembreQueFalto)), "2026-09")
-        esperarTexto("PAGOS FIJOS")
+        esperarTexto("PAGOS DEL PERÍODO")
 
         assertTrue(hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(hay("De dónde salió lo que faltó"))
@@ -448,7 +490,7 @@ class DetalleDePeriodoScreenTest {
     fun `si entro lo mismo o mas de lo que salio, la tarjeta no aparece aunque haya fuentes`() {
         val alDia = septiembreQueFalto.copy(resumen = septiembreQueFalto.resumen.copy(entradas = 34_000_000L))
         montar(ConDetalle(mapOf("2026-09" to alDia)), "2026-09")
-        esperarTexto("PAGOS FIJOS")
+        esperarTexto("PAGOS DEL PERÍODO")
 
         assertTrue(!hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(!hay("De dónde salió lo que faltó"))
@@ -459,7 +501,7 @@ class DetalleDePeriodoScreenTest {
     @Test
     fun `el encabezado dice cuanto de lo que entro son creditos desembolsados`() {
         montar(ConDetalle(mapOf("2026-09" to septiembreQueFalto)), "2026-09")
-        esperarTexto("PAGOS FIJOS")
+        esperarTexto("PAGOS DEL PERÍODO")
         assertTrue(hayTag(TAG_INCLUYE_CREDITOS))
         assertTrue(hay("Incluye \$10M de créditos desembolsados."))
     }
@@ -468,14 +510,14 @@ class DetalleDePeriodoScreenTest {
     fun `sin creditos el encabezado no dice nada de creditos`() {
         val sinCreditos = septiembreQueFalto.copy(resumen = septiembreQueFalto.resumen.copy(creditosRecibidos = 0))
         montar(ConDetalle(mapOf("2026-09" to sinCreditos)), "2026-09")
-        esperarTexto("PAGOS FIJOS")
+        esperarTexto("PAGOS DEL PERÍODO")
         assertTrue(!hayTag(TAG_INCLUYE_CREDITOS))
     }
 
     @Test
     fun `sin fuentes la tarjeta no aparece`() {
         montar(ConDetalle(mapOf("2026-09" to septiembreQueFalto.copy(fuentesQueNoSonIngreso = emptyList()))), "2026-09")
-        esperarTexto("PAGOS FIJOS")
+        esperarTexto("PAGOS DEL PERÍODO")
 
         assertTrue(!hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(!hay("De dónde salió lo que faltó"))
@@ -486,7 +528,7 @@ class DetalleDePeriodoScreenTest {
     fun `con solo fuentes que esta version no conoce la tarjeta no aparece`() {
         val raras = listOf(FuenteDePlata("HERENCIA", 5_000_000L, listOf("La tía")))
         montar(ConDetalle(mapOf("2026-09" to septiembreQueFalto.copy(fuentesQueNoSonIngreso = raras))), "2026-09")
-        esperarTexto("PAGOS FIJOS")
+        esperarTexto("PAGOS DEL PERÍODO")
 
         assertTrue(!hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(!hay("La tía", substring = true))

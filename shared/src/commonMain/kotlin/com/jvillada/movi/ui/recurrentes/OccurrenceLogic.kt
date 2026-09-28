@@ -3,10 +3,8 @@ package com.jvillada.movi.ui.recurrentes
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import com.jvillada.movi.ui.Screen
@@ -23,10 +21,6 @@ import com.jvillada.movi.ui.components.formatMoney
  * que el dueño dijo «no fue este».
  */
 
-/** El estado del periodo en juego de [ruleId], si el server mandó uno. */
-fun ocurrenciaDe(estados: List<OccurrenceState>, ruleId: String): OccurrenceState? =
-    estados.firstOrNull { it.ruleId == ruleId }
-
 /**
  * La clave de un «no fue este»: **la regla Y el movimiento**, nunca el movimiento solo.
  *
@@ -38,89 +32,6 @@ fun ocurrenciaDe(estados: List<OccurrenceState>, ruleId: String): OccurrenceStat
  * otra regla — justo el mecanismo del que depende que las categorías compartidas sean tolerables.
  */
 fun claveDescartada(ruleId: String, eventId: String): String = "$ruleId|$eventId"
-
-/**
- * La propuesta que toca mostrar, o `null` si no queda ninguna.
- *
- * [descartadas] son las claves ([claveDescartada]) que el dueño ya rechazó con «no fue este» **en
- * esta sesión de pantalla**. No se persisten a propósito: rechazar una propuesta no es un hecho
- * sobre su plata (a diferencia de confirmarla, que sí lo es y por eso sí va a la base). Guardar
- * cada «no» obligaría a una tabla más para evitar un ruido que se va solo apenas confirma o apenas
- * cambia el mes.
- */
-fun propuestaActual(estado: OccurrenceState, descartadas: Set<String> = emptySet()): FinancialEvent? =
-    estado.candidates.firstOrNull { claveDescartada(estado.ruleId, it.id) !in descartadas }
-
-/**
- * Los periodos **ya sellados**, emparejados con la regla de la que hablan — la lista que alimenta
- * la sección «Ya ocurrieron» y sus «Deshacer».
- *
- * Las reglas salen de [upcoming] y no de una llamada aparte: `GET /api/payments/upcoming` ya trae
- * una entrada por regla (por eso «Próximos» tiene que filtrar lo que urge, ver [proximosQueUrgen])
- * y con ella viene la `RecurringRule` entera. Una ocurrencia sin regla conocida se descarta en
- * silencio: sin el nombre no hay nada que mostrar, y una fila que diga «Deshacer» sin decir de qué
- * es peor que no estar.
- *
- * Se ordena por nombre y no por fecha de confirmación: es un inventario para revisar, no un
- * registro cronológico, y el orden estable evita que las filas bailen entre recargas.
- */
-fun ocurrenciasSelladas(
-    upcoming: List<UpcomingPayment>,
-    estados: List<OccurrenceState>,
-): List<Pair<RecurringRule, OccurrenceState>> {
-    val reglas = upcoming.associate { it.rule.id to it.rule }
-    return estados
-        .filter { it.occurred }
-        .mapNotNull { estado -> reglas[estado.ruleId]?.let { it to estado } }
-        .sortedBy { (rule, _) -> rule.name.lowercase() }
-}
-
-/**
- * Los periodos **todavía abiertos que ya no urgen** — lo que quedaría sin ninguna puerta si
- * «Próximos» fuera la única forma de contestar «¿ya ocurrió?».
- *
- * ### Por qué existe
- *
- * `GET /api/payments/upcoming` corre el vencimiento al mes siguiente cuando pasaron los días de
- * gracia (`DEFAULT_GRACE_DAYS`, ver `DueDates.kt`), **aunque el dueño nunca haya confirmado el
- * periodo en curso**. Apenas eso pasa, la regla deja de urgir y sale de «Próximos». Pero
- * `GET /api/payments/occurrences` no corre nada: sigue preguntando por el mes en curso, así que
- * su `OccurrenceState` queda abierto.
- *
- * En la pantalla vieja eso no se notaba porque el inventario «Por día del mes» listaba TODAS las
- * reglas y ahí seguía la propuesta. Ese inventario no se mudó a Movimientos —su trabajo lo hacen
- * ahora el filtro del chip y el resumen— y sin esta función el agujero es grande: un recurrente
- * de principio de mes (el gimnasio del día 5) quedaría sin forma de confirmarse desde el día ~10
- * hasta fin de mes. No se sella solo —eso estaría mal, ver [PropuestaOcurrencia]—, simplemente el
- * mes siguiente se deja de preguntar y la oportunidad de anclarlo a un movimiento se pierde.
- *
- * Se excluyen las reglas que ya están en [proximos]: ahí la propuesta se pinta debajo de su fila y
- * repetirla acá sería preguntar dos veces lo mismo en la misma pantalla.
- *
- * Mismo criterio que [ocurrenciasSelladas] para el resto: las reglas salen de [upcoming], una
- * ocurrencia sin regla conocida se descarta en silencio, y el orden es por nombre para que las
- * filas no bailen entre recargas.
- */
-fun ocurrenciasAbiertasSinUrgencia(
-    upcoming: List<UpcomingPayment>,
-    estados: List<OccurrenceState>,
-    proximos: List<UpcomingPayment>,
-): List<Pair<RecurringRule, OccurrenceState>> {
-    val reglas = upcoming.associate { it.rule.id to it.rule }
-    val yaMostradas = proximos.map { it.rule.id }.toSet()
-    return estados
-        .filter { !it.occurred && it.ruleId !in yaMostradas }
-        .mapNotNull { estado -> reglas[estado.ruleId]?.let { it to estado } }
-        .sortedBy { (rule, _) -> rule.name.lowercase() }
-}
-
-/**
- * ¿Hay algo que preguntar para este recurrente?
- *
- * Solo cuando el periodo está abierto. Si ya se cerró no se pregunta nada: lo que corresponde ahí
- * es poder deshacerlo, no volver a ofrecer.
- */
-fun hayQuePreguntar(estado: OccurrenceState?): Boolean = estado != null && !estado.occurred
 
 /**
  * Los meses en palabras. La app nunca muestra `"2026-08"` ni `"08"`: eso es una clave, no algo que
@@ -162,59 +73,16 @@ fun tituloPropuesta(tipo: TransactionType, period: String): String {
 }
 
 /**
- * Cómo se lee una fila ya cerrada.
- *
- * **Dice el mes, no «este mes».** El texto anterior era «Ya ocurrió este mes», que en el mejor de
- * los casos repetía lo obvio y en el peor mentía: cuando la app cerraba el periodo equivocado, ese
- * renglón era el único rastro que quedaba del error y estaba escrito de la única forma que lo
- * volvía indetectable. El cálculo ya no puede equivocarse de mes, y el texto tampoco lo tapa.
- *
- * Se distingue además si quedó **respaldada por un movimiento** o si el dueño la cerró a mano: son
- * dos grados de certeza distintos y la fila no debería sonar igual en los dos casos. Un sello a
- * mano es una palabra suya; uno con movimiento está anclado a una plata que se puede ver.
- *
- * Y hay un tercer grado, el más fuerte: la cuota de un crédito o el pago de una tarjeta que **el
- * dueño nunca marcó** porque no hizo falta — el movimiento que bajó la deuda ya lo prueba (ver
- * [OccurrenceState.derivadaDeUnMovimiento]). Esa fila no dice «lo marcaste», porque no lo marcó;
- * dice de dónde sale. Es la mitad visible de que ahí no haya un «Deshacer»: lo que se deshace es
- * el movimiento, no un sello que no existe.
- *
- * **Y un cuarto, que es el único discutible: el que emparejó Movi solo** ([OccurrenceState.automatica]).
- * Ahí el hecho no es «la deuda bajó» sino «encontré un movimiento que no puede ser otra cosa», y
- * por eso su renglón lo dice con todas las letras —«Movi lo emparejó con…»— en vez de esconderse
- * detrás del «lo prueba un movimiento» de las cuotas. Si el dueño lee eso y no está de acuerdo,
- * tiene algo que hacer al respecto (el «no fue este», que persiste); con una cuota de crédito no,
- * y sonar igual en los dos casos le estaría pidiendo confianza donde corresponde revisar.
- *
- * **Y dice cuánta plata fue.** Un abono de $50.000 sobre un extracto de $1.008.902 salda el
- * periodo igual que un pago completo —el monto no filtra, y no puede: movi no conoce el extracto
- * (ver `PagosDeDeuda.kt` en el server)—, así que si la fila dijera solo «ya ocurrió», el dueño no
- * tendría cómo notar que pagó una parte. Con el número a la vista lo ve de un vistazo. Si el
- * server no mandó monto (un cliente contra una versión vieja) se cae al texto de antes, que sigue
- * siendo cierto.
- */
-fun textoYaOcurrio(estado: OccurrenceState): String {
-    // El nombre del período del dueño (con corte 25, el pago del 28-sep es «de octubre»); un server
-    // viejo no lo manda y se cae al mes del vencimiento, que era lo de antes.
-    val mes = nombreDelMes(estado.periodoDelDueno ?: estado.period)
-    val cuando = if (mes.isEmpty()) "Ya ocurrió" else "Ya ocurrió en $mes"
-    return "$cuando · " + origenDeLoOcurrido(
-        automatica = estado.automatica,
-        derivada = estado.derivadaDeUnMovimiento,
-        hayMovimiento = estado.eventId != null,
-        monto = estado.montoDelPago,
-        moneda = estado.monedaDelPago,
-    )
-}
-
-/**
  * **De dónde sale un «ya ocurrió»**, en media frase y sin el «cuándo» adelante.
  *
- * Vive aparte de [textoYaOcurrio] porque hay dos pantallas que tienen que decir exactamente lo
- * mismo con la fecha puesta de otra manera: «Ya ocurrieron» arma «Ya ocurrió en septiembre · …» y
- * el checklist del período arma «5 de septiembre · …», que es la forma que ya tenían todas sus
- * filas. Escribir estos cinco casos dos veces era garantizar que el día que se agregue un sexto
- * quede en uno solo — y justo acá el texto **es** la diferencia entre cuatro certezas distintas.
+ * Es la línea de evidencia de cada fila de «Ya pagaste» en la lista del período, y la del detalle de
+ * un período pasado: las dos tienen que decir exactamente lo mismo, porque acá el texto **es** la
+ * diferencia entre cuatro certezas distintas. (Vivía también en «Ya ocurrieron», que armaba «Ya
+ * ocurrió en septiembre · …»; esa sección se fue en la ola «una sola lista», con su mes adelante.)
+ *
+ * «Con un movimiento» lleva el monto cuando se sabe: el detalle de un período lo manda para lo que
+ * el dueño confirmó, y una fila que dice «con un movimiento» sin decir de cuánto no deja notar un
+ * abono parcial.
  *
  * El último caso es el único sin movimiento detrás, y lo dice: un sello viejo hecho a mano. La app
  * ya no puede crear ninguno (ver [com.jvillada.movi.ui.dashboard.EstadoDeLaFila]), pero en la base
@@ -235,29 +103,10 @@ internal fun origenDeLoOcurrido(
     automatica -> "lo emparejó Movi"
     derivada && monto != null -> "lo prueba un pago de ${formatMoney(monto, moneda ?: "COP")}"
     derivada -> "lo prueba un movimiento"
+    hayMovimiento && monto != null -> "con un movimiento de ${formatMoney(monto, moneda ?: "COP")}"
     hayMovimiento -> "con un movimiento"
     else -> "marcado a mano, sin movimiento"
 }
-
-/**
- * ¿Esta fila puede ofrecer «Deshacer»?
- *
- * **Solo si hay un sello que borrar.** Una ocurrencia derivada de un movimiento no se deshace: no
- * existe ninguna fila en `recurring_occurrences` que borrar, y el DELETE contestaría 404 mientras
- * la pantalla se queda igual. Un control que no hace nada es peor que la ausencia del control —
- * este repo ya se comió ese error una vez— así que la fila derivada aparece sin él, y su renglón
- * dice por qué está ahí (ver [textoYaOcurrio]).
- *
- * Para deshacerla de verdad hay un solo camino honesto: borrar o anular el movimiento. Ahí la fila
- * desaparece sola, porque el server la deriva en cada lectura.
- *
- * Lo mismo vale para las que emparejó Movi sola ([OccurrenceState.automatica]), que viajan con
- * [OccurrenceState.derivadaDeUnMovimiento] en `true` justamente por eso: tampoco hay fila que
- * borrar. Esas sí se pueden revertir, pero con otro botón y otro endpoint —el «no fue este», que
- * persiste el rechazo— así que la pantalla que lo ofrezca tiene que leer `automatica`, no esta
- * función. Un cliente viejo que solo conoce este campo no ofrece nada, que es lo correcto.
- */
-fun sePuedeDeshacer(estado: OccurrenceState): Boolean = !estado.derivadaDeUnMovimiento
 
 /**
  * Una línea que describa la propuesta sin obligar a abrirla: el día **con su mes** y **qué fue** —
@@ -324,26 +173,25 @@ fun difiereDelEsperado(esperado: Long, real: Long): Boolean = esperado != real
  * que el resto de esta pantalla desde que el «Flujo libre» mintió dos veces: sin el dato, no se
  * dice.
  */
-fun avisaMontoDistinto(rule: RecurringRule, real: Long, monedaReal: String = "COP"): Boolean =
-    // Una regla no tiene moneda: su monto es en pesos. Comparar 20 dólares contra $80.000 daba
-    // «no es el monto que anotaste» sobre un pago en dólares normal — mismo criterio que la
-    // tarjeta: sin un esperado comparable, no se afirma nada.
-    monedaReal == "COP" && !rule.montoEsSaldo && difiereDelEsperado(rule.amount, real)
+fun avisaMontoDistinto(esperado: Long, montoEsSaldo: Boolean, real: Long, monedaReal: String = "COP"): Boolean =
+    // Lo esperado es en pesos. Comparar 20 dólares contra $80.000 daba «no es el monto que
+    // anotaste» sobre un pago en dólares normal — mismo criterio que la tarjeta: sin un esperado
+    // comparable, no se afirma nada.
+    monedaReal == "COP" && !montoEsSaldo && difiereDelEsperado(esperado, real)
 
 /**
  * El aviso de que la propuesta no vale lo que el dueño anotó, **ya escrito**, o `null` si no hay
  * nada que advertir.
  *
- * Es [avisaMontoDistinto] con su texto pegado, y existe por lo mismo que [origenDeLoOcurrido]: la
- * propuesta se dibuja ahora en dos lugares —«Próximos» y el checklist del período— y el aviso tiene
- * que decir lo mismo en los dos. La decisión (cuándo advertir) y la redacción (qué decir) viajan
- * juntas a propósito: separadas, cualquiera de las dos pantallas podía quedarse con la decisión
- * vieja o con la frase vieja, y las dos maneras de equivocarse terminan en el dueño confirmando un
- * movimiento que no era.
+ * Es [avisaMontoDistinto] con su texto pegado: la decisión (cuándo advertir) y la redacción (qué
+ * decir) viajan juntas a propósito. Vivía en «Próximos»; desde la ola «una sola lista» lo dice la
+ * propuesta de la fila del período, que es donde quedó la pregunta.
+ *
+ * @param esperado el monto de la regla; [montoEsSaldo] si ese monto es el saldo de una deuda.
  */
-fun avisoDeMontoDistinto(rule: RecurringRule, event: FinancialEvent): String? =
-    if (!avisaMontoDistinto(rule, event.amount, event.currency)) null
-    else "No es el monto que anotaste (${formatCOP(rule.amount)}). Puede ser: revísalo antes de confirmar."
+fun avisoDeMontoDistinto(esperado: Long, montoEsSaldo: Boolean, event: FinancialEvent): String? =
+    if (!avisaMontoDistinto(esperado, montoEsSaldo, event.amount, event.currency)) null
+    else "No es el monto que anotaste (${formatCOP(esperado)}). Puede ser: revísalo antes de confirmar."
 
 /**
  * **A dónde lleva «Anotar este pago»**, con todo lo que el recurrente ya sabe puesto.
@@ -360,7 +208,7 @@ fun avisoDeMontoDistinto(rule: RecurringRule, event: FinancialEvent): String? =
  * `OccurrenceState.derivadaDeUnMovimiento`). Un gasto suelto anotado en la hoja de Agregar **no**
  * baja ninguna deuda, así que la fila se quedaría sin tildar igual y encima habría quedado un gasto
  * duplicado. El movimiento que esa fila necesita se registra en Créditos, y ahí es donde lleva —
- * mismo criterio que el toque sobre su renglón en «Próximos».
+ * mismo criterio que el toque sobre la fila (ver `etiquetaDeAbrir`).
  *
  * @param venceIso la fecha del vencimiento, que es la que hace que el movimiento caiga en el
  *   período correcto. Vacía o ilegible se deja pasar tal cual: la hoja se cae a hoy sola.
@@ -401,19 +249,4 @@ fun hojaParaAnotar(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
     cuentaId = pago.cuentaId,
     venceIso = pago.vence,
     esIngreso = pago.esIngreso,
-)
-
-/**
- * [hojaParaAnotar] desde una regla, para «Próximos» y «Sin confirmar», que tienen la regla entera y
- * la fecha del vencimiento por separado.
- */
-fun hojaParaAnotar(rule: RecurringRule, venceIso: String): Screen = hojaParaAnotar(
-    ruleId = rule.id,
-    nombre = rule.name,
-    monto = rule.amount,
-    montoEsSaldo = rule.montoEsSaldo,
-    categoria = rule.category,
-    cuentaId = rule.accountId,
-    venceIso = venceIso,
-    esIngreso = rule.type == TransactionType.INCOME,
 )
