@@ -21,12 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.LineaEsqueleto
@@ -92,10 +87,6 @@ const val TAG_ESQUELETO_DEL_DISPONIBLE: String = "esqueleto-del-disponible"
 
 /** La barra de una columna (período, semana, hoy): está solo cuando hay margen contra qué medir. */
 const val TAG_BARRA_DE_VENTANA: String = "barra-de-ventana"
-
-/** Hasta dónde se achica «gastaste $X» para entrar en su columna: sigue siendo legible. */
-internal val TAMANO_MINIMO_DE_LO_GASTADO: TextUnit = 9.5.sp
-
 /**
  * **La tarjeta del disponible**, con su título arriba. La pinta el Inicio (ver
  * [DisponibleDelPeriodoSection]) y la pestaña Plan, que la tiene de protagonista con otro título
@@ -181,7 +172,7 @@ private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale
 /**
  * [CuerpoDelDisponible] sin ninguna cifra: el rótulo «Disponible del período» (no es un dato, es
  * el nombre del renglón) con un bloque donde va la cifra, un renglón para la frase y las tres
- * columnas con su rótulo, lo que queda, el «gastaste $…» y la barra. Mismos espacios y estilos que la real,
+ * columnas con su rótulo, lo que queda, los dos renglones de «gastaste $…» y la barra. Mismos espacios y estilos que la real,
  * para que al llegar el dato no cambie de alto (±8 dp, lo mide `PlanScreenTest`).
  */
 @Composable
@@ -210,6 +201,7 @@ private fun CuerpoDelDisponibleEsqueleto() {
             Column(modifier = Modifier.weight(1f)) {
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 LineaEsqueleto(fraccionDelAncho = 0.8f, estilo = Movi.textos.monto)
+                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 Spacer(Modifier.height(Movi.espacios.minimo))
                 BloqueEsqueleto(alto = Movi.espacios.minimo + 2.dp)
@@ -251,21 +243,16 @@ private fun ColumnaDeVentana(
             Movi.textos.monto,
             color = if (ventana.nivel == NivelDelGasto.PASADO) Movi.colores.sale else Movi.colores.texto,
         )
-        // Un renglón que se achica si hace falta: «gastaste $888.888» pide ~230 px y la columna da
-        // ~200 a 390 dp con la letra de la app (lo mide `GastasteEntraEnSuColumnaTest`). El alto
-        // no cambia —lo fija el `lineHeight` del estilo—, así que las tres columnas siguen parejas.
-        val apoyo = Movi.textos.apoyo
-        BasicText(
-            text = "gastaste ${formatMoneyCompact(ventana.gastado)}",
-            style = apoyo.copy(color = Movi.colores.textoApagado),
+        // «gastaste» y la cifra en dos renglones, no en uno: «gastaste $440.000» no entra en su
+        // tercio de tarjeta a 390 dp —visto en la web, cortado en «gastaste $440…»— y achicar la
+        // letra hasta que entre la dejaba en ~9 sp. Dos renglones fijos en las tres columnas, así
+        // que las barras siguen parejas (lo mide `LasCifrasDelDisponibleEntranTest`).
+        Text(text = "gastaste", style = Movi.textos.apoyo, color = Movi.colores.textoApagado, maxLines = 1)
+        Text(
+            text = formatMoneyCompact(ventana.gastado),
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoApagado,
             maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
-            autoSize = TextAutoSize.StepBased(
-                minFontSize = TAMANO_MINIMO_DE_LO_GASTADO,
-                maxFontSize = apoyo.fontSize,
-                stepSize = 0.25.sp,
-            ),
         )
         if (hayMargen) {
             Spacer(Modifier.height(Movi.espacios.minimo))

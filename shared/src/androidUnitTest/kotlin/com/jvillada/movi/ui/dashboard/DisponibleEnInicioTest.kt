@@ -49,7 +49,7 @@ import kotlin.test.assertTrue
  *
  * **Cada columna dice lo que te queda, no lo que gastaste** (el dueño, 28-sep: *«cuánto me puedo
  * gastar por cada una de esas unidades de tiempo no cuánto me gasté»*): la cifra grande es la meta
- * menos lo gastado, y lo gastado va chico abajo («gastaste $X»). Las dos se ven con o sin margen;
+ * menos lo gastado, y lo gastado va chico abajo («gastaste» y la cifra). Las dos se ven con o sin margen;
  * la barra, solo con margen.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -84,12 +84,14 @@ class DisponibleEnInicioTest {
     /** Los colores del tema, leídos dentro de la composición para comparar sin copiar sus valores. */
     private var rojo: Color = Color.Unspecified
     private var normal: Color = Color.Unspecified
+    private var apagado: Color = Color.Unspecified
 
     private fun montar(data: DashboardData) {
         composeRule.setContent {
             MoviTheme {
                 rojo = Movi.colores.sale
                 normal = Movi.colores.texto
+                apagado = Movi.colores.textoApagado
                 // La escala de letra ×1,12 que `App.kt` le pone a toda la app.
                 val base = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
@@ -115,11 +117,21 @@ class DisponibleEnInicioTest {
         return resultados.single()
     }
 
-    /** Las [cuantas] cifras con este texto están pintadas de [color]. */
-    private fun assertCifras(texto: String, cuantas: Int, color: Color) {
-        val encontradas = nodos(texto)
-        assertEquals(cuantas, encontradas.size, "«$texto» tendría que estar $cuantas veces")
-        encontradas.forEach { assertEquals(color, layoutDe(it).layoutInput.style.color, "el color de «$texto»") }
+    /** Cuántos textos «[texto]» hay pintados de [color]. */
+    private fun contar(texto: String, color: Color): Int =
+        nodos(texto).count { layoutDe(it).layoutInput.style.color == color }
+
+    /**
+     * La cifra grande —lo que te queda— dice [texto] en [cuantas] columnas, pintada de [color]. El
+     * color la separa de lo gastado, que va abajo en gris y puede decir la misma cifra («$0»).
+     */
+    private fun assertCifras(texto: String, cuantas: Int, color: Color) =
+        assertEquals(cuantas, contar(texto, color), "«$texto» grande tendría que estar $cuantas veces")
+
+    /** Abajo, «gastaste» y la cifra en gris: [texto] en [cuantas] columnas, y «gastaste» en las tres. */
+    private fun assertGastaste(texto: String, cuantas: Int) {
+        composeRule.onAllNodesWithText("gastaste", useUnmergedTree = true).assertCountEquals(3)
+        assertEquals(cuantas, contar(texto, apagado), "«gastaste $texto» tendría que estar $cuantas veces")
     }
 
     private fun barras(): Int = composeRule.onAllNodesWithTag(TAG_BARRA_DE_VENTANA, useUnmergedTree = true)
@@ -143,11 +155,11 @@ class DisponibleEnInicioTest {
         assertCifras("\$6,8M", 1, normal)
         assertCifras("\$740.320", 1, normal)
         assertCifras("\$72.580", 1, normal)
-        composeRule.onAllNodesWithText("gastaste \$150.000", useUnmergedTree = true).assertCountEquals(3)
+        assertGastaste("\$150.000", 3)
         // La meta ya no va escrita como «de $X»: la cifra grande es lo que queda de ella.
         composeRule.onNodeWithText("de \$", substring = true, useUnmergedTree = true).assertDoesNotExist()
         assertEquals(3, barras(), "con margen, cada columna tiene su barra")
-        // Que «gastaste $X» entre en su columna lo mide `GastasteEntraEnSuColumnaTest`, con el
+        // Que las cifras entren en su columna lo mide `LasCifrasDelDisponibleEntranTest`, con el
         // motor de texto real: acá Robolectric mide con uno que no sirve para anchos.
         // De dónde sale, detrás de un toque.
         composeRule.onNodeWithText("Ingresos \$10M menos fijos \$3,1M", useUnmergedTree = true).assertDoesNotExist()
@@ -169,11 +181,11 @@ class DisponibleEnInicioTest {
             .assertIsDisplayed()
         // Te pasaste: al período le queda $6,9M − $8M, en rojo — la misma cifra que la frase.
         assertCifras("−\$1,1M", 1, rojo)
-        composeRule.onNodeWithText("gastaste \$8M", useUnmergedTree = true).assertIsDisplayed()
+        assertGastaste("\$8M", 1)
         // La semana y hoy no tienen gasto: les queda la meta entera, y lo siguen diciendo.
         assertCifras("\$890.320", 1, normal)
         assertCifras("\$222.580", 1, normal)
-        composeRule.onAllNodesWithText("gastaste \$0", useUnmergedTree = true).assertCountEquals(2)
+        assertEquals(2, contar("\$0", apagado), "la semana y hoy: «gastaste $0»")
         composeRule.onNodeWithText("bien", substring = true, ignoreCase = true, useUnmergedTree = true).assertDoesNotExist()
     }
 
@@ -189,7 +201,7 @@ class DisponibleEnInicioTest {
         assertCifras("−\$77.420", 1, rojo)
         assertCifras("\$590.320", 1, normal)
         assertCifras("\$6,6M", 1, normal)
-        composeRule.onAllNodesWithText("gastaste \$300.000", useUnmergedTree = true).assertCountEquals(3)
+        assertGastaste("\$300.000", 3)
         composeRule.onNodeWithText(
             "Hoy te pasaste de la meta por \$77.420 · a la semana le quedan \$590.320",
             useUnmergedTree = true,
@@ -230,7 +242,7 @@ class DisponibleEnInicioTest {
         // gastado abajo. Lo que se va es la barra: contra cero no hay nada que medir.
         composeRule.onNodeWithText("Período", useUnmergedTree = true).assertIsDisplayed()
         assertCifras("−\$90.000", 3, rojo)
-        composeRule.onAllNodesWithText("gastaste \$90.000", useUnmergedTree = true).assertCountEquals(3)
+        assertGastaste("\$90.000", 3)
         composeRule.onNodeWithText("de \$", substring = true, useUnmergedTree = true).assertDoesNotExist()
         assertEquals(0, barras(), "sin margen no hay barras")
     }
@@ -243,7 +255,7 @@ class DisponibleEnInicioTest {
         composeRule.onNodeWithText("Los fijos del período superan tus ingresos por \$1,1M", useUnmergedTree = true)
             .assertIsDisplayed()
         assertCifras("\$0", 3, normal)
-        composeRule.onAllNodesWithText("gastaste \$0", useUnmergedTree = true).assertCountEquals(3)
+        assertGastaste("\$0", 3)
         assertEquals(0, barras())
     }
 }
