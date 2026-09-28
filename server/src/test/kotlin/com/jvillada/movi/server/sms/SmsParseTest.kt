@@ -159,6 +159,29 @@ class SmsParseTest {
         assertEquals(CARD_PAYMENT_CATEGORY, otro.category)
     }
 
+    /**
+     * El SMS real de Nu, hallado en vivo el 27-sep-2026: sin este caso caía en `Otros`, con «en
+     * tu app» —el pie del mensaje— como comercio (`merchantInRegex` capturando después de «En un
+     * rato podrás verlo…»). Nu no escribe ninguna de las frases de Bancolombia
+     * ([looksLikeCardPayment]); necesita su propia detección, ya calculada en `parseSms` con
+     * `pagoDeNu`. Solo aplica con `origen` diciendo Nu — el mismo criterio que ya usa
+     * `loDeNuEsUnMovimiento`.
+     */
+    @Test
+    fun `el pago de tarjeta de Nu se categoriza aunque no diga ninguna frase de Bancolombia`() {
+        val texto = "¡Bravo! Pagaste tu tarjeta de crédito Nu: Recibimos tu pago por \$1.998,96. " +
+            "En un rato podrás verlo en tu app."
+        val p = assertNotNull(parseSms(texto, origen = "Notificación · Nu"))
+        assertEquals(CARD_PAYMENT_CATEGORY, p.category)
+        assertEquals("Pago de tarjeta", p.merchant)
+        assertEquals(1_998.96, p.amount)
+        assertEquals(TransactionType.EXPENSE, p.type)
+
+        // Sin el origen de Nu, no hay como distinguirlo de un texto cualquiera con "pago" y "en":
+        // sigue el camino de siempre, sin la regla nueva.
+        assertNotEquals(CARD_PAYMENT_CATEGORY, assertNotNull(parseSms(texto)).category)
+    }
+
     @Test
     fun `pagos QR y transferencias dicen a quien`() {
         // **La llave va en el nombre.** Sin ella todos los pagos por QR se llaman igual, y Movi no
