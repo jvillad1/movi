@@ -228,10 +228,11 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     }
 
     fun limpio(m: String?) = m?.trim()?.trimEnd(',', '.')?.trim()?.takeIf { it.isNotEmpty() }
+    val esPagoDeNu = origen != null && origenNu.containsMatchIn(origen) && pagoDeNu.containsMatchIn(text)
     val merchant = when {
         text.contains("Nómina recibida", ignoreCase = true) -> "Nómina"
         type == TransactionType.INCOME -> limpio(merchantOfRegex.find(text)?.groupValues?.get(1)) ?: "Transferencia recibida"
-        looksLikeCardPayment(text, category = "") -> "Pago de tarjeta"
+        looksLikeCardPayment(text, category = "") || esPagoDeNu -> "Pago de tarjeta"
         // Un pago por QR puede venir con el nombre del comercio («por codigo QR en Mora Soccer»);
         // cuando no, la llave es lo único que lo distingue del pago por QR de mañana.
         "codigo qr" in minusculas || "código qr" in minusculas ->
@@ -247,7 +248,7 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
             ?: if ("transferiste" in minusculas) "Transferencia" else "Movimiento"
     }
 
-    val category = categoryFor(text, merchant, type)
+    val category = categoryFor(text, merchant, type, esPagoDeNu)
     return ParsedSms(amount, merchant, type, category, currency)
 }
 
@@ -256,9 +257,15 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
  * "Pago autom TC ...1234 por $80.894" que `merchantInRegex` no captura (no tiene "en <algo>"),
  * así que el merchant extraído llega como "Movimiento" y perdería la señal. Se revisa el texto
  * crudo antes de caer en las reglas por merchant.
+ *
+ * [esPagoDeNu]: ya calculado en [parseSms] con [pagoDeNu] y [origenNu] — Nu no escribe ninguna de
+ * las frases de [looksLikeCardPayment] (esas salen de extractos de Bancolombia). Sin esto, «¡Bravo!
+ * Pagaste tu tarjeta de crédito Nu: Recibimos tu pago por $1.998,96. En un rato podrás verlo en tu
+ * app.» caía en `Otros`, con «en tu app» como comercio: el pie del mensaje, capturado por
+ * [merchantInRegex] al no encontrar ninguna otra regla que aplicara primero.
  */
-private fun categoryFor(text: String, merchant: String, type: TransactionType): String {
-    if (type == TransactionType.EXPENSE && looksLikeCardPayment(text, category = "")) {
+private fun categoryFor(text: String, merchant: String, type: TransactionType, esPagoDeNu: Boolean): String {
+    if (type == TransactionType.EXPENSE && (looksLikeCardPayment(text, category = "") || esPagoDeNu)) {
         return CARD_PAYMENT_CATEGORY
     }
     if (type == TransactionType.INCOME) {
