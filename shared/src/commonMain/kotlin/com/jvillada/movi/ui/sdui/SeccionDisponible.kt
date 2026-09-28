@@ -52,7 +52,7 @@ import com.jvillada.movi.ui.dashboard.rotuloDeLaSemana
  * El dueño la pidió así: *«Disponible en el periodo · por semana · por día»*. Se queda, pero baja de
  * lugar (debajo de «Falta por pagar», que son justamente los fijos que resta) y se achica: la cifra
  * del disponible, **una** frase de cómo viene y tres columnas —el período, la semana, hoy— con lo
- * gastado contra su meta y una barra que crece al cargar.
+ * que te queda por gastar en cada una, lo que ya gastaste y una barra que crece al cargar.
  *
  * **Una sola frase, no tres.** Cada fila decía la suya, y con el período pasado el dueño leía «Te
  * pasaste por $563.456» en rojo y, un renglón abajo, «Vas bien: te quedan … para esta semana». La
@@ -64,8 +64,9 @@ import com.jvillada.movi.ui.dashboard.rotuloDeLaSemana
  * dónde sale?»: es la explicación, no la noticia.
  *
  * **Cuando los fijos superan lo que hay lo dice con todas las letras** y no dibuja barras: una
- * barra contra un disponible negativo no tiene largo que signifique algo. Las cifras de lo gastado
- * se siguen mostrando, porque son lo único sobre lo que se puede actuar hoy.
+ * barra contra un disponible negativo no tiene largo que signifique algo. Las columnas se siguen
+ * mostrando —lo que queda, que ahí es cero o negativo, y lo gastado—, porque son lo único sobre lo
+ * que se puede actuar hoy.
  */
 @Composable
 internal fun DisponibleDelPeriodoSection(
@@ -83,6 +84,9 @@ const val TAG_TARJETA_DEL_DISPONIBLE: String = "tarjeta-del-disponible"
 
 /** La cifra esqueleto del disponible — está solo mientras carga. */
 const val TAG_ESQUELETO_DEL_DISPONIBLE: String = "esqueleto-del-disponible"
+
+/** La barra de una columna (período, semana, hoy): está solo cuando hay margen contra qué medir. */
+const val TAG_BARRA_DE_VENTANA: String = "barra-de-ventana"
 
 /**
  * **La tarjeta del disponible**, con su título arriba. La pinta el Inicio (ver
@@ -169,8 +173,9 @@ private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale
 /**
  * [CuerpoDelDisponible] sin ninguna cifra: el rótulo «Disponible del período» (no es un dato, es
  * el nombre del renglón) con un bloque donde va la cifra, un renglón para la frase y las tres
- * columnas con su rótulo, lo gastado, el «de $…» y la barra. Mismos espacios y estilos que la real,
- * para que al llegar el dato no cambie de alto (±8 dp, lo mide `PlanScreenTest`).
+ * columnas con su rótulo, lo que queda, los dos renglones de «gastaste $…» y la barra. Mismos
+ * espacios y estilos que la real, para que al llegar el dato no cambie de alto (±8 dp, lo mide
+ * `PlanScreenTest`).
  */
 @Composable
 private fun CuerpoDelDisponibleEsqueleto() {
@@ -199,6 +204,7 @@ private fun CuerpoDelDisponibleEsqueleto() {
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 LineaEsqueleto(fraccionDelAncho = 0.8f, estilo = Movi.textos.monto)
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
+                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 Spacer(Modifier.height(Movi.espacios.minimo))
                 BloqueEsqueleto(alto = Movi.espacios.minimo + 2.dp)
             }
@@ -207,8 +213,20 @@ private fun CuerpoDelDisponibleEsqueleto() {
 }
 
 /**
- * Una ventana en su columna: el rótulo, lo gastado, la meta y la barra. Sin margen no hay meta ni
- * barra —no hay contra qué medir—, solo lo gastado.
+ * Una ventana en su columna: el rótulo, **lo que te queda por gastar en ella**, lo que ya gastaste
+ * y la barra.
+ *
+ * El dueño, el 28-sep: *«yo quiero que esto me marque cuánto me puedo gastar por cada una de esas
+ * unidades de tiempo no cuánto me gasté, son cosas muy diferentes»*. La cifra grande era lo gastado
+ * y la meta iba chiquita («de $X»), y sin margen la meta ni aparecía — justo cuando más importa
+ * saber cuánto queda. Ahora la grande es [VentanaDelDisponible.teQuedan] y la chica, lo gastado.
+ *
+ * **Las dos cifras se ven siempre, con o sin margen.** Sin margen la meta es cero, así que lo que
+ * queda es menos lo gastado: «$0» si en esa ventana no gastaste nada, y el negativo en rojo si ya
+ * gastaste — «no te queda nada, y ya gastaste $X de más» es información, no un susto.
+ *
+ * **La barra sí se va sin margen**: mide lo gastado contra la meta, y contra cero no tiene largo que
+ * signifique algo.
  */
 @Composable
 private fun ColumnaDeVentana(
@@ -220,25 +238,34 @@ private fun ColumnaDeVentana(
 ) {
     Column(modifier = modifier) {
         Text(text = rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
+        // Rojo cuando la ventana está PASADA, que es exactamente cuando lo que queda es negativo
+        // (sin margen: gastó algo contra una meta de cero).
         Cifra(
-            formatMoneyCompact(ventana.gastado),
+            formatMoneyCompact(ventana.teQuedan),
             Movi.textos.monto,
             color = if (ventana.nivel == NivelDelGasto.PASADO) Movi.colores.sale else Movi.colores.texto,
         )
+        // «gastaste» y la cifra en dos renglones, no en uno: «gastaste $440.000» no entra en su
+        // tercio de tarjeta a 390 dp —visto en la web, cortado en «gastaste $440…»— y achicar la
+        // letra hasta que entre la dejaba en ~9 sp. Dos renglones fijos en las tres columnas, así
+        // que las barras siguen parejas. Que cada cifra entre en su columna lo mide
+        // `LasCifrasDelDisponibleEntranTest`.
+        Text(text = "gastaste", style = Movi.textos.apoyo, color = Movi.colores.textoApagado, maxLines = 1)
+        Text(
+            text = formatMoneyCompact(ventana.gastado),
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoApagado,
+            maxLines = 1,
+        )
         if (hayMargen) {
-            Text(
-                text = "de ${formatMoneyCompact(ventana.meta)}",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoApagado,
-                maxLines = 1,
-            )
             Spacer(Modifier.height(Movi.espacios.minimo))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(Movi.espacios.minimo + 2.dp)
                     .clip(RoundedCornerShape(Movi.formas.pleno))
-                    .background(Movi.colores.hilo),
+                    .background(Movi.colores.hilo)
+                    .testTag(TAG_BARRA_DE_VENTANA),
             ) {
                 // Sin gasto no hay relleno: una barra vacía dice exactamente eso. Con algo gastado,
                 // un mínimo del 2 % para que se vea que hay algo.
