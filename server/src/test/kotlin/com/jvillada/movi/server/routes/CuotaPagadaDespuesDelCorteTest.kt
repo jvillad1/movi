@@ -109,7 +109,7 @@ class CuotaPagadaDespuesDelCorteTest {
         }
     }
 
-    private fun otrosPagosDeDeuda(): Long = transaction {
+    private fun otrosPagosDeDeuda(reglaDelCredito: RecurringRule = regla): Long = transaction {
         val periodo = ajustesDelPeriodoSinSuspender(uid)
         val dias = diasDelPeriodo(hoy, periodo)
         disponibleDelServidor(
@@ -119,7 +119,7 @@ class CuotaPagadaDespuesDelCorteTest {
             monthStart = appDateToEpochMillis(dias.start),
             monthEnd = appDateToEpochMillis(dias.endInclusive.plusDays(1)),
             voidedIds = emptySet(),
-            reglasDeCredito = listOf(regla),
+            reglasDeCredito = listOf(reglaDelCredito),
         ).pagosDeDeudaFueraDelChecklist
     }
 
@@ -131,14 +131,24 @@ class CuotaPagadaDespuesDelCorteTest {
     }
 
     /**
-     * El control: **sin** el pago del 5, el del 27 es ambiguo como el de AMEX (¿septiembre tarde u
-     * octubre adelantado?) y se queda en septiembre, el lado barato. La cuota del 15-oct no lo
-     * reclama, y cuenta como otro pago de deuda. Si esto diera 0, la prueba de arriba no probaría que
-     * el historial se está cargando.
+     * **Sin el pago del 5 también**: el primer pago que movi le conoce a la deuda, hecho en el
+     * período de octubre, es la cuota de octubre (decisión del dueño, 27-sep-2026 — el caso de Master
+     * Black). Antes se quedaba en septiembre, la cuota del 15-oct no lo reclamaba y se restaba otra vez.
      */
     @Test
-    fun `sin el pago de septiembre, el del 27 sigue siendo el de septiembre`() {
+    fun `sin el pago de septiembre, el del 27 tambien es la cuota de octubre`() {
         cuota("c-0927", LocalDate.of(2026, 9, 27))
-        assertEquals(26_485L, otrosPagosDeDeuda())
+        assertEquals(0L, otrosPagosDeDeuda())
+    }
+
+    /**
+     * El control: un pago dentro de la gracia del vencimiento anterior (día 24, pagado el 26) salda
+     * ese vencimiento, que es del período pasado — ningún ítem de este período lo reclama y cuenta
+     * como otro pago de deuda. Si esto diera 0, las pruebas de arriba no probarían nada.
+     */
+    @Test
+    fun `un pago dentro de la gracia del vencimiento anterior no es la cuota de este periodo`() {
+        cuota("c-0926", LocalDate.of(2026, 9, 26))
+        assertEquals(26_485L, otrosPagosDeDeuda(regla.copy(dayOfMonth = 24)))
     }
 }

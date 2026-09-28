@@ -291,12 +291,9 @@ private fun esCuotaQueSaleDelBolsillo(evento: FinancialEvent): Boolean =
  *
  * @param historialDePagosDeDeuda los pagos de deuda alrededor de [hoy], con la misma franja que usan
  *   `/api/payments/occurrences` y «Próximos» (`pagosDeDeudaAlrededorDe`). **Sin valor por defecto
- *   a propósito.** A qué vencimiento se le atribuye un pago depende de si el período ANTERIOR ya
- *   tenía el suyo (ver [periodoQueSalda]), y ese pago no está en [eventos], que son solo los del
- *   período: con corte 25, la cuota de Crediágil pagada el 5-sep y otra vez el 27-sep se leía, desde
- *   el período de octubre, como un solo pago de septiembre — el ítem del 15-oct quedaba sin pagar y
- *   el Disponible restaba el pago dos veces (como fijo y como otro pago de deuda). Un default vacío
- *   dejaría pasar ese mismo error, en silencio, en el próximo call site.
+ *   a propósito**: el Disponible y «Falta por pagar» tienen que leer los MISMOS pagos para decir
+ *   lo mismo de una cuota. Los [eventos] son solo los del período, y un pago del período anterior
+ *   hecho dentro de la gracia de su vencimiento no está ahí.
  */
 fun cuotasDelChecklistPagadas(
     reglasDeCredito: List<RecurringRule>,
