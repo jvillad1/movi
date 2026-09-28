@@ -87,6 +87,7 @@ const val TAG_ESQUELETO_DEL_DISPONIBLE: String = "esqueleto-del-disponible"
 
 /** La barra de una columna (período, semana, hoy): está solo cuando hay margen contra qué medir. */
 const val TAG_BARRA_DE_VENTANA: String = "barra-de-ventana"
+
 /**
  * **La tarjeta del disponible**, con su título arriba. La pinta el Inicio (ver
  * [DisponibleDelPeriodoSection]) y la pestaña Plan, que la tiene de protagonista con otro título
@@ -172,8 +173,9 @@ private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale
 /**
  * [CuerpoDelDisponible] sin ninguna cifra: el rótulo «Disponible del período» (no es un dato, es
  * el nombre del renglón) con un bloque donde va la cifra, un renglón para la frase y las tres
- * columnas con su rótulo, lo que queda, los dos renglones de «gastaste $…» y la barra. Mismos espacios y estilos que la real,
- * para que al llegar el dato no cambie de alto (±8 dp, lo mide `PlanScreenTest`).
+ * columnas con su rótulo, lo que queda, los dos renglones de «gastaste $…» y la barra. Mismos
+ * espacios y estilos que la real, para que al llegar el dato no cambie de alto (±8 dp, lo mide
+ * `PlanScreenTest`).
  */
 @Composable
 private fun CuerpoDelDisponibleEsqueleto() {
@@ -246,7 +248,8 @@ private fun ColumnaDeVentana(
         // «gastaste» y la cifra en dos renglones, no en uno: «gastaste $440.000» no entra en su
         // tercio de tarjeta a 390 dp —visto en la web, cortado en «gastaste $440…»— y achicar la
         // letra hasta que entre la dejaba en ~9 sp. Dos renglones fijos en las tres columnas, así
-        // que las barras siguen parejas (lo mide `LasCifrasDelDisponibleEntranTest`).
+        // que las barras siguen parejas. Que cada cifra entre en su columna lo mide
+        // `LasCifrasDelDisponibleEntranTest`.
         Text(text = "gastaste", style = Movi.textos.apoyo, color = Movi.colores.textoApagado, maxLines = 1)
         Text(
             text = formatMoneyCompact(ventana.gastado),
