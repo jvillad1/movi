@@ -209,6 +209,11 @@ fun QuickAddScreen(
     presetFecha: String? = null,
     presetEsIngreso: Boolean = false,
     /**
+     * La deuda que se viene a pagar: abre la hoja en «Cuota» con ella en «Hacia» y [presetMonto]
+     * como monto. Ver [Screen.QuickAdd.presetDeudaId].
+     */
+    presetDeudaId: String? = null,
+    /**
      * Ola 9 · B: el movimiento que se acaba de guardar, para que quien sobreviva a esta hoja
      * (App.kt) pueda ofrecer convertirlo en recurrente. Se llama **después** de que el POST
      * salió bien, junto con [onSaved] — nunca antes: primero se guarda, después se ofrece.
@@ -222,7 +227,12 @@ fun QuickAddScreen(
     // El monto viaja como cadena de dígitos, que es lo que teclea el teclado numérico: un preset
     // se escribe igual que si lo hubiera tecleado él. Un cero o un negativo no se pone —«0» dejaría
     // el botón deshabilitado con un campo que parece lleno— y se cae al vacío de siempre.
-    var amount by remember { mutableStateOf(presetMonto?.takeIf { it > 0 }?.toString() ?: "") }
+    //
+    // Con [presetDeudaId] el monto es de la pestaña «Cuota» (se lo lleva [TransferBody]): ponerlo
+    // también acá lo dejaría escrito en «Gasto» si el dueño cambia de pestaña.
+    var amount by remember {
+        mutableStateOf(presetMonto?.takeIf { it > 0 && presetDeudaId == null }?.toString() ?: "")
+    }
     var note by remember { mutableStateOf(presetNota?.trim().orEmpty()) }
     // F35: arranca en la primera categoría predefinida de Gastos, como antes arrancaba en
     // "Mercado" — y se cambia desde la cuadrícula de [SelectorDeCategoria] (Ola B).
@@ -318,7 +328,18 @@ fun QuickAddScreen(
         // Un sueldo no se paga: llega. Abrir «Anotar este pago» de un recurrente de ingreso en
         // la pestaña «Gasto» lo anotaría con el signo al revés, que es el error más caro que esta
         // hoja puede cometer en silencio.
-        mutableStateOf(PickersDeLaHoja(typeIndex = if (presetEsIngreso) 1 else 0))
+        //
+        // Y una cuota se paga en «Cuota»: es la única pestaña que arma el traspaso de dos patas que
+        // baja la deuda (y tilda la fila del checklist).
+        mutableStateOf(
+            PickersDeLaHoja(
+                typeIndex = when {
+                    presetDeudaId != null -> TIPO_PAGO_CUOTA
+                    presetEsIngreso -> 1
+                    else -> 0
+                },
+            ),
+        )
     }
 
     // ── Las tres medidas de la hoja, y el desplazamiento que las une ──────────────────
@@ -429,10 +450,10 @@ fun QuickAddScreen(
     // y el guardado preguntaran cada uno por su cuenta, una hoja abierta a las 23:59:59 podría
     // decir «Hoy» y guardar la fecha de mañana.
     val hoy = remember { hoyEnAppZone() }
-    // Un preset gana sobre «hoy», y no es un detalle: el checklist ofrece anotar una fila que pudo
-    // haber vencido hace dos semanas, y con la fecha de hoy ese movimiento cae en el período
-    // siguiente — o sea, la fila que se venía a tildar se quedaría sin tildar igual. Una fecha que
-    // no se entienda no se inventa: se cae a hoy, que es el default de siempre.
+    // Un preset gana sobre «hoy». El checklist ya no manda ninguno (revisión del 29-sep: anotar con
+    // el vencimiento fechaba el pago un día en que la plata no salió; ver `hojaParaAnotar`), pero
+    // queda para quien necesite abrir la hoja en otro día. Una fecha que no se entienda no se
+    // inventa: se cae a hoy, que es el default de siempre.
     var fecha by remember { mutableStateOf(fechaDelPreset(presetFecha) ?: hoy) }
     /**
      * **El id del movimiento que se está escribiendo. Se genera una vez por borrador, no una vez
@@ -1130,6 +1151,10 @@ fun QuickAddScreen(
                                 // contexto vale también para el ORIGEN del traspaso — es la
                                 // cuenta que el dueño estaba mirando cuando tocó «Agregar».
                                 presetAccountId = presetAccountId,
+                                // «Anotar este pago» desde una cuota o una tarjeta del checklist:
+                                // la deuda en «Hacia» y la cuota como monto.
+                                presetDestinoId = presetDeudaId,
+                                presetMonto = presetMonto.takeIf { presetDeudaId != null },
                                 // La misma hoja sirve las dos pestañas: un pago de cuota es un
                                 // traspaso con otras categorías y otro endpoint. Ver
                                 // [ModoDeTraspaso].

@@ -367,6 +367,7 @@ fun App() {
                             presetCategoria = request.presetCategoria,
                             presetFecha = request.presetFecha,
                             presetEsIngreso = request.presetEsIngreso,
+                            presetDeudaId = request.presetDeudaId,
                             // Ola 9 · B: el movimiento ya se guardó; recién ahora se evalúa si
                             // vale la pena ofrecer el recurrente.
                             onSavedEvent = { movimientoRecienGuardado = it },

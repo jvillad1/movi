@@ -202,16 +202,26 @@ fun avisoDeMontoDistinto(esperado: Long, montoEsSaldo: Boolean, event: Financial
  * del server lo reconoce en la siguiente lectura y la fila se tilda sola; por eso los datos van
  * prellenados y no es comodidad: la categoría y la cuenta son justo lo que `esConcluyente` compara.
  *
- * ## La cuota de un crédito y el pago de una tarjeta van a Créditos
+ * ## La cuota de un crédito y el pago de una tarjeta abren la pestaña «Cuota», ya llena
  *
  * Esas reglas son SINTÉTICAS: no se sellan, se derivan del movimiento que bajó la deuda (ver
- * `OccurrenceState.derivadaDeUnMovimiento`). Un gasto suelto anotado en la hoja de Agregar **no**
- * baja ninguna deuda, así que la fila se quedaría sin tildar igual y encima habría quedado un gasto
- * duplicado. El movimiento que esa fila necesita se registra en Créditos, y ahí es donde lleva —
- * mismo criterio que el toque sobre la fila (ver `etiquetaDeAbrir`).
+ * `OccurrenceState.derivadaDeUnMovimiento`). Un gasto suelto **no** baja ninguna deuda, así que la
+ * fila se quedaría sin tildar igual y encima habría quedado un gasto duplicado: lo que esa fila
+ * necesita es el traspaso de dos patas que arma la pestaña «Cuota» de Agregar.
  *
- * @param venceIso la fecha del vencimiento, que es la que hace que el movimiento caiga en el
- *   período correcto. Vacía o ilegible se deja pasar tal cual: la hoja se cae a hoy sola.
+ * Antes llevaba a Créditos, y ahí el flujo moría: Créditos no tiene ningún botón de pagar (revisión
+ * del 29-sep). Ahora abre Agregar en «Cuota» con la deuda en «Hacia» —su id es el sufijo del
+ * `ruleId`, el mismo que usa `cuentaDeLaDeudaDe` en el server— y la cuota como monto. Un toque en
+ * «Guardar» y la fila se tilda sola en la siguiente lectura.
+ *
+ * ## La fecha es HOY, no el vencimiento
+ *
+ * Antes se prellenaba el vencimiento para que el movimiento «cayera en el período correcto». Pero
+ * el dueño a veces paga tarde, y el movimiento quedaba fechado un día en que la plata no salió. La
+ * fecha de un movimiento tiene que ser la real. El emparejamiento del server ya tolera el atraso:
+ * una regla normal acepta hasta `OCCURRENCE_WINDOW_DAYS` (10) días después del vencimiento (ver
+ * `occurrenceWindow`), y una cuota salda la del período en que se hizo el pago (PR #416). La hoja
+ * sigue dejando cambiar la fecha si el pago de verdad fue otro día.
  */
 fun hojaParaAnotar(
     ruleId: String,
@@ -220,26 +230,41 @@ fun hojaParaAnotar(
     montoEsSaldo: Boolean,
     categoria: String,
     cuentaId: String?,
-    venceIso: String,
     esIngreso: Boolean,
 ): Screen {
-    if (ruleId.startsWith(CREDIT_RULE_PREFIX) || ruleId.startsWith(CARD_RULE_PREFIX)) {
-        return Screen.Credits
+    // El «monto» de una tarjeta es su SALDO, no lo que se va a pagar (ver
+    // `RecurringRule.montoEsSaldo`): prellenarlo sería escribirle $27.501.150 en la caja del monto
+    // a alguien que va a pagar el mínimo. Sin dato, campo vacío.
+    val montoHonesto = monto.takeIf { !montoEsSaldo && it > 0 }
+    val deudaId = deudaDeLaRegla(ruleId)
+    if (deudaId != null) {
+        return Screen.QuickAdd(
+            // Una regla sintética no trae cuenta de origen; si algún día la trae, manda.
+            presetAccountId = cuentaId,
+            presetMonto = montoHonesto,
+            presetDeudaId = deudaId,
+        )
     }
     return Screen.QuickAdd(
         presetAccountId = cuentaId,
         presetNota = nombre,
-        // El «monto» de una tarjeta es su SALDO, no lo que se va a pagar (ver
-        // `RecurringRule.montoEsSaldo`): prellenarlo sería escribirle $27.501.150 en la caja del
-        // monto a alguien que va a pagar el mínimo. Sin dato, campo vacío.
-        presetMonto = monto.takeIf { !montoEsSaldo && it > 0 },
+        presetMonto = montoHonesto,
         presetCategoria = categoria,
-        presetFecha = venceIso,
         presetEsIngreso = esIngreso,
     )
 }
 
-/** [hojaParaAnotar] desde una fila del checklist, que ya trae los ocho datos. */
+/**
+ * La cuenta de la deuda que paga una regla SINTÉTICA —`credit_<id>` o `card_<id>`—, o `null` si la
+ * regla es una normal. Es el espejo en el cliente de `cuentaDeLaDeudaDe` del server.
+ */
+fun deudaDeLaRegla(ruleId: String): String? = when {
+    ruleId.startsWith(CREDIT_RULE_PREFIX) -> ruleId.removePrefix(CREDIT_RULE_PREFIX)
+    ruleId.startsWith(CARD_RULE_PREFIX) -> ruleId.removePrefix(CARD_RULE_PREFIX)
+    else -> null
+}?.takeIf { it.isNotBlank() }
+
+/** [hojaParaAnotar] desde una fila del checklist, que ya trae los datos. */
 fun hojaParaAnotar(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
     ruleId = pago.ruleId,
     nombre = pago.nombre,
@@ -247,6 +272,5 @@ fun hojaParaAnotar(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
     montoEsSaldo = pago.montoEsSaldo,
     categoria = pago.categoria,
     cuentaId = pago.cuentaId,
-    venceIso = pago.vence,
     esIngreso = pago.esIngreso,
 )

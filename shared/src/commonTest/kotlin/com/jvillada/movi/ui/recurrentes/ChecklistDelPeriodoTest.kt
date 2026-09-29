@@ -100,9 +100,10 @@ class ChecklistDelPeriodoTest {
     )
 
     /** «Anotar este pago» desde una regla, como lo arma una fila del checklist. */
+    @Suppress("UNUSED_PARAMETER")
     private fun hojaDe(r: RecurringRule, vence: String) = hojaParaAnotar(
         ruleId = r.id, nombre = r.name, monto = r.amount, montoEsSaldo = r.montoEsSaldo,
-        categoria = r.category, cuentaId = r.accountId, venceIso = vence,
+        categoria = r.category, cuentaId = r.accountId,
         esIngreso = r.type == TransactionType.INCOME,
     )
 
@@ -620,7 +621,7 @@ class ChecklistDelPeriodoTest {
         assertEquals(139_900, hoja.presetMonto)
         assertEquals("Vivienda", hoja.presetCategoria)
         assertEquals("acc_1", hoja.presetAccountId)
-        assertEquals("2026-09-10", hoja.presetFecha, "la fecha del vencimiento, no hoy")
+        assertNull(hoja.presetFecha, "la fecha es hoy: el dueño a veces paga tarde y el vencimiento la dejaba mal")
         assertFalse(hoja.presetEsIngreso)
     }
 
@@ -634,19 +635,31 @@ class ChecklistDelPeriodoTest {
     }
 
     /**
-     * **La cuota de un crédito se anota en Créditos.** Un gasto suelto no baja ninguna deuda, así
-     * que la fila se quedaría sin tildar igual y encima habría quedado un movimiento duplicado.
+     * **La cuota de un crédito se paga en la pestaña «Cuota» de Agregar, ya llena.** Un gasto
+     * suelto no baja ninguna deuda —la fila se quedaría sin tildar y habría un gasto duplicado—, y
+     * Créditos no tiene botón de pagar: ahí moría el flujo (revisión del 29-sep).
      */
     @Test
-    fun la_cuota_de_un_credito_se_anota_en_creditos() {
-        assertEquals(
-            Screen.Credits,
-            hojaDe(regla("credit_1", "Cuota Vehículo", 4_101_123, 10), "2026-09-10"),
-        )
-        assertEquals(
-            Screen.Credits,
+    fun la_cuota_de_un_credito_abre_agregar_en_cuota() {
+        val cuota = assertIs<Screen.QuickAdd>(hojaDe(regla("credit_1", "Cuota Vehículo", 4_101_123, 10), "2026-09-10"))
+        assertEquals("1", cuota.presetDeudaId, "la deuda es el sufijo del ruleId")
+        assertEquals(4_101_123, cuota.presetMonto, "la cuota pactada")
+        assertNull(cuota.presetFecha, "hoy")
+        assertNull(cuota.presetCategoria, "el pago de cuota pone sus propias categorías")
+
+        val tarjeta = assertIs<Screen.QuickAdd>(
             hojaDe(regla("card_1", "Master Black", 27_501_150, 18, saldo = true), "2026-09-18"),
         )
+        assertEquals("1", tarjeta.presetDeudaId)
+        assertNull(tarjeta.presetMonto, "el saldo de la tarjeta no es lo que se va a pagar")
+    }
+
+    @Test
+    fun la_deuda_sale_del_sufijo_de_la_regla_sintetica() {
+        assertEquals("acc_8761", deudaDeLaRegla("credit_acc_8761"))
+        assertEquals("acc_mb", deudaDeLaRegla("card_acc_mb"))
+        assertNull(deudaDeLaRegla("rr_arriendo"), "una regla normal no paga ninguna deuda")
+        assertNull(deudaDeLaRegla("credit_"), "sin id no hay deuda que poner")
     }
 
     /**
@@ -663,7 +676,6 @@ class ChecklistDelPeriodoTest {
                 montoEsSaldo = true,
                 categoria = "Vivienda",
                 cuentaId = null,
-                venceIso = "2026-09-18",
                 esIngreso = false,
             ),
         )
