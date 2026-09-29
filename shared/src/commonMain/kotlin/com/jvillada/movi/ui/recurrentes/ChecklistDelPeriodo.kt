@@ -139,8 +139,9 @@ const val TITULO_NO_LLEGO = "No llegó"
  * @param onConfirmar «Sí, fue este»: sella el período **anclado a ese movimiento**.
  * @param onNoFueEste «No fue este»: guarda el rechazo y, si había un sello, lo borra.
  * @param onAnotarMovimiento «Anotar este pago»: abre la hoja de Agregar con lo que el
- *   recurrente ya sabe. Quien llama decide a dónde lleva — la cuota de un crédito se anota en
- *   Créditos, no como un gasto suelto.
+ *   recurrente ya sabe. Quien llama decide a dónde lleva — la cuota de un crédito o el pago de una
+ *   tarjeta se anotan en la pestaña «Cuota», no como un gasto suelto (ver `hojaParaAnotar`). Se
+ *   ofrece en toda fila pendiente, también antes del vencimiento: el dueño paga antes.
  * @param onQuitarLaMarca la única salida de un sello viejo hecho a mano, sin movimiento detrás.
  * @param onAbrir tocar la fila: abrir la regla para editarla (lo que ofrecía «Próximos»). `null` la
  *   deja sin toque.
@@ -567,10 +568,11 @@ private fun LoQueOfreceLaFila(
     enVuelo: Boolean,
     acciones: AccionesDelChecklist,
 ) {
-    // Una fila sin nada que ofrecer no deja ni un hueco: la mayoría son filas que todavía no vencen
-    // o cuotas que el movimiento ya probó.
+    // Una fila sin nada que ofrecer no deja ni un hueco: la mayoría son cuotas que el movimiento
+    // ya probó.
     val hayQueOfrecer = when (pago.estado) {
-        EstadoDeLaFila.AUN_NO_VENCE -> false
+        // Una fila que todavía no vence SÍ ofrece algo: anotar el pago. Ver la rama de abajo.
+        EstadoDeLaFila.AUN_NO_VENCE -> true
         // La cuota de un crédito y el pago de una tarjeta no discuten: ahí el movimiento MOVIÓ la
         // deuda, y lo único que revierte eso es borrarlo.
         //
@@ -627,7 +629,19 @@ private fun LoQueOfreceLaFila(
                 SinMovimiento(pago, enVuelo, acciones)
             }
             EstadoDeLaFila.SIN_MOVIMIENTO -> SinMovimiento(pago, enVuelo, acciones)
-            EstadoDeLaFila.AUN_NO_VENCE -> Unit
+            // **El dueño paga ANTES del vencimiento** (Master Black vence el 2 y la pagó el 27):
+            // sin esta salida, «Anotar este pago» —que abre Agregar ya lleno, en «Cuota» si es una
+            // deuda— solo aparecía cuando el pago ya estaba vencido, o sea casi nunca. Va como
+            // acción secundaria y sin el «Movi no encontró…»: todavía no tenía por qué encontrarlo.
+            // Solo el botón, para que la fila crezca lo mínimo.
+            EstadoDeLaFila.AUN_NO_VENCE -> AccionesDeLaFila(
+                acciones = listOf(
+                    AccionDeOcurrencia(etiquetaDeAnotar(pago.esIngreso), primary = false) {
+                        acciones.onAnotarMovimiento(pago)
+                    },
+                ),
+                enVuelo = enVuelo,
+            )
         }
     }
 }
