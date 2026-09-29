@@ -36,6 +36,8 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.runtime.withFrameNanos
+import com.jvillada.movi.platform.devolverElTecladoAlLienzo
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -407,6 +409,15 @@ fun QuickAddScreen(
         pickers = siguiente
     }
 
+    // Al cerrarse un sub-editor (la Nota, el buscador de categorías) en la web, el foco del navegador
+    // se queda en el `<body>` y el teclado físico deja de escribir el monto. Se le devuelve al
+    // lienzo un cuadro después, cuando el campo ya se fue. Ver [devolverElTecladoAlLienzo].
+    LaunchedEffect(hayPicker) {
+        if (!hayPicker) {
+            withFrameNanos { }
+            devolverElTecladoAlLienzo()
+        }
+    }
     LaunchedEffect(hayPicker) {
         if (hayPicker) {
             // Que el sub-picker se vea desde su encabezado —su título y su X— y no desde la
