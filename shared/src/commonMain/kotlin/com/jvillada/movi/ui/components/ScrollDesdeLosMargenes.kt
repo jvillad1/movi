@@ -38,10 +38,21 @@ import androidx.compose.ui.platform.LocalLayoutDirection
  *
  * No pisa a la lista cuando el mouse SÍ está sobre ella: Compose despacha la rueda primero al
  * nodo más profundo, la lista la consume, y el `scrollable` de afuera ve el evento consumido y
- * lo deja pasar. Tampoco le pelea el arrastre en el teléfono: como padre de nested scroll, lo
- * único que recibe es el **sobrante** de la lista (`onPostScroll` → `dispatchRawDelta`, sin tomar
- * el mutex de `scroll {}`), y ese sobrante solo existe cuando la lista ya está en un borde, donde
- * delegárselo de vuelta no hace nada.
+ * lo deja pasar.
+ *
+ * ### En el teléfono NO va, y se midió (29-sep-2026)
+ *
+ * El párrafo que había acá decía que en el teléfono el relevo «no le pelea el arrastre a la
+ * lista» porque solo recibe el sobrante en un borde. Lo que no decía es lo que ese sobrante hace:
+ * en el borde, el `scrollable` de afuera toma el gesto como propio, le pone su **propio**
+ * overscroll encima del de la lista, y se queda con el dedo hasta que el arrastre cambia de
+ * sentido. El dueño lo describió exacto: *«cuando hago scroll hasta el final, como que se pega y
+ * luego sí anda de nuevo»*. Medido en su Pixel 8 Pro con `dumpsys gfxinfo` durante arrastres
+ * lentos hasta el final de Hoy: 251 de 549 frames con alta latencia de entrada (46 %) y 8 % con
+ * tirón, con el dibujo barato (p99 12 ms) — la demora era del gesto, no del dibujo.
+ *
+ * En Compact la pantalla ocupa todo el ancho: no hay márgenes que reenviar. Por eso
+ * [elRelevoDeScrollAplica] lo deja fuera ahí y `App.kt` no aplica el modificador.
  *
  * `reverseDirection` va con `ScrollableDefaults.reverseDirection`, la misma convención que usan
  * `LazyColumn` y `verticalScroll` por dentro: sin eso, la rueda hacia abajo movería la lista hacia
@@ -67,6 +78,13 @@ class RelevoDeScroll {
 
 /** Lo provee `App.kt`; `null` fuera de la cáscara (una hoja montada sola en un test). */
 val LocalRelevoDeScroll = staticCompositionLocalOf<RelevoDeScroll?> { null }
+
+/**
+ * ¿La cáscara aplica el relevo con este ancho? Solo donde hay márgenes: Medium y Expanded. En
+ * Compact (el teléfono) la pantalla va de borde a borde y el relevo solo agregaba un segundo
+ * `scrollable` que se pegaba en los bordes (ver el KDoc de arriba).
+ */
+fun elRelevoDeScrollAplica(widthClass: WindowWidthClass): Boolean = widthClass != WindowWidthClass.Compact
 
 /** Para el contenedor que dibuja los márgenes: la rueda y el arrastre sobre él van a [relevo]. */
 @Composable

@@ -89,6 +89,7 @@ import com.jvillada.movi.ui.components.LocalAnfitrionDeHojas
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.RelevoDeScroll
 import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.ui.components.elRelevoDeScrollAplica
 import com.jvillada.movi.ui.components.recibeElScrollDeLosMargenes
 import com.jvillada.movi.ui.components.elTecladoEstaALaVista
 import kotlinx.coroutines.delay
@@ -463,7 +464,12 @@ internal fun EsqueletoDeLaCascara(
             )
         }
         Box(
-            modifier = Modifier.weight(1f).fillMaxHeight().recibeElScrollDeLosMargenes(relevoDeScroll),
+            // Solo donde hay márgenes: en el teléfono el relevo era un segundo `scrollable` sobre
+            // toda la pantalla y se sentía como que la lista «se pegaba» al llegar al final. Ver
+            // [elRelevoDeScrollAplica].
+            modifier = Modifier.weight(1f).fillMaxHeight().let {
+                if (elRelevoDeScrollAplica(widthClass)) it.recibeElScrollDeLosMargenes(relevoDeScroll) else it
+            },
             contentAlignment = Alignment.TopCenter,
         ) {
             // **`imePadding()` es lo que hace que el teclado no tape lo que estás
