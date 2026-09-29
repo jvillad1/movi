@@ -151,6 +151,16 @@ class PorRevisarEnPantallaTest {
         assertTrue(!hay(TODO_AL_DIA))
     }
 
+    /** La fecha del mensaje en palabras, no el «2026-09-03 07:15» guardado (revisión del 29-sep). */
+    @Test
+    fun `la fecha del mensaje se lee en palabras`() {
+        montar(Repo(mensajes = listOf(sms("s1", SMS_STATE_PENDING))))
+        esperarTexto("Revisar")
+
+        assertTrue("sin la fecha cruda", !hay("2026-09-03"))
+        assertTrue("la hora dicha", hay("7:15 a. m."))
+    }
+
     @Test
     fun `revisar un mensaje abre su detalle, como siempre`() {
         montar(Repo(mensajes = listOf(sms("s1", SMS_STATE_PENDING))))
