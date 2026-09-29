@@ -261,7 +261,7 @@ class DisponibleDelPeriodoTest {
             FraseDelDisponible("Te pasaste del disponible del período por \$920.000", NivelDelGasto.PASADO),
             fraseDelDisponible(d),
         )
-        assertEquals(920_000, excesoDelDisponible(d))
+        assertEquals("te pasaste del disponible por \$920.000", avisoDelDisponible(d), "la misma cifra que la frase")
         assertNull(d.porDiaParaLoQueQueda)
 
         assertEquals(400_000, d.semana.meta)

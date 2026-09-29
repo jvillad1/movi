@@ -107,7 +107,11 @@ class InicioDeUnVistazoTest {
                 "Este período entró \$3M más de lo que salió, pero te pasaste del disponible por \$563.456",
                 TonoDelVeredicto.EN_CONTRA,
             ),
-            veredictoDelPeriodo(ingresos = 10_000_000, egresos = 7_000_000, excesoDelDisponible = 563_456),
+            veredictoDelPeriodo(
+                ingresos = 10_000_000,
+                egresos = 7_000_000,
+                avisoDelDisponible = "te pasaste del disponible por \$563.456",
+            ),
         )
     }
 
@@ -168,7 +172,7 @@ class InicioDeUnVistazoTest {
         )
         val d = assertNotNull(disponibleDelInicio(data, hoy))
         assertEquals(13_800_000, d.disponible)
-        assertEquals(563_456, excesoDelDisponible(d))
+        assertEquals("te pasaste del disponible por \$563.456", avisoDelDisponible(d))
 
         val frase = fraseDelDisponible(d)
         assertEquals(
@@ -179,6 +183,59 @@ class InicioDeUnVistazoTest {
         assertEquals(TonoDelVeredicto.EN_CONTRA, veredicto.tono)
         assertFalse("bien" in veredicto.frase.lowercase())
         assertFalse("bien" in frase.texto.lowercase())
+    }
+
+    /**
+     * **Una sola cifra de «te pasaste» en Hoy** (revisión del 29-sep). En el teléfono del dueño el
+     * hero decía «te pasaste por $841.832» y la tarjeta «−$629.882»: el hero sumaba a lo que los
+     * fijos superan lo variable ya gastado ($211.950). Ahora el hero dice la cifra de la tarjeta, con
+     * las palabras de la tarjeta, y lo gastado queda en la columna del período.
+     */
+    @Test
+    fun `sin margen el hero dice la misma cifra que la tarjeta`() {
+        val data = inicio(
+            ingresos = 10_000_000,
+            egresos = 7_000_000,
+            gastoVariable = mapOf("2026-09-01" to 211_950L),
+            // Tenías + entró = $2.470.118, y el arriendo es $3.100.000: los fijos superan por $629.882.
+            plata = PlataDelDisponible(saldoAlInicio = 470_118, entradas = 2_000_000, guardado = 0),
+        )
+        val d = assertNotNull(disponibleDelInicio(data, hoy))
+        assertEquals(-629_882, d.disponible, "la cifra grande de la tarjeta")
+        assertEquals(211_950, d.periodo.gastado)
+
+        val tarjeta = fraseDelDisponible(d)
+        assertEquals(
+            "Los fijos del período superan lo que tenías y lo que entró por \$629.882",
+            tarjeta.texto,
+        )
+        assertEquals(NivelDelGasto.PASADO, tarjeta.nivel)
+
+        val veredicto = assertNotNull(veredictoDelInicio(data, hoy))
+        assertEquals(
+            Veredicto(
+                "Este período entró \$3M más de lo que salió, pero los fijos del período superan lo " +
+                    "que tenías y lo que entró por \$629.882",
+                TonoDelVeredicto.EN_CONTRA,
+            ),
+            veredicto,
+        )
+        assertFalse("841.832" in veredicto.frase, "la suma de las dos cosas no aparece en ningún lado")
+    }
+
+    /** Sin margen pero sin rojo (los fijos se llevan justo todo y no se gastó nada): no hay aviso. */
+    @Test
+    fun `sin margen y sin gasto no hay nada que avisar`() {
+        val data = inicio(
+            ingresos = 10_000_000,
+            egresos = 7_000_000,
+            gastoVariable = emptyMap(),
+            plata = PlataDelDisponible(saldoAlInicio = 1_100_000, entradas = 2_000_000, guardado = 0),
+        )
+        val d = assertNotNull(disponibleDelInicio(data, hoy))
+        assertEquals(0, d.disponible)
+        assertNull(avisoDelDisponible(d))
+        assertEquals(TonoDelVeredicto.A_FAVOR, assertNotNull(veredictoDelInicio(data, hoy)).tono)
     }
 
     /**
@@ -203,11 +260,11 @@ class InicioDeUnVistazoTest {
             val veredicto = assertNotNull(veredictoDelInicio(data, hoy))
             val contexto = "ingresos=$ingresos egresos=$egresos antes=$antes hoy=$deHoy"
             assertFalse("bien" in frase.texto.lowercase(), "la tarjeta opinó: ${frase.texto} ($contexto)")
-            if (excesoDelDisponible(d) > 0L) {
+            if (avisoDelDisponible(d) != null) {
                 assertEquals(TonoDelVeredicto.EN_CONTRA, veredicto.tono, "período pasado con hero a favor ($contexto)")
             }
             if (veredicto.tono == TonoDelVeredicto.A_FAVOR) {
-                assertEquals(0L, excesoDelDisponible(d), "hero a favor con el período pasado ($contexto)")
+                assertNull(avisoDelDisponible(d), "hero a favor con el período pasado ($contexto)")
                 assertTrue(d.periodo.nivel != NivelDelGasto.PASADO, contexto)
             }
             casos++

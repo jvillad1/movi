@@ -54,26 +54,28 @@ data class Veredicto(val frase: String, val tono: TonoDelVeredicto)
  *   gasté $11 millones?». Sin cuotas, se nombra la categoría que más pesó.
  * - **Entró más de lo que salió** (o lo mismo), dicho con la diferencia.
  *
- * **Y si el flujo está a favor pero ya se pasó del disponible, lo dice en la misma frase**
- * («…, pero te pasaste del disponible por $X»). Es la regla de coherencia: con el disponible más
- * abajo en la misma pantalla, un «entró más de lo que salió» a secas arriba y un «te pasaste»
- * abajo serían otra vez dos veredictos opuestos. Con el flujo en contra no hace falta agregarlo: la
- * frase ya es la mala noticia, y la tarjeta del disponible dice cuánto.
+ * **Y si el flujo está a favor pero el disponible está en rojo, lo dice en la misma frase**
+ * («…, pero te pasaste del disponible por $X», o «…, pero los fijos del período superan lo que
+ * tenías y lo que entró por $X»). Es la regla de coherencia: con el disponible más abajo en la
+ * misma pantalla, un «entró más de lo que salió» a secas arriba y un «te pasaste» abajo serían otra
+ * vez dos veredictos opuestos. Con el flujo en contra no hace falta agregarlo: la frase ya es la
+ * mala noticia, y la tarjeta del disponible dice cuánto.
  *
  * `null` cuando no hay nada que medir (ni entró ni salió nada): un «entró lo mismo que salió» sobre
  * un período vacío sería una afirmación sin datos.
  *
  * @param cuotasDeCredito lo gastado en el período bajo [CUOTA_CATEGORY].
  * @param mayorGasto la categoría que más pesó en el período, con su monto; `null` si no hay.
- * @param excesoDelDisponible cuánto se pasó del disponible del período (ver [excesoDelDisponible]);
- *   cero si no se pasó o si la tarjeta no se puede calcular.
+ * @param avisoDelDisponible lo que el hero agrega cuando el disponible está en rojo, ya escrito y
+ *   con la MISMA cifra que la tarjeta (ver [avisoDelDisponible]); `null` si no está en rojo o si la
+ *   tarjeta no se puede calcular.
  */
 fun veredictoDelPeriodo(
     ingresos: Long,
     egresos: Long,
     cuotasDeCredito: Long = 0L,
     mayorGasto: Pair<String, Long>? = null,
-    excesoDelDisponible: Long = 0L,
+    avisoDelDisponible: String? = null,
 ): Veredicto? {
     if (ingresos <= 0L && egresos <= 0L) return null
     val flujo = ingresos - egresos
@@ -91,11 +93,8 @@ fun veredictoDelPeriodo(
     }
     val base = if (flujo == 0L) "Este período entró lo mismo que salió"
     else "Este período entró ${formatMoneyCompact(flujo)} más de lo que salió"
-    if (excesoDelDisponible > 0L) {
-        return Veredicto(
-            "$base, pero te pasaste del disponible por ${formatMoneyCompact(excesoDelDisponible)}",
-            TonoDelVeredicto.EN_CONTRA,
-        )
+    if (avisoDelDisponible != null) {
+        return Veredicto("$base, pero $avisoDelDisponible", TonoDelVeredicto.EN_CONTRA)
     }
     return Veredicto(base, if (flujo == 0L) TonoDelVeredicto.PAREJO else TonoDelVeredicto.A_FAVOR)
 }
@@ -118,7 +117,7 @@ fun veredictoDelInicio(
         egresos = summary.egresos,
         cuotasDeCredito = gasto[CUOTA_CATEGORY] ?: 0L,
         mayorGasto = mayorGastoDelPeriodo(gasto),
-        excesoDelDisponible = disponibleDelInicio(data, hoy)?.let(::excesoDelDisponible) ?: 0L,
+        avisoDelDisponible = disponibleDelInicio(data, hoy)?.let(::avisoDelDisponible),
     )
 }
 
@@ -151,14 +150,28 @@ fun fraccionQueEntro(ingresos: Long, egresos: Long): Float? {
 // ── El disponible, compacto y con UNA frase ──────────────────────────────────
 
 /**
- * Cuánto se pasó del disponible del período: lo gastado menos el disponible, o cero.
+ * **Lo que el hero dice cuando el disponible está en rojo, con la cifra y las palabras de la
+ * tarjeta**, o `null` si no lo está.
  *
- * Sirve igual con margen (el disponible es la meta del período) que sin él (el disponible es cero o
- * negativo, y todo lo gastado es exceso). Es el número que comparten el veredicto del hero y la frase
- * de la tarjeta, y por eso hay una sola función que lo calcula.
+ * Antes el hero sumaba en una sola cifra dos cosas distintas: lo que los fijos superan (la cifra
+ * grande de la tarjeta, «−$629.882») y lo variable ya gastado. El dueño leía arriba «te pasaste por
+ * $841.832» y abajo «−$629.882», dos «te pasaste» que no coincidían (revisión del 29-sep). Ahora el
+ * hero repite lo que dice la tarjeta:
+ *
+ * - **Sin margen** (los fijos se llevan todo): la frase de la tarjeta, [sinMargen], con su cifra
+ *   `−disponible`. Lo variable gastado se sigue viendo en la tarjeta, en la columna del período.
+ * - **Con margen** y el período pasado: «te pasaste del disponible por $X», la misma cifra que la
+ *   frase de la tarjeta («Te pasaste del disponible del período por $X»).
  */
-fun excesoDelDisponible(d: DisponibleDelPeriodo): Long =
-    (d.periodo.gastado - d.disponible).coerceAtLeast(0L)
+fun avisoDelDisponible(d: DisponibleDelPeriodo): String? = when {
+    !d.hayMargen -> if (d.disponible < 0L || d.periodo.gastado > 0L) {
+        sinMargen(d).replaceFirstChar { it.lowercase() }
+    } else {
+        null
+    }
+    d.periodo.teQuedan < 0L -> "te pasaste del disponible por ${formatMoneyCompact(-d.periodo.teQuedan)}"
+    else -> null
+}
 
 /** La frase de la tarjeta del disponible y el nivel con el que se pinta. */
 data class FraseDelDisponible(val texto: String, val nivel: NivelDelGasto)
@@ -184,7 +197,8 @@ fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
     if (!d.hayMargen) {
         return FraseDelDisponible(
             sinMargen(d),
-            if (excesoDelDisponible(d) > 0L) NivelDelGasto.PASADO else NivelDelGasto.CERCA,
+            // En rojo si los fijos superan lo que hay o si ya se gastó algo sin margen para gastar.
+            if (avisoDelDisponible(d) != null) NivelDelGasto.PASADO else NivelDelGasto.CERCA,
         )
     }
     val periodo = d.periodo
