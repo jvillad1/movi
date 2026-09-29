@@ -191,11 +191,29 @@ fun contenidoDelSelectorDeCategoria(
 }
 
 /**
- * Cuántas columnas entran en [ancho]: la cuenta de `GridCells.Adaptive(ANCHO_MINIMO_DE_CELDA)`,
- * hecha a mano (ver [SelectorDeCategoria] para por qué no se usa la cuadrícula perezosa).
+ * Desde qué ancho de cuadrícula las celdas crecen a [ANCHO_MINIMO_DE_CELDA_ANCHA]. La hoja de
+ * «Agregar» en la web mide 600 dp (560 de cuadrícula): por encima del teléfono, por debajo de una
+ * tablet.
  */
-internal fun columnasDeLaCuadricula(ancho: Dp, espacio: Dp): Int =
-    (((ancho + espacio) / (ANCHO_MINIMO_DE_CELDA + espacio)).toInt()).coerceAtLeast(1)
+internal val ANCHO_DESDE_EL_QUE_LAS_CELDAS_CRECEN: Dp = 480.dp
+
+/**
+ * El mínimo de una celda en una cuadrícula ancha. Con los 80 dp del teléfono, «adaptativa» agrega
+ * columnas en vez de ensanchar celdas: a 1.280 la hoja de «Agregar» daba seis columnas de ~90 dp y
+ * «Restaurantes» salía «Restauran…» con la ventana llena de espacio (revisión del 29-sep). Con 100
+ * son cinco de ~109 dp y el nombre entra entero, a su tamaño.
+ */
+internal val ANCHO_MINIMO_DE_CELDA_ANCHA: Dp = 100.dp
+
+/**
+ * Cuántas columnas entran en [ancho]: la cuenta de `GridCells.Adaptive(ANCHO_MINIMO_DE_CELDA)`,
+ * hecha a mano (ver [SelectorDeCategoria] para por qué no se usa la cuadrícula perezosa). En una
+ * cuadrícula ancha el mínimo es [ANCHO_MINIMO_DE_CELDA_ANCHA]; en el teléfono no cambia nada.
+ */
+internal fun columnasDeLaCuadricula(ancho: Dp, espacio: Dp): Int {
+    val minimo = if (ancho >= ANCHO_DESDE_EL_QUE_LAS_CELDAS_CRECEN) ANCHO_MINIMO_DE_CELDA_ANCHA else ANCHO_MINIMO_DE_CELDA
+    return (((ancho + espacio) / (minimo + espacio)).toInt()).coerceAtLeast(1)
+}
 
 /**
  * El tamaño mínimo legible al que se achica el rótulo de una celda cuando su palabra más larga

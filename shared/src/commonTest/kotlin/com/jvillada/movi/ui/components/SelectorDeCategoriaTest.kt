@@ -161,6 +161,11 @@ class SelectorDeCategoriaTest {
         assertEquals(4, columnasDeLaCuadricula(371.dp, espacio)) // el AVD de 411 dp
         assertEquals(1, columnasDeLaCuadricula(80.dp, espacio))
         assertEquals(1, columnasDeLaCuadricula(10.dp, espacio)) // nunca cero columnas
+        // La hoja de «Agregar» en la web: 560 dp de cuadrícula. Eran seis celdas de ~90 dp y
+        // «Restaurantes» salía «Restauran…»; ahora cinco de más de 100.
+        val columnas = columnasDeLaCuadricula(560.dp, espacio)
+        assertEquals(5, columnas)
+        assertTrue((560.dp - espacio * (columnas - 1)) / columnas >= 100.dp)
     }
 
     // ── El rótulo que no corta una palabra a la mitad (Ola B, tarea 4) ────────
