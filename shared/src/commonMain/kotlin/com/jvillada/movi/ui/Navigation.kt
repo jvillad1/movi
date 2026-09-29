@@ -177,8 +177,6 @@ sealed class Screen {
      */
     data object CuadreDeSaldos : Screen()
 
-    data object OCRCapture : Screen()
-    data object OCRConfirm : Screen()
     /**
      * **«Por revisar»** (ola C): la única bandeja de lo que entró solo y espera una decisión — los
      * mensajes del banco por confirmar, los movimientos que entraron solos y los candidatos a pago

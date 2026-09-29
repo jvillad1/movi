@@ -60,8 +60,6 @@ import com.jvillada.movi.ui.dashboard.PrimerosPasosScreen
 import com.jvillada.movi.ui.goals.MetasScreen
 import com.jvillada.movi.ui.extractos.ExtractosScreen
 import com.jvillada.movi.ui.mas.MasScreen
-import com.jvillada.movi.ui.ocr.OCRCaptureScreen
-import com.jvillada.movi.ui.ocr.OCRConfirmScreen
 import com.jvillada.movi.ui.profile.PerfilScreen
 import com.jvillada.movi.ui.quickadd.QuickAddScreen
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
@@ -188,7 +186,7 @@ fun App() {
                     quickAdd = screen as Screen.QuickAdd
                 } else {
                     // Navegar a otra parte cierra la hoja: desde adentro de Agregar se puede
-                    // saltar a Escanear recibo, y dejarla abierta encima del destino nuevo sería
+                    // saltar a crear una cuenta o a otra pantalla, y dejarla abierta encima del destino nuevo sería
                     // una hoja huérfana sobre una pantalla que no la pidió.
                     quickAdd = null
                     // Entrar (o crear la cuenta) REEMPLAZA la pila en vez de apilar encima: ver
@@ -310,8 +308,6 @@ fun App() {
                 Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.Compartir         -> CompartirScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
-                Screen.OCRCapture        -> OCRCaptureScreen(navigate)
-                Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
                 is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)

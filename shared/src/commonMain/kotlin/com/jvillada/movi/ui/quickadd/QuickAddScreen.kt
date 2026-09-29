@@ -13,7 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -1245,7 +1244,6 @@ fun QuickAddScreen(
                         },
                         onPickWallet = { pasarA(pickers.abrir(Picker.Wallet)) },
                         onEditNote = { pasarA(pickers.abrir(Picker.Note)) },
-                        onOcr = { onNavigate(Screen.OCRCapture) },
                         canSave = canSave,
                         missingFieldMessage = missingFieldMessage,
                         saving = saving,
@@ -1312,7 +1310,6 @@ private fun EditorBody(
     onPickCategory: () -> Unit,
     onPickWallet: () -> Unit,
     onEditNote: () -> Unit,
-    onOcr: () -> Unit,
     canSave: Boolean,
     missingFieldMessage: String? = null,
     saving: Boolean,
@@ -1597,20 +1594,14 @@ private fun EditorBody(
             }
         }
     } else {
+        // Aquí había un botón de cámara que abría un «escáner de recibos» con un recibo INVENTADO
+        // («ÉXITO COUNTRY», $312.400) y un «Guardar» que solo volvía al Inicio: la única pantalla de
+        // Movi que mostraba datos falsos. Se quitó entero (revisión del 29-sep); el escáner real
+        // llega con «Compartir con Movi».
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp, 54.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(16.dp))
-                    .clickable { onOcr() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(imageVector = Icons.Filled.CameraAlt, contentDescription = "Escanear recibo", tint = Movi.colores.texto, modifier = Modifier.size(22.dp))
-            }
             Box(
                 modifier = Modifier
                     .weight(1f)
