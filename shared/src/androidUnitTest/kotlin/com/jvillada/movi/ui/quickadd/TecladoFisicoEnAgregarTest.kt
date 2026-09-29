@@ -112,6 +112,17 @@ class TecladoFisicoEnAgregarTest {
         assertNull(accionDeTecla(Key.Escape, KeyEventType.KeyDown, false), "Escape lo atiende el marco")
     }
 
+    /**
+     * **Soltar Enter se consume.** Medido en el navegador con Playwright: el soltar le llegaba al
+     * `clickable` del velo de la hoja, que lo tomaba como un clic afuera y cerraba la hoja antes de
+     * que el guardado saliera. Enter cerraba sin guardar.
+     */
+    @Test
+    fun soltar_enter_se_consume_para_que_el_velo_no_cierre_la_hoja() {
+        assertEquals(AccionDeTecla.Consumir, accionDeTecla(Key.Enter, KeyEventType.KeyUp, false))
+        assertEquals(AccionDeTecla.Consumir, accionDeTecla(Key.NumPadEnter, KeyEventType.KeyUp, false))
+    }
+
     // ── La hoja real ────────────────────────────────────────────────────────────────────
 
     private fun repo() {

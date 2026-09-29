@@ -16,6 +16,13 @@ internal sealed interface AccionDeTecla {
 
     /** Guardar, si el botón está habilitado — la hoja lo decide. */
     data object Guardar : AccionDeTecla
+
+    /**
+     * Soltar Enter: no hace nada, pero **se consume**. Medido en el navegador: el soltar le llegaba
+     * al `clickable` del velo de la hoja (el «toque afuera» que cierra), que lo toma como un clic y
+     * cerraba la hoja antes de que el guardado alcanzara a salir — Enter cerraba sin guardar.
+     */
+    data object Consumir : AccionDeTecla
 }
 
 /**
@@ -28,7 +35,9 @@ internal sealed interface AccionDeTecla {
  * `null` = esta tecla no es de la hoja; que siga su camino.
  */
 internal fun accionDeTecla(tecla: Key, tipo: KeyEventType, conModificador: Boolean): AccionDeTecla? {
-    if (tipo != KeyEventType.KeyDown || conModificador) return null
+    if (conModificador) return null
+    if (tipo == KeyEventType.KeyUp && (tecla == Key.Enter || tecla == Key.NumPadEnter)) return AccionDeTecla.Consumir
+    if (tipo != KeyEventType.KeyDown) return null
     DIGITOS[tecla]?.let { return AccionDeTecla.Digito(it) }
     return when (tecla) {
         Key.Backspace -> AccionDeTecla.Borrar

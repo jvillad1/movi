@@ -873,6 +873,7 @@ fun QuickAddScreen(
             is AccionDeTecla.Digito -> { onKey(accion.digito); true }
             AccionDeTecla.Borrar -> { onKey("⌫"); true }
             AccionDeTecla.Guardar -> { pedidosDeGuardar++; true }
+            AccionDeTecla.Consumir -> true
         }
     }
     LaunchedEffect(pedidosDeGuardar) {
