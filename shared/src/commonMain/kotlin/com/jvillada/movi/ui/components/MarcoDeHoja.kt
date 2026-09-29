@@ -29,7 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +41,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -46,6 +49,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.theme.Movi
 import kotlinx.coroutines.launch
 
@@ -110,6 +114,18 @@ const val TAG_PANEL_DE_HOJA = "marco-de-hoja-panel"
  *   arriba lo recupera; y al cerrarse la de arriba, la de abajo lo retoma. Así un segundo Escape
  *   siempre le llega a alguien. Quién está arriba lo lleva [PilaDeFocoDeHojas], que da
  *   [CascaraDeAncho].
+ *
+ * ### Otras teclas: [onTecla]
+ *
+ * Una hoja que quiera atender el teclado físico (los dígitos del monto en «Agregar», Backspace,
+ * Enter) pasa [onTecla]: le llegan en el *preview* todas las teclas que no son el Escape de arriba,
+ * esté donde esté el foco dentro de la hoja, y devuelve `true` si la consumió. Decidir que un campo
+ * de texto con el foco se quede con sus teclas es trabajo de la hoja, no del marco.
+ *
+ * En la hoja desde abajo (la web por debajo de 600 dp) el panel solo se vuelve destino de foco
+ * cuando hay [onTecla] **y** la plataforma tiene teclado físico ([LocalHayTecladoFisico]): en el
+ * teléfono Android no, porque un panel con el foco al abrir es exactamente lo que
+ * `SelectorDeCategoriaEnAgregarTest` prohíbe (nada puede tener el foco al abrir un selector).
  */
 @Composable
 fun MarcoDeHoja(
@@ -120,14 +136,15 @@ fun MarcoDeHoja(
     conCierre: Boolean = true,
     relleno: PaddingValues = PaddingValues(horizontal = 20.dp),
     onEscape: (() -> Unit)? = null,
+    onTecla: ((KeyEvent) -> Boolean)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (LocalWindowWidthClass.current == WindowWidthClass.Compact) {
-        HojaDesdeAbajo(onDismiss, dismissEnabled, fraccionDeAltoMaximo, conCierre, relleno, content)
+        HojaDesdeAbajo(onDismiss, dismissEnabled, fraccionDeAltoMaximo, conCierre, relleno, onTecla, content)
     } else {
         val alEscape = onEscape ?: { if (dismissEnabled) onDismiss() }
         val hoja: @Composable () -> Unit = {
-            HojaCentrada(onDismiss, dismissEnabled, anchoMaximo, fraccionDeAltoMaximo, conCierre, relleno, alEscape, content)
+            HojaCentrada(onDismiss, dismissEnabled, anchoMaximo, fraccionDeAltoMaximo, conCierre, relleno, alEscape, onTecla, content)
         }
         val anfitrion = LocalAnfitrionDeHojas.current
         if (anfitrion == null) {
@@ -186,6 +203,14 @@ class AnfitrionDeHojas {
     }
 }
 
+/**
+ * ¿Esta plataforma tiene (o puede tener) un teclado físico que valga la pena atender en una hoja
+ * compacta? En la web y en iOS sí; en el teléfono Android no — ver «Otras teclas» en [MarcoDeHoja].
+ * Un `CompositionLocal` y no una constante para que una prueba (que corre en Android) lo pueda
+ * encender.
+ */
+val LocalHayTecladoFisico = staticCompositionLocalOf { !isAndroid }
+
 /** El anfitrión de la cáscara; `null` fuera de ella. */
 val LocalAnfitrionDeHojas = compositionLocalOf<AnfitrionDeHojas?> { null }
 
@@ -227,8 +252,34 @@ private fun HojaDesdeAbajo(
     fraccionDeAltoMaximo: Float?,
     conCierre: Boolean,
     relleno: PaddingValues,
+    onTecla: ((KeyEvent) -> Boolean)?,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // El teclado físico en la hoja desde abajo (ver «Otras teclas» en [MarcoDeHoja]). Solo con
+    // [onTecla] y teclado físico: si no, el panel no es destino de foco, como siempre.
+    val onTecla = onTecla.takeIf { LocalHayTecladoFisico.current }
+    // La ÚLTIMA versión del manejador, no la de la primera composición: el `Velo` de abajo no se
+    // recompone cuando la hoja cambia, y con la vieja Enter veía el botón deshabilitado de cuando
+    // el monto estaba vacío (medido: los dígitos escribían y Enter no guardaba).
+    val teclaActual by rememberUpdatedState(onTecla)
+    val foco = remember { FocusRequester() }
+    val alcance = rememberCoroutineScope()
+    fun reclamarFoco() {
+        alcance.launch { runCatching { foco.requestFocus() } }
+    }
+    val conTeclado = if (onTecla == null) {
+        Modifier
+    } else {
+        Modifier
+            .onPreviewKeyEvent { teclaActual?.invoke(it) ?: false }
+            // Si el foco se va del panel —se cerró el sub-editor cuyo campo lo tenía—, vuelve:
+            // si no, la tecla siguiente no le llega a nadie.
+            .onFocusChanged { if (!it.hasFocus) reclamarFoco() }
+            .focusRequester(foco)
+            .focusable()
+    }
+    if (onTecla != null) LaunchedEffect(Unit) { reclamarFoco() }
+
     @Composable
     fun Velo(altoMaximo: Dp?) {
         Column(
@@ -247,6 +298,7 @@ private fun HojaDesdeAbajo(
                     .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                     .background(Movi.colores.tarjeta)
                     .clickable(enabled = false) {}
+                    .then(conTeclado)
                     .padding(relleno)
                     .testTag(TAG_PANEL_DE_HOJA),
             ) {
@@ -273,10 +325,13 @@ private fun HojaCentrada(
     conCierre: Boolean,
     relleno: PaddingValues,
     alEscape: () -> Unit,
+    onTecla: ((KeyEvent) -> Boolean)?,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val foco = remember { FocusRequester() }
     val alcance = rememberCoroutineScope()
+    // Ver el mismo reflejo en [HojaDesdeAbajo]: siempre el manejador de la última composición.
+    val teclaActual by rememberUpdatedState(onTecla)
     val pila = LocalPilaDeFocoDeHojas.current ?: remember { PilaDeFocoDeHojas() }
     val estaHoja = remember {
         PilaDeFocoDeHojas.Hoja(reclamar = { alcance.launch { runCatching { foco.requestFocus() } } })
@@ -296,7 +351,8 @@ private fun HojaCentrada(
                     alEscape()
                     true
                 } else {
-                    false
+                    // El resto, a la hoja si lo quiere (ver «Otras teclas» en [MarcoDeHoja]).
+                    teclaActual?.invoke(evento) ?: false
                 }
             }
             // Si el foco se va de esta hoja mientras sigue abierta y arriba —se cerró el sub-editor

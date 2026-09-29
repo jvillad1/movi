@@ -30,6 +30,13 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -362,6 +369,9 @@ fun QuickAddScreen(
     // Escape con un sub-picker de Traspaso abierto: ese estado vive adentro de [TransferBody], así
     // que se le pide que lo cierre subiendo este contador.
     var pedidosDeCerrarElDeTraspaso by remember { mutableStateOf(0) }
+
+    // Enter desde el teclado físico: cada pedido es un «Guardar». Ver `alTeclear`.
+    var pedidosDeGuardar by remember { mutableStateOf(0) }
 
     // Dónde estaba la hoja ANTES de abrir un sub-picker. Ver [recordarScroll].
     var scrollAntesDelPicker by remember { mutableStateOf(0) }
@@ -841,6 +851,36 @@ fun QuickAddScreen(
         }
     }
 
+    /**
+     * **El teclado físico** (web y escritorio): los dígitos escriben el monto por el mismo camino
+     * que el teclado en pantalla ([onKey]), Backspace borra y Enter guarda si el botón está
+     * habilitado. Escape lo atiende el `onEscape` de más abajo.
+     *
+     * Solo en «Gasto» e «Ingreso» sin ningún sub-editor abierto: con la Nota abierta el foco está en
+     * su campo y las teclas son de la nota; lo mismo el buscador de categorías. En Traspaso y Cuota
+     * el monto es un campo de texto de verdad y recibe sus teclas solo. Ver [accionDeTecla].
+     *
+     * **Solo toca estado, nunca un valor calculado.** El marco puede quedarse con la versión de
+     * esta función de la PRIMERA composición (el compilador de Compose memoriza la referencia), y
+     * ahí `canSave` era falso para siempre: medido, los dígitos escribían y Enter no guardaba.
+     * Por eso Enter no llama a [save]: sube [pedidosDeGuardar], y el efecto de abajo —que corre en
+     * la composición vigente— guarda con los valores de ahora.
+     */
+    fun alTeclear(evento: KeyEvent): Boolean {
+        if (pickers.typeIndex >= TIPO_TRASPASO || pickers.hayPicker || saving) return false
+        val conModificador = evento.isCtrlPressed || evento.isMetaPressed || evento.isAltPressed || evento.isShiftPressed
+        return when (val accion = accionDeTecla(evento.key, evento.type, conModificador)) {
+            null -> false
+            is AccionDeTecla.Digito -> { onKey(accion.digito); true }
+            AccionDeTecla.Borrar -> { onKey("⌫"); true }
+            AccionDeTecla.Guardar -> { pedidosDeGuardar++; true }
+        }
+    }
+    LaunchedEffect(pedidosDeGuardar) {
+        // `save()` ya se niega solo si el botón está deshabilitado: Enter no puede más que el dedo.
+        if (pedidosDeGuardar > 0) save()
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // La X de la hoja la dibuja `MarcoDeHoja` y queda FUERA de lo que se desplaza (ver el bloque
         // de abajo): en iOS la X es la única salida de esta hoja —no hay botón atrás, y el gesto de
@@ -861,6 +901,7 @@ fun QuickAddScreen(
                     !saving -> onDismiss()
                 }
             },
+            onTecla = ::alTeclear,
         ) {
             // ── Ola 12 — SI LA HOJA NO ENTRA, SE PUEDE LLEGAR IGUAL AL BOTÓN ────────────
             //
