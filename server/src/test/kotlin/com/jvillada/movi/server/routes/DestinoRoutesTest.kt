@@ -42,6 +42,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -482,5 +483,145 @@ class DestinoRoutesTest {
             "Transferencia a la cuenta *31973270756",
             Json.parseToJsonElement(res.bodyAsText()).jsonObject["merchant"]!!.jsonPrimitive.content,
         )
+    }
+
+    // ── Llaves (29-sep) ───────────────────────────────────────────────────────
+
+    private suspend fun ApplicationTestBuilder.postDestino(json: String, uid: String = userAId) =
+        client.post("/api/destinos") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(uid)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(json)
+        }
+
+    private suspend fun ApplicationTestBuilder.listar() =
+        Json.parseToJsonElement(
+            client.get("/api/destinos") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText(),
+        ).jsonArray
+
+    /**
+     * **Un destino que solo se conoce por su llave** se crea (número vacío), se lista, empareja sus
+     * envíos y le pone nombre al SMS que la nombra. Es el caso de Nu y del pago por QR de
+     * Bancolombia, que no escriben ningún número de cuenta.
+     */
+    @Test
+    fun `un destino con llave se crea, se lista, empareja y nombra el SMS`() = testApplication {
+        wireApp()
+        val post = postDestino("""{"nombre":"Panadería","numero":"","llave":" 0092184713 "}""")
+        assertEquals(HttpStatusCode.Created, post.status, post.bodyAsText())
+        val creado = Json.parseToJsonElement(post.bodyAsText()).jsonObject
+        assertEquals("0092184713", creado["llave"]!!.jsonPrimitive.content, "sin espacios")
+        assertEquals("", creado["numero"]!!.jsonPrimitive.content)
+
+        anotarGasto(
+            "ev-qr", "Pan del domingo", 18_500L,
+            "Bancolombia: pagaste \$18,500.00 por codigo QR desde tu cuenta *8133 a la llave 0092184713 el 09/09/2026",
+        )
+        // Una cuenta que TERMINA en 4713: con la llave comparada exacta no se confunde.
+        anotarGasto("ev-otra", "Transferencia", 10_000L, "Transferiste \$10.000 a la cuenta *55554713 desde tu cuenta *8133")
+
+        val lista = listar()
+        assertEquals(1, lista.size)
+        assertEquals("0092184713", lista[0].jsonObject["llave"]!!.jsonPrimitive.content)
+        assertEquals(1, lista[0].jsonObject["cuantos"]!!.jsonPrimitive.int, "el pago por QR y no la cuenta que termina igual")
+        assertEquals(18_500L, lista[0].jsonObject["totales"]!!.jsonObject["COP"]!!.jsonPrimitive.long)
+        // Es de este período (se anotó ahora), así que la tarjeta de Patrimonio lo ve.
+        assertEquals(18_500L, lista[0].jsonObject["totalesDelPeriodo"]!!.jsonObject["COP"]!!.jsonPrimitive.long)
+
+        guardarSms("sms-qr", "Bancolombia: pagaste \$18,500.00 por codigo QR desde tu cuenta *8133 a la llave 0092184713 el 09/09/2026")
+        val parse = client.get("/api/sms/sms-qr/parse") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val leido = Json.parseToJsonElement(parse.bodyAsText()).jsonObject
+        assertEquals("Transferencia a Panadería", leido["merchant"]!!.jsonPrimitive.content)
+        assertEquals("0092184713", leido["identificadorDelDestino"]!!.jsonPrimitive.content)
+        assertEquals(true, leido["identificadorEsLlave"]!!.jsonPrimitive.content.toBoolean())
+    }
+
+    /**
+     * **La plata que llega de alguien guardado** también se nombra: Nu dice «Te llegó dinero de
+     * CAROLINA RESTREPO SALAZAR con tu llave», y si ese nombre está guardado en Caro, se propone
+     * «Transferencia de Caro».
+     */
+    @Test
+    fun `lo que llega de un remitente guardado se propone con su nombre`() = testApplication {
+        wireApp()
+        val texto = "Recibiste 300.000,00 en tu cuenta: Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave."
+        transaction {
+            SmsMessages.insert {
+                it[SmsMessages.id] = "sms-nu"
+                it[userId] = userAId
+                it[time] = "2026-09-20 09:00"
+                it[bank] = "Notificación · Nu"
+                it[SmsMessages.text] = texto
+                it[state] = "pending"
+                it[det] = ""
+            }
+        }
+        val antes = Json.parseToJsonElement(
+            client.get("/api/sms/sms-nu/parse") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText(),
+        ).jsonObject
+        assertEquals("carolina restrepo salazar", antes["identificadorDelDestino"]!!.jsonPrimitive.content)
+        assertEquals("CAROLINA RESTREPO SALAZAR", antes["merchant"]!!.jsonPrimitive.content, "sin guardar, el nombre del banco")
+
+        assertEquals(
+            HttpStatusCode.Created,
+            postDestino("""{"nombre":"Caro","numero":"31973270756","llave":"carolina restrepo salazar"}""").status,
+        )
+        val despues = Json.parseToJsonElement(
+            client.get("/api/sms/sms-nu/parse") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText(),
+        ).jsonObject
+        assertEquals("Transferencia de Caro", despues["merchant"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * **El APK instalado no sabe de llaves**: su cuerpo no trae el campo. El alta sigue funcionando
+     * como siempre, y al editar desde ese APK la llave que se guardó desde la web **no se pierde**.
+     */
+    @Test
+    fun `un cliente viejo sin los campos nuevos sigue funcionando y no borra la llave`() = testApplication {
+        wireApp()
+        // El cuerpo exacto que manda el APK 1.60: sin `llave`, sin `totalesDelPeriodo`.
+        assertEquals(HttpStatusCode.Created, crearCaro().status)
+        val id = listar()[0].jsonObject["id"]!!.jsonPrimitive.content
+
+        // La web le agrega la llave…
+        val conLlave = client.put("/api/destinos/$id") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"nombre":"Caro","numero":"31973270756","deQuien":"esposa","llave":"@CaroR"}""")
+        }
+        assertEquals(HttpStatusCode.OK, conLlave.status)
+        assertEquals("@caror", Json.parseToJsonElement(conLlave.bodyAsText()).jsonObject["llave"]!!.jsonPrimitive.content)
+
+        // …y el APK viejo la renombra, sin saber que existe.
+        val viejo = client.put("/api/destinos/$id") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"nombre":"Caro Restrepo","numero":"31973270756","deQuien":"esposa"}""")
+        }
+        assertEquals(HttpStatusCode.OK, viejo.status)
+        val guardado = listar()[0].jsonObject
+        assertEquals("Caro Restrepo", guardado["nombre"]!!.jsonPrimitive.content)
+        assertEquals("@caror", guardado["llave"]!!.jsonPrimitive.content, "la llave sigue ahí")
+
+        // Y solo un `""` explícito la borra.
+        client.put("/api/destinos/$id") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"nombre":"Caro Restrepo","numero":"31973270756","llave":""}""")
+        }
+        assertEquals(null, listar()[0].jsonObject["llave"]?.jsonPrimitive?.contentOrNull)
+    }
+
+    @Test
+    fun `dos destinos no pueden tener la misma llave, y uno sin numero ni llave no entra`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postDestino("""{"nombre":"Caro","numero":"","llave":"@caro"}""").status)
+        val repetida = postDestino("""{"nombre":"Otra","numero":"","llave":" @CARO "}""")
+        assertEquals(HttpStatusCode.Conflict, repetida.status)
+        assertTrue(repetida.bodyAsText().contains("Caro"), repetida.bodyAsText())
+
+        val vacio = postDestino("""{"nombre":"Nadie","numero":""}""")
+        assertEquals(HttpStatusCode.BadRequest, vacio.status)
+        assertEquals(com.jvillada.movi.shared.model.FALTA_NUMERO_O_LLAVE, vacio.bodyAsText())
     }
 }

@@ -76,6 +76,11 @@ class SchemaDeArranqueTest {
         // esconder o fijar el tipo (el INSERT de esta tabla siempre escribe las cinco columnas).
         "category_prefs" to "icono",
         "category_prefs" to "color",
+        // 29-sep — la llave de una cuenta de otro. `known_destinations` existe en producción desde
+        // la Ola V con los destinos del dueño, y TODA lectura de destinos (`toDestino`,
+        // `destinosDelDueno`) nombra esta columna: sin el ALTER, «Cuentas de otros» entera y el
+        // `/parse` de cada SMS caerían con «column does not exist».
+        "known_destinations" to "llave",
     )
 
     /**

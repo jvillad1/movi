@@ -16,7 +16,7 @@ import org.jetbrains.exposed.sql.selectAll
  */
 fun Transaction.destinosDelDueno(uid: String): List<DestinoConocido> =
     KnownDestinations
-        .select(KnownDestinations.id, KnownDestinations.nombre, KnownDestinations.numero, KnownDestinations.deQuien)
+        .select(KnownDestinations.id, KnownDestinations.nombre, KnownDestinations.numero, KnownDestinations.deQuien, KnownDestinations.llave)
         .where { KnownDestinations.userId eq uid }
         .map {
             DestinoConocido(
@@ -24,5 +24,6 @@ fun Transaction.destinosDelDueno(uid: String): List<DestinoConocido> =
                 nombre = it[KnownDestinations.nombre],
                 numero = it[KnownDestinations.numero],
                 deQuien = it[KnownDestinations.deQuien],
+                llave = it[KnownDestinations.llave],
             )
         }

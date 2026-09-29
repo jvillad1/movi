@@ -68,7 +68,8 @@ class DestinoConocidoTest {
     fun `un destino necesita nombre y al menos cuatro digitos`() {
         assertEquals(DESTINO_SIN_NOMBRE, rechazoDelDestino("   ", "31973270756"))
         assertEquals(NUMERO_DEMASIADO_CORTO, rechazoDelDestino("Caro", "756"))
-        assertEquals(NUMERO_DEMASIADO_CORTO, rechazoDelDestino("Caro", "sin dígitos"))
+        // Sin un solo dígito (y sin llave) no hay con qué reconocerla: se pide una de las dos cosas.
+        assertEquals(FALTA_NUMERO_O_LLAVE, rechazoDelDestino("Caro", "sin dígitos"))
         assertEquals(NUMERO_DEMASIADO_LARGO, rechazoDelDestino("Caro", "1".repeat(MAX_DIGITOS_DEL_NUMERO + 1)))
         assertEquals(NOMBRE_DEL_DESTINO_DEMASIADO_LARGO, rechazoDelDestino("C".repeat(MAX_NOMBRE_DEL_DESTINO + 1), "0756"))
         assertEquals(DE_QUIEN_DEMASIADO_LARGO, rechazoDelDestino("Caro", "0756", "e".repeat(MAX_DE_QUIEN + 1)))
@@ -392,4 +393,130 @@ class DestinoConocidoTest {
 
     /** Copia de lo que la pantalla muestra, para que el test no dependa de `:shared`. */
     private fun colaVisibleDePrueba(numero: String) = "·" + numero.takeLast(4)
+
+    // ── Llaves (29-sep) ───────────────────────────────────────────────────────
+
+    /** Los tres textos reales del brief, con lo que identifica a quién fue (o de quién vino). */
+    @Test
+    fun `el identificador sale de los tres textos reales`() {
+        assertEquals(
+            IdentificadorDelDestino(TipoDeIdentificador.NUMERO, "31973270756"),
+            identificadorDelDestinoEn("Bancolombia: Transferiste \$1.931.488 a la cuenta *31973270756 desde tu cuenta *8133 el 18/09/26"),
+        )
+        assertEquals(
+            IdentificadorDelDestino(TipoDeIdentificador.LLAVE, "0087"),
+            identificadorDelDestinoEn("Bancolombia: ANA PEREZ pagaste \$18,500.00 por codigo QR desde tu cuenta *3333 a la llave 0087 el 09/09/2026"),
+        )
+        assertEquals(
+            IdentificadorDelDestino(TipoDeIdentificador.LLAVE, "carolina restrepo salazar"),
+            identificadorDelDestinoEn("Recibiste 300.000,00 en tu cuenta: Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave."),
+        )
+        // «hacia la cuenta», que también escribe Bancolombia.
+        assertEquals("25318624146", identificadorDelDestinoEn("2026/09/10 13:35:32, hacia la cuenta *25318624146.")?.valor)
+    }
+
+    @Test
+    fun `ni la cuenta de origen ni la llave del dueno identifican a nadie`() {
+        assertNull(identificadorDelDestinoEn("Pagaste \$138.600 a Coomeva desde tu cuenta *8133"))
+        assertNull(identificadorDelDestinoEn("Tu llave 3001234567 quedó inscrita"), "«tu llave» es la del dueño")
+        assertNull(identificadorDelDestinoEn("Configura la llave registrada en tu app"), "una palabra suelta no es una llave")
+        assertNull(identificadorDelDestinoEn("Compraste \$28.500 en UBER con tu T.Cred *3684"))
+    }
+
+    @Test
+    fun `las llaves se normalizan a minusculas y sin espacios, y un nombre queda legible`() {
+        assertEquals("3001234567", normalizarLlave(" 300 123 4567 "))
+        assertEquals("caro@correo.com", normalizarLlave("Caro@Correo.com"))
+        assertEquals("@caror", normalizarLlave("@CaroR"))
+        assertEquals("carolina restrepo salazar", normalizarLlave("CAROLINA  RESTREPO SALAZAR"))
+        assertEquals("caro@correo.com", identificadorDelDestinoEn("transferiste a la llave caro@correo.com.")?.valor, "sin el punto final")
+    }
+
+    @Test
+    fun `un destino puede ser solo llave, pero no ni numero ni llave`() {
+        assertNull(rechazoDelDestino("Panadería", "", llave = "0092184713"))
+        assertNull(rechazoDelDestino("Caro", "31973270756", llave = "@caro"), "número Y llave")
+        assertEquals(FALTA_NUMERO_O_LLAVE, rechazoDelDestino("Nadie", "", llave = "  "))
+        assertEquals(LLAVE_DEMASIADO_CORTA, rechazoDelDestino("Jo", "", llave = "@j"))
+        assertEquals(NUMERO_DEMASIADO_CORTO, rechazoDelDestino("Caro", "12", llave = "@caro"), "un número a medias no se guarda aunque haya llave")
+    }
+
+    private val panaderia = DestinoConocido(id = "dst_pan", nombre = "Panadería", numero = "", llave = "0092184713")
+    /** Una cuenta que TERMINA en los mismos cuatro dígitos que la llave de la panadería. */
+    private val vecino = DestinoConocido(id = "dst_vecino", nombre = "Vecino", numero = "55554713")
+
+    /**
+     * **Una llave no se confunde con un número corto.** «llave 0092184713» y la cuenta *55554713
+     * comparten la cola 4713: por número se compara la cola, por llave el valor exacto, y las dos
+     * señales no se mezclan.
+     */
+    @Test
+    fun `una llave numerica no se confunde con una cuenta que termina igual`() {
+        val conLosDos = listOf(panaderia, vecino)
+        assertEquals(panaderia, destinoQueNombra("Pago QR · llave 0092184713", conLosDos))
+        assertEquals(vecino, destinoQueNombra("Transferiste \$10.000 a la cuenta *55554713", conLosDos))
+        assertNull(destinoQueNombra("Pago QR · llave 4713", conLosDos), "la llave se compara exacta, no por la cola")
+
+        val alQr = gasto("ev-qr", "Pan", 18_500L, 1L, crudo = "pagaste \$18,500.00 por codigo QR a la llave 0092184713")
+        val aLaCuenta = gasto("ev-cta", "Transferencia", 10_000L, 1L, crudo = "Transferiste \$10.000 a la cuenta *55554713")
+        assertTrue(nombraLaLlaveDelDestino(alQr, panaderia))
+        assertFalse(nombraLaLlaveDelDestino(aLaCuenta, panaderia))
+        assertFalse(nombraElNumeroDelDestino(alQr, vecino), "la llave no pasa por el lector de números")
+        assertTrue(nombraElNumeroDelDestino(aLaCuenta, vecino))
+        assertFalse(nombraElNumeroDelDestino(alQr, panaderia), "un destino sin número no nombra ninguna cuenta")
+        assertEquals(listOf("ev-qr"), movimientosHaciaElDestino(panaderia, listOf(alQr, aLaCuenta)).map { it.id })
+    }
+
+    @Test
+    fun `lo que llega de un remitente guardado se propone con su nombre`() {
+        val caroConNombre = caro.copy(llave = "carolina restrepo salazar")
+        val texto = "Recibiste 300.000,00 en tu cuenta: Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave."
+        val leido = ParsedSms(300_000.0, "CAROLINA RESTREPO SALAZAR", TransactionType.INCOME, "Transferencia")
+        assertEquals("Transferencia de Caro", conElDestinoConocido(leido, texto, listOf(caroConNombre)).merchant)
+        // Sin guardarlo, queda el nombre del banco.
+        assertEquals("CAROLINA RESTREPO SALAZAR", conElDestinoConocido(leido, texto, destinos).merchant)
+        // Y si la memoria ya le puso otro nombre, ese es suyo.
+        assertEquals("Mesada", conElDestinoConocido(leido.copy(merchant = "Mesada"), texto, listOf(caroConNombre)).merchant)
+    }
+
+    @Test
+    fun `se ofrece guardar solo lo que no se conoce y no es una cuenta suya`() {
+        val fiducuenta = Account("acc-fidu", "Fiducuenta 9586", AccountType.SAVINGS, 0L)
+        val aCaro = IdentificadorDelDestino(TipoDeIdentificador.NUMERO, "31973270756")
+        val aOtro = IdentificadorDelDestino(TipoDeIdentificador.NUMERO, "12345678")
+        val aSuFiducuenta = IdentificadorDelDestino(TipoDeIdentificador.NUMERO, "40009586")
+        val aLaPanaderia = IdentificadorDelDestino(TipoDeIdentificador.LLAVE, "0092184713")
+
+        assertFalse(ofreceGuardarElDestino(aCaro, destinos, listOf(fiducuenta)), "Caro ya está guardada")
+        assertTrue(ofreceGuardarElDestino(aOtro, destinos, listOf(fiducuenta)))
+        assertFalse(ofreceGuardarElDestino(aSuFiducuenta, destinos, listOf(fiducuenta)), "un traspaso a una cuenta suya")
+        assertTrue(ofreceGuardarElDestino(aLaPanaderia, destinos, emptyList()))
+        assertFalse(ofreceGuardarElDestino(aLaPanaderia, destinos + panaderia, emptyList()))
+        assertFalse(ofreceGuardarElDestino(null, destinos, emptyList()))
+    }
+
+    @Test
+    fun `guardar con el nombre de uno que ya existe le suma el dato en vez de duplicarlo`() {
+        val nombre = IdentificadorDelDestino(TipoDeIdentificador.LLAVE, "carolina restrepo salazar")
+        val sumado = destinoParaGuardar(nombre, " caro ", null, destinos)
+        assertEquals("dst_caro", sumado.id, "es Caro, con la llave agregada")
+        assertEquals("carolina restrepo salazar", sumado.llave)
+        assertEquals("31973270756", sumado.numero)
+
+        val nuevo = destinoParaGuardar(IdentificadorDelDestino(TipoDeIdentificador.NUMERO, "12345678"), "Mamá", "mamá", destinos)
+        assertEquals("", nuevo.id)
+        assertEquals("12345678", nuevo.numero)
+        assertEquals("mamá", nuevo.deQuien)
+        // Caro ya tiene número: uno nuevo con su nombre no le pisa el que tiene.
+        assertEquals("", destinoParaGuardar(IdentificadorDelDestino(TipoDeIdentificador.NUMERO, "12345678"), "Caro", null, destinos).id)
+    }
+
+    @Test
+    fun `el nombre sugerido es el del banco en titulo caso, o nada si es un numero`() {
+        assertEquals("Carolina Restrepo Salazar", nombreSugeridoParaElDestino("CAROLINA RESTREPO SALAZAR"))
+        assertEquals("Pedro Gomez", nombreSugeridoParaElDestino("PEDRO GOMEZ"))
+        assertEquals("", nombreSugeridoParaElDestino("Transferencia a la cuenta *41279033068"))
+        assertEquals("", nombreSugeridoParaElDestino("Pago QR · llave 0087"))
+        assertEquals("María de la Cruz", enTituloCaso("MARÍA DE LA CRUZ"))
+    }
 }

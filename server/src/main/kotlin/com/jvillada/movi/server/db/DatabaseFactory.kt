@@ -101,7 +101,11 @@ object DatabaseFactory {
             // columnas quedarían solo en el código y cada PUT/GET de categorías que las nombre
             // fallaría con «column does not exist» apenas desplegara. Las dos NULLABLE, así que el
             // ALTER no puede fallar sobre las filas que ya existen.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs)
+            // KnownDestinations: `llave` (29-sep, cuentas de otros con llave) — NULLABLE, y la
+            // tabla entra a esta lista por el mismo motivo que CategoryPrefs: existe en producción
+            // desde la Ola V con los destinos del dueño. Su único índice (`user_id`) ya existe, así
+            // que el único DDL es el ADD COLUMN (ver `KnownDestinationsLlaveColumnTest`).
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }
