@@ -38,6 +38,8 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.loQueSeLesMandoEstePeriodo
+import com.jvillada.movi.shared.model.nombresDeLasCuentasDeOtros
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.*
@@ -121,11 +123,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     val tarjetasDeCredito = tarjetasLeidas.valor.takeUnless { tarjetasLeidas.fallo && it.isNullOrEmpty() }
     val cargandoDeudas = creditosLeidos.actualizando || tarjetasLeidas.actualizando
 
-    // ── «Te deben» (Ola C, tarea 4): cuántas cuentas de otros hay guardadas — mismo dato que
-    // muestra `DestinosScreen`, leído acá y no recalculado.
+    // ── «Cuentas de otros»: a quiénes les manda plata y cuánto este período — mismo dato que
+    // muestra `DestinosScreen` (el server deriva `totalesDelPeriodo`), leído acá y no recalculado.
     val destinosLeidos = rememberLectura(ClaveDeLectura.Destinos, reintento = refreshKey) { Repositories.wallets.getDestinos() }
     val destinosGuardados = destinosLeidos.valor.takeUnless { destinosLeidos.fallo && it.isNullOrEmpty() }
-    val cargandoTeDeben = destinosLeidos.actualizando
+    val cargandoCuentasDeOtros = destinosLeidos.actualizando
 
     val lecturas = listOf(cuentasLeidas, creditosLeidos, tarjetasLeidas, destinosLeidos)
     // Se está pintando algo que esta visita todavía no confirmó (lo recordado, o lo de antes de un
@@ -348,6 +350,26 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     }
                 }
 
+                // ── «Cuentas de otros», justo debajo de las cuentas propias ──────────────
+                //
+                // El dueño (29-sep): «gestionar cuentas conocidas no propias es un feature que
+                // necesito y debe ser de fácil acceso». Estaba al fondo, debajo de Deudas, y con un
+                // nombre equivocado («Te deben»: no es plata que le deban, es la cuenta de Caro para
+                // girarle). Sube a donde termina lo suyo: primero sus cuentas, después las de a
+                // quienes les manda. En dos columnas va en la de las cuentas, por el mismo motivo.
+                //
+                // Lectura propia: aparece (o su esqueleto, o su error) aunque Cuentas siga cargando
+                // o se haya rendido — por eso va fuera del `if` de arriba.
+                if (conCuentas) item {
+                    Spacer(Modifier.height(20.dp))
+                    SeccionDeCuentasDeOtros(
+                        destinos = destinosGuardados,
+                        cargando = cargandoCuentasDeOtros,
+                        onReintentar = { refreshKey++ },
+                        onClick = { onNavigate(Screen.Destinos) },
+                    )
+                }
+
                 // **La puerta al cuadre de saldos** y **la plata que se movió entre cuentas**:
                 // viven fuera del `else` de arriba (antes solo aparecían con al menos
                 // una cuenta) para que sigan estando aunque Patrimonio esté vacío — cada una
@@ -364,8 +386,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         Spacer(Modifier.height(20.dp))
                         val ahora = remember(cuentas) { Clock.System.now().toEpochMilliseconds() }
                         val atrasadas = cuentasSinCuadrar(cuentas, ahora)
-                        // Fix round 1: comparte `FilaDeResumenPatrimonio` con «Deudas» y «Te
-                        // deben» — las tres filas eran el mismo `Row` copiado tres veces. Esta
+                        // Fix round 1: comparte `FilaDeResumenPatrimonio` con «Deudas» y «Cuentas
+                        // de otros» — las tres filas eran el mismo `Row` copiado tres veces. Esta
                         // es también la forma en que el brief pide «Cuadrar» como acción de
                         // Patrimonio (ver el header, más arriba: ya no repite la puerta acá).
                         FilaDeResumenPatrimonio(
@@ -422,11 +444,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     }
                 }
 
-                // ── «Deudas» y «Te deben» (Ola C, tarea 4) ──────────────────────────────
+                // ── «Deudas» (Ola C, tarea 4) ──────────────────────────────────────────
                 //
-                // Lecturas propias, así que aparecen (o su esqueleto, o su error) sin importar en
-                // qué estado esté `cuentas` arriba — Cuentas puede seguir cargando o haberse
-                // rendido y estas dos puertas igual contestan.
+                // Lectura propia, así que aparece (o su esqueleto, o su error) sin importar en qué
+                // estado esté `cuentas` arriba — Cuentas puede seguir cargando o haberse rendido y
+                // esta puerta igual contesta.
                 if (!conResumen) return
                 item {
                     Spacer(Modifier.height(20.dp))
@@ -436,15 +458,6 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         cargando = cargandoDeudas,
                         onReintentar = { refreshKey++ },
                         onClick = { onNavigate(Screen.Credits) },
-                    )
-                }
-                item {
-                    Spacer(Modifier.height(20.dp))
-                    SeccionDeTeDeben(
-                        destinos = destinosGuardados,
-                        cargando = cargandoTeDeben,
-                        onReintentar = { refreshKey++ },
-                        onClick = { onNavigate(Screen.Destinos) },
                     )
                 }
             }
@@ -884,13 +897,13 @@ private fun LazyListScope.cuentasEsqueleto(forma: FormaDeCuentas?, conTarjeta: B
     }
 }
 
-// ── «Deudas» y «Te deben» (Ola C, tarea 4) ──────────────────────────────────────────
+// ── «Deudas» y «Cuentas de otros» ────────────────────────────────────────────────────
 
 /** La tarjeta de «Deudas», cargando o cargada: el mismo tag en las dos. */
 const val TAG_TARJETA_DE_DEUDAS: String = "tarjeta-de-deudas"
 
-/** La tarjeta de «Te deben», cargando o cargada: el mismo tag en las dos. */
-const val TAG_TARJETA_DE_TE_DEBEN: String = "tarjeta-de-te-deben"
+/** La tarjeta de «Cuentas de otros», cargando o cargada: el mismo tag en las dos. */
+const val TAG_TARJETA_DE_CUENTAS_DE_OTROS: String = "tarjeta-de-cuentas-de-otros"
 
 /**
  * La tarjeta de «Cuadre de saldos» — ya existía antes de esta tarea; el tag es nuevo (Fix round
@@ -947,13 +960,19 @@ internal fun resumenDeDeudas(creditos: List<CreditSummary>, tarjetas: List<CardS
 }
 
 /**
- * **«Te deben»**: la puerta a `DestinosScreen` (Cuentas de otros) — hasta esta tarea esa pantalla
- * no tenía ninguna entrada, así que esta tarjeta es la que la hace alcanzable. Solo el conteo: la
- * pantalla no calcula un total agregado entre todos los destinos (cada uno trae el suyo), y
- * sumarlo acá sería una cuenta nueva que el brief no pidió.
+ * **«Cuentas de otros»**: la puerta a `DestinosScreen` desde Patrimonio, con los nombres («Caro,
+ * Mamá y Papá») y cuánto se les mandó en el período en curso.
+ *
+ * Se llamaba «Te deben» y era un nombre equivocado: no es plata que le deban, es el registro de las
+ * cuentas a las que él les manda (la de Caro, para girarle). Tampoco es patrimonio: la cifra no
+ * suma ni resta arriba — es lo que salió de sus cuentas hacia esas personas, que es la pregunta que
+ * él se hace («¿cuánto le he mandado a Caro este mes?»).
+ *
+ * La cifra sale de [DestinoConocido.totalesDelPeriodo], que el server deriva con el período DEL
+ * DUEÑO; acá solo se suma entre destinos ([loQueSeLesMandoEstePeriodo]), sin recalcular nada.
  */
 @Composable
-private fun SeccionDeTeDeben(
+private fun SeccionDeCuentasDeOtros(
     destinos: List<DestinoConocido>?,
     cargando: Boolean,
     onReintentar: () -> Unit,
@@ -961,29 +980,45 @@ private fun SeccionDeTeDeben(
 ) {
     if (destinos == null) {
         if (cargando) {
-            FilaDeResumenPatrimonioEsqueleto(conCifra = false, testTag = TAG_TARJETA_DE_TE_DEBEN)
+            FilaDeResumenPatrimonioEsqueleto(conCifra = false, testTag = TAG_TARJETA_DE_CUENTAS_DE_OTROS)
         } else {
             NoSePudoLeer("No pudimos cargar Cuentas de otros", onReintentar = onReintentar)
         }
     } else {
+        val delPeriodo = loQueSeLesMandoEstePeriodo(destinos)
         FilaDeResumenPatrimonio(
-            titulo = "Te deben",
-            subtitulo = resumenDeTeDeben(destinos),
+            titulo = "Cuentas de otros",
+            subtitulo = resumenDeCuentasDeOtros(destinos),
+            cifra = cifraDelPeriodo(delPeriodo),
+            detalleDeLaCifra = if (delPeriodo.isEmpty()) null else "este período",
             onClick = onClick,
-            testTag = TAG_TARJETA_DE_TE_DEBEN,
+            testTag = TAG_TARJETA_DE_CUENTAS_DE_OTROS,
         )
     }
 }
 
-/** El subtítulo de la tarjeta de «Te deben»: cuántas cuentas de otros hay guardadas. */
-internal fun resumenDeTeDeben(destinos: List<DestinoConocido>): String = when (destinos.size) {
-    0 -> "Aún no hay ninguna guardada"
-    1 -> "1 cuenta guardada"
-    else -> "${destinos.size} cuentas guardadas"
+/**
+ * El subtítulo de la tarjeta de «Cuentas de otros»: los nombres, y si este período no se les mandó
+ * nada, eso — un «$0» en el lugar de la cifra se leería como un dato y es una ausencia.
+ */
+internal fun resumenDeCuentasDeOtros(destinos: List<DestinoConocido>): String = when {
+    destinos.isEmpty() -> "Guarda la cuenta de alguien a quien le envías plata"
+    loQueSeLesMandoEstePeriodo(destinos).isEmpty() -> "${nombresDeLasCuentasDeOtros(destinos)} · nada enviado este período"
+    else -> nombresDeLasCuentasDeOtros(destinos)
 }
 
 /**
- * La fila compartida de «Deudas» y «Te deben»: título, subtítulo, una cifra opcional y el chevron
+ * La cifra, **una por moneda** y en pesos primero: sumar pesos con dólares da un número que no
+ * existe (mismo criterio que `TotalesEnColumna`). Casi siempre es una sola.
+ */
+internal fun cifraDelPeriodo(totales: Map<String, Long>): String? =
+    totales.entries
+        .sortedBy { if (it.key == "COP") "" else it.key }
+        .joinToString(" · ") { (moneda, total) -> formatMoney(total, moneda) }
+        .ifEmpty { null }
+
+/**
+ * La fila compartida de «Deudas» y «Cuentas de otros»: título, subtítulo, una cifra opcional y el chevron
  * — la misma forma que ya tenían «Cuadre de saldos» y «Movimientos entre cuentas» más arriba en
  * esta pantalla, con una cifra de más. Una sola función para las dos tarjetas: repetir el mismo
  * `Row` dos veces es el tipo de copia que este proyecto evita.
@@ -996,6 +1031,8 @@ private fun FilaDeResumenPatrimonio(
     testTag: String,
     cifra: String? = null,
     colorCifra: Color = Movi.colores.texto,
+    /** Una línea chica debajo de la cifra, que dice de qué es («este período»). */
+    detalleDeLaCifra: String? = null,
     // Fix round 1: el cuadre lo necesita para el aviso ámbar de «llevas más de un período sin
     // cuadrar» (ver `textoDelAvisoDeCuadre`) — el resto de las filas usan el default.
     colorSubtitulo: Color = Movi.colores.textoMedio,
@@ -1017,13 +1054,17 @@ private fun FilaDeResumenPatrimonio(
                 Text(subtitulo, style = Movi.textos.apoyo, color = colorSubtitulo)
             }
             if (cifra != null) {
-                Text(
-                    cifra,
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = colorCifra,
-                    modifier = Modifier.padding(end = 8.dp),
-                )
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 8.dp, end = 8.dp)) {
+                    Text(
+                        cifra,
+                        style = Movi.textos.monto,
+                        fontWeight = FontWeight.Medium,
+                        color = colorCifra,
+                    )
+                    if (detalleDeLaCifra != null) {
+                        Text(detalleDeLaCifra, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    }
+                }
             }
             ChevronRight()
         }

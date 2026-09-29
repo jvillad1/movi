@@ -53,6 +53,13 @@ data class DestinoConocido(
     val totales: Map<String, Long> = emptyMap(),
     /** Cuántos movimientos se le contaron — derivado. */
     val cuantos: Int = 0,
+    /**
+     * **Cuánto se le mandó en el período en curso del dueño**, por moneda — derivado, igual que
+     * [totales]. Lo lee la tarjeta «Cuentas de otros» de Patrimonio («Caro, Mamá · $X este
+     * período»). Por el período DEL DUEÑO (ver [loQueSeLeMandoPorPeriodo]), no por mes de
+     * calendario. Vacío si el server no sabe el período (un cliente viejo lo ignora sin más).
+     */
+    val totalesDelPeriodo: Map<String, Long> = emptyMap(),
 )
 
 /** **Los movimientos que fueron a un destino, con su total.** Lo que contesta `GET /api/destinos/{id}/movimientos`. */
@@ -363,10 +370,56 @@ fun movimientosHaciaElDestino(
 fun totalesHaciaElDestino(movimientos: List<FinancialEvent>): Map<String, Long> =
     movimientos.groupBy { it.currency }.mapValues { (_, del) -> del.sumOf { it.amount } }
 
-/** [destino] con [DestinoConocido.totales] y [DestinoConocido.cuantos] llenos. */
-fun conLoQueSeLeMando(destino: DestinoConocido, eventos: List<FinancialEvent>): DestinoConocido {
+/**
+ * [destino] con sus derivados llenos: [DestinoConocido.totales], [DestinoConocido.cuantos] y —si se
+ * pasan [ajustes] y [ahora]— [DestinoConocido.totalesDelPeriodo], lo del período en curso del dueño.
+ */
+fun conLoQueSeLeMando(
+    destino: DestinoConocido,
+    eventos: List<FinancialEvent>,
+    ajustes: PeriodSettings? = null,
+    ahora: Long? = null,
+): DestinoConocido {
     val suyos = movimientosHaciaElDestino(destino, eventos)
-    return destino.copy(totales = totalesHaciaElDestino(suyos), cuantos = suyos.size)
+    val delPeriodo = if (ajustes != null && ahora != null) {
+        val enCurso = periodoActual(ahora, ajustes)
+        totalesHaciaElDestino(suyos.filter { periodoDe(it.timestamp, ajustes) == enCurso })
+    } else {
+        emptyMap()
+    }
+    return destino.copy(totales = totalesHaciaElDestino(suyos), cuantos = suyos.size, totalesDelPeriodo = delPeriodo)
+}
+
+/**
+ * **Lo que se les mandó a todas en el período en curso**, por moneda: la cifra de la tarjeta
+ * «Cuentas de otros» de Patrimonio. Suma los [DestinoConocido.totalesDelPeriodo] ya derivados por
+ * el server, sin recalcular nada. Sin `0`: una moneda en cero no es algo que se mandó.
+ */
+fun loQueSeLesMandoEstePeriodo(destinos: List<DestinoConocido>): Map<String, Long> =
+    destinos.flatMap { it.totalesDelPeriodo.entries }
+        .groupBy({ it.key }, { it.value })
+        .mapValues { (_, montos) -> montos.sum() }
+        .filterValues { it != 0L }
+
+/** Cuántos nombres dice la tarjeta de Patrimonio antes de resumir el resto en «y N más». */
+const val NOMBRES_EN_LA_TARJETA_DE_CUENTAS_DE_OTROS: Int = 3
+
+/**
+ * **Los nombres, como los diría él**: «Caro, Mamá y Papá», «Caro, Mamá, Papá y 2 más». Los que
+ * más recibieron este período van primero —son a quienes se refiere la cifra de al lado—, y
+ * después el orden alfabético que ya trae la lista.
+ */
+fun nombresDeLasCuentasDeOtros(destinos: List<DestinoConocido>): String {
+    if (destinos.isEmpty()) return ""
+    val ordenados = destinos.sortedByDescending { d -> d.totalesDelPeriodo.values.sum() }
+    val nombres = ordenados.map { it.nombre }
+    return when {
+        nombres.size == 1 -> nombres.single()
+        nombres.size <= NOMBRES_EN_LA_TARJETA_DE_CUENTAS_DE_OTROS ->
+            nombres.dropLast(1).joinToString(", ") + " y " + nombres.last()
+        else -> nombres.take(NOMBRES_EN_LA_TARJETA_DE_CUENTAS_DE_OTROS).joinToString(", ") +
+            " y ${nombres.size - NOMBRES_EN_LA_TARJETA_DE_CUENTAS_DE_OTROS} más"
+    }
 }
 
 /** Lo que se le mandó a un destino en un período del dueño. */

@@ -117,8 +117,8 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
         Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
             MinScreenHeader(
                 title = "Cuentas de otros",
-                // Ola C, tarea 4: la primera puerta fue la tarjeta «Te deben» de Patrimonio (ver
-                // `SeccionDeTeDeben` en `AccountsScreen`). Ola V agregó una segunda, «Cuentas de
+                // Ola C, tarea 4: la primera puerta fue la tarjeta de Patrimonio, hoy «Cuentas de
+                // otros» (ver `SeccionDeCuentasDeOtros` en `AccountsScreen`). Ola V agregó una segunda, «Cuentas de
                 // otros» en Ajustes (ver `MasScreen`) — «volver» sigue el historial real y solo
                 // cae a este `fallback` (Patrimonio) cuando no hay ninguno.
                 leading = HeaderLeading.Back(fallback = Screen.Accounts),

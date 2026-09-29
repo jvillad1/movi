@@ -82,9 +82,9 @@ class EsqueletoDeCuentasTest {
      * Monta la pantalla con [cuentas] como `getAccounts()` — por default, colgada en [puerta].
      *
      * Ola C, tarea 4: `AccountsScreen` también lee créditos, tarjetas y destinos para sus
-     * tarjetas de «Deudas» y «Te deben» — acá coladas para siempre y a propósito, porque estas
+     * tarjetas de «Deudas» y «Cuentas de otros» — acá coladas para siempre y a propósito, porque estas
      * pruebas miden la tarjeta del patrimonio y los grupos, no esas dos tarjetas nuevas (ver
-     * `TarjetaDeDeudasYTeDebenTest`), y devolverlas ya resueltas haría aparecer «Sin deudas
+     * `TarjetaDeDeudasYCuentasDeOtrosTest`), y devolverlas ya resueltas haría aparecer «Sin deudas
      * registradas · $0» en el primer cuadro — verdadero para esas tarjetas, pero ruido para lo
      * que estas pruebas afirman.
      */

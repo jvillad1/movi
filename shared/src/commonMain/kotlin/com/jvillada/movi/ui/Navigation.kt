@@ -129,8 +129,9 @@ sealed class Screen {
      * `DestinoConocido`). Ponerlas en la misma pantalla invitaría exactamente a la confusión que
      * el modelo evita.
      *
-     * Ola C, tarea 4: la primera puerta fue la tarjeta **«Te deben»** de Patrimonio (ver
-     * `SeccionDeTeDeben` en `AccountsScreen.kt`) — antes de esa tarea no tenía ninguna, «Más» dejó
+     * Ola C, tarea 4: la primera puerta fue una tarjeta de Patrimonio que se llamaba «Te deben»
+     * (hoy «Cuentas de otros», ver `SeccionDeCuentasDeOtros` en `AccountsScreen.kt`, justo debajo
+     * de las cuentas propias desde el 29-sep) — antes de esa tarea no tenía ninguna, «Más» dejó
      * de ser pestaña (Task 3) y esta pantalla se quedó sin como llegar.
      *
      * Ola V: **«Cuentas de otros» en Ajustes** ([MasScreen][com.jvillada.movi.ui.mas.MasScreen]) es

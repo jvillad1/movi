@@ -339,6 +339,51 @@ class DestinoConocidoTest {
         assertEquals(4_931_488L, porCalendario.sumOf { it.totales["COP"] ?: 0L })
     }
 
+    // ── La tarjeta de Patrimonio: lo de este período ─────────────────────────
+
+    /**
+     * El período en curso con corte 25, cuando «ahora» es el 18-sep: va del 25-ago al 24-sep, así
+     * que los tres envíos de Caro (≈16-ago, ≈21-ago y ≈15-sep) reparten: solo el último es de este
+     * período. Se mide contra [periodoDe] y no contra una fecha escrita a mano.
+     */
+    @Test
+    fun `lo de este periodo cuenta solo los envios del periodo en curso del dueno`() {
+        val corte25 = PeriodSettings(cutoffDay = 25)
+        val ahora = cotrafa.timestamp
+        val esperado = listOf(mercado, colegio, cotrafa)
+            .filter { periodoDe(it.timestamp, corte25) == periodoActual(ahora, corte25) }
+            .sumOf { it.amount }
+        assertTrue(esperado in 1L until 4_931_488L, "el caso tiene que dejar afuera algún envío, si no no prueba nada")
+
+        val lleno = conLoQueSeLeMando(caro, listOf(mercado, colegio, cotrafa), corte25, ahora)
+        assertEquals(mapOf("COP" to esperado), lleno.totalesDelPeriodo)
+        assertEquals(mapOf("COP" to 4_931_488L), lleno.totales, "el total de siempre no cambia")
+        // Sin ajustes no se inventa un período: queda vacío, como lo lee un server viejo.
+        assertTrue(conLoQueSeLeMando(caro, listOf(mercado, colegio, cotrafa)).totalesDelPeriodo.isEmpty())
+    }
+
+    @Test
+    fun `lo de este periodo de todas se suma por moneda y sin ceros`() {
+        val conPlata = listOf(
+            caro.copy(totalesDelPeriodo = mapOf("COP" to 300_000L)),
+            papa.copy(totalesDelPeriodo = mapOf("COP" to 1_000_000L, "USD" to 50L)),
+            DestinoConocido(nombre = "Mamá", numero = "40001234", totalesDelPeriodo = mapOf("COP" to 0L)),
+        )
+        assertEquals(mapOf("COP" to 1_300_000L, "USD" to 50L), loQueSeLesMandoEstePeriodo(conPlata))
+        assertTrue(loQueSeLesMandoEstePeriodo(listOf(caro, papa)).isEmpty())
+    }
+
+    @Test
+    fun `los nombres de la tarjeta van como se dicen, con los que mas recibieron primero`() {
+        assertEquals("", nombresDeLasCuentasDeOtros(emptyList()))
+        assertEquals("Caro", nombresDeLasCuentasDeOtros(listOf(caro)))
+        assertEquals("Caro y Papá", nombresDeLasCuentasDeOtros(listOf(caro, papa)))
+        val mama = DestinoConocido(nombre = "Mamá", numero = "40001234", totalesDelPeriodo = mapOf("COP" to 5L))
+        assertEquals("Mamá, Caro y Papá", nombresDeLasCuentasDeOtros(listOf(caro, papa, mama)))
+        val cinco = listOf(caro, papa, mama) + listOf("Tía", "Vecino").map { DestinoConocido(nombre = it, numero = "12345678") }
+        assertEquals("Mamá, Caro, Papá y 2 más", nombresDeLasCuentasDeOtros(cinco))
+    }
+
     @Test
     fun `el nombre propuesto dice quien es`() {
         assertEquals("Transferencia a Caro", nombreHaciaElDestino(caro))

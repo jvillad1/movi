@@ -6,6 +6,7 @@ import com.jvillada.movi.server.db.KnownDestinations
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.MovimientosDelDestino
 import com.jvillada.movi.shared.model.conLoQueSeLeMando
@@ -65,7 +66,11 @@ fun Route.destinoRoutes() {
             // Una sola lectura de movimientos para todos los destinos: el cruce es en memoria (ver
             // `vaHaciaElDestino`), y una consulta por destino sería N+1 sobre la tabla más grande.
             val eventos = loadNonVoidedEvents(uid)
-            call.respond(destinos.map { conLoQueSeLeMando(it, eventos) })
+            // El período en curso del DUEÑO (su corte, sus inicios propios): es lo que lee la
+            // tarjeta «Cuentas de otros» de Patrimonio. Ver `DestinoConocido.totalesDelPeriodo`.
+            val ajustes = ajustesDePeriodoDe(uid)
+            val ahora = System.currentTimeMillis()
+            call.respond(destinos.map { conLoQueSeLeMando(it, eventos, ajustes, ahora) })
         }
 
         post {
@@ -100,7 +105,10 @@ fun Route.destinoRoutes() {
             }
             // Recién creado ya puede tener movimientos: el dueño lo registra DESPUÉS de haberle
             // transferido, que es literalmente el caso que trajo esta feature.
-            call.respond(HttpStatusCode.Created, conLoQueSeLeMando(destino, loadNonVoidedEvents(uid)))
+            call.respond(
+                HttpStatusCode.Created,
+                conLoQueSeLeMando(destino, loadNonVoidedEvents(uid), ajustesDePeriodoDe(uid), System.currentTimeMillis()),
+            )
         }
 
         put("/{id}") {
@@ -127,7 +135,7 @@ fun Route.destinoRoutes() {
             }
             if (actualizadas == 0) return@put call.respond(HttpStatusCode.NotFound)
             val destino = DestinoConocido(id = id, nombre = nombre, numero = numero, deQuien = deQuien)
-            call.respond(conLoQueSeLeMando(destino, loadNonVoidedEvents(uid)))
+            call.respond(conLoQueSeLeMando(destino, loadNonVoidedEvents(uid), ajustesDePeriodoDe(uid), System.currentTimeMillis()))
         }
 
         delete("/{id}") {
