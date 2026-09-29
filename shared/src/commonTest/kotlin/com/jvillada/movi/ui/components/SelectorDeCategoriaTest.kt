@@ -211,4 +211,17 @@ class SelectorDeCategoriaTest {
         assertFalse(esLaCeldaElegida(CeldaDeCategoria.Crear("Colegio"), "Colegio"))
         assertFalse(esLaCeldaElegida(CeldaDeCategoria.Usar("Colegio", porQue = "x"), "Colegio"))
     }
+
+    /**
+     * «Entretenimien…» a 1.280 dp en la web: `TextAutoSize` no achicaba. El tamaño lo calcula ahora
+     * [tamanoQueEntra], con un ancho proporcional al tamaño (como una letra de verdad).
+     */
+    @Test
+    fun el_rotulo_achicado_baja_hasta_que_entra() {
+        // 15 letras de 0,6 em: a 12,5 sp mide 112,5; en 100 de ancho entra a 11 sp (99).
+        val anchoA = { sp: Float -> 15 * 0.6f * sp }
+        assertEquals(11f, tamanoQueEntra(base = 12.5f, minimo = 9f, paso = 0.5f, disponible = 100f, anchoA = anchoA))
+        assertEquals(12.5f, tamanoQueEntra(12.5f, 9f, 0.5f, disponible = 200f, anchoA = anchoA), "si entra, no se toca")
+        assertEquals(9f, tamanoQueEntra(12.5f, 9f, 0.5f, disponible = 10f, anchoA = anchoA), "nunca por debajo del mínimo")
+    }
 }

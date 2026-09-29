@@ -17,7 +17,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Search
@@ -248,6 +247,25 @@ internal enum class ModoDelRotulo { NORMAL, ACHICADO }
 
 internal fun modoDelRotulo(anchoDePalabra: Float, anchoDisponible: Float): ModoDelRotulo =
     if (anchoDePalabra <= anchoDisponible) ModoDelRotulo.NORMAL else ModoDelRotulo.ACHICADO
+
+/**
+ * **El tamaño (en sp) al que entra el rótulo en un renglón**: el más grande entre [base] y
+ * [minimo], bajando de a [paso], con el que [anchoA] cabe en [disponible]. Si ni en [minimo] entra,
+ * [minimo] (y el renglón termina en «…»).
+ *
+ * Antes esto lo hacía `TextAutoSize` de `BasicText`, y en la web no achicaba: a 1.280 dp la celda
+ * decía «Entretenimien…» a tamaño normal (visto con Playwright, revisión del 29-sep). Ahora se mide
+ * con el mismo `TextMeasurer` que ya decide el [ModoDelRotulo], y el `Text` se pinta con el tamaño
+ * que salió. Pura, para probarla sin Compose.
+ */
+internal fun tamanoQueEntra(base: Float, minimo: Float, paso: Float, disponible: Float, anchoA: (Float) -> Float): Float {
+    var tamano = base
+    while (tamano > minimo) {
+        if (anchoA(tamano) <= disponible) return tamano
+        tamano -= paso
+    }
+    return minimo
+}
 
 /**
  * # El selector de categoría: una cuadrícula, y el teclado solo si lo pides
@@ -514,12 +532,22 @@ private fun CeldaDeLaCuadricula(
         // necesariamente la más ANCHA («WWWWWWWWWW» tiene menos letras que
         // «iiiiiiiiiiiiiiiiiiii» pero es más ancha al dibujarse). Ahora se mide cada palabra y se
         // usa la que de verdad pesa más en píxeles.
-        val modo = remember(palabras, anchoDisponiblePx, estiloDelRotulo, pesoDelRotulo) {
+        val (modo, tamanoAchicado) = remember(rotulo, palabras, anchoDisponiblePx, estiloDelRotulo, pesoDelRotulo) {
             val estiloDeRenderizado = estiloDelRotulo.copy(fontWeight = pesoDelRotulo)
             val anchoDeLaPalabraMasAncha = palabras.maxOfOrNull { palabra ->
                 medidor.measure(palabra, estiloDeRenderizado, softWrap = false, maxLines = 1).size.width.toFloat()
             } ?: 0f
-            modoDelRotulo(anchoDeLaPalabraMasAncha, anchoDisponiblePx)
+            val modo = modoDelRotulo(anchoDeLaPalabraMasAncha, anchoDisponiblePx)
+            // En ACHICADO el rótulo va en UN renglón: se mide entero, no por palabra.
+            val tamano = if (modo == ModoDelRotulo.NORMAL) estiloDelRotulo.fontSize.value else tamanoQueEntra(
+                base = estiloDelRotulo.fontSize.value,
+                minimo = TAMANO_MINIMO_DEL_ROTULO.value,
+                paso = 0.5f,
+                disponible = anchoDisponiblePx,
+            ) { sp ->
+                medidor.measure(rotulo, estiloDeRenderizado.copy(fontSize = sp.sp), softWrap = false, maxLines = 1).size.width.toFloat()
+            }
+            modo to tamano
         }
         when (modo) {
             ModoDelRotulo.NORMAL -> Text(
@@ -542,13 +570,18 @@ private fun CeldaDeLaCuadricula(
                 modifier = Modifier.fillMaxWidth().height(altoDeUnRenglon(estiloDelRotulo) * 2),
                 contentAlignment = Alignment.Center,
             ) {
+                // El tamaño lo calculó [tamanoQueEntra] arriba: `TextAutoSize` no achicaba en la web.
                 BasicText(
                     text = rotulo,
-                    style = estiloDelRotulo.copy(color = colorDelRotulo, fontWeight = pesoDelRotulo, textAlign = TextAlign.Center),
+                    style = estiloDelRotulo.copy(
+                        color = colorDelRotulo,
+                        fontWeight = pesoDelRotulo,
+                        textAlign = TextAlign.Center,
+                        fontSize = tamanoAchicado.sp,
+                    ),
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
-                    autoSize = TextAutoSize.StepBased(minFontSize = TAMANO_MINIMO_DEL_ROTULO, maxFontSize = estiloDelRotulo.fontSize, stepSize = 0.5.sp),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
