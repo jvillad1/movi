@@ -52,6 +52,9 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import com.jvillada.movi.ui.fecha.fechaDeEpoch
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.transactions.formatDayHeading
 
 @Composable
 fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: AccountGroup) {
@@ -398,8 +401,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Text(
-                                    // Igual que el encabezado de cada día en Movimientos.
-                                    text = day.date.uppercase(),
+                                    // Igual que el encabezado de cada día en Movimientos: «HOY»,
+                                    // «AYER», «23 DE AGOSTO» — no el «2026-08-23» de la clave.
+                                    text = formatDayHeading(day.date, hoyEnAppZone().toString()).uppercase(),
                                     style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                     fontWeight = FontWeight.Medium,
@@ -618,11 +622,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     }
 }
 
-private fun epochToDate(millis: Long): String =
-    Instant.fromEpochMilliseconds(millis)
-        .toLocalDateTime(TimeZone.currentSystemDefault())
-        .date
-        .toString()
+// La clave de agrupación, en la zona de la app (no la del aparato): la misma que usa Movimientos.
+private fun epochToDate(millis: Long): String = fechaDeEpoch(millis).toString()
 
 private fun accountTypeIcon(type: AccountType): Pair<ImageVector, String> = when (type) {
     AccountType.CASH        -> Icons.Filled.Payments to "Efectivo"

@@ -251,6 +251,10 @@ internal fun HeroDeUnVistazo(
                     // 42 sp es la afirmación más fuerte de la pantalla, y sería falsa.
                     text = if (data.accounts == null) "—" else formatCOP(cifraContando(balance.tuPlata, entradaDeLaCifra)),
                     color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
+                    // Con peso (sin llenar): la fila mide primero el chevron y la cifra se achica en
+                    // lo que queda. Sin esto la cifra se llevaba todo el ancho y a 390 dp el chevron
+                    // quedaba cortado contra el borde (revisión del 29-sep).
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 // Solo con más de una cuenta: con una sola, el desglose diría exactamente lo que
                 // ya dice la cifra grande (mismo criterio que [PatrimonioSection]). El ícono es SU

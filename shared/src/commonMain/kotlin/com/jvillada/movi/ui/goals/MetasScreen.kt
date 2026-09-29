@@ -32,6 +32,8 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.fecha.fechaEnPalabras
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 
 @Composable
 fun MetasScreen(onNavigate: (Screen) -> Unit) {
@@ -208,7 +210,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                         // F26: la fecha objetivo es opcional — sin ella no se
                                         // inventa un texto de relleno.
                                         Text(
-                                            g.targetDate?.let { "Meta para el $it" } ?: "Sin fecha objetivo",
+                                            g.targetDate?.let { "Meta para el ${fechaEnPalabras(it, hoyEnAppZone())}" } ?: "Sin fecha objetivo",
                                             style = Movi.textos.apoyo,
                                             color = Movi.colores.textoMedio,
                                             modifier = Modifier.padding(top = 2.dp),

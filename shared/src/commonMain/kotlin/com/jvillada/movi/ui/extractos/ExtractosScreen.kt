@@ -40,6 +40,9 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.fechaDeEpoch
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 
 @Composable
 fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
@@ -286,8 +289,6 @@ internal fun ImportCard(imp: StatementImport, onClick: () -> Unit) {
     }
 }
 
+// «Hoy», «23 de agosto»: en palabras, como el resto de la app, y no el ISO de la fecha.
 private fun importEpochToShortDate(millis: Long): String =
-    Instant.fromEpochMilliseconds(millis)
-        .toLocalDateTime(TimeZone.currentSystemDefault())
-        .date
-        .toString()
+    etiquetaDeFecha(fechaDeEpoch(millis), hoyEnAppZone())

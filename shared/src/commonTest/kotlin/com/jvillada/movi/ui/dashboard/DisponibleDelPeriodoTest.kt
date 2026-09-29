@@ -163,12 +163,14 @@ class DisponibleDelPeriodoTest {
         // Previsto a hoy: 8.500.000 × 29 ÷ 31 = 7.951.612. Va 2.951.612 por debajo.
         assertEquals(7_951_612, d.periodo.esperadoAHoy)
         assertEquals(NivelDelGasto.BIEN, d.periodo.nivel)
-        // Quedan $3,5M para 3 días (hoy incluido): $1.166.666. Una sola frase para la tarjeta, y
-        // sin «vas bien»: dice lo que queda, no opina.
+        // Quedan $3,5M para 3 días (hoy incluido). Una sola frase para la tarjeta, y sin «vas
+        // bien»: dice lo que queda, no opina. La cifra diaria es la meta de la columna «Hoy»
+        // (8.500.000 ÷ 31 = 274.193), no lo que queda repartido entre los días que faltan.
         assertEquals(
-            FraseDelDisponible("Te quedan \$3,5M, unos \$1,2M por día", NivelDelGasto.BIEN),
+            FraseDelDisponible("Te quedan \$3,5M para 3 días · meta diaria \$274.193", NivelDelGasto.BIEN),
             fraseDelDisponible(d),
         )
+        assertEquals(d.hoy.meta, d.metaPorDia, "la misma cifra que la columna Hoy")
     }
 
     @Test
@@ -182,10 +184,10 @@ class DisponibleDelPeriodoTest {
         )
         assertEquals(1_500_000, d.periodo.esperadoAHoy)
         assertEquals(NivelDelGasto.CERCA, d.periodo.nivel)
-        // Quedan $1,1M para 17 días: $64.705.
+        // Quedan $1,1M para 17 días.
         assertEquals(
             FraseDelDisponible(
-                "Vas \$500.000 por encima de lo previsto a hoy · te quedan \$1,1M, unos \$64.705 por día",
+                "Vas \$500.000 por encima de lo previsto a hoy · te quedan \$1,1M para 17 días",
                 NivelDelGasto.CERCA,
             ),
             fraseDelDisponible(d),
@@ -242,9 +244,29 @@ class DisponibleDelPeriodoTest {
         assertEquals(NivelDelGasto.CERCA, cerca.hoy.nivel)
         // Hoy va cerca de su tope sin pasarlo: la frase sigue hablando del período.
         assertEquals(
-            FraseDelDisponible("Te quedan \$3M, unos \$752.500 por día", NivelDelGasto.BIEN),
+            FraseDelDisponible("Te quedan \$3M para 4 días · meta diaria \$100.000", NivelDelGasto.BIEN),
             fraseDelDisponible(cerca),
         )
+    }
+
+    /**
+     * **La escena de la revisión del 29-sep**: a dos días del cierre, casi sin gastar. La frase decía
+     * «unos $5,7M por día» al lado de una columna «Hoy» con la meta diaria. Ahora la única cifra
+     * diaria de la tarjeta es esa meta.
+     */
+    @Test
+    fun `a dos dias del cierre la cifra diaria es la de la columna Hoy`() {
+        val d = assertNotNull(
+            calcular(
+                recibidos = 12_723_423, checklist = emptyList(),
+                gasto = mapOf("2026-09-01" to 1_300_000L), hoy = LocalDate(2026, 9, 23),
+            ),
+        )
+        assertEquals(2, d.diasQueQuedan)
+        assertEquals(410_433, d.metaPorDia)
+        val frase = fraseDelDisponible(d).texto
+        assertEquals("Te quedan \$11,4M para 2 días · meta diaria \$410.433", frase)
+        assertFalse("por día" in frase, "ninguna otra cifra diaria que compita con la columna Hoy")
     }
 
     /** Lo que el dueño pidió explícito: con el período pasado, la semana y hoy siguen con su meta. */
@@ -261,7 +283,7 @@ class DisponibleDelPeriodoTest {
             FraseDelDisponible("Te pasaste del disponible del período por \$920.000", NivelDelGasto.PASADO),
             fraseDelDisponible(d),
         )
-        assertEquals(920_000, excesoDelDisponible(d))
+        assertEquals("te pasaste del disponible por \$920.000", avisoDelDisponible(d), "la misma cifra que la frase")
         assertNull(d.porDiaParaLoQueQueda)
 
         assertEquals(400_000, d.semana.meta)

@@ -6,6 +6,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.serialization.Serializable
+import kotlinx.datetime.minus
 
 /**
  * # Qué se sabe —de verdad— de la captura de SMS del banco
@@ -139,6 +140,33 @@ fun fechaLegibleDeSms(time: String): String {
 }
 
 /**
+ * **Cierra una frase que termina en una fecha legible**: la hora ya termina en punto («a. m.»), y
+ * ponerle otro dejaba «8:10 a. m..» en Captura del banco (revisión del 29-sep). Mismo criterio que
+ * `ElMismoPago`.
+ */
+internal fun conPuntoFinal(frase: String): String = if (frase.endsWith(".")) frase else "$frase."
+
+/**
+ * **La fecha de un mensaje, corta y en palabras, para una fila**: «Hoy, 8:10 a. m.», «Ayer, 7:52
+ * p. m.», «23 de septiembre, 9:15 a. m.» (con el año si no es el corriente). Es la forma de la
+ * bandeja «Por revisar» y de Mensajes del banco, que antes pintaban el «2026-09-29 08:10» guardado.
+ *
+ * [hoy] entra por parámetro para que sea pura. Un `time` que no se entienda se devuelve tal cual,
+ * igual que [fechaLegibleDeSms].
+ */
+fun fechaCortaDeSms(time: String, hoy: kotlinx.datetime.LocalDate): String {
+    val normalizado = claveDeTiempoDeSms(time)
+    val completo = if (normalizado.length == 16) "$normalizado:00" else normalizado
+    val fecha = runCatching { LocalDateTime.parse(completo) }.getOrNull() ?: return time.trim()
+    val dia = when (fecha.date) {
+        hoy -> "Hoy"
+        hoy.minus(1, kotlinx.datetime.DateTimeUnit.DAY) -> "Ayer"
+        else -> if (fecha.year != hoy.year) "${diaLegible(fecha.date)} de ${fecha.year}" else diaLegible(fecha.date)
+    }
+    return "$dia, ${horaLegibleDeLasDoce(fecha.hour, fecha.minute)}"
+}
+
+/**
  * Solo la hora de un `time` guardado, como la dice [fechaLegibleDeSms]: «9:15 a. m.». `null` si el
  * `time` no se puede leer como fecha, para que quien la use no invente una hora.
  */
@@ -193,7 +221,7 @@ fun avisoDeCaptura(captura: CapturaDeSms): AvisoDeCaptura = when {
     captura.total == 1 -> AvisoDeCaptura(
         rotulo = "ÚLTIMO MENSAJE RECIBIDO",
         detalle = "El único mensaje de tu banco llegó el " +
-            "${fechaLegibleDeSms(captura.ultimo.orEmpty())}. Esto dice lo que llegó, no que la " +
+            "${conPuntoFinal(fechaLegibleDeSms(captura.ultimo.orEmpty()))} Esto dice lo que llegó, no que la " +
             "captura siga andando.",
         esAlerta = false,
     )
@@ -201,7 +229,7 @@ fun avisoDeCaptura(captura: CapturaDeSms): AvisoDeCaptura = when {
     else -> AvisoDeCaptura(
         rotulo = "ÚLTIMO MENSAJE RECIBIDO",
         detalle = "El último de los ${captura.total} mensajes de tu banco llegó el " +
-            "${fechaLegibleDeSms(captura.ultimo.orEmpty())}. Esto dice lo que llegó, no que la " +
+            "${conPuntoFinal(fechaLegibleDeSms(captura.ultimo.orEmpty()))} Esto dice lo que llegó, no que la " +
             "captura siga andando.",
         esAlerta = false,
     )

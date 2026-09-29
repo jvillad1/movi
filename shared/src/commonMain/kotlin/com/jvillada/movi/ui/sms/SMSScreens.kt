@@ -71,6 +71,12 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import com.jvillada.movi.shared.model.fechaCortaDeSms
+import com.jvillada.movi.shared.model.fechaLegibleDeSms
+import com.jvillada.movi.ui.fecha.fechaEnPalabras
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.fechaDeEpoch
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 
 /**
  * **La bandeja, del más nuevo al más viejo.**
@@ -349,13 +355,15 @@ internal fun TarjetaDeMensajeDelBanco(
         ) {
             Text(sms.bank, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             StatusDot(Movi.colores.textoApagado, 2.dp)
-            // La fecha se lleva lo que sobra y, si no alcanza, es la que se corta: el
-            // banco y el estado son lo que se busca con la vista.
+            // La fecha se lleva lo que sobra: el banco y el estado son lo que se busca con la
+            // vista. En palabras («Hoy, 8:10 a. m.») y no el «2026-09-29 08:10» guardado
+            // (revisión del 29-sep); si no entra en un renglón, baja a un segundo en vez de
+            // cortarse justo en la hora.
             Text(
-                sms.time,
+                fechaCortaDeSms(sms.time, hoyEnAppZone()),
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
@@ -721,7 +729,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             StatusDot(Movi.colores.textoApagado, 2.dp)
                             Text("SMS", color = Movi.colores.textoMedio, style = Movi.textos.rotulo)
                             StatusDot(Movi.colores.textoApagado, 2.dp)
-                            Text(sms!!.time, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                            Text(fechaLegibleDeSms(sms!!.time), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
@@ -744,7 +752,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         padding = PaddingValues(18.dp),
                     ) {
                         Text(
-                            "Este mensaje es de antes de que empezaras a llevar «${resolvedAccount?.name}» en Movi (desde el $inicio).",
+                            "Este mensaje es de antes de que empezaras a llevar «${resolvedAccount?.name}» en Movi (desde el ${fechaEnPalabras(inicio, hoyEnAppZone())}).",
                             style = Movi.textos.cuerpo,
                             color = Movi.colores.aviso,
                         )
@@ -790,7 +798,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(ev.description, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                                     Text(
-                                        "${epochMillisToAppDate(ev.timestamp)} · ${formatMoney(ev.amount, ev.currency)}",
+                                        "${etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoyEnAppZone())} · ${formatMoney(ev.amount, ev.currency)}",
                                         style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )

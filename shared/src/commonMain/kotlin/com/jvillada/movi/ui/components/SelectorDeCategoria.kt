@@ -17,7 +17,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Search
@@ -191,11 +190,29 @@ fun contenidoDelSelectorDeCategoria(
 }
 
 /**
- * Cuántas columnas entran en [ancho]: la cuenta de `GridCells.Adaptive(ANCHO_MINIMO_DE_CELDA)`,
- * hecha a mano (ver [SelectorDeCategoria] para por qué no se usa la cuadrícula perezosa).
+ * Desde qué ancho de cuadrícula las celdas crecen a [ANCHO_MINIMO_DE_CELDA_ANCHA]. La hoja de
+ * «Agregar» en la web mide 600 dp (560 de cuadrícula): por encima del teléfono, por debajo de una
+ * tablet.
  */
-internal fun columnasDeLaCuadricula(ancho: Dp, espacio: Dp): Int =
-    (((ancho + espacio) / (ANCHO_MINIMO_DE_CELDA + espacio)).toInt()).coerceAtLeast(1)
+internal val ANCHO_DESDE_EL_QUE_LAS_CELDAS_CRECEN: Dp = 480.dp
+
+/**
+ * El mínimo de una celda en una cuadrícula ancha. Con los 80 dp del teléfono, «adaptativa» agrega
+ * columnas en vez de ensanchar celdas: a 1.280 la hoja de «Agregar» daba seis columnas de ~90 dp y
+ * «Restaurantes» salía «Restauran…» con la ventana llena de espacio (revisión del 29-sep). Con 100
+ * son cinco de ~109 dp y el nombre entra entero, a su tamaño.
+ */
+internal val ANCHO_MINIMO_DE_CELDA_ANCHA: Dp = 100.dp
+
+/**
+ * Cuántas columnas entran en [ancho]: la cuenta de `GridCells.Adaptive(ANCHO_MINIMO_DE_CELDA)`,
+ * hecha a mano (ver [SelectorDeCategoria] para por qué no se usa la cuadrícula perezosa). En una
+ * cuadrícula ancha el mínimo es [ANCHO_MINIMO_DE_CELDA_ANCHA]; en el teléfono no cambia nada.
+ */
+internal fun columnasDeLaCuadricula(ancho: Dp, espacio: Dp): Int {
+    val minimo = if (ancho >= ANCHO_DESDE_EL_QUE_LAS_CELDAS_CRECEN) ANCHO_MINIMO_DE_CELDA_ANCHA else ANCHO_MINIMO_DE_CELDA
+    return (((ancho + espacio) / (minimo + espacio)).toInt()).coerceAtLeast(1)
+}
 
 /**
  * El tamaño mínimo legible al que se achica el rótulo de una celda cuando su palabra más larga
@@ -230,6 +247,25 @@ internal enum class ModoDelRotulo { NORMAL, ACHICADO }
 
 internal fun modoDelRotulo(anchoDePalabra: Float, anchoDisponible: Float): ModoDelRotulo =
     if (anchoDePalabra <= anchoDisponible) ModoDelRotulo.NORMAL else ModoDelRotulo.ACHICADO
+
+/**
+ * **El tamaño (en sp) al que entra el rótulo en un renglón**: el más grande entre [base] y
+ * [minimo], bajando de a [paso], con el que [anchoA] cabe en [disponible]. Si ni en [minimo] entra,
+ * [minimo] (y el renglón termina en «…»).
+ *
+ * Antes esto lo hacía `TextAutoSize` de `BasicText`, y en la web no achicaba: a 1.280 dp la celda
+ * decía «Entretenimien…» a tamaño normal (visto con Playwright, revisión del 29-sep). Ahora se mide
+ * con el mismo `TextMeasurer` que ya decide el [ModoDelRotulo], y el `Text` se pinta con el tamaño
+ * que salió. Pura, para probarla sin Compose.
+ */
+internal fun tamanoQueEntra(base: Float, minimo: Float, paso: Float, disponible: Float, anchoA: (Float) -> Float): Float {
+    var tamano = base
+    while (tamano > minimo) {
+        if (anchoA(tamano) <= disponible) return tamano
+        tamano -= paso
+    }
+    return minimo
+}
 
 /**
  * # El selector de categoría: una cuadrícula, y el teclado solo si lo pides
@@ -496,12 +532,22 @@ private fun CeldaDeLaCuadricula(
         // necesariamente la más ANCHA («WWWWWWWWWW» tiene menos letras que
         // «iiiiiiiiiiiiiiiiiiii» pero es más ancha al dibujarse). Ahora se mide cada palabra y se
         // usa la que de verdad pesa más en píxeles.
-        val modo = remember(palabras, anchoDisponiblePx, estiloDelRotulo, pesoDelRotulo) {
+        val (modo, tamanoAchicado) = remember(rotulo, palabras, anchoDisponiblePx, estiloDelRotulo, pesoDelRotulo) {
             val estiloDeRenderizado = estiloDelRotulo.copy(fontWeight = pesoDelRotulo)
             val anchoDeLaPalabraMasAncha = palabras.maxOfOrNull { palabra ->
                 medidor.measure(palabra, estiloDeRenderizado, softWrap = false, maxLines = 1).size.width.toFloat()
             } ?: 0f
-            modoDelRotulo(anchoDeLaPalabraMasAncha, anchoDisponiblePx)
+            val modo = modoDelRotulo(anchoDeLaPalabraMasAncha, anchoDisponiblePx)
+            // En ACHICADO el rótulo va en UN renglón: se mide entero, no por palabra.
+            val tamano = if (modo == ModoDelRotulo.NORMAL) estiloDelRotulo.fontSize.value else tamanoQueEntra(
+                base = estiloDelRotulo.fontSize.value,
+                minimo = TAMANO_MINIMO_DEL_ROTULO.value,
+                paso = 0.5f,
+                disponible = anchoDisponiblePx,
+            ) { sp ->
+                medidor.measure(rotulo, estiloDeRenderizado.copy(fontSize = sp.sp), softWrap = false, maxLines = 1).size.width.toFloat()
+            }
+            modo to tamano
         }
         when (modo) {
             ModoDelRotulo.NORMAL -> Text(
@@ -524,13 +570,18 @@ private fun CeldaDeLaCuadricula(
                 modifier = Modifier.fillMaxWidth().height(altoDeUnRenglon(estiloDelRotulo) * 2),
                 contentAlignment = Alignment.Center,
             ) {
+                // El tamaño lo calculó [tamanoQueEntra] arriba: `TextAutoSize` no achicaba en la web.
                 BasicText(
                     text = rotulo,
-                    style = estiloDelRotulo.copy(color = colorDelRotulo, fontWeight = pesoDelRotulo, textAlign = TextAlign.Center),
+                    style = estiloDelRotulo.copy(
+                        color = colorDelRotulo,
+                        fontWeight = pesoDelRotulo,
+                        textAlign = TextAlign.Center,
+                        fontSize = tamanoAchicado.sp,
+                    ),
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
-                    autoSize = TextAutoSize.StepBased(minFontSize = TAMANO_MINIMO_DEL_ROTULO, maxFontSize = estiloDelRotulo.fontSize, stepSize = 0.5.sp),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

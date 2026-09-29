@@ -33,6 +33,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.fechaDeEpoch
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 
 @Composable
 fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
@@ -237,8 +240,6 @@ private fun ImportEventRow(event: FinancialEvent) {
     }
 }
 
+// «Hoy», «23 de agosto»: en palabras, como el resto de la app, y no el ISO de la fecha.
 private fun epochToShortDate(millis: Long): String =
-    Instant.fromEpochMilliseconds(millis)
-        .toLocalDateTime(TimeZone.currentSystemDefault())
-        .date
-        .toString()
+    etiquetaDeFecha(fechaDeEpoch(millis), hoyEnAppZone())

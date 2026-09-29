@@ -208,8 +208,8 @@ class ChecklistDiceCuantoDeboPagarTest {
      *
      * Tildarla sellaba el período sin ninguna evidencia. El dueño lo cortó: *«no me debería dejar
      * hacer check sin que el movimiento asociado exista»*. Lo que queda es la salida honesta —que
-     * el movimiento EXISTA— y para una cuota eso se registra en Créditos, decisión que toma la
-     * pantalla (ver `hojaParaAnotar`), no esta sección.
+     * el movimiento EXISTA— y para una cuota eso se registra en la pestaña «Cuota» de Agregar,
+     * decisión que toma la pantalla (ver `hojaParaAnotar`), no esta sección.
      */
     @Test
     fun la_fila_no_se_tilda_y_ofrece_anotar_el_movimiento() {

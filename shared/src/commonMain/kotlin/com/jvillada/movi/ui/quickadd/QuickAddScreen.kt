@@ -13,7 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -30,6 +29,15 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.runtime.withFrameNanos
+import com.jvillada.movi.platform.devolverElTecladoAlLienzo
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -209,6 +217,11 @@ fun QuickAddScreen(
     presetFecha: String? = null,
     presetEsIngreso: Boolean = false,
     /**
+     * La deuda que se viene a pagar: abre la hoja en «Cuota» con ella en «Hacia» y [presetMonto]
+     * como monto. Ver [Screen.QuickAdd.presetDeudaId].
+     */
+    presetDeudaId: String? = null,
+    /**
      * Ola 9 · B: el movimiento que se acaba de guardar, para que quien sobreviva a esta hoja
      * (App.kt) pueda ofrecer convertirlo en recurrente. Se llama **después** de que el POST
      * salió bien, junto con [onSaved] — nunca antes: primero se guarda, después se ofrece.
@@ -222,7 +235,12 @@ fun QuickAddScreen(
     // El monto viaja como cadena de dígitos, que es lo que teclea el teclado numérico: un preset
     // se escribe igual que si lo hubiera tecleado él. Un cero o un negativo no se pone —«0» dejaría
     // el botón deshabilitado con un campo que parece lleno— y se cae al vacío de siempre.
-    var amount by remember { mutableStateOf(presetMonto?.takeIf { it > 0 }?.toString() ?: "") }
+    //
+    // Con [presetDeudaId] el monto es de la pestaña «Cuota» (se lo lleva [TransferBody]): ponerlo
+    // también acá lo dejaría escrito en «Gasto» si el dueño cambia de pestaña.
+    var amount by remember {
+        mutableStateOf(presetMonto?.takeIf { it > 0 && presetDeudaId == null }?.toString() ?: "")
+    }
     var note by remember { mutableStateOf(presetNota?.trim().orEmpty()) }
     // F35: arranca en la primera categoría predefinida de Gastos, como antes arrancaba en
     // "Mercado" — y se cambia desde la cuadrícula de [SelectorDeCategoria] (Ola B).
@@ -318,7 +336,18 @@ fun QuickAddScreen(
         // Un sueldo no se paga: llega. Abrir «Anotar este pago» de un recurrente de ingreso en
         // la pestaña «Gasto» lo anotaría con el signo al revés, que es el error más caro que esta
         // hoja puede cometer en silencio.
-        mutableStateOf(PickersDeLaHoja(typeIndex = if (presetEsIngreso) 1 else 0))
+        //
+        // Y una cuota se paga en «Cuota»: es la única pestaña que arma el traspaso de dos patas que
+        // baja la deuda (y tilda la fila del checklist).
+        mutableStateOf(
+            PickersDeLaHoja(
+                typeIndex = when {
+                    presetDeudaId != null -> TIPO_PAGO_CUOTA
+                    presetEsIngreso -> 1
+                    else -> 0
+                },
+            ),
+        )
     }
 
     // ── Las tres medidas de la hoja, y el desplazamiento que las une ──────────────────
@@ -341,6 +370,9 @@ fun QuickAddScreen(
     // Escape con un sub-picker de Traspaso abierto: ese estado vive adentro de [TransferBody], así
     // que se le pide que lo cierre subiendo este contador.
     var pedidosDeCerrarElDeTraspaso by remember { mutableStateOf(0) }
+
+    // Enter desde el teclado físico: cada pedido es un «Guardar». Ver `alTeclear`.
+    var pedidosDeGuardar by remember { mutableStateOf(0) }
 
     // Dónde estaba la hoja ANTES de abrir un sub-picker. Ver [recordarScroll].
     var scrollAntesDelPicker by remember { mutableStateOf(0) }
@@ -377,6 +409,15 @@ fun QuickAddScreen(
         pickers = siguiente
     }
 
+    // Al cerrarse un sub-editor (la Nota, el buscador de categorías) en la web, el foco del navegador
+    // se queda en el `<body>` y el teclado físico deja de escribir el monto. Se le devuelve al
+    // lienzo un cuadro después, cuando el campo ya se fue. Ver [devolverElTecladoAlLienzo].
+    LaunchedEffect(hayPicker) {
+        if (!hayPicker) {
+            withFrameNanos { }
+            devolverElTecladoAlLienzo()
+        }
+    }
     LaunchedEffect(hayPicker) {
         if (hayPicker) {
             // Que el sub-picker se vea desde su encabezado —su título y su X— y no desde la
@@ -429,10 +470,10 @@ fun QuickAddScreen(
     // y el guardado preguntaran cada uno por su cuenta, una hoja abierta a las 23:59:59 podría
     // decir «Hoy» y guardar la fecha de mañana.
     val hoy = remember { hoyEnAppZone() }
-    // Un preset gana sobre «hoy», y no es un detalle: el checklist ofrece anotar una fila que pudo
-    // haber vencido hace dos semanas, y con la fecha de hoy ese movimiento cae en el período
-    // siguiente — o sea, la fila que se venía a tildar se quedaría sin tildar igual. Una fecha que
-    // no se entienda no se inventa: se cae a hoy, que es el default de siempre.
+    // Un preset gana sobre «hoy». El checklist ya no manda ninguno (revisión del 29-sep: anotar con
+    // el vencimiento fechaba el pago un día en que la plata no salió; ver `hojaParaAnotar`), pero
+    // queda para quien necesite abrir la hoja en otro día. Una fecha que no se entienda no se
+    // inventa: se cae a hoy, que es el default de siempre.
     var fecha by remember { mutableStateOf(fechaDelPreset(presetFecha) ?: hoy) }
     /**
      * **El id del movimiento que se está escribiendo. Se genera una vez por borrador, no una vez
@@ -820,6 +861,37 @@ fun QuickAddScreen(
         }
     }
 
+    /**
+     * **El teclado físico** (web y escritorio): los dígitos escriben el monto por el mismo camino
+     * que el teclado en pantalla ([onKey]), Backspace borra y Enter guarda si el botón está
+     * habilitado. Escape lo atiende el `onEscape` de más abajo.
+     *
+     * Solo en «Gasto» e «Ingreso» sin ningún sub-editor abierto: con la Nota abierta el foco está en
+     * su campo y las teclas son de la nota; lo mismo el buscador de categorías. En Traspaso y Cuota
+     * el monto es un campo de texto de verdad y recibe sus teclas solo. Ver [accionDeTecla].
+     *
+     * **Solo toca estado, nunca un valor calculado.** El marco puede quedarse con la versión de
+     * esta función de la PRIMERA composición (el compilador de Compose memoriza la referencia), y
+     * ahí `canSave` era falso para siempre: medido, los dígitos escribían y Enter no guardaba.
+     * Por eso Enter no llama a [save]: sube [pedidosDeGuardar], y el efecto de abajo —que corre en
+     * la composición vigente— guarda con los valores de ahora.
+     */
+    fun alTeclear(evento: KeyEvent): Boolean {
+        if (pickers.typeIndex >= TIPO_TRASPASO || pickers.hayPicker || saving) return false
+        val conModificador = evento.isCtrlPressed || evento.isMetaPressed || evento.isAltPressed || evento.isShiftPressed
+        return when (val accion = accionDeTecla(evento.key, evento.type, conModificador)) {
+            null -> false
+            is AccionDeTecla.Digito -> { onKey(accion.digito); true }
+            AccionDeTecla.Borrar -> { onKey("⌫"); true }
+            AccionDeTecla.Guardar -> { pedidosDeGuardar++; true }
+            AccionDeTecla.Consumir -> true
+        }
+    }
+    LaunchedEffect(pedidosDeGuardar) {
+        // `save()` ya se niega solo si el botón está deshabilitado: Enter no puede más que el dedo.
+        if (pedidosDeGuardar > 0) save()
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // La X de la hoja la dibuja `MarcoDeHoja` y queda FUERA de lo que se desplaza (ver el bloque
         // de abajo): en iOS la X es la única salida de esta hoja —no hay botón atrás, y el gesto de
@@ -840,6 +912,7 @@ fun QuickAddScreen(
                     !saving -> onDismiss()
                 }
             },
+            onTecla = ::alTeclear,
         ) {
             // ── Ola 12 — SI LA HOJA NO ENTRA, SE PUEDE LLEGAR IGUAL AL BOTÓN ────────────
             //
@@ -1130,6 +1203,10 @@ fun QuickAddScreen(
                                 // contexto vale también para el ORIGEN del traspaso — es la
                                 // cuenta que el dueño estaba mirando cuando tocó «Agregar».
                                 presetAccountId = presetAccountId,
+                                // «Anotar este pago» desde una cuota o una tarjeta del checklist:
+                                // la deuda en «Hacia» y la cuota como monto.
+                                presetDestinoId = presetDeudaId,
+                                presetMonto = presetMonto.takeIf { presetDeudaId != null },
                                 // La misma hoja sirve las dos pestañas: un pago de cuota es un
                                 // traspaso con otras categorías y otro endpoint. Ver
                                 // [ModoDeTraspaso].
@@ -1179,7 +1256,6 @@ fun QuickAddScreen(
                         },
                         onPickWallet = { pasarA(pickers.abrir(Picker.Wallet)) },
                         onEditNote = { pasarA(pickers.abrir(Picker.Note)) },
-                        onOcr = { onNavigate(Screen.OCRCapture) },
                         canSave = canSave,
                         missingFieldMessage = missingFieldMessage,
                         saving = saving,
@@ -1246,7 +1322,6 @@ private fun EditorBody(
     onPickCategory: () -> Unit,
     onPickWallet: () -> Unit,
     onEditNote: () -> Unit,
-    onOcr: () -> Unit,
     canSave: Boolean,
     missingFieldMessage: String? = null,
     saving: Boolean,
@@ -1531,20 +1606,14 @@ private fun EditorBody(
             }
         }
     } else {
+        // Aquí había un botón de cámara que abría un «escáner de recibos» con un recibo INVENTADO
+        // («ÉXITO COUNTRY», $312.400) y un «Guardar» que solo volvía al Inicio: la única pantalla de
+        // Movi que mostraba datos falsos. Se quitó entero (revisión del 29-sep); el escáner real
+        // llega con «Compartir con Movi».
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp, 54.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(16.dp))
-                    .clickable { onOcr() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(imageVector = Icons.Filled.CameraAlt, contentDescription = "Escanear recibo", tint = Movi.colores.texto, modifier = Modifier.size(22.dp))
-            }
             Box(
                 modifier = Modifier
                     .weight(1f)
