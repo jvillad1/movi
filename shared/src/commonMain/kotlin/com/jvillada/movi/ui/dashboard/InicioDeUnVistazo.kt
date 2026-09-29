@@ -188,10 +188,15 @@ data class FraseDelDisponible(val texto: String, val nivel: NivelDelGasto)
  * 2. el período pasado → cuánto;
  * 3. la semana pasada → cuánto, y lo que le queda al período;
  * 4. hoy pasado → cuánto, y lo que le queda a la semana;
- * 5. lo demás → lo que queda y cuánto da por día, avisando si va por encima de lo previsto.
+ * 5. lo demás → lo que queda y para cuántos días, avisando si va por encima de lo previsto.
  *
  * **Nunca dice «vas bien».** Una frase de ánimo es la que se contradice con cualquier otra cosa roja
- * de la pantalla; «te quedan $X, unos $Y por día» dice lo mismo sin opinar.
+ * de la pantalla; «te quedan $X para N días» dice lo mismo sin opinar.
+ *
+ * **La cifra diaria es la meta diaria, la de la columna «Hoy»** ([DisponibleDelPeriodo.metaPorDia]).
+ * Antes decía «unos $Y por día» repartiendo lo que queda entre los días que faltan: a dos días del
+ * cierre eso daba «$5,7M por día» al lado de una columna «Hoy $410.433» en la misma tarjeta
+ * (revisión del 29-sep). Dos cifras diarias distintas para la misma pregunta no se pueden leer.
  */
 fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
     if (!d.hayMargen) {
@@ -232,15 +237,18 @@ fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
             periodo.nivel,
         )
     }
-    val porDia = formatMoneyCompact(d.porDiaParaLoQueQueda ?: 0L)
-    val queda = "te quedan ${formatMoneyCompact(periodo.teQuedan)}, unos $porDia por día"
+    // Acá quedan dos días o más (el último ya salió arriba), así que siempre es «días».
+    val queda = "te quedan ${formatMoneyCompact(periodo.teQuedan)} para ${d.diasQueQuedan} días"
     return if (periodo.contraElRitmo > 0L) {
         FraseDelDisponible(
             "Vas ${formatMoneyCompact(periodo.contraElRitmo)} por encima de lo previsto a hoy · $queda",
             NivelDelGasto.CERCA,
         )
     } else {
-        FraseDelDisponible(queda.replaceFirstChar { it.uppercase() }, periodo.nivel)
+        FraseDelDisponible(
+            "${queda.replaceFirstChar { it.uppercase() }} · meta diaria ${formatMoneyCompact(d.metaPorDia)}",
+            periodo.nivel,
+        )
     }
 }
 

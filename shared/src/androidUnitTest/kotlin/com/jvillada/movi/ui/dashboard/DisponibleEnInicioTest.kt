@@ -144,8 +144,9 @@ class DisponibleEnInicioTest {
 
         composeRule.onNodeWithText("DISPONIBLE", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("\$6,9M", useUnmergedTree = true).assertIsDisplayed()
-        // Quedan $6,8M para 4 días, hoy incluido. Una frase para la tarjeta, sin «vas bien».
-        composeRule.onNodeWithText("Te quedan \$6,8M, unos \$1,7M por día", useUnmergedTree = true).assertIsDisplayed()
+        // Quedan $6,8M para 4 días, hoy incluido. Una frase para la tarjeta, sin «vas bien», y la
+        // cifra diaria es la meta de la columna «Hoy» ($222.580), no lo que queda repartido.
+        composeRule.onNodeWithText("Te quedan \$6,8M para 4 días · meta diaria \$222.580", useUnmergedTree = true).assertIsDisplayed()
         // Las tres columnas: el período, la semana (cortada a 4 días por el fin del período) y hoy.
         // Cada una dice lo que te queda en grande: $6,9M − $150.000, $890.320 − $150.000 y
         // $222.580 − $150.000. Y lo gastado chico, que en las tres es lo de hoy.
