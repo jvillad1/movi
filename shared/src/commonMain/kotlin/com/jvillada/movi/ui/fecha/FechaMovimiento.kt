@@ -99,6 +99,23 @@ fun etiquetaDeFecha(fecha: LocalDate, hoy: LocalDate): String = when {
     else -> "${fecha.dayOfMonth} de ${MESES_DEL_ANIO[fecha.monthNumber - 1]}"
 }
 
+/**
+ * «10 de marzo de 2025» o «23 de agosto»: [etiquetaDeFecha] **sin** «Hoy» ni «Ayer», para las frases
+ * que ya traen su preposición («desde el …», «Meta para el …»), donde «desde el Hoy» no se lee.
+ * El año solo cuando no es el corriente, igual que en [etiquetaDeFecha].
+ */
+fun fechaEnPalabras(fecha: LocalDate, hoy: LocalDate): String =
+    if (fecha.year != hoy.year) "${fecha.dayOfMonth} de ${MESES_DEL_ANIO[fecha.monthNumber - 1]} de ${fecha.year}"
+    else "${fecha.dayOfMonth} de ${MESES_DEL_ANIO[fecha.monthNumber - 1]}"
+
+/**
+ * [fechaEnPalabras] desde un `"AAAA-MM-DD"` (con o sin hora detrás). Lo que no se entienda se
+ * devuelve tal cual: una fecha fea es mejor que un texto vacío (revisión del 29-sep: «desde
+ * 2025-03-10» en el detalle de un crédito).
+ */
+fun fechaEnPalabras(iso: String, hoy: LocalDate): String =
+    runCatching { LocalDate.parse(iso.trim().take(10)) }.getOrNull()?.let { fechaEnPalabras(it, hoy) } ?: iso
+
 /** El nombre del mes de una fecha, para el encabezado del calendario: «agosto 2026». */
 fun etiquetaDeMes(fecha: LocalDate): String =
     "${MESES_DEL_ANIO[fecha.monthNumber - 1]} ${fecha.year}"

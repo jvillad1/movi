@@ -89,6 +89,7 @@ import com.jvillada.movi.ui.components.ListaDeCuentasElegibles
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.fecha.etiquetaDePeriodo
 
 /**
  * **«Documentos»** — los papeles del dueño, guardados en Movi.
@@ -587,7 +588,8 @@ private fun FilaDeDocumento(
                     cuenta,
                     pesoLegible(doc.bytes),
                     etiquetaDeFecha(fechaDeEpoch(doc.subidoEn), hoyEnAppZone()),
-                    doc.periodo,
+                    // «agosto de 2026» si es un «2026-08»; si el dueño escribió otra cosa, tal cual.
+                    doc.periodo?.let { etiquetaDePeriodo(it) ?: it },
                 ).joinToString(" · "),
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,

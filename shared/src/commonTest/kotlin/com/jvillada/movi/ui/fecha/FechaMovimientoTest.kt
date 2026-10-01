@@ -307,4 +307,15 @@ class FechaMovimientoTest {
         assertNull(etiquetaDePeriodo("2026-13"))
         assertNull(etiquetaDePeriodo("2026"))
     }
+
+    /** «desde 2025-03-10» en el detalle de un crédito: la fecha en palabras, sin «Hoy» ni «Ayer». */
+    @Test
+    fun fecha_en_palabras_para_una_frase() {
+        val hoy = LocalDate(2026, 9, 29)
+        assertEquals("10 de marzo de 2025", fechaEnPalabras("2025-03-10", hoy))
+        assertEquals("29 de septiembre", fechaEnPalabras("2026-09-29", hoy), "hoy también se dice con el día")
+        assertEquals("28 de septiembre", fechaEnPalabras(LocalDate(2026, 9, 28), hoy))
+        assertEquals("1 de enero de 2027", fechaEnPalabras("2027-01-01T00:00:00", hoy))
+        assertEquals("pronto", fechaEnPalabras("pronto", hoy), "lo que no es fecha queda tal cual")
+    }
 }

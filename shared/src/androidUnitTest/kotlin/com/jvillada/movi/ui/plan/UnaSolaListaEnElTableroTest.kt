@@ -186,7 +186,7 @@ class UnaSolaListaEnElTableroTest {
         val hoja = assertIs<Screen.QuickAdd>(navegoA)
         assertEquals("Gimnasio Caro", hoja.presetNota)
         assertEquals(180_000L, hoja.presetMonto)
-        assertEquals("2026-09-25", hoja.presetFecha)
+        assertEquals(null, hoja.presetFecha, "la fecha es hoy, no el vencimiento")
         assertTrue(marcadas.isEmpty())
     }
 

@@ -161,6 +161,11 @@ class SelectorDeCategoriaTest {
         assertEquals(4, columnasDeLaCuadricula(371.dp, espacio)) // el AVD de 411 dp
         assertEquals(1, columnasDeLaCuadricula(80.dp, espacio))
         assertEquals(1, columnasDeLaCuadricula(10.dp, espacio)) // nunca cero columnas
+        // La hoja de «Agregar» en la web: 560 dp de cuadrícula. Eran seis celdas de ~90 dp y
+        // «Restaurantes» salía «Restauran…»; ahora cinco de más de 100.
+        val columnas = columnasDeLaCuadricula(560.dp, espacio)
+        assertEquals(5, columnas)
+        assertTrue((560.dp - espacio * (columnas - 1)) / columnas >= 100.dp)
     }
 
     // ── El rótulo que no corta una palabra a la mitad (Ola B, tarea 4) ────────
@@ -205,5 +210,18 @@ class SelectorDeCategoriaTest {
     fun `una celda especial nunca es la marcada, aunque diga lo mismo`() {
         assertFalse(esLaCeldaElegida(CeldaDeCategoria.Crear("Colegio"), "Colegio"))
         assertFalse(esLaCeldaElegida(CeldaDeCategoria.Usar("Colegio", porQue = "x"), "Colegio"))
+    }
+
+    /**
+     * «Entretenimien…» a 1.280 dp en la web: `TextAutoSize` no achicaba. El tamaño lo calcula ahora
+     * [tamanoQueEntra], con un ancho proporcional al tamaño (como una letra de verdad).
+     */
+    @Test
+    fun el_rotulo_achicado_baja_hasta_que_entra() {
+        // 15 letras de 0,6 em: a 12,5 sp mide 112,5; en 100 de ancho entra a 11 sp (99).
+        val anchoA = { sp: Float -> 15 * 0.6f * sp }
+        assertEquals(11f, tamanoQueEntra(base = 12.5f, minimo = 9f, paso = 0.5f, disponible = 100f, anchoA = anchoA))
+        assertEquals(12.5f, tamanoQueEntra(12.5f, 9f, 0.5f, disponible = 200f, anchoA = anchoA), "si entra, no se toca")
+        assertEquals(9f, tamanoQueEntra(12.5f, 9f, 0.5f, disponible = 10f, anchoA = anchoA), "nunca por debajo del mínimo")
     }
 }

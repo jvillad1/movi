@@ -540,6 +540,15 @@ internal fun TransferBody(
      */
     pedidosDeCerrarPicker: Int = 0,
     modo: ModoDeTraspaso = ModoDeTraspaso.TRASPASO,
+    /**
+     * La deuda que se viene a pagar, cuando la hoja se abrió desde la fila de una cuota o una
+     * tarjeta del checklist («Anotar este pago»). Solo vale en [ModoDeTraspaso.PAGO_DE_CUOTA] y
+     * solo si esa deuda está entre las que se pueden pagar; si no, el lado «Hacia» arranca vacío
+     * como siempre.
+     */
+    presetDestinoId: String? = null,
+    /** El monto con el que arranca el campo, en la moneda de la cuenta de origen. */
+    presetMonto: Long? = null,
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
@@ -617,7 +626,12 @@ internal fun TransferBody(
                 // dueño con el dedo. `defaultTransferAccounts` excluye las deudas justamente para
                 // que un crédito no quede preseleccionado por accidente, y esa disciplina vale
                 // igual acá — un pago de $9.147.408 que nadie pidió sería peor que un toque más.
-                cuentas = if (esPago) emptyList() else paraDefecto,
+                //
+                // La única excepción es que el dueño YA la eligió en otra pantalla: tocó «Anotar
+                // este pago» en la fila de ESA cuota. Ahí la deuda llega por [presetDestinoId], y
+                // solo esa entra a la lista.
+                cuentas = if (esPago) elegiblesDestino.filter { it.id == presetDestinoId } else paraDefecto,
+                contexto = if (esPago) presetDestinoId else null,
                 ultima = if (esPago) null else destinoSugerido(fromId),
                 excluir = fromId,
             )
@@ -649,7 +663,7 @@ internal fun TransferBody(
         terminosCargados = true
     }
 
-    var amount by remember { mutableStateOf<Long?>(null) }
+    var amount by remember { mutableStateOf(presetMonto?.takeIf { it > 0 }) }
     /** Lo que bajó la deuda en su moneda, cuando se paga una tarjeta desde una cuenta de otra moneda. */
     var montoEnLaDeuda by remember { mutableStateOf<Long?>(null) }
     // Ola 13 — LA FECHA DEL TRASPASO SE ELIGE, NO SE ESCRIBE.

@@ -653,7 +653,7 @@ internal fun ContenidoDelMovimiento(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(otro.description, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
-                                "${epochMillisToAppDate(otro.timestamp)} · ${otro.category}",
+                                "${etiquetaDeFecha(fechaDeEpoch(otro.timestamp), hoyEnAppZone())} · ${otro.category}",
                                 style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
                             )

@@ -29,6 +29,8 @@ import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.fecha.fechaEnPalabras
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 
 
 @Composable
@@ -354,7 +356,7 @@ private fun NewTransactionRow(
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(tx.merchant, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            Text("${tx.category} · ${tx.date}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            Text("${tx.category} · ${fechaEnPalabras(tx.date, hoyEnAppZone())}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
         val amountColor = if (tx.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.sale
         val prefix = if (tx.type == TransactionType.INCOME) "+" else "−"

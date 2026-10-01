@@ -60,8 +60,6 @@ import com.jvillada.movi.ui.dashboard.PrimerosPasosScreen
 import com.jvillada.movi.ui.goals.MetasScreen
 import com.jvillada.movi.ui.extractos.ExtractosScreen
 import com.jvillada.movi.ui.mas.MasScreen
-import com.jvillada.movi.ui.ocr.OCRCaptureScreen
-import com.jvillada.movi.ui.ocr.OCRConfirmScreen
 import com.jvillada.movi.ui.profile.PerfilScreen
 import com.jvillada.movi.ui.quickadd.QuickAddScreen
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
@@ -89,6 +87,7 @@ import com.jvillada.movi.ui.components.LocalAnfitrionDeHojas
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.RelevoDeScroll
 import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.ui.components.elRelevoDeScrollAplica
 import com.jvillada.movi.ui.components.recibeElScrollDeLosMargenes
 import com.jvillada.movi.ui.components.elTecladoEstaALaVista
 import kotlinx.coroutines.delay
@@ -188,7 +187,7 @@ fun App() {
                     quickAdd = screen as Screen.QuickAdd
                 } else {
                     // Navegar a otra parte cierra la hoja: desde adentro de Agregar se puede
-                    // saltar a Escanear recibo, y dejarla abierta encima del destino nuevo sería
+                    // saltar a crear una cuenta o a otra pantalla, y dejarla abierta encima del destino nuevo sería
                     // una hoja huérfana sobre una pantalla que no la pidió.
                     quickAdd = null
                     // Entrar (o crear la cuenta) REEMPLAZA la pila en vez de apilar encima: ver
@@ -310,8 +309,6 @@ fun App() {
                 Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.Compartir         -> CompartirScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
-                Screen.OCRCapture        -> OCRCaptureScreen(navigate)
-                Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
                 is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)
@@ -367,6 +364,7 @@ fun App() {
                             presetCategoria = request.presetCategoria,
                             presetFecha = request.presetFecha,
                             presetEsIngreso = request.presetEsIngreso,
+                            presetDeudaId = request.presetDeudaId,
                             // Ola 9 · B: el movimiento ya se guardó; recién ahora se evalúa si
                             // vale la pena ofrecer el recurrente.
                             onSavedEvent = { movimientoRecienGuardado = it },
@@ -463,7 +461,12 @@ internal fun EsqueletoDeLaCascara(
             )
         }
         Box(
-            modifier = Modifier.weight(1f).fillMaxHeight().recibeElScrollDeLosMargenes(relevoDeScroll),
+            // Solo donde hay márgenes: en el teléfono el relevo era un segundo `scrollable` sobre
+            // toda la pantalla y se sentía como que la lista «se pegaba» al llegar al final. Ver
+            // [elRelevoDeScrollAplica].
+            modifier = Modifier.weight(1f).fillMaxHeight().let {
+                if (elRelevoDeScrollAplica(widthClass)) it.recibeElScrollDeLosMargenes(relevoDeScroll) else it
+            },
             contentAlignment = Alignment.TopCenter,
         ) {
             // **`imePadding()` es lo que hace que el teclado no tape lo que estás

@@ -39,7 +39,7 @@ class UnaSolaListaDelPeriodoTest {
             assertFalse(fila.pagado)
             assertEquals("vence el 22 de octubre", fechaDeLaFila(fila))
             assertNull(evidenciaDeLaFila(fila), "una fila que falta no dice con qué se pagó")
-            assertEquals(EstadoDeLaFila.AUN_NO_VENCE, fila.estado, "no hay nada que preguntar ni que anotar todavía")
+            assertEquals(EstadoDeLaFila.AUN_NO_VENCE, fila.estado, "no hay nada que preguntar todavía (anotar el pago sí se ofrece)")
         }
     }
 

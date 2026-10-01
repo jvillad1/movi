@@ -280,7 +280,7 @@ class ChecklistDelPeriodoEnElTableroTest {
         assertEquals("Arriendo", hoja.presetNota)
         assertEquals(1_800_000L, hoja.presetMonto)
         assertEquals("Vivienda", hoja.presetCategoria)
-        assertEquals(vence.toString(), hoja.presetFecha, "la fecha del vencimiento, no hoy")
+        assertEquals(null, hoja.presetFecha, "la fecha es hoy, no el vencimiento: el dueño a veces paga tarde")
         assertEquals(0, marcadas, "anotar no sella nada: lo sella el movimiento cuando exista")
     }
 

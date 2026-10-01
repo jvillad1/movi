@@ -269,8 +269,13 @@ enum class EstadoDeLaFila {
     SIN_MOVIMIENTO,
 
     /**
-     * Todavía no vence, así que el server no emitió ocurrencia y no hay nada que preguntar ni nada
-     * que anotar. Se lista con su fecha y su monto, y nada más.
+     * Todavía no vence, así que el server no emitió ocurrencia y no hay nada que preguntar. Se
+     * lista con su fecha y su monto, y ofrece **anotar el pago** como acción secundaria, sin decir
+     * que Movi no lo encontró (todavía no tenía por qué).
+     *
+     * Antes no ofrecía nada, y era el caso más común: el dueño paga antes del vencimiento (la
+     * Master Black vence el 2 y la pagó el 27). La cuota o la tarjeta pendiente se quedaba sin
+     * forma de anotar su pago hasta vencerse.
      */
     AUN_NO_VENCE,
 }

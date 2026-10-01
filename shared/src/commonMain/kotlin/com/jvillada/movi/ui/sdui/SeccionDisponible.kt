@@ -57,7 +57,7 @@ import com.jvillada.movi.ui.dashboard.rotuloDeLaSemana
  * **Una sola frase, no tres.** Cada fila decía la suya, y con el período pasado el dueño leía «Te
  * pasaste por $563.456» en rojo y, un renglón abajo, «Vas bien: te quedan … para esta semana». La
  * frase ahora es [fraseDelDisponible]: manda la peor ventana y nunca dice «vas bien». Y el veredicto
- * del hero sale de la misma cuenta ([excesoDelDisponible]), así que arriba y abajo no pueden decir
+ * del hero sale de la misma cuenta ([avisoDelDisponible]), así que arriba y abajo no pueden decir
  * cosas opuestas.
  *
  * De dónde sale el disponible —lo que tenías el 25, lo que entró, los fijos— queda detrás de «¿De

@@ -60,9 +60,14 @@ sealed class Screen {
      *   SALDO, no lo que se va a pagar (ver `RecurringRule.montoEsSaldo`).
      * @param presetEsIngreso abre la hoja en la pestaña «Ingreso» en vez de «Gasto». Un sueldo no
      *   se paga: llega.
-     * @param presetFecha ISO `"2026-09-05"`. La fecha en que ese recurrente vencía, que es la que
-     *   hace que el movimiento caiga en el período correcto — el default de la hoja es hoy, y con
-     *   una fila vencida hace dos semanas ese default sella el mes equivocado.
+     * @param presetFecha ISO `"2026-09-05"`, para quien necesite abrir la hoja en otro día. El
+     *   checklist ya NO la manda (revisión del 29-sep): un pago anotado con el vencimiento quedaba
+     *   fechado un día en que la plata no salió, y el emparejamiento del server ya tolera el
+     *   atraso. Ver `hojaParaAnotar`.
+     * @param presetDeudaId la cuenta del crédito o la tarjeta que se viene a pagar. Abre la hoja
+     *   en la pestaña «Cuota» con esa deuda en «Hacia» y [presetMonto] como monto, y
+     *   [presetAccountId] (si viene) como la cuenta de la que sale la plata. Es lo que manda
+     *   «Anotar este pago» desde la fila de una cuota o una tarjeta.
      */
     data class QuickAdd(
         val presetAccountId: String? = null,
@@ -71,6 +76,7 @@ sealed class Screen {
         val presetCategoria: String? = null,
         val presetFecha: String? = null,
         val presetEsIngreso: Boolean = false,
+        val presetDeudaId: String? = null,
     ) : Screen()
     data object Profile : Screen()
     /**
@@ -172,8 +178,6 @@ sealed class Screen {
      */
     data object CuadreDeSaldos : Screen()
 
-    data object OCRCapture : Screen()
-    data object OCRConfirm : Screen()
     /**
      * **«Por revisar»** (ola C): la única bandeja de lo que entró solo y espera una decisión — los
      * mensajes del banco por confirmar, los movimientos que entraron solos y los candidatos a pago

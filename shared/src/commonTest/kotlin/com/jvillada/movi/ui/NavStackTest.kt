@@ -160,8 +160,6 @@ class NavStackTest {
         Screen.Login to null,
         Screen.Register to null,
         Screen.QuickAdd() to null,
-        Screen.OCRCapture to null,
-        Screen.OCRConfirm to null,
         Screen.ScreenEditor to null,
         Screen.StatementReview("{}") to null,
         Screen.ImportDetail("i1") to null,
@@ -199,7 +197,7 @@ class NavStackTest {
     fun `las cuatro pestanas llevan la barra y los flujos a pantalla completa no`() {
         listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan(), Screen.Accounts, Screen.Credits)
             .forEach { assertTrue(muestraLaNavegacion(it), "$it") }
-        listOf(Screen.Login, Screen.Register, Screen.QuickAdd(), Screen.OCRCapture, Screen.ScreenEditor,
+        listOf(Screen.Login, Screen.Register, Screen.QuickAdd(), Screen.ScreenEditor,
             Screen.StatementReview("{}"), Screen.ImportDetail("i1"))
             .forEach { assertFalse(muestraLaNavegacion(it), "$it") }
     }
@@ -271,7 +269,7 @@ class NavStackTest {
     fun `el resto de las pantallas son destinos, no modales`() {
         listOf(
             Screen.Dashboard, Screen.Transactions(), Screen.Accounts, Screen.Credits, Screen.Budgets,
-            Screen.Mas, Screen.Profile, Screen.Login, Screen.OCRCapture,
+            Screen.Mas, Screen.Profile, Screen.Login,
             Screen.AccountDetail("acc_1", AccountGroup.DINERO),
         ).forEach { assertFalse(opensAsOverlay(it), "$it") }
     }

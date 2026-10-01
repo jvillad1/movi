@@ -48,6 +48,8 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.fecha.fechaEnPalabras
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 
 /**
  * F20 — Créditos es «todo lo que debes»: préstamos (cuota, tasa, plazo) y tarjetas de crédito
@@ -718,7 +720,7 @@ private fun LoanCard(
                 horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
             ) {
                 Text(
-                    "Plazo pactado ${t.termMonths} meses · desde ${t.startDate}",
+                    "Plazo pactado ${t.termMonths} meses · desde el ${fechaEnPalabras(t.startDate, hoyEnAppZone())}",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoApagado,
                     modifier = Modifier.weight(1f),

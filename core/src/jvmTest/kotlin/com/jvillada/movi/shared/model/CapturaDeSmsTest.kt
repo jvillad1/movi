@@ -150,6 +150,30 @@ class CapturaDeSmsTest {
         assertTrue("3 de septiembre a las 7:15 a. m." in varios.detalle, varios.detalle)
     }
 
+    /** «8:10 a. m..»: la hora ya termina en punto y la frase le ponía otro (revisión del 29-sep). */
+    @Test
+    fun `el aviso no pone dos puntos despues de la hora`() {
+        listOf(
+            avisoDeCaptura(CapturaDeSms(1, "2026-09-29 08:10")),
+            avisoDeCaptura(CapturaDeSms(12, "2026-09-29 20:10")),
+        ).forEach { aviso ->
+            assertFalse(".." in aviso.detalle, aviso.detalle)
+            assertTrue("m. Esto dice" in aviso.detalle, aviso.detalle)
+        }
+        // Una fecha que no se entiende no termina en punto: ahí sí se cierra la frase.
+        assertTrue("ayer. Esto dice" in avisoDeCaptura(CapturaDeSms(1, "ayer")).detalle)
+    }
+
+    @Test
+    fun `la fecha corta de un mensaje dice hoy, ayer o el dia`() {
+        val hoy = kotlinx.datetime.LocalDate(2026, 9, 29)
+        assertEquals("Hoy, 8:10 a. m.", fechaCortaDeSms("2026-09-29 08:10", hoy))
+        assertEquals("Ayer, 7:52 p. m.", fechaCortaDeSms("2026-09-28T19:52:00", hoy))
+        assertEquals("23 de septiembre, 9:15 a. m.", fechaCortaDeSms("2026-09-23 09:15", hoy))
+        assertEquals("30 de diciembre de 2025, 12:05 a. m.", fechaCortaDeSms("2025-12-30 00:05", hoy))
+        assertEquals("ayer", fechaCortaDeSms(" ayer ", hoy), "lo que no se entiende queda tal cual")
+    }
+
     // ── Cuándo aparece en el Inicio, y cuándo deja de aparecer ─────────────────
 
     @Test
