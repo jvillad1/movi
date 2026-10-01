@@ -611,4 +611,53 @@ class SmsSyncTest {
         )
         assertEquals("pending", estado)
     }
+
+    /**
+     * Ola 1 · Movi avisa: la respuesta trae lo que quedó en «Por revisar», ya leído, para que el
+     * teléfono avise con las palabras de la bandeja. Lo que entró ya ignorado (un aviso de app sin
+     * ningún número) y lo que no es un movimiento no se avisan.
+     */
+    @Test
+    fun `la respuesta dice que quedo por revisar, leido, y nada de lo que no se avisa`() = testApplication {
+        application { testModule() }
+        val client = smsClient(this)
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val resp = client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                listOf(
+                    makeSms("rt-uber", "Compra por \$25.000 en UBER TRIP.", time = "2026-10-01 10:00", bank = "85540"),
+                    makeSms("rt-wallet", "Set up a shortcut to pay", time = "2026-10-01 10:01", bank = "Notificación · Google Wallet"),
+                    makeSms("rt-otp", "Tu clave dinamica es valida por 5 minutos", time = "2026-10-01 10:02", bank = "85540"),
+                ),
+            )
+        }
+        assertEquals(HttpStatusCode.OK, resp.status)
+        val cuerpo = Json { ignoreUnknownKeys = true }.decodeFromString(
+            com.jvillada.movi.shared.model.RespuestaDelSync.serializer(),
+            resp.body<String>(),
+        )
+        assertEquals(3, cuerpo.synced)
+        val aviso = cuerpo.porRevisar.single()
+        assertEquals("rt-uber", aviso.id)
+        assertEquals(25_000.0, aviso.monto)
+        assertEquals("COP", aviso.moneda)
+        assertEquals("85540", aviso.origen)
+        assertEquals(com.jvillada.movi.shared.model.TransactionType.EXPENSE, aviso.tipo)
+
+        // El mismo lote otra vez: nada nuevo, nada que avisar.
+        val otraVez = client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(listOf(makeSms("rt-uber", "Compra por \$25.000 en UBER TRIP.", time = "2026-10-01 10:00", bank = "85540")))
+        }
+        val segundo = Json { ignoreUnknownKeys = true }.decodeFromString(
+            com.jvillada.movi.shared.model.RespuestaDelSync.serializer(),
+            otraVez.body<String>(),
+        )
+        assertEquals(0, segundo.synced)
+        assertEquals(emptyList(), segundo.porRevisar)
+    }
 }
