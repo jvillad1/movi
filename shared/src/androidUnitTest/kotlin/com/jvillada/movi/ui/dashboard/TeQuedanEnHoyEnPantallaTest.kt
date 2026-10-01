@@ -31,6 +31,7 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.plan.TITULO_CUANTO_PUEDES_GASTAR
 import com.jvillada.movi.ui.sdui.HeroDeUnVistazo
@@ -45,7 +46,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * **Hoy y Plan, montados uno encima del otro con los mismos datos, dicen la misma cifra** (Ola 1).
+ * **Hoy y Plan, montados uno encima del otro con los mismos datos, dicen la misma cifra** (Ola 1):
+ * el mismo valor, entero en la cifra grande de Hoy y compacto en la columna «Período» de Plan.
  *
  * Arriba el hero de Hoy (`HeroDeUnVistazo`), abajo la tarjeta de Plan tal como la arma
  * `PlanScreen` (`TarjetaDelDisponible` con `disponibleDelInicio(data)`). Se lee lo que de verdad se
@@ -133,10 +135,16 @@ class TeQuedanEnHoyEnPantallaTest {
 
         val esperado = disponibleDelInicio(datos(mapOf("2026-08-26" to 100_000L), unaCuenta), hoy)!!.periodo.teQuedan
         val deHoy = texto(cifraDeHoy())
-        assertEquals(formatMoneyCompact(esperado), deHoy)
-        assertEquals("\$6,8M", deHoy)
-        // La misma cadena está dos veces: la cifra grande de Hoy y la columna «Período» de Plan.
-        assertEquals(2, composeRule.onAllNodesWithText(deHoy, useUnmergedTree = true).fetchSemanticsNodes().size)
+        // Hoy, entero: es la cifra principal del dueño.
+        assertEquals(formatCOP(esperado), deHoy)
+        assertEquals("\$6.800.000", deHoy)
+        // Plan, el MISMO valor en su columna «Período», compacto porque ahí no entra entero.
+        assertEquals(
+            1,
+            composeRule.onAllNodesWithText(formatMoneyCompact(esperado), useUnmergedTree = true).fetchSemanticsNodes().size,
+            "la columna «Período» de Plan dice ${formatMoneyCompact(esperado)}",
+        )
+        assertEquals("\$6,8M", formatMoneyCompact(esperado))
         composeRule.onNodeWithText(ROTULO_TE_QUEDAN, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("para 4 días · meta diaria \$222.580", useUnmergedTree = true).assertIsDisplayed()
         assertEquals(normal, color(cifraDeHoy()))

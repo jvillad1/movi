@@ -272,7 +272,8 @@ fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
  *
  * @property teQuedan la cifra con signo, idéntica a `periodo.teQuedan`.
  * @property monto lo que se escribe después del [rotulo]: sin signo, porque el rótulo ya dice de qué
- *   lado está («Te pasaste por $629.882» y no «Te quedan −$629.882»).
+ *   lado está («Te pasaste por $629.882» y no «Te quedan −$629.882»). Hoy lo escribe entero
+ *   (`formatCOP`, «$4.963.400»); la columna de Plan, compacto («$5M»): mismo valor, otro ancho.
  * @property enRojo el mismo criterio que pinta de rojo la columna «Período» en Plan.
  * @property detalle la línea chica de abajo: para cuántos días, la meta diaria, o qué ventana se pasó.
  */

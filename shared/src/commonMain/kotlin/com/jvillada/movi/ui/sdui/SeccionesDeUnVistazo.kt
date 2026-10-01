@@ -399,8 +399,8 @@ internal fun HeroDeUnVistazo(
 /**
  * **La cabecera del hero cuando abre con «Te quedan $X»** (Ola 1 · Movi avisa).
  *
- * Arriba el rótulo («Te quedan» o «Te pasaste por»), el rango del período, la cifra grande —la
- * columna «Período» de la tarjeta Disponible de Plan, con su mismo formato y su mismo rojo— y una
+ * Arriba el rótulo («Te quedan» o «Te pasaste por»), el rango del período, la cifra grande —el
+ * valor de la columna «Período» de la tarjeta Disponible de Plan, entero y con su mismo rojo— y una
  * línea chica con para cuántos días y la meta diaria ([teQuedanDeHoy]). Debajo, **«Tu plata» en una
  * fila tocable**: con más de una cuenta despliega el saldo de cada una (el chevron de siempre); con
  * una sola, lleva a Cuentas.
@@ -437,9 +437,12 @@ private fun CabeceraTeQuedan(
     Spacer(Modifier.height(Movi.espacios.corto))
     if (teQuedan != null) {
         CifraProtagonista(
-            // El MISMO formato que la columna «Período» de Plan: el número tiene que leerse igual en
-            // las dos pantallas, no solo valer lo mismo.
-            text = formatMoneyCompact(cifraContando(teQuedan.monto, entradaDeLaCifra)),
+            // El MISMO valor que la columna «Período» de Plan, pero **entero**: es la plata del
+            // dueño y su cifra principal, «$4.963.400» y no «$5M» (pedido del 1-oct). La columna de
+            // Plan sigue compacta porque a 390 dp un «−$12.345.678» no entra en su tercio de
+            // tarjeta (pide 205 px contra 202, medido con la letra ×1,12); acá la cifra tiene la
+            // fila entera y `CifraProtagonista` se achica si hace falta.
+            text = formatCOP(cifraContando(teQuedan.monto, entradaDeLaCifra)),
             color = if (teQuedan.enRojo) Movi.colores.sale else Movi.colores.texto,
             modifier = Modifier.testTag(TAG_CIFRA_TE_QUEDAN),
         )
