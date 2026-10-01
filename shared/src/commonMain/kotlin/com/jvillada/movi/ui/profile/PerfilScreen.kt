@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,6 +73,12 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     var cerrandoTodas by remember { mutableStateOf(false) }
     var errorCierreTotal by remember { mutableStateOf<String?>(null) }
     val alcanceCierre = rememberCoroutineScope()
+    // «Descargar tus datos»: pide un enlace de dos minutos y lo abre. Mismo camino que abrir un
+    // documento —en la web el navegador baja el ZIP; en el teléfono lo baja el navegador del
+    // sistema a Descargas—, porque bajar un archivo es una navegación y ahí no viaja la sesión.
+    val uriHandler = LocalUriHandler.current
+    var bajandoDatos by remember { mutableStateOf(false) }
+    var errorDatos by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(profileReloadKey) {
         falloElPerfil = false
         runCatching { Repositories.wallets.getUserProfile() }.onSuccess {
@@ -488,6 +495,44 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
             // funciona, se queda arriba, en su propia sección.
 
 
+            // Tus datos: lo que hoy solo se podía sacar por psql. La cuenta es de quien la usa.
+            item {
+                Spacer(Modifier.height(14.dp))
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    MinSectionHeader(title = "Tus datos")
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                    ) {
+                        CardRow(
+                            left = { Text(DESCARGAR_TUS_DATOS, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
+                            sub = errorDatos ?: if (bajandoDatos) "Preparando el archivo…" else
+                                "Un ZIP con tus cuentas, movimientos, créditos y mensajes del banco, en CSV y JSON",
+                            showChevron = true,
+                            isLast = true,
+                            onClick = {
+                                if (!bajandoDatos) {
+                                    bajandoDatos = true
+                                    errorDatos = null
+                                    alcanceCierre.launch {
+                                        runCatching { Repositories.wallets.getExportLink() }
+                                            .onSuccess { enlace ->
+                                                runCatching { uriHandler.openUri(enlace.url) }
+                                                    .onFailure { errorDatos = "No pudimos abrir la descarga en este aparato." }
+                                            }
+                                            .onFailure {
+                                                errorDatos = "No pudimos preparar la descarga. Revisa tu conexión e inténtalo de nuevo."
+                                            }
+                                        bajandoDatos = false
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+
             // Logout button
             item {
                 Spacer(Modifier.height(24.dp))
@@ -666,6 +711,9 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     }
     }
 }
+
+/** La fila de Perfil que baja el ZIP con todos los datos de la cuenta. */
+const val DESCARGAR_TUS_DATOS: String = "Descargar tus datos"
 
 /** El botón de Perfil que cierra todas las sesiones de la cuenta. */
 const val CERRAR_SESION_EN_TODOS: String = "Cerrar sesión en todos los aparatos"

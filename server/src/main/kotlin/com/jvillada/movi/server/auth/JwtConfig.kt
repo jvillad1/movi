@@ -157,4 +157,40 @@ object JwtConfig {
     } catch (e: Exception) {
         null
     }
+
+    // ── Descarga de todos los datos («Descargar tus datos») ─────────────────────────
+
+    /**
+     * Otra audiencia más, por lo mismo que [DOWNLOAD_AUDIENCE]: el enlace de la exportación viaja
+     * en una URL y no puede servir para nada más. Y es **todo**: cuentas, movimientos, mensajes del
+     * banco. Por eso además lleva la versión de sesiones: cerrar sesión en todos los aparatos mata
+     * también un enlace de exportación que alguien haya pedido y todavía no se usó.
+     */
+    private const val EXPORT_AUDIENCE = "movi-export"
+
+    /** Dos minutos: el enlace se pide y se abre en el mismo gesto. */
+    const val EXPORT_VALIDITY_MS = 2L * 60 * 1000
+
+    fun makeExportToken(userId: String, tokenVersion: Int): String = JWT.create()
+        .withIssuer(ISSUER)
+        .withAudience(EXPORT_AUDIENCE)
+        .withClaim("userId", userId)
+        .withClaim(CLAIM_VERSION, tokenVersion)
+        .withExpiresAt(Date(System.currentTimeMillis() + EXPORT_VALIDITY_MS))
+        .sign(algorithm)
+
+    /**
+     * `(userId, versión)` si el token es un permiso de exportación válido, o `null`. Quien llama
+     * todavía tiene que comparar la versión contra la base — acá no se mira la base.
+     */
+    fun verifyExportToken(token: String): Pair<String, Int>? = try {
+        val payload = JWT.require(algorithm)
+            .withIssuer(ISSUER)
+            .withAudience(EXPORT_AUDIENCE)
+            .build()
+            .verify(token)
+        payload.getClaim("userId").asString()?.let { it to versionDelToken(payload) }
+    } catch (e: Exception) {
+        null
+    }
 }

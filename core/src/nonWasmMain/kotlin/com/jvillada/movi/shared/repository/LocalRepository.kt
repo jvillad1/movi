@@ -2204,6 +2204,8 @@ class LocalRepository(
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = remote.updateUserProfile(request)
     override suspend fun changePassword(request: ChangePasswordRequest): String? = remote.changePassword(request)
     override suspend fun cerrarSesionesEnTodosLosAparatos() = remote.cerrarSesionesEnTodosLosAparatos()
+    // Sin espejo: la exportación la arma el server con lo que tiene él, que es la copia completa.
+    override suspend fun getExportLink(): EnlaceDeDescarga = remote.getExportLink()
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

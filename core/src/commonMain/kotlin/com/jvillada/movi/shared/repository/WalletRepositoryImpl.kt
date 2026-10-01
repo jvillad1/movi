@@ -935,6 +935,11 @@ class WalletRepositoryImpl(
         return response.headers["X-Movi-Token"]?.takeIf { it.isNotBlank() }
     }
 
+    override suspend fun getExportLink(): EnlaceDeDescarga {
+        val relativo: EnlaceDeDescarga = client.post("$baseUrl/api/export/enlace").exigirExito().body()
+        return relativo.copy(url = baseUrl + relativo.url)
+    }
+
     override suspend fun cerrarSesionesEnTodosLosAparatos() {
         client.post("$baseUrl/api/users/me/cerrar-sesiones").exigirExito()
     }

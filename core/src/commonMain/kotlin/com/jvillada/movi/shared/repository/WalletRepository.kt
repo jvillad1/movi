@@ -525,6 +525,13 @@ interface WalletRepository {
     suspend fun cerrarSesionesEnTodosLosAparatos()
 
     /**
+     * «Descargar tus datos»: `POST /api/export/enlace`. Un enlace de dos minutos, ya con el
+     * [baseUrl] adelante, que baja un ZIP con todo (un CSV por tabla y `movi.json`). Mismo patrón
+     * que [getDocumentLink]: bajar un archivo es una navegación y ahí no viaja `Authorization`.
+     */
+    suspend fun getExportLink(): EnlaceDeDescarga
+
+    /**
      * Pide un enlace de recuperación por correo. Devuelve el CÓDIGO HTTP crudo en vez de un
      * cuerpo tipado a propósito: el servidor responde 202 idéntico exista o no el correo
      * (anti-enumeración) y 503 cuando el envío de correo no está configurado en el servidor,
