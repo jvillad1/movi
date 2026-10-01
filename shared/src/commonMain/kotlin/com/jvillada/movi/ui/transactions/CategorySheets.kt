@@ -51,6 +51,11 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.ofreceVincularDeuda
+import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.identificadorDelDestinoEn
+import com.jvillada.movi.ui.destinos.FilaGuardarElDestino
+import com.jvillada.movi.ui.destinos.nombreParaLaFila
+import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
 import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
@@ -410,6 +415,17 @@ internal fun ContenidoDelMovimiento(
         }
     }
 
+    // A quién fue (o de quién vino) este movimiento, según el texto del banco. Solo se leen las
+    // cuentas guardadas si hay algo que preguntar, y nunca para una pata de traspaso ni un saldo
+    // inicial (esas ramas salen antes de pintar la fila).
+    val aQuienFue = remember(event.id, event.rawPayload, event.merchant, event.description) {
+        identificadorDelDestinoEn(event)
+    }
+    val destinosParaGuardar = rememberDestinosParaGuardar(
+        hacenFalta = aQuienFue != null && !isTransferLeg(event) && !isOpeningBalance(event),
+    )
+    var destinoGuardadoAca by remember(event.id) { mutableStateOf<DestinoConocido?>(null) }
+
     // Ola Y: «¿A cuál crédito o tarjeta corresponde?» — completar en el traspaso de deuda un
     // gasto suelto ya categorizado. Aparte de `saving`/`error` (que son de la categoría) porque
     // las dos acciones pueden pasar en momentos distintos: primero se elige la categoría, y solo
@@ -719,6 +735,32 @@ internal fun ContenidoDelMovimiento(
                 abierto = edicionAbierta,
                 onAbiertoChange = { edicionAbierta = it },
             )
+            // «¿De quién es la cuenta ·0756? Guardar como…» — la misma fila de «Reconciliar
+            // movimiento», para un movimiento ya anotado cuyo texto del banco (o su nombre) trae
+            // un número o una llave que ninguna cuenta guardada conoce. Guardarla no toca este
+            // movimiento: desde ahí «Cuentas de otros» lo cuenta, porque el texto del banco no se
+            // reescribe nunca (ver `nombraAlDestino` en `:core`).
+            if (destinoGuardadoAca != null) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "«${destinoGuardadoAca!!.nombre}» quedó en tus cuentas de otros. Este movimiento ya cuenta ahí.",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                )
+            } else if (aQuienFue != null && destinosParaGuardar.ofrece(aQuienFue, cuentas)) {
+                Spacer(Modifier.height(20.dp))
+                Hairline()
+                Spacer(Modifier.height(16.dp))
+                FilaGuardarElDestino(
+                    identificador = aQuienFue,
+                    nombreSugerido = nombreParaLaFila(aQuienFue, event.merchant),
+                    destinos = destinosParaGuardar.guardados.orEmpty(),
+                    onGuardado = { guardado ->
+                        destinosParaGuardar.alGuardar(guardado)
+                        destinoGuardadoAca = guardado
+                    },
+                )
+            }
             // «Esto se repite todos los meses» — solo si quien abrió la hoja tiene dónde poner el
             // formulario, y solo sobre un movimiento al que la pregunta le aplica (ver
             // [puedeOfrecerseComoRecurrenteDesdeElDetalle]).

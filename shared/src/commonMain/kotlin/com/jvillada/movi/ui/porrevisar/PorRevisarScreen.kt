@@ -34,6 +34,10 @@ import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.capturaDeSms
+import com.jvillada.movi.shared.model.identificadorDelDestinoEn
+import com.jvillada.movi.ui.destinos.FilaGuardarElDestino
+import com.jvillada.movi.ui.destinos.nombreParaLaFila
+import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
@@ -140,6 +144,19 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     var movimientoAbierto by remember { mutableStateOf<FinancialEvent?>(null) }
 
     val mensajes = lecturas.mensajes
+    /**
+     * **A quién fue cada mensaje pendiente**, leído del texto con la misma función de `:core` que
+     * usa el server para `ParsedSms.identificadorDelDestino` — la bandeja tiene el texto y no el
+     * parseo, y pedir un parseo por tarjeta sería una ida al server por mensaje. Con esto la
+     * tarjeta ofrece «¿De quién es la cuenta ·0756?» sin abrir «Revisar». Las cuentas guardadas se
+     * leen solo si algún pendiente nombra una.
+     */
+    val aQuienFue = remember(mensajes) {
+        mensajesPorRevisar(mensajes.orEmpty()).mapNotNull { sms ->
+            identificadorDelDestinoEn(sms.text)?.let { sms.id to it }
+        }.toMap()
+    }
+    val destinosParaGuardar = rememberDestinosParaGuardar(hacenFalta = aQuienFue.isNotEmpty())
     val dias = diasLeidos?.map { dia ->
         dia.copy(items = dia.items.filterNot { (it.transferId ?: it.id) in movimientosResueltos })
     }
@@ -228,6 +245,22 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                 // El otro aviso puede estar ya confirmado: se busca en la lista
                                 // entera, no solo entre los pendientes.
                                 parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
+                                pie = aQuienFue[sms.id]
+                                    ?.takeIf { destinosParaGuardar.ofrece(it, cuentas) }
+                                    ?.let { identificador ->
+                                        {
+                                            FilaGuardarElDestino(
+                                                identificador = identificador,
+                                                // La tarjeta no tiene el nombre que leyó Movi: solo
+                                                // se prellena si el mensaje trae el de la persona.
+                                                nombreSugerido = nombreParaLaFila(identificador, nombreDelBanco = null),
+                                                destinos = destinosParaGuardar.guardados.orEmpty(),
+                                                // Guardada, la fila se va sola; al tocar «Revisar»
+                                                // el server ya propone «Transferencia a <nombre>».
+                                                onGuardado = destinosParaGuardar.alGuardar,
+                                            )
+                                        }
+                                    },
                             )
                         }
                     }

@@ -63,6 +63,11 @@ import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.ofreceVincularDeuda
+import com.jvillada.movi.shared.model.identificador
+import com.jvillada.movi.shared.model.nombreDelMovimientoConElDestino
+import com.jvillada.movi.ui.destinos.FilaGuardarElDestino
+import com.jvillada.movi.ui.destinos.nombreParaLaFila
+import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
 import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.ui.transactions.SelectorDeCuentaDeDeuda
 import com.jvillada.movi.theme.*
@@ -336,6 +341,12 @@ internal fun TarjetaDeMensajeDelBanco(
      * mano. Solo se usa para decir su origen y su hora: la marca la decide el server.
      */
     parecidoA: SmsMessage? = null,
+    /**
+     * Lo que va al pie de la tarjeta, debajo de «Revisar»: la bandeja pone acá «¿De quién es la
+     * cuenta ·0756?» cuando el mensaje nombra una cuenta que no está guardada. El historial de
+     * «Captura del banco» no lo usa.
+     */
+    pie: (@Composable () -> Unit)? = null,
 ) {
     MinCard(
         modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
@@ -408,6 +419,12 @@ internal fun TarjetaDeMensajeDelBanco(
                     Text("Revisar", style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                 }
             }
+        }
+        if (pie != null) {
+            Spacer(Modifier.height(12.dp))
+            Hairline()
+            Spacer(Modifier.height(12.dp))
+            pie()
         }
     }
 }
@@ -576,6 +593,15 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      * fecha no se editan acá — los dice el banco.
      */
     val comercio: String? = parsed?.let { p -> comercioEditado?.trim()?.takeIf { it.isNotEmpty() } ?: p.merchant }
+
+    /**
+     * **A quién fue (o de quién vino) la plata**, según lo leyó el server ([ParsedSms.identificador]).
+     * Si ninguna cuenta guardada lo conoce —y no es una cuenta suya— se ofrece guardarla acá mismo
+     * («¿De quién es la cuenta ·0756?»), en vez de mandarlo a Ajustes a copiar el número a mano.
+     * Los destinos se leen solo cuando el mensaje trae un identificador.
+     */
+    val identificador = parsed?.identificador()
+    val destinosParaGuardar = rememberDestinosParaGuardar(hacenFalta = identificador != null)
 
     // Ola Y: ¿corresponde ofrecer «¿A cuál crédito o tarjeta corresponde?» para lo que se va a
     // confirmar? Un SMS recién confirmado nunca es ya la mitad de un traspaso, así que las tres
@@ -850,6 +876,36 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                                 letterSpacing = (-0.4).sp,
                             )
                         }
+                    }
+                }
+
+                // «¿De quién es la cuenta ·0756? Guardar como…» — solo con un identificador que
+                // ninguna cuenta guardada conoce, y solo mientras el aviso espera una decisión.
+                val leidoParaGuardar = parsed
+                if (identificador != null && leidoParaGuardar != null &&
+                    (currentSms == null || currentSms.state == SMS_STATE_PENDING) &&
+                    destinosParaGuardar.ofrece(identificador, accounts)
+                ) {
+                    Spacer(Modifier.height(8.dp))
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Default,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+                    ) {
+                        FilaGuardarElDestino(
+                            identificador = identificador,
+                            nombreSugerido = nombreParaLaFila(identificador, leidoParaGuardar.merchant),
+                            destinos = destinosParaGuardar.guardados.orEmpty(),
+                            onGuardado = { guardado ->
+                                destinosParaGuardar.alGuardar(guardado)
+                                // El movimiento se propone con ese nombre: «Transferencia a Caro»
+                                // (o «de Caro», si la plata llegó). Lo que él ya haya escrito en
+                                // «Comercio» es suyo y no se pisa.
+                                if (comercioEditado.isNullOrBlank()) {
+                                    comercioEditado = nombreDelMovimientoConElDestino(guardado, leidoParaGuardar.type)
+                                }
+                            },
+                        )
                     }
                 }
 
