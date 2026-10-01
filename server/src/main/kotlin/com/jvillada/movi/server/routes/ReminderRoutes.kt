@@ -1096,7 +1096,10 @@ internal sealed interface Resolucion {
     /** Movi la emparejó sola: [evento] es el único concluyente (ver `ocurrenciaConcluyente`). */
     data class Emparejada(val evento: FinancialEvent) : Resolucion
 
-    /** El vencimiento todavía no llegó: no se empareja nada, igual que no se pregunta nada. */
+    /**
+     * El vencimiento todavía no llegó **y no pasó nada que se le parezca**: no se pregunta nada. Si ya
+     * hay un movimiento concluyente, la ocurrencia sale [Emparejada]; si hay candidatos, [Abierta].
+     */
     data object PorLlegar : Resolucion
 
     /**
@@ -1144,7 +1147,29 @@ internal fun resolverOcurrencias(
     val clave = periodOf(due)
     val resolucion = when {
         clave in lectura.ocurridos[rule.id].orEmpty() -> Resolucion.Sellada(lectura.sellos[rule.id to clave])
-        due.isAfter(today) -> Resolucion.PorLlegar
+        // **Lo que llegó ANTES del vencimiento** (1-oct-2026: la recarga de Glim del día 2 entró el 1 y
+        // Plan seguía diciendo «llega mañana»). Si ya hay un movimiento concluyente en la ventana, se
+        // empareja igual que el día del vencimiento: pagar o cobrar antes es lo normal, no ruido. Y si
+        // hay candidatos que no alcanzan a ser concluyentes, se PREGUNTA —con el movimiento a la
+        // vista—, porque ya pasó algo que se le parece. Lo que sigue siendo ruido es preguntar por algo
+        // que vence en tres semanas sin que haya pasado nada: eso sigue siendo [Resolucion.PorLlegar].
+        due.isAfter(today) -> {
+            val sinRechazados = lectura.sinRechazados(rule)
+            val concluyentes = ocurrenciasConcluyentes(
+                rule, due, sinRechazados, lectura.reservados, settings = periodo, destinos = destinos,
+            )
+            val unico = concluyentes.singleOrNull()
+            when {
+                unico != null -> {
+                    lectura.reservados += unico.id
+                    Resolucion.Emparejada(unico)
+                }
+                occurrenceCandidatesFor(
+                    rule, due, sinRechazados, lectura.reservados, settings = periodo, destinos = destinos,
+                ).isNotEmpty() -> Resolucion.Abierta(concluyentes.size)
+                else -> Resolucion.PorLlegar
+            }
+        }
         else -> {
             val concluyentes = ocurrenciasConcluyentes(
                 rule,
