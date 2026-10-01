@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- Ola 1 · Movi avisa: los avisos de «Por revisar» y de pagos por vencer. Desde Android 13 se
+         pide en tiempo de ejecución, y Movi lo pide EN CONTEXTO (una tarjeta de Hoy, o Ajustes →
+         Captura del banco), nunca al abrir la app en frío. Antes de 13 viene concedido. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- READ_SMS implies telephony hardware; mark it optional so the app stays
          installable on ChromeOS/tablets without telephony (SMS reader is a no-op there). -->

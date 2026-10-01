@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.avisos.AvisosEnHoy
+import com.jvillada.movi.avisos.TarjetaDeAvisos
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -536,6 +538,10 @@ fun DashboardScreen(
             // cada carga en frío de la web —donde la caché en memoria se pierde al recargar—
             // saludaba con una lista de tareas ya hechas hace meses.
             val showGuide = data.guiaIncompleta
+            // Ola 1 · Movi avisa: la tarjeta que ofrece los avisos del teléfono, una sola vez y
+            // solo en Android 13+ sin el permiso (ver [AvisosEnHoy]). Va donde va la guía, y solo
+            // cuando la guía no está: una cuenta recién creada tiene cosas más urgentes que hacer.
+            val ofertaDeAvisos = AvisosEnHoy.oferta()
             // SDUI: la definición del server si la hay; si no, la misma lista que el server
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
             // `LocalCargandoElInicio`: el hero y «Pregúntale a Movi» solo reciben `data`, no
@@ -554,6 +560,8 @@ fun DashboardScreen(
                                 onShowCreateSheet = { showCreateSheet = true },
                             )
                         }
+                    } else if (ofertaDeAvisos != null) {
+                        { TarjetaDeAvisos(ofertaDeAvisos) }
                     } else null,
                     // El hero vacío abre la MISMA hoja que «Primeros pasos» —
                     // mismo estado, un solo `CreateAccountSheet` en esta pantalla.

@@ -31,6 +31,10 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
 import com.jvillada.movi.shared.repository.CompartirRepository
 import com.jvillada.movi.platform.Huella
+import com.jvillada.movi.avisos.AvisosEnHoy
+import com.jvillada.movi.avisos.DestinoDesdeAfuera
+import com.jvillada.movi.avisos.OfertaDeAvisos
+import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.platform.HuellaDelAparato
 import com.jvillada.movi.data.EstadoDeHuella
 import com.jvillada.movi.data.PropositoDeHuella
@@ -112,6 +116,12 @@ class ElForkLlegaLimpioTest {
         PropuestasDescartadasStore.marcar("unificar:otra>prueba")
         RecurringOfferGate.recordarLoQueYaHay(listOf(ARRIENDO), emptyList())
         Huella.sustitutoDePrueba = LECTOR_DE_OTRA_PRUEBA
+        // Ola 1: la pantalla que dejó pendiente un aviso tocado, y la oferta de avisos de prueba.
+        DestinoDesdeAfuera.pendiente = Screen.PorRevisar
+        AvisosEnHoy.sustitutoDePrueba = object : OfertaDeAvisos {
+            override fun pedir() = Unit
+            override fun descartar() = Unit
+        }
         // Ola D, Task 2: la costura de «Compartir», mismo trato que el repositorio de arriba.
         Repositories.sustitutoDeCompartirDePrueba = COMPARTIR_DE_OTRA_PRUEBA
         SessionManager.huellaActivada = true
@@ -158,6 +168,8 @@ class ElForkLlegaLimpioTest {
         assertNotNull("La definición de pantalla no quedó cacheada", ScreenDefCache.dashboard)
         assertNotNull("El repositorio de prueba no quedó enchufado", Repositories.sustitutoDePrueba)
         assertNotNull("El lector de huellas de prueba no quedó enchufado", Huella.sustitutoDePrueba)
+        assertNotNull("El destino del aviso no quedó pendiente", DestinoDesdeAfuera.pendiente)
+        assertNotNull("La oferta de avisos de prueba no quedó enchufada", AvisosEnHoy.sustitutoDePrueba)
         assertNotNull("El repositorio de Compartir de prueba no quedó enchufado", Repositories.sustitutoDeCompartirDePrueba)
         assertTrue("«Entrar con huella» no quedó prendida", SessionManager.huellaActivada)
         assertEquals("Las lecturas recordadas no quedaron guardadas", 2, CacheDeLecturas.cuantas)
@@ -196,6 +208,8 @@ class ElForkLlegaLimpioTest {
         assertNull("El token de otra prueba sigue puesto", SessionManager.token)
         assertNull("El repositorio de prueba de otra clase sigue enchufado", Repositories.sustitutoDePrueba)
         assertNull("El lector de huellas de otra clase sigue enchufado", Huella.sustitutoDePrueba)
+        assertNull("El destino de un aviso tocado en otra prueba sigue pendiente", DestinoDesdeAfuera.pendiente)
+        assertNull("La oferta de avisos de otra clase sigue enchufada", AvisosEnHoy.sustitutoDePrueba)
         assertNull("El repositorio de Compartir de otra clase sigue enchufado", Repositories.sustitutoDeCompartirDePrueba)
         assertFalse("«Entrar con huella» trae la resaca del método anterior", SessionManager.huellaActivada)
         assertEquals("La instantánea del Inicio de otra prueba sigue guardada", emptyMap<String, String>(), ALMACEN_DE_LA_INSTANTANEA)

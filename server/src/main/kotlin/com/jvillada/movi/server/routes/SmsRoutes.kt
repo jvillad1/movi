@@ -24,6 +24,9 @@ import com.jvillada.movi.shared.model.categoriaProbablePorElNombre
 import com.jvillada.movi.shared.model.huellaDeUnMovimiento
 import com.jvillada.movi.shared.model.laHuellaEsUnNumero
 import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.AvisoPorRevisar
+import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.RespuestaDelSync
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
@@ -554,9 +557,37 @@ fun Route.smsRoutes() {
             }
         }
 
-        call.respond(mapOf("synced" to insertedCount))
+        // Ola 1 · Movi avisa: lo que quedó esperando en «Por revisar», ya leído, para que el
+        // teléfono avise «Movi anotó $180.000» con las mismas palabras que la bandeja. Solo lo
+        // insertado ahora, en `pending` (lo que entró ya ignorado no se avisa) y con movimiento.
+        // Best-effort como la push: sin destinos (o si la consulta falla) se avisa con el nombre
+        // que mandó el banco, y nunca se cae el sync por esto.
+        val pendientes = inserted.filter { estadoAlLlegar(it) == SMS_STATE_PENDING }
+        val destinos = if (pendientes.isEmpty()) emptyList() else runCatching { dbQuery { destinosDelDueno(uid) } }
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            .getOrDefault(emptyList())
+        call.respond(RespuestaDelSync(synced = insertedCount, porRevisar = avisosPorRevisar(pendientes, destinos)))
     }
 }
+
+/**
+ * Los movimientos de [pendientes] que se pueden leer, con el nombre del destino guardado cuando lo
+ * hay (la misma lectura que la push y que `/parse`, sin la memoria de categorías: el aviso dice el
+ * monto y a quién, no la categoría). Lo que no trae un movimiento no se avisa —igual que la push—:
+ * un aviso de «llegó algo» sin monto sería ruido, y sigue en la bandeja de todas formas.
+ */
+internal fun avisosPorRevisar(pendientes: List<SmsMessage>, destinos: List<DestinoConocido>): List<AvisoPorRevisar> =
+    pendientes.mapNotNull { msg ->
+        val leido = parseSms(msg.text, msg.bank)?.let { conElDestinoConocido(it, msg.text, destinos) } ?: return@mapNotNull null
+        AvisoPorRevisar(
+            id = msg.id,
+            origen = msg.bank,
+            monto = leido.amount,
+            moneda = leido.currency,
+            descripcion = leido.merchant,
+            tipo = leido.type,
+        )
+    }
 
 /**
  * **Con qué estado entra un mensaje a la bandeja.** Casi siempre `pending`: la bandeja es del

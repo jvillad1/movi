@@ -1,11 +1,17 @@
 package com.jvillada.movi
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
+import com.jvillada.movi.avisos.AvisoDeVencimientosWorker
+import com.jvillada.movi.avisos.Avisador
+import com.jvillada.movi.avisos.DestinoDesdeAfuera
+import com.jvillada.movi.avisos.EXTRA_ABRIR
+import com.jvillada.movi.avisos.destinoDeAviso
 import com.jvillada.movi.shared.db.DatabaseDriverFactory
 import com.jvillada.movi.sms.SmsBackfillWorker
 import com.jvillada.movi.sms.SmsFilterConfigStore
@@ -44,8 +50,29 @@ class MainActivity : FragmentActivity() {
         // Y un refresh oportunista en cada apertura — reemplaza el que disparaba la
         // pantalla del sensor cuando era la única UI del APK.
         SmsFilterConfigStore.refreshIfStale(applicationContext)
+        // Ola 1 · Movi avisa: los dos canales (con nombre en español, para silenciarlos por
+        // separado) y el aviso diario de vencimientos. El Worker se programa siempre y decide al
+        // correr: con el interruptor apagado o sin permiso no hace nada.
+        Avisador.crearCanales(applicationContext)
+        AvisoDeVencimientosWorker.programar(applicationContext)
+        // Si la app se abrió tocando un aviso, a qué pantalla va (lo cumple App() tras la puerta).
+        recibirAviso(intent)
         setContent {
             App()
         }
+    }
+
+    /** La app ya estaba abierta y se tocó un aviso: llega acá en vez de a `onCreate`. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        recibirAviso(intent)
+    }
+
+    private fun recibirAviso(intent: Intent?) {
+        val destino = destinoDeAviso(intent?.getStringExtra(EXTRA_ABRIR)) ?: return
+        DestinoDesdeAfuera.pendiente = destino
+        // Una sola vez: rotar la pantalla recrea la actividad con el mismo Intent.
+        intent?.removeExtra(EXTRA_ABRIR)
     }
 }

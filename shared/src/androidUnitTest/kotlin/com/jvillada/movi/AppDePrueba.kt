@@ -1,6 +1,8 @@
 package com.jvillada.movi
 
 import android.app.Application
+import com.jvillada.movi.avisos.AvisosEnHoy
+import com.jvillada.movi.avisos.PreferenciasDeAvisos
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
@@ -86,6 +88,12 @@ class AppDePrueba : Application(), TestLifecycleApplication {
         // siguiente — ahí la pantalla de entrada creería estar en un teléfono con lector.
         Huella.sustitutoDePrueba = null
         TemaStore.clear()
+        // Ola 1 · Movi avisa: la tarjeta de Hoy que ofrece los avisos. Robolectric corre en SDK 34
+        // sin el permiso concedido, así que sin esto TODO montaje del Inicio la pintaría arriba y
+        // movería lo que las pruebas miden. Se da por contestada; la prueba que la quiere ver
+        // enchufa su oferta con [AvisosEnHoy.sustitutoDePrueba].
+        AvisosEnHoy.sustitutoDePrueba = null
+        PreferenciasDeAvisos.cerrarOferta(this)
     }
 
     override fun prepareTest(test: Any) = Unit
