@@ -92,6 +92,11 @@ class EsqueletosDelInicioTest {
         spentByCategory = mapOf(CUOTA_CATEGORY to 5_000_000L),
         ajustesDePeriodo = ajustesDelPeriodo,
         periodoActual = periodoDePrueba,
+        // Ola 1: con las lecturas del disponible el hero abre con «Te quedan» —el caso de todos los
+        // días—, que es la forma que copia el esqueleto.
+        upcoming = emptyList(),
+        ocurrencias = emptyList(),
+        gastoVariablePorDia = emptyMap(),
     )
 
     /** Monta el hero (y el resto del Inicio) con [data], marcando una carga en vuelo si [cargando]. */
@@ -153,8 +158,12 @@ class EsqueletosDelInicioTest {
         }
         composeRule.waitForIdle()
 
-        // Las cuatro piezas del esqueleto están, ni una de menos.
+        // Las piezas del esqueleto están, ni una de menos.
         assertEquals(1, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
+        assertEquals(1, contarTag(TAG_ESQUELETO_DETALLE_DEL_HERO))
+        assertEquals(1, contarTag(TAG_ESQUELETO_TU_PLATA_DEL_HERO))
+        // Y el lado cargado abre con «Te quedan», no con «Tu plata» de cifra grande.
+        assertEquals(1, contarTag(TAG_CIFRA_TE_QUEDAN))
         assertEquals(2, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
         assertEquals(1, contarTag(TAG_ESQUELETO_BARRA_DEL_HERO))
         assertEquals(2, contarTag(TAG_ESQUELETO_FILA_DEL_HERO))
@@ -172,20 +181,22 @@ class EsqueletosDelInicioTest {
     }
 
     /**
-     * **Fix round 1.** El brief original solo pedía la condición de arriba (las dos cosas a la
-     * vez), pero eso hacía que el hero se achicara cuando las cuentas contestaban primero —la
-     * cifra real, sin la fila de patrimonio todavía porque le faltaba el resumen— y volviera a
-     * crecer cuando el resumen llegaba después. Acá: cuentas SÍ, resumen NO — la cifra tiene que
-     * ser real y el veredicto/la barra/la fila esqueleto.
+     * **Fix round 1**, reescrita en la Ola 1. Las cuentas llegan antes que el resto: «Tu plata» ya
+     * es real (en su fila, debajo de la cifra grande), pero la cifra grande —«Te quedan»— sigue de
+     * esqueleto hasta que lleguen sus lecturas, y el veredicto, la barra y la fila también. Mostrar
+     * «Tu plata» arriba y cambiarla por otra cifra un segundo después sería un salto, y dos
+     * respuestas a la misma pregunta.
      */
     @Test
-    fun `con cuentas pero sin resumen, la cifra es real y el resto sigue esqueleto`() {
+    fun `con cuentas pero sin resumen, Tu plata es real y la cifra grande sigue esqueleto`() {
         val soloCuentas = DashboardData(
             accounts = listOf(Account(id = "a1", name = "Ahorros", type = AccountType.SAVINGS, balance = 500_000)),
         )
         montarHero(soloCuentas, cargando = true)
 
-        assertEquals(0, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
+        assertEquals(1, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
+        assertEquals(1, contarTag(TAG_ESQUELETO_DETALLE_DEL_HERO))
+        assertEquals(0, contarTag(TAG_ESQUELETO_TU_PLATA_DEL_HERO))
         assertEquals(2, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
         assertEquals(1, contarTag(TAG_ESQUELETO_BARRA_DEL_HERO))
         assertEquals(2, contarTag(TAG_ESQUELETO_FILA_DEL_HERO))

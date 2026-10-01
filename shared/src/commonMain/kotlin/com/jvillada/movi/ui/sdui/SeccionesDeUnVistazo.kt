@@ -77,6 +77,14 @@ import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_VEREDICTO_DEL_HERO
 import com.jvillada.movi.ui.dashboard.TAG_TARJETA_DEL_HERO
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
 import com.jvillada.movi.ui.dashboard.veredictoDelInicio
+import com.jvillada.movi.ui.dashboard.NivelDelGasto
+import com.jvillada.movi.ui.dashboard.TAG_CIFRA_TE_QUEDAN
+import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_DETALLE_DEL_HERO
+import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_TU_PLATA_DEL_HERO
+import com.jvillada.movi.ui.dashboard.TAG_FILA_TU_PLATA_DEL_HERO
+import com.jvillada.movi.ui.dashboard.TeQuedanDeHoy
+import com.jvillada.movi.ui.dashboard.alcanzaParaElDisponible
+import com.jvillada.movi.ui.dashboard.teQuedanDelInicio
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 
@@ -95,14 +103,22 @@ import kotlinx.datetime.LocalDate
  * El alto mínimo del hero cuando `accounts` contestó vacía, para que
  * la transición esqueleto → vacío no salte. Medido con `@GraphicsMode(NATIVE)` + `sdk = 34` (el
  * motor de texto real, ×1.12 de escala de letra de la app): el esqueleto (cifra + veredicto +
- * barra + fila) da ~242dp y el vacío por sí solo (título + detalle + botón, sin esas cuatro
- * piezas) da ~207dp — 238dp deja los ±8dp de `EsqueletosDelInicioTest` con margen de sobra sin
- * ser el número exacto medido, así que una fuente ligeramente distinta no tira la prueba.
+ * barra + fila) daba ~242dp y el vacío por sí solo (título + detalle + botón, sin esas cuatro
+ * piezas) da ~207dp. Desde la Ola 1 el esqueleto tiene la forma de «Te quedan» —con la línea del
+ * detalle y la fila de «Tu plata»— y mide 307dp: 302dp deja los ±8dp de `EsqueletosDelInicioTest`
+ * con margen sin ser el número exacto medido, así que una fuente ligeramente distinta no tira la
+ * prueba.
  */
-private val ALTO_MINIMO_DEL_HERO_VACIO = 238.dp
+private val ALTO_MINIMO_DEL_HERO_VACIO = 302.dp
 
 /**
- * **El hero: Tu plata, un veredicto y la barra de lo que entró contra lo que salió. Nada más.**
+ * **El hero: «Te quedan $X», un veredicto y la barra de lo que entró contra lo que salió.**
+ *
+ * Ola 1 · Movi avisa (1-oct): la cifra grande pasó de «Tu plata» a **«Te quedan $X»**, la columna
+ * «Período» de la tarjeta Disponible de Plan ([CabeceraTeQuedan]); «Tu plata» baja a una fila
+ * tocable de la misma tarjeta. Cuando el disponible no se puede afirmar (sin ingresos ni plata
+ * anotados, o la carga terminó sin sus lecturas) el hero vuelve a ser el de abajo, con «Tu plata» de
+ * cifra grande.
  *
  * Antes esta tarjeta tenía Tu plata, el uso condicionado, la lista de cuentas, el patrimonio neto
  * con su explicación y tres cifras más (ingresos, gastos, flujo). Todo eso sigue en el Inicio, pero
@@ -179,9 +195,14 @@ internal fun HeroDeUnVistazo(
     // hay nada que desglosar (ver el KDoc de esta función).
     val cuentasHero = cuentasDelHero(data.accounts)
     var desgloseAbierto by remember { mutableStateOf(false) }
-    val entradaDeLaCifra = rememberProgresoDeEntrada("hero.cifra", listo = data.accounts != null)
+    // Ola 1 · Movi avisa: la cifra grande es «Te quedan $X», la MISMA columna «Período» de la
+    // tarjeta Disponible de Plan (ver [teQuedanDelInicio]). `null` = no se puede afirmar todavía, o
+    // no hay nada honesto que decir; ver [modoTeQuedan] abajo.
+    val teQuedan = teQuedanDelInicio(data, hoy)
+    val entradaDeLaCifra = rememberProgresoDeEntrada("hero.cifra", listo = teQuedan != null || data.accounts != null)
     val entradaDeLaBarra = rememberProgresoDeEntrada("hero.barra", listo = data.summary != null)
-    val veredicto = veredictoDelInicio(data, hoy)
+    // Con «Te pasaste por $X» ya arriba, el veredicto no lo repite (ver [veredictoDelInicio]).
+    val veredicto = veredictoDelInicio(data, hoy, conAvisoDelDisponible = teQuedan == null)
     val ingresos = data.summary?.ingresos ?: 0L
     val egresos = data.summary?.egresos ?: 0L
     // Fix round 1 (Task 7): el brief original pedía UNA condición para todo el hero
@@ -201,6 +222,13 @@ internal fun HeroDeUnVistazo(
     val hayCargaEnVuelo = LocalCargandoElInicio.current
     val cifraCargando = data.accounts == null && hayCargaEnVuelo
     val resumenCargando = data.summary == null && hayCargaEnVuelo
+    // **Qué cifra va arriba.** «Te quedan» cuando ya se sabe, y también mientras sus lecturas vienen
+    // en camino (el período, el resumen, los vencimientos, las ocurrencias y el gasto por día): ahí
+    // la tarjeta pinta la forma de «Te quedan» con esqueletos, porque mostrar «Tu plata» y cambiarla
+    // por otra cifra un segundo después sería un salto y, peor, dos respuestas a la misma pregunta.
+    // Si las lecturas llegaron y no hay disponible que afirmar (sin ingresos ni plata), o si la carga
+    // terminó sin ellas, vuelve el hero de siempre con «Tu plata» de cifra grande.
+    val modoTeQuedan = teQuedan != null || (hayCargaEnVuelo && !alcanzaParaElDisponible(data))
 
     MinCard(
         modifier = Modifier
@@ -217,73 +245,88 @@ internal fun HeroDeUnVistazo(
         onClick = { onNavigate(Screen.Periodos) },
         onClickLabel = "Ver tus períodos",
     ) {
-        // El rótulo viaja en el binario, no en la fila: ver [HERO_BALANCE_TITLE].
-        Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-        val rangoDelPeriodo = encabezadoDelPeriodo(data)
-        if (rangoDelPeriodo != null) {
-            Text(
-                text = rangoDelPeriodo,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoApagado,
-            )
-        } else if (data.periodoActual == null && hayCargaEnVuelo) {
-            // Reservado SOLO mientras se sabe que el perfil (de donde sale el período) todavía
-            // viene en camino: si no, esta línea aparecía de golpe cuando el perfil contestaba y
-            // empujaba la cifra un renglón hacia abajo — el mismo salto que el resto del hero ya
-            // no tiene. Alguien con el mes de calendario nunca tiene `rangoDelPeriodo` (es null a
-            // propósito, ver [encabezadoDelPeriodo]) y con `hayCargaEnVuelo` en falso esta línea
-            // tampoco se reserva para siempre.
-            LineaEsqueleto(fraccionDelAncho = 0.45f, estilo = Movi.textos.apoyo)
-        }
-        Spacer(Modifier.height(Movi.espacios.corto))
-        if (cifraCargando) {
-            // El bloque va del alto de `Movi.textos.cifra` — el mismo estilo que usa
-            // CifraProtagonista— y no de ancho completo: una cifra corta no lo es.
-            LineaEsqueleto(
-                fraccionDelAncho = 0.45f,
-                estilo = Movi.textos.cifra,
-                modifier = Modifier.testTag(TAG_ESQUELETO_CIFRA_DEL_HERO),
+        if (modoTeQuedan) {
+            CabeceraTeQuedan(
+                section = section,
+                data = data,
+                teQuedan = teQuedan,
+                hayCargaEnVuelo = hayCargaEnVuelo,
+                entradaDeLaCifra = entradaDeLaCifra,
+                tuPlata = balance.tuPlata,
+                cuentasHero = cuentasHero,
+                desgloseAbierto = desgloseAbierto,
+                onAlternarDesglose = { desgloseAbierto = !desgloseAbierto },
+                onNavigate = onNavigate,
             )
         } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CifraProtagonista(
-                    // Un guion mientras las cuentas no contestan (ni están en camino): un «$0» de
-                    // 42 sp es la afirmación más fuerte de la pantalla, y sería falsa.
-                    text = if (data.accounts == null) "—" else formatCOP(cifraContando(balance.tuPlata, entradaDeLaCifra)),
-                    color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
-                    // Con peso (sin llenar): la fila mide primero el chevron y la cifra se achica en
-                    // lo que queda. Sin esto la cifra se llevaba todo el ancho y a 390 dp el chevron
-                    // quedaba cortado contra el borde (revisión del 29-sep).
-                    modifier = Modifier.weight(1f, fill = false),
+            // El rótulo viaja en el binario, no en la fila: ver [HERO_BALANCE_TITLE].
+            Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+            val rangoDelPeriodo = encabezadoDelPeriodo(data)
+            if (rangoDelPeriodo != null) {
+                Text(
+                    text = rangoDelPeriodo,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoApagado,
                 )
-                // Solo con más de una cuenta: con una sola, el desglose diría exactamente lo que
-                // ya dice la cifra grande (mismo criterio que [PatrimonioSection]). El ícono es SU
-                // PROPIO nodo semántico (con su propio `clickable`) — a propósito, para no volver
-                // clickeable la cifra ni el resto de la fila: la tarjeta entera sigue yendo a «Tus
-                // períodos» al tocar la cifra, el veredicto o la barra (ver
-                // `InicioDeUnVistazoEnPantallaTest`).
-                if (cuentasHero != null && cuentasHero.size > 1) {
-                    Spacer(Modifier.width(Movi.espacios.corto))
-                    val rotulo = if (desgloseAbierto) "Ocultar el detalle de tu plata" else "Ver el detalle de tu plata"
-                    Icon(
-                        imageVector = if (desgloseAbierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
-                        contentDescription = rotulo,
-                        tint = Movi.colores.textoMedio,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clickable(
-                                role = Role.Button,
-                                onClickLabel = rotulo,
-                                onClick = { desgloseAbierto = !desgloseAbierto },
-                            ),
-                    )
-                }
+            } else if (data.periodoActual == null && hayCargaEnVuelo) {
+                // Reservado SOLO mientras se sabe que el perfil (de donde sale el período) todavía
+                // viene en camino: si no, esta línea aparecía de golpe cuando el perfil contestaba y
+                // empujaba la cifra un renglón hacia abajo — el mismo salto que el resto del hero ya
+                // no tiene. Alguien con el mes de calendario nunca tiene `rangoDelPeriodo` (es null a
+                // propósito, ver [encabezadoDelPeriodo]) y con `hayCargaEnVuelo` en falso esta línea
+                // tampoco se reserva para siempre.
+                LineaEsqueleto(fraccionDelAncho = 0.45f, estilo = Movi.textos.apoyo)
             }
-            if (desgloseAbierto && cuentasHero != null && cuentasHero.size > 1) {
-                Spacer(Modifier.height(Movi.espacios.minimo))
-                Column {
-                    cuentasHero.forEach { cuenta ->
-                        FilaDeCuentaDelHero(cuenta, modifier = Modifier.padding(bottom = Movi.espacios.minimo))
+            Spacer(Modifier.height(Movi.espacios.corto))
+            if (cifraCargando) {
+                // El bloque va del alto de `Movi.textos.cifra` — el mismo estilo que usa
+                // CifraProtagonista— y no de ancho completo: una cifra corta no lo es.
+                LineaEsqueleto(
+                    fraccionDelAncho = 0.45f,
+                    estilo = Movi.textos.cifra,
+                    modifier = Modifier.testTag(TAG_ESQUELETO_CIFRA_DEL_HERO),
+                )
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CifraProtagonista(
+                        // Un guion mientras las cuentas no contestan (ni están en camino): un «$0» de
+                        // 42 sp es la afirmación más fuerte de la pantalla, y sería falsa.
+                        text = if (data.accounts == null) "—" else formatCOP(cifraContando(balance.tuPlata, entradaDeLaCifra)),
+                        color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
+                        // Con peso (sin llenar): la fila mide primero el chevron y la cifra se achica en
+                        // lo que queda. Sin esto la cifra se llevaba todo el ancho y a 390 dp el chevron
+                        // quedaba cortado contra el borde (revisión del 29-sep).
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    // Solo con más de una cuenta: con una sola, el desglose diría exactamente lo que
+                    // ya dice la cifra grande (mismo criterio que [PatrimonioSection]). El ícono es SU
+                    // PROPIO nodo semántico (con su propio `clickable`) — a propósito, para no volver
+                    // clickeable la cifra ni el resto de la fila: la tarjeta entera sigue yendo a «Tus
+                    // períodos» al tocar la cifra, el veredicto o la barra (ver
+                    // `InicioDeUnVistazoEnPantallaTest`).
+                    if (cuentasHero != null && cuentasHero.size > 1) {
+                        Spacer(Modifier.width(Movi.espacios.corto))
+                        val rotulo = if (desgloseAbierto) "Ocultar el detalle de tu plata" else "Ver el detalle de tu plata"
+                        Icon(
+                            imageVector = if (desgloseAbierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = rotulo,
+                            tint = Movi.colores.textoMedio,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = rotulo,
+                                    onClick = { desgloseAbierto = !desgloseAbierto },
+                                ),
+                        )
+                    }
+                }
+                if (desgloseAbierto && cuentasHero != null && cuentasHero.size > 1) {
+                    Spacer(Modifier.height(Movi.espacios.minimo))
+                    Column {
+                        cuentasHero.forEach { cuenta ->
+                            FilaDeCuentaDelHero(cuenta, modifier = Modifier.padding(bottom = Movi.espacios.minimo))
+                        }
                     }
                 }
             }
@@ -351,6 +394,163 @@ internal fun HeroDeUnVistazo(
             }
         }
     }
+}
+
+/**
+ * **La cabecera del hero cuando abre con «Te quedan $X»** (Ola 1 · Movi avisa).
+ *
+ * Arriba el rótulo («Te quedan» o «Te pasaste por»), el rango del período, la cifra grande —la
+ * columna «Período» de la tarjeta Disponible de Plan, con su mismo formato y su mismo rojo— y una
+ * línea chica con para cuántos días y la meta diaria ([teQuedanDeHoy]). Debajo, **«Tu plata» en una
+ * fila tocable**: con más de una cuenta despliega el saldo de cada una (el chevron de siempre); con
+ * una sola, lleva a Cuentas.
+ *
+ * [teQuedan] en `null` = sus lecturas vienen en camino: cada pieza sin dato es un esqueleto con su
+ * alto, y nada dice «$0» (regla de la ola B).
+ */
+@Composable
+private fun CabeceraTeQuedan(
+    section: ScreenSection,
+    data: DashboardData,
+    teQuedan: TeQuedanDeHoy?,
+    hayCargaEnVuelo: Boolean,
+    entradaDeLaCifra: Float,
+    tuPlata: Long,
+    cuentasHero: List<CuentaHero>?,
+    desgloseAbierto: Boolean,
+    onAlternarDesglose: () -> Unit,
+    onNavigate: (Screen) -> Unit,
+) {
+    if (teQuedan != null) {
+        Text(text = teQuedan.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+    } else {
+        LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.cuerpo)
+    }
+    // Sin «· quedan N días»: los días los dice la línea de abajo, contados como los cuenta el
+    // Disponible (hoy incluido). Dos conteos distintos a dos renglones serían otra contradicción.
+    val rangoDelPeriodo = encabezadoDelPeriodo(data, conDias = false)
+    if (rangoDelPeriodo != null) {
+        Text(text = rangoDelPeriodo, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+    } else if (data.periodoActual == null && hayCargaEnVuelo) {
+        LineaEsqueleto(fraccionDelAncho = 0.45f, estilo = Movi.textos.apoyo)
+    }
+    Spacer(Modifier.height(Movi.espacios.corto))
+    if (teQuedan != null) {
+        CifraProtagonista(
+            // El MISMO formato que la columna «Período» de Plan: el número tiene que leerse igual en
+            // las dos pantallas, no solo valer lo mismo.
+            text = formatMoneyCompact(cifraContando(teQuedan.monto, entradaDeLaCifra)),
+            color = if (teQuedan.enRojo) Movi.colores.sale else Movi.colores.texto,
+            modifier = Modifier.testTag(TAG_CIFRA_TE_QUEDAN),
+        )
+        Text(text = teQuedan.detalle, style = Movi.textos.apoyo, color = colorDelDetalle(teQuedan.nivelDelDetalle))
+    } else {
+        LineaEsqueleto(
+            fraccionDelAncho = 0.45f,
+            estilo = Movi.textos.cifra,
+            modifier = Modifier.testTag(TAG_ESQUELETO_CIFRA_DEL_HERO),
+        )
+        LineaEsqueleto(
+            fraccionDelAncho = 0.7f,
+            estilo = Movi.textos.apoyo,
+            modifier = Modifier.testTag(TAG_ESQUELETO_DETALLE_DEL_HERO),
+        )
+    }
+    Spacer(Modifier.height(Movi.espacios.corto))
+    FilaDeTuPlata(
+        titulo = heroBalanceTitle(section),
+        tuPlata = tuPlata,
+        cuentasListas = data.accounts != null,
+        cargando = data.accounts == null && hayCargaEnVuelo,
+        cuentasHero = cuentasHero,
+        desgloseAbierto = desgloseAbierto,
+        onAlternarDesglose = onAlternarDesglose,
+        onNavigate = onNavigate,
+    )
+    if (desgloseAbierto && cuentasHero != null && cuentasHero.size > 1) {
+        Column {
+            cuentasHero.forEach { cuenta ->
+                FilaDeCuentaDelHero(cuenta, modifier = Modifier.padding(bottom = Movi.espacios.minimo))
+            }
+        }
+    }
+}
+
+/** El alto de la fila «Tu plata» del hero, cargada o esqueleto: un blanco cómodo para el dedo. */
+private val ALTO_DE_LA_FILA_TU_PLATA = 40.dp
+
+/**
+ * «Tu plata $X ⌄» en una línea, dentro de la tarjeta de «Te quedan». **Su propio toque**, no el de
+ * la tarjeta (que lleva a «Tus períodos»): con más de una cuenta abre o cierra el desglose, con una
+ * sola lleva a Cuentas, que es donde se mira esa plata.
+ */
+@Composable
+private fun FilaDeTuPlata(
+    titulo: String,
+    tuPlata: Long,
+    cuentasListas: Boolean,
+    cargando: Boolean,
+    cuentasHero: List<CuentaHero>?,
+    desgloseAbierto: Boolean,
+    onAlternarDesglose: () -> Unit,
+    onNavigate: (Screen) -> Unit,
+) {
+    if (cargando) {
+        Box(
+            modifier = Modifier.fillMaxWidth().height(ALTO_DE_LA_FILA_TU_PLATA).testTag(TAG_ESQUELETO_TU_PLATA_DEL_HERO),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            LineaEsqueleto(fraccionDelAncho = 0.55f, estilo = Movi.textos.cuerpo)
+        }
+        return
+    }
+    val conDesglose = cuentasHero != null && cuentasHero.size > 1
+    val rotulo = when {
+        !conDesglose -> "Ver tus cuentas"
+        desgloseAbierto -> "Ocultar el detalle de tu plata"
+        else -> "Ver el detalle de tu plata"
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = ALTO_DE_LA_FILA_TU_PLATA)
+            .clickable(role = Role.Button, onClickLabel = rotulo) {
+                if (conDesglose) onAlternarDesglose() else onNavigate(Screen.Accounts)
+            }
+            .testTag(TAG_FILA_TU_PLATA_DEL_HERO),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = titulo,
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.weight(1f),
+        )
+        Cifra(
+            // Un guion si las cuentas no contestaron (ni vienen en camino): nunca un «$0» inventado.
+            if (cuentasListas) formatCOP(tuPlata) else "—",
+            Movi.textos.monto,
+            color = if (tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
+        )
+        Spacer(Modifier.width(Movi.espacios.minimo))
+        if (conDesglose) {
+            Icon(
+                imageVector = if (desgloseAbierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                contentDescription = rotulo,
+                tint = Movi.colores.textoMedio,
+                modifier = Modifier.size(24.dp),
+            )
+        } else {
+            ChevronRight()
+        }
+    }
+}
+
+@Composable
+private fun colorDelDetalle(nivel: NivelDelGasto): Color = when (nivel) {
+    NivelDelGasto.BIEN -> Movi.colores.textoMedio
+    NivelDelGasto.CERCA -> Movi.colores.aviso
+    NivelDelGasto.PASADO -> Movi.colores.sale
 }
 
 /**
@@ -449,9 +649,10 @@ internal fun BarraDeDosTramos(
  * Los días que quedan importan tanto como el rango: son la diferencia entre «me pasé» y «me estoy
  * por pasar», y es lo que convierte el resumen en algo accionable.
  */
-internal fun encabezadoDelPeriodo(data: DashboardData): String? {
+internal fun encabezadoDelPeriodo(data: DashboardData, conDias: Boolean = true): String? {
     val periodo = data.periodoActual ?: return null
     val rango = rangoLegibleDe(periodo, data.ajustesDePeriodo) ?: return null
+    if (!conDias) return rango
     val ahora = Clock.System.now().toEpochMilliseconds()
     val fin = ventanaDe(periodo, data.ajustesDePeriodo).last
     val dias = ((fin - ahora) / 86_400_000L).toInt()

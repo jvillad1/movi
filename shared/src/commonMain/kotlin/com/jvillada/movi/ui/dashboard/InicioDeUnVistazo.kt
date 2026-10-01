@@ -109,6 +109,10 @@ fun veredictoDelPeriodo(
 fun veredictoDelInicio(
     data: DashboardData,
     hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
+    // Ola 1: cuando el hero ya abre con «Te quedan / Te pasaste por» ([teQuedanDelInicio]), el
+    // aviso del disponible está dicho arriba con su cifra, y repetirlo en el veredicto lo decía
+    // dos veces seguidas en la misma tarjeta.
+    conAvisoDelDisponible: Boolean = true,
 ): Veredicto? {
     val summary = data.summary ?: return null
     val gasto = data.spentByCategory.orEmpty()
@@ -117,7 +121,7 @@ fun veredictoDelInicio(
         egresos = summary.egresos,
         cuotasDeCredito = gasto[CUOTA_CATEGORY] ?: 0L,
         mayorGasto = mayorGastoDelPeriodo(gasto),
-        avisoDelDisponible = disponibleDelInicio(data, hoy)?.let(::avisoDelDisponible),
+        avisoDelDisponible = if (conAvisoDelDisponible) disponibleDelInicio(data, hoy)?.let(::avisoDelDisponible) else null,
     )
 }
 
@@ -251,6 +255,99 @@ fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
         )
     }
 }
+
+// ── «Te quedan»: la cifra principal de Hoy ───────────────────────────────────
+
+/**
+ * **La cifra grande de Hoy**: cuánto te queda por gastar en el período, o cuánto te pasaste.
+ *
+ * Ola 1 · Movi avisa (1-oct). Hoy abría con «Tu plata», el saldo total, que no contesta la pregunta
+ * del día: ¿cuánto puedo gastar? El dueño decidió que la cifra principal sea «Te quedan $X».
+ *
+ * **No es una cuenta nueva: es la columna «Período» de la tarjeta Disponible de Plan**
+ * ([DisponibleDelPeriodo.periodo], [VentanaDelDisponible.teQuedan]), leída del MISMO
+ * [DisponibleDelPeriodo] que pinta esa tarjeta ([disponibleDelInicio]). Si Hoy y Plan pudieran dar
+ * dos números distintos para «¿cuánto me queda?», ninguno de los dos se podría creer. Lo fija
+ * `TeQuedanEnHoyTest` (pura) y `TeQuedanEnHoyEnPantallaTest` (las dos pantallas montadas).
+ *
+ * @property teQuedan la cifra con signo, idéntica a `periodo.teQuedan`.
+ * @property monto lo que se escribe después del [rotulo]: sin signo, porque el rótulo ya dice de qué
+ *   lado está («Te pasaste por $629.882» y no «Te quedan −$629.882»).
+ * @property enRojo el mismo criterio que pinta de rojo la columna «Período» en Plan.
+ * @property detalle la línea chica de abajo: para cuántos días, la meta diaria, o qué ventana se pasó.
+ */
+data class TeQuedanDeHoy(
+    val rotulo: String,
+    val teQuedan: Long,
+    val enRojo: Boolean,
+    val detalle: String,
+    val nivelDelDetalle: NivelDelGasto,
+) {
+    val monto: Long get() = kotlin.math.abs(teQuedan)
+}
+
+/** El rótulo cuando queda algo (o nada). */
+const val ROTULO_TE_QUEDAN: String = "Te quedan"
+
+/** El rótulo cuando la columna «Período» está en negativo. */
+const val ROTULO_TE_PASASTE: String = "Te pasaste por"
+
+/**
+ * [TeQuedanDeHoy] desde la tarjeta del disponible. Puro: lo prueban las pruebas sin pantalla.
+ *
+ * El detalle no repite la cifra grande —ya está arriba— y **la cifra diaria es la meta diaria**, la
+ * misma de la columna «Hoy» (ver [fraseDelDisponible] y la revisión del 29-sep: dos cifras diarias
+ * distintas para la misma pregunta no se pueden leer). Lo que manda, en orden:
+ *
+ * 1. sin margen: la frase de la tarjeta ([sinMargen]), porque es la explicación de por qué no queda;
+ * 2. el período pasado: cuántos días faltan todavía para el corte;
+ * 3. la semana o el día pasados, o el ritmo por encima de lo previsto: lo dice después de los días;
+ * 4. lo demás: para cuántos días y la meta diaria.
+ */
+fun teQuedanDeHoy(d: DisponibleDelPeriodo): TeQuedanDeHoy {
+    val periodo = d.periodo
+    val enRojo = periodo.nivel == NivelDelGasto.PASADO
+    val rotulo = if (periodo.teQuedan < 0L) ROTULO_TE_PASASTE else ROTULO_TE_QUEDAN
+    val dias = if (d.diasQueQuedan <= 1) "para cerrar el período" else "para ${d.diasQueQuedan} días"
+    val (detalle, nivel) = when {
+        !d.hayMargen -> sinMargen(d) to
+            (if (avisoDelDisponible(d) != null) NivelDelGasto.PASADO else NivelDelGasto.CERCA)
+        periodo.teQuedan < 0L -> (
+            if (d.diasQueQuedan <= 1) "del disponible del período · hoy es el último día"
+            else "del disponible del período · faltan ${d.diasQueQuedan} días para el corte"
+            ) to NivelDelGasto.PASADO
+        periodo.teQuedan == 0L -> "Ya usaste todo el disponible del período" to NivelDelGasto.CERCA
+        d.semana.nivel == NivelDelGasto.PASADO ->
+            "$dias · esta semana te pasaste de la meta por ${formatMoneyCompact(-d.semana.teQuedan)}" to
+                NivelDelGasto.PASADO
+        d.hoy.nivel == NivelDelGasto.PASADO ->
+            "$dias · hoy te pasaste de la meta por ${formatMoneyCompact(-d.hoy.teQuedan)}" to NivelDelGasto.PASADO
+        periodo.contraElRitmo > 0L ->
+            "$dias · vas ${formatMoneyCompact(periodo.contraElRitmo)} por encima de lo previsto a hoy" to
+                NivelDelGasto.CERCA
+        d.diasQueQuedan <= 1 -> dias to periodo.nivel
+        else -> "$dias · meta diaria ${formatMoneyCompact(d.metaPorDia)}" to periodo.nivel
+    }
+    return TeQuedanDeHoy(
+        rotulo = rotulo,
+        teQuedan = periodo.teQuedan,
+        enRojo = enRojo,
+        detalle = detalle,
+        nivelDelDetalle = nivel,
+    )
+}
+
+/**
+ * [teQuedanDeHoy] con lo que el Inicio ya cargó, o `null` si la tarjeta del disponible no se puede
+ * afirmar (falta una lectura, o no hay ingresos ni plata anotados). En ese caso el hero vuelve a
+ * mostrar «Tu plata» como cifra grande: es lo único honesto que hay para decir.
+ *
+ * Pasa por [disponibleDelInicio] —la misma función que llama la pestaña Plan—, nunca por una copia.
+ */
+fun teQuedanDelInicio(
+    data: DashboardData,
+    hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
+): TeQuedanDeHoy? = disponibleDelInicio(data, hoy)?.let(::teQuedanDeHoy)
 
 // ── Tu patrimonio, honesto ───────────────────────────────────────────────────
 

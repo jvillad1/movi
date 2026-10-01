@@ -335,6 +335,16 @@ const val TAG_ESQUELETO_BARRA_DEL_HERO: String = "esqueleto-barra-del-hero"
 const val TAG_ESQUELETO_FILA_DEL_HERO: String = "esqueleto-fila-del-hero"
 
 /**
+ * Ola 1 · Movi avisa: las piezas nuevas del hero cuando abre con «Te quedan» ([teQuedanDelInicio]).
+ * La cifra lleva su tag para que una prueba la lea sin confundirla con la columna «Período» de la
+ * tarjeta Disponible, que dice el mismo número a propósito. «Tu plata» baja a una fila tocable.
+ */
+const val TAG_CIFRA_TE_QUEDAN: String = "cifra-te-quedan"
+const val TAG_FILA_TU_PLATA_DEL_HERO: String = "fila-tu-plata-del-hero"
+const val TAG_ESQUELETO_DETALLE_DEL_HERO: String = "esqueleto-detalle-del-hero"
+const val TAG_ESQUELETO_TU_PLATA_DEL_HERO: String = "esqueleto-tu-plata-del-hero"
+
+/**
  * **¿Hay una carga del Inicio EN VUELO ahora mismo?** Lo provee `DashboardScreen`, con su propio
  * `loading`, alrededor de `SduiRenderer` — Task 7, fix round 1.
  *
