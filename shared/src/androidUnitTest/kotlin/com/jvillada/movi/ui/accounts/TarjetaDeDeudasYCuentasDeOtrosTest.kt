@@ -42,19 +42,20 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * # Patrimonio: «Deudas», «Te deben» y «Cuadre de saldos» (Ola C, tarea 4)
+ * # Patrimonio: «Deudas», «Cuentas de otros» y «Cuadre de saldos» (Ola C, tarea 4; 29-sep)
  *
- * `AccountsScreen` pasó de ser solo Cuentas a ser Patrimonio: debajo de los grupos de cuentas
- * gana dos tarjetas nuevas —«Deudas» (el mismo total que el encabezado de Créditos, ver
- * [com.jvillada.movi.ui.credits.totalDebtCop]) y «Te deben» (la puerta que le faltaba a
- * `DestinosScreen`)—. Las tres lecturas (cuentas, créditos+tarjetas, destinos) son independientes,
- * así que se prueban por separado.
+ * `AccountsScreen` pasó de ser solo Cuentas a ser Patrimonio: gana dos tarjetas —«Deudas» (el
+ * mismo total que el encabezado de Créditos, ver [com.jvillada.movi.ui.credits.totalDebtCop]) y
+ * «Cuentas de otros» (la puerta a `DestinosScreen`, que se llamaba «Te deben» hasta el 29-sep y
+ * ahora va justo debajo de las cuentas propias, con los nombres y lo enviado este período)—. Las
+ * tres lecturas (cuentas, créditos+tarjetas, destinos) son independientes, así que se prueban por
+ * separado.
  *
  * Fix round 1: «Cuadrar» NO es una acción nueva del encabezado — se probó así (ícono solo) y se
  * revirtió: le quitaba el rótulo a «+ Nueva cuenta» (la única puerta permanente para crear una
  * cuenta) y era redundante con la tarjeta «Cuadre de saldos», que ya existía y ya abre
  * `Screen.CuadreDeSaldos` con su propio rótulo. Esa tarjeta ahora comparte `FilaDeResumenPatrimonio`
- * con «Deudas» y «Te deben» (antes era su propio `Row`), así que entra en el alcance de esta
+ * con «Deudas» y «Cuentas de otros» (antes era su propio `Row`), así que entra en el alcance de esta
  * prueba aunque no sea código nuevo de esta tarea.
  *
  * `@GraphicsMode(NATIVE)` y `sdk = [34]` para medir la tarjeta del patrimonio con el motor de
@@ -64,7 +65,7 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w390dp-h2400dp-xhdpi")
-class TarjetaDeDeudasYTeDebenTest {
+class TarjetaDeDeudasYCuentasDeOtrosTest {
 
     @get:Rule val composeRule = createComposeRule()
 
@@ -85,6 +86,14 @@ class TarjetaDeDeudasYTeDebenTest {
         numero = "31973270756",
         totales = mapOf("COP" to 500_000L),
         cuantos = 3,
+        totalesDelPeriodo = mapOf("COP" to 300_000L),
+    )
+    private val mama = DestinoConocido(id = "dst_2", nombre = "Mamá", numero = "40001234")
+    private val papa = DestinoConocido(
+        id = "dst_3",
+        nombre = "Papá",
+        numero = "50009876",
+        totalesDelPeriodo = mapOf("COP" to 1_000_000L),
     )
 
     private var navegoA: Screen? = null
@@ -149,9 +158,9 @@ class TarjetaDeDeudasYTeDebenTest {
         composeRule.waitForIdle()
 
         assertEquals(1, contarTag(TAG_TARJETA_DE_DEUDAS))
-        assertEquals(1, contarTag(TAG_TARJETA_DE_TE_DEBEN))
+        assertEquals(1, contarTag(TAG_TARJETA_DE_CUENTAS_DE_OTROS))
         assertTrue(!hay("Deudas"), "el título de la tarjeta es parte de los datos, no del esqueleto")
-        assertTrue(!hay("Te deben"))
+        assertTrue(!hay("Cuentas de otros"))
         assertTrue(!hay("\$0"), "nada de cifras inventadas mientras cuelga la lectura")
     }
 
@@ -190,20 +199,53 @@ class TarjetaDeDeudasYTeDebenTest {
     }
 
     @Test
-    fun `Te deben dice cuantas cuentas hay guardadas`() {
-        montar(destinos = { listOf(destino) })
+    fun `Cuentas de otros dice los nombres y cuanto se les mando este periodo`() {
+        montar(destinos = { listOf(destino, mama, papa) })
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Te deben", useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText("1 cuenta guardada", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Cuentas de otros", useUnmergedTree = true).assertExists()
+        assertTrue(!hay("Te deben"), "el nombre viejo se fue: no es plata que le deban")
+        // Primero a quien más se le mandó este período (Papá), después el resto.
+        composeRule.onNodeWithText("Papá, Caro y Mamá", useUnmergedTree = true).assertExists()
+        // 300.000 (Caro) + 1.000.000 (Papá): la suma de lo que el server derivó, no una cuenta nueva.
+        composeRule.onNodeWithText("\$1.300.000", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("este período", useUnmergedTree = true).assertExists()
     }
 
     @Test
-    fun `Te deben sin ninguna guardada lo dice`() {
+    fun `Cuentas de otros sin nada enviado este periodo no inventa un cero`() {
+        montar(destinos = { listOf(mama) })
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Mamá · nada enviado este período", useUnmergedTree = true).assertExists()
+        assertTrue(!hay("\$0"), "sin envíos no hay cifra, se dice con palabras")
+    }
+
+    @Test
+    fun `Cuentas de otros sin ninguna guardada invita a guardar una`() {
         montar()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Aún no hay ninguna guardada", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Guarda la cuenta de alguien a quien le envías plata", useUnmergedTree = true).assertExists()
+    }
+
+    /**
+     * El pedido del 29-sep: que sea de fácil acceso. Va justo debajo de las cuentas propias y antes
+     * de «Cuadre de saldos» — no al fondo, debajo de Deudas, donde estaba.
+     */
+    @Test
+    fun `Cuentas de otros va debajo de las cuentas propias y antes del cuadre`() {
+        montar(cuentas = { listOf(nu) }, destinos = { listOf(destino) })
+        composeRule.waitForIdle()
+
+        val cuentasDeOtros = composeRule.onNodeWithTag(TAG_TARJETA_DE_CUENTAS_DE_OTROS).fetchSemanticsNode().boundsInRoot
+        val cuadre = composeRule.onNodeWithTag(TAG_TARJETA_DE_CUADRE).fetchSemanticsNode().boundsInRoot
+        val deudas = composeRule.onNodeWithTag(TAG_TARJETA_DE_DEUDAS).fetchSemanticsNode().boundsInRoot
+        val nuEnLaLista = composeRule.onAllNodesWithText("Nu", useUnmergedTree = true).fetchSemanticsNodes()
+            .maxOf { it.boundsInRoot.bottom }
+        assertTrue(cuentasDeOtros.top >= nuEnLaLista, "debajo de las cuentas propias")
+        assertTrue(cuentasDeOtros.bottom <= cuadre.top, "antes del cuadre de saldos")
+        assertTrue(cuentasDeOtros.bottom <= deudas.top, "antes de Deudas")
     }
 
     // ── Tocar cada tarjeta navega a su pantalla ─────────────────────────────────
@@ -219,11 +261,11 @@ class TarjetaDeDeudasYTeDebenTest {
     }
 
     @Test
-    fun `tocar Te deben abre Cuentas de otros`() {
+    fun `tocar Cuentas de otros abre la pantalla`() {
         montar(destinos = { listOf(destino) })
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag(TAG_TARJETA_DE_TE_DEBEN, useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag(TAG_TARJETA_DE_CUENTAS_DE_OTROS, useUnmergedTree = true).performClick()
 
         assertEquals(Screen.Destinos, navegoA)
     }
@@ -309,7 +351,7 @@ class TarjetaDeDeudasYTeDebenTest {
      * se tiene que mover un pelo por eso.
      */
     @Test
-    fun `la tarjeta del patrimonio mide lo mismo con Deudas y Te deben cargando que con las tres listas`() {
+    fun `la tarjeta del patrimonio mide lo mismo con Deudas y Cuentas de otros cargando que con las tres listas`() {
         val puertaDeudas = CompletableDeferred<List<CreditSummary>>()
         val puertaDestinos = CompletableDeferred<List<DestinoConocido>>()
         montar(
@@ -328,7 +370,7 @@ class TarjetaDeDeudasYTeDebenTest {
         val diferencia = abs(cargado.value - cargando.value)
         assertTrue(
             diferencia <= 8f,
-            "La tarjeta del patrimonio mide ${cargando.value} dp con Deudas/Te deben cargando y " +
+            "La tarjeta del patrimonio mide ${cargando.value} dp con Deudas/Cuentas de otros cargando y " +
                 "${cargado.value} dp con las tres listas — diferencia de $diferencia dp, el máximo son 8 dp",
         )
     }

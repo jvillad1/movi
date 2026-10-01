@@ -117,6 +117,8 @@ class PatrimonioEnColumnasEnPantallaTest {
         listOf("Nu", "Fondo de inversión", "Casa Almendros").forEach {
             assertTrue(limitesDelTexto(it).left >= cuentas.left, "$it va en la columna de las cuentas")
         }
+        // «Cuentas de otros» va justo debajo de las cuentas propias: en su columna, no en el resumen.
+        assertTrue(limites(TAG_TARJETA_DE_CUENTAS_DE_OTROS).left >= cuentas.left - 0.5f, "Cuentas de otros va con las cuentas")
         // El grupo Dinero arranca arriba, a la altura de la tarjeta del patrimonio.
         assertEquals(tarjeta.top, composeRule.onAllNodesWithTag(TAG_GRUPO_DE_CUENTAS, useUnmergedTree = true)
             .fetchSemanticsNodes().first().boundsInRoot.top, 0.5f)

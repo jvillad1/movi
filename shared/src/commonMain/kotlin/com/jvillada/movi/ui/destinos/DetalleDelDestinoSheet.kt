@@ -191,14 +191,14 @@ fun DetalleDelDestinoSheet(
 
 /** Lo que se dice cuando el destino está guardado pero todavía no se le reconoció ningún envío. */
 internal const val NADA_TODAVIA: String =
-    "Todavía no hay ninguno. Aparecen aquí en cuanto el banco te avise de una transferencia a ese " +
-        "número, o si el concepto de un movimiento dice el nombre que le pusiste."
+    "Todavía no hay ninguno. Aparecen aquí en cuanto el banco te avise de una transferencia a esa " +
+        "cuenta o a su llave, o si el concepto de un movimiento dice el nombre que le pusiste."
 
 /**
  * **De dónde sale cada renglón**, dicho en la pantalla. Ver `vaHaciaElDestino` en `:core` para las
  * dos señales; esto es la misma regla en palabras del dueño, para que la lista se pueda auditar.
  */
 internal const val COMO_SE_CUENTAN: String =
-    "Se cuentan los gastos en los que el banco nombró ese número —aunque después les hayas " +
+    "Se cuentan los gastos en los que el banco nombró ese número o esa llave —aunque después les hayas " +
         "cambiado el nombre— y los que digan el nombre que le pusiste. Lo que recibes de esa " +
         "cuenta no se cuenta aquí: esto es lo que enviaste."

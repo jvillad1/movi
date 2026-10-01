@@ -6,12 +6,16 @@ import com.jvillada.movi.server.db.KnownDestinations
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.MovimientosDelDestino
 import com.jvillada.movi.shared.model.conLoQueSeLeMando
 import com.jvillada.movi.shared.model.nombreDeLaCuentaPropiaConEseNumero
 import com.jvillada.movi.shared.model.mensajeDeNumeroPropio
+import com.jvillada.movi.shared.model.mensajeDeLlaveRepetida
 import com.jvillada.movi.shared.model.mensajeDeNumeroRepetido
+import com.jvillada.movi.shared.model.llaveNormalizada
+import com.jvillada.movi.shared.model.normalizarLlave
 import com.jvillada.movi.shared.model.movimientosHaciaElDestino
 import com.jvillada.movi.shared.model.rechazoDelDestino
 import com.jvillada.movi.shared.model.soloLosDigitos
@@ -52,6 +56,12 @@ import java.util.UUID
  *    se contaría en «lo que le mandé».
  * 3. **Dos destinos no pueden compartir los últimos cuatro dígitos** (409) — si los comparten,
  *    `destinoQueNombra` no elige ninguno (empate) y los dos se llevarían los mismos movimientos.
+ *    Lo mismo con la llave (29-sep), comparada exacta.
+ *
+ * **La llave y el APK viejo.** Un destino puede conocerse por su número, por su llave, o por los
+ * dos; con solo la llave, `numero` va vacío. El APK instalado no sabe de llaves: su `POST` llega
+ * sin el campo (y crea un destino con número, como siempre) y su `PUT` también — por eso en un
+ * `PUT` una llave ausente (`null`) **no toca** la guardada, y solo `""` la borra.
  *
  * Todo con `call.userId()`, como el resto del server: quien pide el destino de otro recibe «no
  * existe», no «no puedes».
@@ -65,7 +75,11 @@ fun Route.destinoRoutes() {
             // Una sola lectura de movimientos para todos los destinos: el cruce es en memoria (ver
             // `vaHaciaElDestino`), y una consulta por destino sería N+1 sobre la tabla más grande.
             val eventos = loadNonVoidedEvents(uid)
-            call.respond(destinos.map { conLoQueSeLeMando(it, eventos) })
+            // El período en curso del DUEÑO (su corte, sus inicios propios): es lo que lee la
+            // tarjeta «Cuentas de otros» de Patrimonio. Ver `DestinoConocido.totalesDelPeriodo`.
+            val ajustes = ajustesDePeriodoDe(uid)
+            val ahora = System.currentTimeMillis()
+            call.respond(destinos.map { conLoQueSeLeMando(it, eventos, ajustes, ahora) })
         }
 
         post {
@@ -74,11 +88,12 @@ fun Route.destinoRoutes() {
             val nombre = body.nombre.trim()
             val numero = soloLosDigitos(body.numero)
             val deQuien = body.deQuien?.trim()?.ifBlank { null }
+            val llave = body.llave?.let(::normalizarLlave)?.ifBlank { null }
 
-            rechazoDelDestino(nombre, numero, deQuien)?.let { motivo ->
+            rechazoDelDestino(nombre, numero, deQuien, llave)?.let { motivo ->
                 return@post call.respond(HttpStatusCode.BadRequest, motivo)
             }
-            rechazoPorLoQueYaTiene(uid, numero, yaExiste = null)?.let { (status, motivo) ->
+            rechazoPorLoQueYaTiene(uid, numero, llave, yaExiste = null)?.let { (status, motivo) ->
                 return@post call.respond(status, motivo)
             }
 
@@ -87,6 +102,7 @@ fun Route.destinoRoutes() {
                 nombre = nombre,
                 numero = numero,
                 deQuien = deQuien,
+                llave = llave,
             )
             dbQuery {
                 KnownDestinations.insert {
@@ -95,12 +111,16 @@ fun Route.destinoRoutes() {
                     it[this.nombre]  = destino.nombre
                     it[this.numero]  = destino.numero
                     it[this.deQuien] = destino.deQuien
+                    it[this.llave]   = destino.llave
                     it[createdAt] = System.currentTimeMillis()
                 }
             }
             // Recién creado ya puede tener movimientos: el dueño lo registra DESPUÉS de haberle
             // transferido, que es literalmente el caso que trajo esta feature.
-            call.respond(HttpStatusCode.Created, conLoQueSeLeMando(destino, loadNonVoidedEvents(uid)))
+            call.respond(
+                HttpStatusCode.Created,
+                conLoQueSeLeMando(destino, loadNonVoidedEvents(uid), ajustesDePeriodoDe(uid), System.currentTimeMillis()),
+            )
         }
 
         put("/{id}") {
@@ -110,11 +130,18 @@ fun Route.destinoRoutes() {
             val nombre = body.nombre.trim()
             val numero = soloLosDigitos(body.numero)
             val deQuien = body.deQuien?.trim()?.ifBlank { null }
+            val guardado = dbQuery {
+                KnownDestinations.selectAll()
+                    .where { (KnownDestinations.id eq id) and (KnownDestinations.userId eq uid) }
+                    .firstOrNull()?.toDestino()
+            } ?: return@put call.respond(HttpStatusCode.NotFound)
+            // `null` = el cliente no sabe de llaves (el APK instalado): se queda la que había.
+            val llave = if (body.llave == null) guardado.llave else normalizarLlave(body.llave!!).ifBlank { null }
 
-            rechazoDelDestino(nombre, numero, deQuien)?.let { motivo ->
+            rechazoDelDestino(nombre, numero, deQuien, llave)?.let { motivo ->
                 return@put call.respond(HttpStatusCode.BadRequest, motivo)
             }
-            rechazoPorLoQueYaTiene(uid, numero, yaExiste = id)?.let { (status, motivo) ->
+            rechazoPorLoQueYaTiene(uid, numero, llave, yaExiste = id)?.let { (status, motivo) ->
                 return@put call.respond(status, motivo)
             }
 
@@ -123,11 +150,12 @@ fun Route.destinoRoutes() {
                     it[this.nombre]  = nombre
                     it[this.numero]  = numero
                     it[this.deQuien] = deQuien
+                    it[this.llave]   = llave
                 }
             }
             if (actualizadas == 0) return@put call.respond(HttpStatusCode.NotFound)
-            val destino = DestinoConocido(id = id, nombre = nombre, numero = numero, deQuien = deQuien)
-            call.respond(conLoQueSeLeMando(destino, loadNonVoidedEvents(uid)))
+            val destino = DestinoConocido(id = id, nombre = nombre, numero = numero, deQuien = deQuien, llave = llave)
+            call.respond(conLoQueSeLeMando(destino, loadNonVoidedEvents(uid), ajustesDePeriodoDe(uid), System.currentTimeMillis()))
         }
 
         delete("/{id}") {
@@ -182,27 +210,36 @@ private fun org.jetbrains.exposed.sql.Transaction.destinosDe(uid: String): List<
         .map { it.toDestino() }
 
 /**
- * Las dos guardas que necesitan mirar lo que el dueño ya tiene: sus cuentas y sus otros destinos.
- * Devuelve el par (código, texto) del rechazo, o `null` si el número se puede usar.
+ * Las guardas que necesitan mirar lo que el dueño ya tiene: sus cuentas y sus otros destinos.
+ * Devuelve el par (código, texto) del rechazo, o `null` si el número y la llave se pueden usar.
  *
  * [yaExiste] es el id del destino que se está editando, para que guardarlo sin cambiarle el número
- * no choque consigo mismo.
+ * no choque consigo mismo. Un destino solo con llave ([numero] vacío) no pasa por las guardas del
+ * número: no nombra ninguna cuenta.
  */
 private suspend fun rechazoPorLoQueYaTiene(
     uid: String,
     numero: String,
+    llave: String?,
     yaExiste: String?,
 ): Pair<HttpStatusCode, String>? {
-    val nombresDeSusCuentas = dbQuery {
-        Accounts.selectAll().where { Accounts.userId eq uid }.map { it[Accounts.name] }
-    }
-    nombreDeLaCuentaPropiaConEseNumero(numero, nombresDeSusCuentas)?.let { propia ->
-        return HttpStatusCode.UnprocessableEntity to mensajeDeNumeroPropio(propia)
-    }
-    val cola = ultimosCuatro(numero)
     val otros = dbQuery { destinosDe(uid) }.filter { it.id != yaExiste }
-    otros.firstOrNull { ultimosCuatro(it.numero) == cola }?.let { choca ->
-        return HttpStatusCode.Conflict to mensajeDeNumeroRepetido(choca.nombre)
+    if (numero.isNotEmpty()) {
+        val nombresDeSusCuentas = dbQuery {
+            Accounts.selectAll().where { Accounts.userId eq uid }.map { it[Accounts.name] }
+        }
+        nombreDeLaCuentaPropiaConEseNumero(numero, nombresDeSusCuentas)?.let { propia ->
+            return HttpStatusCode.UnprocessableEntity to mensajeDeNumeroPropio(propia)
+        }
+        val cola = ultimosCuatro(numero)
+        otros.firstOrNull { cola != null && ultimosCuatro(it.numero) == cola }?.let { choca ->
+            return HttpStatusCode.Conflict to mensajeDeNumeroRepetido(choca.nombre)
+        }
+    }
+    if (llave != null) {
+        otros.firstOrNull { it.llaveNormalizada() == llave }?.let { choca ->
+            return HttpStatusCode.Conflict to mensajeDeLlaveRepetida(choca.nombre)
+        }
     }
     return null
 }
@@ -212,4 +249,5 @@ private fun ResultRow.toDestino() = DestinoConocido(
     nombre  = this[KnownDestinations.nombre],
     numero  = this[KnownDestinations.numero],
     deQuien = this[KnownDestinations.deQuien],
+    llave   = this[KnownDestinations.llave],
 )

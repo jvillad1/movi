@@ -832,6 +832,19 @@ data class ParsedSms(
      * configuran `ignoreUnknownKeys = true`, así que el campo nuevo le pasa de largo).
      */
     val aprendidoDe: String? = null,
+    /**
+     * **A quién fue (o de quién vino) la plata, según el banco** (29-sep): el número de la cuenta de
+     * destino («a la cuenta *31973270756» → `31973270756`), una llave («a la llave 0087» → `0087`)
+     * o el nombre de quien mandó («Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave» →
+     * `carolina restrepo salazar`). `null` si el mensaje no lo dice. Lo llena el server con
+     * `identificadorDelDestinoEn`; el cliente decide si ya hay un destino guardado con ese dato y,
+     * si no, ofrece «¿De quién es esta cuenta?». Hasta acá iba pegado adentro de [merchant].
+     *
+     * Con default, como [aprendidoDe]: el APK instalado lo ignora.
+     */
+    val identificadorDelDestino: String? = null,
+    /** `true` si [identificadorDelDestino] es una llave (o un nombre), `false` si es un número de cuenta. */
+    val identificadorEsLlave: Boolean = false,
 )
 
 @Serializable

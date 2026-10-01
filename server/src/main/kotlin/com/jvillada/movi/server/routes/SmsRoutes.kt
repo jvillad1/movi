@@ -18,6 +18,8 @@ import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.MemoriaDeCategorias
 import com.jvillada.movi.shared.model.conElDestinoConocido
+import com.jvillada.movi.shared.model.identificadorDelDestinoEn
+import com.jvillada.movi.shared.model.TipoDeIdentificador
 import com.jvillada.movi.shared.model.categoriaProbablePorElNombre
 import com.jvillada.movi.shared.model.huellaDeUnMovimiento
 import com.jvillada.movi.shared.model.laHuellaEsUnNumero
@@ -249,7 +251,14 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     }
 
     val category = categoryFor(text, merchant, type, esPagoDeNu)
-    return ParsedSms(amount, merchant, type, category, currency)
+    // A quién fue (o de quién vino): la misma lectura que hacen la bandeja y el detalle de un
+    // movimiento, en `:core`. Un pago de tarjeta no es a una persona, así que no lo lleva.
+    val identificador = if (category == CARD_PAYMENT_CATEGORY) null else identificadorDelDestinoEn(text)
+    return ParsedSms(
+        amount, merchant, type, category, currency,
+        identificadorDelDestino = identificador?.valor,
+        identificadorEsLlave = identificador?.tipo == TipoDeIdentificador.LLAVE,
+    )
 }
 
 /**

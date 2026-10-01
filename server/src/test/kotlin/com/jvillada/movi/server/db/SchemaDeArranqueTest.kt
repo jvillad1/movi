@@ -79,6 +79,11 @@ class SchemaDeArranqueTest {
         // Ola 0 · Confianza — la versión de las sesiones. `configureAuth` la lee en CADA pedido
         // autenticado: sin el ALTER, toda la API contesta 500 apenas despliega.
         "users" to "token_version",
+        // 29-sep — la llave de una cuenta de otro. `known_destinations` existe en producción desde
+        // la Ola V con los destinos del dueño, y TODA lectura de destinos (`toDestino`,
+        // `destinosDelDueno`) nombra esta columna: sin el ALTER, «Cuentas de otros» entera y el
+        // `/parse` de cada SMS caerían con «column does not exist».
+        "known_destinations" to "llave",
     )
 
     /**
