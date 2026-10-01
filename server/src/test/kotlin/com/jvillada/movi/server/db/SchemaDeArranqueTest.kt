@@ -76,6 +76,9 @@ class SchemaDeArranqueTest {
         // esconder o fijar el tipo (el INSERT de esta tabla siempre escribe las cinco columnas).
         "category_prefs" to "icono",
         "category_prefs" to "color",
+        // Ola 0 · Confianza — la versión de las sesiones. `configureAuth` la lee en CADA pedido
+        // autenticado: sin el ALTER, toda la API contesta 500 apenas despliega.
+        "users" to "token_version",
         // 29-sep — la llave de una cuenta de otro. `known_destinations` existe en producción desde
         // la Ola V con los destinos del dueño, y TODA lectura de destinos (`toDestino`,
         // `destinosDelDueno`) nombra esta columna: sin el ALTER, «Cuentas de otros» entera y el

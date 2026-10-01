@@ -34,6 +34,10 @@ private const val KEY_REMEMBER_PREF = "remember_email_pref"
 // Android levanta solo (`SmsBackfillWorker` cada 6 horas, `SmsSyncWorker` tras un reinicio)
 // tienen que poder leerlo sin nadie delante del teléfono. Ver el encabezado de EntrarConHuella.kt.
 private const val KEY_HUELLA = "entrar_con_huella"
+
+// El usuario cuyo espejo local quedó por borrar porque la sesión se cerró antes de que la base
+// estuviera abierta (ver `Repositories.olvidarDatosLocales`). No es un secreto: un id.
+private const val KEY_BORRADO_PENDIENTE = "borrado_local_pendiente"
 private const val KEY_HUELLA_RECHAZADA = "entrar_con_huella_rechazada"
 
 /**
@@ -236,6 +240,11 @@ object SessionManager {
 
     val isLoggedIn: Boolean get() = !token.isNullOrBlank()
 
+    /** Ver `Repositories.olvidarDatosLocales`. Sobrevive al logout: es justamente para después. */
+    internal var borradoLocalPendiente: String?
+        get() = leer(KEY_BORRADO_PENDIENTE)
+        set(v) = guardar(KEY_BORRADO_PENDIENTE, v)
+
     private var consecutive401s = 0
     private const val MAX_CONSECUTIVE_401S = 3
 
@@ -290,6 +299,12 @@ object SessionManager {
         // solo números, pero son SUS números — cuántos préstamos tiene, cuántas cuentas. Misma
         // clave por id, así que también va antes de soltarlo.
         FormaRecordada.delAparato.borrar(userId)
+        // Y el espejo local —cuentas, movimientos y anulaciones que el server ya tiene— más el
+        // caché de lecturas (`remote_cache`): hasta acá el logout limpiaba la memoria y dejaba la
+        // base de SQLite con toda su plata adentro. Lo que no subió se queda esperando a su dueño
+        // (nunca se borra plata que solo existe acá). Va antes de soltar el id: se borra por él.
+        // `runCatching` por lo mismo que el push de arriba: un logout siempre termina.
+        userId?.let { uid -> runCatching { Repositories.olvidarDatosLocales(uid) } }
         // «Entrar con huella» se apaga al cerrar sesión. Sin esto, el token vencido dejaba un
         // bucle: `clear()` también corre cuando el servidor contesta 401 tres veces seguidas, y
         // con el interruptor prendido el próximo arranque pediría el dedo para abrir una app que

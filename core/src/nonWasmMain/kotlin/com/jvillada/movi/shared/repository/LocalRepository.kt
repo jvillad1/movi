@@ -842,7 +842,7 @@ class LocalRepository(
             // del día.
             db.transaction {
                 cambiados.forEach { mirrorEventLocally(it, uid) }
-                fantasmas.forEach { db.voidEventQueries.insertFantasma(it, ahora) }
+                fantasmas.forEach { db.voidEventQueries.insertFantasma(it, ahora, uid) }
                 lapidasQueSobran.forEach { db.voidEventQueries.olvidarFantasma(it) }
             }
         }
@@ -988,10 +988,10 @@ class LocalRepository(
                 ?.filter { it.id != id }
                 .orEmpty()
 
-            db.voidEventQueries.insert(voidId, id, reason, now, null)
+            db.voidEventQueries.insert(voidId, id, reason, now, null, uid)
             hermanas.forEach { hermana ->
                 // syncedAt = now: esta anulación NO se empuja, el server la deduce del transferId.
-                db.voidEventQueries.insert("${now}_${hermana.id.take(8)}", hermana.id, reason, now, now)
+                db.voidEventQueries.insert("${now}_${hermana.id.take(8)}", hermana.id, reason, now, now, uid)
             }
 
             (listOfNotNull(event) + hermanas).forEach { fila ->
@@ -2202,7 +2202,34 @@ class LocalRepository(
     // por persona, no datos que necesiten funcionar offline.
     override suspend fun getUserProfile(): UserProfile = remote.getUserProfile()
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = remote.updateUserProfile(request)
-    override suspend fun changePassword(request: ChangePasswordRequest) = remote.changePassword(request)
+    override suspend fun changePassword(request: ChangePasswordRequest): String? = remote.changePassword(request)
+    override suspend fun cerrarSesionesEnTodosLosAparatos() = remote.cerrarSesionesEnTodosLosAparatos()
+    // Sin espejo: la exportación la arma el server con lo que tiene él, que es la copia completa.
+    override suspend fun getExportLink(): EnlaceDeDescarga = remote.getExportLink()
+
+    /**
+     * Ver [WalletRepository.olvidarDatosLocales]. Una sola transacción: o se va todo lo que toca,
+     * o nada.
+     *
+     * **Solo se borra lo que el server ya tiene.** Lo anotado o anulado sin señal —y lo que quedó
+     * pendiente porque la sesión se cerró sola tras tres 401— se queda en el teléfono: es plata
+     * que todavía no existe en ningún otro lado. Espera a su dueño: los tres `selectUnsynced`
+     * filtran por usuario, así que el `SyncEngine` de otra persona que entre acá no lo ve ni lo
+     * sube con su token, y cuando el mismo dueño vuelve a entrar sube como siempre.
+     *
+     * Lo que sí se va: los movimientos y cuentas sellados (salvo una cuenta de la que cuelga un
+     * movimiento pendiente), las anulaciones selladas (salvo la que esconde un movimiento
+     * pendiente) y todo el `remote_cache`, que es solo una copia de lectura del server.
+     */
+    override fun olvidarDatosLocales(userId: String) {
+        if (userId.isBlank()) return
+        db.transaction {
+            db.voidEventQueries.deleteSyncedForUser(userId)
+            db.financialEventQueries.deleteSyncedForUser(userId)
+            db.accountQueries.deleteSyncedForUser(userId)
+            db.remoteCacheQueries.deleteForUser(userId)
+        }
+    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

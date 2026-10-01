@@ -14,6 +14,11 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.mas
+import com.jvillada.movi.shared.model.nombreDe
+import com.jvillada.movi.shared.model.periodoDe
+import kotlinx.datetime.Clock
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Rule
@@ -184,7 +189,11 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
     fun `la pantalla dice cuando termina y con que supuesto`() {
         montar(listOf(libreInversion))
 
-        composeRule.onNodeWithText("Te faltan 46 cuotas · la última en junio de 2030 si la cuota y la tasa no cambian", substring = true)
+        // El mes de la última cuota se cuenta desde el mes en curso (corte 1: esta clase no manda
+        // perfil), así que se calcula igual acá. Fijo en «junio de 2030» se rompió el 1 de octubre
+        // de 2026: el número de cuotas (46) no depende de la fecha, el mes en que termina sí.
+        val ultima = nombreDe(periodoDe(Clock.System.now().toEpochMilliseconds(), PeriodSettings()).mas(46 - 1))
+        composeRule.onNodeWithText("Te faltan 46 cuotas · la última en $ultima si la cuota y la tasa no cambian", substring = true)
             .assertExists()
         composeRule.onNodeWithText(SUPUESTO_DE_LA_PROYECCION, substring = true).assertExists()
     }

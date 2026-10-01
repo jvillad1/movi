@@ -14,15 +14,20 @@ CREATE TABLE void_event (
     -- y el movimiento reaparece, mientras que una anulación del dueño no se toca nunca — ni siquiera
     -- la de la pata hermana de un traspaso, que se escribe sellada y que el server sigue devolviendo
     -- hasta que el `SyncEngine` empuje la del evento que el dueño tocó.
-    origen          TEXT
+    origen          TEXT,
+    -- **De quién es.** La tabla no lo tenía y `selectUnsynced` devolvía lo pendiente de todos: el
+    -- `SyncEngine` habría empujado la anulación de una persona con el token de la siguiente que
+    -- entrara en el teléfono. NULL solo en filas viejas sin movimiento local (migración 15), que
+    -- por eso no salen por `selectUnsynced` de nadie.
+    userId          TEXT
 );
 
 selectUnsynced:
-SELECT * FROM void_event WHERE syncedAt IS NULL;
+SELECT * FROM void_event WHERE syncedAt IS NULL AND userId = :userId;
 
 insert:
-INSERT OR IGNORE INTO void_event(id, originalEventId, reason, timestamp, syncedAt)
-VALUES (?, ?, ?, ?, ?);
+INSERT OR IGNORE INTO void_event(id, originalEventId, reason, timestamp, syncedAt, userId)
+VALUES (?, ?, ?, ?, ?, ?);
 
 markSynced:
 UPDATE void_event SET syncedAt = :syncedAt WHERE id = :id;
@@ -69,8 +74,8 @@ SELECT originalEventId FROM void_event;
 -- El `id` es determinista (`fantasma_<id del evento>`) y no lleva reloj: con `INSERT OR IGNORE`, dos
 -- lecturas seguidas escriben una sola fila.
 insertFantasma:
-INSERT OR IGNORE INTO void_event(id, originalEventId, reason, timestamp, syncedAt, origen)
-VALUES ('fantasma_' || :originalEventId, :originalEventId, NULL, :timestamp, :timestamp, 'fantasma');
+INSERT OR IGNORE INTO void_event(id, originalEventId, reason, timestamp, syncedAt, origen, userId)
+VALUES ('fantasma_' || :originalEventId, :originalEventId, NULL, :timestamp, :timestamp, 'fantasma', :userId);
 
 -- Qué movimientos se están escondiendo por fantasmas —y no porque el dueño los anulara—, para poder
 -- devolverlos si el server los vuelve a mandar.
@@ -82,3 +87,14 @@ SELECT originalEventId FROM void_event WHERE origen = 'fantasma';
 -- anulación del dueño sobre el mismo movimiento se queda donde está.
 olvidarFantasma:
 DELETE FROM void_event WHERE originalEventId = :originalEventId AND origen = 'fantasma';
+
+-- Al cerrar sesión (ver LocalRepository.olvidarDatosLocales): **solo lo que el server ya tiene**.
+-- Una anulación sin subir se queda esperando a su dueño (`selectUnsynced` filtra por usuario). Y una
+-- sellada tampoco se borra si su movimiento sigue pendiente: es la que lo esconde y la que impide
+-- que `financial_event.selectUnsynced` lo suba — borrarla resucitaría un movimiento anulado.
+-- Las filas viejas sin dueño (userId NULL) que ya subieron se van también: no son de nadie más.
+deleteSyncedForUser:
+DELETE FROM void_event
+WHERE syncedAt IS NOT NULL
+  AND (userId = :userId OR userId IS NULL)
+  AND originalEventId NOT IN (SELECT id FROM financial_event WHERE syncedAt IS NULL);

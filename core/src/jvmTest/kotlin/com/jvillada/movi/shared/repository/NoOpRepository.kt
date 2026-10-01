@@ -520,5 +520,7 @@ open class NoOpRepository(
         name = request.name ?: "Stub",
         avatarColor = request.avatarColor ?: AvatarPalette.DEFAULT,
     )
-    override suspend fun changePassword(request: ChangePasswordRequest) {}
+    override suspend fun changePassword(request: ChangePasswordRequest): String? = null
+    override suspend fun cerrarSesionesEnTodosLosAparatos() {}
+    override suspend fun getExportLink() = EnlaceDeDescarga(url = "", expiraEn = 0L)
 }

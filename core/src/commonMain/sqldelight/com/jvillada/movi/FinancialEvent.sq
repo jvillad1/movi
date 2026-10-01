@@ -245,3 +245,9 @@ DELETE FROM financial_event WHERE accountId = :accountId AND userId = :userId;
 -- Solo cubre lo que se renombra DESDE este dispositivo; ver el KDoc de LocalRepository.renameCategory.
 renameCategory:
 UPDATE financial_event SET category = :newCategory WHERE category = :oldCategory AND userId = :userId;
+
+-- Al cerrar sesión (ver LocalRepository.olvidarDatosLocales): **solo lo que el server ya tiene**.
+-- Lo pendiente (`syncedAt IS NULL`, incluido lo que el server rechazó) se queda en el teléfono y
+-- sube cuando su dueño vuelva a entrar: nunca se borra plata que solo existe acá.
+deleteSyncedForUser:
+DELETE FROM financial_event WHERE userId = :userId AND syncedAt IS NOT NULL;

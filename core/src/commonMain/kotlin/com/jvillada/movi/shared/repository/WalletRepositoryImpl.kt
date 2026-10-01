@@ -924,7 +924,7 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
-    override suspend fun changePassword(request: ChangePasswordRequest) {
+    override suspend fun changePassword(request: ChangePasswordRequest): String? {
         val response = client.put("$baseUrl/api/users/me/password") {
             contentType(ContentType.Application.Json)
             setBody(request)
@@ -932,5 +932,15 @@ class WalletRepositoryImpl(
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
         }
+        return response.headers["X-Movi-Token"]?.takeIf { it.isNotBlank() }
+    }
+
+    override suspend fun getExportLink(): EnlaceDeDescarga {
+        val relativo: EnlaceDeDescarga = client.post("$baseUrl/api/export/enlace").exigirExito().body()
+        return relativo.copy(url = baseUrl + relativo.url)
+    }
+
+    override suspend fun cerrarSesionesEnTodosLosAparatos() {
+        client.post("$baseUrl/api/users/me/cerrar-sesiones").exigirExito()
     }
 }

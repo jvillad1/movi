@@ -511,8 +511,37 @@ interface WalletRepository {
      * `PUT /api/users/me/password`. Lanza [ApiException] con 403 si [ChangePasswordRequest.current]
      * no coincide, o 400 si [ChangePasswordRequest.new] no cumple [com.jvillada.movi.shared.model.PasswordPolicy]
      * — el servidor es la autoridad, la validación del cliente es solo cortesía.
+     *
+     * Cambiar la contraseña cierra las sesiones de **todos** los aparatos, incluido este. Devuelve
+     * el token nuevo que el server manda para que ESTE aparato siga adentro (encabezado
+     * `X-Movi-Token`), o `null` si no vino — un server viejo. Quien llama lo guarda en la sesión.
      */
-    suspend fun changePassword(request: ChangePasswordRequest)
+    suspend fun changePassword(request: ChangePasswordRequest): String?
+
+    /**
+     * `POST /api/users/me/cerrar-sesiones` — «Cerrar sesión en todos los aparatos». Después de
+     * esto el token de este aparato tampoco sirve: quien llama cierra la sesión local.
+     */
+    suspend fun cerrarSesionesEnTodosLosAparatos()
+
+    /**
+     * «Descargar tus datos»: `POST /api/export/enlace`. Un enlace de dos minutos, ya con el
+     * [baseUrl] adelante, que baja un ZIP con todo (un CSV por tabla y `movi.json`). Mismo patrón
+     * que [getDocumentLink]: bajar un archivo es una navegación y ahí no viaja `Authorization`.
+     */
+    suspend fun getExportLink(): EnlaceDeDescarga
+
+    /**
+     * **Al cerrar sesión: que en el aparato no quede de [userId] nada que el server ya tenga.**
+     * Borra del espejo local sus cuentas, movimientos y anulaciones **ya sellados**, y el caché de
+     * lecturas (`remote_cache`). Lo que todavía no subió se queda, esperando a su dueño — ver
+     * `LocalRepository.olvidarDatosLocales`. No toca el server.
+     *
+     * Sin espejo local (la web) no hay nada que borrar, y por eso el default no hace nada. No es
+     * `suspend` porque la llama `SessionManager.clear()`, que corre desde la UI y desde los
+     * workers de fondo y tiene que terminar siempre.
+     */
+    fun olvidarDatosLocales(userId: String) {}
 
     /**
      * Pide un enlace de recuperación por correo. Devuelve el CÓDIGO HTTP crudo en vez de un

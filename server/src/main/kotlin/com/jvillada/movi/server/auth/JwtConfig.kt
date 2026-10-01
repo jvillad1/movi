@@ -67,13 +67,42 @@ object JwtConfig {
     private const val AUDIENCE = "movi-client"
     private const val VALIDITY_MS = 30L * 24 * 60 * 60 * 1000 // 30 days
 
-    fun makeToken(userId: String, email: String): String = JWT.create()
+    /**
+     * **La versión de las sesiones del usuario, dentro del token.** Ver `Users.tokenVersion`.
+     *
+     * El claim es corto a propósito (viaja en cada pedido). Un token firmado antes de que existiera
+     * no lo trae, y eso se lee como **versión 0** —que es el default de la columna—: el teléfono
+     * del dueño, con un token de antes de este cambio, sigue entrando después del despliegue. Lo
+     * que deja de servir es solo lo emitido antes de la última vez que la versión subió.
+     */
+    const val CLAIM_VERSION = "tv"
+
+    fun makeToken(userId: String, email: String, tokenVersion: Int = 0): String = JWT.create()
+        .withIssuer(ISSUER)
+        .withAudience(AUDIENCE)
+        .withClaim("userId", userId)
+        .withClaim("email", email)
+        .withClaim(CLAIM_VERSION, tokenVersion)
+        .withExpiresAt(Date(System.currentTimeMillis() + VALIDITY_MS))
+        .sign(algorithm)
+
+    /**
+     * Un token con la forma de los que se firmaban **antes** de [CLAIM_VERSION]. No lo usa el
+     * server: existe para que una prueba demuestre que esos tokens —el del teléfono del dueño el
+     * día del despliegue— siguen entrando. Firmarlo con [algorithm] y no con un secreto de la
+     * prueba importa: el secreto es `lazy` y lo fija la primera clase que corre en la JVM.
+     */
+    internal fun makeTokenSinVersion(userId: String, email: String): String = JWT.create()
         .withIssuer(ISSUER)
         .withAudience(AUDIENCE)
         .withClaim("userId", userId)
         .withClaim("email", email)
         .withExpiresAt(Date(System.currentTimeMillis() + VALIDITY_MS))
         .sign(algorithm)
+
+    /** La versión que dice el token; sin el claim (token de antes del cambio) es 0. */
+    fun versionDelToken(payload: com.auth0.jwt.interfaces.Payload): Int =
+        payload.getClaim(CLAIM_VERSION).asInt() ?: 0
 
     fun verifier() = JWT.require(algorithm)
         .withIssuer(ISSUER)
@@ -125,6 +154,42 @@ object JwtConfig {
             .build()
             .verify(token)
         payload.getClaim("userId").asString()
+    } catch (e: Exception) {
+        null
+    }
+
+    // ── Descarga de todos los datos («Descargar tus datos») ─────────────────────────
+
+    /**
+     * Otra audiencia más, por lo mismo que [DOWNLOAD_AUDIENCE]: el enlace de la exportación viaja
+     * en una URL y no puede servir para nada más. Y es **todo**: cuentas, movimientos, mensajes del
+     * banco. Por eso además lleva la versión de sesiones: cerrar sesión en todos los aparatos mata
+     * también un enlace de exportación que alguien haya pedido y todavía no se usó.
+     */
+    private const val EXPORT_AUDIENCE = "movi-export"
+
+    /** Dos minutos: el enlace se pide y se abre en el mismo gesto. */
+    const val EXPORT_VALIDITY_MS = 2L * 60 * 1000
+
+    fun makeExportToken(userId: String, tokenVersion: Int): String = JWT.create()
+        .withIssuer(ISSUER)
+        .withAudience(EXPORT_AUDIENCE)
+        .withClaim("userId", userId)
+        .withClaim(CLAIM_VERSION, tokenVersion)
+        .withExpiresAt(Date(System.currentTimeMillis() + EXPORT_VALIDITY_MS))
+        .sign(algorithm)
+
+    /**
+     * `(userId, versión)` si el token es un permiso de exportación válido, o `null`. Quien llama
+     * todavía tiene que comparar la versión contra la base — acá no se mira la base.
+     */
+    fun verifyExportToken(token: String): Pair<String, Int>? = try {
+        val payload = JWT.require(algorithm)
+            .withIssuer(ISSUER)
+            .withAudience(EXPORT_AUDIENCE)
+            .build()
+            .verify(token)
+        payload.getClaim("userId").asString()?.let { it to versionDelToken(payload) }
     } catch (e: Exception) {
         null
     }

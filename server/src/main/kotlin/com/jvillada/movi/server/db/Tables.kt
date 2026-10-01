@@ -60,6 +60,19 @@ object Users : Table("users") {
      * arranque.
      */
     val smsAlertMuted = bool("sms_alert_muted").nullable()
+    /**
+     * **La versión de las sesiones abiertas.** Cada token lleva la versión vigente cuando se
+     * firmó (claim `tv`, ver [com.jvillada.movi.server.auth.JwtConfig.CLAIM_VERSION]) y
+     * `configureAuth` lo rechaza si ya no coincide con esta columna. Sube en tres lugares: cambiar
+     * la contraseña, restablecerla por correo, y «Cerrar sesión en todos los aparatos». Subirla es
+     * la única forma de echar a un teléfono perdido: el JWT dura 30 días y no hay lista de tokens.
+     *
+     * `NOT NULL DEFAULT 0` y no nullable como sus vecinas: un `ADD COLUMN … DEFAULT 0 NOT NULL` en
+     * Postgres llena las filas existentes con el default sin reescribir nada, y 0 es exactamente
+     * lo que un token viejo sin claim representa. Así las sesiones abiertas antes del despliegue
+     * siguen valiendo. Lo cubre `SchemaDeArranqueTest` y `TokenVersionColumnTest`.
+     */
+    val tokenVersion = integer("token_version").default(0)
     override val primaryKey = PrimaryKey(id)
 }
 

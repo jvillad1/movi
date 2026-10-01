@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Auto Backup, Android 11 y anteriores (android:fullBackupContent).
+    Auto Backup, Android 11 y anteriores (android:fullBackupContent). Lo mismo, y por lo mismo,
+    que data_extraction_rules.xml: las dos listas tienen que decir exactamente lo mismo (lo vigila
+    RespaldoDeAndroidTest en :core).
 
     `movi_sms_filter` guarda hechos de ESTA instalación en ESTE teléfono: si ya pedimos los
     permisos de SMS, cuándo capturó el receiver por última vez, cuándo se sincronizó el
@@ -8,9 +10,22 @@
     peor es `perm_requested`, que haría que la pantalla mandara a los ajustes del sistema en
     vez de ofrecer el diálogo que ahí sí funcionaría. La lista de remitentes bancarios se
     vuelve a bajar del server sola, así que no se pierde nada por excluir el archivo entero.
+
+    `com.jvillada.movi_preferences` es el archivo de `Settings()` (multiplatform-settings-no-arg
+    lo nombra `<paquete>_preferences`): ahí viven el TOKEN de sesión, la instantánea del Inicio
+    (saldos y vencimientos) y la forma recordada de las listas. El token en la nube de Google es
+    una sesión de 30 días que sale del teléfono; la instantánea es plata. Se excluye entero: lo
+    único que se pierde al restaurar es el tema elegido y el correo recordado del login.
+
+    `movi.db` es el espejo local de SQLite (`createDatabase("movi.db")`, Platform.android.kt):
+    cuentas, movimientos y el caché de lecturas. Se excluyen también sus archivos de diario, que
+    llevan las mismas filas. Al restaurar, el teléfono vuelve a bajar todo del server.
 -->
 <full-backup-content>
-    <exclude
-        domain="sharedpref"
-        path="movi_sms_filter.xml" />
+    <exclude domain="sharedpref" path="movi_sms_filter.xml" />
+    <exclude domain="sharedpref" path="com.jvillada.movi_preferences.xml" />
+    <exclude domain="database" path="movi.db" />
+    <exclude domain="database" path="movi.db-journal" />
+    <exclude domain="database" path="movi.db-wal" />
+    <exclude domain="database" path="movi.db-shm" />
 </full-backup-content>

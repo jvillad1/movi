@@ -18,6 +18,10 @@ fun Application.configureCORS() {
         allowMethod(HttpMethod.Delete)
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.ContentType)
+        // El token nuevo tras cambiar la contraseña (ver `ENCABEZADO_TOKEN_NUEVO` en
+        // UserRoutes.kt). En producción la web es del mismo origen y no hace falta; en desarrollo
+        // (:8081 contra :8080) sin esto el navegador lo esconde y la web se desloguea sola.
+        exposeHeader("X-Movi-Token")
 
         val raw = System.getenv("ALLOWED_ORIGINS")?.trim().orEmpty()
         if (raw.isBlank()) {

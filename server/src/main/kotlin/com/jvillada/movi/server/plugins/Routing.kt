@@ -75,6 +75,10 @@ fun Application.configureRouting() {
         // tiene sesión de Movi; la protege el token, que viaja en el fragmento y en el cuerpo del
         // POST, nunca en la ruta. Ver EnlaceCompartidoRoutes.kt.
         paginaCompartidaRoutes()
+        // La descarga de «Descarga tus datos», por lo mismo que el contenido de un documento: la
+        // abre el navegador, que no manda `Authorization`. La protege un permiso de dos minutos
+        // con su propia audiencia y la versión de sesiones. Ver ExportRoutes.kt.
+        exportDescargaRoutes()
 
         authenticate("jwt") {
             userRoutes()
@@ -101,6 +105,7 @@ fun Application.configureRouting() {
             statementRoutes()
             documentRoutes()
             enlaceCompartidoRoutes()
+            exportRoutes()
         }
 
         // /api/** que nadie registró → 404 JSON, nunca el index.html de la SPA.

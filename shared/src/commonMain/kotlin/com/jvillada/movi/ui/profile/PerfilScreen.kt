@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,6 +67,18 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     var guardandoPeriodo by remember { mutableStateOf(false) }
     var errorPeriodo by remember { mutableStateOf<String?>(null) }
     var profileReloadKey by remember { mutableStateOf(0) }
+    // «Cerrar sesión en todos los aparatos»: pide confirmación y, si sale bien, cierra también la
+    // sesión de este (el token de acá tampoco sirve después). Ver `POST /api/users/me/cerrar-sesiones`.
+    var confirmarCierreTotal by remember { mutableStateOf(false) }
+    var cerrandoTodas by remember { mutableStateOf(false) }
+    var errorCierreTotal by remember { mutableStateOf<String?>(null) }
+    val alcanceCierre = rememberCoroutineScope()
+    // «Descargar tus datos»: pide un enlace de dos minutos y lo abre. Mismo camino que abrir un
+    // documento —en la web el navegador baja el ZIP; en el teléfono lo baja el navegador del
+    // sistema a Descargas—, porque bajar un archivo es una navegación y ahí no viaja la sesión.
+    val uriHandler = LocalUriHandler.current
+    var bajandoDatos by remember { mutableStateOf(false) }
+    var errorDatos by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(profileReloadKey) {
         falloElPerfil = false
         runCatching { Repositories.wallets.getUserProfile() }.onSuccess {
@@ -482,6 +495,44 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
             // funciona, se queda arriba, en su propia sección.
 
 
+            // Tus datos: lo que hoy solo se podía sacar por psql. La cuenta es de quien la usa.
+            item {
+                Spacer(Modifier.height(14.dp))
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    MinSectionHeader(title = "Tus datos")
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                    ) {
+                        CardRow(
+                            left = { Text(DESCARGAR_TUS_DATOS, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
+                            sub = errorDatos ?: if (bajandoDatos) "Preparando el archivo…" else
+                                "Un ZIP con tus cuentas, movimientos, créditos y mensajes del banco, en CSV y JSON",
+                            showChevron = true,
+                            isLast = true,
+                            onClick = {
+                                if (!bajandoDatos) {
+                                    bajandoDatos = true
+                                    errorDatos = null
+                                    alcanceCierre.launch {
+                                        runCatching { Repositories.wallets.getExportLink() }
+                                            .onSuccess { enlace ->
+                                                runCatching { uriHandler.openUri(enlace.url) }
+                                                    .onFailure { errorDatos = "No pudimos abrir la descarga en este aparato." }
+                                            }
+                                            .onFailure {
+                                                errorDatos = "No pudimos preparar la descarga. Revisa tu conexión e inténtalo de nuevo."
+                                            }
+                                        bajandoDatos = false
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+
             // Logout button
             item {
                 Spacer(Modifier.height(24.dp))
@@ -496,6 +547,34 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) {
                     Text("Cerrar sesión", style = Movi.textos.cuerpo, color = Movi.colores.sale, fontWeight = FontWeight.Medium)
+                }
+            }
+
+            // Para el teléfono perdido o el computador prestado: cierra TODAS las sesiones, no solo
+            // la de acá. Va debajo del logout normal, más discreto, porque se usa poco y no se
+            // deshace — por eso pide confirmación.
+            item {
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(enabled = !cerrandoTodas) { errorCierreTotal = null; confirmarCierreTotal = true }
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        CERRAR_SESION_EN_TODOS,
+                        style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium,
+                    )
+                }
+                errorCierreTotal?.let {
+                    Text(
+                        it,
+                        style = Movi.textos.apoyo, color = Movi.colores.sale,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    )
                 }
             }
 
@@ -547,6 +626,34 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         ChangePasswordSheet(
             onDismiss = { showChangePassword = false },
             onSaved = { showChangePassword = false },
+        )
+    }
+    if (confirmarCierreTotal) {
+        AtrasCierraEstaHoja { if (!cerrandoTodas) confirmarCierreTotal = false }
+        ConfirmarEnHoja(
+            pregunta = "¿Cerrar sesión en todos los aparatos?",
+            detalle = "Se cierra en este teléfono o computador y en cualquier otro donde hayas entrado " +
+                "con tu cuenta. Para volver a usar Movi en cada uno vas a tener que entrar con tu " +
+                "contraseña. Tus datos no se tocan.",
+            textoConfirmar = "Cerrar en todos",
+            ocupado = cerrandoTodas,
+            onConfirmar = {
+                cerrandoTodas = true
+                alcanceCierre.launch {
+                    runCatching { Repositories.wallets.cerrarSesionesEnTodosLosAparatos() }
+                        .onSuccess {
+                            cerrandoTodas = false
+                            confirmarCierreTotal = false
+                            onLogout()
+                        }
+                        .onFailure {
+                            cerrandoTodas = false
+                            confirmarCierreTotal = false
+                            errorCierreTotal = "No pudimos cerrar las sesiones. Revisa tu conexión e inténtalo de nuevo."
+                        }
+                }
+            },
+            onCancelar = { confirmarCierreTotal = false },
         )
     }
     val alcancePeriodo = rememberCoroutineScope()
@@ -604,6 +711,12 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     }
     }
 }
+
+/** La fila de Perfil que baja el ZIP con todos los datos de la cuenta. */
+const val DESCARGAR_TUS_DATOS: String = "Descargar tus datos"
+
+/** El botón de Perfil que cierra todas las sesiones de la cuenta. */
+const val CERRAR_SESION_EN_TODOS: String = "Cerrar sesión en todos los aparatos"
 
 /** Lo que dice la tarjeta de reintento cuando el perfil del dueño no se pudo leer. */
 const val AJUSTES_NO_LEIDOS: String = "No pudimos cargar tus ajustes"

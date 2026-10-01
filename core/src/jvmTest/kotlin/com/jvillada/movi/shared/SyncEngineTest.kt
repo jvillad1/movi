@@ -493,7 +493,7 @@ class SyncEngineTest {
         engine.syncEvents()
         engine.syncVoids()
         assertTrue(remote.eventosSubidos.isEmpty(), "no se vuelve a subir un movimiento anulado")
-        assertTrue(db.voidEventQueries.selectUnsynced().executeAsList().isEmpty(), "el 404 de algo que nunca subió se sella")
+        assertTrue(db.voidEventQueries.selectUnsynced(testUserId).executeAsList().isEmpty(), "el 404 de algo que nunca subió se sella")
 
         // Y el ciclo siguiente no insiste con nada.
         engine.syncEvents()
@@ -525,7 +525,7 @@ class SyncEngineTest {
 
         assertTrue(remote.eventosSubidos.isEmpty())
         assertEquals(listOf("ev-perdido"), remote.anulados, "la anulación llega al server")
-        assertTrue(db.voidEventQueries.selectUnsynced().executeAsList().isEmpty())
+        assertTrue(db.voidEventQueries.selectUnsynced(testUserId).executeAsList().isEmpty())
     }
 
     /** Un 404 sobre un movimiento que SÍ subió no es «nunca llegó»: no se sella y se reintenta. */
@@ -544,7 +544,7 @@ class SyncEngineTest {
         // Otro server que no lo conoce: el 404 no se puede tomar como «no hay nada que anular».
         SyncEngine(db = db, remote = VoidAwareRemote(), userId = { testUserId }).syncVoids()
 
-        assertEquals(1, db.voidEventQueries.selectUnsynced().executeAsList().size)
+        assertEquals(1, db.voidEventQueries.selectUnsynced(testUserId).executeAsList().size)
     }
 
     // ── El 5xx que no afloja ──────────────────────────────────────────────────
