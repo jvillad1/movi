@@ -354,6 +354,8 @@ object SessionManager {
         // Ola B · tarea 6: y los «Ahora no» de la tarjeta de ordenar categorías — son SUS
         // propuestas, sobre SUS categorías.
         PropuestasDescartadasStore.clear()
+        // Ola 1: y la pantalla que un aviso tocado dejó pendiente — es de quien lo tocó.
+        com.jvillada.movi.avisos.DestinoDesdeAfuera.pendiente = null
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
         // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres

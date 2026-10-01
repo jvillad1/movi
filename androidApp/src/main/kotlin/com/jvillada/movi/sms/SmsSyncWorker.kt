@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.jvillada.movi.avisos.Avisador
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.notificaciones.AlmacenDeNotificaciones
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +65,11 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 // Bloqueante a propósito: WorkManager puede dejar morir el proceso
                 // apenas doWork retorna, así que un thread{} suelto no se ejecutaría.
                 SmsFilterConfigStore.refreshIfStaleBlocking(applicationContext)
+                // Ola 1 · Movi avisa: «Movi anotó $180.000», con lo que el server leyó y dejó en
+                // «Por revisar» (nada de lo que entró ya resuelto). Best-effort: un aviso que no
+                // sale no puede convertir un upload exitoso en reintento.
+                runCatching { Avisador.avisarMovimientos(applicationContext, result.porRevisar) }
+                    .onFailure { Log.w(TAG, "no se pudo avisar el movimiento", it) }
                 Result.success()
             }
             SmsSyncResult.Unauthorized -> {

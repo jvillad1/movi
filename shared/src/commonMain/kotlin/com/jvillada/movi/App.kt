@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.TemaStore
+import com.jvillada.movi.avisos.DestinoDesdeAfuera
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.platform.AjustarBarrasDelSistema
 import com.jvillada.movi.platform.BackHandlerEffect
@@ -223,6 +224,21 @@ fun App() {
                             if (backStack.last() != result.screen) backStack[backStack.lastIndex] = result.screen
                     }
                 }
+            }
+
+            // Ola 1 · Movi avisa: tocar un aviso del teléfono abre su pantalla («Por revisar» o
+            // Plan). La `MainActivity` lo deja en [DestinoDesdeAfuera] y acá se cumple **solo con
+            // sesión y fuera del login**: con «Entrar con huella» la app arranca en el login aunque
+            // haya sesión, y abrir la bandeja encima sería saltarse la puerta. Cuando el dedo pasa y
+            // la pila llega al Inicio, el efecto vuelve a correr y navega.
+            val destinoPendiente = DestinoDesdeAfuera.pendiente
+            LaunchedEffect(destinoPendiente, currentScreen, SessionManager.loggedIn) {
+                val destino = destinoPendiente ?: return@LaunchedEffect
+                if (!SessionManager.loggedIn || currentScreen == Screen.Login || currentScreen == Screen.Register) {
+                    return@LaunchedEffect
+                }
+                DestinoDesdeAfuera.pendiente = null
+                if (currentScreen != destino) navigate(destino)
             }
 
             BackHandlerEffect(

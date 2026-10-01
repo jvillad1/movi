@@ -1,7 +1,10 @@
 package com.jvillada.movi.sms
 
 import com.jvillada.movi.data.apiBaseUrl
+import com.jvillada.movi.shared.model.AvisoPorRevisar
+import com.jvillada.movi.shared.model.RespuestaDelSync
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
+import kotlinx.serialization.json.Json
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -70,8 +73,12 @@ fun buildSmsSyncPayload(items: List<SmsSyncItem>): String {
 }
 
 sealed interface SmsSyncResult {
-    /** [synced] es lo que el server dice haber insertado; null si la respuesta no se pudo leer. */
-    data class Success(val synced: Int?) : SmsSyncResult
+    /**
+     * [synced] es lo que el server dice haber insertado; null si la respuesta no se pudo leer.
+     * [porRevisar] es lo que de eso quedó en «Por revisar», ya leído (Ola 1 · Movi avisa): vacío
+     * con un server anterior al campo, o si la respuesta no se pudo leer.
+     */
+    data class Success(val synced: Int?, val porRevisar: List<AvisoPorRevisar> = emptyList()) : SmsSyncResult
 
     /** 401: el token venció (30 días, sin refresh). Quien llama decide qué mostrar. */
     data object Unauthorized : SmsSyncResult
@@ -89,6 +96,17 @@ sealed interface SmsSyncResult {
 /** Cuenta reportada por el server. Devuelve null ante cuerpo ausente o inesperado. */
 internal fun parseSyncedCount(body: String?): Int? =
     body?.let { runCatching { JSONObject(it).getInt("synced") }.getOrNull() }
+
+private val jsonDelSync = Json { ignoreUnknownKeys = true }
+
+/**
+ * Lo que quedó por revisar, según el server ([RespuestaDelSync.porRevisar]). Vacío ante un cuerpo
+ * ausente, ilegible o de un server que todavía no lo manda: el aviso es informativo y la inserción
+ * ya ocurrió, así que nada de esto puede degradar un 2xx.
+ */
+internal fun parsePorRevisar(body: String?): List<AvisoPorRevisar> =
+    body?.let { runCatching { jsonDelSync.decodeFromString(RespuestaDelSync.serializer(), it).porRevisar }.getOrNull() }
+        .orEmpty()
 
 /** POST bloqueante — llamar SIEMPRE desde un hilo de IO. */
 fun postSmsSync(token: String, payload: String): SmsSyncResult = try {
@@ -110,7 +128,7 @@ fun postSmsSync(token: String, payload: String): SmsSyncResult = try {
             null
         }
         when {
-            code in 200..299 -> SmsSyncResult.Success(parseSyncedCount(body))
+            code in 200..299 -> SmsSyncResult.Success(parseSyncedCount(body), parsePorRevisar(body))
             code == 401 -> SmsSyncResult.Unauthorized
             code >= 500 -> SmsSyncResult.ServerError(code)
             else -> SmsSyncResult.Rejected(code)
