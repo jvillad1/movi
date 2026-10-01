@@ -2305,7 +2305,7 @@ class LocalRepositoryTest {
 
         assertEquals(listOf("ev-vivo"), conRed.getEvents().map { it.id }, "con red buena se va")
         assertTrue(
-            db.voidEventQueries.selectUnsynced().executeAsList().isEmpty(),
+            db.voidEventQueries.selectUnsynced(testUserId).executeAsList().isEmpty(),
             "la lápida se escribe sellada: no se le empuja al server algo que el server ya no tiene",
         )
 
@@ -2390,7 +2390,7 @@ class LocalRepositoryTest {
         )
         assertEquals(
             1,
-            db.voidEventQueries.selectUnsynced().executeAsList().size,
+            db.voidEventQueries.selectUnsynced(testUserId).executeAsList().size,
             "y sigue encolada para el SyncEngine",
         )
     }

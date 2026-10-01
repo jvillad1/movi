@@ -246,7 +246,8 @@ DELETE FROM financial_event WHERE accountId = :accountId AND userId = :userId;
 renameCategory:
 UPDATE financial_event SET category = :newCategory WHERE category = :oldCategory AND userId = :userId;
 
--- Al cerrar sesión (ver LocalRepository.olvidarDatosLocales). Va DESPUÉS de borrar sus
--- anulaciones (`void_event.deleteForUser`), que se encuentran por este mismo `userId`.
-deleteForUser:
-DELETE FROM financial_event WHERE userId = :userId;
+-- Al cerrar sesión (ver LocalRepository.olvidarDatosLocales): **solo lo que el server ya tiene**.
+-- Lo pendiente (`syncedAt IS NULL`, incluido lo que el server rechazó) se queda en el teléfono y
+-- sube cuando su dueño vuelva a entrar: nunca se borra plata que solo existe acá.
+deleteSyncedForUser:
+DELETE FROM financial_event WHERE userId = :userId AND syncedAt IS NOT NULL;

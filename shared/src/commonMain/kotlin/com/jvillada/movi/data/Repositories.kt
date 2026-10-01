@@ -12,9 +12,9 @@ object Repositories {
     private val realPerezoso: Lazy<WalletRepository> = lazy {
         val repo = createRepository()
         // Un cierre de sesión que llegó antes de que existiera el repositorio (ver
-        // [olvidarDatosLocales]) se cumple ahora, apenas hay base abierta — salvo que quien entró
-        // sea la misma persona: borrarle lo suyo al volver no protege a nadie y le haría perder lo
-        // que anotó sin señal.
+        // [olvidarDatosLocales]) se cumple ahora, apenas hay base abierta, con la misma regla: solo
+        // lo sellado y el caché, nunca lo que no subió. Si quien entró es la misma persona no se
+        // borra nada: borrarle lo suyo al volver no protege a nadie.
         SessionManager.borradoLocalPendiente?.let { pendiente ->
             if (pendiente != SessionManager.userId) runCatching { repo.olvidarDatosLocales(pendiente) }
             SessionManager.borradoLocalPendiente = null

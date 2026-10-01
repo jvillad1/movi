@@ -1,0 +1,15 @@
+-- Migración 15 → 16: agrega void_event.userId — **de quién es esta anulación**.
+--
+-- `void_event` era la única tabla del espejo sin dueño, y `selectUnsynced` devolvía las anulaciones
+-- pendientes de TODOS: si una persona cerraba sesión con una anulación sin subir y entraba otra en
+-- el mismo teléfono, el `SyncEngine` la empujaba con el token de la segunda. Desde Ola 0 el logout
+-- deja lo que no subió esperando a su dueño (nunca se borra plata que el server no tiene), así que
+-- esa anulación tiene que saber de quién es para esperar al que corresponde.
+--
+-- Backfill por el movimiento anulado, que sí tiene `userId`. Lo que quede en NULL es una anulación
+-- de un movimiento que no está en el teléfono: no se le puede nombrar dueño, así que no sale por
+-- `selectUnsynced` de nadie (queda guardada, no se sube con el token equivocado).
+ALTER TABLE void_event ADD COLUMN userId TEXT;
+UPDATE void_event SET userId = (
+    SELECT financial_event.userId FROM financial_event WHERE financial_event.id = void_event.originalEventId
+);

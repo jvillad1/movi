@@ -842,7 +842,7 @@ class LocalRepository(
             // del día.
             db.transaction {
                 cambiados.forEach { mirrorEventLocally(it, uid) }
-                fantasmas.forEach { db.voidEventQueries.insertFantasma(it, ahora) }
+                fantasmas.forEach { db.voidEventQueries.insertFantasma(it, ahora, uid) }
                 lapidasQueSobran.forEach { db.voidEventQueries.olvidarFantasma(it) }
             }
         }
@@ -988,10 +988,10 @@ class LocalRepository(
                 ?.filter { it.id != id }
                 .orEmpty()
 
-            db.voidEventQueries.insert(voidId, id, reason, now, null)
+            db.voidEventQueries.insert(voidId, id, reason, now, null, uid)
             hermanas.forEach { hermana ->
                 // syncedAt = now: esta anulación NO se empuja, el server la deduce del transferId.
-                db.voidEventQueries.insert("${now}_${hermana.id.take(8)}", hermana.id, reason, now, now)
+                db.voidEventQueries.insert("${now}_${hermana.id.take(8)}", hermana.id, reason, now, now, uid)
             }
 
             (listOfNotNull(event) + hermanas).forEach { fila ->
@@ -2208,21 +2208,25 @@ class LocalRepository(
     override suspend fun getExportLink(): EnlaceDeDescarga = remote.getExportLink()
 
     /**
-     * Ver [WalletRepository.olvidarDatosLocales]. Una sola transacción: o se va todo lo de
-     * [userId], o nada. El orden importa: las anulaciones se encuentran por los movimientos (no
-     * tienen `userId`), así que van primero.
+     * Ver [WalletRepository.olvidarDatosLocales]. Una sola transacción: o se va todo lo que toca,
+     * o nada.
      *
-     * **Lo que todavía no subió se pierde**, y es a propósito: el teléfono es de quien entre
-     * después, y dejar movimientos ajenos esperando —el `SyncEngine` los empujaría con el token del
-     * siguiente— es peor. En la práctica es poco: lo pendiente es lo anotado sin señal, y una
-     * sesión que se cierra sola por 401 es una sesión que ya no podía subir nada.
+     * **Solo se borra lo que el server ya tiene.** Lo anotado o anulado sin señal —y lo que quedó
+     * pendiente porque la sesión se cerró sola tras tres 401— se queda en el teléfono: es plata
+     * que todavía no existe en ningún otro lado. Espera a su dueño: los tres `selectUnsynced`
+     * filtran por usuario, así que el `SyncEngine` de otra persona que entre acá no lo ve ni lo
+     * sube con su token, y cuando el mismo dueño vuelve a entrar sube como siempre.
+     *
+     * Lo que sí se va: los movimientos y cuentas sellados (salvo una cuenta de la que cuelga un
+     * movimiento pendiente), las anulaciones selladas (salvo la que esconde un movimiento
+     * pendiente) y todo el `remote_cache`, que es solo una copia de lectura del server.
      */
     override fun olvidarDatosLocales(userId: String) {
         if (userId.isBlank()) return
         db.transaction {
-            db.voidEventQueries.deleteForUser(userId)
-            db.financialEventQueries.deleteForUser(userId)
-            db.accountQueries.deleteForUser(userId)
+            db.voidEventQueries.deleteSyncedForUser(userId)
+            db.financialEventQueries.deleteSyncedForUser(userId)
+            db.accountQueries.deleteSyncedForUser(userId)
             db.remoteCacheQueries.deleteForUser(userId)
         }
     }

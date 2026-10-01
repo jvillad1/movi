@@ -8,7 +8,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * **Cerrar sesión vacía el espejo local de quien se va** (Ola 0 · Confianza).
+ * **Cerrar sesión suelta del espejo local lo que el server ya tiene de quien se va** (Ola 0 · Confianza).
  *
  * Lo que borra las filas lo prueba `OlvidarDatosLocalesTest` en `:core`, contra SQLite de verdad.
  * Acá se prueba el cableado: que [SessionManager.clear] le pida el borrado al repositorio **con el

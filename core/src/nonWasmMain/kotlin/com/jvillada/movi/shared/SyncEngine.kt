@@ -261,7 +261,9 @@ class SyncEngine(
      * es otra cosa y se sigue reintentando.
      */
     internal suspend fun syncVoids() {
-        val unsynced = db.voidEventQueries.selectUnsynced().executeAsList()
+        // Solo las de quien está adentro: una anulación que quedó pendiente de otra persona en este
+        // teléfono la espera a ella, no se sube con este token (ver void_event.userId).
+        val unsynced = db.voidEventQueries.selectUnsynced(userId()).executeAsList()
         for (row in unsynced) {
             try {
                 remote.voidEvent(row.originalEventId, row.reason)

@@ -150,7 +150,10 @@ UPDATE account SET hiddenAt = NULL WHERE id = :id;
 deleteById:
 DELETE FROM account WHERE id = :id;
 
--- Al cerrar sesión (ver LocalRepository.olvidarDatosLocales): las cuentas de quien se va no se
--- quedan en el teléfono.
-deleteForUser:
-DELETE FROM account WHERE userId = :userId;
+-- Al cerrar sesión (ver LocalRepository.olvidarDatosLocales): **solo lo que el server ya tiene**,
+-- y tampoco una cuenta de la que cuelga un movimiento pendiente — ese movimiento tiene que poder
+-- leerse y subirse cuando su dueño vuelva a entrar.
+deleteSyncedForUser:
+DELETE FROM account
+WHERE userId = :userId AND syncedAt IS NOT NULL
+  AND id NOT IN (SELECT accountId FROM financial_event WHERE syncedAt IS NULL AND userId = :userId);

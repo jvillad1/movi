@@ -299,9 +299,10 @@ object SessionManager {
         // solo números, pero son SUS números — cuántos préstamos tiene, cuántas cuentas. Misma
         // clave por id, así que también va antes de soltarlo.
         FormaRecordada.delAparato.borrar(userId)
-        // Y el espejo local entero —cuentas, movimientos, anulaciones— más el caché de lecturas
-        // (`remote_cache`): hasta acá el logout limpiaba la memoria y dejaba la base de SQLite
-        // con toda su plata adentro. También va antes de soltar el id: las filas se borran por él.
+        // Y el espejo local —cuentas, movimientos y anulaciones que el server ya tiene— más el
+        // caché de lecturas (`remote_cache`): hasta acá el logout limpiaba la memoria y dejaba la
+        // base de SQLite con toda su plata adentro. Lo que no subió se queda esperando a su dueño
+        // (nunca se borra plata que solo existe acá). Va antes de soltar el id: se borra por él.
         // `runCatching` por lo mismo que el push de arriba: un logout siempre termina.
         userId?.let { uid -> runCatching { Repositories.olvidarDatosLocales(uid) } }
         // «Entrar con huella» se apaga al cerrar sesión. Sin esto, el token vencido dejaba un
