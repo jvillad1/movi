@@ -31,6 +31,10 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.plan.TableroDeRecurrentesDePrueba
 import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.plus
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -121,11 +125,26 @@ class CuotasRecurrentesEnMovimientosTest {
     // filtra por el mes de CALENDARIO de verdad, así que una fecha fija deja de estar en el
     // período apenas cambia el mes de la máquina que corre la prueba. Mismo patrón que
     // `PorConfirmarEnMovimientosTest.HOY_ISO`.
+    private val hoy = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds())
+
     private val dia = EventDay(
-        date = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()).toString(),
+        date = hoy.toString(),
         total = -4_215_223L,
         items = listOf(cuotaDinero, cuotaDeuda, tarjetaDinero, tarjetaDeuda),
     )
+
+    /**
+     * **El vencimiento de las dos cuotas: el 1 del mes que viene, calculado desde hoy.**
+     *
+     * Era `"2026-10-01"` fijo, y la prueba se rompió justo el 1 de octubre: con corte 1 ese día cae
+     * DENTRO del período, así que la lista «Pagos del mes» (`checklistDelPeriodo`) empezó a mostrar
+     * las dos cuotas con su total, $14.215.223 —que es correcto: el pago único del techo SÍ vence
+     * en ese período—, y la aserción de que esa cifra no aparece en ningún lado de la pantalla se
+     * puso roja sin que el card de «Flujo libre» hubiera cambiado. El 1 del mes siguiente es
+     * siempre del período siguiente (corte 1, el de esta clase), que es la situación que estas
+     * pruebas describen: las cuotas que vienen, contadas en el «Flujo libre» y fuera de la lista.
+     */
+    private val proximoVencimiento: LocalDate = LocalDate(hoy.year, hoy.month, 1).plus(1, DateTimeUnit.MONTH)
 
     /**
      * Las reglas sintéticas de sus créditos, tal como se las manda el server por
@@ -157,7 +176,8 @@ class CuotasRecurrentesEnMovimientosTest {
         override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
             listOf(reglaDelCarro, reglaDelTecho).map {
                 UpcomingPayment(
-                    rule = it, dueDate = "2026-10-01", daysUntil = 25,
+                    rule = it, dueDate = proximoVencimiento.toString(),
+                    daysUntil = hoy.daysUntil(proximoVencimiento),
                     status = PaymentStatus.UPCOMING,
                 )
             }
