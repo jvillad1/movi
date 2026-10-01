@@ -11,6 +11,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.plugins.configureAuth
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.PasswordPolicy
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.put
@@ -904,6 +905,54 @@ class AuthRoutesTest {
             assertTrue(obj["token"]!!.jsonPrimitive.content.isNotBlank())
             assertEquals("forma@movi.test", obj["email"]!!.jsonPrimitive.content)
         }
+    }
+
+    // ── Cerrar la puerta también cierra las sesiones abiertas (users.token_version) ──
+
+    private suspend fun ApplicationTestBuilder.leerPerfil(token: String) =
+        client.get("/api/users/me") { header(HttpHeaders.Authorization, "Bearer $token") }
+
+    @Test
+    fun `el reset deja afuera a los tokens que ya estaban emitidos`() = testApplication {
+        wireAppConSesion()
+        val tokenDeAntes = JwtConfig.makeToken(legacyUserId, legacyEmail)
+        assertEquals(HttpStatusCode.OK, leerPerfil(tokenDeAntes).status)
+
+        requestReset(legacyEmail)
+        assertEquals(HttpStatusCode.OK, confirmReset(tokenFromLastEmail(), strongPassword).status)
+
+        assertEquals(
+            HttpStatusCode.Unauthorized, leerPerfil(tokenDeAntes).status,
+            "quien se llevó un token seguía entrando hasta 30 días después del reset",
+        )
+        // Y entrar con la contraseña nueva da un token que sí sirve.
+        val nuevo = Json.parseToJsonElement(login(legacyEmail, strongPassword).bodyAsText())
+            .jsonObject["token"]!!.jsonPrimitive.content
+        assertEquals(HttpStatusCode.OK, leerPerfil(nuevo).status)
+    }
+
+    @Test
+    fun `cambiar la contrasena cierra las otras sesiones y deja adentro a este aparato`() = testApplication {
+        wireAppConSesion()
+        val otroAparato = JwtConfig.makeToken(legacyUserId, legacyEmail)
+
+        val cambio = cambiarContrasenaDesdeAdentro(legacyUserId, legacyEmail, legacyShortPassword, strongPassword)
+        assertEquals(HttpStatusCode.OK, cambio.status, cambio.bodyAsText())
+
+        assertEquals(HttpStatusCode.Unauthorized, leerPerfil(otroAparato).status)
+        val tokenNuevo = cambio.headers[ENCABEZADO_TOKEN_NUEVO]
+        assertNotNull(tokenNuevo, "sin el token nuevo, el aparato que cambió la contraseña también queda afuera")
+        assertEquals(HttpStatusCode.OK, leerPerfil(tokenNuevo).status)
+    }
+
+    @Test
+    fun `una contrasena actual equivocada no cierra ninguna sesion`() = testApplication {
+        wireAppConSesion()
+        val token = JwtConfig.makeToken(legacyUserId, legacyEmail)
+        val cambio = cambiarContrasenaDesdeAdentro(legacyUserId, legacyEmail, "no-es-la-actual", strongPassword)
+        assertEquals(HttpStatusCode.Forbidden, cambio.status)
+        assertEquals(null, cambio.headers[ENCABEZADO_TOKEN_NUEVO])
+        assertEquals(HttpStatusCode.OK, leerPerfil(token).status)
     }
 
     // ── utilidades ────────────────────────────────────────────────────────────

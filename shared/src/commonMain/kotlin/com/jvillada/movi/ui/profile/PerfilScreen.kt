@@ -66,6 +66,12 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     var guardandoPeriodo by remember { mutableStateOf(false) }
     var errorPeriodo by remember { mutableStateOf<String?>(null) }
     var profileReloadKey by remember { mutableStateOf(0) }
+    // «Cerrar sesión en todos los aparatos»: pide confirmación y, si sale bien, cierra también la
+    // sesión de este (el token de acá tampoco sirve después). Ver `POST /api/users/me/cerrar-sesiones`.
+    var confirmarCierreTotal by remember { mutableStateOf(false) }
+    var cerrandoTodas by remember { mutableStateOf(false) }
+    var errorCierreTotal by remember { mutableStateOf<String?>(null) }
+    val alcanceCierre = rememberCoroutineScope()
     LaunchedEffect(profileReloadKey) {
         falloElPerfil = false
         runCatching { Repositories.wallets.getUserProfile() }.onSuccess {
@@ -499,6 +505,34 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                 }
             }
 
+            // Para el teléfono perdido o el computador prestado: cierra TODAS las sesiones, no solo
+            // la de acá. Va debajo del logout normal, más discreto, porque se usa poco y no se
+            // deshace — por eso pide confirmación.
+            item {
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(enabled = !cerrandoTodas) { errorCierreTotal = null; confirmarCierreTotal = true }
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        CERRAR_SESION_EN_TODOS,
+                        style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium,
+                    )
+                }
+                errorCierreTotal?.let {
+                    Text(
+                        it,
+                        style = Movi.textos.apoyo, color = Movi.colores.sale,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    )
+                }
+            }
+
             // Va DESPUÉS de «Cerrar sesión» a propósito: `isAdmin` llega async, y si esta sección
             // se pintara antes del botón, al aparecer lo empujaría hacia abajo en cada visita (salto de
             // layout). Al final de la lista solo alarga el scroll — nada se mueve bajo el dedo.
@@ -547,6 +581,34 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         ChangePasswordSheet(
             onDismiss = { showChangePassword = false },
             onSaved = { showChangePassword = false },
+        )
+    }
+    if (confirmarCierreTotal) {
+        AtrasCierraEstaHoja { if (!cerrandoTodas) confirmarCierreTotal = false }
+        ConfirmarEnHoja(
+            pregunta = "¿Cerrar sesión en todos los aparatos?",
+            detalle = "Se cierra en este teléfono o computador y en cualquier otro donde hayas entrado " +
+                "con tu cuenta. Para volver a usar Movi en cada uno vas a tener que entrar con tu " +
+                "contraseña. Tus datos no se tocan.",
+            textoConfirmar = "Cerrar en todos",
+            ocupado = cerrandoTodas,
+            onConfirmar = {
+                cerrandoTodas = true
+                alcanceCierre.launch {
+                    runCatching { Repositories.wallets.cerrarSesionesEnTodosLosAparatos() }
+                        .onSuccess {
+                            cerrandoTodas = false
+                            confirmarCierreTotal = false
+                            onLogout()
+                        }
+                        .onFailure {
+                            cerrandoTodas = false
+                            confirmarCierreTotal = false
+                            errorCierreTotal = "No pudimos cerrar las sesiones. Revisa tu conexión e inténtalo de nuevo."
+                        }
+                }
+            },
+            onCancelar = { confirmarCierreTotal = false },
         )
     }
     val alcancePeriodo = rememberCoroutineScope()
@@ -604,6 +666,9 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     }
     }
 }
+
+/** El botón de Perfil que cierra todas las sesiones de la cuenta. */
+const val CERRAR_SESION_EN_TODOS: String = "Cerrar sesión en todos los aparatos"
 
 /** Lo que dice la tarjeta de reintento cuando el perfil del dueño no se pudo leer. */
 const val AJUSTES_NO_LEIDOS: String = "No pudimos cargar tus ajustes"

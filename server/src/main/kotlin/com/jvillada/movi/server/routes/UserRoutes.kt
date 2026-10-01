@@ -1,7 +1,9 @@
 package com.jvillada.movi.server.routes
 
 import at.favre.lib.crypto.bcrypt.BCrypt
+import com.jvillada.movi.server.auth.JwtConfig
 import com.jvillada.movi.server.auth.RateLimiter
+import com.jvillada.movi.server.auth.subirVersionDeSesiones
 import com.jvillada.movi.server.db.PasswordResetTokens
 import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.Users
@@ -14,10 +16,13 @@ import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.log
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.response.header
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.ResultRow
@@ -56,6 +61,15 @@ private const val WINDOW_PASSWORD_MS = 15 * 60_000L
 /** Mensaje único para "la actual no coincide" — no distingue de ningún otro caso; no hace falta,
  *  quien llama ya está autenticado, así que no hay oráculo de enumeración que cuidar acá. */
 private const val CURRENT_PASSWORD_REJECTED = "La contraseña actual no coincide"
+
+/**
+ * Encabezado con el token nuevo que devuelve el cambio de contraseña. Cambiarla cierra todas las
+ * sesiones (sube `users.token_version`), incluida la del aparato desde el que se cambió; este
+ * token —ya con la versión nueva— es lo que deja a ESE aparato adentro. Encabezado y no cuerpo
+ * para no romper al cliente viejo, que lee el cuerpo como texto: ese simplemente no lo toma y
+ * vuelve a pedir entrar, que es lo mismo que les pasa a los demás aparatos.
+ */
+const val ENCABEZADO_TOKEN_NUEVO = "X-Movi-Token"
 
 fun Route.userRoutes() {
     route("/api/users/me") {
@@ -184,7 +198,7 @@ fun Route.userRoutes() {
             // Las tres cosas en la MISMA transacción: o cambia todo, o no cambia nada. Una
             // contraseña nueva con los enlaces viejos todavía vivos es peor que no haber hecho
             // nada, porque la persona se queda creyendo que cerró la puerta.
-            dbQuery {
+            val versionNueva = dbQuery {
                 Users.update({ Users.id eq uid }) { it[passwordHash] = newHash }
                 // **Cambiar la contraseña desde adentro sella los enlaces de recuperación
                 // pendientes.** El camino del reset ya lo hacía (ver AuthRoutes.kt) y este no:
@@ -200,13 +214,44 @@ fun Route.userRoutes() {
                 // la pantalla de bloqueo el nombre de la tarjeta y el monto de cada vencimiento.
                 // El navegador propio se vuelve a suscribir con el interruptor de Perfil.
                 PushSubscriptions.deleteWhere { PushSubscriptions.userId eq uid }
+                // Y las sesiones abiertas en otros aparatos: si alguien más tuvo la cuenta, su
+                // token deja de servir en el pedido siguiente. Ver `Users.tokenVersion`.
+                subirVersionDeSesiones(uid)
             }
 
+            // Este aparato sigue adentro con un token de la versión nueva. Ver ENCABEZADO_TOKEN_NUEVO.
+            if (versionNueva != null) {
+                call.response.header(
+                    ENCABEZADO_TOKEN_NUEVO,
+                    JwtConfig.makeToken(uid, row[Users.email], versionNueva),
+                )
+            }
             call.respond(
                 HttpStatusCode.OK,
                 "Listo, tu contraseña quedó actualizada. Los enlaces de recuperación que hayas " +
-                    "pedido ya no sirven, y si tenías avisos en el navegador vuelve a activarlos.",
+                    "pedido ya no sirven, las sesiones en tus otros aparatos se cerraron, y si " +
+                    "tenías avisos en el navegador vuelve a activarlos.",
             )
+        }
+
+        /**
+         * **«Cerrar sesión en todos los aparatos».** Sube `users.token_version`: desde el pedido
+         * siguiente, todo token firmado antes —el del teléfono perdido, el de un navegador
+         * prestado, y también el de quien lo pide— contesta 401. No devuelve token nuevo a
+         * propósito: la app cierra también la sesión local y se vuelve a entrar con la contraseña.
+         *
+         * Suelta además las suscripciones push, por lo mismo que el cambio de contraseña: un
+         * navegador ajeno seguiría recibiendo en la pantalla de bloqueo los vencimientos.
+         */
+        post("/cerrar-sesiones") {
+            val uid = call.userId()
+            val versionNueva = dbQuery {
+                val v = subirVersionDeSesiones(uid)
+                if (v != null) PushSubscriptions.deleteWhere { PushSubscriptions.userId eq uid }
+                v
+            } ?: return@post call.respond(HttpStatusCode.NotFound)
+            call.application.log.info("cerrar-sesiones: $uid pasó a la versión $versionNueva")
+            call.respond(HttpStatusCode.NoContent)
         }
     }
 }

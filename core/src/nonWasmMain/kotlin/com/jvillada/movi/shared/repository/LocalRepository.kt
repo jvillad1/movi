@@ -2202,7 +2202,8 @@ class LocalRepository(
     // por persona, no datos que necesiten funcionar offline.
     override suspend fun getUserProfile(): UserProfile = remote.getUserProfile()
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = remote.updateUserProfile(request)
-    override suspend fun changePassword(request: ChangePasswordRequest) = remote.changePassword(request)
+    override suspend fun changePassword(request: ChangePasswordRequest): String? = remote.changePassword(request)
+    override suspend fun cerrarSesionesEnTodosLosAparatos() = remote.cerrarSesionesEnTodosLosAparatos()
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

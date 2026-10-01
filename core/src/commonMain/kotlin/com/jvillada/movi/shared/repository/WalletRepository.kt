@@ -511,8 +511,18 @@ interface WalletRepository {
      * `PUT /api/users/me/password`. Lanza [ApiException] con 403 si [ChangePasswordRequest.current]
      * no coincide, o 400 si [ChangePasswordRequest.new] no cumple [com.jvillada.movi.shared.model.PasswordPolicy]
      * — el servidor es la autoridad, la validación del cliente es solo cortesía.
+     *
+     * Cambiar la contraseña cierra las sesiones de **todos** los aparatos, incluido este. Devuelve
+     * el token nuevo que el server manda para que ESTE aparato siga adentro (encabezado
+     * `X-Movi-Token`), o `null` si no vino — un server viejo. Quien llama lo guarda en la sesión.
      */
-    suspend fun changePassword(request: ChangePasswordRequest)
+    suspend fun changePassword(request: ChangePasswordRequest): String?
+
+    /**
+     * `POST /api/users/me/cerrar-sesiones` — «Cerrar sesión en todos los aparatos». Después de
+     * esto el token de este aparato tampoco sirve: quien llama cierra la sesión local.
+     */
+    suspend fun cerrarSesionesEnTodosLosAparatos()
 
     /**
      * Pide un enlace de recuperación por correo. Devuelve el CÓDIGO HTTP crudo en vez de un

@@ -67,13 +67,42 @@ object JwtConfig {
     private const val AUDIENCE = "movi-client"
     private const val VALIDITY_MS = 30L * 24 * 60 * 60 * 1000 // 30 days
 
-    fun makeToken(userId: String, email: String): String = JWT.create()
+    /**
+     * **La versión de las sesiones del usuario, dentro del token.** Ver `Users.tokenVersion`.
+     *
+     * El claim es corto a propósito (viaja en cada pedido). Un token firmado antes de que existiera
+     * no lo trae, y eso se lee como **versión 0** —que es el default de la columna—: el teléfono
+     * del dueño, con un token de antes de este cambio, sigue entrando después del despliegue. Lo
+     * que deja de servir es solo lo emitido antes de la última vez que la versión subió.
+     */
+    const val CLAIM_VERSION = "tv"
+
+    fun makeToken(userId: String, email: String, tokenVersion: Int = 0): String = JWT.create()
+        .withIssuer(ISSUER)
+        .withAudience(AUDIENCE)
+        .withClaim("userId", userId)
+        .withClaim("email", email)
+        .withClaim(CLAIM_VERSION, tokenVersion)
+        .withExpiresAt(Date(System.currentTimeMillis() + VALIDITY_MS))
+        .sign(algorithm)
+
+    /**
+     * Un token con la forma de los que se firmaban **antes** de [CLAIM_VERSION]. No lo usa el
+     * server: existe para que una prueba demuestre que esos tokens —el del teléfono del dueño el
+     * día del despliegue— siguen entrando. Firmarlo con [algorithm] y no con un secreto de la
+     * prueba importa: el secreto es `lazy` y lo fija la primera clase que corre en la JVM.
+     */
+    internal fun makeTokenSinVersion(userId: String, email: String): String = JWT.create()
         .withIssuer(ISSUER)
         .withAudience(AUDIENCE)
         .withClaim("userId", userId)
         .withClaim("email", email)
         .withExpiresAt(Date(System.currentTimeMillis() + VALIDITY_MS))
         .sign(algorithm)
+
+    /** La versión que dice el token; sin el claim (token de antes del cambio) es 0. */
+    fun versionDelToken(payload: com.auth0.jwt.interfaces.Payload): Int =
+        payload.getClaim(CLAIM_VERSION).asInt() ?: 0
 
     fun verifier() = JWT.require(algorithm)
         .withIssuer(ISSUER)

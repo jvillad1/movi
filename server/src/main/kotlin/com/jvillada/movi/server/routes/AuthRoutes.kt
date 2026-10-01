@@ -6,6 +6,7 @@ import com.jvillada.movi.server.auth.PasswordReset
 import com.jvillada.movi.server.auth.PasswordResetConfig
 import com.jvillada.movi.server.auth.PasswordResetMailer
 import com.jvillada.movi.server.auth.RateLimiter
+import com.jvillada.movi.server.auth.subirVersionDeSesiones
 import com.jvillada.movi.server.db.PasswordResetTokens
 import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.Users
@@ -262,21 +263,19 @@ fun Route.authRoutes() {
                 .verify(req.password.toCharArray(), row[Users.passwordHash]).verified
             if (!verified) return@post call.respond(HttpStatusCode.Unauthorized, INVALID_CREDENTIALS)
 
-            val token = JwtConfig.makeToken(row[Users.id], row[Users.email])
+            // Con la versión vigente: si el dueño cerró las sesiones en todos los aparatos, la que
+            // abre ahora es la primera de la versión nueva.
+            val token = JwtConfig.makeToken(row[Users.id], row[Users.email], row[Users.tokenVersion])
             call.respond(AuthResponse(token, row[Users.id], row[Users.name], row[Users.email]))
         }
 
         // ── Recuperación de contraseña ────────────────────────────────────────
         //
-        // LIMITACIÓN CONOCIDA Y NO RESUELTA — leer antes de asumir que un reset "echa" a nadie:
-        // las sesiones de movi son JWT sin estado, de 30 días y SIN revocación. No hay lista de
-        // tokens vivos ni versión de credencial en el token, así que **restablecer la contraseña
-        // NO invalida los JWT que un atacante ya tenga**: si alguien se llevó un token, sigue
-        // entrando hasta que ese JWT venza por su cuenta (hasta 30 días después). El reset cierra
-        // la puerta de la contraseña, no las sesiones ya abiertas. Arreglarlo de verdad exige
-        // revocación (tabla de sesiones, o un `passwordChangedAt` en el usuario chequeado en cada
-        // request contra un claim `iat`), que es un cambio mucho más grande que este y que además
-        // toca el JWT. Está fuera de alcance a propósito, no olvidado.
+        // **Restablecer la contraseña cierra todas las sesiones abiertas.** Las sesiones de movi
+        // son JWT de 30 días sin lista de tokens vivos; lo que las revoca es `users.token_version`
+        // (ver Tables.kt): el confirm la sube en la misma transacción que escribe la contraseña,
+        // y desde el pedido siguiente `configureAuth` rechaza todo token firmado antes. Quien se
+        // llevó un token deja de entrar en ese momento, no 30 días después.
 
         post("/password-reset/request") {
             val startedAt = System.currentTimeMillis()
@@ -434,6 +433,9 @@ fun Route.authRoutes() {
                     CONFIRM_TOKEN_YA_CONSUMIDO
                 } else {
                     val n = Users.update({ Users.id eq userId }) { it[passwordHash] = newHash }
+                    // Y todas las sesiones abiertas: quien restablece la contraseña puede estar
+                    // recuperando la cuenta de manos ajenas. Ver el bloque de arriba.
+                    if (n > 0) subirVersionDeSesiones(userId)
                     // Consume de paso cualquier otro token pendiente del mismo usuario: si pidió
                     // tres enlaces, canjear uno mata los otros dos. Se sella incluso si el
                     // usuario ya no está: un token huérfano no puede prosperar nunca.

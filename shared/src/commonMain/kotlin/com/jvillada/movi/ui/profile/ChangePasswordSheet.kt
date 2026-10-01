@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.theme.*
@@ -73,7 +74,13 @@ fun ChangePasswordSheet(
                 Repositories.wallets.changePassword(ChangePasswordRequest(current = current, new = new))
             }
             saving = false
-            result.onSuccess { success = true }.onFailure { error = it.toUserMessage() }
+            result.onSuccess { tokenNuevo ->
+                // Cambiar la contraseña cerró las sesiones de TODOS los aparatos, también la de
+                // este. El server manda un token de la versión nueva para que este siga adentro;
+                // sin guardarlo, el pedido siguiente sería un 401 y la app pediría entrar de nuevo.
+                tokenNuevo?.let { SessionManager.token = it }
+                success = true
+            }.onFailure { error = it.toUserMessage() }
         }
     }
 
@@ -95,6 +102,12 @@ fun ChangePasswordSheet(
                 Text(
                     "Listo, tu contraseña quedó actualizada.",
                     style = Movi.textos.cuerpo, color = Movi.colores.entra,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Cerramos la sesión en tus otros aparatos.",
+                    style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                 )
             }
