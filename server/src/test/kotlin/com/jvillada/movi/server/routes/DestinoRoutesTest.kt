@@ -550,6 +550,55 @@ class DestinoRoutesTest {
         assertEquals(true, leido["identificadorEsLlave"]!!.jsonPrimitive.content.toBoolean())
     }
 
+    private suspend fun ApplicationTestBuilder.leer(id: String) = Json.parseToJsonElement(
+        client.get("/api/sms/$id/parse") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText(),
+    ).jsonObject
+
+    /**
+     * **Punto 5 (30-sep): Movimientos y Hoy dicen «Transferencia a Caro» también con llaves.** El
+     * nombre de un movimiento se decide al leer el aviso (`/parse` → `conElDestinoConocido`) y es
+     * el que queda guardado y se pinta en Movimientos y Hoy. Con la llave en `@usuario` y con un
+     * correo, lo que el banco escribe es la llave sola, así que se reemplaza por el nombre.
+     */
+    @Test
+    fun `con una llave arroba o un correo el aviso se propone con el nombre del destino`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postDestino("""{"nombre":"Caro","numero":"","llave":"@caro"}""").status)
+        assertEquals(HttpStatusCode.Created, postDestino("""{"nombre":"Papá","numero":"","llave":"papa@correo.com"}""").status)
+
+        guardarSms("sms-arroba", "Bancolombia: pagaste \$50,000.00 por codigo QR desde tu cuenta *8133 a la llave @caro el 29/09/2026 a las 10:02.")
+        val arroba = leer("sms-arroba")
+        assertEquals("Transferencia a Caro", arroba["merchant"]!!.jsonPrimitive.content)
+        assertEquals("@caro", arroba["identificadorDelDestino"]!!.jsonPrimitive.content)
+
+        guardarSms("sms-correo", "Bancolombia: pagaste \$80,000.00 por codigo QR desde tu cuenta *8133 a la llave papa@correo.com el 29/09/2026.")
+        assertEquals("Transferencia a Papá", leer("sms-correo")["merchant"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * **Cuando el banco trae el nombre real, ese nombre manda** — decisión documentada en
+     * `sePuedeRenombrar` (`:core`): «a la llave @pedro … a PEDRO GOMEZ» sigue diciendo «PEDRO
+     * GOMEZ», no «Transferencia a Pedro». Lo que SÍ cambia con la llave guardada: el envío cuenta en
+     * «Cuentas de otros» (lo engancha la llave del texto del banco), y Reconciliar ya no ofrece
+     * guardarla porque el identificador es conocido.
+     */
+    @Test
+    fun `con el nombre real del banco no se renombra, pero el envio cuenta para el destino`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postDestino("""{"nombre":"Pedro","numero":"","llave":"@pedro"}""").status)
+        val texto = "Bancolombia: ANA, transferiste \$25,910.00 a la llave @pedro desde tu cuenta *8133 a PEDRO GOMEZ el 10/09/26 a las 08:50."
+        guardarSms("sms-pedro", texto)
+        val leido = leer("sms-pedro")
+        assertEquals("PEDRO GOMEZ", leido["merchant"]!!.jsonPrimitive.content)
+        assertEquals("@pedro", leido["identificadorDelDestino"]!!.jsonPrimitive.content)
+
+        // Confirmado con el nombre del banco, cuenta igual: el texto crudo viaja con el movimiento.
+        anotarGasto("ev-pedro", "PEDRO GOMEZ", 25_910L, texto)
+        val lista = listar()
+        assertEquals(1, lista[0].jsonObject["cuantos"]!!.jsonPrimitive.int)
+        assertEquals("PEDRO GOMEZ", lista[0].jsonObject["ultimo"]!!.jsonObject["descripcion"]!!.jsonPrimitive.content)
+    }
+
     /**
      * **La plata que llega de alguien guardado** también se nombra: Nu dice «Te llegó dinero de
      * CAROLINA RESTREPO SALAZAR con tu llave», y si ese nombre está guardado en Caro, se propone

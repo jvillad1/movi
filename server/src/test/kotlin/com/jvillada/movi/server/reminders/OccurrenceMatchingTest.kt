@@ -490,6 +490,36 @@ class OccurrenceMatchingTest {
         )
     }
 
+    /**
+     * **Lo mismo con una llave** (30-sep): Nu y el pago por QR no escriben número de cuenta, solo la
+     * llave. Un destino conocido solo por su llave tiene que completar «Tía Caro» igual que el
+     * número — que es lo que Hoy y Plan leen para decir que ese pago ya se hizo.
+     */
+    @Test fun `un envio que solo trae la llave del destino se empareja solo`() {
+        val tiaCaro = regla(
+            name = "Tía Caro",
+            category = "Familia",
+            amount = 100_000,
+            type = TransactionType.EXPENSE,
+            destinoConocidoId = "dst_caro",
+        )
+        val destinos = mapOf("dst_caro" to DestinoConocido(id = "dst_caro", nombre = "Caro", numero = "", llave = "@caro"))
+        val vencimiento = LocalDate.of(2026, 9, 25)
+        val envio = evento(
+            id = "ev_caro",
+            day = 25,
+            month = 9,
+            amount = 100_000,
+            category = "Otra categoría",
+            description = "Pago QR · llave @caro",
+            type = TransactionType.EXPENSE,
+        )
+        assertEquals("ev_caro", ocurrenciaConcluyente(tiaCaro, vencimiento, listOf(envio), destinos = destinos)?.id)
+        // Y una llave que solo se le PARECE no empareja nada: se compara exacta.
+        val otra = envio.copy(id = "ev_otra", description = "Pago QR · llave @carolina")
+        assertNull(ocurrenciaConcluyente(tiaCaro, vencimiento, listOf(otra), destinos = destinos))
+    }
+
     /** Sin el mapa de destinos (el default de todo llamador viejo), el comportamiento no cambia. */
     @Test fun `sin destinos resueltos, el mismo movimiento no se distingue de cualquier otro`() {
         val tiaCaro = regla(
