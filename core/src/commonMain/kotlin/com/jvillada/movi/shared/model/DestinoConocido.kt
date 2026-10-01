@@ -27,7 +27,8 @@ import kotlinx.serialization.Serializable
  *
  * ## Los campos, y por qué no hay más
  *
- * Un nombre, el número y opcionalmente de quién es. Nada de saldo, de cupo ni de moneda: cada campo
+ * Un nombre, el número (o la [llave], o los dos — 29-sep) y opcionalmente de quién es. Nada de
+ * saldo, de cupo ni de moneda: cada campo
  * que se agregue acá es un campo que alguien va a querer que cuadre con algo, y no hay nada con qué
  * cuadrarlo — Movi no ve el extracto de la cuenta de otra persona.
  *
@@ -41,10 +42,25 @@ data class DestinoConocido(
     val id: String = "",
     /** Cómo lo reconoce el dueño: «Caro». Es lo que va a leer en sus movimientos. */
     val nombre: String,
-    /** El número de la cuenta como lo escribió, solo dígitos (ver [soloLosDigitos]). */
+    /**
+     * El número de la cuenta como lo escribió, solo dígitos (ver [soloLosDigitos]). **Vacío** cuando
+     * el destino se conoce solo por su [llave] (29-sep): la columna es la de siempre, y ninguna
+     * fila que ya existe cambia.
+     */
     val numero: String,
     /** «esposa», «papá». Opcional: el nombre suele alcanzar, y obligar a llenarlo no agrega nada. */
     val deQuien: String? = null,
+    /**
+     * **La llave**, el otro identificador (29-sep): `@usuario`, un celular, un correo o un código
+     * numérico — Nu y Bancolombia (Bre-B) identifican por llave en vez de por número de cuenta, y
+     * el mismo destino puede tener las dos cosas (la cuenta de Caro Y su llave). También guarda el
+     * nombre con que el banco nombra a quien manda plata («Te llegó dinero de CAROLINA RESTREPO
+     * SALAZAR con tu llave»). Normalizada con [normalizarLlave]; se compara **exacta**.
+     *
+     * `null` en todo destino anterior y en todo cuerpo que mande un APK viejo. Por eso en un `PUT`
+     * `null` quiere decir «no la toques» y `""` «bórrala» — ver `DestinoRoutes`.
+     */
+    val llave: String? = null,
     /**
      * **Cuánto se le mandó, por moneda** — derivado. Un mapa y no un `Long` porque sumar pesos con
      * dólares da un número que no existe, y este destino puede recibir los dos (él tiene cuentas en
@@ -53,6 +69,33 @@ data class DestinoConocido(
     val totales: Map<String, Long> = emptyMap(),
     /** Cuántos movimientos se le contaron — derivado. */
     val cuantos: Int = 0,
+    /**
+     * **Cuánto se le mandó en el período en curso del dueño**, por moneda — derivado, igual que
+     * [totales]. Lo lee la tarjeta «Cuentas de otros» de Patrimonio («Caro, Mamá · $X este
+     * período»). Por el período DEL DUEÑO (ver [loQueSeLeMandoPorPeriodo]), no por mes de
+     * calendario. Vacío si el server no sabe el período (un cliente viejo lo ignora sin más).
+     */
+    val totalesDelPeriodo: Map<String, Long> = emptyMap(),
+    /**
+     * **El último envío** — derivado, igual que [totales] (30-sep). Lo lee la ficha de «Cuentas de
+     * otros» («Último: Mercado · 18 sep · $2.000.000») para que se sepa cuándo fue la última vez
+     * sin abrir el detalle. `null` sin envíos, y en lo que mande un server viejo.
+     */
+    val ultimo: UltimoEnvio? = null,
+)
+
+/**
+ * Lo que la ficha dice del último envío a un destino: el nombre que tiene HOY el movimiento (el que
+ * el dueño reconoce en Movimientos), el monto, la moneda y cuándo. Una foto liviana y no el
+ * [FinancialEvent] entero: la lista de destinos no necesita la cuenta, la categoría ni el texto del
+ * banco de cada uno.
+ */
+@Serializable
+data class UltimoEnvio(
+    val descripcion: String,
+    val monto: Long,
+    val moneda: String = "COP",
+    val timestamp: Long,
 )
 
 /** **Los movimientos que fueron a un destino, con su total.** Lo que contesta `GET /api/destinos/{id}/movimientos`. */
@@ -92,6 +135,21 @@ const val NUMERO_DEMASIADO_CORTO: String =
 const val NUMERO_DEMASIADO_LARGO: String =
     "Ese número tiene demasiados dígitos. Revisa lo que escribiste."
 
+/** Mínimo de caracteres de una llave: «@jo» no identifica a nadie. */
+const val MIN_LARGO_DE_LA_LLAVE: Int = 3
+
+/** Largo de `known_destinations.llave` en el server. */
+const val MAX_LARGO_DE_LA_LLAVE: Int = 80
+
+const val FALTA_NUMERO_O_LLAVE: String =
+    "Escribe el número de la cuenta (al menos los últimos $MIN_DIGITOS_DEL_NUMERO dígitos) o su llave."
+
+const val LLAVE_DEMASIADO_CORTA: String =
+    "Esa llave es muy corta. Escríbela como te la muestra el banco."
+
+const val LLAVE_DEMASIADO_LARGA: String =
+    "Esa llave es demasiado larga. Revisa lo que escribiste."
+
 /**
  * **Solo los dígitos.** El dueño va a pegar el número como se lo mandó el banco —`*31973270756`,
  * `319-7327-0756`, con espacios— y el que se guarda tiene que ser el mismo en los tres casos, si no
@@ -118,14 +176,23 @@ fun ultimosCuatro(numero: String): String? =
  * necesita las cuentas del dueño, que la pantalla tiene y esta función no, y su mensaje nombra la
  * cuenta que chocó.
  */
-fun rechazoDelDestino(nombre: String, numero: String, deQuien: String? = null): String? {
+fun rechazoDelDestino(nombre: String, numero: String, deQuien: String? = null, llave: String? = null): String? {
     val limpio = nombre.trim()
     if (limpio.isEmpty()) return DESTINO_SIN_NOMBRE
     if (limpio.length > MAX_NOMBRE_DEL_DESTINO) return NOMBRE_DEL_DESTINO_DEMASIADO_LARGO
     if ((deQuien?.trim()?.length ?: 0) > MAX_DE_QUIEN) return DE_QUIEN_DEMASIADO_LARGO
     val digitos = soloLosDigitos(numero)
-    if (digitos.length < MIN_DIGITOS_DEL_NUMERO) return NUMERO_DEMASIADO_CORTO
-    if (digitos.length > MAX_DIGITOS_DEL_NUMERO) return NUMERO_DEMASIADO_LARGO
+    val laLlave = llave?.let(::normalizarLlave).orEmpty()
+    // Sin llave, el número es obligatorio — la regla de siempre, con el mensaje de siempre.
+    if (laLlave.isEmpty() && digitos.isEmpty()) return FALTA_NUMERO_O_LLAVE
+    if (digitos.isNotEmpty() || laLlave.isEmpty()) {
+        if (digitos.length < MIN_DIGITOS_DEL_NUMERO) return NUMERO_DEMASIADO_CORTO
+        if (digitos.length > MAX_DIGITOS_DEL_NUMERO) return NUMERO_DEMASIADO_LARGO
+    }
+    if (laLlave.isNotEmpty()) {
+        if (laLlave.length < MIN_LARGO_DE_LA_LLAVE) return LLAVE_DEMASIADO_CORTA
+        if (laLlave.length > MAX_LARGO_DE_LA_LLAVE) return LLAVE_DEMASIADO_LARGA
+    }
     return null
 }
 
@@ -172,6 +239,11 @@ fun mensajeDeNumeroPropio(nombreDeLaCuenta: String): String =
     "Ese número es el de tu cuenta «$nombreDeLaCuenta». Un destino es una cuenta de otra persona: " +
         "si la registras aquí, Movi le pondría el nombre de otro a tus propios movimientos."
 
+/** Lo que se le dice a quien registra dos veces la misma llave. */
+fun mensajeDeLlaveRepetida(nombreDelOtro: String): String =
+    "Ya tienes «$nombreDelOtro» con esa llave. Edítalo en vez de agregar otro: dos destinos con la " +
+        "misma llave se llevarían los mismos movimientos."
+
 /** Lo que se le dice a quien registra dos veces el mismo número. */
 fun mensajeDeNumeroRepetido(nombreDelOtro: String): String =
     "Ya tienes «$nombreDelOtro» con ese número. Edítalo en vez de agregar otro: dos destinos con el " +
@@ -214,8 +286,17 @@ fun destinoQueNombra(texto: String, destinos: List<DestinoConocido>): DestinoCon
         val coinciden = destinos.filter { ultimosCuatro(it.numero) == cola }
         if (coinciden.size == 1) return coinciden.single()
     }
+    // 29-sep: y las llaves, que se comparan EXACTAS (ver [llavesQueNombra]). Van después de los
+    // números porque un texto que nombra una cuenta de destino ya dijo a dónde fue.
+    llavesQueNombra(texto).forEach { llave ->
+        val coinciden = destinos.filter { it.llaveNormalizada() == llave }
+        if (coinciden.size == 1) return coinciden.single()
+    }
     return null
 }
+
+/** Nombre que Movi propone para lo que LLEGÓ de [destino]: «Transferencia de Caro». */
+fun nombreDesdeElDestino(destino: DestinoConocido): String = "Transferencia de ${destino.nombre}"
 
 /** El nombre que Movi propone para un movimiento que va a [destino]. */
 fun nombreHaciaElDestino(destino: DestinoConocido): String = "Transferencia a ${destino.nombre}"
@@ -231,7 +312,7 @@ fun nombreHaciaElDestino(destino: DestinoConocido): String = "Transferencia a ${
  * `huella == null` es «este texto no identifica a nadie» («Transferencia», «Movimiento»): ahí poner
  * el nombre del destino es una mejora estricta.
  */
-private fun sePuedeRenombrar(nombreActual: String): Boolean {
+fun sePuedeRenombrar(nombreActual: String): Boolean {
     val huella = huellaDeUnMovimiento(nombreActual) ?: return true
     return laHuellaEsUnNumero(huella)
 }
@@ -254,10 +335,29 @@ fun conElDestinoConocido(
     textoDelMensaje: String,
     destinos: List<DestinoConocido>,
 ): ParsedSms {
+    if (parsed.type == TransactionType.INCOME) return conElRemitenteConocido(parsed, textoDelMensaje, destinos)
     if (parsed.type != TransactionType.EXPENSE) return parsed
     val destino = destinoQueNombra(textoDelMensaje, destinos) ?: return parsed
     if (!sePuedeRenombrar(parsed.merchant)) return parsed
     return parsed.copy(merchant = nombreHaciaElDestino(destino))
+}
+
+/**
+ * **La plata que LLEGÓ de alguien guardado** (29-sep): «Te llegó dinero de CAROLINA RESTREPO
+ * SALAZAR con tu llave» se propone como «Transferencia de Caro» si él guardó ese nombre en Caro.
+ *
+ * Solo reemplaza el nombre que mandó el banco (o uno ilegible): si la memoria ya le puso otro, ese
+ * es suyo. Y no suma en «lo que le mandaste» — eso sigue siendo solo gastos ([vaHaciaElDestino]).
+ */
+private fun conElRemitenteConocido(
+    parsed: ParsedSms,
+    textoDelMensaje: String,
+    destinos: List<DestinoConocido>,
+): ParsedSms {
+    val remitente = REMITENTE_CON_TU_LLAVE.find(textoDelMensaje)?.let { normalizarLlave(it.groupValues[1]) } ?: return parsed
+    val destino = destinos.filter { it.llaveNormalizada() == remitente }.singleOrNull() ?: return parsed
+    if (normalizarLlave(parsed.merchant) != remitente && !sePuedeRenombrar(parsed.merchant)) return parsed
+    return parsed.copy(merchant = nombreDesdeElDestino(destino))
 }
 
 /**
@@ -306,6 +406,29 @@ fun nombraElNumeroDelDestino(evento: FinancialEvent, destino: DestinoConocido): 
 }
 
 /**
+ * **¿El texto de [evento] nombra la LLAVE de [destino]?** La hermana de [nombraElNumeroDelDestino],
+ * con la misma fuerza: una llave es un hecho que escribió el banco. Se compara **exacta** (no por
+ * los últimos cuatro, como el número): «llave 0092184713» y una cuenta que termina en 4713 no
+ * tienen nada que ver, y por eso las dos señales no se mezclan — una llave nunca pasa por
+ * [NUMEROS_QUE_NOMBRA_EL_TEXTO] (exige `*` o «cuenta») y un número nunca pasa por [llavesQueNombra].
+ *
+ * **Solo gastos**, como su hermana.
+ */
+fun nombraLaLlaveDelDestino(evento: FinancialEvent, destino: DestinoConocido): Boolean {
+    if (evento.type != TransactionType.EXPENSE) return false
+    val llave = destino.llaveNormalizada() ?: return false
+    return listOfNotNull(evento.description, evento.merchant, evento.rawPayload)
+        .any { texto -> llave in llavesQueNombra(texto) }
+}
+
+/**
+ * **La señal fuerte, entera**: el texto del banco nombra el número o la llave de [destino]. Es la
+ * que usan el agrupador ([vaHaciaElDestino]) y el emparejador de recurrentes.
+ */
+fun nombraAlDestino(evento: FinancialEvent, destino: DestinoConocido): Boolean =
+    nombraElNumeroDelDestino(evento, destino) || nombraLaLlaveDelDestino(evento, destino)
+
+/**
  * **¿Este movimiento fue a este destino?** Usado para AGRUPAR «lo que le mandaste» en «Cuentas de
  * otros» (ver [movimientosHaciaElDestino]/[totalesHaciaElDestino]) — no para decidir sola la
  * ocurrencia de un recurrente, que es un problema con otro perfil de riesgo (ver
@@ -313,7 +436,7 @@ fun nombraElNumeroDelDestino(evento: FinancialEvent, destino: DestinoConocido): 
  *
  * Dos señales, y cualquiera alcanza:
  *
- * 1. **El número** — [nombraElNumeroDelDestino].
+ * 1. **El número o la llave** — [nombraAlDestino].
  * 2. **El nombre del destino, como palabra completa en el concepto o en el nombre.** Es lo que hace
  *    que «Cuota de Cotrafa 5413 · transferida a Caro» cuente, y lo que hace que un movimiento
  *    anotado a mano se pueda enganchar sin tocar código: se le escribe el nombre y ya. Esta señal es
@@ -327,7 +450,7 @@ fun nombraElNumeroDelDestino(evento: FinancialEvent, destino: DestinoConocido): 
  * **Solo gastos**, por lo mismo que [conElDestinoConocido]: lo que entró no es lo que se mandó.
  */
 fun vaHaciaElDestino(evento: FinancialEvent, destino: DestinoConocido): Boolean {
-    if (nombraElNumeroDelDestino(evento, destino)) return true
+    if (nombraAlDestino(evento, destino)) return true
     if (evento.type != TransactionType.EXPENSE) return false
     val nombre = enPalabras(destino.nombre)
     if (nombre.trim().length < 3) return false
@@ -363,10 +486,62 @@ fun movimientosHaciaElDestino(
 fun totalesHaciaElDestino(movimientos: List<FinancialEvent>): Map<String, Long> =
     movimientos.groupBy { it.currency }.mapValues { (_, del) -> del.sumOf { it.amount } }
 
-/** [destino] con [DestinoConocido.totales] y [DestinoConocido.cuantos] llenos. */
-fun conLoQueSeLeMando(destino: DestinoConocido, eventos: List<FinancialEvent>): DestinoConocido {
+/**
+ * [destino] con sus derivados llenos: [DestinoConocido.totales], [DestinoConocido.cuantos] y —si se
+ * pasan [ajustes] y [ahora]— [DestinoConocido.totalesDelPeriodo], lo del período en curso del dueño.
+ */
+fun conLoQueSeLeMando(
+    destino: DestinoConocido,
+    eventos: List<FinancialEvent>,
+    ajustes: PeriodSettings? = null,
+    ahora: Long? = null,
+): DestinoConocido {
     val suyos = movimientosHaciaElDestino(destino, eventos)
-    return destino.copy(totales = totalesHaciaElDestino(suyos), cuantos = suyos.size)
+    val delPeriodo = if (ajustes != null && ahora != null) {
+        val enCurso = periodoActual(ahora, ajustes)
+        totalesHaciaElDestino(suyos.filter { periodoDe(it.timestamp, ajustes) == enCurso })
+    } else {
+        emptyMap()
+    }
+    return destino.copy(
+        totales = totalesHaciaElDestino(suyos),
+        cuantos = suyos.size,
+        totalesDelPeriodo = delPeriodo,
+        // `suyos` ya viene del más reciente al más viejo (ver [movimientosHaciaElDestino]).
+        ultimo = suyos.firstOrNull()?.let { UltimoEnvio(it.description, it.amount, it.currency, it.timestamp) },
+    )
+}
+
+/**
+ * **Lo que se les mandó a todas en el período en curso**, por moneda: la cifra de la tarjeta
+ * «Cuentas de otros» de Patrimonio. Suma los [DestinoConocido.totalesDelPeriodo] ya derivados por
+ * el server, sin recalcular nada. Sin `0`: una moneda en cero no es algo que se mandó.
+ */
+fun loQueSeLesMandoEstePeriodo(destinos: List<DestinoConocido>): Map<String, Long> =
+    destinos.flatMap { it.totalesDelPeriodo.entries }
+        .groupBy({ it.key }, { it.value })
+        .mapValues { (_, montos) -> montos.sum() }
+        .filterValues { it != 0L }
+
+/** Cuántos nombres dice la tarjeta de Patrimonio antes de resumir el resto en «y N más». */
+const val NOMBRES_EN_LA_TARJETA_DE_CUENTAS_DE_OTROS: Int = 3
+
+/**
+ * **Los nombres, como los diría él**: «Caro, Mamá y Papá», «Caro, Mamá, Papá y 2 más». Los que
+ * más recibieron este período van primero —son a quienes se refiere la cifra de al lado—, y
+ * después el orden alfabético que ya trae la lista.
+ */
+fun nombresDeLasCuentasDeOtros(destinos: List<DestinoConocido>): String {
+    if (destinos.isEmpty()) return ""
+    val ordenados = destinos.sortedByDescending { d -> d.totalesDelPeriodo.values.sum() }
+    val nombres = ordenados.map { it.nombre }
+    return when {
+        nombres.size == 1 -> nombres.single()
+        nombres.size <= NOMBRES_EN_LA_TARJETA_DE_CUENTAS_DE_OTROS ->
+            nombres.dropLast(1).joinToString(", ") + " y " + nombres.last()
+        else -> nombres.take(NOMBRES_EN_LA_TARJETA_DE_CUENTAS_DE_OTROS).joinToString(", ") +
+            " y ${nombres.size - NOMBRES_EN_LA_TARJETA_DE_CUENTAS_DE_OTROS} más"
+    }
 }
 
 /** Lo que se le mandó a un destino en un período del dueño. */
@@ -392,3 +567,221 @@ fun loQueSeLeMandoPorPeriodo(
         .groupBy { periodoDe(it.timestamp, settings) }
         .map { (periodo, del) -> LoDeUnPeriodo(periodo, totalesHaciaElDestino(del), del.size) }
         .sortedWith(compareByDescending<LoDeUnPeriodo> { it.periodo.year }.thenByDescending { it.periodo.month })
+
+// ── Llaves y lo que el banco dice de a quién fue la plata (29-sep) ─────────────────────
+
+/**
+ * **La llave, como se guarda y como se compara.** Una llave es lo que Nu y Bancolombia (Bre-B)
+ * usan en vez del número de cuenta: `@usuario`, un celular, un correo, o un código numérico
+ * («llave 0092184713»). Se guarda **tal cual venga, en minúsculas y sin espacios** — un celular
+ * pegado como «300 123 4567» y el mismo escrito junto tienen que ser la misma llave, y un correo no
+ * distingue mayúsculas.
+ *
+ * **La única excepción es un nombre de persona**, que es lo que Nu escribe cuando la plata llega
+ * («Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave»): ahí no hay llave ni número, el
+ * nombre ES lo que identifica a quien mandó. Se guarda con un espacio entre palabras («carolina
+ * restrepo salazar») para que se pueda leer en la ficha; como ninguna llave real tiene espacios
+ * entre palabras de solo letras, esto no cambia nada para las demás.
+ */
+fun normalizarLlave(crudo: String): String {
+    val palabras = crudo.trim().lowercase().split(ESPACIOS).filter { it.isNotEmpty() }
+    return palabras.joinToString(if (esNombreDePersona(palabras)) " " else "")
+}
+
+private fun esNombreDePersona(palabras: List<String>): Boolean =
+    palabras.size > 1 && palabras.all { palabra -> palabra.all { it.isLetter() } }
+
+private val ESPACIOS = Regex("""\s+""")
+
+/** La llave de [this] normalizada, o `null` si no tiene. */
+fun DestinoConocido.llaveNormalizada(): String? = llave?.let(::normalizarLlave)?.takeIf { it.isNotEmpty() }
+
+/**
+ * **Cómo se lee la llave guardada**: «llave @caro», «llave 3001234567», o —si lo guardado es el
+ * nombre con que Nu nombra a quien manda plata— «Carolina Restrepo Salazar», que no es una llave y
+ * no se presenta como tal. `null` si no tiene.
+ */
+fun DestinoConocido.llaveComoSeLee(): String? = llaveNormalizada()?.let { llave ->
+    if (laLlaveEsUnNombre(llave)) enTituloCaso(llave) else "llave $llave"
+}
+
+/**
+ * **Los identificadores de un destino, como los dice la ficha**: «·0756», «llave @caro», o los dos
+ * («·0756 · llave @caro»). Del número va solo la cola, que es lo que escribe el banco.
+ */
+fun identificadoresDelDestino(destino: DestinoConocido): List<String> = listOfNotNull(
+    soloLosDigitos(destino.numero).takeIf { it.isNotEmpty() }?.let { "·" + it.takeLast(MIN_DIGITOS_DEL_NUMERO) },
+    destino.llaveComoSeLee(),
+)
+
+/** ¿La llave guardada es el nombre de una persona (lo que Nu escribe al recibir) y no una llave? */
+fun laLlaveEsUnNombre(llave: String): Boolean = ' ' in normalizarLlave(llave)
+
+/**
+ * «CAROLINA RESTREPO SALAZAR» → «Carolina Restrepo Salazar». Lo que el banco manda en mayúsculas,
+ * como lo escribiría él. Las partículas («de», «del», «la», «y») van en minúscula salvo al empezar.
+ */
+fun enTituloCaso(texto: String): String =
+    texto.trim().split(ESPACIOS).filter { it.isNotEmpty() }.mapIndexed { i, palabra ->
+        val min = palabra.lowercase()
+        if (i > 0 && min in PARTICULAS) min else min.replaceFirstChar { it.uppercaseChar() }
+    }.joinToString(" ")
+
+private val PARTICULAS = setOf("de", "del", "la", "las", "los", "y", "e")
+
+/** Qué clase de dato identifica al destino en un texto del banco. */
+enum class TipoDeIdentificador { NUMERO, LLAVE }
+
+/**
+ * **Lo que un texto del banco dice sobre a quién fue (o de quién vino) la plata.** [valor] ya viene
+ * normalizado: solo dígitos para un número, [normalizarLlave] para una llave o un nombre.
+ */
+data class IdentificadorDelDestino(val tipo: TipoDeIdentificador, val valor: String) {
+    /** Cómo se lo nombra en una pregunta: «la cuenta ·0756», «la llave 0087», «Carolina Restrepo». */
+    val comoSeDice: String
+        get() = when {
+            tipo == TipoDeIdentificador.NUMERO -> "la cuenta ·${valor.takeLast(MIN_DIGITOS_DEL_NUMERO)}"
+            laLlaveEsUnNombre(valor) -> enTituloCaso(valor)
+            else -> "la llave $valor"
+        }
+}
+
+/**
+ * La cuenta **de destino** — detrás de «a» o «hacia», nunca la de «desde tu cuenta», que es de
+ * dónde salió. La misma forma que `cuentaDestinoRegex` del server, más «hacia la cuenta», que
+ * también escribe Bancolombia.
+ */
+private val CUENTA_DE_DESTINO =
+    Regex("""\b(?:a|hacia)\s+(?:la\s+)?cuenta\s+\*?\s?(\d{4,})""", RegexOption.IGNORE_CASE)
+
+/**
+ * «a la llave 0087», «Pago QR · llave 0092184713», «llave @juan», «llave caro@correo.com». **No**
+ * «con tu llave» (la llave es la del dueño) — por eso el `tu` delante lo descarta. Y la llave
+ * tiene que tener un dígito o una arroba: una palabra suelta después de «llave» («la llave
+ * registrada») no identifica a nadie.
+ */
+private val LLAVE_DEL_TEXTO =
+    Regex("""(?<!\btu\s)\bllave\s+(@?[A-Za-z0-9._+\-]+(?:@[A-Za-z0-9.\-]+)?)""", RegexOption.IGNORE_CASE)
+
+/** «Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave» (Nu): el nombre de quien mandó. */
+private val REMITENTE_CON_TU_LLAVE =
+    Regex("""te\s+lleg[oó]\s+dinero\s+de\s+(.+?)\s+con\s+tu\s+llave""", RegexOption.IGNORE_CASE)
+
+private fun llavesDelTexto(texto: String): List<String> =
+    LLAVE_DEL_TEXTO.findAll(texto)
+        .map { it.groupValues[1].trimEnd('.', ',', '-', ';', ':') }
+        .filter { it.any { c -> c.isDigit() || c == '@' } }
+        .map(::normalizarLlave)
+        .filter { it.length >= MIN_LARGO_DE_LA_LLAVE }
+        .toList()
+
+/** Las llaves (y el nombre de quien mandó) que nombra un texto del banco, normalizadas. */
+private fun llavesQueNombra(texto: String): List<String> =
+    llavesDelTexto(texto) +
+        REMITENTE_CON_TU_LLAVE.findAll(texto).map { normalizarLlave(it.groupValues[1]) }.filter { it.isNotEmpty() }
+
+/**
+ * **A quién fue (o de quién vino) la plata, según el texto del banco**, o `null` si no lo dice.
+ *
+ * Tres formas, en este orden: la cuenta de destino («a la cuenta *31973270756»), una llave («a la
+ * llave 0087»), o el nombre de quien mandó («Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu
+ * llave»). Es lo que el server pone en [ParsedSms.identificadorDelDestino] y lo que la bandeja y el
+ * detalle de un movimiento leen para ofrecer «¿De quién es esta cuenta?».
+ */
+fun identificadorDelDestinoEn(texto: String): IdentificadorDelDestino? {
+    CUENTA_DE_DESTINO.find(texto)?.let { return IdentificadorDelDestino(TipoDeIdentificador.NUMERO, it.groupValues[1]) }
+    llavesDelTexto(texto).firstOrNull()?.let { return IdentificadorDelDestino(TipoDeIdentificador.LLAVE, it) }
+    REMITENTE_CON_TU_LLAVE.find(texto)?.let { hallazgo ->
+        val nombre = normalizarLlave(hallazgo.groupValues[1])
+        if (nombre.length >= MIN_LARGO_DE_LA_LLAVE) return IdentificadorDelDestino(TipoDeIdentificador.LLAVE, nombre)
+    }
+    return null
+}
+
+/**
+ * Lo mismo para un movimiento ya anotado: primero el texto crudo del banco ([FinancialEvent.rawPayload],
+ * que no se reescribe nunca), después el nombre del banco y el concepto.
+ */
+fun identificadorDelDestinoEn(evento: FinancialEvent): IdentificadorDelDestino? =
+    listOfNotNull(evento.rawPayload, evento.merchant, evento.description)
+        .firstNotNullOfOrNull { identificadorDelDestinoEn(it) }
+
+/** El identificador que el server leyó del SMS ([ParsedSms.identificadorDelDestino]), o `null`. */
+fun ParsedSms.identificador(): IdentificadorDelDestino? =
+    identificadorDelDestino?.takeIf { it.isNotBlank() }?.let {
+        IdentificadorDelDestino(if (identificadorEsLlave) TipoDeIdentificador.LLAVE else TipoDeIdentificador.NUMERO, it)
+    }
+
+/**
+ * **¿[destino] se reconoce por [identificador]?** Un número, por los últimos cuatro (la regla de
+ * siempre, ver [ultimosCuatro]); una llave, exacta.
+ */
+fun elDestinoConoce(destino: DestinoConocido, identificador: IdentificadorDelDestino): Boolean =
+    when (identificador.tipo) {
+        TipoDeIdentificador.NUMERO ->
+            ultimosCuatro(destino.numero)?.let { it == ultimosCuatro(identificador.valor) } ?: false
+        TipoDeIdentificador.LLAVE -> destino.llaveNormalizada() == identificador.valor
+    }
+
+/**
+ * **¿Hay que ofrecer «¿De quién es esta cuenta?»?** Sí cuando hay un identificador, ningún destino
+ * guardado lo conoce, y —si es un número— no es el de una cuenta suya (un traspaso entre sus
+ * cuentas nombra la de destino igual que una transferencia a Caro).
+ */
+fun ofreceGuardarElDestino(
+    identificador: IdentificadorDelDestino?,
+    destinos: List<DestinoConocido>,
+    cuentas: List<Account>,
+): Boolean {
+    if (identificador == null) return false
+    if (destinos.any { elDestinoConoce(it, identificador) }) return false
+    if (identificador.tipo == TipoDeIdentificador.NUMERO && cuentaPropiaConEseNumero(identificador.valor, cuentas) != null) {
+        return false
+    }
+    return true
+}
+
+/**
+ * **El nombre con que se ofrece guardarlo**: el que mandó el banco, en Título Caso («Carolina
+ * Restrepo Salazar», no en mayúsculas), o vacío si lo que hay es un número o nada («Transferencia a
+ * la cuenta *0756» no es el nombre de nadie).
+ */
+fun nombreSugeridoParaElDestino(nombreDelBanco: String?): String {
+    val nombre = nombreDelBanco?.trim().orEmpty()
+    if (nombre.isEmpty() || sePuedeRenombrar(nombre)) return ""
+    return enTituloCaso(nombre).take(MAX_NOMBRE_DEL_DESTINO)
+}
+
+/**
+ * **Qué se guarda al tocar «Guardar»** desde donde apareció el identificador: el destino que ya se
+ * llama así (sin distinguir mayúsculas ni tildes) y todavía no tiene ese dato, con el dato agregado
+ * — «Caro» ya tenía la cuenta y ahora suma la llave —, o uno nuevo.
+ */
+fun destinoParaGuardar(
+    identificador: IdentificadorDelDestino,
+    nombre: String,
+    deQuien: String?,
+    destinos: List<DestinoConocido>,
+): DestinoConocido {
+    val limpio = nombre.trim()
+    val quien = deQuien?.trim()?.ifBlank { null }
+    val mismoNombre = destinos.firstOrNull { normalizarParaBuscar(it.nombre.trim()) == normalizarParaBuscar(limpio) }
+    if (mismoNombre != null) {
+        when (identificador.tipo) {
+            TipoDeIdentificador.NUMERO -> if (mismoNombre.numero.isBlank()) {
+                return mismoNombre.copy(numero = identificador.valor, deQuien = mismoNombre.deQuien ?: quien)
+            }
+            TipoDeIdentificador.LLAVE -> if (mismoNombre.llaveNormalizada() == null) {
+                return mismoNombre.copy(llave = identificador.valor, deQuien = mismoNombre.deQuien ?: quien)
+            }
+        }
+    }
+    return when (identificador.tipo) {
+        TipoDeIdentificador.NUMERO -> DestinoConocido(nombre = limpio, numero = identificador.valor, deQuien = quien)
+        TipoDeIdentificador.LLAVE -> DestinoConocido(nombre = limpio, numero = "", deQuien = quien, llave = identificador.valor)
+    }
+}
+
+/** El nombre que se propone para el movimiento una vez guardado el destino. */
+fun nombreDelMovimientoConElDestino(destino: DestinoConocido, tipo: TransactionType): String =
+    if (tipo == TransactionType.INCOME) nombreDesdeElDestino(destino) else nombreHaciaElDestino(destino)

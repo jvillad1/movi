@@ -814,6 +814,15 @@ object KnownDestinations : Table("known_destinations") {
     val numero    = varchar("numero", 30)
     val deQuien   = varchar("de_quien", 40).nullable()
     val createdAt = long("created_at")
+    /**
+     * **La llave** (29-sep) — `@usuario`, celular, correo o código, normalizada con
+     * `normalizarLlave`. NULLABLE a propósito: la tabla ya existe en producción con los destinos
+     * del dueño adentro, y `createMissingTablesAndColumns` emite un `ADD COLUMN llave VARCHAR(80)
+     * NULL` que no puede fallar sobre esas filas — todas quedan en NULL, que es la verdad: ninguna
+     * tenía llave. Un destino que solo se conoce por su llave guarda `numero = ''` (la columna
+     * `numero` sigue como estaba). Ver `KnownDestinationsLlaveColumnTest`.
+     */
+    val llave     = varchar("llave", 80).nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_known_destinations_user_id", false, userId) }
 }

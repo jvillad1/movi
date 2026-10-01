@@ -182,6 +182,32 @@ class SmsParseTest {
         assertNotEquals(CARD_PAYMENT_CATEGORY, assertNotNull(parseSms(texto)).category)
     }
 
+    /**
+     * **A quién fue, como campo aparte** (29-sep): el número o la llave ya no van solo pegados en el
+     * nombre. Con los tres textos reales: la transferencia a una cuenta, el pago por QR a una llave
+     * y la plata que llega a Nu «de NOMBRE con tu llave». El cliente decide con esto si ofrecer
+     * «¿De quién es esta cuenta?».
+     */
+    @Test
+    fun `el identificador del destino sale aparte para los tres textos reales`() {
+        val transferencia = assertNotNull(parseSms("Bancolombia: ANA, transferiste \$10,000.00 a la cuenta *41279033068 desde tu cuenta *3333."))
+        assertEquals("41279033068", transferencia.identificadorDelDestino, "la de destino, no la de origen (*3333)")
+        assertEquals(false, transferencia.identificadorEsLlave)
+
+        val qr = assertNotNull(parseSms("Bancolombia: ANA PEREZ pagaste \$18,500.00 por codigo QR desde tu cuenta *3333 a la llave 0087 el 09/09/2026 a las 15:08."))
+        assertEquals("0087", qr.identificadorDelDestino)
+        assertEquals(true, qr.identificadorEsLlave, "una llave numérica sigue siendo llave, no un número de cuenta")
+
+        val nu = assertNotNull(
+            parseSms("Recibiste 300.000,00 en tu cuenta: Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave.", "Notificación · Nu"),
+        )
+        assertEquals("carolina restrepo salazar", nu.identificadorDelDestino, "«con tu llave» es la del dueño: lo que identifica es el nombre")
+        assertEquals(true, nu.identificadorEsLlave)
+
+        // Una compra no es a una persona, y un pago de tarjeta tampoco.
+        assertEquals(null, assertNotNull(parseSms("Bancolombia: Compraste \$28.500 en UBER con tu T.Cred *3684.")).identificadorDelDestino)
+    }
+
     @Test
     fun `pagos QR y transferencias dicen a quien`() {
         // **La llave va en el nombre.** Sin ella todos los pagos por QR se llaman igual, y Movi no

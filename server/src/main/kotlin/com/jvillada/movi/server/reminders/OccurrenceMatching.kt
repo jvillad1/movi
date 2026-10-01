@@ -9,7 +9,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.nombreDeMovimientoPegaConRegla
-import com.jvillada.movi.shared.model.nombraElNumeroDelDestino
+import com.jvillada.movi.shared.model.nombraAlDestino
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -215,19 +215,21 @@ private fun nombrePegaCon(rule: RecurringRule, event: FinancialEvent): Boolean =
  * **Ola V — ¿el texto de [event] nombra el NÚMERO del [DestinoConocido] que [rule] tiene asociado**
  * (si tiene alguno)?
  *
- * Reusa [nombraElNumeroDelDestino] de `:core` y **no** [com.jvillada.movi.shared.model.vaHaciaElDestino] —
+ * Reusa [nombraAlDestino] de `:core` (el número, o desde el 29-sep la llave, exacta) y **no**
+ * [com.jvillada.movi.shared.model.vaHaciaElDestino] —
  * esa función también acepta el NOMBRE del destino como palabra suelta («Almuerzo caro», «Mercado
  * caro»: «caro» es un adjetivo común en español), una seña floja hecha a propósito para que un
  * movimiento anotado a mano se enganche solo con escribirle el nombre. Ahí un falso positivo infla
  * un total en pantalla; acá podría emparejar solo un gasto ajeno y apagar el aviso de una deuda
- * real, así que la única seña que se admite es el **hecho** que escribió el banco: el número.
+ * real, así que la única seña que se admite es el **hecho** que escribió el banco: el número o
+ * la llave.
  *
  * `destinos` trae SOLO los destinos que el llamador ya resolvió como del dueño de esta regla — un
  * mapa y no una lista para no recorrerla por cada movimiento de la ventana.
  */
 private fun destinoPegaCon(rule: RecurringRule, event: FinancialEvent, destinos: Map<String, DestinoConocido>): Boolean {
     val destino = rule.destinoConocidoId?.let { destinos[it] } ?: return false
-    return nombraElNumeroDelDestino(event, destino)
+    return nombraAlDestino(event, destino)
 }
 
 /**

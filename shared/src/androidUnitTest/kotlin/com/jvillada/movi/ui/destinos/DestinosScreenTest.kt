@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -23,9 +24,11 @@ import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MovimientosDelDestino
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UltimoEnvio
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.formatMoney
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -107,9 +110,18 @@ class DestinosScreenTest {
     }
 
     private fun tocar(texto: String) {
-        composeRule.onNode(hasClickAction() and hasAnyChild(hasText(texto)), useUnmergedTree = true)
+        composeRule.onAllNodes(hasClickAction() and (hasText(texto) or hasAnyChild(hasText(texto))), useUnmergedTree = true)
+            .onFirst()
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
+    }
+
+    /** Ficha → detalle → «Editar», hasta la hoja de edición. */
+    private fun abrirLaEdicion() {
+        composeRule.onAllNodesWithText("Caro", useUnmergedTree = true).onFirst().performClick()
+        esperarTexto("LE HAS ENVIADO")
+        tocar("Editar")
+        esperarTexto("Editar cuenta de otro")
     }
 
     @Test
@@ -181,11 +193,11 @@ class DestinosScreenTest {
         tocar("Guardar una cuenta de otra persona")
         esperarTexto("Nueva cuenta de otro")
 
-        // Los tres campos en orden: nombre, número, de quién.
+        // Los cuatro campos en orden: nombre, número, llave, de quién.
         val editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
         editables[0].performTextInput("Caro")
         editables[1].performTextInput("*319-7327-0756")
-        editables[2].performTextInput("esposa")
+        editables[3].performTextInput("esposa")
         composeRule.waitForIdle()
 
         tocar("Guardar cuenta")
@@ -194,6 +206,117 @@ class DestinosScreenTest {
         assertEquals("Caro", mandado!!.nombre)
         assertEquals("31973270756", mandado!!.numero, "se guardan solo los dígitos")
         assertEquals("esposa", mandado!!.deQuien)
+        assertEquals(null, mandado!!.llave, "sin llave escrita no se manda ninguna")
+    }
+
+    // ── 30-sep: la ficha dice todo, y la llave se puede guardar y editar ──────
+
+    @Test
+    fun `la ficha dice los identificadores, lo de este periodo y el ultimo envio`() {
+        montar(object : ConCaro() {
+            override suspend fun getDestinos(): List<DestinoConocido> = listOf(
+                caro.copy(
+                    llave = "@caro",
+                    totalesDelPeriodo = mapOf("COP" to 350_000L),
+                    ultimo = UltimoEnvio("Transferencia a Caro", 350_000L, "COP", 1_790_000_000_000L),
+                ),
+            )
+        })
+
+        esperarTexto("·0756 · llave @caro · esposa")
+        esperarTexto("Este período")
+        esperarTexto("350.000")
+        esperarTexto("Último")
+        esperarTexto("Transferencia a Caro ·")
+        // El monto del último envío va en su propio texto, a la derecha: a 390 dp, pegado al final
+        // del renglón, era lo primero que se cortaba.
+        assertEquals(
+            2,
+            composeRule.onAllNodesWithText(formatMoney(350_000L, "COP"), useUnmergedTree = true).fetchSemanticsNodes().size,
+            "el de «Este período» y el del último envío, cada uno entero",
+        )
+    }
+
+    @Test
+    fun `una cuenta conocida solo por su llave no muestra un numero vacio`() {
+        montar(object : ConCaro() {
+            override suspend fun getDestinos(): List<DestinoConocido> =
+                listOf(caro.copy(numero = "", llave = "carolina restrepo salazar", deQuien = null))
+        })
+
+        esperarTexto("Carolina Restrepo Salazar")
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("·", useUnmergedTree = true).fetchSemanticsNodes().size,
+            "un «·» suelto por el número vacío",
+        )
+    }
+
+    @Test
+    fun `guardar una cuenta nueva solo con la llave`() {
+        var mandado: DestinoConocido? = null
+        montar(object : ConCaro() {
+            override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
+            override suspend fun createDestino(destino: DestinoConocido): DestinoConocido {
+                mandado = destino
+                return destino.copy(id = "dst_nuevo")
+            }
+        })
+
+        esperarTexto("Guardar una cuenta de otra persona")
+        tocar("Guardar una cuenta de otra persona")
+        esperarTexto("Nueva cuenta de otro")
+        val editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
+        editables[0].performTextInput("Caro")
+        editables[2].performTextInput("@caro")
+        composeRule.waitForIdle()
+
+        tocar("Guardar cuenta")
+        composeRule.waitUntil(timeoutMillis = 5_000) { mandado != null }
+        assertEquals("", mandado!!.numero)
+        assertEquals("@caro", mandado!!.llave)
+    }
+
+    /**
+     * **Editar un destino que solo tiene llave se puede** — antes la hoja no sabía de llaves y lo
+     * rechazaba por «falta el número». Y vaciar la llave manda `""` (bórrala), no `null` (que el
+     * server lee como «no la toques»).
+     */
+    @Test
+    fun `editar una cuenta de solo llave guarda, y vaciar la llave la borra`() {
+        val soloLlave = caro.copy(numero = "", llave = "@caro")
+        var mandado: DestinoConocido? = null
+        montar(object : ConCaro() {
+            override suspend fun getDestinos(): List<DestinoConocido> = listOf(soloLlave)
+            override suspend fun getMovimientosDelDestino(id: String): MovimientosDelDestino =
+                MovimientosDelDestino(destino = soloLlave, movimientos = emptyList())
+            override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido {
+                mandado = destino
+                return destino
+            }
+        })
+
+        esperarTexto("llave @caro")
+        abrirLaEdicion()
+        var editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
+        editables[3].performTextInput("esposa")
+        composeRule.waitForIdle()
+        tocar("Guardar cambios")
+        composeRule.waitUntil(timeoutMillis = 5_000) { mandado != null }
+        assertEquals("@caro", mandado!!.llave)
+        assertEquals("", mandado!!.numero)
+
+        // Con número, vaciar la llave la borra.
+        mandado = null
+        composeRule.waitForIdle()
+        abrirLaEdicion()
+        editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
+        editables[1].performTextInput("31973270756")
+        editables[2].performTextClearance()
+        composeRule.waitForIdle()
+        tocar("Guardar cambios")
+        composeRule.waitUntil(timeoutMillis = 5_000) { mandado != null }
+        assertEquals("", mandado!!.llave, "vaciar la llave tiene que mandar \"\", no null")
     }
 
     /**
