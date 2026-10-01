@@ -28,6 +28,7 @@ import com.jvillada.movi.shared.model.UltimoEnvio
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.formatMoney
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -227,6 +228,13 @@ class DestinosScreenTest {
         esperarTexto("350.000")
         esperarTexto("Último")
         esperarTexto("Transferencia a Caro ·")
+        // El monto del último envío va en su propio texto, a la derecha: a 390 dp, pegado al final
+        // del renglón, era lo primero que se cortaba.
+        assertEquals(
+            2,
+            composeRule.onAllNodesWithText(formatMoney(350_000L, "COP"), useUnmergedTree = true).fetchSemanticsNodes().size,
+            "el de «Este período» y el del último envío, cada uno entero",
+        )
     }
 
     @Test

@@ -135,8 +135,10 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
                 },
                 action = if (destinos.isNotEmpty() && !noSeLeyo) {
                     {
+                        // «Nueva» y no «Nueva cuenta»: a 390 dp el botón largo dejaba el título en
+                        // «Cuentas de otr…» (visto en la web, 30-sep).
                         NewItemButton(
-                            label = "Nueva cuenta",
+                            label = "Nueva",
                             onClick = { formulario = null; formularioAbierto = true },
                         )
                     }
@@ -296,10 +298,12 @@ private fun FichaDelDestino(destino: DestinoConocido, onClick: () -> Unit) {
             RenglonDeLaFicha("Este período", loDeEstePeriodo(destino))
             if (ultimo != null) {
                 Spacer(Modifier.height(4.dp))
+                // El monto va aparte, a la derecha: a 390 dp el renglón entero se cortaba justo en
+                // la cifra («… · $…»), que es lo que más se busca. Lo que cede es el nombre.
                 RenglonDeLaFicha(
                     "Último",
-                    "${ultimo.descripcion} · ${etiquetaDeFecha(fechaDeEpoch(ultimo.timestamp), hoy)} · " +
-                        formatMoney(ultimo.monto, ultimo.moneda),
+                    "${ultimo.descripcion} · ${etiquetaDeFecha(fechaDeEpoch(ultimo.timestamp), hoy)}",
+                    alFinal = formatMoney(ultimo.monto, ultimo.moneda),
                 )
             }
         }
@@ -307,7 +311,7 @@ private fun FichaDelDestino(destino: DestinoConocido, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RenglonDeLaFicha(rotulo: String, valor: String) {
+private fun RenglonDeLaFicha(rotulo: String, valor: String, alFinal: String? = null) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
         Text(
@@ -318,6 +322,9 @@ private fun RenglonDeLaFicha(rotulo: String, valor: String) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+        if (alFinal != null) {
+            Text(alFinal, style = Movi.textos.apoyo, color = Movi.colores.texto, maxLines = 1, softWrap = false)
+        }
     }
 }
 
