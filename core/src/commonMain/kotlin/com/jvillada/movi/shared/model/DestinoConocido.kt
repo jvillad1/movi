@@ -76,6 +76,26 @@ data class DestinoConocido(
      * calendario. Vacío si el server no sabe el período (un cliente viejo lo ignora sin más).
      */
     val totalesDelPeriodo: Map<String, Long> = emptyMap(),
+    /**
+     * **El último envío** — derivado, igual que [totales] (30-sep). Lo lee la ficha de «Cuentas de
+     * otros» («Último: Mercado · 18 sep · $2.000.000») para que se sepa cuándo fue la última vez
+     * sin abrir el detalle. `null` sin envíos, y en lo que mande un server viejo.
+     */
+    val ultimo: UltimoEnvio? = null,
+)
+
+/**
+ * Lo que la ficha dice del último envío a un destino: el nombre que tiene HOY el movimiento (el que
+ * el dueño reconoce en Movimientos), el monto, la moneda y cuándo. Una foto liviana y no el
+ * [FinancialEvent] entero: la lista de destinos no necesita la cuenta, la categoría ni el texto del
+ * banco de cada uno.
+ */
+@Serializable
+data class UltimoEnvio(
+    val descripcion: String,
+    val monto: Long,
+    val moneda: String = "COP",
+    val timestamp: Long,
 )
 
 /** **Los movimientos que fueron a un destino, con su total.** Lo que contesta `GET /api/destinos/{id}/movimientos`. */
@@ -483,7 +503,13 @@ fun conLoQueSeLeMando(
     } else {
         emptyMap()
     }
-    return destino.copy(totales = totalesHaciaElDestino(suyos), cuantos = suyos.size, totalesDelPeriodo = delPeriodo)
+    return destino.copy(
+        totales = totalesHaciaElDestino(suyos),
+        cuantos = suyos.size,
+        totalesDelPeriodo = delPeriodo,
+        // `suyos` ya viene del más reciente al más viejo (ver [movimientosHaciaElDestino]).
+        ultimo = suyos.firstOrNull()?.let { UltimoEnvio(it.description, it.amount, it.currency, it.timestamp) },
+    )
 }
 
 /**
@@ -569,6 +595,24 @@ private val ESPACIOS = Regex("""\s+""")
 
 /** La llave de [this] normalizada, o `null` si no tiene. */
 fun DestinoConocido.llaveNormalizada(): String? = llave?.let(::normalizarLlave)?.takeIf { it.isNotEmpty() }
+
+/**
+ * **Cómo se lee la llave guardada**: «llave @caro», «llave 3001234567», o —si lo guardado es el
+ * nombre con que Nu nombra a quien manda plata— «Carolina Restrepo Salazar», que no es una llave y
+ * no se presenta como tal. `null` si no tiene.
+ */
+fun DestinoConocido.llaveComoSeLee(): String? = llaveNormalizada()?.let { llave ->
+    if (laLlaveEsUnNombre(llave)) enTituloCaso(llave) else "llave $llave"
+}
+
+/**
+ * **Los identificadores de un destino, como los dice la ficha**: «·0756», «llave @caro», o los dos
+ * («·0756 · llave @caro»). Del número va solo la cola, que es lo que escribe el banco.
+ */
+fun identificadoresDelDestino(destino: DestinoConocido): List<String> = listOfNotNull(
+    soloLosDigitos(destino.numero).takeIf { it.isNotEmpty() }?.let { "·" + it.takeLast(MIN_DIGITOS_DEL_NUMERO) },
+    destino.llaveComoSeLee(),
+)
 
 /** ¿La llave guardada es el nombre de una persona (lo que Nu escribe al recibir) y no una llave? */
 fun laLlaveEsUnNombre(llave: String): Boolean = ' ' in normalizarLlave(llave)

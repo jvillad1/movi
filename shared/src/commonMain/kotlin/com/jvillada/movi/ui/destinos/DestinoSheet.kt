@@ -27,6 +27,9 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.cuentaPropiaConEseNumero
+import com.jvillada.movi.shared.model.enTituloCaso
+import com.jvillada.movi.shared.model.laLlaveEsUnNombre
+import com.jvillada.movi.shared.model.llaveNormalizada
 import com.jvillada.movi.shared.model.mensajeDeNumeroPropio
 import com.jvillada.movi.shared.model.rechazoDelDestino
 import com.jvillada.movi.shared.model.soloLosDigitos
@@ -39,8 +42,15 @@ import com.jvillada.movi.ui.credits.SectionLabel
 import kotlinx.coroutines.launch
 
 /**
- * **Guardar, renombrar o borrar una cuenta de otra persona.** Tres campos y nada más: el nombre, el
- * número, y de quién es.
+ * **Guardar, renombrar o borrar una cuenta de otra persona.** Cuatro campos y nada más: el nombre,
+ * el número, la llave (30-sep: Nu y Bre-B identifican por llave; con uno de los dos basta) y de
+ * quién es.
+ *
+ * ### La llave y el `PUT`
+ *
+ * En el server, una llave `null` quiere decir «no la toques» (es lo que manda el APK viejo) y `""`
+ * «bórrala» — ver `DestinoRoutes`. Por eso esta hoja manda `""` cuando el dueño vació una llave que
+ * había, y `null` cuando no había ninguna y no escribió nada.
  *
  * ### La guarda que se muestra ACÁ y no solo en el server
  *
@@ -65,6 +75,10 @@ fun DestinoSheet(
     var nombre by remember { mutableStateOf(existente?.nombre ?: "") }
     var numero by remember { mutableStateOf(existente?.numero ?: "") }
     var deQuien by remember { mutableStateOf(existente?.deQuien ?: "") }
+    // Un nombre guardado como llave (lo que Nu escribe al recibir) se muestra como se lee.
+    var llave by remember {
+        mutableStateOf(existente?.llaveNormalizada()?.let { if (laLlaveEsUnNombre(it)) enTituloCaso(it) else it } ?: "")
+    }
     var guardando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var pidiendoBorrar by remember { mutableStateOf(false) }
@@ -74,7 +88,8 @@ fun DestinoSheet(
     val propia = remember(digitos, cuentas) {
         if (digitos.length >= 4) cuentaPropiaConEseNumero(digitos, cuentas) else null
     }
-    val loQueFalta = rechazoDelDestino(nombre, digitos, deQuien)
+    val llaveEscrita = llave.trim().ifEmpty { null }
+    val loQueFalta = rechazoDelDestino(nombre, digitos, deQuien, llaveEscrita)
         ?: propia?.let { mensajeDeNumeroPropio(it.name) }
     val sePuedeGuardar = loQueFalta == null && !guardando
 
@@ -88,6 +103,7 @@ fun DestinoSheet(
                 nombre = nombre.trim(),
                 numero = digitos,
                 deQuien = deQuien.trim().ifBlank { null },
+                llave = llaveEscrita ?: if (existente?.llaveNormalizada() != null) "" else null,
             )
             val resultado = if (editando) {
                 runCatching { Repositories.wallets.updateDestino(existente!!.id, destino) }
@@ -178,6 +194,18 @@ fun DestinoSheet(
             Spacer(Modifier.height(6.dp))
             Text(
                 "Puedes pegarlo como te lo manda el banco. Movi se queda solo con los dígitos.",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoApagado,
+            )
+
+            Spacer(Modifier.height(18.dp))
+
+            SectionLabel("LLAVE")
+            Spacer(Modifier.height(8.dp))
+            FieldBox("Ej: @caro, 3001234567 o su correo", llave, { llave = it })
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Nu y Bre-B usan la llave en vez del número. Con el número o la llave basta; si tienes los dos, mejor.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
             )

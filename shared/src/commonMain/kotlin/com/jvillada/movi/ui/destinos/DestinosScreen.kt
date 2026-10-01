@@ -26,11 +26,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.identificadoresDelDestino
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
@@ -47,6 +49,9 @@ import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
 import com.jvillada.movi.ui.components.altoDeUnRenglon
 import com.jvillada.movi.ui.components.formatMoney
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.fechaDeEpoch
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 
 /**
  * # «Más → Cuentas de otros»
@@ -223,18 +228,31 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
 internal const val QUE_ES_ESTO: String =
     "Aquí guardas cuentas que no son tuyas: la de tu pareja, la de tu papá. No entran en tu plata " +
         "ni en tu patrimonio. Sirven para dos cosas: cuando el banco te avise de una transferencia " +
-        "a ese número, Movi le pone el nombre en vez del número; y aquí ves junto todo lo que le " +
-        "has enviado."
+        "a esa cuenta o a su llave, Movi le pone el nombre en vez del número; y aquí ves junto todo " +
+        "lo que le has enviado. También puedes guardarlas desde el aviso del banco, con «Guardar como…»."
 
-/** Cómo se muestra un número guardado: solo la cola, que es lo que dice el banco. */
-internal fun colaVisible(numero: String): String = "·" + numero.takeLast(4)
-
-/** El renglón de «de quién es», si lo llenó. */
+/**
+ * El renglón de debajo del nombre: cómo lo reconoce el banco (la cola del número, la llave, o los
+ * dos — ver [identificadoresDelDestino]) y de quién es, si lo llenó.
+ */
 internal fun subtituloDelDestino(destino: DestinoConocido): String =
-    listOfNotNull(colaVisible(destino.numero), destino.deQuien).joinToString(" · ")
+    (identificadoresDelDestino(destino) + listOfNotNull(destino.deQuien)).joinToString(" · ")
 
+/** «Este período»: lo de [DestinoConocido.totalesDelPeriodo], o que no hubo nada. */
+internal fun loDeEstePeriodo(destino: DestinoConocido): String =
+    destino.totalesDelPeriodo.filterValues { it != 0L }.entries.sortedBy { it.key }
+        .joinToString(" · ") { (moneda, total) -> formatMoney(total, moneda) }
+        .ifEmpty { "nada todavía" }
+
+/**
+ * **Una cuenta de otro, de un vistazo** (30-sep): el nombre, cómo la reconoce el banco y de quién
+ * es; a la derecha el total y cuántos envíos; y debajo lo de este período y el último envío —
+ * «¿cuándo fue la última vez que le mandé a Caro?» se contesta sin abrir nada. Tocarla abre el
+ * detalle con todos los movimientos ([DetalleDelDestinoSheet]).
+ */
 @Composable
 private fun FichaDelDestino(destino: DestinoConocido, onClick: () -> Unit) {
+    val hoy = remember { hoyEnAppZone() }
     MinCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         variant = MinCardVariant.Elevated,
@@ -270,6 +288,36 @@ private fun FichaDelDestino(destino: DestinoConocido, onClick: () -> Unit) {
                 }
             }
         }
+        // Lo de este período y el último envío, solo si hubo alguno: sin envíos ya lo dice
+        // «Sin movimientos», y dos renglones vacíos más no agregan nada.
+        val ultimo = destino.ultimo
+        if (destino.cuantos > 0) {
+            Spacer(Modifier.height(12.dp))
+            RenglonDeLaFicha("Este período", loDeEstePeriodo(destino))
+            if (ultimo != null) {
+                Spacer(Modifier.height(4.dp))
+                RenglonDeLaFicha(
+                    "Último",
+                    "${ultimo.descripcion} · ${etiquetaDeFecha(fechaDeEpoch(ultimo.timestamp), hoy)} · " +
+                        formatMoney(ultimo.monto, ultimo.moneda),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenglonDeLaFicha(rotulo: String, valor: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+        Text(
+            valor,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 

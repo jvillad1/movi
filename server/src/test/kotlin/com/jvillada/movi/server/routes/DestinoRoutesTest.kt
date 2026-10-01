@@ -359,7 +359,13 @@ class DestinoRoutesTest {
 
     // ── El total de lo que se le mandó ────────────────────────────────────────
 
-    private fun anotarGasto(id: String, descripcion: String, monto: Long, crudo: String?) = transaction {
+    private fun anotarGasto(
+        id: String,
+        descripcion: String,
+        monto: Long,
+        crudo: String?,
+        cuando: Long = System.currentTimeMillis(),
+    ) = transaction {
         Events.insert {
             it[Events.id] = id
             it[userId] = userAId
@@ -370,7 +376,7 @@ class DestinoRoutesTest {
             it[category] = "Otros"
             it[Events.description] = descripcion
             it[merchant] = descripcion
-            it[timestamp] = System.currentTimeMillis()
+            it[timestamp] = cuando
             it[eventSource] = "SMS"
             it[rawPayload] = crudo
             it[reconciliationStatus] = "RECONCILED"
@@ -385,16 +391,20 @@ class DestinoRoutesTest {
     fun `el GET suma lo enviado, y los movimientos renombrados siguen contando`() = testApplication {
         wireApp()
         crearCaro()
+        val dia = 86_400_000L
+        val ahora = System.currentTimeMillis()
         anotarGasto(
             "ev-mercado", "Mercado", 2_000_000L,
             "Transferiste \$2.000.000 a la cuenta *31973270756 desde tu cuenta *8133",
+            cuando = ahora - 3 * dia,
         )
         anotarGasto(
             "ev-colegio", "Colegio Hija · parte desde Bancolombia", 1_000_000L,
             "Transferiste \$1.000.000 a la cuenta *31973270756 desde tu cuenta *8133",
+            cuando = ahora - 2 * dia,
         )
         // Anotado a mano: sin texto del banco, lo engancha el nombre en el concepto.
-        anotarGasto("ev-cotrafa", "Cuota de Cotrafa 5413 · transferida a Caro", 1_931_488L, null)
+        anotarGasto("ev-cotrafa", "Cuota de Cotrafa 5413 · transferida a Caro", 1_931_488L, null, cuando = ahora - dia)
         // Y algo que no tiene nada que ver, para que el total no sea «todos los gastos».
         anotarGasto("ev-uber", "Uber", 28_500L, "Compra aprobada \$28.500 en Uber BV.")
 
@@ -406,6 +416,10 @@ class DestinoRoutesTest {
             destino["totales"]!!.jsonObject["COP"]!!.jsonPrimitive.long,
             "los tres envíos, y NO el Uber",
         )
+        // 30-sep: y el último envío, para la ficha — el más reciente de los tres, no el Uber.
+        val ultimo = destino["ultimo"]!!.jsonObject
+        assertEquals("Cuota de Cotrafa 5413 · transferida a Caro", ultimo["descripcion"]!!.jsonPrimitive.content)
+        assertEquals(1_931_488L, ultimo["monto"]!!.jsonPrimitive.long)
 
         val id = destino["id"]!!.jsonPrimitive.content
         val detalle = client.get("/api/destinos/$id/movimientos") {

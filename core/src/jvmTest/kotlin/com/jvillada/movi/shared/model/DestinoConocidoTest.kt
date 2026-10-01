@@ -312,6 +312,33 @@ class DestinoConocidoTest {
         assertTrue(vacio.totales.isEmpty())
     }
 
+    /** La ficha dice el último envío: el más reciente, con el nombre que tiene hoy. */
+    @Test
+    fun `conLoQueSeLeMando dice cual fue el ultimo envio`() {
+        val lleno = conLoQueSeLeMando(caro, listOf(mercado, cotrafa, colegio))
+        assertEquals(
+            UltimoEnvio("Cuota de Cotrafa 5413 · transferida a Caro", 1_931_488L, "COP", cotrafa.timestamp),
+            lleno.ultimo,
+        )
+        assertNull(conLoQueSeLeMando(papa, listOf(mercado)).ultimo, "sin envíos no hay último")
+    }
+
+    @Test
+    fun `los identificadores se leen como los dice el banco`() {
+        assertEquals(listOf("·0756"), identificadoresDelDestino(caro))
+        assertEquals(
+            listOf("·0756", "llave @caro"),
+            identificadoresDelDestino(caro.copy(llave = "@Caro")),
+        )
+        // Solo llave: sin un «·» suelto por el número vacío.
+        assertEquals(listOf("llave 3001234567"), identificadoresDelDestino(caro.copy(numero = "", llave = "300 123 4567")))
+        // El nombre con que Nu nombra a quien manda no se presenta como llave.
+        assertEquals(
+            listOf("Carolina Restrepo Salazar"),
+            identificadoresDelDestino(caro.copy(numero = "", llave = "carolina restrepo salazar")),
+        )
+    }
+
     /**
      * **Por el período del dueño, no por mes de calendario.** Con corte 25, dos envíos del 26 y del
      * 31 de agosto caen en «septiembre» —el mes que él vive— y no en agosto.
