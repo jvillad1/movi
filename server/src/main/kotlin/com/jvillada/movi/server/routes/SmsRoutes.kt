@@ -57,6 +57,19 @@ private val amountRegex = Regex("""(\$|\bCOP|\bUSD)\s*([0-9]{1,3}(?:[.,][0-9]{3}
 private val amountPorRegex = Regex("""\bpor\s+([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
 /** «Recibiste 300.000,00 en tu cuenta» (Nu): sin prefijo ni «por», pero con separador de miles. */
 private val amountRecibisteRegex = Regex("""\brecibiste\s+([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
+/**
+ * «recargó 640.000,00 COP en tu tarjeta de beneficios» (Glim): la moneda va DESPUÉS del número. Sin
+ * esto el aviso no tenía monto y quedaba en «Por revisar» sin poder leerse (1-oct-2026).
+ */
+private val amountSufijoRegex = Regex("""([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?)\s*(COP|USD)\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * **La recarga de una tarjeta de beneficios** (Glim: «Aleluya: ¡tienes nuevo saldo! 💳: Mercado Libre
+ * Colombia Ltda recargó 640.000,00 COP en tu tarjeta de beneficios.»). Es plata que ENTRA, y quien
+ * recarga es el empleador: el nombre es lo que va entre el último «:» y «recargó». El dueño anotaba
+ * estas recargas a mano como «Salario» (ver `ev_glim_20260902`), por eso esa es la categoría.
+ */
+private val recargaDeBeneficiosRegex = Regex("""([^:]+?)\s+recarg[oó]\s""", RegexOption.IGNORE_CASE)
 private val merchantInRegex = Regex("""\ben\s+(.+?)(?:\s+el\s|\s+a\s+las|\s+con\s+tu\s|\s+de\s+tu\s|,|\.|$)""", RegexOption.IGNORE_CASE)
 private val merchantOfRegex = Regex("""\bde\s+(.+?)(?:\s+por\s|\s+con\s+tu\s|\.|$)""", RegexOption.IGNORE_CASE)
 /**
@@ -113,6 +126,9 @@ private val NO_PASARON = listOf(
     "declinada", "declinado",
     "no aprobada", "no aprobado", "no fue aprobada", "no fue aprobado",
     "no exitosa", "no exitoso", "no fue exitosa", "no fue exitoso",
+    // Glim: «Fondos insuficientes ⛔: Se rechazó tu pago por $17.150,00 COP.» — el pretérito no
+    // contiene «rechazada» y se leía como un gasto de $17.150 que nunca salió.
+    "se rechazó", "se rechazo", "fondos insuficientes",
 )
 
 /** El rótulo de origen nombra a Nu como palabra («Notificación · Nu»). El mismo criterio que `tarjetaDeNu`. */
@@ -219,11 +235,15 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val rawAmount = conPrefijo?.groupValues?.get(2)
         ?: amountPorRegex.find(text)?.groupValues?.get(1)
         ?: amountRecibisteRegex.find(text)?.groupValues?.get(1)
+        ?: amountSufijoRegex.find(text)?.groupValues?.get(1)
         ?: return null
     val amount = montoDelSms(rawAmount) ?: return null
-    val currency = if (conPrefijo?.groupValues?.get(1)?.equals("USD", ignoreCase = true) == true) "USD" else "COP"
+    val monedaDelSms = conPrefijo?.groupValues?.get(1) ?: amountSufijoRegex.find(text)?.groupValues?.get(2)
+    val currency = if (monedaDelSms?.equals("USD", ignoreCase = true) == true) "USD" else "COP"
+    val recargaDeBeneficios = if ("tarjeta de beneficios" in minusculas) recargaDeBeneficiosRegex.find(text) else null
 
     val type = when {
+        recargaDeBeneficios != null -> TransactionType.INCOME
         text.contains("Recibiste", ignoreCase = true) -> TransactionType.INCOME
         text.contains("Nómina recibida", ignoreCase = true) -> TransactionType.INCOME
         text.contains("Compra", ignoreCase = true) -> TransactionType.EXPENSE
@@ -236,6 +256,8 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val esPagoDeNu = origen != null && origenNu.containsMatchIn(origen) && pagoDeNu.containsMatchIn(text)
     val merchant = when {
         text.contains("Nómina recibida", ignoreCase = true) -> "Nómina"
+        recargaDeBeneficios != null ->
+            limpio(recargaDeBeneficios.groupValues[1])?.let { "Recarga de beneficios · $it" } ?: "Recarga de beneficios"
         type == TransactionType.INCOME -> limpio(merchantOfRegex.find(text)?.groupValues?.get(1)) ?: "Transferencia recibida"
         looksLikeCardPayment(text, category = "") || esPagoDeNu -> "Pago de tarjeta"
         // Un pago por QR puede venir con el nombre del comercio («por codigo QR en Mora Soccer»);
@@ -281,6 +303,7 @@ private fun categoryFor(text: String, merchant: String, type: TransactionType, e
         return CARD_PAYMENT_CATEGORY
     }
     if (type == TransactionType.INCOME) {
+        if (merchant.startsWith("Recarga de beneficios")) return "Salario"
         return if (merchant.equals("Nómina", true)) "Nómina" else "Transferencia"
     }
     return categoriaProbablePorElNombre(merchant) ?: SIN_CATEGORIA
