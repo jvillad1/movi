@@ -1,19 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Android 12+ (android:dataExtractionRules). Mismo motivo que backup_rules.xml, y hay que
-    repetirlo en los dos caminos: la copia a la nube y la transferencia directa entre
-    teléfonos se configuran por separado, y el estado de permisos no debe sobrevivir a
-    ninguna de las dos.
+    Android 12+ (android:dataExtractionRules). Mismos archivos y mismos motivos que
+    backup_rules.xml —leer ahí el porqué de cada uno—, y hay que repetirlos en los dos caminos:
+    la copia a la nube y la transferencia directa entre teléfonos se configuran por separado, y
+    ni el estado de permisos, ni el token de sesión, ni la plata del espejo local deben
+    sobrevivir a ninguna de las dos.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <exclude
-            domain="sharedpref"
-            path="movi_sms_filter.xml" />
+        <exclude domain="sharedpref" path="movi_sms_filter.xml" />
+        <exclude domain="sharedpref" path="com.jvillada.movi_preferences.xml" />
+        <exclude domain="database" path="movi.db" />
+        <exclude domain="database" path="movi.db-journal" />
+        <exclude domain="database" path="movi.db-wal" />
+        <exclude domain="database" path="movi.db-shm" />
     </cloud-backup>
     <device-transfer>
-        <exclude
-            domain="sharedpref"
-            path="movi_sms_filter.xml" />
+        <exclude domain="sharedpref" path="movi_sms_filter.xml" />
+        <exclude domain="sharedpref" path="com.jvillada.movi_preferences.xml" />
+        <exclude domain="database" path="movi.db" />
+        <exclude domain="database" path="movi.db-journal" />
+        <exclude domain="database" path="movi.db-wal" />
+        <exclude domain="database" path="movi.db-shm" />
     </device-transfer>
 </data-extraction-rules>
