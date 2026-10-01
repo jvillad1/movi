@@ -2207,6 +2207,26 @@ class LocalRepository(
     // Sin espejo: la exportación la arma el server con lo que tiene él, que es la copia completa.
     override suspend fun getExportLink(): EnlaceDeDescarga = remote.getExportLink()
 
+    /**
+     * Ver [WalletRepository.olvidarDatosLocales]. Una sola transacción: o se va todo lo de
+     * [userId], o nada. El orden importa: las anulaciones se encuentran por los movimientos (no
+     * tienen `userId`), así que van primero.
+     *
+     * **Lo que todavía no subió se pierde**, y es a propósito: el teléfono es de quien entre
+     * después, y dejar movimientos ajenos esperando —el `SyncEngine` los empujaría con el token del
+     * siguiente— es peor. En la práctica es poco: lo pendiente es lo anotado sin señal, y una
+     * sesión que se cierra sola por 401 es una sesión que ya no podía subir nada.
+     */
+    override fun olvidarDatosLocales(userId: String) {
+        if (userId.isBlank()) return
+        db.transaction {
+            db.voidEventQueries.deleteForUser(userId)
+            db.financialEventQueries.deleteForUser(userId)
+            db.accountQueries.deleteForUser(userId)
+            db.remoteCacheQueries.deleteForUser(userId)
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**

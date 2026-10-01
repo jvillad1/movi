@@ -125,6 +125,7 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = trasEscribir { delegado.updateUserProfile(request) }
     override suspend fun changePassword(request: ChangePasswordRequest): String? = trasEscribir { delegado.changePassword(request) }
     override suspend fun cerrarSesionesEnTodosLosAparatos() = trasEscribir { delegado.cerrarSesionesEnTodosLosAparatos() }
+    override fun olvidarDatosLocales(userId: String) = trasEscribir { delegado.olvidarDatosLocales(userId) }
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = trasEscribir { delegado.requestPasswordReset(request) }
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult = trasEscribir { delegado.uploadStatement(fileName, bytes, mimeType) }
     override suspend fun readStatementFromDocument(id: String): StatementParseResult = trasEscribir { delegado.readStatementFromDocument(id) }

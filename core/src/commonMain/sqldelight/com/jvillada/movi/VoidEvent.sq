@@ -82,3 +82,13 @@ SELECT originalEventId FROM void_event WHERE origen = 'fantasma';
 -- anulación del dueño sobre el mismo movimiento se queda donde está.
 olvidarFantasma:
 DELETE FROM void_event WHERE originalEventId = :originalEventId AND origen = 'fantasma';
+
+-- Al cerrar sesión (ver LocalRepository.olvidarDatosLocales). `void_event` no tiene `userId`: es
+-- del usuario de su movimiento, así que esto corre ANTES de borrar los movimientos. Y de paso se
+-- lleva las anulaciones huérfanas —las que apuntan a un movimiento que no está en el teléfono—,
+-- que no son de nadie que se pueda nombrar y que `selectUnsynced` (sin filtro de usuario) le
+-- mandaría al server con el token del SIGUIENTE que entre.
+deleteForUser:
+DELETE FROM void_event
+WHERE originalEventId IN (SELECT id FROM financial_event WHERE userId = :userId)
+   OR originalEventId NOT IN (SELECT id FROM financial_event);

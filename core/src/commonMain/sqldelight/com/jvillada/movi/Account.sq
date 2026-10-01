@@ -149,3 +149,8 @@ UPDATE account SET hiddenAt = NULL WHERE id = :id;
 -- nuevo por userId sería redundante.
 deleteById:
 DELETE FROM account WHERE id = :id;
+
+-- Al cerrar sesión (ver LocalRepository.olvidarDatosLocales): las cuentas de quien se va no se
+-- quedan en el teléfono.
+deleteForUser:
+DELETE FROM account WHERE userId = :userId;

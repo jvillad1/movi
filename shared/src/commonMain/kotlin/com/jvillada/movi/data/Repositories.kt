@@ -9,7 +9,19 @@ object Repositories {
      * Envuelto en [InvalidaElInicioAlEscribir]: cualquier escritura marca la caché del Inicio como
      * vieja, así el TTL de esa pantalla no puede esconder plata que acaba de cambiar.
      */
-    private val real: WalletRepository by lazy { InvalidaElInicioAlEscribir(createRepository()) }
+    private val realPerezoso: Lazy<WalletRepository> = lazy {
+        val repo = createRepository()
+        // Un cierre de sesión que llegó antes de que existiera el repositorio (ver
+        // [olvidarDatosLocales]) se cumple ahora, apenas hay base abierta — salvo que quien entró
+        // sea la misma persona: borrarle lo suyo al volver no protege a nadie y le haría perder lo
+        // que anotó sin señal.
+        SessionManager.borradoLocalPendiente?.let { pendiente ->
+            if (pendiente != SessionManager.userId) runCatching { repo.olvidarDatosLocales(pendiente) }
+            SessionManager.borradoLocalPendiente = null
+        }
+        InvalidaElInicioAlEscribir(repo)
+    }
+    private val real: WalletRepository by realPerezoso
 
     /**
      * **La única costura de pruebas de este objeto, y el motivo por el que [wallets] pasó de ser
@@ -51,4 +63,19 @@ object Repositories {
      * Perezoso, igual que [real]: una prueba que nunca abre esa pantalla no construye el cliente.
      */
     val compartir: CompartirRepository get() = sustitutoDeCompartirDePrueba ?: compartirReal
+
+    /**
+     * **Que en el aparato no quede nada de [userId]** — lo llama [SessionManager.clear].
+     *
+     * Si el repositorio ya existe, borra ahora. Si **todavía no existe**, no lo construye: en
+     * Android eso es abrir la base, y `SessionManager.clear()` también corre desde un Worker que
+     * levantó el proceso solo —sin `MainActivity`, sin `DatabaseDriverFactory.init`— donde
+     * construirlo revienta. Ahí se anota el pendiente, y se cumple la próxima vez que el
+     * repositorio se construya (ver [realPerezoso]).
+     */
+    fun olvidarDatosLocales(userId: String) {
+        sustitutoDePrueba?.let { it.olvidarDatosLocales(userId); return }
+        if (realPerezoso.isInitialized()) real.olvidarDatosLocales(userId)
+        else SessionManager.borradoLocalPendiente = userId
+    }
 }

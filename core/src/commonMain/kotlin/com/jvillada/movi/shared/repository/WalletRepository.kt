@@ -532,6 +532,17 @@ interface WalletRepository {
     suspend fun getExportLink(): EnlaceDeDescarga
 
     /**
+     * **Al cerrar sesión: que en el aparato no quede nada de [userId].** Borra sus filas del espejo
+     * local (cuentas, movimientos, anulaciones) y el caché de lecturas (`remote_cache`). No toca el
+     * server.
+     *
+     * Sin espejo local (la web) no hay nada que borrar, y por eso el default no hace nada. No es
+     * `suspend` porque la llama `SessionManager.clear()`, que corre desde la UI y desde los
+     * workers de fondo y tiene que terminar siempre.
+     */
+    fun olvidarDatosLocales(userId: String) {}
+
+    /**
      * Pide un enlace de recuperación por correo. Devuelve el CÓDIGO HTTP crudo en vez de un
      * cuerpo tipado a propósito: el servidor responde 202 idéntico exista o no el correo
      * (anti-enumeración) y 503 cuando el envío de correo no está configurado en el servidor,

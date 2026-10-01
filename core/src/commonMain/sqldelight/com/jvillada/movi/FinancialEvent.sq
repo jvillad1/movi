@@ -245,3 +245,8 @@ DELETE FROM financial_event WHERE accountId = :accountId AND userId = :userId;
 -- Solo cubre lo que se renombra DESDE este dispositivo; ver el KDoc de LocalRepository.renameCategory.
 renameCategory:
 UPDATE financial_event SET category = :newCategory WHERE category = :oldCategory AND userId = :userId;
+
+-- Al cerrar sesión (ver LocalRepository.olvidarDatosLocales). Va DESPUÉS de borrar sus
+-- anulaciones (`void_event.deleteForUser`), que se encuentran por este mismo `userId`.
+deleteForUser:
+DELETE FROM financial_event WHERE userId = :userId;
