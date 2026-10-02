@@ -2,23 +2,7 @@ package com.jvillada.movi.server.ai
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
-import com.jvillada.movi.server.db.Accounts
-import com.jvillada.movi.server.db.AiTurns
-import com.jvillada.movi.server.db.Budgets
-import com.jvillada.movi.server.db.CategoryPrefs
-import com.jvillada.movi.server.db.ConversacionesDelAsistente
-import com.jvillada.movi.server.db.Credits
-import com.jvillada.movi.server.db.Documents
-import com.jvillada.movi.server.db.Events
-import com.jvillada.movi.server.db.Goals
-import com.jvillada.movi.server.db.KnownDestinations
-import com.jvillada.movi.server.db.OccurrenceRejections
-import com.jvillada.movi.server.db.RecurringOccurrences
-import com.jvillada.movi.server.db.RecurringRules
-import com.jvillada.movi.server.db.SmsMessages
-import com.jvillada.movi.server.db.StatementImports
-import com.jvillada.movi.server.db.Users
-import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.server.db.*
 import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
@@ -56,8 +40,10 @@ internal class AndamioDelAsistente(nombreDeLaBase: String) {
     /** Todas las tablas que tocan el chat y las rutas que confirman. */
     private val tablas: Array<Table> = arrayOf(
         Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
-        RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Goals, CategoryPrefs,
-        Documents, KnownDestinations, AiTurns, ConversacionesDelAsistente,
+        RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions,
+        PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs,
+        Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos,
+        LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas,
     )
 
     init {

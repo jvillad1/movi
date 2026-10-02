@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
 import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.NOTA_DEL_PAPEL_COMPARTIDO
@@ -292,6 +293,12 @@ interface WalletRepository {
     suspend fun getConversacionDelAsistente(): ConversacionDelAsistente
     /** `POST /api/ai/conversacion/nueva`: «Nueva conversación». No borra nada del server. */
     suspend fun empezarConversacionNueva()
+    /**
+     * `POST /api/ai/propuestas/{id}/estado` (Ola 3): anota que el dueño hizo o descartó una
+     * propuesta del asistente. **No hace la acción**: eso lo hace el endpoint de siempre (ver
+     * `hacerLaPropuesta`). Solo le avisa al asistente para el turno siguiente.
+     */
+    suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta)
     suspend fun getAccounts(): List<Account>
     suspend fun getAccount(id: String): Account
     suspend fun createAccount(account: Account): Account

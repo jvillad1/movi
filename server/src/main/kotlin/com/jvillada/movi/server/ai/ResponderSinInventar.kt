@@ -56,8 +56,10 @@ suspend fun responderSinInventar(
     trampas: Map<Long, String> = emptyMap(),
     verificar: Boolean = true,
     vueltasMaximas: Int = VUELTAS_MAXIMAS,
+    /** Ver [conversarConHerramientas]. */
+    cerrarSinOtraVuelta: (List<LlamadaDeHerramienta>, String) -> String? = { _, _ -> null },
 ): RespuestaVerificada {
-    val paso = conversarConHerramientas(modelo, ejecutar, vueltasMaximas)
+    val paso = conversarConHerramientas(modelo, ejecutar, vueltasMaximas, cerrarSinOtraVuelta)
     if (!verificar) return RespuestaVerificada(paso.texto, paso.consultas)
 
     val todas = fuentes + paso.consultas.map { it.devolvio }

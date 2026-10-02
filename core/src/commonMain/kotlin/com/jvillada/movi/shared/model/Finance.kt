@@ -865,13 +865,25 @@ data class ChatMessage(
      * imagen. Sirve para pintar «Imagen adjunta» en el globo recargado.
      */
     val teniaImagen: Boolean = false,
+    /**
+     * Ola 3: lo que el asistente propuso hacer en este turno (tarjetas con «Hacerlo» / «No»). Solo
+     * en mensajes del asistente; el cliente no lo vuelve a mandar (ver `mensajesParaEnviar`).
+     */
+    val propuestas: List<AccionPropuesta> = emptyList(),
 )
 
 @Serializable
 data class AiChatRequest(val messages: List<ChatMessage>)
 
 @Serializable
-data class AiChatResponse(val text: String)
+data class AiChatResponse(
+    val text: String,
+    /**
+     * Ola 3: lo que el asistente propone hacer, ya validado por el server. Vacío casi siempre; un
+     * APK viejo lo ignora (`ignoreUnknownKeys`) y sigue viendo solo el texto.
+     */
+    val propuestas: List<AccionPropuesta> = emptyList(),
+)
 
 /**
  * Días de anticipación con los que el barrido avisa un vencimiento.

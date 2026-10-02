@@ -17,7 +17,11 @@ package com.jvillada.movi.server.ai
 /** Lo que el modelo contestó en una vuelta: o habló, o pidió datos. */
 sealed interface RespuestaDelModelo {
     data class Texto(val texto: String) : RespuestaDelModelo
-    data class PideHerramientas(val llamadas: List<LlamadaDeHerramienta>) : RespuestaDelModelo
+    /**
+     * [texto] es lo que el modelo escribió ANTES de pedir las herramientas («Claro, te lo anoto»),
+     * casi siempre vacío. Solo se usa cuando el turno se cierra en propuestas (ver `cierraElTurno`).
+     */
+    data class PideHerramientas(val llamadas: List<LlamadaDeHerramienta>, val texto: String = "") : RespuestaDelModelo
 }
 
 /**
@@ -84,6 +88,13 @@ suspend fun conversarConHerramientas(
     modelo: ElModeloConHerramientas,
     ejecutar: suspend (LlamadaDeHerramienta) -> String,
     vueltasMaximas: Int = VUELTAS_MAXIMAS,
+    /**
+     * Ola 3: si después de ejecutar una vuelta esto devuelve un texto, el turno termina ahí, sin
+     * otra llamada al modelo. Es para cuando todo lo que pidió fueron propuestas y todas salieron
+     * bien: la vuelta siguiente solo diría «te dejé la propuesta abajo», y cuesta una llamada entera
+     * con el prefijo encima. Recibe lo que pidió en esa vuelta y lo que había escrito antes.
+     */
+    cerrarSinOtraVuelta: (List<LlamadaDeHerramienta>, String) -> String? = { _, _ -> null },
 ): LoQuePaso {
     val hechas = mutableListOf<ConsultaHecha>()
     repeat(vueltasMaximas) { vuelta ->
@@ -99,6 +110,7 @@ suspend fun conversarConHerramientas(
                     hechas += ConsultaHecha(llamada.nombre, llamada.argumentos, devolvio)
                     llamada.id to devolvio
                 }
+                cerrarSinOtraVuelta(respuesta.llamadas, respuesta.texto)?.let { return LoQuePaso(it, hechas) }
                 modelo.anotarResultados(resultados)
             }
         }

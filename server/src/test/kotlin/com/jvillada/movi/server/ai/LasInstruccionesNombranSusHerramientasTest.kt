@@ -32,7 +32,7 @@ class LasInstruccionesNombranSusHerramientasTest {
     @Test
     fun `las instrucciones no nombran herramientas que no existen`() {
         val nombres = LAS_HERRAMIENTAS.map { it.name() }
-        Regex("""\b(buscar|totales|consultar)_[a-z_]+""").findAll(PERSONA).forEach { encontrada ->
+        Regex("""\b(buscar|totales|consultar|proponer)_[a-z_]+""").findAll(PERSONA).forEach { encontrada ->
             assertTrue(
                 encontrada.value in nombres,
                 "las instrucciones nombran «${encontrada.value}», que no existe: el modelo va a pedir algo que no está",
@@ -50,6 +50,17 @@ class LasInstruccionesNombranSusHerramientasTest {
             "bloque \"Documentos guardados\"" in PERSONA,
             "ese bloque ya no viaja en el contexto: los papeles se piden con $BUSCAR_DOCUMENTOS",
         )
+    }
+
+    /**
+     * **El asistente propone; no hace.** Si las instrucciones no lo dicen, el modelo contesta
+     * «listo, lo anoté» mientras la tarjeta sigue esperando un toque — y el dueño cree que ya está.
+     */
+    @Test
+    fun `las instrucciones dicen que proponer no es hacer`() {
+        assertTrue("TÚ NO HACES NADA, PROPONES" in PERSONA)
+        assertTrue("NUNCA digas que ya quedó hecho" in PERSONA)
+        assertTrue("Sin movimiento no se puede" in PERSONA)
     }
 
     /** Lo que sí sigue viajando en cada mensaje, y el modelo tiene que saber que está ahí. */

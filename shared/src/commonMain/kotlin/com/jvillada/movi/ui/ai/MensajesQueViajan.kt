@@ -50,7 +50,7 @@ internal fun mensajesParaEnviar(historial: List<ChatMessage>): List<ChatMessage>
     // por eso el descarte va DESPUÉS de recortar y no antes.
     val desdeElUsuario = ultimos.dropWhile { it.role != ChatRole.USER }
     val ultimo = desdeElUsuario.lastIndex
-    return desdeElUsuario.mapIndexed { i, mensaje ->
+    return desdeElUsuario.map { it.copy(propuestas = emptyList()) }.mapIndexed { i, mensaje ->
         if (mensaje.teniaImagen && mensaje.imageBase64 == null) {
             // Ola 3: un globo recargado de una conversación guardada. La foto nunca se guardó, así
             // que viaja como el mismo texto que una que ya viajó.

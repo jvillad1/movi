@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.Bien
@@ -2145,6 +2146,7 @@ class LocalRepository(
     // asistente, así que no tiene sentido un espejo local.
     override suspend fun getConversacionDelAsistente(): ConversacionDelAsistente = remote.getConversacionDelAsistente()
     override suspend fun empezarConversacionNueva() = remote.empezarConversacionNueva()
+    override suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta) = remote.resolverPropuesta(id, estado)
     override suspend fun register(request: RegisterRequest): AuthResponse = remote.register(request)
     override suspend fun login(request: LoginRequest): AuthResponse = remote.login(request)
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = remote.requestPasswordReset(request)

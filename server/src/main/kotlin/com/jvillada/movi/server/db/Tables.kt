@@ -654,6 +654,30 @@ object ConversacionesDelAsistente : Table("asistente_conversaciones") {
     override val primaryKey = PrimaryKey(userId)
 }
 
+/**
+ * **Lo que el asistente propuso hacer, y lo que el dueño decidió** (Ola 3 · «Movi actúa»). Una fila
+ * por tarjeta. Nada de acá escribe en los datos del dueño: la acción la hace el endpoint de siempre
+ * cuando él toca «Hacerlo»; esto solo recuerda que se propuso y qué dijo, para volver a pintar la
+ * tarjeta al recargar la conversación y para que el asistente sepa en el turno siguiente que le
+ * dijeron «No».
+ *
+ * [datos] es la `AccionPropuesta` entera en JSON: lo que el dueño vio es lo que se guarda.
+ */
+object AccionesPropuestas : Table("asistente_propuestas") {
+    val id         = varchar("id", 50)
+    val userId     = varchar("user_id", 50)
+    /** El turno de `ai_turns` que la propuso. */
+    val turnoId    = varchar("turno_id", 50)
+    val tipo       = varchar("tipo", 30)
+    val datos      = text("datos")
+    /** `PENDIENTE`, `HECHA` o `RECHAZADA`. */
+    val estado     = varchar("estado", 20)
+    val creadaEn   = long("creada_en")
+    val resueltaEn = long("resuelta_en").nullable()
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_asistente_propuestas_user", false, userId) }
+}
+
 object Credits : Table("credit_terms") {
     /**
      * Libranza: la cuota se descuenta de la nómina. Nullable y se lee como `false` — las filas

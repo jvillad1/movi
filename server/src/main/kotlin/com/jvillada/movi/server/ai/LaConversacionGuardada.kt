@@ -101,15 +101,20 @@ internal suspend fun turnosDeLaConversacion(uid: String): List<TurnoGuardado> {
  * La conversación en curso, como la pinta la pantalla: por cada turno, la pregunta del dueño y la
  * respuesta del asistente.
  */
-suspend fun conversacionGuardada(uid: String): ConversacionDelAsistente =
-    ConversacionDelAsistente(
-        mensajes = turnosDeLaConversacion(uid).flatMap { turno ->
+suspend fun conversacionGuardada(uid: String): ConversacionDelAsistente {
+    val turnos = turnosDeLaConversacion(uid)
+    // Las tarjetas que propuso cada turno, con su estado de HOY: una que el dueño ya hizo vuelve
+    // como hecha, no con «Hacerlo» otra vez.
+    val propuestas = propuestasDeLosTurnos(uid, turnos.map { it.id })
+    return ConversacionDelAsistente(
+        mensajes = turnos.flatMap { turno ->
             listOf(
                 ChatMessage(ChatRole.USER, turno.pregunta, teniaImagen = turno.teniaImagen),
-                ChatMessage(ChatRole.ASSISTANT, turno.respuesta),
+                ChatMessage(ChatRole.ASSISTANT, turno.respuesta, propuestas = propuestas[turno.id].orEmpty()),
             )
         },
     )
+}
 
 /** «Nueva conversación»: la en curso pasa a empezar ahora. Idempotente. */
 suspend fun empezarConversacionNueva(uid: String, ahora: Long = System.currentTimeMillis()) {

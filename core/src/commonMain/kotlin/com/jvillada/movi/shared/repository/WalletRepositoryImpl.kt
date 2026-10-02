@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.ResolverPropuestaRequest
+import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.LecturaDelPapel
@@ -527,6 +529,13 @@ class WalletRepositoryImpl(
 
     override suspend fun empezarConversacionNueva() {
         client.post("$baseUrl/api/ai/conversacion/nueva").exigirExito()
+    }
+
+    override suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta) {
+        client.post("$baseUrl/api/ai/propuestas/$id/estado") {
+            contentType(ContentType.Application.Json)
+            setBody(ResolverPropuestaRequest(estado))
+        }.exigirExito()
     }
 
     override suspend fun getAccounts(): List<Account> =

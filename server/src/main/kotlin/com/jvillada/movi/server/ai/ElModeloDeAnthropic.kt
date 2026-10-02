@@ -120,7 +120,7 @@ internal class ElModeloDeAnthropic(
             if (texto.isBlank()) avisarQueNoHuboTexto(respuesta, penso, "se le contesta al dueño")
             RespuestaDelModelo.Texto(texto.ifBlank { NO_ALCANCE_A_TERMINAR })
         } else {
-            RespuestaDelModelo.PideHerramientas(pedidos.map { it.comoLlamada() })
+            RespuestaDelModelo.PideHerramientas(pedidos.map { it.comoLlamada() }, texto = respuesta.textoJunto())
         }
     }
 
@@ -380,7 +380,10 @@ private fun texto(descripcion: String) =
  * prefijo y tiraría la caché de esa llamada entera. Lo que se hace en la última vuelta es
  * prohibirle elegirlas (`tool_choice: none`), que no toca el prefijo.
  */
-internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
+internal val LAS_HERRAMIENTAS: List<Tool> by lazy { HERRAMIENTAS_DE_LECTURA + HERRAMIENTAS_QUE_PROPONEN }
+
+/** Las tres de lectura de siempre. Las que proponen (Ola 3) están en `LoQueMoviPropone.kt`. */
+private val HERRAMIENTAS_DE_LECTURA: List<Tool> = listOf(
     Tool.builder()
         .name(BUSCAR_MOVIMIENTOS)
         .description(

@@ -53,6 +53,17 @@ import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
 import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
 import com.jvillada.movi.server.ai.MODELO_PARA_CONSEJOS
 import com.jvillada.movi.server.ai.conversacionGuardada
+import com.jvillada.movi.server.ai.conversacionEmpezadaEn
+import com.jvillada.movi.server.ai.ElModeloQueSeCorrige
+import com.jvillada.movi.server.ai.PropuestasDelTurno
+import com.jvillada.movi.server.ai.esHerramientaQuePropone
+import com.jvillada.movi.server.ai.guardarPropuestas
+import com.jvillada.movi.server.ai.loQueElDuenoDecidio
+import com.jvillada.movi.server.ai.nuevoIdDeTurno
+import com.jvillada.movi.server.ai.resolverPropuesta
+import com.jvillada.movi.server.ai.textoAlCerrarConPropuestas
+import com.jvillada.movi.shared.model.EstadoDePropuesta
+import com.jvillada.movi.shared.model.ResolverPropuestaRequest
 import com.jvillada.movi.server.ai.empezarConversacionNueva
 import com.jvillada.movi.server.ai.tramoParaElModelo
 import io.ktor.http.HttpStatusCode
@@ -103,7 +114,7 @@ El bloque "DATOS EXACTOS PARA ESTA PREGUNTA" lo calcula Movi con las mismas cuen
 PROPORCIONES: no describas una proporción con palabras ("casi todo", "casi iguala", "la mitad", "la mayoría", "mucho más") si el porcentaje de los datos no la sostiene. Cuando compares una cifra con otra, di el porcentaje que trae el bloque ("el 58 % de lo que entró"), no una impresión.
 NO SUPONGAS: si un nombre (una entidad, una cuenta, un tercero) no está explicado en los datos, no le inventes qué es ni para qué sirve, y no supongas de dónde sale su plata más allá de lo que dicen los datos. Está bien decir "no lo sé con estos datos".
 
-Tienes TRES herramientas, y son la única forma de saber algo que no esté en el bloque:
+Para CONSULTAR tienes tres herramientas, y son la única forma de saber algo que no esté en el bloque:
 - buscar_movimientos: hechos concretos. "¿Qué compré en X?", "¿qué hubo entre estas fechas?", "¿esto ya lo había comprado?".
 - totales_por_categoria: cuánto. "¿Cuánto gasté en Comida en agosto?", "¿gasté más que el mes pasado?".
 - buscar_documentos: lo que dicen sus papeles. "¿Qué seguro paga la cuenta X?", "¿qué tasa tiene ese crédito?", "¿tengo el extracto de agosto?".
@@ -118,6 +129,13 @@ Si una consulta vuelve vacía, dilo: "no encuentro nada" es una respuesta correc
 Si la pregunta no se puede contestar ni con los datos ni consultando, dilo claramente y sugiere qué información faltaría.
 
 Cuando el bloque ya traiga un total (gastos del período, total de suscripciones, deuda total, intereses del mes, cuotas al mes, lo que se pasó de un presupuesto, gastos recurrentes que faltan), usa ESE número tal cual: no vuelvas a sumar los renglones ni corrijas el total con tu propia cuenta.
+
+ACCIONES — TÚ NO HACES NADA, PROPONES: cuando el usuario te pida HACER algo, puedes proponérselo con estas herramientas:
+- proponer_movimiento: anotar un gasto o un ingreso que ya pasó ("hoy gasté 45 mil en almuerzo con la Nu").
+- proponer_cambio_de_categoria: cambiar la categoría de unos movimientos ("lo de Rappi es Comida").
+- proponer_recurrente: crear un pago o ingreso que se repite cada mes ("pago el colegio el 25, 1.200.000").
+- proponer_pago_hecho: marcar que un pago del período ya se hizo con un movimiento que YA existe. Sin movimiento no se puede: si no está anotado, propón primero el movimiento.
+Ninguna escribe nada: Movi le muestra una tarjeta y él decide con "Hacerlo" o "No". Por eso NUNCA digas que ya quedó hecho, anotado o guardado; di que se lo dejaste para confirmar. Úsalas solo cuando él te lo pida, no por iniciativa en cada respuesta. Si falta un dato que no se deduce (el monto, la cuenta), pregúntale antes de proponer. Si la herramienta te dice que no pudo, explícale por qué en una frase o pregúntale lo que falta. Si él dijo "No" a una propuesta, no la repitas igual.
 
 Tono: directo, empático, accionable. No moralices sobre el gasto.
 Estructura de una pregunta de DATOS (cuánto, cuándo, qué): responde en máximo 4-5 frases cortas. Si la respuesta tiene un cálculo, muéstralo en una línea separada.
@@ -172,7 +190,40 @@ internal fun stripEmojis(text: String): String {
     return sb.toString()
 }
 
-fun Route.aiRoutes() {
+/**
+ * Lo que necesita quien arma el modelo de un turno. Existe para poder probar el chat entero —con
+ * propuestas, memoria y conversación— con un modelo de mentira: ninguna prueba llama a Anthropic.
+ */
+internal data class PedidoDelModelo(
+    val modelo: String,
+    val persona: String,
+    val contexto: String,
+    val mensajes: List<MessageParam>,
+    val piensa: Boolean,
+)
+
+internal typealias FabricaDeModelos = (PedidoDelModelo) -> ElModeloQueSeCorrige
+
+/** La fábrica de verdad: Anthropic, con el modelo de respaldo. `null` si no hay clave. */
+private fun fabricaDeAnthropic(): FabricaDeModelos? {
+    val client = anthropicClient ?: return null
+    return { p ->
+        ElModeloDeAnthropic(
+            client = client,
+            modelo = p.modelo,
+            persona = p.persona,
+            contexto = p.contexto,
+            mensajesDelDueno = p.mensajes,
+            // Pensar se cobra como salida. Se enciende solo cuando de verdad hay algo que pensar.
+            piensa = p.piensa,
+            modeloDeRespaldo = MODELO_DE_RESPALDO,
+        )
+    }
+}
+
+fun Route.aiRoutes() = aiRoutes(fabricaDePrueba = null)
+
+internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
     // **La conversación en curso** (Ola 3): lo que la pantalla pinta al volver. Solo del dueño —el
     // `uid` sale del token— y sin fotos: `ai_turns` nunca las guardó.
     get("/api/ai/conversacion") {
@@ -183,6 +234,22 @@ fun Route.aiRoutes() {
     post("/api/ai/conversacion/nueva") {
         empezarConversacionNueva(call.userId())
         call.respond(HttpStatusCode.NoContent)
+    }
+
+    // **Lo que el dueño decidió de una tarjeta** (Ola 3). Esto NO hace la acción —la hizo el
+    // cliente con el endpoint de siempre—; solo la anota, para que el asistente sepa en el turno
+    // siguiente que le dijeron «No» y para volver a pintar la tarjeta resuelta al recargar.
+    post("/api/ai/propuestas/{id}/estado") {
+        val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val estado = call.receive<ResolverPropuestaRequest>().estado
+        if (estado == EstadoDePropuesta.PENDIENTE) {
+            return@post call.respond(HttpStatusCode.BadRequest, "Una propuesta se resuelve con HECHA o RECHAZADA.")
+        }
+        when (resolverPropuesta(call.userId(), id, estado)) {
+            null -> call.respond(HttpStatusCode.NotFound)
+            false -> call.respond(HttpStatusCode.Conflict, "Esa propuesta ya se resolvió de otra forma.")
+            true -> call.respond(HttpStatusCode.NoContent)
+        }
     }
 
     post("/api/ai/chat") {
@@ -196,8 +263,8 @@ fun Route.aiRoutes() {
             return@post
         }
 
-        val client = anthropicClient
-        if (client == null) {
+        val fabrica = fabricaDePrueba ?: fabricaDeAnthropic()
+        if (fabrica == null) {
             call.respond(
                 HttpStatusCode.ServiceUnavailable,
                 AiChatResponse(
@@ -219,8 +286,13 @@ fun Route.aiRoutes() {
         // dueño: DESPUÉS de todo lo cacheado (PERSONA, contexto, herramientas), así que cambian con
         // cada pregunta sin tirar la caché. Ver `hechosParaLaPregunta`.
         val hechos = paraElModelo.lastOrNull()?.let { hechosParaLaPregunta(it.content, datos.paraLosHechos()) }
+        // **Lo que el dueño hizo con lo que se le propuso** (Ola 3): si dijo «No», el asistente lo
+        // sabe en el turno siguiente. Va pegado a la pregunta, igual que los hechos: después de todo
+        // lo cacheado, así que cambiar de estado una tarjeta no tira la caché.
+        val decisiones = loQueElDuenoDecidio(call.userId(), conversacionEmpezadaEn(call.userId()))
+        val anexo = listOfNotNull(hechos, decisiones).joinToString("\n\n").ifBlank { null }
         val messageParams = paraElModelo.mapIndexed { i, m ->
-            toMessageParam(m, anexo = hechos.takeIf { i == paraElModelo.lastIndex })
+            toMessageParam(m, anexo = anexo.takeIf { i == paraElModelo.lastIndex })
         }
         if (messageParams.isEmpty() || messageParams.last().role() != MessageParam.Role.USER) {
             call.respond(HttpStatusCode.BadRequest, AiChatResponse(text = "Último mensaje debe ser del usuario"))
@@ -236,25 +308,36 @@ fun Route.aiRoutes() {
         // todo lo que él pregunta es un dato y lo contesta el chico; el grande es para el criterio.
         val ultima = paraElModelo.last()
         val pideCriterio = laPreguntaPideCriterio(ultima.content, hayImagen = ultima.imageBase64 != null)
-        val elModelo = ElModeloDeAnthropic(
-            client = client,
-            modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
-            persona = PERSONA,
-            contexto = context,
-            mensajesDelDueno = messageParams,
-            // Pensar se cobra como salida. Se enciende solo cuando de verdad hay algo que pensar.
-            piensa = pideCriterio,
-            modeloDeRespaldo = MODELO_DE_RESPALDO,
+        val elModelo = fabrica(
+            PedidoDelModelo(
+                modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
+                persona = PERSONA,
+                contexto = context,
+                mensajes = messageParams,
+                piensa = pideCriterio,
+            ),
         )
+        val fichas = elModelo as? ElModeloDeAnthropic
         val hayImagen = ultima.imageBase64 != null
+        // **Lo que el asistente propone en este turno** (Ola 3). Las herramientas que proponen no
+        // escriben nada: validan y arman una tarjeta; esto las junta para la respuesta.
+        val propuestas = PropuestasDelTurno(uid)
         val reply = runCatching {
             responderSinInventar(
                 modelo = elModelo,
-                ejecutar = { llamada -> ejecutarHerramienta(uid, llamada) },
+                ejecutar = { llamada ->
+                    if (esHerramientaQuePropone(llamada.nombre)) propuestas.ejecutar(llamada)
+                    else ejecutarHerramienta(uid, llamada)
+                },
+                // Si todo lo que pidió fueron propuestas y salieron bien, el turno termina en las
+                // tarjetas: la vuelta siguiente solo diría «te la dejé abajo» y cuesta una llamada.
+                cerrarSinOtraVuelta = { llamadas, texto ->
+                    if (propuestas.cierraElTurno(llamadas)) textoAlCerrarConPropuestas(texto, propuestas.propuestas.size) else null
+                },
                 // Todo lo que el modelo tenía delante en este turno: contra esto se revisa cada
                 // cifra. La conversación entra entera —la pregunta y lo que ya se contestó—, porque
                 // repetir una cifra que el dueño escribió no es inventarla.
-                fuentes = listOfNotNull(context, hechos) + paraElModelo.map { it.content },
+                fuentes = listOfNotNull(context, hechos, decisiones) + paraElModelo.map { it.content },
                 trampas = cifrasTrampa(datos.periodo.creditos),
                 // Con una foto, los montos salen de la imagen y el verificador no la puede leer.
                 verificar = !hayImagen,
@@ -263,15 +346,17 @@ fun Route.aiRoutes() {
         // Lo que costó, en el log. Sin esto el costo se estima; con esto se mira.
         call.application.log.info(
             "movi-ai uid=$uid criterio=$pideCriterio hechos=${hechos != null} " +
-                "reintento=${reply.getOrNull()?.huboReintento == true} entrada=${elModelo.fichasDeEntrada} " +
-                "cache=${elModelo.fichasLeidasDeCache} salida=${elModelo.fichasDeSalida}",
+                "reintento=${reply.getOrNull()?.huboReintento == true} propuestas=${propuestas.propuestas.size} " +
+                "entrada=${fichas?.fichasDeEntrada ?: 0} cache=${fichas?.fichasLeidasDeCache ?: 0} salida=${fichas?.fichasDeSalida ?: 0}",
         )
         // Y la conversación queda guardada, que es lo que hace diagnosticable «el asistente no
         // supo»: sin la pregunta, lo que consultó y lo que contestó, del lado del server solo
         // quedaban las fichas. Guardar NUNCA puede romper la respuesta — ver
         // `guardarLaConversacion`, que no lanza.
+        val turnoId = nuevoIdDeTurno()
         reply.getOrNull()?.let { paso ->
             val guardado = guardarLaConversacion(
+                id = turnoId,
                 uid = uid,
                 pregunta = ultima.content,
                 // Sin emojis, igual que lo que se le manda: desde la Ola 3 esto se vuelve a pintar.
@@ -279,16 +364,21 @@ fun Route.aiRoutes() {
                 consultas = paso.consultas,
                 modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
                 criterio = pideCriterio,
-                fichasEntrada = elModelo.fichasDeEntrada,
-                fichasCache = elModelo.fichasLeidasDeCache,
-                fichasSalida = elModelo.fichasDeSalida,
+                fichasEntrada = fichas?.fichasDeEntrada ?: 0,
+                fichasCache = fichas?.fichasLeidasDeCache ?: 0,
+                fichasSalida = fichas?.fichasDeSalida ?: 0,
                 hayImagen = hayImagen,
                 cifrasSinRespaldo = paso.sinRespaldo,
                 cifrasCorregidas = paso.corregidas,
             )
             if (!guardado) call.application.log.warn("movi-ai: no pude guardar la conversación de $uid")
+            // Las tarjetas se guardan con el id del turno que las hizo: así vuelven a su globo al
+            // recargar, y «Hacerlo»/«No» tienen dónde anotarse.
+            if (!guardarPropuestas(uid, turnoId, propuestas.propuestas)) {
+                call.application.log.warn("movi-ai: no pude guardar las propuestas de $uid")
+            }
         }
-        reply.onSuccess { call.respond(AiChatResponse(text = stripEmojis(it.texto))) }
+        reply.onSuccess { call.respond(AiChatResponse(text = stripEmojis(it.texto), propuestas = propuestas.propuestas)) }
             .onFailure {
                 call.respond(
                     HttpStatusCode.InternalServerError,

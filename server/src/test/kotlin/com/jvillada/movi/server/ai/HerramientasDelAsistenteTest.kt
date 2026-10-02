@@ -303,8 +303,16 @@ class HerramientasDelAsistenteTest {
     fun `las herramientas que se ofrecen son las que se saben ejecutar`() {
         val ofrecidas = LAS_HERRAMIENTAS.map { it.name() }
 
-        assertEquals(setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS), ofrecidas.toSet())
-        ofrecidas.forEach { nombre ->
+        assertEquals(
+            setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS) + HERRAMIENTAS_QUE_PROPONEN_NOMBRES,
+            ofrecidas.toSet(),
+        )
+        // Las que proponen (Ola 3) no pasan por `ejecutarHerramienta`: las ejecuta `proponer`.
+        ofrecidas.filter(::esHerramientaQuePropone).forEach { nombre ->
+            val r = runBlocking { proponer(dueno, LlamadaDeHerramienta("tu_1", nombre, emptyMap())) }
+            assertFalse("No existe una herramienta" in r.paraElModelo, "se ofrece «$nombre» y no se sabe proponer")
+        }
+        ofrecidas.filterNot(::esHerramientaQuePropone).forEach { nombre ->
             assertFalse(
                 "No existe una herramienta" in preguntar(nombre, "desde" to "2026-08-01", "hasta" to "2026-08-31"),
                 "se ofrece «$nombre» y no se sabe ejecutar",

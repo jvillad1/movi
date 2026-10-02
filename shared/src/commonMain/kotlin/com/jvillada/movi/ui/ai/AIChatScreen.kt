@@ -34,6 +34,7 @@ import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
+import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -77,6 +78,9 @@ fun AIChatScreen(
     // Mientras no llega no se pinta el arranque, para que no parpadee un chat vacío antes de que
     // aparezca lo que ya se habló. Si falla (sin señal) el chat arranca vacío, como antes.
     var historialCargado by remember { mutableStateOf(false) }
+    // Lo que el dueño decidió de cada tarjeta, por id (Ola 3). Vive acá y no en la tarjeta: una
+    // tarjeta que sale de la pantalla al hacer scroll no puede volver con «Hacerlo» ya hecha.
+    val estadosDePropuestas = remember { mutableStateMapOf<String, EstadoDePropuesta>() }
     var aviso by remember { mutableStateOf<String?>(null) }
     val nombre = remember { primerNombre(SessionManager.userName) }
 
@@ -124,7 +128,7 @@ fun AIChatScreen(
             val reply = runCatching { Repositories.wallets.chatAi(AiChatRequest(history)) }
             val replyText = reply.getOrNull()?.text
                 ?: "No pude conectarme con el AI. ${reply.exceptionOrNull()?.message ?: ""}"
-            messages.add(ChatMessage(ChatRole.ASSISTANT, replyText))
+            messages.add(ChatMessage(ChatRole.ASSISTANT, replyText, propuestas = reply.getOrNull()?.propuestas.orEmpty()))
             loading = false
         }
     }
@@ -223,6 +227,13 @@ fun AIChatScreen(
                     AIMsgUser(msg.content, hasImage = msg.imageBase64 != null || msg.teniaImagen)
                 } else {
                     AIMsgAI(msg.content)
+                    msg.propuestas.forEach { propuesta ->
+                        PropuestaDelAsistente(
+                            propuesta = propuesta,
+                            estado = estadosDePropuestas[propuesta.id] ?: propuesta.estado,
+                            onEstado = { estadosDePropuestas[propuesta.id] = it },
+                        )
+                    }
                 }
             }
             if (loading) {
