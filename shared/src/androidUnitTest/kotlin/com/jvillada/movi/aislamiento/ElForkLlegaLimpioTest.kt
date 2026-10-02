@@ -33,6 +33,8 @@ import com.jvillada.movi.shared.repository.CompartirRepository
 import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.avisos.AvisosEnHoy
 import com.jvillada.movi.avisos.DestinoDesdeAfuera
+import com.jvillada.movi.ui.papeles.ArchivoCompartido
+import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import com.jvillada.movi.avisos.OfertaDeAvisos
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.platform.HuellaDelAparato
@@ -118,6 +120,8 @@ class ElForkLlegaLimpioTest {
         Huella.sustitutoDePrueba = LECTOR_DE_OTRA_PRUEBA
         // Ola 1: la pantalla que dejó pendiente un aviso tocado, y la oferta de avisos de prueba.
         DestinoDesdeAfuera.pendiente = Screen.PorRevisar
+        // Ola 2: un archivo compartido que esperaba la puerta.
+        PapelesCompartidos.recibir(listOf(ArchivoCompartido("recibo.png", byteArrayOf(1), "image/png")))
         AvisosEnHoy.sustitutoDePrueba = object : OfertaDeAvisos {
             override fun pedir() = Unit
             override fun descartar() = Unit
@@ -169,6 +173,7 @@ class ElForkLlegaLimpioTest {
         assertNotNull("El repositorio de prueba no quedó enchufado", Repositories.sustitutoDePrueba)
         assertNotNull("El lector de huellas de prueba no quedó enchufado", Huella.sustitutoDePrueba)
         assertNotNull("El destino del aviso no quedó pendiente", DestinoDesdeAfuera.pendiente)
+        assertTrue("El archivo compartido no quedó esperando", PapelesCompartidos.pendientes.isNotEmpty())
         assertNotNull("La oferta de avisos de prueba no quedó enchufada", AvisosEnHoy.sustitutoDePrueba)
         assertNotNull("El repositorio de Compartir de prueba no quedó enchufado", Repositories.sustitutoDeCompartirDePrueba)
         assertTrue("«Entrar con huella» no quedó prendida", SessionManager.huellaActivada)
@@ -209,6 +214,7 @@ class ElForkLlegaLimpioTest {
         assertNull("El repositorio de prueba de otra clase sigue enchufado", Repositories.sustitutoDePrueba)
         assertNull("El lector de huellas de otra clase sigue enchufado", Huella.sustitutoDePrueba)
         assertNull("El destino de un aviso tocado en otra prueba sigue pendiente", DestinoDesdeAfuera.pendiente)
+        assertTrue("Un archivo compartido en otra prueba sigue esperando", PapelesCompartidos.pendientes.isEmpty())
         assertNull("La oferta de avisos de otra clase sigue enchufada", AvisosEnHoy.sustitutoDePrueba)
         assertNull("El repositorio de Compartir de otra clase sigue enchufado", Repositories.sustitutoDeCompartirDePrueba)
         assertFalse("«Entrar con huella» trae la resaca del método anterior", SessionManager.huellaActivada)

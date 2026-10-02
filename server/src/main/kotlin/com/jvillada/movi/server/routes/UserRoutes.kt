@@ -10,6 +10,8 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.AvatarPalette
+import com.jvillada.movi.shared.model.DIAS_PARA_BANCO_MUDO_POR_DEFECTO
+import com.jvillada.movi.shared.model.MAX_DIAS_PARA_BANCO_MUDO
 import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.MAX_INICIOS_PROPIOS
 import com.jvillada.movi.shared.model.PasswordPolicy
@@ -110,6 +112,10 @@ fun Route.userRoutes() {
             if (req.reminderLeadDays != null && req.reminderLeadDays !in 0..30) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Los días de aviso van de 0 a 30")
             }
+            // Banco mudo (Ola 2): 0 lo apaga; más de un mes sin avisar ya no es un aviso.
+            if (req.diasParaBancoMudo != null && req.diasParaBancoMudo !in 0..MAX_DIAS_PARA_BANCO_MUDO) {
+                return@put call.respond(HttpStatusCode.BadRequest, "Los días del aviso van de 0 a $MAX_DIAS_PARA_BANCO_MUDO")
+            }
             // Los arranques propios: cada clave un período «AAAA-MM» y cada valor una fecha ISO
             // real. **No se valida que la fecha caiga en el mes correcto acá**, y es a propósito:
             // esa regla vive en `inicioDelPeriodo` (:core), que ante un valor imposible vuelve al
@@ -135,7 +141,8 @@ fun Route.userRoutes() {
                 )
             }
             if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null &&
-                req.reminderLeadDays == null && req.smsAlertMuted == null && req.periodStarts == null
+                req.reminderLeadDays == null && req.smsAlertMuted == null && req.periodStarts == null &&
+                req.diasParaBancoMudo == null
             ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
             }
@@ -154,6 +161,7 @@ fun Route.userRoutes() {
                     // Sin rango que validar: es un sí o un no. Mandar `false` es tan válido como
                     // mandar `true` — así se vuelve a mostrar el aviso del Inicio.
                     req.smsAlertMuted?.let { stmt[Users.smsAlertMuted] = it }
+                    req.diasParaBancoMudo?.let { stmt[Users.diasParaBancoMudo] = it }
                 }
                 Users.selectAll().where { Users.id eq uid }.firstOrNull()
             } ?: return@put call.respond(HttpStatusCode.NotFound)
@@ -271,6 +279,8 @@ private fun ResultRow.toProfile() = UserProfile(
     reminderLeadDays = this[Users.reminderLeadDays] ?: ReminderConfig.leadDays(),
     // Sin tocar = no silenciado: el aviso de captura se muestra hasta que alguien pida callarlo.
     smsAlertMuted = this[Users.smsAlertMuted] ?: false,
+    // Sin elegir = el default de :core. 0 = el dueño lo apagó.
+    diasParaBancoMudo = this[Users.diasParaBancoMudo] ?: DIAS_PARA_BANCO_MUDO_POR_DEFECTO,
 )
 
 /** Un período se escribe «AAAA-MM». */

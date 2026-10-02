@@ -327,6 +327,7 @@ private fun AvisosDelTelefonoCard() {
     var aAjustes by remember { mutableStateOf(false) }
     var movimientos by remember { mutableStateOf(PreferenciasDeAvisos.avisarMovimientos(context)) }
     var vencimientos by remember { mutableStateOf(PreferenciasDeAvisos.avisarVencimientos(context)) }
+    var bancoMudo by remember { mutableStateOf(PreferenciasDeAvisos.avisarBancoMudo(context)) }
 
     fun refrescar() {
         puede = puedeAvisar(context)
@@ -380,6 +381,16 @@ private fun AvisosDelTelefonoCard() {
         ) {
             vencimientos = it
             PreferenciasDeAvisos.ponerAvisarVencimientos(context, it)
+        }
+        // Ola 2 · banco mudo: cuántos días cuentan como silencio se elige arriba, en esta misma
+        // pantalla (vale para la web y el teléfono); acá solo si este teléfono suena.
+        FilaDeInterruptor(
+            texto = "Avisarme si mi banco deja de avisar",
+            encendido = bancoMudo,
+            habilitado = puede,
+        ) {
+            bancoMudo = it
+            PreferenciasDeAvisos.ponerAvisarBancoMudo(context, it)
         }
     }
 }

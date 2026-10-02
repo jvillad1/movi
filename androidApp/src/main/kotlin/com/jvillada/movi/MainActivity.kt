@@ -7,11 +7,16 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
+import com.jvillada.movi.avisos.AvisoDeBancoMudoWorker
 import com.jvillada.movi.avisos.AvisoDeVencimientosWorker
 import com.jvillada.movi.avisos.Avisador
 import com.jvillada.movi.avisos.DestinoDesdeAfuera
 import com.jvillada.movi.avisos.EXTRA_ABRIR
 import com.jvillada.movi.avisos.destinoDeAviso
+import com.jvillada.movi.compartir.esCompartirConMovi
+import com.jvillada.movi.compartir.leerLoCompartido
+import com.jvillada.movi.compartir.urisCompartidos
+import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import com.jvillada.movi.shared.db.DatabaseDriverFactory
 import com.jvillada.movi.sms.SmsBackfillWorker
 import com.jvillada.movi.sms.SmsFilterConfigStore
@@ -55,8 +60,13 @@ class MainActivity : FragmentActivity() {
         // correr: con el interruptor apagado o sin permiso no hace nada.
         Avisador.crearCanales(applicationContext)
         AvisoDeVencimientosWorker.programar(applicationContext)
+        // Ola 2: y el diario de «banco mudo» (decide al correr, igual que el de vencimientos).
+        AvisoDeBancoMudoWorker.programar(applicationContext)
         // Si la app se abrió tocando un aviso, a qué pantalla va (lo cumple App() tras la puerta).
         recibirAviso(intent)
+        // Ola 2 · «Compartir con Movi». Solo en un arranque de verdad: si Android recrea la
+        // actividad con el mismo Intent, lo compartido ya se recibió la primera vez.
+        if (savedInstanceState == null) recibirCompartido(intent)
         setContent {
             App()
         }
@@ -67,6 +77,27 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         recibirAviso(intent)
+        recibirCompartido(intent)
+    }
+
+    /**
+     * Lee lo compartido (imágenes o PDF) en un hilo aparte y lo deja en [PapelesCompartidos].
+     * **No sube nada**: `App()` lo procesa después de la puerta de «Entrar con huella» (ver
+     * `sePuedeLeerLoCompartido`). El permiso de leer cada `content://` dura lo que viva esta
+     * actividad, así que se lee ya y no se guarda el URI para después.
+     */
+    private fun recibirCompartido(intent: Intent?) {
+        if (intent == null || !esCompartirConMovi(intent.action, intent.type)) return
+        val uris = urisCompartidos(intent)
+        val tipo = intent.type
+        // Una sola vez: el mismo Intent no se vuelve a leer si la actividad recibe otro onNewIntent.
+        intent.action = null
+        if (uris.isEmpty()) return
+        val contexto = applicationContext
+        Thread {
+            val archivos = leerLoCompartido(contexto, uris, tipo)
+            runOnUiThread { PapelesCompartidos.recibir(archivos) }
+        }.start()
     }
 
     private fun recibirAviso(intent: Intent?) {

@@ -39,8 +39,9 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 // Alta a propósito: debajo del aviso viene la sección «Captura en este teléfono» y la bandeja
-// entera. Ver el mismo criterio en `SuscripcionesActivasEnElTableroTest`.
-@Config(qualifiers = "w411dp-h1200dp-xhdpi")
+// entera. Ver el mismo criterio en `SuscripcionesActivasEnElTableroTest`. Ola 2: 1600 y no 1200,
+// porque entre el aviso y la sección del teléfono entró la tarjeta del aviso de banco mudo.
+@Config(qualifiers = "w411dp-h1600dp-xhdpi")
 class CapturaDeSmsEnLaBandejaTest {
 
     @get:Rule val composeRule = createComposeRule()

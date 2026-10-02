@@ -356,6 +356,8 @@ object SessionManager {
         PropuestasDescartadasStore.clear()
         // Ola 1: y la pantalla que un aviso tocado dejó pendiente — es de quien lo tocó.
         com.jvillada.movi.avisos.DestinoDesdeAfuera.pendiente = null
+        // Ola 2: y los archivos compartidos que esperaban la puerta — son de quien los compartió.
+        com.jvillada.movi.ui.papeles.PapelesCompartidos.olvidar()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
         // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres

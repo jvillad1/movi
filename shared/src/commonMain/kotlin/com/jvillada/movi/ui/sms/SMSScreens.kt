@@ -45,6 +45,13 @@ import androidx.compose.ui.semantics.Role
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.momentoDelSms
+import com.jvillada.movi.shared.model.esIdDeComprobante
+import com.jvillada.movi.shared.model.soloLoQueLlegoSolo
+import com.jvillada.movi.shared.model.Captura
+import com.jvillada.movi.shared.model.MAX_DIAS_PARA_BANCO_MUDO
+import com.jvillada.movi.shared.model.OrigenMudo
+import com.jvillada.movi.shared.model.origenesMudos
+import com.jvillada.movi.shared.model.textoDeOrigenMudo
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.EventSource
@@ -134,6 +141,8 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
     var refreshKey by remember { mutableStateOf(0) }
     /** `null` = el perfil todavía no contestó; hasta entonces no se ofrece silenciar ni no. */
     var silenciada by remember { mutableStateOf<Boolean?>(null) }
+    /** Ola 2 · banco mudo: los días que eligió; `null` hasta que el perfil contesta. */
+    var diasParaBancoMudo by remember { mutableStateOf<Int?>(null) }
 
     var leyendo by remember { mutableStateOf(true) }
     // `intentar` y no `runCatching`: una lectura cancelada no puede quedar contada como contestada.
@@ -145,12 +154,16 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
     }
     LaunchedEffect(Unit) {
         intentar { Repositories.wallets.getUserProfile() }
-            .onSuccess { silenciada = it.smsAlertMuted }
+            .onSuccess {
+                silenciada = it.smsAlertMuted
+                diasParaBancoMudo = it.diasParaBancoMudo
+            }
     }
     val mensajes = mensajesMasRecientesPrimero(smsItems.orEmpty())
     // El estado de la captura sale de la MISMA función que usa el server para el Inicio
     // (`capturaDeSms`, en :core) — acá sin un viaje extra, porque la lista ya está bajada.
-    val aviso = smsItems?.let { avisoDeCaptura(capturaDeSms(it.map { sms -> sms.time })) }
+    // Sin los comprobantes compartidos (Ola 2): esos no prueban que la captura ande.
+    val aviso = smsItems?.let { avisoDeCaptura(capturaDeSms(soloLoQueLlegoSolo(it).map { sms -> sms.time })) }
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60: encabezado único — se abre desde Ajustes (flecha, F22); «Actualizar» es la acción
         // propia. Ola C: ya no lleva «N por confirmar» de subtítulo — lo pendiente se revisa en
@@ -272,6 +285,35 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                         }
                     }
                 }
+                // Ola 2 · «banco mudo»: qué origen se calló (la misma regla del server, sobre la
+                // lista que ya está bajada) y cuántos días de silencio avisan.
+                diasParaBancoMudo?.let { dias ->
+                    val mudos = smsItems?.let { lista ->
+                        val ahora = Clock.System.now().toEpochMilliseconds()
+                        origenesMudos(
+                            soloLoQueLlegoSolo(lista).mapNotNull { sms ->
+                                momentoDelSms(sms.time, ahora = Long.MAX_VALUE).takeIf { it != Long.MAX_VALUE }
+                                    ?.let { Captura(sms.bank, it) }
+                            },
+                            ahora,
+                            dias,
+                        )
+                    }.orEmpty()
+                    Spacer(Modifier.height(14.dp))
+                    AjusteDeBancoMudo(
+                        dias = dias,
+                        mudos = mudos,
+                        onCambio = { nuevo ->
+                            val antes = dias
+                            diasParaBancoMudo = nuevo
+                            coroutine.launch {
+                                intentar { Repositories.wallets.updateUserProfile(UpdateProfileRequest(diasParaBancoMudo = nuevo)) }
+                                    // Sin snackbar acá, como el silencio de arriba: se revierte.
+                                    .onFailure { diasParaBancoMudo = antes }
+                            }
+                        },
+                    )
+                }
                 // Solo Android pinta algo acá: la configuración de la captura de SMS (permisos,
                 // hibernación, historial) que antes vivía en la pantalla del APK sensor.
                 // Reemplaza también a la vieja tarjeta "Sincronizar SMS del teléfono", que subía
@@ -296,6 +338,80 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
         }
+    }
+}
+
+/** El tag de la tarjeta del aviso de banco mudo en Captura del banco. */
+const val TAG_AJUSTE_DE_BANCO_MUDO: String = "ajuste-de-banco-mudo"
+
+/** «3 días», «1 día», «Nunca». */
+internal fun textoDeDiasDeBancoMudo(dias: Int): String = when {
+    dias <= 0 -> "Nunca"
+    dias == 1 -> "1 día"
+    else -> "$dias días"
+}
+
+/**
+ * **«Avisarme si un banco se calla»** (Ola 2): cuántos días sin capturas de un origen que llegaba
+ * siempre cuentan como silencio, con un − y un +; `0` es «Nunca». Encima, si ya hay uno callado, lo
+ * dice. Vale para la cuenta (web y teléfono), por eso vive en el server y no en el aparato.
+ */
+@Composable
+private fun AjusteDeBancoMudo(dias: Int, mudos: List<OrigenMudo>, onCambio: (Int) -> Unit) {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_AJUSTE_DE_BANCO_MUDO),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(18.dp),
+    ) {
+        Text(
+            "AVISARME SI UN BANCO SE CALLA",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            letterSpacing = 1.4.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(Modifier.height(8.dp))
+        mudos.forEach { mudo ->
+            Text(conPuntoFinalDelAviso(textoDeOrigenMudo(mudo)), style = Movi.textos.cuerpo, color = Movi.colores.aviso)
+            Spacer(Modifier.height(6.dp))
+        }
+        Text(
+            if (dias <= 0) "Movi no te avisa si un banco deja de mandar mensajes, avisos o correos."
+            else "Si un banco que te avisaba siempre lleva ${textoDeDiasDeBancoMudo(dias)} sin mandar nada, Movi te lo dice en Hoy.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            lineHeight = 18.sp,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BotonDeDias("−", habilitado = dias > 0) { onCambio(dias - 1) }
+            Text(
+                textoDeDiasDeBancoMudo(dias),
+                style = Movi.textos.cuerpo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.texto,
+                modifier = Modifier.widthIn(min = 64.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            BotonDeDias("+", habilitado = dias < MAX_DIAS_PARA_BANCO_MUDO) { onCambio(dias + 1) }
+        }
+    }
+}
+
+/** El texto de la regla termina sin punto («… Revisa la captura»); en una tarjeta va con él. */
+private fun conPuntoFinalDelAviso(texto: String): String = if (texto.endsWith(".")) texto else "$texto."
+
+@Composable
+private fun BotonDeDias(texto: String, habilitado: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .border(1.dp, Movi.colores.borde, CircleShape)
+            .clickable(enabled = habilitado, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(texto, style = Movi.textos.titulo, color = if (habilitado) Movi.colores.texto else Movi.colores.textoApagado)
     }
 }
 
@@ -364,7 +480,18 @@ internal fun TarjetaDeMensajeDelBanco(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(sms.bank, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            // Con tope y en un renglón: «Comprobante · transferencia de septiembre.png» (Ola 2) se
+            // comía el ancho entero y la fecha quedaba en un dígito suelto. Un código de SMS o
+            // «Notificación · Nu» ni se acercan al tope.
+            Text(
+                sms.bank,
+                style = Movi.textos.cuerpo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.texto,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 170.dp),
+            )
             StatusDot(Movi.colores.textoApagado, 2.dp)
             // La fecha se lleva lo que sobra: el banco y el estado son lo que se busca con la
             // vista. En palabras («Hoy, 8:10 a. m.») y no el «2026-09-29 08:10» guardado
@@ -502,13 +629,26 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      */
     var cuentaDeDeudaElegida by remember { mutableStateOf<Account?>(null) }
 
+    /**
+     * Ola 2: la propuesta salió de un comprobante que el dueño compartió (ver `Papeles.kt` en
+     * :core). Se revisa igual que un SMS; cambia el rótulo, el origen del movimiento (`OCR`) y que
+     * al confirmar se le dice al server con qué movimiento, para colgar el papel de su cuenta.
+     */
+    val esComprobante = esIdDeComprobante(smsId)
+
+    /** Confirma el aviso diciendo, si es un comprobante, con qué movimiento quedó. */
+    suspend fun confirmarElAviso(eventoId: String) {
+        if (esComprobante) Repositories.wallets.confirmarComprobante(smsId, eventoId)
+        else Repositories.wallets.confirmSms(smsId)
+    }
+
     /** «Es este»: el SMS queda confirmado sin crear nada, porque el movimiento ya existía. */
-    fun esElQueYaEstaba() {
+    fun esElQueYaEstaba(eventoId: String) {
         if (working) return
         working = true
         error = null
         coroutine.launch {
-            intentar { Repositories.wallets.confirmSms(smsId) }
+            intentar { confirmarElAviso(eventoId) }
                 .onSuccess {
                     working = false
                     sms = sms?.copy(state = SMS_STATE_CONFIRMED)
@@ -653,6 +793,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelSms].
                     momento = momentoDelSms(sms?.time.orEmpty(), ahora = Clock.System.now().toEpochMilliseconds()),
                     textoDelSms = sms?.text.orEmpty(),
+                    origen = if (esComprobante) EventSource.OCR else EventSource.SMS,
                 )
                 Repositories.wallets.postEvent(event)
                 movimientoCreado = true
@@ -675,7 +816,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         )
                     }
                 }
-                Repositories.wallets.confirmSms(smsId)
+                confirmarElAviso(event.id)
             }.onSuccess {
                 working = false
                 sms = sms?.copy(state = SMS_STATE_CONFIRMED)
@@ -741,7 +882,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     }
                     Spacer(Modifier.height(14.dp))
                 }
-                MinSectionHeader(title = "SMS recibido")
+                MinSectionHeader(title = if (esComprobante) "Lo que Movi leyó del papel" else "SMS recibido")
                 MinCard(
                     modifier = Modifier.fillMaxWidth(),
                     variant = MinCardVariant.Default,
@@ -750,10 +891,19 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     if (sms == null) {
                         Text("Cargando…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     } else {
+                        // El origen en su propio renglón: «Comprobante · transferencia.png» (Ola 2) no
+                        // entraba al lado del tipo y la fecha, y los dejaba en una letra por renglón.
+                        Text(
+                            sms!!.bank,
+                            style = Movi.textos.cuerpo,
+                            fontWeight = FontWeight.Medium,
+                            color = Movi.colores.texto,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(sms!!.bank, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                            StatusDot(Movi.colores.textoApagado, 2.dp)
-                            Text("SMS", color = Movi.colores.textoMedio, style = Movi.textos.rotulo)
+                            Text(if (esComprobante) "COMPROBANTE" else "SMS", color = Movi.colores.textoMedio, style = Movi.textos.rotulo)
                             StatusDot(Movi.colores.textoApagado, 2.dp)
                             Text(fechaLegibleDeSms(sms!!.time), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                         }
@@ -837,7 +987,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(999.dp))
                                         .background(Movi.colores.marca.copy(alpha = 0.16f))
-                                        .clickable(enabled = !working) { esElQueYaEstaba() }
+                                        .clickable(enabled = !working) { esElQueYaEstaba(ev.id) }
                                         .padding(horizontal = 14.dp, vertical = 8.dp),
                                 )
                             }
@@ -1372,6 +1522,8 @@ internal fun movimientoConfirmadoDelSms(
      * silencio en cualquier call site nuevo, y este dato es el que hace auditable una cifra.
      */
     textoDelSms: String,
+    /** `OCR` cuando la propuesta salió de un comprobante compartido (Ola 2); `SMS` en lo demás. */
+    origen: EventSource = EventSource.SMS,
 ): FinancialEvent = FinancialEvent(
     id = id,
     accountId = cuentaId,
@@ -1381,7 +1533,7 @@ internal fun movimientoConfirmadoDelSms(
     category = categoria,
     description = leido.merchant,
     merchant = leido.merchant,
-    source = EventSource.SMS,
+    source = origen,
     rawPayload = textoDelSms.ifBlank { null },
     reconciliationStatus = ReconciliationStatus.RECONCILED,
     timestamp = momento,

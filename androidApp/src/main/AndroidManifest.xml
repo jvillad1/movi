@@ -35,6 +35,21 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Ola 2 · «Compartir con Movi»: Movi aparece en la hoja de compartir del sistema para
+                 imágenes (capturas de transferencias, fotos de recibos) y PDF, uno o varios. Lo
+                 compartido se lee DESPUÉS de la puerta de «Entrar con huella» (ver MainActivity). -->
+            <intent-filter android:label="Leer con Movi">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+            <intent-filter android:label="Leer con Movi">
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
         </activity>
 
         <!--

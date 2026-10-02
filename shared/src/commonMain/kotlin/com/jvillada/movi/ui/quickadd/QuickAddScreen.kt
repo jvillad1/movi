@@ -17,6 +17,11 @@ import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.UploadFile
+import com.jvillada.movi.ui.extractos.TiposDeArchivo
+import com.jvillada.movi.ui.extractos.rememberFilePicker
+import com.jvillada.movi.ui.papeles.ArchivoCompartido
+import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -104,6 +109,9 @@ internal const val TAG_CERRAR_SUB_PICKER = "quickadd:cerrar-sub-picker"
 
 /** El campo de texto del sub-picker «Nota» — para encontrarlo en una prueba (Task 5). */
 internal const val TAG_CAMPO_DE_NOTA = "quickadd:campo-de-nota"
+
+/** El botón «Subir comprobante o extracto» de Agregar (Ola 2). */
+const val TAG_SUBIR_PAPEL_EN_AGREGAR: String = "quickadd:subir-papel"
 
 /**
  * **En qué moneda está la plata de esta cuenta** — la del movimiento que se anote contra ella.
@@ -469,6 +477,12 @@ fun QuickAddScreen(
     // `hoy` se calcula UNA vez por apertura de la hoja y se comparte: si el selector, la etiqueta
     // y el guardado preguntaran cada uno por su cuenta, una hoja abierta a las 23:59:59 podría
     // decir «Hoy» y guardar la fecha de mañana.
+    // Ola 2 · «Compartir con Movi»: el papel elegido va a la cola de lo compartido y la hoja se
+    // cierra; `App()` abre la de lectura encima de la pantalla.
+    val elegirPapel = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
+        PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
+        onDismiss()
+    }
     val hoy = remember { hoyEnAppZone() }
     // Un preset gana sobre «hoy». El checklist ya no manda ninguno (revisión del 29-sep: anotar con
     // el vencimiento fechaba el pago un día en que la plata no salió; ver `hojaParaAnotar`), pero
@@ -1263,6 +1277,7 @@ fun QuickAddScreen(
                         onSave = ::save,
                                 hasNoAccounts = accountsLoaded && accounts.isEmpty(),
                                 onCreateAccount = { showCreateSheet = true },
+                                onSubirPapel = elegirPapel,
                             )
                         }
                     }
@@ -1329,6 +1344,11 @@ private fun EditorBody(
     onSave: () -> Unit,
     hasNoAccounts: Boolean = false,
     onCreateAccount: () -> Unit = {},
+    /**
+     * Ola 2 · «Compartir con Movi»: subir un comprobante o un extracto en vez de anotarlo a mano.
+     * Va en el lugar que tenía la cámara falsa, al lado de guardar, para no mover nada de la hoja.
+     */
+    onSubirPapel: (() -> Unit)? = null,
 ) {
     // Ola 13 — DE DÓNDE SALIERON ESTOS DOS SPACERS MÁS CHICOS (22→16 y 8→2).
     //
@@ -1608,12 +1628,31 @@ private fun EditorBody(
     } else {
         // Aquí había un botón de cámara que abría un «escáner de recibos» con un recibo INVENTADO
         // («ÉXITO COUNTRY», $312.400) y un «Guardar» que solo volvía al Inicio: la única pantalla de
-        // Movi que mostraba datos falsos. Se quitó entero (revisión del 29-sep); el escáner real
-        // llega con «Compartir con Movi».
+        // Movi que mostraba datos falsos. Se quitó entero (revisión del 29-sep). En su lugar —el
+        // mismo tamaño, así la hoja no cambia de alto— va el de verdad (Ola 2): subir el papel y
+        // que Movi lo lea.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (onSubirPapel != null) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp, 54.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(16.dp))
+                        .clickable(enabled = !saving) { onSubirPapel() }
+                        .testTag(TAG_SUBIR_PAPEL_EN_AGREGAR),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.UploadFile,
+                        contentDescription = "Subir comprobante o extracto",
+                        tint = Movi.colores.texto,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
             Box(
                 modifier = Modifier
                     .weight(1f)

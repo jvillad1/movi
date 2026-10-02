@@ -28,6 +28,8 @@ object PreferenciasDeAvisos {
     private const val KEY_OFERTA_CERRADA = "oferta_de_hoy_cerrada"
     private const val KEY_AGRUPADOS = "movimientos_agrupados"
     private const val KEY_HUELLA_VENCIMIENTOS = "huella_vencimientos"
+    private const val KEY_BANCO_MUDO = "avisar_banco_mudo"
+    private const val KEY_HUELLA_BANCO_MUDO = "huella_banco_mudo"
 
     private val json = Json { ignoreUnknownKeys = true }
     private val listaDeAvisos = ListSerializer(AvisoPorRevisar.serializer())
@@ -44,6 +46,18 @@ object PreferenciasDeAvisos {
     fun avisarVencimientos(context: Context): Boolean = prefs(context).getBoolean(KEY_VENCIMIENTOS, true)
     fun ponerAvisarVencimientos(context: Context, valor: Boolean) {
         prefs(context).edit().putBoolean(KEY_VENCIMIENTOS, valor).apply()
+    }
+
+    /** Ola 2: «Avisarme si mi banco deja de avisar». Encendido por defecto, como los otros dos. */
+    fun avisarBancoMudo(context: Context): Boolean = prefs(context).getBoolean(KEY_BANCO_MUDO, true)
+    fun ponerAvisarBancoMudo(context: Context, valor: Boolean) {
+        prefs(context).edit().putBoolean(KEY_BANCO_MUDO, valor).apply()
+    }
+
+    /** La huella del último silencio avisado (ver `huellaDeBancosMudos`). */
+    fun huellaDeBancoMudo(context: Context): String? = prefs(context).getString(KEY_HUELLA_BANCO_MUDO, null)
+    fun guardarHuellaDeBancoMudo(context: Context, huella: String) {
+        prefs(context).edit().putString(KEY_HUELLA_BANCO_MUDO, huella).apply()
     }
 
     /** La tarjeta de Hoy ya se contestó («Activar avisos» o «Ahora no»): no vuelve a salir. */

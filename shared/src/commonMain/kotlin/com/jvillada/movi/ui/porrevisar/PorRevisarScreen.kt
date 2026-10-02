@@ -57,6 +57,11 @@ import com.jvillada.movi.ui.components.ActualizandoEnLaCabecera
 import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.sms.TarjetaDeMensajeDelBanco
+import com.jvillada.movi.shared.model.soloLoQueLlegoSolo
+import com.jvillada.movi.ui.extractos.TiposDeArchivo
+import com.jvillada.movi.ui.extractos.rememberFilePicker
+import com.jvillada.movi.ui.papeles.ArchivoCompartido
+import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import com.jvillada.movi.ui.transactions.CardPaymentCandidatesSheet
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import com.jvillada.movi.ui.transactions.MovementRow
@@ -74,6 +79,9 @@ const val TAG_RENGLON_POR_REVISAR: String = "renglon-por-revisar"
 
 /** El tag del esqueleto de la bandeja, para verificar que está mientras nada contestó. */
 const val TAG_ESQUELETO_DE_POR_REVISAR: String = "esqueleto-de-por-revisar"
+
+/** El tag del renglón «Subir comprobante o extracto» (Ola 2). */
+const val TAG_SUBIR_PAPEL_EN_LA_BANDEJA: String = "subir-papel-en-la-bandeja"
 
 /** El tag del renglón «la captura dejó de andar» de la bandeja. */
 const val TAG_AVISO_DE_CAPTURA_EN_LA_BANDEJA: String = "aviso-de-captura-en-la-bandeja"
@@ -143,6 +151,12 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     var viendoCandidatos by remember { mutableStateOf(false) }
     var movimientoAbierto by remember { mutableStateOf<FinancialEvent?>(null) }
 
+    // Ola 2 · «Compartir con Movi» desde la bandeja: el archivo va a la misma cola que lo que se
+    // comparte desde Android, y `App()` abre la hoja que lo lee.
+    val elegirPapel = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
+        PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
+    }
+
     val mensajes = lecturas.mensajes
     /**
      * **A quién fue cada mensaje pendiente**, leído del texto con la misma función de `:core` que
@@ -202,6 +216,17 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
 
+            // La puerta para lo que no llega solo: una captura de una transferencia, un recibo, un
+            // PDF del banco. Arriba y siempre, también con la bandeja al día.
+            item {
+                FilaQueLleva(
+                    texto = "Subir comprobante o extracto",
+                    detalle = "Una captura, un recibo o un PDF del banco: Movi lo lee y lo deja aquí para que lo revises.",
+                    onClick = elegirPapel,
+                    modifier = Modifier.padding(bottom = 16.dp).testTag(TAG_SUBIR_PAPEL_EN_LA_BANDEJA),
+                )
+            }
+
             avisoDeCapturaEnLaBandeja(mensajes, capturaSilenciada)?.let { aviso ->
                 item {
                     FilaQueLleva(
@@ -224,7 +249,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 // la silenció: ese renglón es un reclamo que se puede apagar, este es una
                 // invitación a configurar algo que todavía no existe, y silenciar el reclamo no
                 // debería apagar también la invitación.
-                if (mensajes != null && capturaDeSms(mensajes.map { it.time }).nuncaLlegoNada) {
+                if (mensajes != null && capturaDeSms(soloLoQueLlegoSolo(mensajes).map { it.time }).nuncaLlegoNada) {
                     item { VacioDeLaCapturaEnLaBandeja(onNavigate) }
                 }
                 return@LazyColumn

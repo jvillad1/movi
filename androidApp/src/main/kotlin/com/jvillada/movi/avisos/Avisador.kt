@@ -27,10 +27,12 @@ object Avisador {
 
     const val CANAL_MOVIMIENTOS = "movimientos"
     const val CANAL_VENCIMIENTOS = "vencimientos"
+    const val CANAL_CAPTURA = "captura"
 
     /** Un id fijo por tipo: la notificación de «Por revisar» se reemplaza, no se apila. */
     private const val ID_MOVIMIENTOS = 7101
     private const val ID_VENCIMIENTOS = 7102
+    private const val ID_BANCO_MUDO = 7103
 
     /** Idempotente: Android ignora crear un canal que ya existe (solo actualiza su nombre). */
     fun crearCanales(context: Context) {
@@ -44,6 +46,11 @@ object Avisador {
         gestor.createNotificationChannel(
             NotificationChannel(CANAL_VENCIMIENTOS, "Pagos por vencer", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Los pagos del período que vencen hoy o mañana y no están pagados."
+            },
+        )
+        gestor.createNotificationChannel(
+            NotificationChannel(CANAL_CAPTURA, "La captura del banco", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Cuando un banco que avisaba siempre lleva días sin mandar nada."
             },
         )
     }
@@ -69,6 +76,11 @@ object Avisador {
     /** Avisa los vencimientos de hoy y mañana con [texto] (ver [textoDeVencimientos]). */
     fun avisarVencimientos(context: Context, texto: TextoDeAviso) {
         publicar(context, ID_VENCIMIENTOS, CANAL_VENCIMIENTOS, texto, ABRIR_PLAN, cuantos = texto.lineas.size)
+    }
+
+    /** Ola 2: avisa que un banco dejó de mandar avisos (ver `textoDeBancosMudos`). Tocarla abre la captura. */
+    fun avisarBancoMudo(context: Context, texto: TextoDeAviso) {
+        publicar(context, ID_BANCO_MUDO, CANAL_CAPTURA, texto, ABRIR_CAPTURA, cuantos = maxOf(1, texto.lineas.size))
     }
 
     /**

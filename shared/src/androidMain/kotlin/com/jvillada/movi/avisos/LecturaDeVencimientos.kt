@@ -40,3 +40,17 @@ suspend fun leerPagosDelPeriodo(ahora: Long = System.currentTimeMillis()): List<
         cliente.close()
     }
 }
+
+/**
+ * **Los orígenes de captura que se callaron**, leídos desde un Worker (Ola 2 · banco mudo). Contra el
+ * server directo, por lo mismo que [leerPagosDelPeriodo]: un Worker puede correr sin la base local.
+ * Lanza si la lectura falla; quien llama decide reintentar.
+ */
+suspend fun leerOrigenesMudos(): List<com.jvillada.movi.shared.model.OrigenMudo> {
+    val cliente = createHttpClient()
+    try {
+        return WalletRepositoryImpl(cliente, apiBaseUrl).getOrigenesMudos()
+    } finally {
+        cliente.close()
+    }
+}
