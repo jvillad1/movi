@@ -78,7 +78,7 @@ const val PROPONER_PAGO_HECHO = "proponer_pago_hecho"
 
 /** Las herramientas que proponen (y no leen). Ver [esHerramientaQuePropone]. */
 val HERRAMIENTAS_QUE_PROPONEN_NOMBRES: Set<String> =
-    setOf(PROPONER_MOVIMIENTO, PROPONER_CAMBIO_DE_CATEGORIA, PROPONER_RECURRENTE, PROPONER_PAGO_HECHO)
+    setOf(PROPONER_MOVIMIENTO, PROPONER_CAMBIO_DE_CATEGORIA, PROPONER_RECURRENTE, PROPONER_PAGO_HECHO, RECORDAR)
 
 fun esHerramientaQuePropone(nombre: String): Boolean = nombre in HERRAMIENTAS_QUE_PROPONEN_NOMBRES
 
@@ -172,10 +172,14 @@ suspend fun proponer(uid: String, llamada: LlamadaDeHerramienta, hoy: LocalDate 
         PROPONER_CAMBIO_DE_CATEGORIA -> proponerCambioDeCategoria(uid, args, hoy)
         PROPONER_RECURRENTE -> proponerRecurrente(uid, args)
         PROPONER_PAGO_HECHO -> proponerPagoHecho(uid, args, hoy)
+        // Ola 3 · 2: recordar algo también es una propuesta. Ver `LoQueMoviSabeDeTi.kt`.
+        RECORDAR -> proponerRecuerdo(uid, args)
         else -> no("No existe una herramienta que se llame «${llamada.nombre}».")
     }
     ResultadoDePropuesta.Lista(accion)
 } catch (e: PropuestaInvalida) {
+    ResultadoDePropuesta.Invalida(e.motivo)
+} catch (e: PropuestaInvalidaPublica) {
     ResultadoDePropuesta.Invalida(e.motivo)
 }
 
@@ -675,5 +679,14 @@ internal val HERRAMIENTAS_QUE_PROPONEN: List<Tool> = listOf(
             "monto" to numero("Opcional: el monto exacto de ese movimiento."),
         ),
         listOf("pago"),
+    ),
+    herramienta(
+        RECORDAR,
+        "Propone guardar algo DURABLE que el usuario te contó y que te va a servir en otras conversaciones: " +
+            "quién es alguien («Caro es mi esposa»), algo que no es lo que parece («el bono de Glim de 55.500 " +
+            "no es mensual»), una costumbre («pago el colegio de mi hija el 25»). NO guarda nada: él lo confirma. " +
+            "Nada de cifras del mes ni cosas que ya están en sus datos. Una frase, en tercera persona o como él la dijo.",
+        mapOf("texto" to texto("La frase a recordar, corta y completa.")),
+        listOf("texto"),
     ),
 )

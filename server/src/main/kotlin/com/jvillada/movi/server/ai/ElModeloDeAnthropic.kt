@@ -63,6 +63,11 @@ internal class ElModeloDeAnthropic(
      * una llamada de verdad.
      */
     private val llamar: suspend (MessageCreateParams) -> Message,
+    /**
+     * «Lo que Movi sabe de ti» (Ola 3): lo que el dueño confirmó que se recuerde, ya armado como
+     * bloque (ver `memoriaParaElContexto`). `null` = no hay nada, y no viaja ningún bloque.
+     */
+    private val memoria: String? = null,
 ) : ElModeloQueSeCorrige {
 
     constructor(
@@ -74,9 +79,10 @@ internal class ElModeloDeAnthropic(
         maxTokens: Long = MAX_TOKENS_DE_RESPUESTA,
         piensa: Boolean = false,
         modeloDeRespaldo: String? = null,
+        memoria: String? = null,
     ) : this(modelo, persona, contexto, mensajesDelDueno, maxTokens, piensa, modeloDeRespaldo, { params ->
         withContext(Dispatchers.IO) { client.messages().create(params) }
-    })
+    }, memoria)
 
     private val turnos: MutableList<MessageParam> = mensajesDelDueno.toMutableList()
 
@@ -226,8 +232,8 @@ internal class ElModeloDeAnthropic(
                 }
             }
             .systemOfTextBlockParams(
-                listOf(
-                    // **Las dos partes se cachean, y en este orden.** La PERSONA no cambia nunca y
+                listOfNotNull(
+                    // **Las partes se cachean, y en este orden.** La PERSONA no cambia nunca y
                     // el contexto cambia cuando cambian los datos: lo estable primero, para que un
                     // movimiento nuevo no invalide también las instrucciones. Sin esto, una
                     // conversación de tres vueltas paga el prefijo entero tres veces.
@@ -235,6 +241,16 @@ internal class ElModeloDeAnthropic(
                         .text(persona)
                         .cacheControl(CacheControlEphemeral.builder().build())
                         .build(),
+                    // La memoria va en el medio: cambia mucho menos que los datos (un recuerdo
+                    // cada tanto contra un movimiento cada día), así que un movimiento nuevo no
+                    // la invalida, y un recuerdo nuevo no invalida la PERSONA. Tres puntos de
+                    // caché de los cuatro que permite la API.
+                    memoria?.let {
+                        TextBlockParam.builder()
+                            .text(it)
+                            .cacheControl(CacheControlEphemeral.builder().build())
+                            .build()
+                    },
                     TextBlockParam.builder()
                         .text(contexto)
                         .cacheControl(CacheControlEphemeral.builder().build())

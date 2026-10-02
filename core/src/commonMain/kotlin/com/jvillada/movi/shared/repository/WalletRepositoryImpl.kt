@@ -1,5 +1,8 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.GuardarRecuerdoRequest
+import com.jvillada.movi.shared.model.OrigenDelRecuerdo
+import com.jvillada.movi.shared.model.RecuerdoDelAsistente
 import com.jvillada.movi.shared.model.ResolverPropuestaRequest
 import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
@@ -529,6 +532,25 @@ class WalletRepositoryImpl(
 
     override suspend fun empezarConversacionNueva() {
         client.post("$baseUrl/api/ai/conversacion/nueva").exigirExito()
+    }
+
+    override suspend fun getMemoriaDelAsistente(): List<RecuerdoDelAsistente> =
+        client.get("$baseUrl/api/asistente/memoria").exigirExito().body()
+
+    override suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String?): RecuerdoDelAsistente =
+        client.post("$baseUrl/api/asistente/memoria") {
+            contentType(ContentType.Application.Json)
+            setBody(GuardarRecuerdoRequest(texto, origen, propuestaId))
+        }.exigirExito().body()
+
+    override suspend fun editarRecuerdo(id: String, texto: String): RecuerdoDelAsistente =
+        client.put("$baseUrl/api/asistente/memoria/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(GuardarRecuerdoRequest(texto, OrigenDelRecuerdo.A_MANO))
+        }.exigirExito().body()
+
+    override suspend fun borrarRecuerdo(id: String) {
+        client.delete("$baseUrl/api/asistente/memoria/$id").exigirExito()
     }
 
     override suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta) {

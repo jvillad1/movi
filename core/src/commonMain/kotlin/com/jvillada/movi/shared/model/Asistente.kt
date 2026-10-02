@@ -52,6 +52,8 @@ enum class TipoDeAccion {
      * `POST /api/recurring-rules/{id}/occurrence` con el `eventId`. Nunca sin movimiento.
      */
     MARCAR_PAGO_HECHO,
+    /** Algo durable que el dueño contó y Movi debería recordar. `POST /api/asistente/memoria`. */
+    RECORDAR,
 }
 
 /** Qué dijo el dueño de una propuesta. */
@@ -79,8 +81,50 @@ data class AccionPropuesta(
     val reglaId: String? = null,
     val periodo: String? = null,
     val eventId: String? = null,
+    /** [TipoDeAccion.RECORDAR]: el texto que se guardaría en «Lo que Movi sabe de ti». */
+    val recuerdo: String? = null,
 )
 
 /** `POST /api/ai/propuestas/{id}/estado`: lo que el dueño decidió. */
 @Serializable
 data class ResolverPropuestaRequest(val estado: EstadoDePropuesta)
+
+/**
+ * # «Lo que Movi sabe de ti» (Ola 3)
+ *
+ * Lo que el dueño le contó al asistente y él mismo confirmó que se guarde: «Caro es mi esposa», «el
+ * bono de Glim de $55.500 no es mensual», «pago el colegio de mi hija el 25». Entra al contexto de
+ * cada conversación (con tope) y se ve, se corrige y se borra en Ajustes. **Nunca se guarda en
+ * silencio**: llega por una propuesta del asistente ([TipoDeAccion.RECORDAR]) que el dueño confirma.
+ */
+@Serializable
+data class RecuerdoDelAsistente(
+    val id: String,
+    val texto: String,
+    /** Cuándo se guardó (epoch ms). */
+    val creadoEn: Long,
+    /** De dónde salió: ver [OrigenDelRecuerdo]. */
+    val origen: OrigenDelRecuerdo = OrigenDelRecuerdo.CONVERSACION,
+    /** Cuándo lo corrigió el dueño por última vez; `null` si nunca. */
+    val editadoEn: Long? = null,
+)
+
+@Serializable
+enum class OrigenDelRecuerdo {
+    /** Lo propuso el asistente en una conversación y el dueño tocó «Hacerlo». */
+    CONVERSACION,
+    /** Lo escribió el dueño en «Lo que Movi sabe de ti». */
+    A_MANO,
+}
+
+/** `POST /api/asistente/memoria` y `PUT /api/asistente/memoria/{id}`. */
+@Serializable
+data class GuardarRecuerdoRequest(
+    val texto: String,
+    val origen: OrigenDelRecuerdo = OrigenDelRecuerdo.CONVERSACION,
+    /** La propuesta que lo originó, si vino de una. Solo para saber de dónde salió. */
+    val propuestaId: String? = null,
+)
+
+/** Cuánto puede medir un recuerdo. Una frase, no un diario: lo que no entra en esto no es un dato durable. */
+const val LARGO_MAXIMO_DE_UN_RECUERDO: Int = 300

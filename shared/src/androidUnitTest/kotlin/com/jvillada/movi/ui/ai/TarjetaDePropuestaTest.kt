@@ -17,6 +17,8 @@ import com.jvillada.movi.shared.model.AccionPropuesta
 import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.OrigenDelRecuerdo
+import com.jvillada.movi.shared.model.RecuerdoDelAsistente
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 import com.jvillada.movi.shared.model.TipoDeAccion
@@ -63,6 +65,7 @@ class TarjetaDePropuestaTest {
     private val posteados = mutableListOf<FinancialEvent>()
     private val avisos = mutableListOf<Pair<String, EstadoDePropuesta>>()
     private var lote: List<String>? = null
+    private val recordados = mutableListOf<String>()
 
     private fun repo(rechazar: Boolean = false) = object : RepositorioDePrueba() {
         override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
@@ -76,6 +79,10 @@ class TarjetaDePropuestaTest {
         }
         override suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta) {
             avisos += id to estado
+        }
+        override suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String?): RecuerdoDelAsistente {
+            recordados += texto
+            return RecuerdoDelAsistente("m1", texto, creadoEn = 1L, origen = origen)
         }
     }
 
@@ -144,5 +151,19 @@ class TarjetaDePropuestaTest {
         composeRule.waitUntil(5_000) { hay(YA_ESTA_HECHO) }
 
         assertEquals(listOf("r1", "r2"), lote)
+    }
+
+    @Test
+    fun `recordar se guarda solo con Hacerlo, por el endpoint de la memoria`() {
+        val recordar = AccionPropuesta(
+            id = "ap_3", tipo = TipoDeAccion.RECORDAR, frase = "Recordar: «Caro es mi esposa»", recuerdo = "Caro es mi esposa",
+        )
+        pintar(recordar, repo())
+        assertTrue(recordados.isEmpty(), "pintar la tarjeta no guarda nada")
+
+        tocar(HACERLO)
+        composeRule.waitUntil(5_000) { hay(YA_ESTA_HECHO) }
+
+        assertEquals(listOf("Caro es mi esposa"), recordados)
     }
 }

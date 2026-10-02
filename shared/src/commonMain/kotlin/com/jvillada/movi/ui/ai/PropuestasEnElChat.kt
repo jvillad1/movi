@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.AccionPropuesta
 import com.jvillada.movi.shared.model.EstadoDePropuesta
+import com.jvillada.movi.shared.model.OrigenDelRecuerdo
 import com.jvillada.movi.shared.model.TipoDeAccion
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.repository.WalletRepository
@@ -74,6 +75,12 @@ internal suspend fun hacerLaPropuesta(repo: WalletRepository, propuesta: AccionP
             period = requireNotNull(propuesta.periodo),
             // Nunca sin movimiento: es la regla del dueño, «el checklist lo tilda el movimiento».
             eventId = requireNotNull(propuesta.eventId) { "Un pago se marca solo con su movimiento" },
+        )
+        // El mismo POST que usa «Lo que Movi sabe de ti»: nada se recuerda sin este toque.
+        TipoDeAccion.RECORDAR -> repo.guardarRecuerdo(
+            texto = requireNotNull(propuesta.recuerdo) { "La propuesta no trae qué recordar" },
+            origen = OrigenDelRecuerdo.CONVERSACION,
+            propuestaId = propuesta.id,
         )
     }
     // La acción ya está hecha; si este aviso no llega, lo único que se pierde es que el asistente

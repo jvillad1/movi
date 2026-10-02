@@ -70,8 +70,18 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
+import io.ktor.server.routing.route
+import com.jvillada.movi.server.ai.ResultadoDelRecuerdo
+import com.jvillada.movi.server.ai.borrarRecuerdo
+import com.jvillada.movi.server.ai.editarRecuerdo
+import com.jvillada.movi.server.ai.guardarRecuerdo
+import com.jvillada.movi.server.ai.memoriaDe
+import com.jvillada.movi.server.ai.memoriaParaElContexto
+import com.jvillada.movi.shared.model.GuardarRecuerdoRequest
 import java.io.File
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
@@ -107,6 +117,8 @@ Habla en español neutro latinoamericano, de tú, SIN VOSEO. Esto no es un matiz
 Montos siempre en pesos colombianos con formato ${'$'}X.XXX.XXX.
 Vocabulario de la app: di "gasto"/"gastos", nunca "egreso"/"egresos". La interfaz habla así y tú también.
 
+Si existe el bloque "LO QUE EL DUEÑO TE CONTÓ", son cosas que él confirmó que recuerdes: úsalas para entenderlo (quién es quién, qué es cada cosa), pero no las trates como cifras de Movi.
+
 Cuando el usuario te pregunte sobre su plata, básate ÚNICAMENTE en los datos del bloque "DATOS DEL USUARIO", en el bloque "DATOS EXACTOS PARA ESTA PREGUNTA" (si su mensaje lo trae) y en lo que devuelvan tus herramientas. Nunca estimes ni completes de memoria una cifra que no viniera de ahí.
 
 CIFRAS — NO CALCULES: toda cifra de plata o porcentaje que escribas tiene que estar en esos datos. Si los datos traen la cuenta hecha (lo que queda de la cuota después de los seguros, cuánto baja o crece una deuda, cuánto falta o cuánto se pasó de un presupuesto), usa ESA cifra con ESE significado: no la rehagas con tu propia resta. Lo único que puedes calcular es una suma o una resta de DOS cifras de los datos, y entonces escribe la operación con las dos ("${'$'}2.613.714 − ${'$'}209.219 = ${'$'}2.404.495"). Si necesitas una cifra que no está, di cuál falta y consúltala con una herramienta o pídesela al usuario. Movi revisa cada cifra de tu respuesta contra los datos.
@@ -135,7 +147,8 @@ ACCIONES — TÚ NO HACES NADA, PROPONES: cuando el usuario te pida HACER algo, 
 - proponer_cambio_de_categoria: cambiar la categoría de unos movimientos ("lo de Rappi es Comida").
 - proponer_recurrente: crear un pago o ingreso que se repite cada mes ("pago el colegio el 25, 1.200.000").
 - proponer_pago_hecho: marcar que un pago del período ya se hizo con un movimiento que YA existe. Sin movimiento no se puede: si no está anotado, propón primero el movimiento.
-Ninguna escribe nada: Movi le muestra una tarjeta y él decide con "Hacerlo" o "No". Por eso NUNCA digas que ya quedó hecho, anotado o guardado; di que se lo dejaste para confirmar. Úsalas solo cuando él te lo pida, no por iniciativa en cada respuesta. Si falta un dato que no se deduce (el monto, la cuenta), pregúntale antes de proponer. Si la herramienta te dice que no pudo, explícale por qué en una frase o pregúntale lo que falta. Si él dijo "No" a una propuesta, no la repitas igual.
+- recordar: guardar algo DURABLE que te contó y te servirá en otras conversaciones ("Caro es mi esposa", "el bono de Glim no es mensual", "pago el colegio de mi hija el 25"). Úsala cuando te cuente algo así, aunque no te lo pida, pero nunca para cifras del mes ni para lo que ya está en sus datos.
+Ninguna escribe nada: Movi le muestra una tarjeta y él decide con "Hacerlo" o "No". Por eso NUNCA digas que ya quedó hecho, anotado o guardado; di que se lo dejaste para confirmar. Las cuatro proponer_ úsalas solo cuando él te pida hacer algo, no por iniciativa en cada respuesta; recordar, cuando te cuente algo durable. Si falta un dato que no se deduce (el monto, la cuenta), pregúntale antes de proponer. Si la herramienta te dice que no pudo, explícale por qué en una frase o pregúntale lo que falta. Si él dijo "No" a una propuesta, no la repitas igual.
 
 Tono: directo, empático, accionable. No moralices sobre el gasto.
 Estructura de una pregunta de DATOS (cuánto, cuándo, qué): responde en máximo 4-5 frases cortas. Si la respuesta tiene un cálculo, muéstralo en una línea separada.
@@ -200,6 +213,8 @@ internal data class PedidoDelModelo(
     val contexto: String,
     val mensajes: List<MessageParam>,
     val piensa: Boolean,
+    /** «Lo que Movi sabe de ti», ya armado; `null` si no hay nada. */
+    val memoria: String? = null,
 )
 
 internal typealias FabricaDeModelos = (PedidoDelModelo) -> ElModeloQueSeCorrige
@@ -217,6 +232,7 @@ private fun fabricaDeAnthropic(): FabricaDeModelos? {
             // Pensar se cobra como salida. Se enciende solo cuando de verdad hay algo que pensar.
             piensa = p.piensa,
             modeloDeRespaldo = MODELO_DE_RESPALDO,
+            memoria = p.memoria,
         )
     }
 }
@@ -234,6 +250,34 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
     post("/api/ai/conversacion/nueva") {
         empezarConversacionNueva(call.userId())
         call.respond(HttpStatusCode.NoContent)
+    }
+
+    // **«Lo que Movi sabe de ti»** (Ola 3 · 2): verla, guardarla, corregirla y borrarla. POST es
+    // también lo que llama «Hacerlo» en una propuesta de recordar: la misma puerta para los dos.
+    route("/api/asistente/memoria") {
+        get { call.respond(memoriaDe(call.userId())) }
+        post {
+            val body = call.receive<GuardarRecuerdoRequest>()
+            when (val r = guardarRecuerdo(call.userId(), body.texto, body.origen, body.propuestaId)) {
+                is ResultadoDelRecuerdo.Guardado -> call.respond(HttpStatusCode.Created, r.recuerdo)
+                is ResultadoDelRecuerdo.Rechazado -> call.respond(HttpStatusCode.BadRequest, r.motivo)
+                ResultadoDelRecuerdo.NoExiste -> call.respond(HttpStatusCode.NotFound)
+            }
+        }
+        put("/{id}") {
+            val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest)
+            val body = call.receive<GuardarRecuerdoRequest>()
+            when (val r = editarRecuerdo(call.userId(), id, body.texto)) {
+                is ResultadoDelRecuerdo.Guardado -> call.respond(r.recuerdo)
+                is ResultadoDelRecuerdo.Rechazado -> call.respond(HttpStatusCode.BadRequest, r.motivo)
+                ResultadoDelRecuerdo.NoExiste -> call.respond(HttpStatusCode.NotFound)
+            }
+        }
+        delete("/{id}") {
+            val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            if (borrarRecuerdo(call.userId(), id)) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound)
+        }
     }
 
     // **Lo que el dueño decidió de una tarjeta** (Ola 3). Esto NO hace la acción —la hizo el
@@ -308,6 +352,9 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
         // todo lo que él pregunta es un dato y lo contesta el chico; el grande es para el criterio.
         val ultima = paraElModelo.last()
         val pideCriterio = laPreguntaPideCriterio(ultima.content, hayImagen = ultima.imageBase64 != null)
+        // «Lo que Movi sabe de ti» (Ola 3 · 2): lo que el dueño confirmó que se recuerde. Viaja en su
+        // propio bloque cacheado; sin recuerdos no viaja nada.
+        val memoria = memoriaParaElContexto(uid)
         val elModelo = fabrica(
             PedidoDelModelo(
                 modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
@@ -315,6 +362,7 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
                 contexto = context,
                 mensajes = messageParams,
                 piensa = pideCriterio,
+                memoria = memoria,
             ),
         )
         val fichas = elModelo as? ElModeloDeAnthropic
@@ -337,7 +385,8 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
                 // Todo lo que el modelo tenía delante en este turno: contra esto se revisa cada
                 // cifra. La conversación entra entera —la pregunta y lo que ya se contestó—, porque
                 // repetir una cifra que el dueño escribió no es inventarla.
-                fuentes = listOfNotNull(context, hechos, decisiones) + paraElModelo.map { it.content },
+                // La memoria también: «el bono de Glim de $55.500» es una cifra que él dijo.
+                fuentes = listOfNotNull(context, hechos, decisiones, memoria) + paraElModelo.map { it.content },
                 trampas = cifrasTrampa(datos.periodo.creditos),
                 // Con una foto, los montos salen de la imagen y el verificador no la puede leer.
                 verificar = !hayImagen,

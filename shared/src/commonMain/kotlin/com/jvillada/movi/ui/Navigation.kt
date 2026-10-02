@@ -168,6 +168,12 @@ sealed class Screen {
      */
     data object Compartir : Screen()
     /**
+     * **«Lo que Movi sabe de ti»** (Ola 3): lo que el dueño le contó a Movi AI y confirmó guardar
+     * —«Caro es mi esposa», «el bono de Glim no es mensual»—, para verlo, corregirlo y borrarlo.
+     * Ficha de Ajustes, como [Compartir].
+     */
+    data object LoQueMoviSabe : Screen()
+    /**
      * **«Cuadre de saldos»** — comparar de una sentada lo que Movi cree con lo que dice el banco,
      * y anotar la diferencia de cada cuenta como un ajuste.
      *
@@ -276,7 +282,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
     Screen.Mas, Screen.Profile, Screen.Goals, Screen.Extractos, is Screen.AIChat,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos,
-    Screen.Documentos, Screen.Compartir -> true
+    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe -> true
     else -> false
 }
 

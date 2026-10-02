@@ -663,6 +663,25 @@ object ConversacionesDelAsistente : Table("asistente_conversaciones") {
  *
  * [datos] es la `AccionPropuesta` entera en JSON: lo que el dueño vio es lo que se guarda.
  */
+/**
+ * **«Lo que Movi sabe de ti»** (Ola 3): lo que el dueño le contó al asistente y confirmó guardar.
+ * Entra al contexto de cada conversación con tope (ver `memoriaParaElContexto`). Tabla nueva:
+ * entra por `SchemaUtils.create`.
+ */
+object MemoriaDelAsistente : Table("memoria_del_asistente") {
+    val id          = varchar("id", 50)
+    val userId      = varchar("user_id", 50)
+    val texto       = varchar("texto", 400)
+    /** `CONVERSACION` (lo propuso el asistente y él confirmó) o `A_MANO`. */
+    val origen      = varchar("origen", 20)
+    /** La propuesta que lo originó, si vino de una conversación. */
+    val propuestaId = varchar("propuesta_id", 50).nullable()
+    val creadoEn    = long("creado_en")
+    val editadoEn   = long("editado_en").nullable()
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_memoria_del_asistente_user", false, userId) }
+}
+
 object AccionesPropuestas : Table("asistente_propuestas") {
     val id         = varchar("id", 50)
     val userId     = varchar("user_id", 50)

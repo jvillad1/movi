@@ -43,7 +43,7 @@ internal class AndamioDelAsistente(nombreDeLaBase: String) {
         RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions,
         PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs,
         Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos,
-        LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas,
+        LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente,
     )
 
     init {
