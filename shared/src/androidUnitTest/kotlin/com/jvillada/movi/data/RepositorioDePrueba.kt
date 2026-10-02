@@ -92,6 +92,8 @@ open class RepositorioDePrueba : WalletRepository {
     // Tipo de retorno explícito por lo mismo que el de arriba.
     override suspend fun rechazarOcurrencia(ruleId: String, eventId: String): Unit = noUsado("rechazarOcurrencia")
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = noUsado("chatAi")
+    override suspend fun getConversacionDelAsistente(): ConversacionDelAsistente = noUsado("getConversacionDelAsistente")
+    override suspend fun empezarConversacionNueva(): Unit = noUsado("empezarConversacionNueva")
     override suspend fun getAccounts(): List<Account> = noUsado("getAccounts")
     override suspend fun getAccount(id: String): Account = noUsado("getAccount")
     override suspend fun createAccount(account: Account): Account = noUsado("createAccount")

@@ -859,6 +859,12 @@ data class ChatMessage(
     // solo mandan role+content (ver ChatModelTest).
     val imageBase64: String? = null,
     val imageMime: String? = null,
+    /**
+     * Ola 3: este mensaje llevó una foto, pero la foto ya no viene. Lo pone el server al devolver
+     * una conversación guardada (`GET /api/ai/conversacion`), que guarda que hubo imagen y nunca la
+     * imagen. Sirve para pintar «Imagen adjunta» en el globo recargado.
+     */
+    val teniaImagen: Boolean = false,
 )
 
 @Serializable

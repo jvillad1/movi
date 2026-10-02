@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.ConversacionDelAsistente
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.NOTA_DEL_PAPEL_COMPARTIDO
@@ -520,6 +521,13 @@ class WalletRepositoryImpl(
             contentType(ContentType.Application.Json)
             setBody(request)
         }.body()
+
+    override suspend fun getConversacionDelAsistente(): ConversacionDelAsistente =
+        client.get("$baseUrl/api/ai/conversacion").exigirExito().body()
+
+    override suspend fun empezarConversacionNueva() {
+        client.post("$baseUrl/api/ai/conversacion/nueva").exigirExito()
+    }
 
     override suspend fun getAccounts(): List<Account> =
         client.get("$baseUrl/api/accounts").body()

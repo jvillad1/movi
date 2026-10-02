@@ -100,4 +100,16 @@ class MensajesQueViajanTest {
         assertEquals(ChatRole.USER, viajan.first().role)
         assertEquals("la última", viajan.last().content)
     }
+
+    /**
+     * Ola 3: un globo recargado de una conversación guardada dice que hubo foto, pero la foto no
+     * vuelve. Si el dueño no escribió nada con ella, viajaría vacío —y la API rechaza un mensaje
+     * vacío—: viaja con el mismo texto que una foto que ya viajó.
+     */
+    @Test
+    fun `un globo recargado que tenia foto viaja con texto, nunca vacio`() {
+        val recargado = ChatMessage(ChatRole.USER, "", teniaImagen = true)
+        val viajan = mensajesParaEnviar(listOf(recargado, asistente("vi el recibo"), usuario("¿y ahora?")))
+        assertEquals(TEXTO_DE_IMAGEN_QUE_YA_VIAJO, viajan.first().content)
+    }
 }

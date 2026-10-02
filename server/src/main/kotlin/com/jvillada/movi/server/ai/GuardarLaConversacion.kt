@@ -66,6 +66,11 @@ suspend fun guardarLaConversacion(
     cifrasSinRespaldo: List<String> = emptyList(),
     /** Las que dispararon el reintento. Vacío se guarda NULL. */
     cifrasCorregidas: List<String> = emptyList(),
+    /**
+     * El id del turno. Lo elige quien llama cuando necesita colgarle algo —las propuestas de la
+     * Ola 3 se guardan con el id del turno que las hizo, para volver a pintarlas en su globo—.
+     */
+    id: String = nuevoIdDeTurno(),
 ): Boolean = runCatching {
     val comoJson = json.encodeToString(
         consultas.map {
@@ -75,7 +80,7 @@ suspend fun guardarLaConversacion(
 
     dbQuery {
         AiTurns.insert {
-            it[id] = "ai_" + UUID.randomUUID().toString().replace("-", "").take(20)
+            it[AiTurns.id] = id
             it[userId] = uid
             it[creadoEn] = ahora
             it[AiTurns.pregunta] = pregunta.take(TOPE_PREGUNTA)
@@ -106,6 +111,9 @@ suspend fun guardarLaConversacion(
     }
     true
 }.getOrDefault(false)
+
+/** Un id de turno nuevo, con el mismo formato de siempre. */
+fun nuevoIdDeTurno(): String = "ai_" + UUID.randomUUID().toString().replace("-", "").take(20)
 
 /** «$185.831 · 12 %», o NULL: así un `is not null` cuenta los turnos con cifras sin respaldo. */
 private fun List<String>.comoColumna(): String? =

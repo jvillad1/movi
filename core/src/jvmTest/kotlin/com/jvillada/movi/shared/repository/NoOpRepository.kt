@@ -242,6 +242,8 @@ open class NoOpRepository(
     override suspend fun unmarkOccurrence(ruleId: String, period: String) {}
     override suspend fun rechazarOcurrencia(ruleId: String, eventId: String) {}
     override suspend fun chatAi(request: AiChatRequest) = error("stub")
+    override suspend fun getConversacionDelAsistente(): ConversacionDelAsistente = ConversacionDelAsistente()
+    override suspend fun empezarConversacionNueva() {}
     override suspend fun getAccounts(): List<Account> = cuentasDelServer.toList()
     // Tipo de retorno explícito (y no el `Nothing` que infiere `error(...)`): así una subclase
     // puede sobrescribirlo para devolver una cuenta de verdad — ver [ServerAccountsRepository].

@@ -639,6 +639,21 @@ object AiTurns : Table("ai_turns") {
     init { index("idx_ai_turns_user", false, userId) }
 }
 
+/**
+ * **Desde cuándo corre la conversación en curso con el asistente** (Ola 3). Una fila por dueño:
+ * «Nueva conversación» la mueve a ahora, y `GET /api/ai/conversacion` devuelve solo los turnos de
+ * [AiTurns] posteriores. No borra nada: los turnos viejos siguen ahí para diagnosticar (y se podan
+ * solos, ver `CUANTAS_CONVERSACIONES_SE_GUARDAN`).
+ *
+ * Tabla nueva y no una columna en `users`: entra por `SchemaUtils.create`, que no puede fallar
+ * sobre filas existentes.
+ */
+object ConversacionesDelAsistente : Table("asistente_conversaciones") {
+    val userId     = varchar("user_id", 50)
+    val empezadaEn = long("empezada_en")
+    override val primaryKey = PrimaryKey(userId)
+}
+
 object Credits : Table("credit_terms") {
     /**
      * Libranza: la cuota se descuenta de la nómina. Nullable y se lee como `false` — las filas

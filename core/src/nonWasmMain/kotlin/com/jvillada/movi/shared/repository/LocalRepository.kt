@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.ConversacionDelAsistente
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.Bien
 import com.jvillada.movi.shared.model.normalizarBien
@@ -2140,6 +2141,10 @@ class LocalRepository(
     override suspend fun rechazarOcurrencia(ruleId: String, eventId: String) =
         remote.rechazarOcurrencia(ruleId, eventId)
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = remote.chatAi(request)
+    // La conversación con el asistente vive en el server (`ai_turns`): sin conexión tampoco hay
+    // asistente, así que no tiene sentido un espejo local.
+    override suspend fun getConversacionDelAsistente(): ConversacionDelAsistente = remote.getConversacionDelAsistente()
+    override suspend fun empezarConversacionNueva() = remote.empezarConversacionNueva()
     override suspend fun register(request: RegisterRequest): AuthResponse = remote.register(request)
     override suspend fun login(request: LoginRequest): AuthResponse = remote.login(request)
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = remote.requestPasswordReset(request)

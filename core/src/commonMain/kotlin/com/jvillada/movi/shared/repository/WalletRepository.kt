@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.ConversacionDelAsistente
 import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.NOTA_DEL_PAPEL_COMPARTIDO
 
@@ -284,6 +285,13 @@ interface WalletRepository {
      */
     suspend fun rechazarOcurrencia(ruleId: String, eventId: String)
     suspend fun chatAi(request: AiChatRequest): AiChatResponse
+    /**
+     * `GET /api/ai/conversacion` (Ola 3): la conversación en curso con el asistente, para que
+     * volver a la pantalla no sea empezar de cero.
+     */
+    suspend fun getConversacionDelAsistente(): ConversacionDelAsistente
+    /** `POST /api/ai/conversacion/nueva`: «Nueva conversación». No borra nada del server. */
+    suspend fun empezarConversacionNueva()
     suspend fun getAccounts(): List<Account>
     suspend fun getAccount(id: String): Account
     suspend fun createAccount(account: Account): Account

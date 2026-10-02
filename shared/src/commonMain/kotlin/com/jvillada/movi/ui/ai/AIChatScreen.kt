@@ -73,6 +73,11 @@ fun AIChatScreen(
     // armarlas (ver [preguntasSugeridas], que tampoco llama al modelo). Sin caché —se abrió el chat
     // antes que el Inicio— salen las de respaldo, que valen para cualquiera.
     val sugeridas = remember { preguntasSugeridas(DashboardDataCache.data ?: DashboardData()) }
+    // **La conversación sobrevive** (Ola 3): al abrir se pide la conversación en curso al server.
+    // Mientras no llega no se pinta el arranque, para que no parpadee un chat vacío antes de que
+    // aparezca lo que ya se habló. Si falla (sin señal) el chat arranca vacío, como antes.
+    var historialCargado by remember { mutableStateOf(false) }
+    var aviso by remember { mutableStateOf<String?>(null) }
     val nombre = remember { primerNombre(SessionManager.userName) }
 
     // F32: el picker de la Ola 1 (extractos) acepta cualquier archivo — acá se filtra por
@@ -131,10 +136,28 @@ fun AIChatScreen(
     // pero la pregunta ya se mandó y se pagó — mandarla de nuevo sería cobrarle dos veces el mismo
     // toque. Queda el arranque con sus sugerencias, y el dueño decide.
     var yaSeMandoLaInicial by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(preguntaInicial) {
+    LaunchedEffect(Unit) {
+        // Primero lo que ya se habló, después la pregunta con la que se abrió: así la nueva queda
+        // al final de la conversación y no antes de lo que se recarga.
+        val guardada = runCatching { Repositories.wallets.getConversacionDelAsistente() }.getOrNull()
+        if (guardada != null && messages.isEmpty()) messages.addAll(guardada.mensajes)
+        historialCargado = true
         if (!yaSeMandoLaInicial && !preguntaInicial.isNullOrBlank()) {
             yaSeMandoLaInicial = true
             enviar(preguntaInicial)
+        }
+    }
+
+    fun nuevaConversacion() {
+        if (loading) return
+        coroutine.launch {
+            val hecho = runCatching { Repositories.wallets.empezarConversacionNueva() }.isSuccess
+            if (hecho) {
+                messages.clear()
+                aviso = null
+            } else {
+                aviso = NO_PUDE_EMPEZAR_OTRA
+            }
         }
     }
 
@@ -158,11 +181,26 @@ fun AIChatScreen(
             leading = HeaderLeading.Back(fallback = Screen.Mas),
             subtitle = "Conoce tus finanzas",
             action = {
-                Text(
-                    "BETA",
-                    color = Movi.colores.textoMedio,
-                    style = Movi.textos.rotulo,
-                )
+                // Con conversación, la acción es empezar otra; sin conversación no hay nada que
+                // limpiar y queda la marca de siempre.
+                if (messages.isNotEmpty()) {
+                    Text(
+                        NUEVA_CONVERSACION,
+                        color = Movi.colores.marca,
+                        style = Movi.textos.apoyo,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(Movi.formas.normal))
+                            .clickable(enabled = !loading) { nuevaConversacion() }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                } else {
+                    Text(
+                        "BETA",
+                        color = Movi.colores.textoMedio,
+                        style = Movi.textos.rotulo,
+                    )
+                }
             },
         )
 
@@ -171,7 +209,7 @@ fun AIChatScreen(
             state = listState,
             contentPadding = PaddingValues(18.dp),
         ) {
-            if (messages.isEmpty() && !loading) {
+            if (messages.isEmpty() && !loading && historialCargado) {
                 item {
                     ArranqueDelChat(
                         nombre = nombre,
@@ -182,7 +220,7 @@ fun AIChatScreen(
             }
             items(messages) { msg ->
                 if (msg.role == ChatRole.USER) {
-                    AIMsgUser(msg.content, hasImage = msg.imageBase64 != null)
+                    AIMsgUser(msg.content, hasImage = msg.imageBase64 != null || msg.teniaImagen)
                 } else {
                     AIMsgAI(msg.content)
                 }
@@ -194,6 +232,15 @@ fun AIChatScreen(
 
         // F32: nombre del adjunto + X para quitarlo, o el aviso de "por ahora solo imágenes"
         // si eligieron otra cosa (p.ej. un PDF) — visible arriba de la barra de escribir.
+        aviso?.let {
+            Text(
+                text = it,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.sale,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+        }
+
         if (pendingImage != null || attachError != null) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -445,6 +492,12 @@ internal const val QUE_MIRA_MOVI =
 
 /** El rótulo arriba de los chips. En la escala `rotulo`, que va en mayúsculas como los demás. */
 internal const val ROTULO_DE_LAS_SUGERENCIAS = "PREGÚNTALE, POR EJEMPLO"
+
+/** La acción del encabezado cuando hay conversación (Ola 3). */
+internal const val NUEVA_CONVERSACION = "Nueva conversación"
+
+/** Lo que se dice si «Nueva conversación» no llegó al server: no se borra en pantalla lo que sigue allá. */
+internal const val NO_PUDE_EMPEZAR_OTRA = "No pude empezar una conversación nueva. Revisa tu conexión e intenta otra vez."
 
 /** La nota honesta del arranque. Una línea, sin sermón. */
 internal const val NO_REEMPLAZA_A_UN_ASESOR =

@@ -52,11 +52,14 @@ import com.jvillada.movi.server.ai.laPreguntaPideCriterio
 import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
 import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
 import com.jvillada.movi.server.ai.MODELO_PARA_CONSEJOS
-import com.jvillada.movi.server.ai.ULTIMOS_MENSAJES_QUE_VIAJAN
+import com.jvillada.movi.server.ai.conversacionGuardada
+import com.jvillada.movi.server.ai.empezarConversacionNueva
+import com.jvillada.movi.server.ai.tramoParaElModelo
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import java.io.File
 import org.jetbrains.exposed.sql.and
@@ -170,6 +173,18 @@ internal fun stripEmojis(text: String): String {
 }
 
 fun Route.aiRoutes() {
+    // **La conversación en curso** (Ola 3): lo que la pantalla pinta al volver. Solo del dueño —el
+    // `uid` sale del token— y sin fotos: `ai_turns` nunca las guardó.
+    get("/api/ai/conversacion") {
+        call.respond(conversacionGuardada(call.userId()))
+    }
+
+    // «Nueva conversación»: no borra nada, mueve el comienzo de la en curso a ahora.
+    post("/api/ai/conversacion/nueva") {
+        empezarConversacionNueva(call.userId())
+        call.respond(HttpStatusCode.NoContent)
+    }
+
     post("/api/ai/chat") {
         val body = call.receive<AiChatRequest>()
 
@@ -194,11 +209,12 @@ fun Route.aiRoutes() {
 
         val datos = cargarDatosDelUsuario(call.userId())
         val context = datos.comoContexto()
-        // **Solo el final del hilo.** El teléfono manda la conversación entera en cada pregunta,
-        // así que sin este recorte una charla larga se paga completa cada vez. El `dropWhile` de
-        // `mensajesParaElModelo` va DESPUÉS del recorte: si al cortar queda un turno del asistente
-        // al principio, la API lo rechaza.
-        val paraElModelo = mensajesParaElModelo(body.messages.takeLast(ULTIMOS_MENSAJES_QUE_VIAJAN))
+        // **Solo el final del hilo.** El teléfono manda la conversación entera en cada pregunta
+        // —y desde la Ola 3 esa conversación sobrevive a salir de la pantalla—, así que sin este
+        // recorte una charla larga se paga completa cada vez. `tramoParaElModelo` corta por
+        // mensajes Y por caracteres, y el `dropWhile` va DESPUÉS del recorte: si al cortar queda un
+        // turno del asistente al principio, la API lo rechaza.
+        val paraElModelo = mensajesParaElModelo(tramoParaElModelo(body.messages))
         // **Los datos exactos para ESTA pregunta** van pegados a ella, en el último mensaje del
         // dueño: DESPUÉS de todo lo cacheado (PERSONA, contexto, herramientas), así que cambian con
         // cada pregunta sin tirar la caché. Ver `hechosParaLaPregunta`.
@@ -258,7 +274,8 @@ fun Route.aiRoutes() {
             val guardado = guardarLaConversacion(
                 uid = uid,
                 pregunta = ultima.content,
-                respuesta = paso.texto,
+                // Sin emojis, igual que lo que se le manda: desde la Ola 3 esto se vuelve a pintar.
+                respuesta = stripEmojis(paso.texto),
                 consultas = paso.consultas,
                 modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
                 criterio = pideCriterio,
