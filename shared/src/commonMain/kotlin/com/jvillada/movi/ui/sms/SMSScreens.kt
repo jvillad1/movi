@@ -891,9 +891,18 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     if (sms == null) {
                         Text("Cargando…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     } else {
+                        // El origen en su propio renglón: «Comprobante · transferencia.png» (Ola 2) no
+                        // entraba al lado del tipo y la fecha, y los dejaba en una letra por renglón.
+                        Text(
+                            sms!!.bank,
+                            style = Movi.textos.cuerpo,
+                            fontWeight = FontWeight.Medium,
+                            color = Movi.colores.texto,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(sms!!.bank, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                            StatusDot(Movi.colores.textoApagado, 2.dp)
                             Text(if (esComprobante) "COMPROBANTE" else "SMS", color = Movi.colores.textoMedio, style = Movi.textos.rotulo)
                             StatusDot(Movi.colores.textoApagado, 2.dp)
                             Text(fechaLegibleDeSms(sms!!.time), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
