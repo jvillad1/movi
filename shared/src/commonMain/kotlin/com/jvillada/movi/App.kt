@@ -22,6 +22,11 @@ import androidx.compose.ui.unit.Density
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.avisos.DestinoDesdeAfuera
+import com.jvillada.movi.ui.papeles.ArchivoCompartido
+import com.jvillada.movi.ui.papeles.EscucharArchivosSoltados
+import com.jvillada.movi.ui.papeles.HojaLeyendoElPapel
+import com.jvillada.movi.ui.papeles.PapelesCompartidos
+import com.jvillada.movi.ui.papeles.sePuedeLeerLoCompartido
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.platform.AjustarBarrasDelSistema
 import com.jvillada.movi.platform.BackHandlerEffect
@@ -234,11 +239,25 @@ fun App() {
             val destinoPendiente = DestinoDesdeAfuera.pendiente
             LaunchedEffect(destinoPendiente, currentScreen, SessionManager.loggedIn) {
                 val destino = destinoPendiente ?: return@LaunchedEffect
-                if (!SessionManager.loggedIn || currentScreen == Screen.Login || currentScreen == Screen.Register) {
-                    return@LaunchedEffect
-                }
+                if (!sePuedeLeerLoCompartido(SessionManager.loggedIn, currentScreen)) return@LaunchedEffect
                 DestinoDesdeAfuera.pendiente = null
                 if (currentScreen != destino) navigate(destino)
+            }
+
+            // Ola 2 · «Compartir con Movi»: lo compartido desde otra app (o subido en Por revisar /
+            // Agregar, o soltado sobre la web) espera en [PapelesCompartidos] y se lee **después** de
+            // la puerta, con la misma condición que el destino de un aviso: con «Entrar con huella»
+            // la app arranca en el login, y subir el archivo ahí sería saltársela.
+            var papelesALeer by remember { mutableStateOf<List<ArchivoCompartido>?>(null) }
+            // En la web, además, se puede soltar el archivo sobre la ventana.
+            EscucharArchivosSoltados()
+            val hayPapeles = PapelesCompartidos.pendientes.isNotEmpty()
+            LaunchedEffect(hayPapeles, papelesALeer, currentScreen, SessionManager.loggedIn) {
+                if (!hayPapeles || papelesALeer != null) return@LaunchedEffect
+                if (!sePuedeLeerLoCompartido(SessionManager.loggedIn, currentScreen)) return@LaunchedEffect
+                // Agregar se cierra: la hoja de lectura va encima de la pantalla, no de otra hoja.
+                quickAdd = null
+                papelesALeer = PapelesCompartidos.tomarTodos()
             }
 
             BackHandlerEffect(
@@ -256,6 +275,7 @@ fun App() {
                     hojaRecurrentePrellenada = null
                     ofrecimientoRecurrente = null
                     movimientoRecienGuardado = null
+                    papelesALeer = null
                     backStack.clear()
                     backStack.add(Screen.Login)
                 }
@@ -410,6 +430,18 @@ fun App() {
                         onDismiss = { ofrecimientoRecurrente = null },
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )
+                }
+                // «Movi está leyendo tu comprobante…». Encima de la pantalla, como Agregar.
+                papelesALeer?.let { archivos ->
+                    CompositionLocalProvider(LocalGoBack provides goBackTo, LocalNavigate provides navigate) {
+                        HojaLeyendoElPapel(
+                            archivos = archivos,
+                            onCerrar = { papelesALeer = null },
+                            onNavigate = navigate,
+                            // Una propuesta nueva en Por revisar: la pantalla de atrás se vuelve a leer.
+                            onCambio = { refreshTick++ },
+                        )
+                    }
                 }
                 hojaRecurrentePrellenada?.let { propuesta ->
                     // Se compone DESPUÉS de la de Agregar, así que se anota después: cuando las

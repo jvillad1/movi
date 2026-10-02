@@ -15,6 +15,7 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.reminders.loadEventsBetween
+import com.jvillada.movi.shared.model.esIdDeComprobante
 import com.jvillada.movi.server.reminders.loadOccurredBy
 import com.jvillada.movi.server.reminders.loadOccurrenceRows
 import com.jvillada.movi.server.reminders.loadRejectedPairs
@@ -158,10 +159,12 @@ fun Route.dashboardRoutes() {
             // en la MISMA función que usa la bandeja de SMS del cliente: dos superficies que
             // ordenan por su cuenta terminan nombrando mensajes distintos.
             val filasDeSms = SmsMessages
-                .select(SmsMessages.time, SmsMessages.state)
+                .select(SmsMessages.id, SmsMessages.time, SmsMessages.state)
                 .where { SmsMessages.userId eq uid }
-                .map { it[SmsMessages.time] to it[SmsMessages.state] }
-            val captura = capturaDeSms(filasDeSms.map { it.first })
+                .map { Triple(it[SmsMessages.id], it[SmsMessages.time], it[SmsMessages.state]) }
+            // La captura mide lo que llegó SOLO: un comprobante que el dueño compartió no prueba que
+            // el teléfono siga capturando (Ola 2, ver `soloLoQueLlegoSolo` en :core).
+            val captura = capturaDeSms(filasDeSms.filterNot { esIdDeComprobante(it.first) }.map { it.second })
             val disponible = disponibleDelServidor(
                 uid = uid,
                 hoy = epochMillisToAppDate(ahora),
@@ -180,7 +183,7 @@ fun Route.dashboardRoutes() {
                 monthSpent = spentByCategory.values.sum(),
                 spentByCategory = spentByCategory,
                 cardPaymentCandidates = cardPaymentCandidateCount(uid, voidedIds, accountTypeById),
-                pendingSms = filasDeSms.count { (_, state) -> state == SMS_STATE_PENDING },
+                pendingSms = filasDeSms.count { (_, _, state) -> state == SMS_STATE_PENDING },
                 smsTotal = captura.total,
                 smsLastAt = captura.ultimo,
                 smsAlertMuted = Users.select(Users.smsAlertMuted)

@@ -127,6 +127,7 @@ fun Route.documentRoutes() {
         var accountId: String? = null
         var periodo: String? = null
         var notas: String? = null
+        var reusar = false
 
         call.receiveMultipart().forEachPart { part ->
             when (part) {
@@ -151,6 +152,7 @@ fun Route.documentRoutes() {
                     "accountId" -> accountId = part.value.takeIf { it.isNotBlank() }
                     "periodo" -> periodo = part.value.takeIf { it.isNotBlank() }
                     "notas" -> notas = part.value.takeIf { it.isNotBlank() }
+                    "reusar" -> reusar = part.value == "true"
                 }
                 else -> Unit
             }
@@ -172,6 +174,25 @@ fun Route.documentRoutes() {
         val cuentaPedida = accountId
         if (cuentaPedida != null && !dbQuery { esSuCuenta(uid, cuentaPedida) }) {
             return@post call.respond(HttpStatusCode.BadRequest, CUENTA_QUE_NO_ES_SUYA)
+        }
+
+        // Ola 2 · «Compartir con Movi»: compartir dos veces la misma captura no deja dos papeles
+        // iguales en Documentos. Se busca por nombre y tamaño —lo que ya usa el archivador de
+        // extractos— y se confirma comparando los bytes: el mismo nombre con otro contenido es
+        // otro papel. Solo con `reusar`, que manda la hoja de compartir: «Subir archivo» en
+        // Documentos sigue guardando lo que se le pida.
+        if (reusar) {
+            val nombreGuardado = nombre.take(255)
+            val existente = dbQuery {
+                Documents.selectAll()
+                    .where {
+                        (Documents.userId eq uid) and (Documents.name eq nombreGuardado) and
+                            (Documents.sizeBytes eq bytes.size.toLong())
+                    }
+                    .firstOrNull { it[Documents.content].contentEquals(bytes) }
+                    ?.toDocumento()
+            }
+            if (existente != null) return@post call.respond(HttpStatusCode.OK, existente)
         }
 
         val doc = Documento(

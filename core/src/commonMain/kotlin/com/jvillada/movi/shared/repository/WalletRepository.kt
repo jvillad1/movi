@@ -1,5 +1,8 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.LecturaDelPapel
+import com.jvillada.movi.shared.model.NOTA_DEL_PAPEL_COMPARTIDO
+
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
@@ -591,6 +594,33 @@ interface WalletRepository {
     suspend fun updateDocument(id: String, cambios: EdicionDeDocumento): Documento
 
     suspend fun deleteDocument(id: String)
+
+    // ── Compartir con Movi (Ola 2) ─────────────────────────────────────────────
+
+    /**
+     * Guarda un papel que el dueño compartió con Movi: el mismo `POST /api/documents`, como «Otro»,
+     * y **sin duplicarlo** si ese archivo ya estaba guardado (el server compara los bytes). Así el
+     * archivo nunca se pierde, se lea o no.
+     */
+    suspend fun subirPapel(fileName: String, bytes: ByteArray, mimeType: String): Documento =
+        uploadDocument(fileName, bytes, mimeType, TipoDeDocumento.OTRO, notas = NOTA_DEL_PAPEL_COMPARTIDO)
+
+    /**
+     * `POST /api/documents/{id}/leer`: qué es el papel y qué hizo Movi con él (una propuesta en
+     * «Por revisar», un «ya lo tienes anotado» o un extracto para revisar). Lanza `ApiException`
+     * con el motivo del server cuando no se pudo leer — el archivo igual queda en Documentos.
+     *
+     * [anotarAunqueEsteAnotado] es el «Anotarlo de todas formas» de la hoja.
+     */
+    suspend fun leerPapel(documentoId: String, anotarAunqueEsteAnotado: Boolean = false): LecturaDelPapel =
+        throw UnsupportedOperationException("leerPapel")
+
+    /**
+     * Confirma la propuesta de un comprobante diciendo **con qué movimiento** —el que se acaba de
+     * crear o el que ya estaba—: el server cuelga el papel de la cuenta de ese movimiento. Sin
+     * soporte del lado de quien implemente esto, es un `confirmSms` de siempre.
+     */
+    suspend fun confirmarComprobante(smsId: String, eventoId: String) = confirmSms(smsId)
     suspend fun importStatement(decision: ImportDecision)
     suspend fun getStatementImports(): List<StatementImport>
     suspend fun getStatementImportDetail(id: String): StatementImportDetail

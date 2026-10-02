@@ -132,6 +132,10 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun uploadDocument(fileName: String, bytes: ByteArray, mimeType: String, tipo: TipoDeDocumento, accountId: String?, periodo: String?, notas: String?): Documento = trasEscribir { delegado.uploadDocument(fileName, bytes, mimeType, tipo, accountId, periodo, notas) }
     override suspend fun updateDocument(id: String, cambios: EdicionDeDocumento): Documento = trasEscribir { delegado.updateDocument(id, cambios) }
     override suspend fun deleteDocument(id: String): Unit = trasEscribir { delegado.deleteDocument(id) }
+    override suspend fun subirPapel(fileName: String, bytes: ByteArray, mimeType: String): Documento = trasEscribir { delegado.subirPapel(fileName, bytes, mimeType) }
+    // Leer un papel puede dejar una propuesta en «Por revisar»: es una escritura.
+    override suspend fun leerPapel(documentoId: String, anotarAunqueEsteAnotado: Boolean): com.jvillada.movi.shared.model.LecturaDelPapel = trasEscribir { delegado.leerPapel(documentoId, anotarAunqueEsteAnotado) }
+    override suspend fun confirmarComprobante(smsId: String, eventoId: String): Unit = trasEscribir { delegado.confirmarComprobante(smsId, eventoId) }
     override suspend fun importStatement(decision: ImportDecision): Unit = trasEscribir { delegado.importStatement(decision) }
     override suspend fun deleteStatementImport(id: String): Unit = trasEscribir { delegado.deleteStatementImport(id) }
     override suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition = trasEscribir { delegado.putScreen(slug, sections) }

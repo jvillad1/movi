@@ -14,6 +14,7 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.alertaDeCapturaEnInicio
 import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
+import com.jvillada.movi.shared.model.soloLoQueLlegoSolo
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.sms.mensajesMasRecientesPrimero
 import com.jvillada.movi.ui.transactions.MovementRow
@@ -94,7 +95,8 @@ fun bandejaAlDia(
  */
 fun avisoDeCapturaEnLaBandeja(mensajes: List<SmsMessage>?, silenciada: Boolean?): String? {
     if (mensajes == null || silenciada == null) return null
-    return alertaDeCapturaEnInicio(capturaDeSms(mensajes.map { it.time }), silenciada)
+    // Sin los comprobantes (Ola 2): uno compartido hoy no prueba que el teléfono siga capturando.
+    return alertaDeCapturaEnInicio(capturaDeSms(soloLoQueLlegoSolo(mensajes).map { it.time }), silenciada)
 }
 
 /**

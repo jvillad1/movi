@@ -1,6 +1,8 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.MovimientoRechazado
+import com.jvillada.movi.shared.model.LecturaDelPapel
+import com.jvillada.movi.shared.model.NOTA_DEL_PAPEL_COMPARTIDO
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
@@ -857,6 +859,31 @@ class WalletRepositoryImpl(
 
     override suspend fun deleteDocument(id: String) {
         client.delete("$baseUrl/api/documents/$id").exigirExito()
+    }
+
+    // Ola 2 · «Compartir con Movi». `reusar`: si ese mismo archivo ya estaba guardado, el server
+    // devuelve ese documento en vez de otro igual (ver `POST /api/documents`).
+    override suspend fun subirPapel(fileName: String, bytes: ByteArray, mimeType: String): Documento =
+        client.post("$baseUrl/api/documents") {
+            setBody(MultiPartFormDataContent(formData {
+                append("tipo", TipoDeDocumento.OTRO.name)
+                append("notas", NOTA_DEL_PAPEL_COMPARTIDO)
+                append("reusar", "true")
+                append("file", bytes, Headers.build {
+                    append(HttpHeaders.ContentDisposition, "filename=\"${fileName.replace("\"", "")}\"")
+                    append(HttpHeaders.ContentType, mimeType)
+                })
+            }))
+        }.exigirExito().body()
+
+    // `exigirExito()` por lo mismo que los extractos: el motivo («el PDF tiene contraseña», «falta
+    // la clave») viaja en el cuerpo y es lo único que el dueño puede usar.
+    override suspend fun leerPapel(documentoId: String, anotarAunqueEsteAnotado: Boolean): LecturaDelPapel =
+        client.post("$baseUrl/api/documents/$documentoId/leer" + if (anotarAunqueEsteAnotado) "?anotarAunque=true" else "")
+            .exigirExito().body()
+
+    override suspend fun confirmarComprobante(smsId: String, eventoId: String) {
+        client.post("$baseUrl/api/sms/$smsId/confirm?eventoId=$eventoId").exigirExito()
     }
 
     /** La comprobación de status del archivo, extraída para no repetirla cuatro veces. */

@@ -209,6 +209,34 @@ object Documents : Table("documents") {
     init { index("idx_documents_user_id", false, userId) }
 }
 
+/**
+ * **Lo que Movi ya leyó de un papel** (Ola 2 · «Compartir con Movi»): la regla del costo es que
+ * **el mismo archivo no se manda dos veces a Claude**. Se identifica por la [huella] de sus bytes
+ * (SHA-256), no por el documento: compartir dos veces la misma captura crea dos filas en Documentos
+ * pero una sola lectura.
+ *
+ * - [tipo] es `COMPROBANTE` o `EXTRACTO` (ver `QueEsElPapel` en :core), y [datos] lo que se leyó
+ *   en JSON (`ComprobanteLeido` o `ExtractoLeido`).
+ * - [porRevisarId] es la fila que el comprobante dejó en `sms_messages` (`cmp_<documento>`), y
+ *   [eventoId] el movimiento con el que se confirmó: el enlace entre el papel y el movimiento.
+ *
+ * Tabla NUEVA: entra por `SchemaUtils.create`, con su clave primaria compuesta adentro del CREATE
+ * TABLE y sin índices sueltos que puedan fallar en el arranque. No va al «Descargar tus datos»: es
+ * memoria interna de Movi, como las conversaciones con Movi AI — el papel y el movimiento sí van.
+ */
+object LecturasDePapeles : Table("lecturas_de_papeles") {
+    val userId = varchar("user_id", 50)
+    val huella = varchar("huella", 64)
+    val documentoId = varchar("documento_id", 50)
+    val tipo = varchar("tipo", 20)
+    val datos = text("datos")
+    val modelo = varchar("modelo", 60)
+    val leidoEn = long("leido_en")
+    val porRevisarId = varchar("por_revisar_id", 60).nullable()
+    val eventoId = varchar("evento_id", 50).nullable()
+    override val primaryKey = PrimaryKey(userId, huella)
+}
+
 object Events : Table("financial_events") {
     val id                   = varchar("id", 50)
     val userId               = varchar("user_id", 50)

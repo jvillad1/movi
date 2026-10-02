@@ -24,6 +24,7 @@ import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
+import com.jvillada.movi.server.parsing.LectorDePapeles
 import com.jvillada.movi.server.parsing.FamiriosParser
 import com.jvillada.movi.server.parsing.StatementDocumentType
 import com.jvillada.movi.server.parsing.StatementParser
@@ -231,7 +232,34 @@ internal suspend fun procesarExtracto(
      * texto libre que el dueño pudo haber editado después. Ver [nombreParaExtraerTexto].
      */
     mimeConfiable: Boolean = false,
-): StatementParseResult {
+): StatementParseResult =
+    conciliarYArchivar(uid, fileName, mimeType, bytes, leerElExtracto(uid, fileName, mimeType, bytes, mimeConfiable), log)
+
+/**
+ * **Lo que dijo el papel, antes de mirar lo que ya existe.** Es la mitad cara de
+ * [procesarExtracto] —la que llama a Claude— separada de la mitad barata (conciliar y archivar) en
+ * la Ola 2, para que «Compartir con Movi» pueda **guardar la lectura y no volver a mandar el mismo
+ * archivo dos veces**: la segunda vez se concilia de nuevo contra los movimientos de hoy, pero sin
+ * gastar otra lectura.
+ *
+ * `@Serializable` porque eso es justamente lo que se guarda (`lecturas_de_papeles.datos`).
+ */
+@kotlinx.serialization.Serializable
+internal data class ExtractoLeido(
+    val bankName: String,
+    val filas: List<ParsedTransaction>,
+    val esFamirios: Boolean,
+    val numerosDeCuenta: List<String>,
+)
+
+/** Lee el extracto (Claude o Famirios). Lanza [FallaAlProcesarExtracto]. Ver [ExtractoLeido]. */
+internal suspend fun leerElExtracto(
+    uid: String,
+    fileName: String,
+    mimeType: String,
+    bytes: ByteArray,
+    mimeConfiable: Boolean = false,
+): ExtractoLeido {
     if (bytes.isEmpty()) throw FallaAlProcesarExtracto(HttpStatusCode.BadRequest, "No file received")
     // Desde que esta ruta ARCHIVA el archivo (y no solo lo parsea), le aplica el mismo tope
     // que la de documentos: sin esto, un PDF de 200 MB entraba a Postgres por la puerta de
@@ -260,7 +288,7 @@ internal suspend fun procesarExtracto(
                 "Formato de imagen no soportado. Sube PNG, JPG, GIF o WEBP (HEIC no se puede leer).",
             )
         bankName = StatementParser.detectBankName(fileName)
-        val lectura = ClaudeStatementParser.leerImagen(bytes, imageMime, Stores.merchantRules.getRules(uid))
+        val lectura = LectorDePapeles.actual.leerExtractoDeImagen(bytes, imageMime, Stores.merchantRules.getRules(uid))
         val falla = fallaDeLaLectura(lectura, esImagen = true)
         if (falla != null) throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, falla)
         parsed = (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
@@ -296,7 +324,7 @@ internal suspend fun procesarExtracto(
                 throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, LECTURA_FALLO)
             }
         } else {
-            val lectura = ClaudeStatementParser.leer(text, Stores.merchantRules.getRules(uid))
+            val lectura = LectorDePapeles.actual.leerExtractoDeTexto(text, Stores.merchantRules.getRules(uid))
             val falla = fallaDeLaLectura(lectura, esImagen = false)
             if (falla != null) throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, falla)
             (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
@@ -308,6 +336,30 @@ internal suspend fun procesarExtracto(
             )
         }
     }
+
+    return ExtractoLeido(
+        bankName = bankName,
+        filas = parsed,
+        esFamirios = isFamirios,
+        numerosDeCuenta = StatementParser.numerosDeCuenta(fileName, textoDelExtracto),
+    )
+}
+
+/**
+ * La mitad barata de [procesarExtracto]: concilia lo [leido] contra los movimientos que ya existen
+ * y archiva el papel en Documentos. No llama a Claude.
+ */
+internal suspend fun conciliarYArchivar(
+    uid: String,
+    fileName: String,
+    mimeType: String,
+    bytes: ByteArray,
+    leido: ExtractoLeido,
+    log: (String, Throwable) -> Unit,
+): StatementParseResult {
+    val parsed = leido.filas
+    val bankName = leido.bankName
+    val isFamirios = leido.esFamirios
 
     val voidedIds = dbQuery {
         VoidEvents.selectAll()
@@ -446,7 +498,7 @@ internal suspend fun procesarExtracto(
         period = period,
         newTransactions = newTransactions,
         matches = matches,
-        numerosDeCuenta = StatementParser.numerosDeCuenta(fileName, textoDelExtracto),
+        numerosDeCuenta = leido.numerosDeCuenta,
         documentoId = documentoId,
     )
 }

@@ -104,6 +104,7 @@ fun Application.configureRouting() {
             aiRoutes()
             statementRoutes()
             documentRoutes()
+            papelesRoutes()
             enlaceCompartidoRoutes()
             exportRoutes()
         }

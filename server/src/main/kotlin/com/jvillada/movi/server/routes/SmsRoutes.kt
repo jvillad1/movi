@@ -32,6 +32,8 @@ import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.esIdDeComprobante
+import com.jvillada.movi.shared.model.esUnComprobante
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.log
 import io.ktor.server.request.receive
@@ -433,6 +435,11 @@ fun Route.smsRoutes() {
                 .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
                 .firstOrNull()?.toSmsMessage()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
+        // Ola 2: la propuesta de un comprobante no se lee con el parser de SMS sino con lo que leyó
+        // Claude del papel, ya pasado por la memoria y las cuentas de otros (ver `PapelesRoutes`).
+        if (esUnComprobante(sms)) {
+            dbQuery { parsedDeUnComprobante(uid, sms.id, sms.text) }?.let { return@get call.respond(it) }
+        }
         val parsed = parseSms(sms.text, sms.bank)
             // No es un error de la app: el mensaje no trae un movimiento (un aviso, una ampliación de
             // plazo). Se dice así, porque la pantalla muestra este texto.
@@ -457,7 +464,9 @@ fun Route.smsRoutes() {
                 .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
                 .firstOrNull()?.toSmsMessage()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
-        val parsed = parseSms(sms.text, sms.bank) ?: return@get call.respond(emptyList<FinancialEvent>())
+        val parsed = (if (esUnComprobante(sms)) dbQuery { parsedDeUnComprobante(uid, sms.id, sms.text) } else null)
+            ?: parseSms(sms.text, sms.bank)
+            ?: return@get call.respond(emptyList<FinancialEvent>())
         val momento = momentoDelSms(sms.time, ahora = System.currentTimeMillis())
         val margen = DIAS_PARA_COINCIDIR * 86_400_000L
         val eventos = dbQuery { loadEventsBetween(uid, momento - margen, momento + margen + 1) }
@@ -467,10 +476,15 @@ fun Route.smsRoutes() {
     post("/api/sms/{id}/confirm") {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        // Ola 2: con qué movimiento se confirmó un comprobante (el que se acaba de crear, o el que
+        // ya estaba, «Es este»). Opcional: un cliente viejo no lo manda y todo sigue igual.
+        val eventoId = call.request.queryParameters["eventoId"]?.takeIf { it.isNotBlank() }
         val updated = dbQuery {
-            SmsMessages.update({ (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }) {
+            val n = SmsMessages.update({ (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }) {
                 it[state] = SMS_STATE_CONFIRMED
             }
+            if (n > 0 && eventoId != null && esIdDeComprobante(id)) enlazarElComprobante(uid, id, eventoId)
+            n
         }
         if (updated == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.OK)
     }
@@ -533,6 +547,9 @@ fun Route.smsRoutes() {
             var count = 0
             for (msg in messages) {
                 if (msg.id in existingIds) continue
+                // Los `cmp_` son de los comprobantes que lee el server (Ola 2): el teléfono no
+                // puede inventar uno.
+                if (esIdDeComprobante(msg.id)) continue
                 if (!seenIds.add(msg.id)) continue
                 val key = SmsKey(msg.text, msg.time)
                 if (dedupe.isDuplicate(key)) continue

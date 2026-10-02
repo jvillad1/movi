@@ -2182,6 +2182,13 @@ class LocalRepository(
     override suspend fun updateDocument(id: String, cambios: EdicionDeDocumento): Documento =
         remote.updateDocument(id, cambios)
     override suspend fun deleteDocument(id: String) = remote.deleteDocument(id)
+    // Ola 2 · «Compartir con Movi»: como los documentos, sin espejo local — siempre a la red.
+    override suspend fun subirPapel(fileName: String, bytes: ByteArray, mimeType: String): Documento =
+        remote.subirPapel(fileName, bytes, mimeType)
+    override suspend fun leerPapel(documentoId: String, anotarAunqueEsteAnotado: Boolean) =
+        remote.leerPapel(documentoId, anotarAunqueEsteAnotado)
+    override suspend fun confirmarComprobante(smsId: String, eventoId: String) =
+        remote.confirmarComprobante(smsId, eventoId)
     override suspend fun getStatementImports(): List<StatementImport> =
         remote.getStatementImports()
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail =

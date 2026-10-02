@@ -9,6 +9,7 @@ import com.anthropic.models.messages.Message
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
+import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
 import com.jvillada.movi.shared.model.MerchantRule
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.ParsedTransaction
@@ -273,6 +274,77 @@ Aplicá las reglas del usuario cuando el merchant coincida.
         val rawText = textoDe(response)
         if (quedoCortada(rawText, response.stopReason().orElse(null)?.asString())) return Lectura.Incompleta
         return Lectura.Ok(parseJson(rawText))
+    }
+
+    /**
+     * **¿Qué es este papel?** — Ola 2 · «Compartir con Movi». Una sola llamada al modelo barato
+     * ([MODELO_DE_TODOS_LOS_DIAS], Haiku): decide si es un comprobante de UN movimiento, un extracto
+     * o nada, y si es un comprobante lo lee de una vez. Lo caro —leer un extracto entero— solo pasa
+     * si esto dice «extracto», y con el modelo de siempre ([leer] / [leerImagen]).
+     *
+     * El tope de salida es chico a propósito: la respuesta es un objeto de doce campos.
+     */
+    suspend fun queEsElPapel(contenido: ContenidoDelPapel): QueDiceElPapel {
+        val c = client ?: return QueDiceElPapel.SinLlave
+        val bloques = when (contenido) {
+            is ContenidoDelPapel.Imagen -> listOf(
+                ContentBlockParam.ofImage(
+                    ImageBlockParam.builder().source(
+                        Base64ImageSource.builder()
+                            .data(java.util.Base64.getEncoder().encodeToString(contenido.bytes))
+                            .mediaType(Base64ImageSource.MediaType.of(contenido.mime))
+                            .build(),
+                    ).build(),
+                ),
+                ContentBlockParam.ofText(TextBlockParam.builder().text("¿Qué es este papel? Contesta con el JSON.").build()),
+            )
+            is ContenidoDelPapel.Texto -> listOf(
+                ContentBlockParam.ofText(
+                    TextBlockParam.builder()
+                        .text("TEXTO DEL PAPEL (sacado de un PDF):\n" + contenido.texto.take(MAX_CARACTERES_DEL_PAPEL) + "\n\n¿Qué es este papel? Contesta con el JSON.")
+                        .build(),
+                ),
+            )
+        }
+        val params = MessageCreateParams.builder()
+            .model(MODELO_DE_TODOS_LOS_DIAS)
+            .maxTokens(MAX_TOKENS_DEL_PAPEL)
+            .temperature(0.0)
+            .systemOfTextBlockParams(listOf(TextBlockParam.builder().text(promptDelPapel()).build()))
+            .addUserMessageOfBlockParams(bloques)
+            .build()
+        val response = withContext(Dispatchers.IO) { c.messages().create(params) }
+        return queDiceLaRespuesta(textoDe(response))
+    }
+
+    /** La respuesta de [queEsElPapel] es un objeto chico; 600 fichas sobran con holgura. */
+    private const val MAX_TOKENS_DEL_PAPEL = 600L
+
+    /** Un comprobante en PDF tiene una página; más que esto ya es un extracto y lo decide la heurística. */
+    private const val MAX_CARACTERES_DEL_PAPEL = 8_000
+
+    private fun promptDelPapel(): String {
+        val categorias = PREDEFINED_CATEGORIES.joinToString(", ") { it.name }
+        return """
+Lees papeles financieros colombianos: capturas de pantalla de transferencias, recibos, pagos PSE, facturas pagadas y extractos. Decide qué es el papel y devuelve SOLO un objeto JSON, sin texto antes ni después.
+
+Si muestra UN solo movimiento de plata (una transferencia, un pago, una compra, un recibo, una factura pagada), devuelve:
+{"tipo":"COMPROBANTE","monto":138600,"moneda":"COP","movimiento":"EXPENSE","fecha":"2026-09-30","hora":"14:05","comercio":"Coomeva Medicina Prepagada","categoria":"Salud","banco":"Bancolombia","cuentaPropia":"8133","cuentaDestino":null,"llave":null,"concepto":"Pago PSE"}
+- monto: el valor total pagado o recibido, como número sin separadores de miles; los centavos van como decimales (20.5). El formato puede ser colombiano (${'$'}46.489,00) o americano (46,489.00): detecta cuál es.
+- moneda: "COP" o "USD".
+- movimiento: "EXPENSE" si la plata salió del titular, "INCOME" si le llegó.
+- fecha: YYYY-MM-DD, o null si no aparece. hora: HH:mm en 24 horas, o null si no aparece.
+- comercio: a quién se le pagó o de quién llegó, como lo escribiría una persona. Si solo aparece un número de cuenta o una llave, deja comercio vacío ("").
+- categoria: una de estas: $categorias. Usa "Pago de tarjeta" solo si es el pago de una tarjeta de crédito.
+- banco: el banco o la app que emitió el comprobante, o null.
+- cuentaPropia: los últimos 4 dígitos de la cuenta o tarjeta del titular, o null.
+- cuentaDestino: el número de la cuenta de destino si es una transferencia a otra persona y se ve completo, o null.
+- llave: la llave de destino (Bre-B) si se ve, o null.
+- concepto: una descripción corta (máximo 6 palabras), o null.
+
+Si muestra VARIOS movimientos (un extracto, un listado o un histórico de movimientos), devuelve: {"tipo":"EXTRACTO"}
+Si no muestra ningún movimiento de plata (un certificado, un saldo, una publicidad), devuelve: {"tipo":"NADA"}
+""".trimIndent()
     }
 
     /** Returns true if [mimeType] represents an image (starts with "image/"). */
