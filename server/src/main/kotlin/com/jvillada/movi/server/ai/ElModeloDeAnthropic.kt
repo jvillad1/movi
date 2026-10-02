@@ -388,7 +388,9 @@ internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
                 "pregunta sea por hechos («¿qué compré en Zelo Group?», «¿qué hubo la semana " +
                 "pasada?»). Devuelve como máximo $TOPE_DE_RESULTADOS movimientos y avisa si hubo " +
                 "más; para una cifra total usa $TOTALES_POR_CATEGORIA, que suma todos. Sin fechas " +
-                "mira los últimos $MESES_HACIA_ATRAS_POR_DEFECTO meses.",
+                "mira los últimos $MESES_HACIA_ATRAS_POR_DEFECTO meses. Trae también los pagos de " +
+                "tarjeta y los traspasos entre sus cuentas, rotulados porque NO cuentan como gasto: " +
+                "úsala para «¿cuánto le pagué a la Master Black?» (filtra por cuenta o por texto).",
         )
         .inputSchema(
             Tool.InputSchema.builder()
@@ -419,7 +421,8 @@ internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
                 "CUENTA salió cada peso. Úsala para cualquier pregunta de cuánto («¿cuánto gasté " +
                 "en Comida en agosto?», «¿gasté más que el mes pasado?», «¿qué gasté desde " +
                 "Bancolombia este período?»). Suma TODOS los movimientos del rango, sin tope. Las " +
-                "monedas nunca se suman entre sí: cada una viene aparte.",
+                "monedas nunca se suman entre sí: cada una viene aparte. Al final trae, en un " +
+                "bloque aparte que NO suma en Entró ni en Salió, los pagos de tarjeta y los traspasos.",
         )
         .inputSchema(
             Tool.InputSchema.builder()

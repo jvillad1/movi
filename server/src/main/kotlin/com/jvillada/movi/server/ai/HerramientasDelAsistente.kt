@@ -8,6 +8,14 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.time.epochMillisToAppDateString
+import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.PAYROLL_DEDUCTION_CATEGORY
+import com.jvillada.movi.shared.model.THIRD_PARTY_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
@@ -42,6 +50,12 @@ import java.time.format.DateTimeParseException
  * 2. **Las mismas cifras que la pantalla.** Anulados afuera, «Por confirmar» afuera, el pago de
  *    tarjeta no cuenta como gasto (`isCashFlow`). Un asistente que conteste otra cosa que el
  *    Inicio es peor que uno que no sepa.
+ *
+ *    Ola 3 separó dos preguntas que hasta acá eran una: **qué cuenta como gasto** y **qué se puede
+ *    consultar**. Los pagos de tarjeta y los traspasos siguen sin sumar en ningún total —es la
+ *    regla de plata del dueño—, pero ya no son invisibles: «¿cuánto le pagué a la Master Black este
+ *    mes?» tiene respuesta. [buscarMovimientos] los lista rotulados («no cuenta como gasto: pago de
+ *    tarjeta») y [totalesPorCategoria] los pone en un bloque aparte que dice que NO suma arriba.
  * 3. **Acotado y dicho.** Toda respuesta tiene tope, y cuando el tope corta, el texto lo dice.
  *    Igual que en el contexto: un recorte callado hace que el modelo sume lo que ve y conteste una
  *    cifra que no coincide con la pantalla.
@@ -88,7 +102,14 @@ private data class FilaDeMovimiento(
     val moneda: String,
     val esIngreso: Boolean,
     val cuenta: String,
-)
+    /**
+     * `null` si cuenta como gasto o ingreso del mes (lo normal); si no, **por qué no** —«pago de
+     * tarjeta», «traspaso entre tus cuentas»—. Ver [porQueNoCuentaEnElMes].
+     */
+    val noCuenta: String? = null,
+) {
+    val cuentaEnElMes: Boolean get() = noCuenta == null
+}
 
 /**
  * **Ejecuta lo que el modelo pidió.** Devuelve texto, siempre: un error no se lanza, se le
@@ -137,8 +158,18 @@ private suspend fun buscarMovimientos(uid: String, args: Map<String, String>): S
     }
 
     val muestra = todas.take(tope)
+    val fueraDelMes = todas.count { !it.cuentaEnElMes }
     return buildString {
-        appendLine("${todas.size} movimientos entre $desde y $hasta:")
+        append("${todas.size} movimientos entre $desde y $hasta")
+        // El rótulo va también arriba, no solo en cada renglón: es lo que le recuerda al modelo,
+        // antes de leer la lista, que esos no se suman a un gasto.
+        if (fueraDelMes > 0) {
+            append(
+                " ($fueraDelMes NO cuentan como gasto ni como ingreso —pagos de tarjeta, traspasos " +
+                    "entre sus cuentas—: se pueden consultar, pero no se suman a lo que gastó)",
+            )
+        }
+        appendLine(":")
         muestra.forEach { appendLine("- ${renglon(it)}") }
         if (todas.size > muestra.size) {
             appendLine(
@@ -153,8 +184,12 @@ private suspend fun totalesPorCategoria(uid: String, args: Map<String, String>):
     val desde = fechaDe(args["desde"]) ?: AppClock.today().minusMonths(1)
     val hasta = fechaDe(args["hasta"]) ?: AppClock.today()
 
-    val filas = filasDe(uid, desde, hasta)
-    if (filas.isEmpty()) return "Sin movimientos entre $desde y $hasta."
+    val todas = filasDe(uid, desde, hasta)
+    if (todas.isEmpty()) return "Sin movimientos entre $desde y $hasta."
+    // **Los totales son los de siempre**: solo lo que cuenta en el mes. Lo demás va en su propio
+    // bloque, abajo, rotulado — nunca mezclado con «Salió».
+    val filas = todas.filter { it.cuentaEnElMes }
+    val fuera = todas.filterNot { it.cuentaEnElMes }
 
     return buildString {
         appendLine("Entre $desde y $hasta:")
@@ -182,7 +217,69 @@ private suspend fun totalesPorCategoria(uid: String, args: Map<String, String>):
                     .forEach { (cuenta, monto) -> appendLine("- $cuenta: $monto") }
             }
         }
+        if (fuera.isNotEmpty()) {
+            appendLine(
+                bloqueDeLoQueNoCuenta(
+                    fuera.map { FilaDeMovimientoParaElBloque(it.noCuenta ?: "otro", it.cuenta, it.esIngreso, it.monto, it.moneda) },
+                ),
+            )
+        }
     }.trim()
+}
+
+/**
+ * **Lo que se movió sin ser gasto ni ingreso**, para poder contestar «¿cuánto le pagué a la tarjeta?»
+ * sin tocar «Salió». Por motivo y por cuenta, con el sentido de la plata dicho en palabras: de una
+ * cuenta SALIÓ y a la tarjeta ENTRÓ, y las dos patas son el mismo pago — sumarlas sería contarlo
+ * dos veces, y el encabezado lo advierte.
+ */
+internal fun bloqueDeLoQueNoCuenta(fuera: List<FilaDeMovimientoParaElBloque>): String = buildString {
+    appendLine(
+        "== Fuera de los gastos y de los ingresos (NO suman en Entró ni en Salió; un traspaso o " +
+            "un pago de tarjeta tiene dos patas, la que sale y la que entra, y son el mismo pago) ==",
+    )
+    fuera.groupBy { it.moneda }.toSortedMap().forEach { (moneda, deEsaMoneda) ->
+        deEsaMoneda.groupBy { it.motivo }.forEach { (motivo, filas) ->
+            val partes = filas.groupBy { it.cuenta to it.esIngreso }
+                .map { (clave, delGrupo) ->
+                    val (cuenta, entro) = clave
+                    "${if (entro) "entró a" else "salió de"} $cuenta ${delGrupo.sumOf { it.monto }}"
+                }
+            appendLine("- ${motivo.replaceFirstChar { it.uppercase() }} ($moneda, ${filas.size} movimientos): ${partes.joinToString("; ")}")
+        }
+    }
+}.trim()
+
+/** Lo mínimo que necesita [bloqueDeLoQueNoCuenta]; aparte para poder probarlo sin base. */
+internal data class FilaDeMovimientoParaElBloque(
+    val motivo: String,
+    val cuenta: String,
+    val esIngreso: Boolean,
+    val monto: Long,
+    val moneda: String,
+)
+
+
+/**
+ * **Por qué un movimiento no cuenta en el mes**, en las palabras del dueño; `null` si cuenta. Usa
+ * [isCashFlow] para decidir —la misma regla del Inicio, sin copiarla— y solo pone el rótulo.
+ */
+internal fun porQueNoCuentaEnElMes(tipoDeCuenta: AccountType?, tipo: TransactionType, categoria: String): String? {
+    if (tipoDeCuenta == null || isCashFlow(tipoDeCuenta, tipo, categoria)) return null
+    return when (categoria) {
+        CARD_PAYMENT_CATEGORY -> "pago de tarjeta"
+        TRANSFER_CATEGORY -> "traspaso entre sus cuentas"
+        OPENING_CATEGORY -> "saldo inicial de una cuenta"
+        ADJUSTMENT_CATEGORY -> "ajuste de saldo"
+        PAYROLL_DEDUCTION_CATEGORY -> "descuento de nómina"
+        THIRD_PARTY_PAYMENT_CATEGORY -> "cuota que paga un tercero"
+        ORPHANED_LEG_CATEGORY -> "pata de un traspaso con una cuenta borrada"
+        else -> when (tipoDeCuenta) {
+            AccountType.LOAN -> "movimiento de la cuenta de un crédito"
+            AccountType.CREDIT_CARD -> "abono a la tarjeta"
+            else -> "no cuenta en el mes"
+        }
+    }
 }
 
 /**
@@ -245,10 +342,9 @@ private suspend fun filasDe(uid: String, desde: LocalDate, hasta: LocalDate): Li
             }
             .filterNot { it[Events.id] in anulados }
             .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
-            .filter { fila ->
-                val tipo = tipoDeCuenta[fila[Events.accountId]]
-                tipo == null || isCashFlow(tipo, TransactionType.valueOf(fila[Events.type]), fila[Events.category])
-            }
+            // Ola 3: lo que no cuenta como flujo YA NO se descarta acá —se rotula—. Descartarlo
+            // dejaba al asistente sin poder contestar «¿cuánto le pagué a la Master Black?»; los
+            // totales lo siguen dejando afuera (ver [totalesPorCategoria]).
             .map { fila ->
                 FilaDeMovimiento(
                     fecha = epochMillisToAppDateString(fila[Events.timestamp]),
@@ -258,6 +354,11 @@ private suspend fun filasDe(uid: String, desde: LocalDate, hasta: LocalDate): Li
                     moneda = fila[Events.currency],
                     esIngreso = fila[Events.type] == TransactionType.INCOME.name,
                     cuenta = nombreDeCuenta[fila[Events.accountId]] ?: "otra cuenta",
+                    noCuenta = porQueNoCuentaEnElMes(
+                        tipoDeCuenta[fila[Events.accountId]],
+                        TransactionType.valueOf(fila[Events.type]),
+                        fila[Events.category],
+                    ),
                 )
             }
             .sortedByDescending { it.fecha }
@@ -266,7 +367,8 @@ private suspend fun filasDe(uid: String, desde: LocalDate, hasta: LocalDate): Li
 
 private fun renglon(f: FilaDeMovimiento): String {
     val signo = if (f.esIngreso) "+" else "-"
-    return "${f.fecha} · ${f.nombre} (${f.categoria}, ${f.cuenta}): $signo${f.monto} ${f.moneda}"
+    val rotulo = f.noCuenta?.let { " [NO cuenta como gasto ni ingreso: $it]" }.orEmpty()
+    return "${f.fecha} · ${f.nombre} (${f.categoria}, ${f.cuenta}): $signo${f.monto} ${f.moneda}$rotulo"
 }
 
 /** `null` cuando no vino nada; excepción cuando vino algo que no es una fecha. */
