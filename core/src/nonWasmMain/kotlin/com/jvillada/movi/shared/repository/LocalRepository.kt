@@ -2189,6 +2189,7 @@ class LocalRepository(
         remote.leerPapel(documentoId, anotarAunqueEsteAnotado)
     override suspend fun confirmarComprobante(smsId: String, eventoId: String) =
         remote.confirmarComprobante(smsId, eventoId)
+    override suspend fun getOrigenesMudos() = remote.getOrigenesMudos()
     override suspend fun getStatementImports(): List<StatementImport> =
         remote.getStatementImports()
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail =

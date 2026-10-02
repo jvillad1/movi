@@ -16,6 +16,7 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.shared.model.esIdDeComprobante
+import com.jvillada.movi.server.sms.origenesMudosDe
 import com.jvillada.movi.server.reminders.loadOccurredBy
 import com.jvillada.movi.server.reminders.loadOccurrenceRows
 import com.jvillada.movi.server.reminders.loadRejectedPairs
@@ -186,6 +187,9 @@ fun Route.dashboardRoutes() {
                 pendingSms = filasDeSms.count { (_, _, state) -> state == SMS_STATE_PENDING },
                 smsTotal = captura.total,
                 smsLastAt = captura.ultimo,
+                // Ola 2: los orígenes de captura que se callaron (lee las mismas filas otra vez, con
+                // su rótulo; son mensajes del banco, no la historia de movimientos).
+                bancosMudos = origenesMudosDe(uid, ahora),
                 smsAlertMuted = Users.select(Users.smsAlertMuted)
                     .where { Users.id eq uid }
                     .firstOrNull()?.get(Users.smsAlertMuted) ?: false,

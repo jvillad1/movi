@@ -61,6 +61,15 @@ data class DashboardSummary(
      */
     val smsAlertMuted: Boolean = false,
     /**
+     * **Los orígenes de captura que se callaron** («banco mudo», Ola 2): SMS de un banco,
+     * notificaciones de una app o correos que llegaban con regularidad y llevan días sin llegar.
+     * La regla es `origenesMudos`, en :core; el Inicio solo la muestra («Hace 4 días no llegan los
+     * SMS de Bancolombia»). Vacía con el aviso apagado (`diasParaBancoMudo = 0`).
+     *
+     * Con default: un APK viejo no la lee, y un server viejo no la manda.
+     */
+    val bancosMudos: List<OrigenMudo> = emptyList(),
+    /**
      * Ola 9 · A2: **las categorías que el dueño ya usó alguna vez**, con el tipo (o los tipos)
      * con los que las usó. Viaja acá y no en un endpoint propio a propósito: el Inicio ya pide
      * esta respuesta y es la pantalla en la que la app arranca, así que las categorías propias

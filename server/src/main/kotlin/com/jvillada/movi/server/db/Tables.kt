@@ -73,6 +73,15 @@ object Users : Table("users") {
      * siguen valiendo. Lo cubre `SchemaDeArranqueTest` y `TokenVersionColumnTest`.
      */
     val tokenVersion = integer("token_version").default(0)
+    /**
+     * **Cuántos días sin capturas de un origen regular avisan** («banco mudo», Ola 2; ver
+     * `origenesMudos` en :core). `0` apaga el aviso. Se elige desde la app (Captura del banco),
+     * regla del dueño: nada que solo se cambie tocando código.
+     *
+     * Nullable y se lee como `DIAS_PARA_BANCO_MUDO_POR_DEFECTO`, por lo mismo que sus vecinas: es el
+     * único DDL que `createMissingTablesAndColumns` puede agregar sin riesgo sobre una tabla con filas.
+     */
+    val diasParaBancoMudo = integer("dias_para_banco_mudo").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

@@ -44,6 +44,11 @@ data class UserProfile(
      * `null` en la respuesta: una cuenta que no lo tocó cae a `false` del lado del server.
      */
     val smsAlertMuted: Boolean = false,
+    /**
+     * Cuántos días sin capturas de un origen que era regular avisan «banco mudo» (Ola 2). `0` = no
+     * avisar. Nunca `null` en la respuesta: cae a [DIAS_PARA_BANCO_MUDO_POR_DEFECTO].
+     */
+    val diasParaBancoMudo: Int = DIAS_PARA_BANCO_MUDO_POR_DEFECTO,
 )
 
 /**
@@ -76,6 +81,8 @@ data class UpdateProfileRequest(
      * Perfil: quien decide callar el recordatorio tiene que estar viendo lo que se calla.
      */
     val smsAlertMuted: Boolean? = null,
+    /** Días para el aviso de banco mudo, 0..[MAX_DIAS_PARA_BANCO_MUDO] (0 lo apaga). `null` = no tocar. */
+    val diasParaBancoMudo: Int? = null,
 )
 
 /**

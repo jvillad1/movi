@@ -13,6 +13,7 @@ import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.push.buildSmsPushPayload
 import com.jvillada.movi.server.sms.SmsDedupeIndex
 import com.jvillada.movi.server.sms.memoriaDe
+import com.jvillada.movi.server.sms.origenesMudosDe
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
@@ -404,6 +405,15 @@ fun Route.smsRoutes() {
         }
         // Los pendientes que parecen el mismo pago que otro aviso lo dicen antes de aprobarse.
         call.respond(conLosAvisosParecidos(list, ahora = System.currentTimeMillis()))
+    }
+
+    /**
+     * Ola 2 · «banco mudo»: los orígenes de captura que se callaron. Lo pide el aviso diario del
+     * teléfono; el Inicio los trae en su resumen. Literal, así que gana sobre `/api/sms/{id}`.
+     */
+    get("/api/sms/origenes-mudos") {
+        val uid = call.userId()
+        call.respond(dbQuery { origenesMudosDe(uid, System.currentTimeMillis()) })
     }
 
     get("/api/sms/{id}") {

@@ -17,6 +17,8 @@ import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CapturaDeSms
 import com.jvillada.movi.shared.model.alertaDeCapturaEnInicio
+import com.jvillada.movi.shared.model.OrigenMudo
+import com.jvillada.movi.shared.model.textoDeOrigenMudo
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.EventDay
@@ -125,6 +127,8 @@ data class DashboardData(
     val captura: CapturaDeSms? = null,
     /** El dueño pidió no ver el aviso de captura en el Inicio (`users.sms_alert_muted`). */
     val capturaSilenciada: Boolean = false,
+    /** Ola 2 · «banco mudo»: los orígenes de captura que se callaron (ver `origenesMudos`). */
+    val bancosMudos: List<OrigenMudo> = emptyList(),
     /** `null` = no llegó; ver [budgets]. */
     val goals: List<Goal>? = null,
     val subscriptions: SubscriptionsResult? = null,
@@ -534,7 +538,10 @@ fun dashboardAlerts(
     pendingSms: Int,
     captura: CapturaDeSms? = null,
     capturaSilenciada: Boolean = false,
+    /** Ola 2: los orígenes que se callaron. Llevan a «Captura del banco», donde se revisa. */
+    bancosMudos: List<OrigenMudo> = emptyList(),
 ): List<DashboardAlert> = buildList {
+    bancosMudos.forEach { add(DashboardAlert(textoDeOrigenMudo(it), Screen.CapturaDelBanco)) }
     when (overBudget.size) {
         0 -> Unit
         // Ola C: Presupuestos es un segmento de Plan — la alerta abre Plan con ese segmento puesto.
@@ -771,7 +778,7 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
     }
     dashboardAlerts(
         overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
-        data.captura, data.capturaSilenciada,
+        data.captura, data.capturaSilenciada, data.bancosMudos,
     ).forEach { add(NotificationRow(it.text, it.target)) }
 }
 
@@ -872,6 +879,7 @@ internal fun cosasParaRevisarDe(
     // `data.accounts` en null = las cuentas todavía no contestaron, y entonces no se afirma que
     // haya ninguna sin cuadrar. Misma disciplina que el resto de este archivo.
     avisoDeCuadre = textoDelAvisoDeCuadre(cuentasSinCuadrar(data.accounts.orEmpty(), ahora)),
+    bancosMudos = data.bancosMudos,
 )
 
 /**
@@ -949,6 +957,8 @@ internal fun DashboardData.conResumenDelInicio(s: DashboardSummary): DashboardDa
     // podía delatarlo era una pantalla de Android que el dueño no abre.
     captura = CapturaDeSms(total = s.smsTotal, ultimo = s.smsLastAt),
     capturaSilenciada = s.smsAlertMuted,
+    // Ola 2: los orígenes de captura que se callaron. Misma respuesta, ninguna llamada nueva.
+    bancosMudos = s.bancosMudos,
     // La tarjeta «Disponible». Misma respuesta, ninguna llamada nueva.
     gastoVariablePorDia = s.gastoVariablePorDia,
     // Lo que tenías al empezar el período y lo que entró. Un server viejo no lo manda y la

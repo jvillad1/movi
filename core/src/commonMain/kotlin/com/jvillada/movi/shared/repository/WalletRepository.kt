@@ -621,6 +621,12 @@ interface WalletRepository {
      * soporte del lado de quien implemente esto, es un `confirmSms` de siempre.
      */
     suspend fun confirmarComprobante(smsId: String, eventoId: String) = confirmSms(smsId)
+
+    /**
+     * `GET /api/sms/origenes-mudos`: los orígenes de captura que se callaron («banco mudo», Ola 2).
+     * Lo lee el aviso diario del teléfono; el Inicio los trae en el resumen.
+     */
+    suspend fun getOrigenesMudos(): List<com.jvillada.movi.shared.model.OrigenMudo> = emptyList()
     suspend fun importStatement(decision: ImportDecision)
     suspend fun getStatementImports(): List<StatementImport>
     suspend fun getStatementImportDetail(id: String): StatementImportDetail

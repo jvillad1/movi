@@ -7,6 +7,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
+import com.jvillada.movi.avisos.AvisoDeBancoMudoWorker
 import com.jvillada.movi.avisos.AvisoDeVencimientosWorker
 import com.jvillada.movi.avisos.Avisador
 import com.jvillada.movi.avisos.DestinoDesdeAfuera
@@ -59,6 +60,8 @@ class MainActivity : FragmentActivity() {
         // correr: con el interruptor apagado o sin permiso no hace nada.
         Avisador.crearCanales(applicationContext)
         AvisoDeVencimientosWorker.programar(applicationContext)
+        // Ola 2: y el diario de «banco mudo» (decide al correr, igual que el de vencimientos).
+        AvisoDeBancoMudoWorker.programar(applicationContext)
         // Si la app se abrió tocando un aviso, a qué pantalla va (lo cumple App() tras la puerta).
         recibirAviso(intent)
         // Ola 2 · «Compartir con Movi». Solo en un arranque de verdad: si Android recrea la

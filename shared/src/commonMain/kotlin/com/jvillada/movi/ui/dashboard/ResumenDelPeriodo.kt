@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.OrigenMudo
+import com.jvillada.movi.shared.model.textoDeOrigenMudo
+
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -582,7 +585,7 @@ data class CosaParaRevisar(
  * Ola C: [POR_REVISAR] reemplaza a `SMS` — los mensajes del banco por confirmar y los candidatos a
  * pago de tarjeta se revisan en la misma bandeja. No viaja ni se guarda: vive solo en la UI.
  */
-enum class DestinoDeRevision { MOVIMIENTOS, RECURRENTES, PRESUPUESTOS, CREDITOS, POR_REVISAR, SUSCRIPCIONES, CUADRE }
+enum class DestinoDeRevision { MOVIMIENTOS, RECURRENTES, PRESUPUESTOS, CREDITOS, POR_REVISAR, SUSCRIPCIONES, CUADRE, CAPTURA }
 
 /**
  * **Lo que el Inicio recomienda mirar hoy**, de lo más urgente a lo más opcional.
@@ -610,9 +613,25 @@ fun cosasParaRevisar(
      * relojes: la regla vive en `ui/cuadre`, que es donde se resuelve.
      */
     avisoDeCuadre: String? = null,
+    /**
+     * Ola 2 · «banco mudo»: los orígenes de captura que se callaron (`origenesMudos`, en :core, lo
+     * calcula el server). Urgentes: mientras la captura esté muda, lo que el dueño pague no entra
+     * solo y el período se ve más barato de lo que es.
+     */
+    bancosMudos: List<OrigenMudo> = emptyList(),
     cuantas: Int = 4,
 ): List<CosaParaRevisar> {
     val todas = buildList {
+        bancosMudos.forEach { mudo ->
+            add(
+                CosaParaRevisar(
+                    texto = textoDeOrigenMudo(mudo),
+                    detalle = "Mientras tanto, lo que pagues no entra solo a Por revisar.",
+                    destino = DestinoDeRevision.CAPTURA,
+                    urgente = true,
+                ),
+            )
+        }
         val vencidos = checklist.filter { it.vencido }
         if (vencidos.isNotEmpty()) {
             add(

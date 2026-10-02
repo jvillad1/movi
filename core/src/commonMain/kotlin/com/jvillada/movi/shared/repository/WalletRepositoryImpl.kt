@@ -886,6 +886,9 @@ class WalletRepositoryImpl(
         client.post("$baseUrl/api/sms/$smsId/confirm?eventoId=$eventoId").exigirExito()
     }
 
+    override suspend fun getOrigenesMudos(): List<com.jvillada.movi.shared.model.OrigenMudo> =
+        client.get("$baseUrl/api/sms/origenes-mudos").exigirExito().body()
+
     /** La comprobación de status del archivo, extraída para no repetirla cuatro veces. */
     private suspend fun HttpResponse.exigirExito(): HttpResponse {
         if (!status.isSuccess()) {

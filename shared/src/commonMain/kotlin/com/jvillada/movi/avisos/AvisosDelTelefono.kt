@@ -2,6 +2,9 @@ package com.jvillada.movi.avisos
 
 import com.jvillada.movi.shared.model.AvisoPorRevisar
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.nombreDelOrigenDeCaptura
+import com.jvillada.movi.shared.model.OrigenMudo
+import com.jvillada.movi.shared.model.queNoLlega
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
@@ -41,26 +44,13 @@ data class TextoDeAviso(val titulo: String, val texto: String, val lineas: List<
 // ── Llegó un movimiento ──────────────────────────────────────────────────────
 
 /**
- * Los códigos con los que Bancolombia manda sus SMS (los mismos del piso de `BankSenderFilter`, en
- * el `androidMain`). Un SMS trae de origen el código y no el nombre; el aviso dice «Bancolombia».
- */
-private val CODIGOS_DE_BANCOLOMBIA = setOf("85540", "891333", "87400")
-
-/**
  * **De dónde vino, como lo diría una persona**, o `null` si no hay nada legible que decir.
  *
- * «Notificación · Nu» → «Nu», «Correo · Bancolombia» → «Bancolombia», «85540» → «Bancolombia». Un
- * código de remitente que no se conoce no se dice: «· 899776» no le explica nada a nadie.
+ * «Notificación · Nu» → «Nu», «Correo · Bancolombia» → «Bancolombia», «85540» → «Bancolombia». La
+ * regla vive en `:core` ([nombreDelOrigenDeCaptura]) desde la Ola 2: el server la usa para nombrar
+ * el banco mudo, y el aviso del teléfono tiene que decir el mismo nombre.
  */
-fun origenParaElAviso(origen: String): String? {
-    val limpio = origen.trim()
-    if (limpio.isEmpty()) return null
-    if ('·' in limpio) return limpio.substringAfter('·').trim().ifBlank { null }
-    if (CODIGOS_DE_BANCOLOMBIA.any { it in limpio }) return "Bancolombia"
-    if (limpio.all { it.isDigit() || it == '+' }) return null
-    if (limpio.equals("SMS", ignoreCase = true)) return null
-    return limpio
-}
+fun origenParaElAviso(origen: String): String? = nombreDelOrigenDeCaptura(origen)
 
 /**
  * Un monto como lo dice la app: pesos enteros con puntos («$180.000»), y los dólares con su signo
@@ -212,12 +202,47 @@ fun milisHastaLaProxima(hora: Int, ahora: Long): Long {
     return objetivo - ahora
 }
 
+// ── Banco mudo (Ola 2) ───────────────────────────────────────────────────────
+
+/**
+ * **El aviso de «banco mudo»**: un origen de captura que llegaba con regularidad y se calló (la
+ * regla es `origenesMudos`, en :core, y la corre el server). Uno: «Hace 4 días no llega nada de
+ * Bancolombia»; varios: «2 bancos dejaron de avisar», con uno por renglón. `null` sin nada que decir.
+ */
+fun textoDeBancosMudos(origenes: List<OrigenMudo>): TextoDeAviso? {
+    if (origenes.isEmpty()) return null
+    if (origenes.size == 1) {
+        val mudo = origenes.single()
+        return TextoDeAviso(
+            titulo = "Hace ${mudo.diasSinCaptura} días no llega nada de ${mudo.nombre}",
+            texto = "No llegan ${queNoLlega(mudo)}: revisa la captura — toca para verla",
+        )
+    }
+    return TextoDeAviso(
+        titulo = "${origenes.size} bancos dejaron de avisar",
+        texto = "Revisa la captura — toca para verla",
+        lineas = origenes.map { "Hace ${it.diasSinCaptura} días: ${queNoLlega(it)}" },
+    )
+}
+
+/**
+ * **La huella de un silencio**: qué orígenes y desde qué última captura. El mismo silencio no suena
+ * dos veces —el Worker corre todos los días—; uno nuevo (otro banco que se calla, o el mismo que
+ * volvió y se volvió a callar) sí.
+ */
+fun huellaDeBancosMudos(origenes: List<OrigenMudo>): String =
+    origenes.sortedBy { it.clave }.joinToString(",") { "${it.clave}@${it.ultima}" }
+
+/** La hora del aviso de banco mudo, en Bogotá: después del de vencimientos, para no sonar juntos. */
+const val HORA_DEL_AVISO_DE_BANCO_MUDO: Int = 9
+
 // ── A dónde lleva tocar ──────────────────────────────────────────────────────
 
 /** La clave del `Intent` que dice a qué pantalla abrir al tocar un aviso. */
 const val EXTRA_ABRIR: String = "movi.abrir"
 const val ABRIR_POR_REVISAR: String = "por_revisar"
 const val ABRIR_PLAN: String = "plan"
+const val ABRIR_CAPTURA: String = "captura"
 
 /**
  * La pantalla que abre tocar un aviso: «Por revisar» para los movimientos, Plan (en «Pagos del
@@ -227,5 +252,6 @@ const val ABRIR_PLAN: String = "plan"
 fun destinoDeAviso(valor: String?): Screen? = when (valor) {
     ABRIR_POR_REVISAR -> Screen.PorRevisar
     ABRIR_PLAN -> Screen.Plan()
+    ABRIR_CAPTURA -> Screen.CapturaDelBanco
     else -> null
 }
