@@ -90,6 +90,16 @@ internal class InvalidaElInicioAlEscribir(
     // cambia el checklist del Inicio igual que un sello: entra por la misma puerta.
     override suspend fun rechazarOcurrencia(ruleId: String, eventId: String): Unit = trasEscribir { delegado.rechazarOcurrencia(ruleId, eventId) }
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = trasEscribir { delegado.chatAi(request) }
+    // Ola 3: lo del asistente no mueve plata, pero son escrituras y la regla es una sola —
+    // `CadaEscrituraVaciaLoRecordadoTest` no distingue, y está bien que no: una excepción por
+    // método es una lista que alguien se olvida de mantener. Lo que SÍ mueve plata de una
+    // propuesta («Hacerlo») pasa por los métodos de siempre, que ya están envueltos.
+    override suspend fun empezarConversacionNueva() = trasEscribir { delegado.empezarConversacionNueva() }
+    override suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta) = trasEscribir { delegado.resolverPropuesta(id, estado) }
+    override suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String?): RecuerdoDelAsistente =
+        trasEscribir { delegado.guardarRecuerdo(texto, origen, propuestaId) }
+    override suspend fun editarRecuerdo(id: String, texto: String): RecuerdoDelAsistente = trasEscribir { delegado.editarRecuerdo(id, texto) }
+    override suspend fun borrarRecuerdo(id: String) = trasEscribir { delegado.borrarRecuerdo(id) }
     // Las cuentas ajenas se muestran en Patrimonio: registrarlas, editarlas o borrarlas tiene que
     // vaciar lo recordado igual que cualquier otra escritura. Faltaban acá.
     override suspend fun createDestino(destino: DestinoConocido): DestinoConocido = trasEscribir { delegado.createDestino(destino) }
