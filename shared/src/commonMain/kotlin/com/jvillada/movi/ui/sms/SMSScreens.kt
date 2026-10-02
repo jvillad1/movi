@@ -480,7 +480,18 @@ internal fun TarjetaDeMensajeDelBanco(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(sms.bank, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            // Con tope y en un renglón: «Comprobante · transferencia de septiembre.png» (Ola 2) se
+            // comía el ancho entero y la fecha quedaba en un dígito suelto. Un código de SMS o
+            // «Notificación · Nu» ni se acercan al tope.
+            Text(
+                sms.bank,
+                style = Movi.textos.cuerpo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.texto,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 170.dp),
+            )
             StatusDot(Movi.colores.textoApagado, 2.dp)
             // La fecha se lleva lo que sobra: el banco y el estado son lo que se busca con la
             // vista. En palabras («Hoy, 8:10 a. m.») y no el «2026-09-29 08:10» guardado
