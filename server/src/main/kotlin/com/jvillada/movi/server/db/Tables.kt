@@ -639,6 +639,64 @@ object AiTurns : Table("ai_turns") {
     init { index("idx_ai_turns_user", false, userId) }
 }
 
+/**
+ * **Desde cuándo corre la conversación en curso con el asistente** (Ola 3). Una fila por dueño:
+ * «Nueva conversación» la mueve a ahora, y `GET /api/ai/conversacion` devuelve solo los turnos de
+ * [AiTurns] posteriores. No borra nada: los turnos viejos siguen ahí para diagnosticar (y se podan
+ * solos, ver `CUANTAS_CONVERSACIONES_SE_GUARDAN`).
+ *
+ * Tabla nueva y no una columna en `users`: entra por `SchemaUtils.create`, que no puede fallar
+ * sobre filas existentes.
+ */
+object ConversacionesDelAsistente : Table("asistente_conversaciones") {
+    val userId     = varchar("user_id", 50)
+    val empezadaEn = long("empezada_en")
+    override val primaryKey = PrimaryKey(userId)
+}
+
+/**
+ * **Lo que el asistente propuso hacer, y lo que el dueño decidió** (Ola 3 · «Movi actúa»). Una fila
+ * por tarjeta. Nada de acá escribe en los datos del dueño: la acción la hace el endpoint de siempre
+ * cuando él toca «Hacerlo»; esto solo recuerda que se propuso y qué dijo, para volver a pintar la
+ * tarjeta al recargar la conversación y para que el asistente sepa en el turno siguiente que le
+ * dijeron «No».
+ *
+ * [datos] es la `AccionPropuesta` entera en JSON: lo que el dueño vio es lo que se guarda.
+ */
+/**
+ * **«Lo que Movi sabe de ti»** (Ola 3): lo que el dueño le contó al asistente y confirmó guardar.
+ * Entra al contexto de cada conversación con tope (ver `memoriaParaElContexto`). Tabla nueva:
+ * entra por `SchemaUtils.create`.
+ */
+object MemoriaDelAsistente : Table("memoria_del_asistente") {
+    val id          = varchar("id", 50)
+    val userId      = varchar("user_id", 50)
+    val texto       = varchar("texto", 400)
+    /** `CONVERSACION` (lo propuso el asistente y él confirmó) o `A_MANO`. */
+    val origen      = varchar("origen", 20)
+    /** La propuesta que lo originó, si vino de una conversación. */
+    val propuestaId = varchar("propuesta_id", 50).nullable()
+    val creadoEn    = long("creado_en")
+    val editadoEn   = long("editado_en").nullable()
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_memoria_del_asistente_user", false, userId) }
+}
+
+object AccionesPropuestas : Table("asistente_propuestas") {
+    val id         = varchar("id", 50)
+    val userId     = varchar("user_id", 50)
+    /** El turno de `ai_turns` que la propuso. */
+    val turnoId    = varchar("turno_id", 50)
+    val tipo       = varchar("tipo", 30)
+    val datos      = text("datos")
+    /** `PENDIENTE`, `HECHA` o `RECHAZADA`. */
+    val estado     = varchar("estado", 20)
+    val creadaEn   = long("creada_en")
+    val resueltaEn = long("resuelta_en").nullable()
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_asistente_propuestas_user", false, userId) }
+}
+
 object Credits : Table("credit_terms") {
     /**
      * Libranza: la cuota se descuenta de la nómina. Nullable y se lee como `false` — las filas

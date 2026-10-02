@@ -109,9 +109,15 @@ class HerramientasDelAsistenteTest {
         assertFalse("Almuerzo de julio" in texto)
     }
 
-    /** Las mismas reglas que el Inicio: si acá entrara, el asistente contestaría otra cifra. */
+    /**
+     * Las mismas reglas que el Inicio para lo anulado y lo que espera en «Por confirmar»: eso no
+     * existe para el asistente.
+     *
+     * **El pago de tarjeta, en cambio, sí se ve desde la Ola 3** —rotulado—: antes esta misma prueba
+     * fijaba que NO apareciera, y eso dejaba sin respuesta «¿cuánto le pagué a la Master Black?».
+     */
     @Test
-    fun `lo anulado, lo que espera en Por confirmar y el pago de tarjeta no entran`() {
+    fun `lo anulado y lo que espera en Por confirmar no entran, el pago de tarjeta entra rotulado`() {
         anotar("e-anulado", "Compra anulada", "Comida", 50_000, "2026-08-10")
         transaction {
             VoidEvents.insert {
@@ -128,7 +134,57 @@ class HerramientasDelAsistenteTest {
         assertTrue("Almuerzo" in texto)
         assertFalse("anulada" in texto, texto)
         assertFalse("por confirmar" in texto.lowercase(), texto)
-        assertFalse("Master" in texto, "un abono a la tarjeta no es un movimiento del mes:\n$texto")
+        val renglon = texto.lines().single { "Pago a la Master" in it }
+        assertTrue("NO cuenta como gasto ni ingreso: pago de tarjeta" in renglon, renglon)
+        assertTrue("1 NO cuentan como gasto" in texto.lines().first(), texto)
+    }
+
+    // ── Ola 3: ver toda la plata sin tocar los totales ───────────────────────
+
+    /**
+     * «¿Cuánto le pagué a la Master Black este mes?» — la pregunta que el asistente no podía
+     * contestar. El pago de la tarjeta se encuentra por la cuenta, y en los totales queda en su
+     * bloque aparte: **«Salió» es exactamente el mismo que antes**.
+     */
+    @Test
+    fun `el pago de tarjeta se puede consultar y no entra al gasto`() {
+        anotar("e1", "Mercado", "Comida", 300_000, "2026-08-05")
+        // Las dos patas de un pago de tarjeta: sale de Bancolombia, entra a la Master.
+        anotar("p-sale", "Pago Master Black", CARD_PAYMENT_CATEGORY, 2_000_000, "2026-08-20")
+        anotar("p-entra", "Pago Master Black", CARD_PAYMENT_CATEGORY, 2_000_000, "2026-08-20", cuenta = "tc", tipo = TransactionType.INCOME)
+
+        val busqueda = preguntar(BUSCAR_MOVIMIENTOS, "desde" to "2026-08-01", "hasta" to "2026-08-31", "cuenta" to "master")
+        assertTrue("Pago Master Black" in busqueda, busqueda)
+        assertTrue("+2000000 COP [NO cuenta como gasto ni ingreso: pago de tarjeta]" in busqueda, busqueda)
+
+        val totales = preguntar(TOTALES_POR_CATEGORIA, "desde" to "2026-08-01", "hasta" to "2026-08-31")
+        assertTrue("Salió: 300000" in totales, "el pago no suma al gasto:\n$totales")
+        assertTrue("Entró: 0" in totales, "ni al ingreso:\n$totales")
+        assertFalse("Pago de tarjeta: 2000000" in totales.substringBefore("== Fuera"), totales)
+        val fuera = totales.substringAfter("== Fuera de los gastos")
+        assertTrue("Pago de tarjeta (COP, 2 movimientos)" in fuera, fuera)
+        assertTrue("salió de Bancolombia Ahorros 2000000" in fuera, fuera)
+        assertTrue("entró a Master Black 2000000" in fuera, fuera)
+    }
+
+    @Test
+    fun `sin pagos ni traspasos los totales no traen el bloque aparte`() {
+        anotar("e1", "Mercado", "Comida", 300_000, "2026-08-05")
+        val totales = preguntar(TOTALES_POR_CATEGORIA, "desde" to "2026-08-01", "hasta" to "2026-08-31")
+        assertFalse("Fuera de los gastos" in totales, totales)
+    }
+
+    @Test
+    fun `el rotulo dice por que no cuenta, con la misma regla del Inicio`() {
+        assertEquals(null, porQueNoCuentaEnElMes(com.jvillada.movi.shared.model.AccountType.SAVINGS, TransactionType.EXPENSE, "Comida"))
+        assertEquals("pago de tarjeta", porQueNoCuentaEnElMes(com.jvillada.movi.shared.model.AccountType.SAVINGS, TransactionType.EXPENSE, CARD_PAYMENT_CATEGORY))
+        assertEquals(
+            "traspaso entre sus cuentas",
+            porQueNoCuentaEnElMes(com.jvillada.movi.shared.model.AccountType.SAVINGS, TransactionType.INCOME, com.jvillada.movi.shared.model.TRANSFER_CATEGORY),
+        )
+        // Una compra con la tarjeta SÍ es gasto; el abono a la tarjeta no.
+        assertEquals(null, porQueNoCuentaEnElMes(com.jvillada.movi.shared.model.AccountType.CREDIT_CARD, TransactionType.EXPENSE, "Comida"))
+        assertEquals("abono a la tarjeta", porQueNoCuentaEnElMes(com.jvillada.movi.shared.model.AccountType.CREDIT_CARD, TransactionType.INCOME, "Otros"))
     }
 
     @Test
@@ -247,8 +303,16 @@ class HerramientasDelAsistenteTest {
     fun `las herramientas que se ofrecen son las que se saben ejecutar`() {
         val ofrecidas = LAS_HERRAMIENTAS.map { it.name() }
 
-        assertEquals(setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS), ofrecidas.toSet())
-        ofrecidas.forEach { nombre ->
+        assertEquals(
+            setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS) + HERRAMIENTAS_QUE_PROPONEN_NOMBRES,
+            ofrecidas.toSet(),
+        )
+        // Las que proponen (Ola 3) no pasan por `ejecutarHerramienta`: las ejecuta `proponer`.
+        ofrecidas.filter(::esHerramientaQuePropone).forEach { nombre ->
+            val r = runBlocking { proponer(dueno, LlamadaDeHerramienta("tu_1", nombre, emptyMap())) }
+            assertFalse("No existe una herramienta" in r.paraElModelo, "se ofrece «$nombre» y no se sabe proponer")
+        }
+        ofrecidas.filterNot(::esHerramientaQuePropone).forEach { nombre ->
             assertFalse(
                 "No existe una herramienta" in preguntar(nombre, "desde" to "2026-08-01", "hasta" to "2026-08-31"),
                 "se ofrece «$nombre» y no se sabe ejecutar",

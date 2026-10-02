@@ -28,6 +28,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
+import com.jvillada.movi.ui.ai.TITULO_LO_QUE_MOVI_SABE
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
 
 private data class MasItem(
@@ -65,6 +66,8 @@ private val items = listOf(
     // ícono en el encabezado del Hoy. El rótulo es el título de la pantalla, como en toda ficha.
     MasItem("Compartir",    Icons.Rounded.Share,            Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Compartir),
     MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat()),
+    // Ola 3: lo que Movi AI recuerda de ti, para verlo, corregirlo y borrarlo. Junto al asistente.
+    MasItem(TITULO_LO_QUE_MOVI_SABE, Icons.Rounded.Psychology, Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.LoQueMoviSabe),
     // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú). Ola C: lo
     // pendiente se mudó a «Por revisar» (Movimientos) y acá quedó la configuración de la captura y
     // el historial — «Captura del banco» en Android, «Mensajes del banco» donde no hay captura.

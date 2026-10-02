@@ -1,5 +1,9 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.OrigenDelRecuerdo
+import com.jvillada.movi.shared.model.RecuerdoDelAsistente
+import com.jvillada.movi.shared.model.EstadoDePropuesta
+import com.jvillada.movi.shared.model.ConversacionDelAsistente
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.Bien
 import com.jvillada.movi.shared.model.normalizarBien
@@ -2140,6 +2144,17 @@ class LocalRepository(
     override suspend fun rechazarOcurrencia(ruleId: String, eventId: String) =
         remote.rechazarOcurrencia(ruleId, eventId)
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = remote.chatAi(request)
+    // La conversación con el asistente vive en el server (`ai_turns`): sin conexión tampoco hay
+    // asistente, así que no tiene sentido un espejo local.
+    override suspend fun getConversacionDelAsistente(): ConversacionDelAsistente = remote.getConversacionDelAsistente()
+    override suspend fun empezarConversacionNueva() = remote.empezarConversacionNueva()
+    override suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta) = remote.resolverPropuesta(id, estado)
+    // «Lo que Movi sabe de ti» vive en el server: es contexto del asistente, que tampoco anda sin señal.
+    override suspend fun getMemoriaDelAsistente(): List<RecuerdoDelAsistente> = remote.getMemoriaDelAsistente()
+    override suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String?): RecuerdoDelAsistente =
+        remote.guardarRecuerdo(texto, origen, propuestaId)
+    override suspend fun editarRecuerdo(id: String, texto: String): RecuerdoDelAsistente = remote.editarRecuerdo(id, texto)
+    override suspend fun borrarRecuerdo(id: String) = remote.borrarRecuerdo(id)
     override suspend fun register(request: RegisterRequest): AuthResponse = remote.register(request)
     override suspend fun login(request: LoginRequest): AuthResponse = remote.login(request)
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = remote.requestPasswordReset(request)

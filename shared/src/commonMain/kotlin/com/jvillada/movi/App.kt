@@ -1,5 +1,6 @@
 package com.jvillada.movi
 
+import com.jvillada.movi.ui.ai.LoQueMoviSabeScreen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -344,6 +345,7 @@ fun App() {
                 Screen.Destinos          -> DestinosScreen(navigate)
                 Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.Compartir         -> CompartirScreen(navigate)
+                Screen.LoQueMoviSabe     -> LoQueMoviSabeScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)

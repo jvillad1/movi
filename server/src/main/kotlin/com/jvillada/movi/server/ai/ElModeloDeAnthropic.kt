@@ -63,6 +63,11 @@ internal class ElModeloDeAnthropic(
      * una llamada de verdad.
      */
     private val llamar: suspend (MessageCreateParams) -> Message,
+    /**
+     * «Lo que Movi sabe de ti» (Ola 3): lo que el dueño confirmó que se recuerde, ya armado como
+     * bloque (ver `memoriaParaElContexto`). `null` = no hay nada, y no viaja ningún bloque.
+     */
+    private val memoria: String? = null,
 ) : ElModeloQueSeCorrige {
 
     constructor(
@@ -74,9 +79,10 @@ internal class ElModeloDeAnthropic(
         maxTokens: Long = MAX_TOKENS_DE_RESPUESTA,
         piensa: Boolean = false,
         modeloDeRespaldo: String? = null,
+        memoria: String? = null,
     ) : this(modelo, persona, contexto, mensajesDelDueno, maxTokens, piensa, modeloDeRespaldo, { params ->
         withContext(Dispatchers.IO) { client.messages().create(params) }
-    })
+    }, memoria)
 
     private val turnos: MutableList<MessageParam> = mensajesDelDueno.toMutableList()
 
@@ -120,7 +126,7 @@ internal class ElModeloDeAnthropic(
             if (texto.isBlank()) avisarQueNoHuboTexto(respuesta, penso, "se le contesta al dueño")
             RespuestaDelModelo.Texto(texto.ifBlank { NO_ALCANCE_A_TERMINAR })
         } else {
-            RespuestaDelModelo.PideHerramientas(pedidos.map { it.comoLlamada() })
+            RespuestaDelModelo.PideHerramientas(pedidos.map { it.comoLlamada() }, texto = respuesta.textoJunto())
         }
     }
 
@@ -226,8 +232,8 @@ internal class ElModeloDeAnthropic(
                 }
             }
             .systemOfTextBlockParams(
-                listOf(
-                    // **Las dos partes se cachean, y en este orden.** La PERSONA no cambia nunca y
+                listOfNotNull(
+                    // **Las partes se cachean, y en este orden.** La PERSONA no cambia nunca y
                     // el contexto cambia cuando cambian los datos: lo estable primero, para que un
                     // movimiento nuevo no invalide también las instrucciones. Sin esto, una
                     // conversación de tres vueltas paga el prefijo entero tres veces.
@@ -235,6 +241,16 @@ internal class ElModeloDeAnthropic(
                         .text(persona)
                         .cacheControl(CacheControlEphemeral.builder().build())
                         .build(),
+                    // La memoria va en el medio: cambia mucho menos que los datos (un recuerdo
+                    // cada tanto contra un movimiento cada día), así que un movimiento nuevo no
+                    // la invalida, y un recuerdo nuevo no invalida la PERSONA. Tres puntos de
+                    // caché de los cuatro que permite la API.
+                    memoria?.let {
+                        TextBlockParam.builder()
+                            .text(it)
+                            .cacheControl(CacheControlEphemeral.builder().build())
+                            .build()
+                    },
                     TextBlockParam.builder()
                         .text(contexto)
                         .cacheControl(CacheControlEphemeral.builder().build())
@@ -380,7 +396,10 @@ private fun texto(descripcion: String) =
  * prefijo y tiraría la caché de esa llamada entera. Lo que se hace en la última vuelta es
  * prohibirle elegirlas (`tool_choice: none`), que no toca el prefijo.
  */
-internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
+internal val LAS_HERRAMIENTAS: List<Tool> by lazy { HERRAMIENTAS_DE_LECTURA + HERRAMIENTAS_QUE_PROPONEN }
+
+/** Las tres de lectura de siempre. Las que proponen (Ola 3) están en `LoQueMoviPropone.kt`. */
+private val HERRAMIENTAS_DE_LECTURA: List<Tool> = listOf(
     Tool.builder()
         .name(BUSCAR_MOVIMIENTOS)
         .description(
@@ -388,7 +407,9 @@ internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
                 "pregunta sea por hechos («¿qué compré en Zelo Group?», «¿qué hubo la semana " +
                 "pasada?»). Devuelve como máximo $TOPE_DE_RESULTADOS movimientos y avisa si hubo " +
                 "más; para una cifra total usa $TOTALES_POR_CATEGORIA, que suma todos. Sin fechas " +
-                "mira los últimos $MESES_HACIA_ATRAS_POR_DEFECTO meses.",
+                "mira los últimos $MESES_HACIA_ATRAS_POR_DEFECTO meses. Trae también los pagos de " +
+                "tarjeta y los traspasos entre sus cuentas, rotulados porque NO cuentan como gasto: " +
+                "úsala para «¿cuánto le pagué a la Master Black?» (filtra por cuenta o por texto).",
         )
         .inputSchema(
             Tool.InputSchema.builder()
@@ -419,7 +440,8 @@ internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
                 "CUENTA salió cada peso. Úsala para cualquier pregunta de cuánto («¿cuánto gasté " +
                 "en Comida en agosto?», «¿gasté más que el mes pasado?», «¿qué gasté desde " +
                 "Bancolombia este período?»). Suma TODOS los movimientos del rango, sin tope. Las " +
-                "monedas nunca se suman entre sí: cada una viene aparte.",
+                "monedas nunca se suman entre sí: cada una viene aparte. Al final trae, en un " +
+                "bloque aparte que NO suma en Entró ni en Salió, los pagos de tarjeta y los traspasos.",
         )
         .inputSchema(
             Tool.InputSchema.builder()

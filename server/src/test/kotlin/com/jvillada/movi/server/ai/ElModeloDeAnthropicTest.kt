@@ -170,6 +170,29 @@ class ElModeloDeAnthropicTest {
     }
 
     /**
+     * Ola 3: «Lo que Movi sabe de ti» viaja en su propio bloque cacheado, ENTRE la PERSONA y los
+     * datos —cambia menos que los datos y más que la PERSONA—. Sin recuerdos no viaja nada.
+     */
+    @Test
+    fun `la memoria viaja cacheada entre la persona y los datos, y sin memoria no viaja`() {
+        val conMemoria = ElModeloDeAnthropic(
+            modelo = MODELO_DE_PRUEBA,
+            persona = "Eres Movi AI",
+            contexto = "DATOS DEL USUARIO",
+            mensajesDelDueno = listOf(MessageParam.builder().role(MessageParam.Role.USER).content("hola").build()),
+            llamar = { respuestaConTexto("Listo.") },
+            memoria = "LO QUE EL DUEÑO TE CONTÓ:\n- Caro es mi esposa",
+        )
+        val bloques = conMemoria.armarLlamada(puedeUsarHerramientas = true).system().orElseThrow()
+            .textBlockParams().orElseThrow()
+        assertEquals(listOf("Eres Movi AI", "LO QUE EL DUEÑO TE CONTÓ:\n- Caro es mi esposa", "DATOS DEL USUARIO"), bloques.map { it.text() })
+        assertTrue(bloques.all { it.cacheControl().isPresent })
+
+        val (sinMemoria, _) = modelo(respuestaConTexto("Listo."))
+        assertEquals(2, sinMemoria.armarLlamada(puedeUsarHerramientas = true).system().orElseThrow().textBlockParams().orElseThrow().size)
+    }
+
+    /**
      * Un id de modelo es un texto que viaja a la API. Si uno dejara de estar disponible en esta
      * cuenta, sin respaldo el asistente se caería entero; con respaldo, el peor caso es una
      * respuesta más cara.

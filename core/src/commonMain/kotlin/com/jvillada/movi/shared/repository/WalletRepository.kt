@@ -1,5 +1,9 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.OrigenDelRecuerdo
+import com.jvillada.movi.shared.model.RecuerdoDelAsistente
+import com.jvillada.movi.shared.model.EstadoDePropuesta
+import com.jvillada.movi.shared.model.ConversacionDelAsistente
 import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.NOTA_DEL_PAPEL_COMPARTIDO
 
@@ -284,6 +288,30 @@ interface WalletRepository {
      */
     suspend fun rechazarOcurrencia(ruleId: String, eventId: String)
     suspend fun chatAi(request: AiChatRequest): AiChatResponse
+    /**
+     * `GET /api/ai/conversacion` (Ola 3): la conversación en curso con el asistente, para que
+     * volver a la pantalla no sea empezar de cero.
+     */
+    suspend fun getConversacionDelAsistente(): ConversacionDelAsistente
+    /** `POST /api/ai/conversacion/nueva`: «Nueva conversación». No borra nada del server. */
+    suspend fun empezarConversacionNueva()
+    /**
+     * `POST /api/ai/propuestas/{id}/estado` (Ola 3): anota que el dueño hizo o descartó una
+     * propuesta del asistente. **No hace la acción**: eso lo hace el endpoint de siempre (ver
+     * `hacerLaPropuesta`). Solo le avisa al asistente para el turno siguiente.
+     */
+    suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta)
+    /** `GET /api/asistente/memoria` (Ola 3): «Lo que Movi sabe de ti». */
+    suspend fun getMemoriaDelAsistente(): List<RecuerdoDelAsistente>
+    /**
+     * `POST /api/asistente/memoria`: guardar un recuerdo. Es lo que hace «Hacerlo» en una propuesta
+     * de recordar ([propuestaId] dice de cuál salió). El mismo texto dos veces queda una vez.
+     */
+    suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String? = null): RecuerdoDelAsistente
+    /** `PUT /api/asistente/memoria/{id}`: corregir lo que Movi recuerda. */
+    suspend fun editarRecuerdo(id: String, texto: String): RecuerdoDelAsistente
+    /** `DELETE /api/asistente/memoria/{id}`: que Movi lo olvide. */
+    suspend fun borrarRecuerdo(id: String)
     suspend fun getAccounts(): List<Account>
     suspend fun getAccount(id: String): Account
     suspend fun createAccount(account: Account): Account

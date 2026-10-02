@@ -859,13 +859,31 @@ data class ChatMessage(
     // solo mandan role+content (ver ChatModelTest).
     val imageBase64: String? = null,
     val imageMime: String? = null,
+    /**
+     * Ola 3: este mensaje llevó una foto, pero la foto ya no viene. Lo pone el server al devolver
+     * una conversación guardada (`GET /api/ai/conversacion`), que guarda que hubo imagen y nunca la
+     * imagen. Sirve para pintar «Imagen adjunta» en el globo recargado.
+     */
+    val teniaImagen: Boolean = false,
+    /**
+     * Ola 3: lo que el asistente propuso hacer en este turno (tarjetas con «Hacerlo» / «No»). Solo
+     * en mensajes del asistente; el cliente no lo vuelve a mandar (ver `mensajesParaEnviar`).
+     */
+    val propuestas: List<AccionPropuesta> = emptyList(),
 )
 
 @Serializable
 data class AiChatRequest(val messages: List<ChatMessage>)
 
 @Serializable
-data class AiChatResponse(val text: String)
+data class AiChatResponse(
+    val text: String,
+    /**
+     * Ola 3: lo que el asistente propone hacer, ya validado por el server. Vacío casi siempre; un
+     * APK viejo lo ignora (`ignoreUnknownKeys`) y sigue viendo solo el texto.
+     */
+    val propuestas: List<AccionPropuesta> = emptyList(),
+)
 
 /**
  * Días de anticipación con los que el barrido avisa un vencimiento.

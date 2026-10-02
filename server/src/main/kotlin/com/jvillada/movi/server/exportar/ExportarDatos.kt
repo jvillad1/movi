@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.exportar
 
+import com.jvillada.movi.server.db.MemoriaDelAsistente
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Cards
@@ -79,6 +80,10 @@ internal val TABLAS_EXPORTADAS: List<TablaExportada> = listOf(
     TablaExportada("documentos", Documents, Documents.userId, setOf(Documents.content)),
     TablaExportada("mensajes_del_banco", SmsMessages, SmsMessages.userId),
     TablaExportada("extractos_importados", StatementImports, StatementImports.userId),
+    // Ola 3: lo que el dueño le contó a Movi AI y confirmó guardar. No es la memoria interna del
+    // asistente (las conversaciones siguen afuera): son frases suyas sobre su vida y su plata, que
+    // él ve y edita en Ajustes.
+    TablaExportada("lo_que_movi_sabe_de_ti", MemoriaDelAsistente, MemoriaDelAsistente.userId),
 )
 
 /** Las filas de una tabla, ya leídas: nombres de columna y valores crudos. */
