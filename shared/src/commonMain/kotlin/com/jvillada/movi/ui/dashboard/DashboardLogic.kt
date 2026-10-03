@@ -158,6 +158,12 @@ data class DashboardData(
      * ver `patrimonioDelInicio`, que explica por qué prefiere `accounts`.
      */
     val patrimonio: Patrimonio? = null,
+    /**
+     * Ola 4: **lo que se sale de lo normal** (`GET /api/anomalias`), cada aviso con su evidencia.
+     * `null` = todavía no llegó (o el server es anterior); «Para revisar» lo pinta debajo de lo
+     * demás. Ver `anomaliasVisiblesDe`.
+     */
+    val anomalias: List<com.jvillada.movi.shared.model.Anomalia>? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -802,7 +808,7 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             // «Para revisar» se pinta con lo mismo que antes eran las alertas, más lo que el
             // checklist sabe de vencidos. Ver `cosasParaRevisar`: sin nada que sugerir, no ocupa
             // lugar.
-            "ALERTS" -> cosasParaRevisarDe(data).isNotEmpty()
+            "ALERTS" -> cosasParaRevisarDe(data).isNotEmpty() || anomaliasVisiblesDe(data).isNotEmpty()
             "CHECKLIST_DEL_PERIODO" -> checklistDelPeriodoDe(data).isNotEmpty()
             "GASTO_POR_CATEGORIA" -> data.spentByCategory.orEmpty().any { it.value > 0 }
             // Solo con todo lo que la cuenta necesita ya leído, y con ingresos que medir. Ver
@@ -978,3 +984,12 @@ internal fun DashboardData.conElPerfil(perfil: UserProfile, ahora: Long): Dashbo
     val ajustes = PeriodSettings(perfil.periodCutoffDay, perfil.periodStarts)
     return copy(ajustesDePeriodo = ajustes, periodoActual = periodoDe(ahora, ajustes))
 }
+
+/**
+ * Ola 4: **los avisos de lo que se sale de lo normal que se pintan**: los que mandó el server menos
+ * los que el dueño descartó en esta sesión con «Está bien» (el server ya saca los de antes; esto
+ * cubre el rato entre el toque y la próxima lectura). La misma función decide si «Para revisar» se
+ * pinta y qué pinta.
+ */
+internal fun anomaliasVisiblesDe(data: DashboardData): List<com.jvillada.movi.shared.model.Anomalia> =
+    data.anomalias.orEmpty().filterNot { it.huella in AnomaliasDescartadasEnLaSesion.huellas }

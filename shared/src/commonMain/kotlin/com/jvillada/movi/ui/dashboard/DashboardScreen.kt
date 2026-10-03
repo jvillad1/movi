@@ -415,6 +415,12 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getSubscriptions() }
                     .onSuccess { s -> data = data.copy(subscriptions = s); llegado = llegado.copy(subscriptions = s) }
             }
+            // Ola 4: lo que se sale de lo normal. Secundario: si falla, «Para revisar» sigue con lo
+            // demás y no avisa nada de esto esta vez.
+            launch {
+                runCatching { Repositories.wallets.getAnomalias() }
+                    .onSuccess { a -> data = data.copy(anomalias = a); llegado = llegado.copy(anomalias = a) }
+            }
         }
         // Con la misma guarda que la instantánea (ver `usuario`): una carga que termina después
         // del logout no puede dejarle al próximo usuario la plata del anterior en memoria.

@@ -358,6 +358,8 @@ object SessionManager {
         com.jvillada.movi.avisos.DestinoDesdeAfuera.pendiente = null
         // Ola 2: y los archivos compartidos que esperaban la puerta — son de quien los compartió.
         com.jvillada.movi.ui.papeles.PapelesCompartidos.olvidar()
+        // Ola 4: y los «Está bien» de esta sesión — son avisos sobre SU plata.
+        com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.olvidar()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
         // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres

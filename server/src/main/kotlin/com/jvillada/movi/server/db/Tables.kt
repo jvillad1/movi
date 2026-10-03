@@ -389,6 +389,19 @@ object CardPaymentDismissals : Table("card_payment_dismissals") {
     override val primaryKey = PrimaryKey(userId, eventId)
 }
 
+/**
+ * Ola 4: **los avisos de «lo que se sale de lo normal» que el dueño descartó** con «Está bien», por
+ * su huella (`Anomalia.huella`). La misma situación da la misma huella en cada lectura, así que una
+ * fila acá la saca para siempre; una situación nueva (otro cobro, otro período) trae otra huella y
+ * vuelve a avisar. Tabla nueva: entra solo al `SchemaUtils.create` del arranque.
+ */
+object AnomaliasDescartadas : Table("anomalias_descartadas") {
+    val userId       = varchar("user_id", 50)
+    val huella       = varchar("huella", 300)
+    val descartadaEn = long("descartada_en")
+    override val primaryKey = PrimaryKey(userId, huella)
+}
+
 object Budgets : Table("budgets") {
     val userId       = varchar("user_id", 50)
     val category     = varchar("category", 100)

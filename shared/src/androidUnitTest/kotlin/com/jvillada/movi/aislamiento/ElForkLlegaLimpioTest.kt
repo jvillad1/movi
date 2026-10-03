@@ -122,6 +122,8 @@ class ElForkLlegaLimpioTest {
         DestinoDesdeAfuera.pendiente = Screen.PorRevisar
         // Ola 2: un archivo compartido que esperaba la puerta.
         PapelesCompartidos.recibir(listOf(ArchivoCompartido("recibo.png", byteArrayOf(1), "image/png")))
+        // Ola 4: un «Está bien» de otra prueba.
+        com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.descartar("duplicado:a,b")
         AvisosEnHoy.sustitutoDePrueba = object : OfertaDeAvisos {
             override fun pedir() = Unit
             override fun descartar() = Unit
@@ -174,6 +176,10 @@ class ElForkLlegaLimpioTest {
         assertNotNull("El lector de huellas de prueba no quedó enchufado", Huella.sustitutoDePrueba)
         assertNotNull("El destino del aviso no quedó pendiente", DestinoDesdeAfuera.pendiente)
         assertTrue("El archivo compartido no quedó esperando", PapelesCompartidos.pendientes.isNotEmpty())
+        assertTrue(
+            "El «Está bien» no quedó guardado",
+            com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.huellas.isNotEmpty(),
+        )
         assertNotNull("La oferta de avisos de prueba no quedó enchufada", AvisosEnHoy.sustitutoDePrueba)
         assertNotNull("El repositorio de Compartir de prueba no quedó enchufado", Repositories.sustitutoDeCompartirDePrueba)
         assertTrue("«Entrar con huella» no quedó prendida", SessionManager.huellaActivada)
@@ -187,6 +193,10 @@ class ElForkLlegaLimpioTest {
 
     @Test
     fun bLosGlobalesLleganEnCero() {
+        assertTrue(
+            "Los «Está bien» de la Ola 4 traen resaca",
+            com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.huellas.isEmpty(),
+        )
         assertEquals("UsedCategoriesCache trae la resaca del método anterior", emptyMap<String, Any>(), UsedCategoriesCache.used)
         assertEquals("Las preferencias de categoría traen resaca", emptyMap<String, Any>(), UsedCategoriesCache.prefs)
         assertEquals("Los usos recientes de categoría traen resaca", emptyMap<String, Int>(), UsedCategoriesCache.usosRecientes)
