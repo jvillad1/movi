@@ -168,6 +168,10 @@ internal fun SeccionCajaProyectada(
     cargando: Boolean,
     recarga: Int,
     onNavigate: (Screen) -> Unit,
+    /** El aire de arriba: en la columna del disponible separa de «Tus períodos»; en la lista, ya lo pone el selector. */
+    espacioArriba: androidx.compose.ui.unit.Dp = Movi.espacios.seccion,
+    /** El aire de abajo, solo cuando la sección se pinta (en la lista la sigue el tablero). */
+    espacioAbajo: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
     var reintento by remember { mutableStateOf(0) }
     val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = recarga + reintento) {
@@ -177,12 +181,18 @@ internal fun SeccionCajaProyectada(
     val hoy = remember { epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()) }
     val gasto = gastoLeido.valor
     val caja = gasto?.let { cajaDelPeriodoDe(data, it, hoy) }
+    val noSePudo = gastoLeido.valor == null && gastoLeido.terminada && !gastoLeido.actualizando
+    // Sin período, sin lista o sin cuentas no hay nada honesto que proyectar: no se pinta nada, ni
+    // el título (un título sobre un hueco es una promesa que no se cumple).
+    if (caja == null && !noSePudo && !(gastoLeido.actualizando || cargando)) return
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio).testTag(TAG_CAJA_PROYECTADA)) {
-        Spacer(Modifier.height(Movi.espacios.seccion))
+        Spacer(Modifier.height(espacioArriba))
         MinSectionHeader(
             title = TITULO_CAJA_PROYECTADA,
-            action = if (verDeDondeSale) "Ocultar" else "¿De dónde sale?",
+            // No «¿De dónde sale?»: esa es la de la tarjeta de arriba, y dos iguales en la misma
+            // pantalla no se distinguen. Acá lo que se abre son los supuestos.
+            action = if (verDeDondeSale) "Ocultar supuestos" else "¿Qué supone?",
             onAction = { if (caja != null) verDeDondeSale = !verDeDondeSale },
         )
         when {
@@ -193,7 +203,7 @@ internal fun SeccionCajaProyectada(
             ) {
                 CuerpoDeLaCaja(caja, gasto, hoy, verDeDondeSale, onNavigate)
             }
-            gastoLeido.valor == null && gastoLeido.terminada && !gastoLeido.actualizando ->
+            noSePudo ->
                 NoSePudoLeer("No pudimos proyectar tu plata", onReintentar = { reintento++ })
             gastoLeido.actualizando || cargando -> MinCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -204,9 +214,9 @@ internal fun SeccionCajaProyectada(
                 Spacer(Modifier.height(Movi.espacios.medio))
                 Spacer(Modifier.height(ALTO_DE_LA_GRAFICA))
             }
-            // Sin período, sin lista o sin cuentas no hay nada honesto que proyectar: se calla.
             else -> Unit
         }
+        Spacer(Modifier.height(espacioAbajo))
     }
 }
 
