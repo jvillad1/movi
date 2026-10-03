@@ -96,6 +96,11 @@ sealed class Screen {
      */
     data class AIChat(val preguntaInicial: String? = null) : Screen()
     data object Credits : Screen()
+    /**
+     * **«Cómo salir de tus deudas»** (Ola 4): el orden para un abono extra y el simulador. Se abre
+     * desde Créditos (Patrimonio → Deudas) y marca Patrimonio, como Créditos.
+     */
+    data object SalidaDeDeudas : Screen()
     data object Goals : Screen()
     /**
      * Presupuestos suelto. Ola C: su cuerpo es el mismo que el segmento «Presupuestos» de [Plan]
@@ -265,7 +270,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     // revisar»): marcan esa pestaña, no Ajustes.
     is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile -> NavTab.MOVIMIENTOS
     is Screen.Plan, Screen.Budgets, Screen.Periodos, is Screen.DetalleDePeriodo -> NavTab.PLAN
-    Screen.Accounts, Screen.Credits, Screen.CuadreDeSaldos, Screen.Destinos -> NavTab.PATRIMONIO
+    Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos, Screen.Destinos -> NavTab.PATRIMONIO
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse. Hoy las dos (Cuentas y Créditos) son Patrimonio.
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))

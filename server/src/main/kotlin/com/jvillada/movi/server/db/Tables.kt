@@ -389,6 +389,19 @@ object CardPaymentDismissals : Table("card_payment_dismissals") {
     override val primaryKey = PrimaryKey(userId, eventId)
 }
 
+/**
+ * Ola 4: **los avisos de «lo que se sale de lo normal» que el dueño descartó** con «Está bien», por
+ * su huella (`Anomalia.huella`). La misma situación da la misma huella en cada lectura, así que una
+ * fila acá la saca para siempre; una situación nueva (otro cobro, otro período) trae otra huella y
+ * vuelve a avisar. Tabla nueva: entra solo al `SchemaUtils.create` del arranque.
+ */
+object AnomaliasDescartadas : Table("anomalias_descartadas") {
+    val userId       = varchar("user_id", 50)
+    val huella       = varchar("huella", 300)
+    val descartadaEn = long("descartada_en")
+    override val primaryKey = PrimaryKey(userId, huella)
+}
+
 object Budgets : Table("budgets") {
     val userId       = varchar("user_id", 50)
     val category     = varchar("category", 100)
@@ -826,6 +839,13 @@ object Cards : Table("card_terms") {
     val lastRemindedPeriod = varchar("last_reminded_period", 7).nullable() // "YYYY-MM", server-only
     /** Ver `RecurringRules.remindMe`. */
     val remindMe           = bool("remind_me").default(true)
+    /**
+     * Ola 4: la tasa E.A. de la tarjeta (`29.64`), tecleada. Ver `CardTerms.tasaEa`. Nullable por lo
+     * mismo que `pago_minimo`: `createMissingTablesAndColumns` la agrega sobre las filas que ya están
+     * (y `Cards` está en esa lista), y `null` dice «no se cargó», que es la verdad de las cinco
+     * tarjetas del dueño. Sin tasa, el plan de salida no la mete al cálculo: lo dice.
+     */
+    val tasaEa             = double("tasa_ea").nullable()
     override val primaryKey = PrimaryKey(accountId)
     init { index("idx_card_terms_user_id", false, userId) }
 }

@@ -58,6 +58,9 @@ class SchemaDeArranqueTest {
         // 8761). `credit_terms` existe en producción desde hace olas, y TODA consulta de créditos
         // nombra esta columna: sin el ALTER, la pantalla de créditos entera deja de cargar.
         "credit_terms" to "otros_cargos_mensuales",
+        // Ola 4 — la tasa E.A. de la tarjeta, que el plan de salida de deudas necesita. `card_terms`
+        // existe en producción y `GET /api/cards` nombra la columna: sin el ALTER, Créditos no carga.
+        "card_terms" to "tasa_ea",
         // El pago mínimo del extracto. `card_terms` existe en producción con las cinco tarjetas
         // del dueño adentro, y TODA consulta de tarjetas nombra esta columna (`toCardTerms`):
         // sin el ALTER, la pantalla de Créditos y «Próximos pagos» dejan de cargar enteras.

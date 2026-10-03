@@ -95,6 +95,20 @@ data class CardTerms(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val remindMe: Boolean = true,
+    /**
+     * Ola 4: **la tasa efectiva anual de la tarjeta**, en porcentaje (`29.64`), o `null` si no se
+     * cargó. Opcional y tecleada, por lo mismo que [pagoMinimo]: Movi no la deduce de nada, y la
+     * tasa de una tarjeta colombiana cambia cada mes con la de usura.
+     *
+     * La usa el plan de salida de deudas (`planDeSalida`): sin tasa una tarjeta **no entra al
+     * cálculo** y se lista con «Falta la tasa», nunca con una supuesta.
+     *
+     * **Viaja siempre, aunque valga `null`**, por la misma guarda por clave del PUT que [pagoMinimo]:
+     * sin la anotación, borrarla desde la hoja mandaría un cuerpo sin la clave y el server
+     * repondría la anterior.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val tasaEa: Double? = null,
 )
 
 /**

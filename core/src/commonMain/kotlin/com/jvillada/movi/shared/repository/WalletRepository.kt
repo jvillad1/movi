@@ -155,6 +155,20 @@ interface WalletRepository {
      */
     suspend fun getDashboardSummary(scope: Scope): DashboardSummary
     /**
+     * `GET /api/caja-proyectada/gasto-del-dia-a-dia` (Ola 4): el supuesto del gasto del día a día de
+     * la caja proyectada — el promedio diario de gasto variable de los últimos períodos cerrados.
+     * Default vacío (sin supuesto) para los dobles de prueba que no lo necesitan.
+     */
+    suspend fun getGastoDelDiaADia(): com.jvillada.movi.shared.model.GastoDelDiaADia =
+        com.jvillada.movi.shared.model.GastoDelDiaADia()
+    /**
+     * `GET /api/anomalias` (Ola 4): lo que se sale de lo normal en el período, con su evidencia y
+     * sin lo ya descartado. Default vacío para los dobles de prueba.
+     */
+    suspend fun getAnomalias(): List<com.jvillada.movi.shared.model.Anomalia> = emptyList()
+    /** `POST /api/anomalias/descartar` (Ola 4): «Está bien», no volver a avisar esa huella. */
+    suspend fun descartarAnomalia(huella: String) {}
+    /**
      * **«Tus períodos»** (`GET /api/periodos`): un [ResumenDePeriodo] por período, del en curso al
      * más viejo. Siempre trae al menos el en curso, con `enCurso = true`.
      */

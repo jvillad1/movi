@@ -45,29 +45,7 @@ import org.jetbrains.exposed.sql.lowerCase
 fun Route.cardRoutes() {
     route("/api/cards") {
         get {
-            val uid = call.userId()
-            val cards = dbQuery {
-                Accounts.selectAll()
-                    .where { (Accounts.userId eq uid) and (Accounts.type eq AccountType.CREDIT_CARD.name) }
-                    // **El mismo orden que `GET /api/accounts`**, que ya ordenaba por nombre.
-                    // Sin esto, las mismas cuentas llegaban ordenadas por un endpoint y en el
-                    // orden físico de la tabla por este otro — el que un UPDATE o un VACUUM cambia
-                    // sin avisar. Con doce créditos y cinco tarjetas eso es una lista que se
-                    // reordena sola entre dos visitas. El `id` desempata para que dos cuentas con
-                    // el mismo nombre tampoco bailen.
-                    .orderBy(Accounts.name.lowerCase() to SortOrder.ASC, Accounts.id to SortOrder.ASC)
-                    .map { it.toAccount() }
-            }
-            if (cards.isEmpty()) return@get call.respond(emptyList<com.jvillada.movi.shared.model.CardSummary>())
-            val rate = FxRateService.usdToCop()
-            val termsByAccount = dbQuery {
-                Cards.selectAll().where { Cards.userId eq uid }
-                    .associate { it[Cards.accountId] to it.toCardTerms() }
-            }
-            val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
-            call.respond(cards.map { acc ->
-                cardSummaryFor(enrichWith(acc, eventsByAccount[acc.id] ?: emptyList(), rate), termsByAccount[acc.id])
-            })
+            call.respond(tarjetasDe(call.userId()))
         }
 
         // Alta atómica: cuenta CREDIT_CARD + evento de deuda inicial (si la hay) + términos en
@@ -88,6 +66,7 @@ fun Route.cardRoutes() {
                 return@post call.respond(HttpStatusCode.BadRequest, "Moneda no soportada — usa COP o USD")
             }
             rechazoDelCupo(body.terms.creditLimit)?.let { motivo -> return@post call.respond(HttpStatusCode.BadRequest, motivo) }
+            rechazoDeLaTasa(body.terms.tasaEa)?.let { motivo -> return@post call.respond(HttpStatusCode.BadRequest, motivo) }
 
             val account = Account(
                 id       = "acc_${System.currentTimeMillis()}",
@@ -160,8 +139,12 @@ fun Route.cardRoutes() {
                 // marcada. Sin esta línea el default deserializado pisaba la columna y editar el
                 // día de pago le devolvía el recordatorio a una tarjeta silenciada.
                 .let { if ("remindMe" in crudo) it else it.copy(remindMe = previo?.remindMe ?: true) }
+                // Ola 4: la tasa, con la misma guarda que el mínimo — un APK que no conoce el campo
+                // no puede borrarla al editar el día de pago.
+                .let { if ("tasaEa" in crudo) it else it.copy(tasaEa = previo?.tasaEa) }
                 .sanitized()
             rechazoDelCupo(body.creditLimit)?.let { motivo -> return@put call.respond(HttpStatusCode.BadRequest, motivo) }
+            rechazoDeLaTasa(body.tasaEa)?.let { motivo -> return@put call.respond(HttpStatusCode.BadRequest, motivo) }
             // upsert atómico por PK (accountId), igual que en creditRoutes: lastRemindedPeriod
             // no está en el upsert, así que se conserva — un cambio de día aplica desde el mes
             // siguiente.
@@ -195,6 +178,14 @@ fun Route.cardRoutes() {
 private fun rechazoDelCupo(cupo: Long?): String? =
     if (cupo != null && (cupo < 0L || cupo > MAX_CREDIT_DEBT_COP)) "Cupo fuera de rango — revisa el monto" else null
 
+/**
+ * Ola 4: una tasa E.A. de tarjeta por encima del 100 % no existe en Colombia (la de usura ronda el
+ * 30 %); es un dedo que se fue —«296» por «29,6»— y entraría al plan de salida como la deuda más
+ * cara del mundo. Se rechaza en vez de guardarse.
+ */
+private fun rechazoDeLaTasa(tasa: Double?): String? =
+    if (tasa != null && (!tasa.isFinite() || tasa > 100.0)) "Tasa fuera de rango — escríbela como 29,6" else null
+
 private fun CardTerms.sanitized(): CardTerms = copy(
     paymentDay = paymentDay.coerceIn(1, 31),
     cutoffDay  = cutoffDay?.coerceIn(1, 31),
@@ -218,4 +209,35 @@ private fun fillCardTerms(
     it[Cards.pagoMinimo]  = terms.pagoMinimo?.takeIf { v -> v > 0L }
     it[Cards.notes]       = terms.notes
     it[Cards.remindMe]    = terms.remindMe
+    // Mismo criterio que el mínimo: una tasa en cero o negativa no es una tasa, es «no la sé».
+    it[Cards.tasaEa]      = terms.tasaEa?.takeIf { v -> v > 0.0 && v.isFinite() }
+}
+
+/**
+ * **Lo que contesta `GET /api/cards`**, fuera de la ruta: el plan de salida de deudas de Movi AI
+ * (Ola 4, `simular_abono`) parte de la MISMA lista que ve la pantalla.
+ */
+internal suspend fun tarjetasDe(uid: String): List<com.jvillada.movi.shared.model.CardSummary> {
+    val cards = dbQuery {
+        Accounts.selectAll()
+            .where { (Accounts.userId eq uid) and (Accounts.type eq AccountType.CREDIT_CARD.name) }
+            // **El mismo orden que `GET /api/accounts`**, que ya ordenaba por nombre.
+            // Sin esto, las mismas cuentas llegaban ordenadas por un endpoint y en el
+            // orden físico de la tabla por este otro — el que un UPDATE o un VACUUM cambia
+            // sin avisar. Con doce créditos y cinco tarjetas eso es una lista que se
+            // reordena sola entre dos visitas. El `id` desempata para que dos cuentas con
+            // el mismo nombre tampoco bailen.
+            .orderBy(Accounts.name.lowerCase() to SortOrder.ASC, Accounts.id to SortOrder.ASC)
+            .map { it.toAccount() }
+    }
+    if (cards.isEmpty()) return emptyList()
+    val rate = FxRateService.usdToCop()
+    val termsByAccount = dbQuery {
+        Cards.selectAll().where { Cards.userId eq uid }
+            .associate { it[Cards.accountId] to it.toCardTerms() }
+    }
+    val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
+    return cards.map { acc ->
+        cardSummaryFor(enrichWith(acc, eventsByAccount[acc.id] ?: emptyList(), rate), termsByAccount[acc.id])
+    }
 }

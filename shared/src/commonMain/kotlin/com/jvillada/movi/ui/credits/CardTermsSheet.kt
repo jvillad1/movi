@@ -55,6 +55,9 @@ fun CardTermsSheet(
     // El pago mínimo del extracto. Nullable y sin default: null significa «no lo cargué», no 0.
     // Ver [CardTerms.pagoMinimo].
     var pagoMinimo by remember { mutableStateOf(existingTerms?.pagoMinimo) }
+    // Ola 4: la tasa E.A., opcional. Texto y no número por lo mismo que en [CreditTermsSheet]: el
+    // filtro deja solo dígitos y una coma o punto. Vacío = «no la sé», y se guarda null.
+    var tasaEa by remember { mutableStateOf(existingTerms?.tasaEa?.toString()?.replace('.', ',') ?: "") }
     var paymentDay by remember { mutableStateOf(existingTerms?.paymentDay?.toString() ?: "") }
     // Mismo campo y mismo tratamiento que en [CreditTermsSheet]: vacío se guarda como null.
     // Sin esta línea la hoja armaba el `CardTerms` sin `notes`, y como el PUT escribe todas las
@@ -94,6 +97,7 @@ fun CardTermsSheet(
                     creditLimit = creditLimit,
                     cutoffDay = cutoffDay.toIntOrNull(),
                     pagoMinimo = pagoMinimo,
+                    tasaEa = tasaEa.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0.0 },
                     paymentDay = paymentDay.toInt(),
                     notes = notes.trim().ifBlank { null },
                     remindMe = remindMe,
@@ -195,6 +199,14 @@ fun CardTermsSheet(
             Spacer(Modifier.height(6.dp))
             Text(
                 text = TEXTO_DE_AYUDA_DEL_MINIMO,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoApagado,
+            )
+            Spacer(Modifier.height(8.dp))
+            RateFieldBox("29,6", tasaEa, { tasaEa = filterRateInput(it).replace('.', ',') }, rotulo = "Tasa % E.A. (opcional)")
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = TEXTO_DE_AYUDA_DE_LA_TASA,
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
             )
@@ -319,3 +331,11 @@ const val TEXTO_DE_AYUDA_DEL_MINIMO: String =
     "Con esto, el «Flujo libre» descuenta lo que esta tarjeta te obliga a pagar. Cambia con cada " +
         "extracto: no lo estimamos, revísalo cuando te llegue. Si tu tarjeta maneja pesos y " +
         "dólares, el extracto trae un mínimo por cada moneda: aquí va solo el de esta cuenta."
+
+/**
+ * Lo que la hoja dice debajo de la tasa (Ola 4): para qué sirve. Sin ella, la tarjeta no entra al
+ * plan de salida de deudas, que la lista con «Falta la tasa».
+ */
+const val TEXTO_DE_AYUDA_DE_LA_TASA: String =
+    "Con la tasa, «Cómo salir de tus deudas» incluye esta tarjeta en el orden para abonar. Está en tu " +
+        "extracto como tasa efectiva anual."

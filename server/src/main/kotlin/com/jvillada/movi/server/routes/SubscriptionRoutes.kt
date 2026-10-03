@@ -352,7 +352,7 @@ internal fun totalDeSuscripciones(
     )
 }
 
-private fun ResultRow.toSubscription() = Subscription(
+internal fun ResultRow.toSubscription() = Subscription(
     id          = this[Subscriptions.id],
     merchantKey = this[Subscriptions.merchantKey],
     displayName = this[Subscriptions.displayName],

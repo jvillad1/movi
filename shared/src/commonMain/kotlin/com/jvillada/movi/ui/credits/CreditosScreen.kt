@@ -305,6 +305,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         .padding(bottom = 80.dp),
                 ) {
                     resumenDeDeuda(creditosListos, tarjetasListas)
+                    FilaComoSalirDeTusDeudas(onClick = { onNavigate(Screen.SalidaDeDeudas) })
                     Spacer(Modifier.height(20.dp))
                     val ambos = creditosListos.isNotEmpty() && tarjetasListas.isNotEmpty()
                     if (!ambos) {
@@ -361,6 +362,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 // cualquier crédito o tarjeta, esta tarjeta sigue apareciendo igual que siempre.
                 if (!sinDeudas) {
                     item { resumenDeDeuda(creditosListos, tarjetasListas) }
+                    item { FilaComoSalirDeTusDeudas(onClick = { onNavigate(Screen.SalidaDeDeudas) }) }
                 }
 
                 if (isEmpty) {
@@ -1148,5 +1150,42 @@ private fun TarjetaDePrestamoEsqueleto() {
         LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.apoyo)
         Spacer(Modifier.height(10.dp))
         LineaEsqueleto(fraccionDelAncho = 0.85f, estilo = Movi.textos.apoyo)
+    }
+}
+
+/** El tag de la fila «Cómo salir de tus deudas», para encontrarla sin depender de su texto. */
+const val TAG_FILA_COMO_SALIR_DE_TUS_DEUDAS: String = "fila-como-salir-de-tus-deudas"
+
+/**
+ * Ola 4: **la puerta al plan de salida** ([Screen.SalidaDeDeudas]), debajo de «Deuda total». Un
+ * enlace fijo, sin cifra propia: lo que calcula vive en su pantalla.
+ */
+@Composable
+private fun FilaComoSalirDeTusDeudas(onClick: () -> Unit) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+        Spacer(Modifier.height(12.dp))
+        MinCard(
+            modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_COMO_SALIR_DE_TUS_DEUDAS),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
+            onClick = onClick,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(TITULO_SALIDA_DE_DEUDAS, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                    Spacer(Modifier.height(Movi.espacios.minimo))
+                    Text(
+                        "En qué orden abonar y cuánto interés te ahorras",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                    )
+                }
+                ChevronRight()
+            }
+        }
     }
 }

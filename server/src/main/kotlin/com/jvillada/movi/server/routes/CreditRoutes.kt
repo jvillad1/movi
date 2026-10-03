@@ -86,29 +86,7 @@ private const val MEDIODIA_MILLIS = 12L * 60 * 60 * 1000
 fun Route.creditRoutes() {
     route("/api/credits") {
         get {
-            val uid = call.userId()
-            val loans = dbQuery {
-                Accounts.selectAll()
-                    .where { (Accounts.userId eq uid) and (Accounts.type eq AccountType.LOAN.name) }
-                    // **El mismo orden que `GET /api/accounts`**, que ya ordenaba por nombre.
-                    // Sin esto, las mismas cuentas llegaban ordenadas por un endpoint y en el
-                    // orden físico de la tabla por este otro — el que un UPDATE o un VACUUM cambia
-                    // sin avisar. Con doce créditos y cinco tarjetas eso es una lista que se
-                    // reordena sola entre dos visitas. El `id` desempata para que dos cuentas con
-                    // el mismo nombre tampoco bailen.
-                    .orderBy(Accounts.name.lowerCase() to SortOrder.ASC, Accounts.id to SortOrder.ASC)
-                    .map { it.toAccount() }
-            }
-            if (loans.isEmpty()) return@get call.respond(emptyList<CreditSummary>())
-            val rate = FxRateService.usdToCop()
-            val termsByAccount = dbQuery {
-                Credits.selectAll().where { Credits.userId eq uid }
-                    .associate { it[Credits.accountId] to it.toCreditTerms() }
-            }
-            val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
-            call.respond(loans.map { acc ->
-                summaryFor(acc, termsByAccount[acc.id], eventsByAccount[acc.id] ?: emptyList(), rate)
-            })
+            call.respond(creditosDe(call.userId()))
         }
 
         // Alta atómica: cuenta LOAN + evento de apertura + términos en UNA transacción.
@@ -716,4 +694,33 @@ private val MESES_EN_ESPANOL = listOf(
 private fun nombreDelMesEnEspanol(periodo: String): String {
     val mes = periodo.substringAfter('-').toIntOrNull() ?: return periodo
     return "${MESES_EN_ESPANOL.getOrElse(mes - 1) { periodo }} de ${periodo.substringBefore('-')}"
+}
+
+/**
+ * **Lo que contesta `GET /api/credits`**, fuera de la ruta: el plan de salida de deudas de Movi AI
+ * (Ola 4, `simular_abono`) parte de la MISMA lista que ve la pantalla.
+ */
+internal suspend fun creditosDe(uid: String): List<CreditSummary> {
+    val loans = dbQuery {
+        Accounts.selectAll()
+            .where { (Accounts.userId eq uid) and (Accounts.type eq AccountType.LOAN.name) }
+            // **El mismo orden que `GET /api/accounts`**, que ya ordenaba por nombre.
+            // Sin esto, las mismas cuentas llegaban ordenadas por un endpoint y en el
+            // orden físico de la tabla por este otro — el que un UPDATE o un VACUUM cambia
+            // sin avisar. Con doce créditos y cinco tarjetas eso es una lista que se
+            // reordena sola entre dos visitas. El `id` desempata para que dos cuentas con
+            // el mismo nombre tampoco bailen.
+            .orderBy(Accounts.name.lowerCase() to SortOrder.ASC, Accounts.id to SortOrder.ASC)
+            .map { it.toAccount() }
+    }
+    if (loans.isEmpty()) return emptyList()
+    val rate = FxRateService.usdToCop()
+    val termsByAccount = dbQuery {
+        Credits.selectAll().where { Credits.userId eq uid }
+            .associate { it[Credits.accountId] to it.toCreditTerms() }
+    }
+    val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
+    return loans.map { acc ->
+        summaryFor(acc, termsByAccount[acc.id], eventsByAccount[acc.id] ?: emptyList(), rate)
+    }
 }

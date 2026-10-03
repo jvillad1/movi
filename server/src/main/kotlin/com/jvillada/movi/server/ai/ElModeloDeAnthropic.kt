@@ -398,8 +398,49 @@ private fun texto(descripcion: String) =
  */
 internal val LAS_HERRAMIENTAS: List<Tool> by lazy { HERRAMIENTAS_DE_LECTURA + HERRAMIENTAS_QUE_PROPONEN }
 
-/** Las tres de lectura de siempre. Las que proponen (Ola 3) están en `LoQueMoviPropone.kt`. */
+/**
+ * Las de lectura: las tres de siempre y las que miran adelante (Ola 4). Las que proponen (Ola 3)
+ * están en `LoQueMoviPropone.kt`.
+ */
 private val HERRAMIENTAS_DE_LECTURA: List<Tool> = listOf(
+    Tool.builder()
+        .name(SIMULAR_ABONO)
+        .description(
+            "Calcula el plan de salida de sus deudas: en qué orden conviene abonar (avalancha: mayor tasa " +
+                "primero; bola de nieve: menor saldo primero), y con un abono extra al mes cuándo sale de cada " +
+                "una y cuánto interés se ahorra, con amortización mes a mes. Úsala SIEMPRE para «¿qué deuda me " +
+                "conviene abonar primero?», «¿y si abono X al mes?», «¿cuándo salgo de mis deudas?». Separa las " +
+                "deudas a las que les falta la tasa o el mínimo y las que paga la nómina o un tercero.",
+        )
+        .inputSchema(
+            Tool.InputSchema.builder()
+                .properties(
+                    Tool.InputSchema.Properties.builder()
+                        .putAdditionalProperty("abono_mensual", texto("Pesos extra al mes para abonar, solo dígitos («500000»). Sin esto, 0: solo el orden."))
+                        .putAdditionalProperty("estrategia", texto("«avalancha» (por defecto) o «bola_de_nieve»."))
+                        .build(),
+                )
+                .required(emptyList())
+                .build(),
+        )
+        .build(),
+    Tool.builder()
+        .name(PROYECTAR_CAJA)
+        .description(
+            "Proyecta cuánta plata va a tener el usuario cada día hasta el cierre de su período y cuál " +
+                "es el día más justo. Parte de «Tu plata» de hoy, resta los pagos pendientes de su lista " +
+                "del período el día que vencen (una tarjeta, su pago mínimo), suma los ingresos que faltan " +
+                "y resta un gasto del día a día estimado de sus períodos cerrados. Úsala para «¿me alcanza " +
+                "hasta fin de mes?», «¿cuánto voy a tener el 17?», «¿qué día ando más corto?». Trae los " +
+                "supuestos y lo que no entró: dilos.",
+        )
+        .inputSchema(
+            Tool.InputSchema.builder()
+                .properties(Tool.InputSchema.Properties.builder().build())
+                .required(emptyList())
+                .build(),
+        )
+        .build(),
     Tool.builder()
         .name(BUSCAR_MOVIMIENTOS)
         .description(

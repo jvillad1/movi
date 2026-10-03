@@ -17,6 +17,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.testTag
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.Anomalia
+import com.jvillada.movi.shared.model.EvidenciaDeAnomalia
+import com.jvillada.movi.shared.time.epochMillisToAppDate
+import com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion
+import com.jvillada.movi.ui.dashboard.anomaliasVisiblesDe
+import com.jvillada.movi.ui.fecha.fechaEnPalabras
+import com.jvillada.movi.ui.recurrentes.ActionChip
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -363,10 +376,13 @@ internal fun ParaRevisarSection(
     // La misma cuenta que decide si esta sección se pinta (ver `visibleSections`): una sola
     // definición, o la pantalla y su regla de visibilidad terminan opinando distinto.
     val cosas = cosasParaRevisarDe(data)
-    if (cosas.isEmpty()) return
+    // Ola 4: lo que se sale de lo normal va en la misma tarjeta, debajo, con su evidencia.
+    val anomalias = anomaliasVisiblesDe(data)
+    if (cosas.isEmpty() && anomalias.isEmpty()) return
+    val coroutine = rememberCoroutineScope()
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-        MinSectionHeader(title = section.title ?: "Para revisar", count = cosas.size)
+        MinSectionHeader(title = section.title ?: "Para revisar", count = cosas.size + anomalias.size)
         MinCard(
             modifier = Modifier.fillMaxWidth(),
             variant = MinCardVariant.Elevated,
@@ -374,11 +390,79 @@ internal fun ParaRevisarSection(
         ) {
             cosas.forEachIndexed { i, cosa ->
                 FilaParaRevisar(cosa) { onNavigate(pantallaDe(cosa.destino)) }
-                if (i < cosas.lastIndex) Hairline()
+                if (i < cosas.lastIndex || anomalias.isNotEmpty()) Hairline()
+            }
+            anomalias.forEachIndexed { i, anomalia ->
+                FilaDeAnomalia(anomalia) {
+                    // «Está bien»: se va en el mismo toque; si el server no lo guarda, vuelve.
+                    AnomaliasDescartadasEnLaSesion.descartar(anomalia.huella)
+                    coroutine.launch {
+                        runCatching { Repositories.wallets.descartarAnomalia(anomalia.huella) }
+                            .onFailure { AnomaliasDescartadasEnLaSesion.deshacer(anomalia.huella) }
+                    }
+                }
+                if (i < anomalias.lastIndex) Hairline()
             }
         }
     }
 }
+
+/** El tag de una fila de «lo que se sale de lo normal», para las pruebas. */
+const val TAG_FILA_DE_ANOMALIA: String = "fila-de-anomalia"
+
+/**
+ * Un aviso de lo que se sale de lo normal: la noticia, de dónde sale y dos salidas — «Ver los
+ * movimientos» despliega la evidencia ahí mismo (fecha, nombre, cuenta y monto de cada uno) y
+ * «Está bien» lo descarta para siempre.
+ */
+@Composable
+private fun FilaDeAnomalia(anomalia: Anomalia, onDescartar: () -> Unit) {
+    var verEvidencia by rememberSaveable(anomalia.huella) { mutableStateOf(false) }
+    val hoy = remember { epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).testTag(TAG_FILA_DE_ANOMALIA),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(Movi.colores.aviso),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = anomalia.titulo, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            Text(text = anomalia.detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            if (verEvidencia) {
+                Spacer(Modifier.height(Movi.espacios.corto))
+                anomalia.evidencia.forEach { e ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.Top) {
+                        Text(
+                            text = renglonDeEvidencia(e, hoy),
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(formatMoney(e.monto, e.moneda), style = Movi.textos.apoyo, color = Movi.colores.texto)
+                    }
+                }
+            }
+            Spacer(Modifier.height(Movi.espacios.corto))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionChip(
+                    label = if (verEvidencia) "Ocultar los movimientos" else "Ver los movimientos",
+                    primary = false,
+                ) { verEvidencia = !verEvidencia }
+                ActionChip(label = "Está bien", primary = false, onClick = onDescartar)
+            }
+        }
+    }
+}
+
+/** «28 de septiembre · RAPPI COLOMBIA · Bancolombia». */
+internal fun renglonDeEvidencia(e: EvidenciaDeAnomalia, hoy: kotlinx.datetime.LocalDate): String =
+    listOfNotNull(fechaEnPalabras(e.fecha, hoy), e.nombre, e.cuenta).joinToString(" · ")
 
 @Composable
 private fun FilaParaRevisar(cosa: CosaParaRevisar, onClick: () -> Unit) {

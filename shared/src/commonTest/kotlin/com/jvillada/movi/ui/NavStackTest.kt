@@ -140,6 +140,7 @@ class NavStackTest {
         Screen.Budgets to NavTab.PLAN,
         Screen.Accounts to NavTab.PATRIMONIO,
         Screen.Credits to NavTab.PATRIMONIO,
+        Screen.SalidaDeDeudas to NavTab.PATRIMONIO,
         Screen.CuadreDeSaldos to NavTab.PATRIMONIO,
         Screen.Destinos to NavTab.PATRIMONIO,
         Screen.AccountDetail("acc-1", AccountGroup.DINERO) to NavTab.PATRIMONIO,

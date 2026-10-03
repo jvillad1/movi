@@ -398,64 +398,7 @@ fun Route.reminderRoutes() {
      * con un sello propio.
      */
     get("/api/payments/occurrences") {
-        val uid = call.userId()
-        val today = AppClock.today()
-        // **El período del dueño, no el mes de calendario.** Con corte 25, «octubre» va del 25 de
-        // septiembre al 24 de octubre, y la pregunta «¿ya pagaste el de octubre?» tiene que ser
-        // sobre la ocurrencia que cae ahí —la misma que Movimientos cuenta en octubre—.
-        val periodo = ajustesDePeriodoDe(uid)
-        // Las reglas REALES, con lo que Movi emparejó solo adentro. Vive en una función aparte
-        // porque el contexto de Movi AI necesita EXACTAMENTE esta misma respuesta: ver
-        // [estadosDeLasOcurrenciasReales].
-        val estados = dbQuery { estadosDeLasOcurrenciasReales(uid, today, periodo) }
-        // ── Las sintéticas que YA ESTÁN PAGADAS ──────────────────────────────────────
-        //
-        // «Ya ocurrieron · 1» era falso: había cuatro pagos registrados que nadie leía. Estas
-        // filas salen del movimiento que bajó la deuda, no de un sello, y por eso viajan marcadas
-        // con `derivadaDeUnMovimiento` — la pantalla no puede ofrecerles un «Deshacer» que no
-        // haría nada (para deshacerlo hay que borrar el movimiento).
-        //
-        // **Solo las pagadas.** Una sintética abierta no se emite: la pantalla pintaría su
-        // propuesta con el botón «Ya lo pagué», que en una regla sintética responde 400 — un
-        // control muerto — y si respondiera 201 sería el segundo mecanismo de sellado que este
-        // endpoint existe para no tener.
-        //
-        // Y no se le exige que el vencimiento ya haya llegado, a diferencia de las reales: ahí la
-        // guarda evita preguntar por algo que todavía no pasó, pero acá no se pregunta nada. El
-        // movimiento existe; la cuota de Crediágil pagada el 5 está pagada aunque venza el 15.
-        val sinteticas = loadCreditRulePairs(uid).map { it.first } + loadCardRulePairs(uid).map { it.first }
-        val derivadas = if (sinteticas.isEmpty()) emptyList() else {
-            val pagos = cargarPagosDeDeuda(uid, today)
-            pagosDeDeudaPorPeriodo(sinteticas, pagos, settings = periodo).mapNotNull { (ruleId, porPeriodo) ->
-                val rule = sinteticas.first { it.id == ruleId }
-                val due = ocurrenciaPorPreguntar(today, rule, periodo) ?: return@mapNotNull null
-                val pago = porPeriodo[periodOf(due)] ?: return@mapNotNull null
-                // **Cuánta plata fue.** El monto no filtra —no puede: movi no conoce el extracto,
-                // y el saldo de la tarjeta o la cuota del crédito no son comparables con lo que se
-                // movió (ver `PagosDeDeuda.kt`)— así que un abono de $50.000 salda el periodo
-                // igual que un pago completo. Lo que queda es decirlo: la fila viaja con el monto
-                // para que el dueño vea el abono en vez de un «ya ocurrió» pelado.
-                //
-                // Y es la plata que SALIÓ DE LA CUENTA, no la que bajó la deuda: en una cuota son
-                // distintas a propósito ($12.157 de capital de una cuota de $26.485).
-                val salida = plataQueSalio(pago, pagos)
-                OccurrenceState(
-                    ruleId = ruleId,
-                    period = periodOf(due),
-                    dueDate = due.toString(),
-                    periodoDelDueno = periodoDelDueno(due, periodo),
-                    occurred = true,
-                    eventId = pago.id,
-                    // No hubo confirmación que fechar: lo más cierto que se puede decir es cuándo
-                    // quedó respaldada, que es cuándo se hizo el pago.
-                    confirmedAt = pago.timestamp,
-                    derivadaDeUnMovimiento = true,
-                    montoDelPago = salida.amount,
-                    monedaDelPago = salida.currency,
-                )
-            }
-        }
-        call.respond(estados + derivadas)
+        call.respond(ocurrenciasDelPeriodo(call.userId(), AppClock.today()))
     }
 
     /**
@@ -1189,4 +1132,67 @@ internal fun resolverOcurrencias(
         }
     }
     OcurrenciaResuelta(rule, due, resolucion)
+}
+
+/**
+ * **Lo que contesta `GET /api/payments/occurrences`**, fuera de la ruta: Movi AI (la caja proyectada
+ * de la Ola 4) arma con esto la MISMA lista «Pagos del período» que Plan, sin una segunda regla.
+ */
+internal suspend fun ocurrenciasDelPeriodo(uid: String, today: java.time.LocalDate): List<OccurrenceState> {
+    // **El período del dueño, no el mes de calendario.** Con corte 25, «octubre» va del 25 de
+    // septiembre al 24 de octubre, y la pregunta «¿ya pagaste el de octubre?» tiene que ser
+    // sobre la ocurrencia que cae ahí —la misma que Movimientos cuenta en octubre—.
+    val periodo = ajustesDePeriodoDe(uid)
+    // Las reglas REALES, con lo que Movi emparejó solo adentro. Vive en una función aparte
+    // porque el contexto de Movi AI necesita EXACTAMENTE esta misma respuesta: ver
+    // [estadosDeLasOcurrenciasReales].
+    val estados = dbQuery { estadosDeLasOcurrenciasReales(uid, today, periodo) }
+    // ── Las sintéticas que YA ESTÁN PAGADAS ──────────────────────────────────────
+    //
+    // «Ya ocurrieron · 1» era falso: había cuatro pagos registrados que nadie leía. Estas
+    // filas salen del movimiento que bajó la deuda, no de un sello, y por eso viajan marcadas
+    // con `derivadaDeUnMovimiento` — la pantalla no puede ofrecerles un «Deshacer» que no
+    // haría nada (para deshacerlo hay que borrar el movimiento).
+    //
+    // **Solo las pagadas.** Una sintética abierta no se emite: la pantalla pintaría su
+    // propuesta con el botón «Ya lo pagué», que en una regla sintética responde 400 — un
+    // control muerto — y si respondiera 201 sería el segundo mecanismo de sellado que este
+    // endpoint existe para no tener.
+    //
+    // Y no se le exige que el vencimiento ya haya llegado, a diferencia de las reales: ahí la
+    // guarda evita preguntar por algo que todavía no pasó, pero acá no se pregunta nada. El
+    // movimiento existe; la cuota de Crediágil pagada el 5 está pagada aunque venza el 15.
+    val sinteticas = loadCreditRulePairs(uid).map { it.first } + loadCardRulePairs(uid).map { it.first }
+    val derivadas = if (sinteticas.isEmpty()) emptyList() else {
+        val pagos = cargarPagosDeDeuda(uid, today)
+        pagosDeDeudaPorPeriodo(sinteticas, pagos, settings = periodo).mapNotNull { (ruleId, porPeriodo) ->
+            val rule = sinteticas.first { it.id == ruleId }
+            val due = ocurrenciaPorPreguntar(today, rule, periodo) ?: return@mapNotNull null
+            val pago = porPeriodo[periodOf(due)] ?: return@mapNotNull null
+            // **Cuánta plata fue.** El monto no filtra —no puede: movi no conoce el extracto,
+            // y el saldo de la tarjeta o la cuota del crédito no son comparables con lo que se
+            // movió (ver `PagosDeDeuda.kt`)— así que un abono de $50.000 salda el periodo
+            // igual que un pago completo. Lo que queda es decirlo: la fila viaja con el monto
+            // para que el dueño vea el abono en vez de un «ya ocurrió» pelado.
+            //
+            // Y es la plata que SALIÓ DE LA CUENTA, no la que bajó la deuda: en una cuota son
+            // distintas a propósito ($12.157 de capital de una cuota de $26.485).
+            val salida = plataQueSalio(pago, pagos)
+            OccurrenceState(
+                ruleId = ruleId,
+                period = periodOf(due),
+                dueDate = due.toString(),
+                periodoDelDueno = periodoDelDueno(due, periodo),
+                occurred = true,
+                eventId = pago.id,
+                // No hubo confirmación que fechar: lo más cierto que se puede decir es cuándo
+                // quedó respaldada, que es cuándo se hizo el pago.
+                confirmedAt = pago.timestamp,
+                derivadaDeUnMovimiento = true,
+                montoDelPago = salida.amount,
+                monedaDelPago = salida.currency,
+            )
+        }
+    }
+    return estados + derivadas
 }

@@ -152,6 +152,24 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             onReintentar = { pagos.estado.recargar() },
         )
     }
+    // Ola 4: lo que viene. Debajo de «Cuánto puedes gastar», con la misma lista del período.
+    //
+    // **Dónde va, y por qué no pegada a la tarjeta en una columna.** Plan tiene una regla vieja y
+    // probada (`PlanScreenTest`): al llegar los datos ni la tarjeta, ni «Tus períodos», ni el
+    // selector se corren más de 8 dp. La caja tiene un alto que depende de lo que diga (un día en
+    // rojo, una tarjeta sin mínimo), así que encima del selector lo empujaba ~100 dp. En pantalla
+    // ancha va en la columna del disponible, debajo de todo; en una columna, primera cosa de «Pagos
+    // del mes»: debajo del selector, encima de los pagos que la mueven.
+    val cajaProyectada: @Composable (androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp) -> Unit = { arriba, abajo ->
+        SeccionCajaProyectada(
+            data = data,
+            cargando = disponible.cargando,
+            recarga = pagos.estado.recargas,
+            onNavigate = onNavigate,
+            espacioArriba = arriba,
+            espacioAbajo = abajo,
+        )
+    }
     val tusPeriodos: @Composable () -> Unit = {
         FilaDeTusPeriodos(onClick = { onNavigate(Screen.Periodos) })
     }
@@ -163,9 +181,13 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
         )
     }
     // Lo de debajo del selector: el tablero de Recurrentes o los presupuestos. Perezoso siempre.
-    fun LazyListScope.segmentoElegido() {
+    fun LazyListScope.segmentoElegido(dosColumnas: Boolean) {
         if (enPagos) {
             item(key = "aire-de-pagos") { Spacer(Modifier.height(Movi.espacios.amplio)) }
+            // En una columna la caja va acá (ver `cajaProyectada`); en dos ya está a la izquierda.
+            if (!dosColumnas) {
+                item(key = "caja-proyectada") { cajaProyectada(0.dp, Movi.espacios.seccion) }
+            }
             if (esqueletoDePagos) {
                 tableroDeRecurrentesEsqueleto()
             } else {
@@ -228,6 +250,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                         lineaDelPeriodo()
                         cuantoPuedesGastar()
                         tusPeriodos()
+                        cajaProyectada(Movi.espacios.seccion, 0.dp)
                     }
                     LazyColumn(
                         state = listState,
@@ -240,7 +263,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                                 selector()
                             }
                         }
-                        segmentoElegido()
+                        segmentoElegido(dosColumnas = true)
                     }
                 }
             } else {
@@ -258,7 +281,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                             selector()
                         }
                     }
-                    segmentoElegido()
+                    segmentoElegido(dosColumnas = false)
                 }
             }
         }

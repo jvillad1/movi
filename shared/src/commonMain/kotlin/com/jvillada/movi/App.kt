@@ -62,6 +62,7 @@ import com.jvillada.movi.ui.periodos.PeriodosListaYDetalle
 import com.jvillada.movi.ui.categorias.CategoriasScreen
 import com.jvillada.movi.ui.destinos.DestinosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
+import com.jvillada.movi.ui.credits.SalidaDeDeudasScreen
 import com.jvillada.movi.ui.dashboard.DashboardScreen
 import com.jvillada.movi.ui.dashboard.PrimerosPasosScreen
 import com.jvillada.movi.ui.goals.MetasScreen
@@ -338,6 +339,7 @@ fun App() {
                 )
                 is Screen.AIChat         -> AIChatScreen(navigate, preguntaInicial = currentScreen.preguntaInicial)
                 Screen.Credits           -> CreditosScreen(navigate)
+                Screen.SalidaDeDeudas    -> SalidaDeDeudasScreen(navigate)
                 Screen.Goals             -> MetasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)
                 is Screen.Plan           -> PlanScreen(navigate, segmento = currentScreen.segmento)

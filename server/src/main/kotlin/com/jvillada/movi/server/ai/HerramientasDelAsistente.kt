@@ -5,6 +5,20 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.routes.CajaDelDueno
+import com.jvillada.movi.server.routes.cajaProyectadaDe
+import com.jvillada.movi.server.routes.creditosDe
+import com.jvillada.movi.server.routes.tarjetasDe
+import com.jvillada.movi.server.time.ajustesDePeriodoDe
+import com.jvillada.movi.shared.model.EstrategiaDeSalida
+import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.PlanDeSalida
+import com.jvillada.movi.shared.model.PorQueNoEntraAlPlan
+import com.jvillada.movi.shared.model.deudasParaSalir
+import com.jvillada.movi.shared.model.mas
+import com.jvillada.movi.shared.model.nombreDe
+import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.model.planDeSalida
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.time.epochMillisToAppDateString
@@ -72,6 +86,12 @@ const val BUSCAR_MOVIMIENTOS = "buscar_movimientos"
 const val TOTALES_POR_CATEGORIA = "totales_por_categoria"
 const val BUSCAR_DOCUMENTOS = "buscar_documentos"
 
+/** Ola 4: la caja proyectada día a día hasta el cierre del período. Ver `CajaRoutes.kt`. */
+const val PROYECTAR_CAJA = "proyectar_caja"
+
+/** Ola 4: el plan de salida de deudas con un abono extra al mes. Ver `PlanDeSalida.kt` en :core. */
+const val SIMULAR_ABONO = "simular_abono"
+
 /**
  * **Cuánto se le manda cuando pide los documentos sin filtrar.** La lista entera de los 33 papeles
  * del dueño son casi ocho mil caracteres: tanto como costaba el contexto viejo completo, en una
@@ -121,6 +141,8 @@ suspend fun ejecutarHerramienta(uid: String, llamada: LlamadaDeHerramienta): Str
         BUSCAR_MOVIMIENTOS -> buscarMovimientos(uid, llamada.argumentos)
         TOTALES_POR_CATEGORIA -> totalesPorCategoria(uid, llamada.argumentos)
         BUSCAR_DOCUMENTOS -> buscarDocumentos(uid, llamada.argumentos)
+        PROYECTAR_CAJA -> textoDeLaCaja(cajaProyectadaDe(uid))
+        SIMULAR_ABONO -> simularAbono(uid, llamada.argumentos)
         else -> "No existe una herramienta que se llame «${llamada.nombre}»."
     }
 } catch (e: FechaIlegible) {
@@ -379,4 +401,136 @@ private fun fechaDe(valor: String?): LocalDate? {
     } catch (_: DateTimeParseException) {
         throw FechaIlegible(limpio)
     }
+}
+
+// ── Ola 4: lo que viene ──────────────────────────────────────────────────────
+
+/**
+ * **La caja proyectada, en texto para el modelo**: cada cifra con de dónde sale y qué supone, y lo
+ * que NO entró con su porqué. Es la misma cuenta que la gráfica de Plan ([cajaProyectada] en
+ * `:core`, sobre la misma lista del período), así que lo que diga el asistente y lo que diga la
+ * pantalla no pueden separarse.
+ */
+internal fun textoDeLaCaja(d: CajaDelDueno): String {
+    val caja = d.caja ?: return "No hay días que proyectar: el período del usuario no está en curso."
+    val desde = caja.dias.first().fecha
+    val hasta = caja.dias.last().fecha
+    return buildString {
+        appendLine("Caja proyectada día a día del $desde al $hasta (cierre del período del usuario), en pesos.")
+        appendLine("DE DÓNDE SALE:")
+        appendLine("- Tu plata hoy: ${caja.tuPlataHoy} (la misma cifra de «Tu plata» de la app).")
+        val gasto = d.gasto
+        if (gasto.porDia != null) {
+            val cuales = gasto.periodos.joinToString("; ") { "${it.periodo}: ${it.total} en ${it.dias} días" }
+            appendLine(
+                "- SUPUESTO: gasta como siempre, ${gasto.porDia} por día desde mañana. Es el promedio diario " +
+                    "de su gasto variable en ${gasto.periodos.size} período(s) cerrado(s) ($cuales). Cuenta el " +
+                    "gasto con tarjeta como si saliera de su plata el mismo día.",
+            )
+        } else {
+            appendLine(
+                "- SIN gasto del día a día: todavía no hay un período cerrado completo con qué estimarlo, así " +
+                    "que la proyección solo resta los pagos fijos y es optimista. Dilo.",
+            )
+        }
+        val pendientes = d.pagos.filter { !it.pagado }
+        if (pendientes.isEmpty()) appendLine("- No quedan pagos ni ingresos pendientes en la lista del período.")
+        else {
+            appendLine("- Pagos e ingresos pendientes de la lista «Pagos del período» (lo ya pagado no se vuelve a restar):")
+            caja.dias.forEach { dia ->
+                dia.movimientos.forEach { m ->
+                    appendLine("  ${dia.fecha}: ${m.nombre} ${if (m.monto >= 0) "+" else "-"}${kotlin.math.abs(m.monto)}")
+                }
+            }
+        }
+        if (caja.sinContar.isNotEmpty()) {
+            appendLine("- NO ENTRAN a la cuenta (falta un dato; no lo estimes): ${caja.sinContar.joinToString("; ")}.")
+        }
+        appendLine("RESULTADO:")
+        val bajo = caja.diaMasBajo
+        appendLine("- Día más justo: ${bajo.fecha}, con ${bajo.saldo}" + (bajo.pagoMasGrande?.let { " (ese día sale ${it.nombre})" } ?: "") + ".")
+        val rojo = caja.primerDiaEnRojo
+        if (rojo == null) appendLine("- Ningún día queda en negativo.")
+        else appendLine(
+            "- PRIMER DÍA EN NEGATIVO: ${rojo.fecha}, queda en ${rojo.saldo}" +
+                (rojo.pagoMasGrande?.let { " por ${it.nombre} (${-it.monto})" } ?: " por el gasto del día a día") + ".",
+        )
+        appendLine("- Al cierre ($hasta): ${caja.alCierre.saldo}.")
+        appendLine("Saldo al cerrar cada día: " + caja.dias.joinToString("; ") { "${it.fecha} ${it.saldo}" } + ".")
+    }.trim()
+}
+
+/**
+ * **El plan de salida de deudas**, con el abono que pida el modelo (o $0) y la estrategia que pida
+ * (avalancha si no dice). Las deudas son las mismas de las pantallas de Créditos (`creditosDe`,
+ * `tarjetasDe`) y la cuenta es la misma de la pantalla «Cómo salir de tus deudas» ([planDeSalida]).
+ */
+private suspend fun simularAbono(uid: String, args: Map<String, String>): String {
+    val abono = args["abono_mensual"]?.filter { it.isDigit() }?.toLongOrNull() ?: 0L
+    val estrategia = if (args["estrategia"]?.lowercase()?.contains("bola") == true) EstrategiaDeSalida.BOLA_DE_NIEVE
+    else EstrategiaDeSalida.AVALANCHA
+    val deudas = deudasParaSalir(creditosDe(uid), tarjetasDe(uid))
+    val plan = planDeSalida(deudas, abono, estrategia)
+    val otra = planDeSalida(
+        deudas,
+        abono,
+        if (estrategia == EstrategiaDeSalida.AVALANCHA) EstrategiaDeSalida.BOLA_DE_NIEVE else EstrategiaDeSalida.AVALANCHA,
+    )
+    val periodo = periodoDe(System.currentTimeMillis(), ajustesDePeriodoDe(uid))
+    return textoDelPlanDeSalida(plan, otra, periodo)
+}
+
+/** Fuera de [simularAbono] para poder probarlo sin base. Ver el KDoc de [planDeSalida]. */
+internal fun textoDelPlanDeSalida(plan: PlanDeSalida, otra: PlanDeSalida, periodoActual: PeriodoFinanciero): String = buildString {
+    fun cuando(meses: Int?) = meses?.let { "$it cuotas, la última en ${nombreDe(periodoActual.mas((it - 1).coerceAtLeast(0)))}" }
+        ?: "no se termina a este ritmo"
+    fun nombreDeLa(e: EstrategiaDeSalida) = if (e == EstrategiaDeSalida.AVALANCHA) "avalancha (mayor tasa primero)" else "bola de nieve (menor saldo primero)"
+    appendLine(
+        "Plan de salida de deudas, estrategia ${nombreDeLa(plan.estrategia)}, con ${plan.abonoMensual} pesos extra al mes. " +
+            "Supuestos: tasa y cuota constantes; el abono va entero a capital de la primera deuda del orden y, cuando " +
+            "esa termina, pasa a la siguiente; la cuota que se libera NO se suma al abono.",
+    )
+    if (plan.enElCalculo.isEmpty()) {
+        appendLine("Ninguna deuda que salga de su bolsillo tiene los datos para calcular (tasa y cuota).")
+    } else {
+        appendLine("ORDEN PARA EL ABONO (deudas que salen de su bolsillo y tienen tasa y cuota):")
+        plan.enElCalculo.forEach { s ->
+            val d = s.deuda
+            appendLine(
+                "${s.orden}. ${d.nombre}: saldo ${d.saldo}, tasa ${d.tasaEa ?: 0.0} % EA" +
+                    (if (d.sinIntereses) " (no cobra intereses)" else "") +
+                    ", ${if (d.tipo.name == "TARJETA") "pago mínimo" else "cuota"} ${d.cuota}, interés de este mes ${d.interesDelMes}. " +
+                    "Sin abono: ${cuando(s.mesesSinAbono)}${s.interesSinAbono?.let { ", $it de interés por pagar" } ?: ""}. " +
+                    "Con el abono: ${cuando(s.mesesConAbono)}${s.interesConAbono?.let { ", $it de interés por pagar" } ?: ""}." +
+                    (s.interesAhorrado?.let { " Ahorra $it de interés." } ?: ""),
+            )
+        }
+        appendLine("Interés total que ahorra el abono (en las deudas que terminan con y sin él): ${plan.interesAhorrado}.")
+        if (plan.seTerminanSoloConAbono.isNotEmpty()) {
+            appendLine("Solo se terminan CON el abono: ${plan.seTerminanSoloConAbono.joinToString { it.deuda.nombre }}.")
+        }
+        plan.mesesHastaSalir?.let { appendLine("Con el abono sale de todas estas en ${cuando(it)}.") }
+        appendLine(
+            "Con la otra estrategia, ${nombreDeLa(otra.estrategia)}, el orden sería " +
+                otra.enElCalculo.joinToString(" → ") { it.deuda.nombre } + " y ahorraría ${otra.interesAhorrado} de interés.",
+        )
+    }
+    if (plan.faltanDatos.isNotEmpty()) {
+        appendLine("NO ENTRAN porque falta un dato (no lo estimes; dile que lo cargue en Créditos):")
+        plan.faltanDatos.forEach { d ->
+            val motivo = when (d.porQueNoEntra) {
+                PorQueNoEntraAlPlan.FALTA_LA_TASA -> "falta la tasa"
+                PorQueNoEntraAlPlan.FALTA_EL_PAGO_MINIMO -> "falta el pago mínimo"
+                PorQueNoEntraAlPlan.FALTA_LA_CUOTA -> "falta la cuota"
+                PorQueNoEntraAlPlan.EN_OTRA_MONEDA -> "está en ${d.moneda}"
+                null -> ""
+            }
+            appendLine("- ${d.nombre} (saldo ${d.saldo} ${d.moneda}): $motivo.")
+        }
+    }
+    if (plan.ajenas.isNotEmpty()) {
+        appendLine("APARTE, no compiten por el abono porque la cuota no sale de su bolsillo:")
+        plan.ajenas.forEach { d -> appendLine("- ${d.nombre} (saldo ${d.saldo}): la paga ${d.quienLaPaga}.") }
+    }
+    append("Es un cálculo con sus datos, no una recomendación financiera: dilo así.")
 }

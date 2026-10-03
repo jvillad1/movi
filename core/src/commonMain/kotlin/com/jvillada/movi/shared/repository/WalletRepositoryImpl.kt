@@ -326,6 +326,19 @@ class WalletRepositoryImpl(
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
         client.get("$baseUrl/api/finance-summary?scope=${scope.name}").body()
 
+    override suspend fun getGastoDelDiaADia(): com.jvillada.movi.shared.model.GastoDelDiaADia =
+        client.get("$baseUrl/api/caja-proyectada/gasto-del-dia-a-dia").exigirExito().body()
+
+    override suspend fun getAnomalias(): List<com.jvillada.movi.shared.model.Anomalia> =
+        client.get("$baseUrl/api/anomalias").exigirExito().body()
+
+    override suspend fun descartarAnomalia(huella: String) {
+        client.post("$baseUrl/api/anomalias/descartar") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.DescartarAnomaliaRequest(huella))
+        }.exigirExito()
+    }
+
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary =
         client.get("$baseUrl/api/dashboard/summary?scope=${scope.name}").body()
 
