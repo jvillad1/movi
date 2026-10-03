@@ -428,7 +428,7 @@ fun planDelCredito(credit: CreditSummary): PlanDelCredito? {
  * tasa, se redondea a Long apenas se calcula, y todo lo demás es Long. Está factorizado para que
  * la proyección de acá no pueda desviarse por redondeo de lo que el pago real va a hacer mes a mes.
  */
-private fun interesDelPeriodo(saldo: Long, tasaMensual: Double): Long =
+internal fun interesDelPeriodo(saldo: Long, tasaMensual: Double): Long =
     round(saldo.toDouble() * tasaMensual).toLong().coerceAtLeast(0L)
 
 private data class Proyeccion(val meses: Int, val interes: Long)

@@ -317,7 +317,7 @@ class HerramientasDelAsistenteTest {
         val ofrecidas = LAS_HERRAMIENTAS.map { it.name() }
 
         assertEquals(
-            setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS, PROYECTAR_CAJA) + HERRAMIENTAS_QUE_PROPONEN_NOMBRES,
+            setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS, PROYECTAR_CAJA, SIMULAR_ABONO) + HERRAMIENTAS_QUE_PROPONEN_NOMBRES,
             ofrecidas.toSet(),
         )
         // Las que proponen (Ola 3) no pasan por `ejecutarHerramienta`: las ejecuta `proponer`.

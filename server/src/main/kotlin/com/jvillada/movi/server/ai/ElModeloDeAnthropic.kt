@@ -404,6 +404,27 @@ internal val LAS_HERRAMIENTAS: List<Tool> by lazy { HERRAMIENTAS_DE_LECTURA + HE
  */
 private val HERRAMIENTAS_DE_LECTURA: List<Tool> = listOf(
     Tool.builder()
+        .name(SIMULAR_ABONO)
+        .description(
+            "Calcula el plan de salida de sus deudas: en qué orden conviene abonar (avalancha: mayor tasa " +
+                "primero; bola de nieve: menor saldo primero), y con un abono extra al mes cuándo sale de cada " +
+                "una y cuánto interés se ahorra, con amortización mes a mes. Úsala SIEMPRE para «¿qué deuda me " +
+                "conviene abonar primero?», «¿y si abono X al mes?», «¿cuándo salgo de mis deudas?». Separa las " +
+                "deudas a las que les falta la tasa o el mínimo y las que paga la nómina o un tercero.",
+        )
+        .inputSchema(
+            Tool.InputSchema.builder()
+                .properties(
+                    Tool.InputSchema.Properties.builder()
+                        .putAdditionalProperty("abono_mensual", texto("Pesos extra al mes para abonar, solo dígitos («500000»). Sin esto, 0: solo el orden."))
+                        .putAdditionalProperty("estrategia", texto("«avalancha» (por defecto) o «bola_de_nieve»."))
+                        .build(),
+                )
+                .required(emptyList())
+                .build(),
+        )
+        .build(),
+    Tool.builder()
         .name(PROYECTAR_CAJA)
         .description(
             "Proyecta cuánta plata va a tener el usuario cada día hasta el cierre de su período y cuál " +

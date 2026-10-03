@@ -15,6 +15,7 @@ fun ResultRow.toCardTerms() = CardTerms(
     pagoMinimo  = this[Cards.pagoMinimo],
     notes       = this[Cards.notes],
     remindMe    = this[Cards.remindMe],
+    tasaEa      = this[Cards.tasaEa],
 )
 
 /**

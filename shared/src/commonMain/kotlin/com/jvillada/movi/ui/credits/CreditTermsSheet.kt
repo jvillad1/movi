@@ -1074,7 +1074,7 @@ private fun CasillaConExplicacion(
  * lo escribe, así que nunca puede terminar en el estado ("12%") que rompía el parseo (F23/F24).
  */
 @Composable
-private fun RateFieldBox(
+internal fun RateFieldBox(
     placeholder: String,
     value: String,
     onValueChange: (String) -> Unit,
