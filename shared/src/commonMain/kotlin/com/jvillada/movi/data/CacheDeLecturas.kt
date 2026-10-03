@@ -43,6 +43,8 @@ sealed interface ClaveDeLectura<T : Any> {
     data object Creditos : ClaveDeLectura<List<CreditSummary>>
     data object Tarjetas : ClaveDeLectura<List<CardSummary>>
     data object Destinos : ClaveDeLectura<List<DestinoConocido>>
+    /** Ola 4: el supuesto del gasto del día a día de la caja proyectada (sale de períodos cerrados). */
+    data object GastoDelDiaADia : ClaveDeLectura<com.jvillada.movi.shared.model.GastoDelDiaADia>
 
     /** Los límites no cambian con el período, pero Presupuestos los pinta junto al gasto de uno. */
     data object Presupuestos : ClaveDeLectura<List<Budget>> {

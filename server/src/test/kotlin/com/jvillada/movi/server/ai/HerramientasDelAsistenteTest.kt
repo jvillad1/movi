@@ -1,6 +1,12 @@
 package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Cards
+import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.KnownDestinations
+import com.jvillada.movi.server.db.OccurrenceRejections
+import com.jvillada.movi.server.db.RecurringOccurrences
+import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Users
@@ -40,8 +46,15 @@ class HerramientasDelAsistenteTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.drop(Documents, VoidEvents, Events, Accounts, Users)
-            SchemaUtils.create(Users, Accounts, Events, VoidEvents, Documents)
+            // Las de la caja proyectada (Ola 4) también: `proyectar_caja` lee la lista del período.
+            SchemaUtils.drop(
+                KnownDestinations, OccurrenceRejections, RecurringOccurrences, RecurringRules, Cards, Credits,
+                Documents, VoidEvents, Events, Accounts, Users,
+            )
+            SchemaUtils.create(
+                Users, Accounts, Events, VoidEvents, Documents, Credits, Cards, RecurringRules, RecurringOccurrences,
+                OccurrenceRejections, KnownDestinations,
+            )
             Users.insert {
                 it[id] = dueno; it[email] = "dueno@herramientas.test"; it[name] = "Camilo"
                 it[passwordHash] = "hash"
@@ -304,7 +317,7 @@ class HerramientasDelAsistenteTest {
         val ofrecidas = LAS_HERRAMIENTAS.map { it.name() }
 
         assertEquals(
-            setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS) + HERRAMIENTAS_QUE_PROPONEN_NOMBRES,
+            setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS, PROYECTAR_CAJA) + HERRAMIENTAS_QUE_PROPONEN_NOMBRES,
             ofrecidas.toSet(),
         )
         // Las que proponen (Ola 3) no pasan por `ejecutarHerramienta`: las ejecuta `proponer`.

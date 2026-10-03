@@ -5,6 +5,8 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.routes.CajaDelDueno
+import com.jvillada.movi.server.routes.cajaProyectadaDe
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.time.epochMillisToAppDateString
@@ -72,6 +74,9 @@ const val BUSCAR_MOVIMIENTOS = "buscar_movimientos"
 const val TOTALES_POR_CATEGORIA = "totales_por_categoria"
 const val BUSCAR_DOCUMENTOS = "buscar_documentos"
 
+/** Ola 4: la caja proyectada día a día hasta el cierre del período. Ver `CajaRoutes.kt`. */
+const val PROYECTAR_CAJA = "proyectar_caja"
+
 /**
  * **Cuánto se le manda cuando pide los documentos sin filtrar.** La lista entera de los 33 papeles
  * del dueño son casi ocho mil caracteres: tanto como costaba el contexto viejo completo, en una
@@ -121,6 +126,7 @@ suspend fun ejecutarHerramienta(uid: String, llamada: LlamadaDeHerramienta): Str
         BUSCAR_MOVIMIENTOS -> buscarMovimientos(uid, llamada.argumentos)
         TOTALES_POR_CATEGORIA -> totalesPorCategoria(uid, llamada.argumentos)
         BUSCAR_DOCUMENTOS -> buscarDocumentos(uid, llamada.argumentos)
+        PROYECTAR_CAJA -> textoDeLaCaja(cajaProyectadaDe(uid))
         else -> "No existe una herramienta que se llame «${llamada.nombre}»."
     }
 } catch (e: FechaIlegible) {
@@ -379,4 +385,61 @@ private fun fechaDe(valor: String?): LocalDate? {
     } catch (_: DateTimeParseException) {
         throw FechaIlegible(limpio)
     }
+}
+
+// ── Ola 4: lo que viene ──────────────────────────────────────────────────────
+
+/**
+ * **La caja proyectada, en texto para el modelo**: cada cifra con de dónde sale y qué supone, y lo
+ * que NO entró con su porqué. Es la misma cuenta que la gráfica de Plan ([cajaProyectada] en
+ * `:core`, sobre la misma lista del período), así que lo que diga el asistente y lo que diga la
+ * pantalla no pueden separarse.
+ */
+internal fun textoDeLaCaja(d: CajaDelDueno): String {
+    val caja = d.caja ?: return "No hay días que proyectar: el período del usuario no está en curso."
+    val desde = caja.dias.first().fecha
+    val hasta = caja.dias.last().fecha
+    return buildString {
+        appendLine("Caja proyectada día a día del $desde al $hasta (cierre del período del usuario), en pesos.")
+        appendLine("DE DÓNDE SALE:")
+        appendLine("- Tu plata hoy: ${caja.tuPlataHoy} (la misma cifra de «Tu plata» de la app).")
+        val gasto = d.gasto
+        if (gasto.porDia != null) {
+            val cuales = gasto.periodos.joinToString("; ") { "${it.periodo}: ${it.total} en ${it.dias} días" }
+            appendLine(
+                "- SUPUESTO: gasta como siempre, ${gasto.porDia} por día desde mañana. Es el promedio diario " +
+                    "de su gasto variable en ${gasto.periodos.size} período(s) cerrado(s) ($cuales). Cuenta el " +
+                    "gasto con tarjeta como si saliera de su plata el mismo día.",
+            )
+        } else {
+            appendLine(
+                "- SIN gasto del día a día: todavía no hay un período cerrado completo con qué estimarlo, así " +
+                    "que la proyección solo resta los pagos fijos y es optimista. Dilo.",
+            )
+        }
+        val pendientes = d.pagos.filter { !it.pagado }
+        if (pendientes.isEmpty()) appendLine("- No quedan pagos ni ingresos pendientes en la lista del período.")
+        else {
+            appendLine("- Pagos e ingresos pendientes de la lista «Pagos del período» (lo ya pagado no se vuelve a restar):")
+            caja.dias.forEach { dia ->
+                dia.movimientos.forEach { m ->
+                    appendLine("  ${dia.fecha}: ${m.nombre} ${if (m.monto >= 0) "+" else "-"}${kotlin.math.abs(m.monto)}")
+                }
+            }
+        }
+        if (caja.sinContar.isNotEmpty()) {
+            appendLine("- NO ENTRAN a la cuenta (falta un dato; no lo estimes): ${caja.sinContar.joinToString("; ")}.")
+        }
+        appendLine("RESULTADO:")
+        val bajo = caja.diaMasBajo
+        appendLine("- Día más justo: ${bajo.fecha}, con ${bajo.saldo}" + (bajo.pagoMasGrande?.let { " (ese día sale ${it.nombre})" } ?: "") + ".")
+        val rojo = caja.primerDiaEnRojo
+        if (rojo == null) appendLine("- Ningún día queda en negativo.")
+        else appendLine(
+            "- PRIMER DÍA EN NEGATIVO: ${rojo.fecha}, queda en ${rojo.saldo}" +
+                (rojo.pagoMasGrande?.let { " por ${it.nombre} (${-it.monto})" } ?: " por el gasto del día a día") + ".",
+        )
+        appendLine("- Al cierre ($hasta): ${caja.alCierre.saldo}.")
+        appendLine("Saldo al cerrar cada día: " + caja.dias.joinToString("; ") { "${it.fecha} ${it.saldo}" } + ".")
+    }.trim()
 }

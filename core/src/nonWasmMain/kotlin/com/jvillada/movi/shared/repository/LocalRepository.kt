@@ -1983,6 +1983,8 @@ class LocalRepository(
     // Presupuestos usa esta misma fuente para que las dos pantallas coincidan; el cálculo local
     // queda solo como fallback sin red.
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = remote.getDashboardSummary(scope)
+    // Ola 4: el supuesto de la caja sale de la historia del server; sin red no hay supuesto.
+    override suspend fun getGastoDelDiaADia(): com.jvillada.movi.shared.model.GastoDelDiaADia = remote.getGastoDelDiaADia()
     // Igual que getFinanceSummary/getDashboardSummary: la ventana de cada período (el corte, los
     // inicios propios) y sus cifras salen de TODO lo que el server sabe, no solo de este
     // dispositivo — sin red falla y «Tus períodos» lo dice con «Reintentar», no con una cuenta

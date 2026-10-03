@@ -152,6 +152,15 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             onReintentar = { pagos.estado.recargar() },
         )
     }
+    // Ola 4: lo que viene. Debajo de «Cuánto puedes gastar», con la misma lista del período.
+    val cajaProyectada: @Composable () -> Unit = {
+        SeccionCajaProyectada(
+            data = data,
+            cargando = disponible.cargando,
+            recarga = pagos.estado.recargas,
+            onNavigate = onNavigate,
+        )
+    }
     val tusPeriodos: @Composable () -> Unit = {
         FilaDeTusPeriodos(onClick = { onNavigate(Screen.Periodos) })
     }
@@ -227,6 +236,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                     ) {
                         lineaDelPeriodo()
                         cuantoPuedesGastar()
+                        cajaProyectada()
                         tusPeriodos()
                     }
                     LazyColumn(
@@ -251,6 +261,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                 ) {
                     item(key = "periodo") { lineaDelPeriodo() }
                     item(key = "disponible") { cuantoPuedesGastar() }
+                    item(key = "caja-proyectada") { cajaProyectada() }
                     item(key = "tus-periodos") { tusPeriodos() }
                     item(key = "segmentos") {
                         Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
