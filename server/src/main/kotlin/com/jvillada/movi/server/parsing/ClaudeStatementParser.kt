@@ -350,7 +350,13 @@ Aplicá las reglas del usuario cuando el merchant coincida.
     /** Un comprobante en PDF tiene una página; más que esto ya es un extracto y lo decide la heurística. */
     private const val MAX_CARACTERES_DEL_PAPEL = 8_000
 
-    private fun promptDelPapel(): String {
+    /**
+     * El prompt del clasificador. Las tres reglas del final salieron del benchmark del 2026-10-04:
+     * el extracto del crédito del vehículo (cuota, saldo y tasa, sin movimientos) se iba a extracto
+     * y la lectura cara volvía vacía; el pantallazo del desembolso de la hipoteca (~$200 M) salía
+     * como un GASTO, y un desembolso es plata que entró (regla del dueño).
+     */
+    internal fun promptDelPapel(): String {
         val categorias = PREDEFINED_CATEGORIES.joinToString(", ") { it.name }
         return """
 Lees papeles financieros colombianos: capturas de pantalla de transferencias, recibos, pagos PSE, facturas pagadas y extractos. Decide qué es el papel y devuelve SOLO un objeto JSON, sin texto antes ni después.
@@ -371,6 +377,9 @@ Si muestra UN solo movimiento de plata (una transferencia, un pago, una compra, 
 
 Si muestra VARIOS movimientos (un extracto, un listado o un histórico de movimientos), devuelve: {"tipo":"EXTRACTO"}
 Si no muestra ningún movimiento de plata (un certificado, un saldo, una publicidad), devuelve: {"tipo":"NADA"}
+- El extracto o la pantalla de un CRÉDITO (hipoteca, vehículo, libre inversión, libranza) que muestra saldo, cuota a pagar, fecha límite o el desglose del último abono, sin una lista de movimientos, es {"tipo":"NADA"}: lo que dice es lo que se DEBE, no un movimiento hecho.
+- Una factura o cuenta de cobro que todavía no se ha pagado es {"tipo":"NADA"}.
+- Un desembolso de crédito es plata que ENTRÓ al titular: "movimiento":"INCOME".
 """.trimIndent()
     }
 

@@ -140,6 +140,26 @@ class LectorDePapelesTest {
         assertEquals("USD 99", montoDelComprobante(99.0, "USD"))
     }
 
+    // ── El clasificador frente a créditos, facturas y desembolsos ───────────────
+
+    @Test
+    fun `el clasificador sabe que un credito sin movimientos y una factura sin pagar son NADA`() {
+        val prompt = ClaudeStatementParser.promptDelPapel()
+        assertTrue("CRÉDITO (hipoteca, vehículo, libre inversión, libranza)" in prompt)
+        assertTrue("lo que se DEBE, no un movimiento hecho" in prompt)
+        assertTrue("todavía no se ha pagado es {\"tipo\":\"NADA\"}" in prompt)
+        // Las reglas van después de la definición de NADA, que es la que afinan.
+        assertTrue(prompt.indexOf("CRÉDITO (hipoteca") > prompt.indexOf("devuelve: {\"tipo\":\"NADA\"}"))
+    }
+
+    @Test
+    fun `un desembolso es plata que entro`() {
+        assertTrue("Un desembolso de crédito es plata que ENTRÓ al titular: \"movimiento\":\"INCOME\"" in ClaudeStatementParser.promptDelPapel())
+        // Y lo que el modelo conteste así se lee como ingreso, no como el gasto de siempre.
+        val dijo = queDiceLaRespuesta("""{"tipo":"COMPROBANTE","monto":200000000,"moneda":"COP","movimiento":"INCOME","fecha":"2026-08-19","comercio":"Bancolombia","concepto":"Desembolso crédito hipotecario"}""")
+        assertEquals(TransactionType.INCOME, assertIs<QueDiceElPapel.Comprobante>(dijo).leido.tipo)
+    }
+
     // ── Cuándo un PDF ya es un extracto ─────────────────────────────────────────
 
     @Test
