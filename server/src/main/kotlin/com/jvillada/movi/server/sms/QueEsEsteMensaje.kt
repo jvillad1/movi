@@ -80,7 +80,19 @@ fun queEsEsteMensaje(texto: String, origen: String?): QueEsElMensaje {
         PROMOCION.any { it in t } -> MotivoDeApartado.PROMOCION
         else -> null
     }
-    return motivo?.let { QueEsElMensaje.NoEsMovimiento(it) } ?: QueEsElMensaje.Movimiento
+    if (motivo != null) return QueEsElMensaje.NoEsMovimiento(motivo)
+    // **Un correo de Nu sin la forma de un movimiento es publicidad.** Nu escribe por correo sus
+    // promociones («Haz crecer tu plata con las Cajitas…») sin ninguna de las marcas de arriba, y
+    // de Nu `parseSms` solo lee lo que tiene forma de movimiento (`loDeNuEsUnMovimiento`): un correo
+    // así nunca podría anotarse. Solo el correo: una notificación de Nu sigue la regla de oro.
+    if (origen != null && esUnCorreoDeNu(origen)) return QueEsElMensaje.NoEsMovimiento(MotivoDeApartado.PROMOCION)
+    return QueEsElMensaje.Movimiento
+}
+
+/** «Correo · Nu», «Correo · Nubank»: el rótulo de un correo que mandó Nu. */
+private fun esUnCorreoDeNu(origen: String): Boolean {
+    val o = normalizarParaBuscar(origen)
+    return o.startsWith("correo") && Regex("""\bnu(?:bank)?\b""").containsMatchIn(o.substringAfter("correo"))
 }
 
 /** Atajo: ¿lo aparta? `null` si es (o podría ser) un movimiento. */
@@ -105,6 +117,9 @@ private val FORMAS_DE_MOVIMIENTO = listOf(
     // tarjeta de beneficios»): sin esto, el «PAGO MINIMO» de la descripción de un pago por PSE lo
     // apartaba como recordatorio.
     "transaccion aprobada",
+    // «Transacción exitosa y nuevo comercio guardado por PSE» (correo de Nu): repite un pago que ya
+    // llega por otro lado, pero ante la duda es movimiento y lo decide el dueño.
+    "transaccion exitosa",
     "compra aprobada", "pago aprobado", "fue aprobada", "fue aprobado", "hemos aprobado",
     "te llego dinero", "recargo ", "debitamos", "realizo debito", "realizo abono", "hizo un abono",
     "desembolso", "nomina recibida", "abono a tu", "abonamos", "consignacion", "reembolso",

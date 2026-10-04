@@ -234,8 +234,12 @@ private val tarjetaDelAvanceRegex = Regex("""\bT\.?\s*Cred(?:ito)?\.?\s*\*+\s?(\
 /** La categoría de un avance de tarjeta, mientras confirmar no arme el desembolso de dos patas. */
 internal const val AVANCE_CATEGORY = "Avance de tarjeta"
 
-/** A quién se le pagó desde la cuenta de Nu: lo que va entre «Pagaste en» y « con tu cuenta». */
-private val pagasteEnRegex = Regex("""\bpagaste\s+en\s+(.+?)\s+con\s+tu\s+cuenta\b""", RegexOption.IGNORE_CASE)
+/**
+ * A quién se le pagó desde la cuenta de Nu: lo que va entre «Pagaste en» y « con tu cuenta» (la
+ * notificación) o « con Cuenta Nu» (el correo: «Pagaste en Coomeva Medicina Prepagada S.A. con
+ * Cuenta Nu»).
+ */
+private val pagasteEnRegex = Regex("""\bpagaste\s+en\s+(.+?)\s+con\s+(?:tu\s+)?cuenta\b""", RegexOption.IGNORE_CASE)
 
 /**
  * **De Nu solo se lee lo que es una compra aprobada, un pago (a la tarjeta o desde la cuenta) o plata que llega.** Desde #346 el teléfono sube TODAS
