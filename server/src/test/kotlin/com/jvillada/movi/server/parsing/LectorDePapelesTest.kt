@@ -171,6 +171,24 @@ class LectorDePapelesTest {
     }
 
     @Test
+    fun `los formatos de fecha de los extractos reales tambien son un extracto`() {
+        val listadoBancolombia = (1..4).joinToString("\n") { "0$it sept 2026 COMPRA EN EXITO -45.000,00" }
+        val nu = (1..4).joinToString("\n") { "2$it AGO 2026 Rappi \$ 32.900" }
+        val davibank = (1..4).joinToString("\n") { "2026/09/0$it;TRANSFERENCIA;1.250.000" }
+        val davivienda = (1..4).joinToString("\n") { "2026082$it PAGO PSE 120.000,00" }
+        val conPunto = (1..4).joinToString("\n") { "1$it oct. 2026 UBER 18.500" }
+        listOf(listadoBancolombia, nu, davibank, davivienda, conPunto).forEach { assertTrue(pareceUnExtracto(it), it) }
+    }
+
+    @Test
+    fun `un comprobante con una fecha larga sigue sin ser un extracto`() {
+        val comprobante = "Nu\nPago exitoso\n21 AGO 2026 14:05\nValor \$ 115.000\nReferencia 20260821"
+        assertFalse(pareceUnExtracto(comprobante))
+        // Un mes que no es mes no cuenta como fecha.
+        assertFalse(pareceUnExtracto((1..4).joinToString("\n") { "0$it xyz 2026 COMPRA 45.000" }))
+    }
+
+    @Test
     fun `la huella es la de los bytes`() {
         assertEquals(huellaDelPapel(byteArrayOf(1, 2, 3)), huellaDelPapel(byteArrayOf(1, 2, 3)))
         assertTrue(huellaDelPapel(byteArrayOf(1, 2, 3)) != huellaDelPapel(byteArrayOf(1, 2, 4)))
