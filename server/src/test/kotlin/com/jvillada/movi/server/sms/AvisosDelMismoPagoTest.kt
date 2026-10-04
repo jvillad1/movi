@@ -110,10 +110,18 @@ class AvisosDelMismoPagoTest {
     // ── La ventana ───────────────────────────────────────────────────────────────
 
     @Test
-    fun `entre SMS y notificaciones, diez minutos`() {
-        assertEquals(10L, minutosParaElMismoPago("85540", "Notificación · Google Wallet"))
-        assertEquals(listOf(setOf("w", "s")), grupos(wallet, delSms.copy(time = "2026-09-25 09:25")))
-        assertEquals(emptyList(), grupos(wallet, delSms.copy(time = "2026-09-25 09:26")))
+    fun `entre SMS y notificaciones, treinta minutos`() {
+        assertEquals(30L, minutosParaElMismoPago("85540", "Notificación · Google Wallet"))
+        assertEquals(listOf(setOf("w", "s")), grupos(wallet, delSms.copy(time = "2026-09-25 09:45")))
+        assertEquals(emptyList(), grupos(wallet, delSms.copy(time = "2026-09-25 09:46")))
+    }
+
+    /** El caso real del 2-oct: Google Wallet avisó 21 minutos después que la app de la tarjeta. */
+    @Test
+    fun `Google Wallet que avisa tarde se junta con la app de la tarjeta`() {
+        val tarjeta = sms("t", "Notificación · Glim", "¡Usaste tus beneficios!: Pagaste \$3.300,00 COP con tu tarjeta de beneficios Glim en MAQUINA DE EJEMPLO.", time = "2026-10-02 11:22")
+        val tarde = sms("g", "Notificación · Google Wallet", "PWS*MAQUINA EJEMPLO: COP3,300 with Glim ••1111", time = "2026-10-02 11:43")
+        assertEquals(listOf(setOf("t", "g")), grupos(tarjeta, tarde))
     }
 
     @Test

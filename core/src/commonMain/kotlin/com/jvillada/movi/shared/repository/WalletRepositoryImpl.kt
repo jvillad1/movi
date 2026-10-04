@@ -100,6 +100,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
@@ -1034,6 +1035,24 @@ class WalletRepositoryImpl(
     override suspend fun confirmarComprobante(smsId: String, eventoId: String) {
         client.post("$baseUrl/api/sms/$smsId/confirm?eventoId=$eventoId").exigirExito()
     }
+
+    override suspend fun confirmSmsCon(id: String, eventoId: String) {
+        client.post("$baseUrl/api/sms/$id/confirm?eventoId=$eventoId").exigirExito()
+    }
+
+    override suspend fun getAvisosConfirmadosSinMovimiento(): List<com.jvillada.movi.shared.model.AvisoConfirmadoSinMovimiento> =
+        client.get("$baseUrl/api/sms/confirmados-sin-movimiento").exigirExito().body()
+
+    override suspend fun getAvisosPendientesParecidos(
+        monto: Long,
+        tipo: com.jvillada.movi.shared.model.TransactionType,
+        moneda: String,
+    ): List<com.jvillada.movi.shared.model.AvisoPendienteParecido> =
+        client.get("$baseUrl/api/sms/pendientes-parecidos") {
+            parameter("monto", monto)
+            parameter("tipo", tipo.name)
+            parameter("moneda", moneda)
+        }.exigirExito().body()
 
     override suspend fun getOrigenesMudos(): List<com.jvillada.movi.shared.model.OrigenMudo> =
         client.get("$baseUrl/api/sms/origenes-mudos").exigirExito().body()
