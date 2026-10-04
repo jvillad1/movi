@@ -17,6 +17,11 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.layout.width
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
+import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,32 +76,21 @@ import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 
 /**
- * # «Más → Cuentas de otros»
+ * # «Personas y comercios»
  *
  * El dueño lo pidió así: *«Es la cuenta de Caro, yo le transferí a ella lo de Cotrafa. Guarda esa
  * cuenta como una cuenta no mía pero sí de mi esposa, me interesa tenerla guardada y poder ver los
- * movimientos hacia esa cuenta.»*
+ * movimientos hacia esa cuenta.»* Y el 4-oct-2026: *«que funcione de forma perfecta… ser ágil y no
+ * ofrecer campos basura… un acceso muy fácil de encontrar»*.
  *
- * Esta pantalla es las dos mitades de ese pedido:
+ * - **La lista**: cada ficha dice el nombre, cómo la reconoce el banco y **cuánto se le envió este
+ *   período** (y lo que te envió) — la pregunta que trae al dueño acá. Personas y comercios aparte.
+ * - **Lo que Movi encontró solo** (los sugeridos) va arriba en **una sola línea** que se abre: hasta
+ *   esta fecha eran hasta cinco tarjetas grandes encima, y lo guardado quedaba debajo del pliegue.
+ * - **La ficha** ([DetalleDelDestinoSheet]) es para leer; **Editar** ([DestinoSheet]) para cambiar,
+ *   unir y borrar. Un movimiento de la ficha se abre con un toque ([HojaDelMovimiento]).
  *
- * - **Guardarla.** Registrar, renombrar y borrar un destino desde acá, sin que nadie toque código.
- *   No es un detalle: la regla del proyecto es que nada se configure solo escribiendo Kotlin, y
- *   *«otros usuarios no tienen a Claude al lado»*.
- * - **Ver lo que fue para allá.** Cada ficha dice cuánto y cuántos movimientos; tocarla abre el
- *   detalle con la lista y el total por período.
- *
- * ## Por qué la lista de movimientos vive ACÁ y no en Movimientos
- *
- * Se consideraron las tres puertas:
- *
- * - **Un chip en Movimientos** no escala: la fila de chips es un juego fijo y global
- *   (`CHIPS_DE_MOVIMIENTOS`), así que un destino nuevo necesitaría un chip nuevo — o sea, volver a
- *   tocar código cada vez que registre a alguien, justo lo que esta feature vino a evitar.
- * - **Una tarjeta en Más** sería una segunda superficie que dice lo mismo que esta, y Más es un
- *   índice de accesos, no un lugar donde se lean cifras.
- * - **El detalle del propio destino** —esto— no agrega ninguna pantalla que el registro no
- *   necesitara igual: la hoja de alta/edición tiene que existir de todos modos, y el total se lee
- *   al lado del nombre de quien lo recibió, que es la pregunta que se está haciendo.
+ * [abrir] es el id de la ficha que se abre al llegar («Ver su ficha» desde un movimiento).
  *
  * ## Solo en línea, y dicho en voz alta
  *
@@ -105,12 +99,13 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
  * que no pudo leer y ofrece reintentar — no muestra una cifra vieja como si fuera la de hoy.
  */
 @Composable
-fun DestinosScreen(onNavigate: (Screen) -> Unit) {
+fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null) {
     var destinos by remember { mutableStateOf<List<DestinoConocido>>(emptyList()) }
     var cuentas by remember { mutableStateOf<List<Account>>(emptyList()) }
     var ajustes by remember { mutableStateOf(PeriodSettings()) }
-    // 4-oct-2026: lo que Movi encontró solo. Secundario: si falla, la pantalla sigue con lo guardado.
+    // Lo que Movi encontró solo. Secundario: si falla, la pantalla sigue con lo guardado.
     var sugeridos by remember { mutableStateOf<List<DestinoSugerido>>(emptyList()) }
+    var verSugeridos by remember { mutableStateOf(false) }
     var verTodosLosSugeridos by remember { mutableStateOf(false) }
     var busqueda by remember { mutableStateOf("") }
     var cargando by remember { mutableStateOf(true) }
@@ -120,25 +115,33 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
     var errorDeSugerido by remember { mutableStateOf<String?>(null) }
     val alcance = rememberCoroutineScope()
 
-    // Qué hoja está abierta. El detalle y el formulario son dos hojas y no una: mezclar campos
-    // editables con una lista de plata que se lee hace que no se entienda qué se está mirando.
+    // Qué hoja está abierta. La ficha (leer), la hoja de guardar/editar, y un movimiento abierto
+    // desde la ficha: al cerrarlo, se vuelve a la ficha.
     var detalle by remember { mutableStateOf<DestinoConocido?>(null) }
     var formulario by remember { mutableStateOf<DestinoConocido?>(null) }
     var formularioAbierto by remember { mutableStateOf(false) }
+    var movimientoAbierto by remember { mutableStateOf<FinancialEvent?>(null) }
+    var yaSeAbrioLaPedida by remember { mutableStateOf(false) }
 
     val refreshTick = LocalRefreshTick.current
     LaunchedEffect(loadKey, refreshTick) {
         cargando = true
         runCatching { Repositories.wallets.getDestinos() }
             .onSuccess { destinos = it; leidos = true }
-        // Las cuentas son para la guarda del alta: la hoja avisa «ese número es de tu Fiducuenta»
-        // sin ir al server. Si no se pudieron leer, el server rechaza igual — la guarda de verdad
-        // está allá (ver `DestinoRoutes`).
+        // Las cuentas son para la guarda del alta («ese número es de tu Fiducuenta») y para abrir un
+        // movimiento. Si no se pudieron leer, el server rechaza igual.
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
         runCatching { Repositories.wallets.getUserProfile() }
             .onSuccess { ajustes = PeriodSettings(it.periodCutoffDay, it.periodStarts) }
         runCatching { Repositories.wallets.getDestinosSugeridos() }.onSuccess { sugeridos = it }
         cargando = false
+    }
+    // «Ver su ficha» desde un movimiento: la ficha pedida se abre sola, una vez.
+    LaunchedEffect(destinos, abrir) {
+        if (abrir != null && !yaSeAbrioLaPedida && leidos) {
+            destinos.firstOrNull { it.id == abrir }?.let { detalle = it }
+            yaSeAbrioLaPedida = true
+        }
     }
     val noSeLeyo = !cargando && !leidos
 
@@ -150,7 +153,8 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
     fun guardarSugerido(s: DestinoSugerido, nombre: String) {
         errorDeSugerido = null
         alcance.launch {
-            val nuevo = DestinoConocido(nombre = nombre.trim(), numero = "", tipo = s.tipo)
+            // Sin tipo: lo deduce el server de los avisos al leer (ver `tipoInferido`).
+            val nuevo = DestinoConocido(nombre = nombre.trim(), numero = "")
                 .conIdentificadores(listOf(s.identificador) + s.otrosIdentificadores)
             runCatching { Repositories.wallets.createDestino(nuevo) }
                 .onSuccess { creado ->
@@ -195,26 +199,25 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
     val visibles = remember(destinos, busqueda) { filtrarTerceros(destinos, busqueda) }
     val personas = visibles.filter { it.tipoOPersona() == TipoDeTercero.PERSONA }
     val comercios = visibles.filter { it.tipoOPersona() == TipoDeTercero.COMERCIO }
+    // Sin nada guardado, lo que Movi encontró es lo único que hay para hacer: se ve abierto.
+    val sugeridosAbiertos = verSugeridos || (leidos && destinos.isEmpty())
 
+    CompositionLocalProvider(LocalAbrirFichaDelTercero provides { t -> movimientoAbierto = null; detalle = t }) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
             MinScreenHeader(
-                title = "Cuentas de otros",
-                // Ola C, tarea 4: la primera puerta fue la tarjeta de Patrimonio, hoy «Cuentas de
-                // otros» (ver `SeccionDeCuentasDeOtros` en `AccountsScreen`). Ola V agregó una segunda, «Cuentas de
-                // otros» en Ajustes (ver `MasScreen`) — «volver» sigue el historial real y solo
-                // cae a este `fallback` (Patrimonio) cuando no hay ninguno.
-                leading = HeaderLeading.Back(fallback = Screen.Accounts),
+                title = PERSONAS_Y_COMERCIOS,
+                // La puerta principal es Movimientos (ver `RenglonDePersonasYComercios`); «volver» sigue
+                // el historial real y solo cae acá cuando no hay ninguno.
+                leading = HeaderLeading.Back(fallback = Screen.Transactions()),
                 subtitle = when {
                     cargando || noSeLeyo -> null
-                    destinos.size == 1 -> "1 cuenta guardada"
-                    destinos.isNotEmpty() -> "${destinos.size} cuentas guardadas"
+                    destinos.size == 1 -> "1 guardado"
+                    destinos.isNotEmpty() -> "${destinos.size} guardados"
                     else -> null
                 },
-                action = if (destinos.isNotEmpty() && !noSeLeyo) {
+                action = if (!noSeLeyo) {
                     {
-                        // «Nueva» y no «Nueva cuenta»: a 390 dp el botón largo dejaba el título en
-                        // «Cuentas de otr…» (visto en la web, 30-sep).
                         NewItemButton(
                             label = "Nueva",
                             onClick = { formulario = null; formularioAbierto = true },
@@ -226,16 +229,9 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
             if (noSeLeyo) {
                 Spacer(Modifier.height(14.dp))
                 NoSePudoLeer(
-                    "No pudimos cargar las cuentas de otros",
+                    "No pudimos cargar tus personas y comercios",
                     onReintentar = { loadKey++ },
                     modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            } else if (destinos.isEmpty() && !cargando) {
-                NewItemButton(
-                    label = "Guardar una cuenta de otra persona",
-                    onClick = { formulario = null; formularioAbierto = true },
-                    modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
-                    full = true,
                 )
             }
 
@@ -243,64 +239,45 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp),
             ) {
-                item {
-                    Text(
-                        QUE_SON_EN_UNA_LINEA,
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 14.dp),
-                    )
-                }
+                item { Spacer(Modifier.height(6.dp)) }
 
-                // ── Lo que Movi encontró solo ─────────────────────────────────────────
+                // ── Lo que Movi encontró solo: una línea que se abre ─────────────────
                 if (sugeridos.isNotEmpty()) {
                     item {
-                        Column(modifier = Modifier.testTag(TAG_SUGERIDOS)) {
-                            Text(
-                                tituloDeLosSugeridos(sugeridos.size),
-                                style = Movi.textos.titulo,
-                                color = Movi.colores.texto,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
-                            )
-                            Text(
-                                "Guárdalas con un toque y Movi les pone el nombre en tus avisos y movimientos.",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
-                            )
-                            if (errorDeSugerido != null) {
-                                Text(
-                                    errorDeSugerido!!,
-                                    style = Movi.textos.apoyo,
-                                    color = Movi.colores.sale,
-                                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                        LoQueEncontroMovi(
+                            cuantos = sugeridos.size,
+                            abierto = sugeridosAbiertos,
+                            puedeCerrarse = destinos.isNotEmpty(),
+                            error = errorDeSugerido,
+                            onAlternar = { verSugeridos = !sugeridosAbiertos },
+                        )
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    if (sugeridosAbiertos) {
+                        val aMostrar = if (verTodosLosSugeridos) sugeridos else sugeridos.take(SUGERIDOS_A_LA_VISTA)
+                        items(aMostrar, key = { "sug-" + it.identificador.clave }) { s ->
+                            Column {
+                                TarjetaDeSugerido(
+                                    sugerido = s,
+                                    pareceDe = s.pareceDe?.let { id -> destinos.firstOrNull { it.id == id } },
+                                    onGuardar = { nombre -> guardarSugerido(s, nombre) },
+                                    onUnir = { tercero -> unirSugerido(s, tercero) },
+                                    onDescartar = { motivo -> descartar(s, motivo) },
+                                )
+                                Spacer(Modifier.height(10.dp))
+                            }
+                        }
+                        if (sugeridos.size > SUGERIDOS_A_LA_VISTA) {
+                            item {
+                                Enlace(
+                                    if (verTodosLosSugeridos) "Ver menos" else "Ver ${sugeridos.size - SUGERIDOS_A_LA_VISTA} más",
+                                    { verTodosLosSugeridos = !verTodosLosSugeridos },
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 14.dp),
                                 )
                             }
                         }
                     }
-                    val aMostrar = if (verTodosLosSugeridos) sugeridos else sugeridos.take(SUGERIDOS_A_LA_VISTA)
-                    items(aMostrar, key = { "sug-" + it.identificador.clave }) { s ->
-                        Column {
-                            TarjetaDeSugerido(
-                                sugerido = s,
-                                pareceDe = s.pareceDe?.let { id -> destinos.firstOrNull { it.id == id } },
-                                onGuardar = { nombre -> guardarSugerido(s, nombre) },
-                                onUnir = { tercero -> unirSugerido(s, tercero) },
-                                onDescartar = { motivo -> descartar(s, motivo) },
-                            )
-                            Spacer(Modifier.height(10.dp))
-                        }
-                    }
-                    if (sugeridos.size > SUGERIDOS_A_LA_VISTA) {
-                        item {
-                            Enlace(
-                                if (verTodosLosSugeridos) "Ver menos" else "Ver ${sugeridos.size - SUGERIDOS_A_LA_VISTA} más",
-                                { verTodosLosSugeridos = !verTodosLosSugeridos },
-                                modifier = Modifier.padding(start = 4.dp, bottom = 14.dp),
-                            )
-                        }
-                    }
-                    item { Spacer(Modifier.height(8.dp)) }
+                    item { Spacer(Modifier.height(4.dp)) }
                 }
 
                 if (destinos.size > TERCEROS_PARA_BUSCAR) {
@@ -312,36 +289,31 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
 
                 if (destinos.isEmpty() && !cargando) {
                     item {
-                        MinSectionHeader(title = "Guardadas")
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
                             padding = PaddingValues(18.dp),
                         ) {
-                            Text(
-                                QUE_ES_ESTO,
-                                style = Movi.textos.cuerpo,
-                                color = Movi.colores.textoMedio,
+                            Text(QUE_ES_ESTO, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                            Spacer(Modifier.height(14.dp))
+                            NewItemButton(
+                                label = "Guardar una persona o comercio",
+                                onClick = { formulario = null; formularioAbierto = true },
+                                full = true,
                             )
                         }
                     }
                 }
-                // Ola B, tarea 9: antes de la primera lectura buena la pantalla quedaba en
-                // blanco debajo de «Guardadas» — ni una ficha, ni una rueda. `!leidos` y no solo
-                // `cargando`: una recarga con destinos ya pintados (guardar uno, volver del
-                // detalle) sigue con `items(destinos)` de siempre.
+                // Ola B, tarea 9: antes de la primera lectura buena, la forma de las fichas.
                 if (cargando && !leidos) {
-                    item { MinSectionHeader(title = "Guardadas") }
                     destinosEsqueleto()
                 } else {
-                    // 4-oct-2026: Personas y Comercios. Un comercio (la arepería del QR) no se lee
-                    // como «la cuenta de alguien».
                     seccionDeTerceros("Personas", personas) { detalle = it }
                     seccionDeTerceros("Comercios", comercios) { detalle = it }
                     if (busqueda.isNotBlank() && visibles.isEmpty()) {
                         item {
                             Text(
-                                "Ninguna cuenta guardada coincide con «${busqueda.trim()}».",
+                                "Nadie guardado coincide con «${busqueda.trim()}».",
                                 style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
                                 modifier = Modifier.padding(start = 4.dp),
@@ -353,24 +325,80 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
             }
         }
 
-        detalle?.let { d ->
+        val d = detalle
+        if (d != null && movimientoAbierto == null && !formularioAbierto) {
             DetalleDelDestinoSheet(
                 destino = d,
                 ajustes = ajustes,
-                otros = destinos.filter { it.id != d.id },
                 onDismiss = { detalle = null },
-                onEditar = { detalle = null; formulario = d; formularioAbierto = true },
+                onEditar = { formulario = destinos.firstOrNull { it.id == d.id } ?: d; formularioAbierto = true },
+                onAbrirMovimiento = { movimientoAbierto = it },
                 onCambio = { loadKey++ },
             )
         }
 
+        movimientoAbierto?.let { ev ->
+            // La misma hoja que abre tocar un movimiento en Movimientos; al cerrarla vuelve la ficha.
+            HojaDelMovimiento(
+                event = ev,
+                cuentas = cuentas,
+                onDismiss = { movimientoAbierto = null },
+                onCambiado = { movimientoAbierto = null; loadKey++ },
+            )
+        }
+
         if (formularioAbierto) {
+            val editado = formulario
             DestinoSheet(
                 cuentas = cuentas,
-                existente = formulario,
+                existente = editado,
+                otros = if (editado == null) emptyList() else destinos.filter { it.id != editado.id },
                 onDismiss = { formularioAbierto = false },
-                onGuardado = { formularioAbierto = false; loadKey++ },
+                onGuardado = {
+                    formularioAbierto = false
+                    // Borrado o unido, la ficha de antes ya no existe: no se vuelve a ella.
+                    detalle = null
+                    loadKey++
+                },
             )
+        }
+    }
+    }
+}
+
+/**
+ * **Lo que Movi encontró solo, en una línea**: «Movi encontró 4 sin nombre · Les envías plata o te
+ * envían, y no sabe quiénes son · Revisarlos». Abierta, debajo van las tarjetas.
+ */
+@Composable
+private fun LoQueEncontroMovi(
+    cuantos: Int,
+    abierto: Boolean,
+    puedeCerrarse: Boolean,
+    error: String?,
+    onAlternar: () -> Unit,
+) {
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_SUGERIDOS),
+        variant = MinCardVariant.Default,
+        padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        onClick = if (abierto && !puedeCerrarse) null else onAlternar,
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(tituloDeLosSugeridos(cuantos), style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                Text(
+                    "Les envías plata o te envían, y Movi no sabe quiénes son.",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                )
+            }
+            if (!abierto) Pastilla("Revisar", onAlternar, principal = true)
+            else if (puedeCerrarse) Enlace("Ocultar", onAlternar)
+        }
+        if (error != null) {
+            Spacer(Modifier.height(6.dp))
+            Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
     }
 }
@@ -384,13 +412,9 @@ internal const val TERCEROS_PARA_BUSCAR: Int = 8
 /** El tag del bloque de lo que Movi encontró. */
 const val TAG_SUGERIDOS: String = "destinos-sugeridos"
 
-/** «Movi encontró 3 cuentas a las que les envías plata». */
+/** «Movi encontró 3 sin nombre». */
 internal fun tituloDeLosSugeridos(n: Int): String =
-    if (n == 1) "Movi encontró 1 cuenta a la que le envías plata" else "Movi encontró $n cuentas a las que les envías plata"
-
-/** Qué son, en una línea: lo primero que se lee en la pantalla. */
-internal const val QUE_SON_EN_UNA_LINEA: String =
-    "Las cuentas de otras personas y comercios a los que les pagas. No suman en tu plata."
+    if (n == 1) "Movi encontró 1 sin nombre" else "Movi encontró $n sin nombre"
 
 /** Los terceros que coinciden con [busqueda] por nombre, nota o cualquiera de sus identificadores. */
 internal fun filtrarTerceros(destinos: List<DestinoConocido>, busqueda: String): List<DestinoConocido> {
@@ -518,134 +542,93 @@ private fun TarjetaDeSugerido(
 /** «·3068 · Persona · 2 veces · último 19 sep». */
 internal fun detalleDelSugerido(s: DestinoSugerido, hoy: kotlinx.datetime.LocalDate): String =
     listOfNotNull(
-        comoSeLeeEnLaFicha(s.identificador).takeIf { s.nombrePropuesto.isNotEmpty() },
+        // El dato solo si el título es otro: «Ana Prueba Salazar · Ana Prueba Salazar» lo repetía.
+        comoSeLeeEnLaFicha(s.identificador).takeIf {
+            s.nombrePropuesto.isNotEmpty() && normalizarParaBuscar(it) != normalizarParaBuscar(s.nombrePropuesto)
+        },
         s.tipo.comoSeDice(),
         if (s.veces == 1) "1 vez" else "${s.veces} veces",
         "último " + etiquetaDeFecha(fechaDeEpoch(s.ultimo), hoy).replaceFirstChar { it.lowercaseChar() },
     ).joinToString(" · ")
 
 /**
- * Lo que la pantalla vacía explica. Va acá y no adentro del `Composable` para que se lea completo
- * de una vez: es el texto que tiene que dejar claro, sin ejemplos de código, qué es esto y qué NO
- * es — que no es una cuenta suya y que no entra en su plata.
+ * Lo que la pantalla vacía explica, en dos frases: qué es y que no suma en su plata. Cómo se usa lo
+ * dice el botón de abajo.
  */
 internal const val QUE_ES_ESTO: String =
-    "Aquí guardas cuentas que no son tuyas: la de tu pareja, la de tu papá. No entran en tu plata " +
-        "ni en tu patrimonio. Sirven para dos cosas: cuando el banco te avise de una transferencia " +
-        "a esa cuenta o a su llave, Movi le pone el nombre en vez del número; y aquí ves junto todo " +
-        "lo que le has enviado. También puedes guardarlas desde el aviso del banco, con «Guardar como…»."
+    "Guarda la cuenta o la llave de tu pareja, tu papá o la cancha: Movi les pone el nombre en tus " +
+        "avisos y movimientos, y aquí ves cuánto les envías. No suman en tu plata."
 
 /**
- * El renglón de debajo del nombre: cómo lo reconoce el banco (la cola del número, la llave, o los
- * dos — ver [identificadoresDelDestino]) y de quién es, si lo llenó.
+ * El renglón de debajo del nombre: cómo lo reconoce el banco (la cola del número, la llave — ver
+ * [identificadoresDelDestino]) y la nota, si la tiene.
  */
 internal fun subtituloDelDestino(destino: DestinoConocido): String =
     (identificadoresDelDestino(destino) + listOfNotNull(destino.deQuien)).joinToString(" · ")
 
-/**
- * «Este período»: lo que le enviaste y lo que te envió ([DestinoConocido.totalesDelPeriodo] y
- * [DestinoConocido.recibidosDelPeriodo]), o que no hubo nada.
- */
-internal fun loDeEstePeriodo(destino: DestinoConocido): String {
-    fun cifras(m: Map<String, Long>) = m.filterValues { it != 0L }.entries.sortedBy { it.key }
-        .joinToString(" · ") { (moneda, total) -> formatMoney(total, moneda) }
-    val enviado = cifras(destino.totalesDelPeriodo)
-    val recibido = cifras(destino.recibidosDelPeriodo)
-    return listOfNotNull(
-        enviado.takeIf { it.isNotEmpty() }?.let { if (recibido.isEmpty()) it else "enviaste $it" },
-        recibido.takeIf { it.isNotEmpty() }?.let { "te envió $it" },
-    ).joinToString(" · ").ifEmpty { "nada todavía" }
+/** «Último: ayer · $1.170.560» o «Último: te envió · 2 oct · $400.000», o `null` sin ninguno. */
+internal fun ultimoDeLaFicha(destino: DestinoConocido, hoy: kotlinx.datetime.LocalDate): String? {
+    val ultimo = listOfNotNull(destino.ultimo, destino.ultimoRecibido).maxByOrNull { it.timestamp } ?: return null
+    val recibido = ultimo === destino.ultimoRecibido
+    return "Último: " + (if (recibido) "te envió · " else "") +
+        etiquetaDeFecha(fechaDeEpoch(ultimo.timestamp), hoy).replaceFirstChar { it.lowercaseChar() } +
+        " · " + formatMoney(ultimo.monto, ultimo.moneda)
 }
 
+/** El tag de cada ficha de la lista: `TAG:<id>`. */
+const val TAG_FICHA_EN_LA_LISTA: String = "ficha-en-la-lista"
+
 /**
- * **Una cuenta de otro, de un vistazo** (30-sep): el nombre, cómo la reconoce el banco y de quién
- * es; a la derecha el total y cuántos envíos; y debajo lo de este período y el último envío —
- * «¿cuándo fue la última vez que le mandé a Caro?» se contesta sin abrir nada. Tocarla abre el
- * detalle con todos los movimientos ([DetalleDelDestinoSheet]).
+ * **Una persona o comercio, de un vistazo** (4-oct-2026): el nombre y cómo lo reconoce el banco; a
+ * la derecha **lo de este período** — lo que le enviaste, y debajo lo que te envió — que es la
+ * pregunta que trae al dueño a esta pantalla; y una línea con el último movimiento. El total
+ * histórico vive en la ficha: con tres cifras por tarjeta no se sabía cuál mirar.
  */
 @Composable
 private fun FichaDelDestino(destino: DestinoConocido, onClick: () -> Unit) {
     val hoy = remember { hoyEnAppZone() }
+    val enviado = destino.totalesDelPeriodo.filterValues { it != 0L }
+    val recibido = destino.recibidosDelPeriodo.filterValues { it != 0L }
     MinCard(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().testTag(TAG_FICHA_EN_LA_LISTA + ":" + destino.id),
         variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
+        padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+        onClick = onClick,
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.fillMaxWidth(0.55f)) {
-                Text(destino.nombre, style = Movi.textos.titulo, color = Movi.colores.texto)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(destino.nombre, style = Movi.textos.titulo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     subtituloDelDestino(destino),
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.End,
-            ) {
-                // Sin movimientos NO se escribe «$0»: un cero dicho con la misma letra que una
-                // cifra real se lee como «no le mandaste nada», y lo que pasa casi siempre es que
-                // el banco todavía no nombró ese número en ningún mensaje.
-                val cuantos = destino.cuantos + destino.cuantosRecibidos
-                if (cuantos == 0) {
-                    Text("Sin movimientos", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+            Spacer(Modifier.width(12.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                // Sin nada este período NO se escribe «$0»: un cero con la letra de una cifra se lee
+                // como un dato, y es una ausencia.
+                if (enviado.isEmpty() && recibido.isEmpty()) {
+                    Text("Nada este período", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
                 } else {
-                    if (destino.totales.isNotEmpty()) TotalesEnColumna(destino.totales, alineadoAlFinal = true)
-                    // Lo que te envió va debajo y en chico: la cifra grande es lo que le mandaste,
-                    // que es lo que esta pantalla vino a contestar.
-                    if (destino.recibidos.isNotEmpty()) {
+                    if (enviado.isNotEmpty()) TotalesEnColumna(enviado, alineadoAlFinal = true)
+                    if (recibido.isNotEmpty()) {
                         Text(
-                            "te envió " + destino.recibidos.entries.sortedBy { it.key }
-                                .joinToString(" · ") { formatMoney(it.value, it.key) },
+                            "te envió " + recibido.entries.sortedBy { it.key }.joinToString(" · ") { formatMoney(it.value, it.key) },
                             style = Movi.textos.apoyo,
                             color = Movi.colores.entra,
                         )
                     }
-                    Text(
-                        if (cuantos == 1) "1 movimiento" else "$cuantos movimientos",
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
+                    Text("este período", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
                 }
             }
         }
-        // Lo de este período y el último movimiento, solo si hubo alguno: sin ninguno ya lo dice
-        // «Sin movimientos», y dos renglones vacíos más no agregan nada.
-        val ultimo = listOfNotNull(destino.ultimo, destino.ultimoRecibido).maxByOrNull { it.timestamp }
-        if (destino.cuantos + destino.cuantosRecibidos > 0) {
-            Spacer(Modifier.height(12.dp))
-            RenglonDeLaFicha("Este período", loDeEstePeriodo(destino))
-            if (ultimo != null) {
-                Spacer(Modifier.height(4.dp))
-                // El monto va aparte, a la derecha: a 390 dp el renglón entero se cortaba justo en
-                // la cifra («… · $…»), que es lo que más se busca. Lo que cede es el nombre.
-                RenglonDeLaFicha(
-                    "Último",
-                    "${ultimo.descripcion} · ${etiquetaDeFecha(fechaDeEpoch(ultimo.timestamp), hoy)}",
-                    alFinal = formatMoney(ultimo.monto, ultimo.moneda),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RenglonDeLaFicha(rotulo: String, valor: String, alFinal: String? = null) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-        Text(
-            valor,
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (alFinal != null) {
-            Text(alFinal, style = Movi.textos.apoyo, color = Movi.colores.texto, maxLines = 1, softWrap = false)
+        ultimoDeLaFicha(destino, hoy)?.let { ultimo ->
+            Spacer(Modifier.height(8.dp))
+            Text(ultimo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

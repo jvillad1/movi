@@ -314,7 +314,7 @@ class EsqueletosDeListasTest {
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { DestinosScreen(onNavigate = {}) } } }
         composeRule.waitForIdle()
 
-        assertTrue(hay("Aquí guardas cuentas que no son tuyas"))
+        assertTrue(hay("No suman en tu plata"))
         assertEquals(0, contarEsqueletos())
     }
 }
