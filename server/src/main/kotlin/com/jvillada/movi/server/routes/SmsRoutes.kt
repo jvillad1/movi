@@ -59,8 +59,18 @@ import org.jetbrains.exposed.sql.update
  * `USD20,00` —estos dos en las compras con tarjeta de crédito—, y la regex de antes solo conocía el
  * `$`: 23 de los 98 SMS pendientes del dueño no se leían (sep-2026), entre ellos todos sus cobros de
  * Microsoft, Uber, Google, Anthropic y Railway.
+ *
+ * **Y el monto sin separadores** (4-oct-2026): el correo de Bancolombia escribe «Pagaste $386902 en
+ * la tarjeta…», todo pegado. La forma de arriba exigía grupos de tres después del primer bloque, así
+ * que se quedaba con «386»: un pago de $386.902 se proponía de $386, mil veces más chico y sin
+ * ninguna señal. Ahora hay dos formas: la de siempre, con al menos un separador de miles, y una
+ * corrida de dígitos con decimales opcionales. La primera se prueba antes, así que todo lo que ya se
+ * leía con separadores se sigue leyendo igual; lo que no los trae se lee entero.
  */
-private val amountRegex = Regex("""(\$|\bCOP|\bUSD)\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
+private val amountRegex = Regex(
+    """(\$|\bCOP|\bUSD)\s*([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?|[0-9]+(?:[.,][0-9]+)?)""",
+    RegexOption.IGNORE_CASE,
+)
 /** «Recibimos pago por 9.809.799 a tu tarjeta»: sin prefijo, pero con separador de miles. */
 private val amountPorRegex = Regex("""\bpor\s+([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
 /** «Recibiste 300.000,00 en tu cuenta» (Nu): sin prefijo ni «por», pero con separador de miles. */
