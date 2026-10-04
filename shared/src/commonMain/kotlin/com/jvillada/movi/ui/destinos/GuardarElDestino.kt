@@ -50,6 +50,16 @@ const val TAG_GUARDAR_EL_DESTINO: String = "guardar-el-destino"
 const val GUARDAR_COMO: String = "Guardar como…"
 
 /**
+ * **El enlace que despliega la nota** (`deQuien`: esposa, papá). Se usa en la fila y en la hoja de
+ * alta: el nombre casi siempre ya dice de quién es, así que la relación es un extra que se pide
+ * solo si él quiere.
+ */
+const val AGREGAR_UNA_NOTA: String = "Agregar una nota (ej. esposa)"
+
+/** Lo que dice el campo de la nota, ya desplegado. */
+internal const val NOTA_DEL_DESTINO: String = "Nota (opcional). Ej: esposa, papá"
+
+/**
  * **La pregunta de la fila**, según lo que el banco haya dicho: «¿De quién es la cuenta ·0756?»,
  * «¿De quién es la llave 0087?», o —cuando lo que hay es el nombre de quien mandó la plata, que ya
  * contesta de quién es— «¿Guardar a Carolina Restrepo Salazar?».
@@ -122,9 +132,14 @@ internal class DestinosParaGuardar(
  * Quien la muestra ya decidió que hace falta ([DestinosParaGuardar.ofrece]); con un destino
  * conocido la fila no existe.
  *
- * Cerrada es una pregunta y un botón. Abierta, dos campos y nada más: el nombre —prellenado con el
- * que trajo el banco, en Título Caso— y «de quién es», opcional. El número o la llave no se
- * escriben: son los del mensaje.
+ * Cerrada es una pregunta y un botón. Abierta, **un solo campo**: el nombre, prellenado con el que
+ * trajo el banco en Título Caso. El número o la llave no se escriben: son los del mensaje.
+ *
+ * Hasta el 3-oct-2026 había un segundo campo con el mismo peso, «De quién es (opcional)», y el dueño
+ * lo vio redundante: la fila ya pregunta «¿De quién es la cuenta ·0756?», y en casi todos los casos
+ * el nombre ES de quién es. La relación (`deQuien`: esposa, papá) sigue existiendo —los destinos
+ * guardados la tienen y «Cuentas de otros» la muestra—, pero ahora se pide detrás del enlace
+ * [AGREGAR_UNA_NOTA].
  *
  * Si el nombre que escribe ya es el de una cuenta guardada a la que le falta este dato («Caro»
  * tiene el número y esto es su llave), **se le agrega a esa** en vez de crear una segunda — lo
@@ -142,6 +157,7 @@ internal fun FilaGuardarElDestino(
     var abierta by remember(identificador) { mutableStateOf(false) }
     var nombre by remember(identificador, nombreSugerido) { mutableStateOf(nombreSugerido) }
     var deQuien by remember(identificador) { mutableStateOf("") }
+    var conNota by remember(identificador) { mutableStateOf(false) }
     var guardando by remember { mutableStateOf(false) }
     var error by remember(identificador) { mutableStateOf<String?>(null) }
 
@@ -197,7 +213,19 @@ internal fun FilaGuardarElDestino(
         Spacer(Modifier.height(12.dp))
         FieldBox("Nombre. Ej: Caro", nombre, { nombre = it })
         Spacer(Modifier.height(8.dp))
-        FieldBox("De quién es (opcional). Ej: esposa", deQuien, { deQuien = it })
+        if (conNota) {
+            FieldBox(NOTA_DEL_DESTINO, deQuien, { deQuien = it })
+        } else {
+            Text(
+                AGREGAR_UNA_NOTA,
+                style = Movi.textos.apoyo,
+                fontWeight = FontWeight.Medium,
+                color = Movi.colores.marca,
+                modifier = Modifier
+                    .clickable(enabled = !guardando, role = Role.Button) { conNota = true }
+                    .padding(vertical = 4.dp),
+            )
+        }
         Spacer(Modifier.height(8.dp))
         Text(
             when {

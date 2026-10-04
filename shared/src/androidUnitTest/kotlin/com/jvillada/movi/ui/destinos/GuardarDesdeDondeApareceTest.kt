@@ -150,10 +150,11 @@ class GuardarDesdeDondeApareceTest {
 
         esperar("¿De quién es la cuenta ·0756?")
         tocar(GUARDAR_COMO)
-        // Primero los dos campos de la fila (nombre, de quién); el de «Comercio» va después.
-        val campos = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
-        campos[0].performTextReplacement("Caro")
-        campos[1].performTextReplacement("esposa")
+        // Un solo campo en la fila (3-oct): el nombre. La nota se pide detrás de un enlace; ya
+        // desplegada, va segunda —antes que el campo de «Comercio»—.
+        composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[0].performTextReplacement("Caro")
+        tocar(AGREGAR_UNA_NOTA)
+        composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[1].performTextReplacement("esposa")
         composeRule.waitForIdle()
         tocar("Guardar cuenta")
         composeRule.waitUntil(timeoutMillis = 5_000) { creados.isNotEmpty() }
@@ -173,6 +174,32 @@ class GuardarDesdeDondeApareceTest {
         assertEquals("Transferencia a Caro", publicados.single().description)
         // El texto del banco viaja con el movimiento: es lo que lo engancha a «Cuentas de otros».
         assertEquals(transferencia.text, publicados.single().rawPayload)
+    }
+
+    /**
+     * **Un solo campo con peso** (3-oct-2026): el dueño vio la fila pedir «Nombre» y «De quién es»,
+     * que casi siempre son lo mismo. Abierta, la fila tiene el nombre y un enlace para la nota; sin
+     * tocar el enlace, se guarda sin nota.
+     */
+    @Test
+    fun `la fila abierta pide un solo campo y la nota es un enlace`() {
+        reconciliar(Repo())
+
+        esperar("¿De quién es la cuenta ·0756?")
+        val antes = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true).fetchSemanticsNodes().size
+        tocar(GUARDAR_COMO)
+        val despues = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true).fetchSemanticsNodes().size
+        assertEquals(1, despues - antes, "la fila abierta debe sumar un solo campo, el nombre")
+        assertTrue(hay(AGREGAR_UNA_NOTA), "falta el enlace de la nota")
+        assertFalse(hay("De quién es (opcional)"), "volvió el segundo campo con el mismo peso")
+
+        composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[0].performTextReplacement("Caro")
+        composeRule.waitForIdle()
+        tocar("Guardar cuenta")
+        composeRule.waitUntil(timeoutMillis = 5_000) { creados.isNotEmpty() }
+
+        assertEquals("Caro", creados.single().nombre)
+        assertNull(creados.single().deQuien, "sin tocar el enlace no hay nota")
     }
 
     @Test

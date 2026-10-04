@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
@@ -193,11 +194,15 @@ class DestinosScreenTest {
         tocar("Guardar una cuenta de otra persona")
         esperarTexto("Nueva cuenta de otro")
 
-        // Los cuatro campos en orden: nombre, número, llave, de quién.
+        // Tres campos en orden: nombre, número, llave. La nota (de quién es) va detrás de un enlace
+        // desde el 3-oct: el nombre casi siempre ya lo dice.
         val editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
+        assertEquals(3, editables.fetchSemanticsNodes().size, "la nota no debe pesar lo mismo que el nombre")
         editables[0].performTextInput("Caro")
         editables[1].performTextInput("*319-7327-0756")
-        editables[3].performTextInput("esposa")
+        composeRule.onNodeWithText(AGREGAR_UNA_NOTA, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[3].performTextInput("esposa")
         composeRule.waitForIdle()
 
         tocar("Guardar cuenta")
