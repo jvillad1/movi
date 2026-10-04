@@ -500,6 +500,43 @@ class PapelesRoutesTest {
         assertEquals(1, lector.vecesExtracto)
     }
 
+    @Test
+    fun `un extracto sin movimientos no abre la revision y no queda leido`() = testApplication {
+        wireApp()
+        // El extracto del crédito del vehículo: Movi lo toma por extracto y la lectura vuelve vacía.
+        lector.filasDelExtracto = emptyList()
+        val pdf = pdfConLineas(
+            listOf(
+                "Extracto credito vehiculo",
+                "01/09/2026 CUOTA A PAGAR 1.250.000",
+                "02/09/2026 SALDO CAPITAL 38.500.000",
+                "03/09/2026 INTERESES 410.000",
+                "04/09/2026 SEGURO 95.000",
+            ),
+        )
+        val doc = subir(duenoId, nombre = "Vehiculos.pdf", contenido = pdf, mime = "application/pdf")
+
+        val res = leer(duenoId, doc)
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
+        assertEquals(PAPEL_SIN_MOVIMIENTO, res.bodyAsText())
+        assertEquals(1, lector.vecesExtracto)
+        transaction {
+            assertEquals(1L, Documents.selectAll().where { Documents.id eq doc }.count(), "el archivo queda en Documentos")
+            assertEquals(0L, LecturasDePapeles.selectAll().count(), "una lectura vacía no se guarda")
+            assertEquals(0L, StatementImports.selectAll().count())
+        }
+    }
+
+    @Test
+    fun `una imagen que el clasificador llama extracto pero no trae filas tampoco abre la revision`() = testApplication {
+        wireApp()
+        lector.queDice = QueDiceElPapel.Extracto
+        lector.filasDelExtracto = emptyList()
+        val res = leer(duenoId, subir(duenoId, nombre = "portal.png"))
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
+        assertEquals(PAPEL_SIN_MOVIMIENTO, res.bodyAsText())
+    }
+
     // ── Utilidades ─────────────────────────────────────────────────────────────
 
     private fun pdfConLineas(lineas: List<String>): ByteArray {

@@ -190,7 +190,22 @@ internal suspend fun leerElPapel(
             val leido = try {
                 leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true)
             } catch (e: FallaAlProcesarExtracto) {
+                // «Extracto sin movimientos» está escrito para quien SUBIÓ un extracto («revisa que
+                // sea el del detalle»). Acá el dueño compartió un papel y fue Movi quien decidió que
+                // era un extracto: lo honesto es decir que el papel no muestra movimientos.
+                if (e.mensaje == EXTRACTO_SIN_MOVIMIENTOS) {
+                    throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_MOVIMIENTO)
+                }
                 throw FallaAlLeerElPapel(e.status, e.mensaje)
+            }
+            // **Un extracto vacío no abre la revisión.** Una revisión en «0 nuevas · 0
+            // coincidencias» se lee como «este mes ya estaba conciliado». Pasaba con el extracto del
+            // crédito del vehículo: cuota, saldo y tasa, sin lista de movimientos, que ni
+            // `detectDocumentType` ni el clasificador reconocían. `leerElExtracto` ya lo frena hoy
+            // (ver `fallaDeLaLectura`); esto es la red por si ese camino cambia, y además no deja
+            // guardada una lectura vacía que tape un reintento.
+            if (leido.filas.isEmpty() && !leido.esFamirios) {
+                throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_MOVIMIENTO)
             }
             dbQuery {
                 guardarLectura(
