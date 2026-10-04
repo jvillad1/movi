@@ -1,6 +1,6 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
+import com.jvillada.movi.server.ai.MODELO_DE_EXTRACTOS
 import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
@@ -195,7 +195,7 @@ internal suspend fun leerElPapel(
             dbQuery {
                 guardarLectura(
                     uid, huella, papel.id, QueEsElPapel.EXTRACTO, json.encodeToString(ExtractoLeido.serializer(), leido),
-                    if (leido.esFamirios) "famirios" else MODELO_DE_RESPALDO,
+                    if (leido.esFamirios) "famirios" else MODELO_DE_EXTRACTOS,
                 )
             }
             LecturaDelPapel(

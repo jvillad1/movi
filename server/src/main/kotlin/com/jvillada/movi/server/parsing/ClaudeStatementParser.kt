@@ -3,12 +3,15 @@ package com.jvillada.movi.server.parsing
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.models.messages.Base64ImageSource
+import com.anthropic.models.messages.CacheControlEphemeral
 import com.anthropic.models.messages.ContentBlockParam
 import com.anthropic.models.messages.ImageBlockParam
 import com.anthropic.models.messages.Message
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
+import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.TextBlockParam
+import com.jvillada.movi.server.ai.MODELO_DE_EXTRACTOS
 import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
 import com.jvillada.movi.shared.model.MerchantRule
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
@@ -210,10 +213,29 @@ Aplicá las reglas del usuario cuando el merchant coincida.
         else "ENCABEZADO DEL DOCUMENTO (contexto: de ahí sale el año, no tiene movimientos):\n" +
             encabezado + "\n\nPARTE ${indice + 1} DE $total DEL EXTRACTO:\n" + pedazo
 
-    private fun MessageCreateParams.Builder.conLoDeSiempre(rules: List<MerchantRule>) =
-        model("claude-opus-4-7")
+    /**
+     * **Cómo se le pide un extracto al modelo**, igual para texto e imagen.
+     *
+     * - [MODELO_DE_EXTRACTOS] (Sonnet 5.5) con esfuerzo **bajo**: así corrió el benchmark que lo
+     *   eligió. Piensa de forma adaptativa (no se puede apagar en ese modelo), y lo que piensa sale
+     *   del mismo [MAX_TOKENS_DE_SALIDA]: con 71 filas usó ~8.200 de salida, lejos del tope, pero si
+     *   empiezan a aparecer [Lectura.Incompleta] es lo primero que hay que mirar.
+     * - El prompt de sistema (~1.400 fichas, más las reglas del dueño) va **cacheado**: un extracto
+     *   troceado lo manda en cada pedazo, y desde el segundo se lee al 10 % del precio. Lo que
+     *   cambia de pedido a pedido —el pedazo, la imagen— va después, en el mensaje del usuario.
+     */
+    internal fun MessageCreateParams.Builder.conLoDeSiempre(rules: List<MerchantRule>) =
+        model(MODELO_DE_EXTRACTOS)
             .maxTokens(MAX_TOKENS_DE_SALIDA)
-            .systemOfTextBlockParams(listOf(TextBlockParam.builder().text(buildSystemPrompt(rules)).build()))
+            .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
+            .systemOfTextBlockParams(
+                listOf(
+                    TextBlockParam.builder()
+                        .text(buildSystemPrompt(rules))
+                        .cacheControl(CacheControlEphemeral.builder().build())
+                        .build(),
+                ),
+            )
 
     private fun textoDe(response: Message): String =
         response.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
