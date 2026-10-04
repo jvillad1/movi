@@ -1,5 +1,8 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.ConfirmarElMismoPago
+import com.jvillada.movi.shared.model.GrupoDeAvisos
+import com.jvillada.movi.shared.model.MismoPagoConfirmado
 import com.jvillada.movi.shared.model.GuardarRecuerdoRequest
 import com.jvillada.movi.shared.model.OrigenDelRecuerdo
 import com.jvillada.movi.shared.model.RecuerdoDelAsistente
@@ -385,6 +388,33 @@ class WalletRepositoryImpl(
 
     override suspend fun devolverSmsALaBandeja(id: String) {
         client.post("$baseUrl/api/sms/$id/era-un-movimiento").exigirExito()
+    }
+
+    override suspend fun getAvisosDelMismoPago(grupoId: String): GrupoDeAvisos =
+        client.get("$baseUrl/api/sms/grupo/$grupoId").exigirExito().body()
+
+    override suspend fun confirmarElMismoPago(grupoId: String, pedido: ConfirmarElMismoPago): MismoPagoConfirmado =
+        client.post("$baseUrl/api/sms/grupo/$grupoId/confirmar") {
+            contentType(ContentType.Application.Json)
+            setBody(pedido)
+        }.exigirExito().body()
+
+    override suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>) {
+        client.post("$baseUrl/api/sms/grupo/$grupoId/ignorar") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.AvisosDelMismoPago(miembros))
+        }.exigirExito()
+    }
+
+    override suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>) {
+        client.post("$baseUrl/api/sms/grupo/$grupoId/desagrupar") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.AvisosDelMismoPago(miembros))
+        }.exigirExito()
+    }
+
+    override suspend fun esteEsOtroPago(id: String) {
+        client.post("$baseUrl/api/sms/$id/no-es-el-mismo-pago").exigirExito()
     }
 
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =

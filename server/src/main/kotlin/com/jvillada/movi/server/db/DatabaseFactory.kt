@@ -112,6 +112,9 @@ object DatabaseFactory {
             // NULLABLE, y la tabla existe en producción con los mensajes del dueño, así que entra a
             // esta lista por lo mismo que KnownDestinations. Su único índice (`user_id`) ya existe:
             // el único DDL es el ADD COLUMN (ver `SmsMessagesMotivoApartadoColumnTest`).
+            // SmsMessages: `no_es_el_mismo_pago` y `evento_id` (4-oct-2026, los avisos de un mismo
+            // pago) — las dos NULLABLE, mismo caso: dos ADD COLUMN y nada más (ver
+            // `SmsMessagesMismoPagoColumnTest`).
             SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }

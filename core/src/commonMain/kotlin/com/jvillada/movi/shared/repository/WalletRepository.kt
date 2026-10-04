@@ -1,5 +1,8 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.ConfirmarElMismoPago
+import com.jvillada.movi.shared.model.GrupoDeAvisos
+import com.jvillada.movi.shared.model.MismoPagoConfirmado
 import com.jvillada.movi.shared.model.OrigenDelRecuerdo
 import com.jvillada.movi.shared.model.RecuerdoDelAsistente
 import com.jvillada.movi.shared.model.EstadoDePropuesta
@@ -190,6 +193,20 @@ interface WalletRepository {
      * vuelve a apartar.
      */
     suspend fun devolverSmsALaBandeja(id: String)
+
+    /**
+     * «Un pago, una tarjeta» (4-oct-2026): los avisos del mismo pago (`GET /api/sms/grupo/{id}`),
+     * con primero el que más dice. Ver `GrupoDeAvisos`.
+     */
+    suspend fun getAvisosDelMismoPago(grupoId: String): GrupoDeAvisos
+    /** `POST /api/sms/grupo/{id}/confirmar`: un solo movimiento para todos los avisos del pago. */
+    suspend fun confirmarElMismoPago(grupoId: String, pedido: ConfirmarElMismoPago): MismoPagoConfirmado
+    /** `POST /api/sms/grupo/{id}/ignorar`: ignora todos los avisos pendientes del pago. */
+    suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>)
+    /** `POST /api/sms/grupo/{id}/desagrupar`: «No son el mismo pago», cada aviso vuelve a ser el suyo. */
+    suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>)
+    /** `POST /api/sms/{id}/no-es-el-mismo-pago`: «Este es otro pago», saca un aviso solo. */
+    suspend fun esteEsOtroPago(id: String)
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary
     /**
      * Cifras del Inicio ya reducidas en el server (`GET /api/dashboard/summary`): gasto del mes

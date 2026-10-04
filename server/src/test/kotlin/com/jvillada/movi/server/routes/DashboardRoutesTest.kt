@@ -189,12 +189,13 @@ class DashboardRoutesTest {
         state: String,
         uid: String = userId,
         cuando: String = "2026-08-01T10:00:00",
+        origen: String = "Bancolombia",
     ) = transaction {
         SmsMessages.insert {
             it[SmsMessages.id]     = id
             it[SmsMessages.userId] = uid
             it[time]               = cuando
-            it[bank]               = "Bancolombia"
+            it[bank]               = origen
             it[text]               = "Compra \$50.000 en Netflix"
             it[SmsMessages.state]  = state
             it[det]                = ""
@@ -493,6 +494,22 @@ class DashboardRoutesTest {
         sms("s-2", SMS_STATE_PENDING)
         sms("s-3", SMS_STATE_CONFIRMED)
         sms("s-4", SMS_STATE_IGNORED)
+
+        assertEquals(2L, summary().long("pendingSms"))
+    }
+
+    /**
+     * «Un pago, una tarjeta» (4-oct-2026): el mismo pago avisado por SMS, por la app del banco y por
+     * Google Wallet es UNO por revisar en el Inicio, como en la bandeja y en Movimientos.
+     */
+    @Test
+    fun `cuenta pagos, no avisos`() = testApplication {
+        wireApp()
+        sms("s-sms", SMS_STATE_PENDING, origen = "85540")
+        sms("s-app", SMS_STATE_PENDING, origen = "Notificación · Bancolombia")
+        sms("s-wallet", SMS_STATE_PENDING, origen = "Notificación · Google Wallet")
+        // Otra compra igual al otro día: es otro pago.
+        sms("s-otro", SMS_STATE_PENDING, cuando = "2026-08-02T10:00:00", origen = "85540")
 
         assertEquals(2L, summary().long("pendingSms"))
     }

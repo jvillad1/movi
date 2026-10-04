@@ -57,6 +57,17 @@ import com.jvillada.movi.ui.components.ActualizandoEnLaCabecera
 import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.sms.TarjetaDeMensajeDelBanco
+import com.jvillada.movi.ui.sms.TarjetaDelMismoPago
+import com.jvillada.movi.ui.sms.avisosDelPago
+import com.jvillada.movi.ui.sms.conLoResueltoEnLaBandeja
+import com.jvillada.movi.shared.model.ConfirmarElMismoPago
+import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
+import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
+import com.jvillada.movi.data.intentar
+import com.jvillada.movi.ui.components.toUserMessage
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.jvillada.movi.shared.model.soloLoQueLlegoSolo
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
@@ -157,7 +168,26 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
     }
 
-    val mensajes = lecturas.mensajes
+    // «Un pago, una tarjeta»: lo que el dueño resolvió acá sobre un pago avisado varias veces
+    // (ignorarlo, cerrarlo, «No son el mismo pago») se ve enseguida, sin esperar la relectura.
+    var avisosResueltos by remember { mutableStateOf(emptyMap<String, String>()) }
+    var avisosSeparados by remember { mutableStateOf(emptySet<String>()) }
+    var pagoEnCurso by remember { mutableStateOf<String?>(null) }
+    var errorDeUnPago by remember { mutableStateOf<String?>(null) }
+    val alcance = rememberCoroutineScope()
+    fun sobreElPago(grupoId: String, accion: suspend () -> Unit, alTerminar: () -> Unit) {
+        if (pagoEnCurso != null) return
+        pagoEnCurso = grupoId
+        errorDeUnPago = null
+        alcance.launch {
+            intentar { accion() }
+                .onSuccess { alTerminar(); recarga++ }
+                .onFailure { errorDeUnPago = it.toUserMessage() }
+            pagoEnCurso = null
+        }
+    }
+
+    val mensajes = lecturas.mensajes?.let { conLoResueltoEnLaBandeja(it, avisosResueltos, avisosSeparados) }
     /**
      * **A quién fue cada mensaje pendiente**, leído del texto con la misma función de `:core` que
      * usa el server para `ParsedSms.identificadorDelDestino` — la bandeja tiene el texto y no el
@@ -259,10 +289,43 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             if (mensajes == null) {
                 item { SeccionQueNoSeLeyo("No pudimos cargar tus mensajes del banco") { recarga++ } }
             } else {
-                val pendientes = mensajesPorRevisar(mensajes)
+                // Uno por pago: los avisos del mismo pago van en una sola tarjeta.
+                val pendientes = pagosPorRevisar(mensajes)
                 if (pendientes.isNotEmpty()) {
                     item { MinSectionHeader(title = "Mensajes del banco", count = pendientes.size) }
+                    errorDeUnPago?.let { error ->
+                        item { Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(bottom = 10.dp)) }
+                    }
                     pendientes.forEach { sms ->
+                        val grupoId = sms.grupoId
+                        if (grupoId != null) {
+                            item(key = "pago-$grupoId") {
+                                val avisos = avisosDelPago(sms, mensajes)
+                                val ids = avisos.map { it.id }
+                                val pendientesDelPago = avisos.filter { it.state == SMS_STATE_PENDING }.map { it.id }
+                                TarjetaDelMismoPago(
+                                    avisos = avisos,
+                                    trabajando = pagoEnCurso == grupoId,
+                                    onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) },
+                                    onIgnorar = {
+                                        sobreElPago(grupoId, { Repositories.wallets.ignorarElMismoPago(grupoId, ids) }) {
+                                            avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_IGNORED }
+                                        }
+                                    },
+                                    onNoSonElMismoPago = {
+                                        sobreElPago(grupoId, { Repositories.wallets.noSonElMismoPago(grupoId, ids) }) {
+                                            avisosSeparados = avisosSeparados + ids
+                                        }
+                                    },
+                                    onCerrar = {
+                                        sobreElPago(grupoId, { Repositories.wallets.confirmarElMismoPago(grupoId, ConfirmarElMismoPago(ids)) }) {
+                                            avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_CONFIRMED }
+                                        }
+                                    },
+                                )
+                            }
+                            return@forEach
+                        }
                         item(key = "sms-${sms.id}") {
                             TarjetaDeMensajeDelBanco(
                                 sms,
