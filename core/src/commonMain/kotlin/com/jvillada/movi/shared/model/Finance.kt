@@ -884,7 +884,9 @@ data class ParsedSms(
      * **El día del movimiento, cuando el aviso lo dice** (ISO `yyyy-MM-dd`): la «Fecha de la
      * transacción» del correo de PSE. El correo puede llegar tarde —pasa por el reenvío de Gmail y
      * por el proveedor de correo—, así que si dice otro día que el de su llegada, manda este.
-     * `null` = vale la hora del aviso, como siempre.
+     * `null` = vale la hora del aviso, como siempre. **Solo viaja cuando el correo es el único aviso
+     * del pago**: con un SMS o una notificación del mismo pago, el día y la hora salen del aviso del
+     * banco más viejo, que los trae completos.
      */
     val fecha: String? = null,
     /**

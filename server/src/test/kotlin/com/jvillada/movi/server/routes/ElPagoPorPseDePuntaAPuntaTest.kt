@@ -207,11 +207,29 @@ class ElPagoPorPseDePuntaAPuntaTest {
         assertEquals(ahorros, p.cuentaSugeridaId)
         assertEquals("La de tus pagos a Vehículo 8761", p.cuentaSugeridaPor)
         assertNull(p.identificadorDelDestino)
+        assertNull(p.fecha, "con el SMS en el pago, el día y la hora salen del SMS, no del correo")
 
-        // El correo de PSE solo, leído por su cuenta, dice lo mismo.
-        val solo = leer<ParsedSms>("/api/sms/correo_pse_occidente/parse")
-        assertEquals(vehiculo, solo.deudaSugeridaId)
-        assertEquals(ahorros, solo.cuentaSugeridaId)
+        // El correo de PSE, leído por su cuenta dentro del mismo pago, dice lo mismo y tampoco manda su fecha.
+        val delCorreo = leer<ParsedSms>("/api/sms/correo_pse_occidente/parse")
+        assertEquals(vehiculo, delCorreo.deudaSugeridaId)
+        assertEquals(ahorros, delCorreo.cuentaSugeridaId)
+        assertNull(delCorreo.fecha)
+    }
+
+    @Test
+    fun `el correo de PSE solo, sin otro aviso del pago, si trae su fecha`() = testApplication {
+        application { testModule() }
+        transaction {
+            aviso(
+                "correo_pse_coomeva", "Correo · PSE",
+                textoDePse(valor = "\$ 138.600,00", descripcion = "Coomeva Pago de saldo plan familiar", fecha = "02/10/2026", cus = "700000077"),
+                "${hoy.minusDays(5)} 08:00",
+            )
+        }
+        val bandeja = leer<List<SmsMessage>>("/api/sms")
+        assertNull(bandeja.first { it.id == "correo_pse_coomeva" }.grupoId, "no hay otro aviso de ese pago")
+        val p = leer<ParsedSms>("/api/sms/correo_pse_coomeva/parse")
+        assertEquals("2026-10-02", p.fecha)
     }
 
     @Test

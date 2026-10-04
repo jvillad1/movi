@@ -474,8 +474,12 @@ private val CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA =
  * («Banco de Occidente S A ATH») y no dice para qué fue; el correo de PSE del mismo pago dice
  * «Empresa: Banco de Occidente» y «Descripción: PAGO Banco de Occidente - Prestamo». La propuesta de
  * un pago avisado varias veces sale del aviso que nombra la cuenta (`propuestaDelGrupo`, que no se
- * toca); esto le pone encima el comercio, la categoría, la nota y la fecha del correo de PSE. El
- * monto, la moneda y el tipo ya son los mismos: por eso se juntaron.
+ * toca); esto le pone encima el comercio, la categoría y la nota del correo de PSE. El monto, la
+ * moneda y el tipo ya son los mismos: por eso se juntaron.
+ *
+ * **La fecha NO**: la del correo es solo un día, y el aviso del banco trae día y hora. Con otro aviso
+ * en el pago, el movimiento va a la hora del más viejo de ellos (lo hace la app con los miembros del
+ * pago); la «Fecha de la transacción» de PSE solo vale cuando el correo es el único aviso.
  */
 internal fun conLoQueDiceElCorreoDePse(leido: ParsedSms, delCorreoDePse: ParsedSms?): ParsedSms =
     if (delCorreoDePse == null) leido
@@ -483,7 +487,7 @@ internal fun conLoQueDiceElCorreoDePse(leido: ParsedSms, delCorreoDePse: ParsedS
         merchant = delCorreoDePse.merchant,
         category = delCorreoDePse.category,
         nota = delCorreoDePse.nota,
-        fecha = delCorreoDePse.fecha,
+        fecha = null,
         // Un pago a una empresa no es «una cuenta de otros».
         identificadorDelDestino = null,
         identificadorEsLlave = false,
@@ -607,12 +611,16 @@ fun Route.smsRoutes() {
             // plazo). Se dice así, porque la pantalla muestra este texto.
             ?: return@get call.respond(HttpStatusCode.UnprocessableEntity, "Este mensaje no trae un movimiento para anotar. Puedes ignorarlo.")
         // El correo de PSE del mismo pago, si este aviso no lo es: ver [conLoQueDiceElCorreoDePse].
-        val correoDePse = if (esUnCorreoDePse(sms.text) || sms.state != SMS_STATE_PENDING) null else dbQuery {
+        val otrosDelPago = if (sms.state != SMS_STATE_PENDING) emptyList() else dbQuery {
             val bandeja = bandejaConLosPagos(uid, ahora = System.currentTimeMillis())
             val miembros = bandeja.firstOrNull { it.id == sms.id }?.miembrosDelGrupo.orEmpty()
-            bandeja.firstOrNull { it.id in miembros && it.id != sms.id && esUnCorreoDePse(it.text) }
+            bandeja.filter { it.id in miembros && it.id != sms.id }
         }
+        val correoDePse = if (esUnCorreoDePse(sms.text)) null else otrosDelPago.firstOrNull { esUnCorreoDePse(it.text) }
         val parsed = conLoQueDiceElCorreoDePse(leido, correoDePse?.let { leerElCorreoDePse(it.text) })
+            // Si el propio correo de PSE es la propuesta de un pago con otros avisos, tampoco manda su
+            // fecha: el día y la hora salen del aviso del banco más viejo (ver [conLoQueDiceElCorreoDePse]).
+            .let { if (otrosDelPago.isNotEmpty()) it.copy(fecha = null) else it }
         // La historia del dueño entra acá y no adentro de `parseSms`: ese mismo parseo lo usan el
         // sync y la push, donde no hay a quién consultarle nada.
         //
