@@ -101,6 +101,10 @@ private val FORMAS_DE_MOVIMIENTO = listOf(
     "le informa avance", "le informa un pago", "le informa recepcion", "te informa recepcion",
     "te informa pago", "informa transferencia", "informa retiro", "informa pago",
     "recibimos pago", "recibimos tu pago", "transferencia realizada", "transferencia recibida",
+    // «PSE - Transacción Aprobada CUS …» y el correo de Glim («Transacción aprobada con tu
+    // tarjeta de beneficios»): sin esto, el «PAGO MINIMO» de la descripción de un pago por PSE lo
+    // apartaba como recordatorio.
+    "transaccion aprobada",
     "compra aprobada", "pago aprobado", "fue aprobada", "fue aprobado", "hemos aprobado",
     "te llego dinero", "recargo ", "debitamos", "realizo debito", "realizo abono", "hizo un abono",
     "desembolso", "nomina recibida", "abono a tu", "abonamos", "consignacion", "reembolso",

@@ -17,12 +17,15 @@ import com.jvillada.movi.server.sms.origenesMudosDe
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.server.sms.motivoParaApartar
+import com.jvillada.movi.server.sms.loQueMoviSabeDelPagoDe
 import com.jvillada.movi.server.sms.numerosPropiosDe
 import com.jvillada.movi.server.sms.sinLaCuentaPropia
 import com.jvillada.movi.shared.model.MOTIVO_DEVUELTO
 import com.jvillada.movi.shared.model.MotivoDeApartado
 import com.jvillada.movi.shared.model.motivoDeApartado
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.MemoriaDeCategorias
 import com.jvillada.movi.shared.model.conElDestinoConocido
 import com.jvillada.movi.shared.model.identificadorDelDestinoEn
@@ -311,6 +314,8 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val minusculas = text.lowercase()
     if (NO_SON_MOVIMIENTOS.any { it in minusculas }) return null
     if (NO_PASARON.any { it in minusculas }) return null
+    // El correo de PSE tiene su propia forma (Valor/Empresa/Descripción/CUS): ver `ElCorreoDePse.kt`.
+    if (esUnCorreoDePse(text)) return leerElCorreoDePse(text)
     if (origen != null && origenNu.containsMatchIn(origen) && !loDeNuEsUnMovimiento(minusculas)) return null
     val conPrefijo = amountRegex.find(text)
     val rawAmount = conPrefijo?.groupValues?.get(2)
@@ -450,8 +455,35 @@ internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategoria
  * Las categorías que dice el aviso y no la costumbre: el pago de tarjeta (ver arriba), y el avance
  * de tarjeta, que nombra la tarjeta por su número —«Avance de la tarjeta *9208»— y con eso la
  * memoria lo confundiría con cualquier otro movimiento de esa tarjeta, cambiándole hasta el nombre.
+ *
+ * Y lo que el correo de PSE clasifica por la descripción (ver `ElCorreoDePse.kt`): la cuota de un
+ * crédito y el depósito a una cuenta propia. A la misma empresa se le paga de dos formas —a «NU
+ * Compañía de Financiamiento» el pago de la tarjeta y el depósito a la cuenta—, así que lo que el
+ * dueño anotó la vez pasada para esa empresa no dice qué es este pago.
  */
-private val CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA = setOf(CARD_PAYMENT_CATEGORY, AVANCE_CATEGORY)
+private val CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA =
+    setOf(CARD_PAYMENT_CATEGORY, AVANCE_CATEGORY, CUOTA_CATEGORY, TRANSFER_CATEGORY)
+
+/**
+ * **Un pago avisado por el banco y por PSE: la cuenta del uno, el nombre del otro.** El SMS de
+ * Bancolombia dice de qué cuenta salió («desde tu producto 8133») pero nombra a la empresa a medias
+ * («Banco de Occidente S A ATH») y no dice para qué fue; el correo de PSE del mismo pago dice
+ * «Empresa: Banco de Occidente» y «Descripción: PAGO Banco de Occidente - Prestamo». La propuesta de
+ * un pago avisado varias veces sale del aviso que nombra la cuenta (`propuestaDelGrupo`, que no se
+ * toca); esto le pone encima el comercio, la categoría, la nota y la fecha del correo de PSE. El
+ * monto, la moneda y el tipo ya son los mismos: por eso se juntaron.
+ */
+internal fun conLoQueDiceElCorreoDePse(leido: ParsedSms, delCorreoDePse: ParsedSms?): ParsedSms =
+    if (delCorreoDePse == null) leido
+    else leido.copy(
+        merchant = delCorreoDePse.merchant,
+        category = delCorreoDePse.category,
+        nota = delCorreoDePse.nota,
+        fecha = delCorreoDePse.fecha,
+        // Un pago a una empresa no es «una cuenta de otros».
+        identificadorDelDestino = null,
+        identificadorEsLlave = false,
+    )
 
 /** Cuántos días alrededor del mensaje se busca lo ya anotado: un gasto se anota el día o un par después. */
 internal const val DIAS_PARA_COINCIDIR: Long = 3
@@ -566,10 +598,17 @@ fun Route.smsRoutes() {
         if (esUnComprobante(sms)) {
             dbQuery { parsedDeUnComprobante(uid, sms.id, sms.text) }?.let { return@get call.respond(it) }
         }
-        val parsed = parseSms(sms.text, sms.bank)
+        val leido = parseSms(sms.text, sms.bank)
             // No es un error de la app: el mensaje no trae un movimiento (un aviso, una ampliación de
             // plazo). Se dice así, porque la pantalla muestra este texto.
             ?: return@get call.respond(HttpStatusCode.UnprocessableEntity, "Este mensaje no trae un movimiento para anotar. Puedes ignorarlo.")
+        // El correo de PSE del mismo pago, si este aviso no lo es: ver [conLoQueDiceElCorreoDePse].
+        val correoDePse = if (esUnCorreoDePse(sms.text) || sms.state != SMS_STATE_PENDING) null else dbQuery {
+            val bandeja = bandejaConLosPagos(uid, ahora = System.currentTimeMillis())
+            val miembros = bandeja.firstOrNull { it.id == sms.id }?.miembrosDelGrupo.orEmpty()
+            bandeja.firstOrNull { it.id in miembros && it.id != sms.id && esUnCorreoDePse(it.text) }
+        }
+        val parsed = conLoQueDiceElCorreoDePse(leido, correoDePse?.let { leerElCorreoDePse(it.text) })
         // La historia del dueño entra acá y no adentro de `parseSms`: ese mismo parseo lo usan el
         // sync y la push, donde no hay a quién consultarle nada.
         //
@@ -581,7 +620,12 @@ fun Route.smsRoutes() {
         val destinos = dbQuery { destinosDelDueno(uid) }
         // Y al final, una cuenta del dueño no se le ofrece como «de otro» (ver [sinLaCuentaPropia]).
         val propios = dbQuery { numerosPropiosDe(uid) }
-        call.respond(sinLaCuentaPropia(conElDestinoConocido(conLoQueMoviRecuerda(parsed, memoria), sms.text, destinos), propios))
+        val propuesta = sinLaCuentaPropia(conElDestinoConocido(conLoQueMoviRecuerda(parsed, memoria), sms.text, destinos), propios)
+        // Lo que el correo de PSE no dice —desde qué cuenta, qué crédito o tarjeta abona, a qué cuenta
+        // propia fue un depósito— lo completa lo que el dueño ya tiene en Movi. Solo para los pagos
+        // de PSE: es donde falta, y así nada cambia para los demás avisos.
+        val esDePse = esUnCorreoDePse(sms.text) || correoDePse != null
+        call.respond(if (esDePse) dbQuery { loQueMoviSabeDelPagoDe(uid, propuesta) } else propuesta)
     }
 
     get("/api/sms/{id}/coincidencias") {

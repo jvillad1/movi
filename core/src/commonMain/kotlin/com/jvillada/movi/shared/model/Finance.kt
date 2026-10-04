@@ -874,6 +874,39 @@ data class ParsedSms(
     val identificadorDelDestino: String? = null,
     /** `true` si [identificadorDelDestino] es una llave (o un nombre), `false` si es un número de cuenta. */
     val identificadorEsLlave: Boolean = false,
+    /**
+     * **Lo que el aviso dice del pago además del nombre** (4-oct-2026): la «Descripción» del correo
+     * de PSE («Coomeva Pago de saldo plan familiar», «PAGO Banco de Occidente - Prestamo»). Va a la
+     * nota del movimiento. `null` en todo lo que no la trae.
+     */
+    val nota: String? = null,
+    /**
+     * **El día del movimiento, cuando el aviso lo dice** (ISO `yyyy-MM-dd`): la «Fecha de la
+     * transacción» del correo de PSE. El correo puede llegar tarde —pasa por el reenvío de Gmail y
+     * por el proveedor de correo—, así que si dice otro día que el de su llegada, manda este.
+     * `null` = vale la hora del aviso, como siempre.
+     */
+    val fecha: String? = null,
+    /**
+     * **De qué cuenta salió, cuando el aviso no lo dice y Movi lo sabe por otro lado**: la de los
+     * pagos anteriores a la misma deuda, la de la regla recurrente de esa empresa o la que el dueño
+     * usó la última vez para ella. La app la usa solo si el texto de los avisos no nombra una cuenta
+     * suya; [cuentaSugeridaPor] dice por qué, para que la pantalla lo diga.
+     */
+    val cuentaSugeridaId: String? = null,
+    val cuentaSugeridaPor: String? = null,
+    /**
+     * **El crédito o la tarjeta que este pago abona**, cuando una sola deuda del dueño encaja con la
+     * empresa (Banco de Occidente ↔ «Vehículo 8761», NU ↔ «Nu Tarjeta»). La app la deja elegida en
+     * «¿A cuál crédito o tarjeta corresponde?»: confirmar arma el traspaso de dos patas, que es lo
+     * que marca la cuota del período.
+     */
+    val deudaSugeridaId: String? = null,
+    /**
+     * **La cuenta propia a la que fue la plata**, cuando el pago es un traspaso («Depósito a tu cuenta
+     * NU» → la cuenta «Nu»). Con ella la app anota un traspaso, que no cuenta como gasto.
+     */
+    val traspasoHaciaId: String? = null,
 )
 
 @Serializable

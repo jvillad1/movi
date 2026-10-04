@@ -405,9 +405,19 @@ internal fun instanteDelCorreo(fecha: String?): Instant? =
  * La base es el `Message-Id` cuando vino —el proveedor puede reintentar el mismo webhook, y con el
  * mismo id el chequeo por id de la inserción lo vuelve idempotente— y el texto + el tiempo cuando
  * no.
+ *
+ * **Salvo que el pago traiga su propio id** ([idExterno]): el CUS de un correo de PSE identifica la
+ * transacción, no el correo. Si el mismo pago llega dos veces —PSE lo reenvía, o el dueño lo
+ * reenvía a mano además del filtro—, cada copia trae otro `Message-Id` y otra hora, y sin esto
+ * entraban dos filas del mismo pago. Con el CUS como base las dos dan el mismo id y la segunda no
+ * entra.
  */
-fun idDeCorreo(idDelMensaje: String?, texto: String, tiempo: String): String =
-    "correo_" + sha256Hex(idDelMensaje?.takeIf { it.isNotBlank() } ?: "$texto|$tiempo").take(16)
+fun idDeCorreo(idDelMensaje: String?, texto: String, tiempo: String, idExterno: String? = null): String =
+    "correo_" + sha256Hex(
+        idExterno?.takeIf { it.isNotBlank() }?.let { "externo:$it" }
+            ?: idDelMensaje?.takeIf { it.isNotBlank() }
+            ?: "$texto|$tiempo",
+    ).take(16)
 
 internal fun sha256Hex(entrada: String): String =
     MessageDigest.getInstance("SHA-256").digest(entrada.toByteArray())
