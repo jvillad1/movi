@@ -158,7 +158,21 @@ private val pagoDeNu = Regex("""recibimos tu pago|\bpago\b.*\b(recibido|aplicado
 private val plataQueLlegaANu = Regex("""te lleg[oó] dinero|\brecibiste\s+\$?\s*[0-9]""", RegexOption.IGNORE_CASE)
 
 /**
- * **De Nu solo se lee lo que es una compra aprobada, un pago o plata que llega.** Desde #346 el teléfono sube TODAS
+ * **El pago que sale de la cuenta de ahorros de Nu** (PSE, facturas): «Nu: Pago aprobado por
+ * $139.154,40 Pagaste en Coomeva Medicina Prepagada S.A. con tu cuenta de ahorros.». Es un gasto
+ * real, y hasta el 3-oct-2026 no tenía «la forma de un movimiento»: Reconciliar decía «Este mensaje
+ * no trae un movimiento para anotar» y el dueño no lo podía ni categorizar.
+ *
+ * No se confunde con el recordatorio («Tienes un pago por $138.600,00 de …: Completa tu pago…»),
+ * que no dice ni «aprobado» ni «pagaste en».
+ */
+private val pagoDesdeLaCuentaDeNu = Regex("""\bpago\s+aprobado\b|\bpagaste\s+en\s""", RegexOption.IGNORE_CASE)
+
+/** A quién se le pagó desde la cuenta de Nu: lo que va entre «Pagaste en» y « con tu cuenta». */
+private val pagasteEnRegex = Regex("""\bpagaste\s+en\s+(.+?)\s+con\s+tu\s+cuenta\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * **De Nu solo se lee lo que es una compra aprobada, un pago (a la tarjeta o desde la cuenta) o plata que llega.** Desde #346 el teléfono sube TODAS
  * las notificaciones de `com.nu.production`, y el lector genérico convierte en gasto cualquier
  * texto con un monto: la factura del mes, una promoción, lo que rindió la Cajita. En vez de ir
  * tachando avisos a medida que aparecen, con Nu se pide la forma de un movimiento: la compra que
@@ -169,7 +183,8 @@ private val plataQueLlegaANu = Regex("""te lleg[oó] dinero|\brecibiste\s+\$?\s*
 private fun loDeNuEsUnMovimiento(minusculas: String): Boolean {
     if (NU_NO_SON_MOVIMIENTOS.any { it in minusculas }) return false
     val esCompra = "compra" in minusculas && ("aprobada" in minusculas || "aprobado" in minusculas)
-    return esCompra || pagoDeNu.containsMatchIn(minusculas) || plataQueLlegaANu.containsMatchIn(minusculas)
+    return esCompra || pagoDeNu.containsMatchIn(minusculas) || plataQueLlegaANu.containsMatchIn(minusculas) ||
+        pagoDesdeLaCuentaDeNu.containsMatchIn(minusculas)
 }
 
 /**
@@ -270,6 +285,10 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
                 ?: llaveRegex.find(text)?.let { "Pago QR · llave ${it.groupValues[1]}" }
                 ?: "Pago QR"
         else -> limpio(pagoDeWalletRegex.find(text)?.groupValues?.get(1))
+            // Antes que el «en …» genérico: ese corta en el primer punto y de «Coomeva Medicina
+            // Prepagada S.A.» dejaba «Coomeva Medicina Prepagada S».
+            // Y sin [limpio]: el punto final de «S.A.» es parte del nombre, no del mensaje.
+            ?: pagasteEnRegex.find(text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
             ?: limpio(compraEnPorRegex.find(text)?.groupValues?.get(1))
             ?: limpio(destinatarioDesdeRegex.find(text)?.groupValues?.get(1))
             ?: limpio(destinatarioElRegex.find(text)?.groupValues?.get(1))
