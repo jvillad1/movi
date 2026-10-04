@@ -725,6 +725,33 @@ interface WalletRepository {
     suspend fun confirmarComprobante(smsId: String, eventoId: String) = confirmSms(smsId)
 
     /**
+     * Confirma un aviso del banco diciendo **con qué movimiento** —el que se acaba de crear o el que
+     * ya estaba («Es este»)—: el server lo guarda en el aviso (`evento_id`, `confirmado_en`) para
+     * poder decir después si un aviso confirmado se quedó sin movimiento. Mismo `POST
+     * /api/sms/{id}/confirm?eventoId=` que [confirmarComprobante]; sin soporte del lado de quien
+     * implemente esto, es un `confirmSms` de siempre.
+     */
+    suspend fun confirmSmsCon(id: String, eventoId: String) = confirmSms(id)
+
+    /**
+     * `GET /api/sms/confirmados-sin-movimiento`: los avisos confirmados cuyo movimiento se anuló o
+     * ya no existe. Ver `AvisoConfirmadoSinMovimiento`.
+     */
+    suspend fun getAvisosConfirmadosSinMovimiento(): List<com.jvillada.movi.shared.model.AvisoConfirmadoSinMovimiento> =
+        emptyList()
+
+    /**
+     * `GET /api/sms/pendientes-parecidos`: los avisos pendientes con este monto, moneda y tipo,
+     * llegados hace menos de 48 h —lo que «Agregar» ofrece como «¿Es el aviso de hace 2 h?»—. Ver
+     * `AvisoPendienteParecido`. Vacía donde no se implementa: la hoja simplemente no pregunta.
+     */
+    suspend fun getAvisosPendientesParecidos(
+        monto: Long,
+        tipo: com.jvillada.movi.shared.model.TransactionType,
+        moneda: String,
+    ): List<com.jvillada.movi.shared.model.AvisoPendienteParecido> = emptyList()
+
+    /**
      * `GET /api/sms/origenes-mudos`: los orígenes de captura que se callaron («banco mudo», Ola 2).
      * Lo lee el aviso diario del teléfono; el Inicio los trae en el resumen.
      */

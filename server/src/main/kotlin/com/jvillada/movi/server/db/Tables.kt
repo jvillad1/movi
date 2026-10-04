@@ -608,11 +608,22 @@ object SmsMessages : Table("sms_messages") {
      */
     val noEsElMismoPago = bool("no_es_el_mismo_pago").nullable()
     /**
-     * **El movimiento con que se confirmó** este aviso, cuando se sabe: lo escribe el confirmar de
-     * los avisos de un mismo pago (`POST /api/sms/grupo/{id}/confirmar`). `NULL` en lo confirmado
-     * antes, y en lo que no está confirmado. NULLABLE por lo mismo que [motivoApartado].
+     * **El movimiento con que se confirmó** este aviso, cuando se sabe. Lo escriben las tres
+     * confirmaciones: `POST /api/sms/{id}/confirm` (el movimiento recién creado, o el que ya estaba
+     * —«Es este»—; si un APK viejo no lo manda, el server lo deduce cuando puede, ver
+     * `eventoDeLaConfirmacion`), el confirmar de los avisos de un mismo pago (`POST
+     * /api/sms/grupo/{id}/confirmar`) y «Agregar» cuando el dueño dice que lo que anota es un aviso
+     * pendiente. `NULL` en lo confirmado antes de esto, y en lo que no está confirmado. NULLABLE por
+     * lo mismo que [motivoApartado].
      */
     val eventoId = varchar("evento_id", 64).nullable()
+    /**
+     * **Cuándo se confirmó**, en epoch ms (4-oct-2026, la auditoría de la ingesta). Con esto se puede
+     * medir cuánto tarda el dueño entre que llega un aviso y lo confirma, y fechar un aviso confirmado
+     * que se quedó sin movimiento. Se escribe una sola vez: una segunda confirmación no lo mueve.
+     * `NULL` en lo confirmado antes de esta columna. NULLABLE por lo mismo que [motivoApartado].
+     */
+    val confirmadoEn = long("confirmado_en").nullable()
     override val primaryKey = PrimaryKey(id, userId)  // per-user: the same SMS id may exist for different users
     init { index("idx_sms_messages_user_id", false, userId) }
 }

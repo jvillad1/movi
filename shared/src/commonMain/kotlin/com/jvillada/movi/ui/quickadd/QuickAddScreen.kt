@@ -60,6 +60,7 @@ import com.jvillada.movi.data.MemoriaDeCategoriasCache
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
+import com.jvillada.movi.shared.model.AvisoPendienteParecido
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -82,6 +83,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import com.jvillada.movi.ui.fecha.timestampParaFecha
 
@@ -798,6 +800,30 @@ fun QuickAddScreen(
      */
     val cuentasDelPicker = cuentasPara(accounts, usoDeCuenta, conservar = selectedAccountId)
 
+    // «¿Es el aviso de hace 2 h?» — ver `ElAvisoPendiente.kt`. [avisoParecido] es el aviso pendiente
+    // con este monto que el server encontró; [conElAviso], que el dueño dijo «Es este». Lo que dijo
+    // «No» no se vuelve a ofrecer en esta hoja.
+    var avisoParecido by remember { mutableStateOf<AvisoPendienteParecido?>(null) }
+    var conElAviso by remember { mutableStateOf(false) }
+    var avisosQueNoSon by remember { mutableStateOf(emptySet<String>()) }
+    val monedaDeLaHoja = monedaDeLaCuenta(accounts, selectedAccountId)
+    LaunchedEffect(amount, pickers.typeIndex, monedaDeLaHoja, avisosQueNoSon) {
+        val monto = amount.toLongOrNull() ?: 0L
+        if (pickers.typeIndex > 1 || monto <= 0) {
+            avisoParecido = null
+            conElAviso = false
+            return@LaunchedEffect
+        }
+        // Mientras teclea no se pregunta nada: se busca cuando el monto se queda quieto un momento.
+        kotlinx.coroutines.delay(400)
+        val tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
+        val encontrado = runCatching { Repositories.wallets.getAvisosPendientesParecidos(monto, tipo, monedaDeLaHoja) }
+            .getOrNull()
+            ?.firstOrNull { it.id !in avisosQueNoSon }
+        if (encontrado?.id != avisoParecido?.id) conElAviso = false
+        avisoParecido = encontrado
+    }
+
     fun save() {
         if (!canSave) return
         /*
@@ -823,8 +849,11 @@ fun QuickAddScreen(
         // Ola 2 #2: recortada — canSave ya exige no-vacío, pero "  Comida  " pasaba esa guarda
         // y se guardaba con espacios.
         val trimmedCategory = category.trim()
+        // Se lee acá, antes del `launch`: un toque en «Quitar» a mitad del guardado no cambia lo que
+        // ya se decidió guardar.
+        val elAviso = avisoParecido?.takeIf { conElAviso }
         coroutine.launch {
-            val event = movimientoDeLaHoja(
+            val deLaHoja = movimientoDeLaHoja(
                 // El id sale del BORRADOR, no de acá adentro: ver [idDelBorrador] más arriba.
                 id = idDelBorrador,
                 cuentaId = cuenta,
@@ -838,9 +867,15 @@ fun QuickAddScreen(
                 // que explica por qué otro día va al mediodía de Bogotá y hoy no.
                 timestamp = timestampParaFecha(fecha, hoy),
             )
+            val event = elAviso?.let { movimientoConElAviso(deLaHoja, it, ahora = Clock.System.now().toEpochMilliseconds()) }
+                ?: deLaHoja
             val result = runCatching { Repositories.wallets.postEvent(event) }
             saving = false
             result.onSuccess {
+                // El aviso queda confirmado CON este movimiento: no se anota dos veces. Si esto falla,
+                // el movimiento ya está guardado y el aviso sigue en «Por revisar», donde «¿Ya lo
+                // anotaste?» lo encuentra (lleva el mismo texto) y ofrece «Es este».
+                elAviso?.let { aviso -> runCatching { Repositories.wallets.confirmSmsCon(aviso.id, event.id) } }
                 // Id nuevo recién ACÁ: el movimiento siguiente es otro movimiento. Mismo reflejo
                 // que `TransferForm` — ver [idDelBorrador].
                 idDelBorrador = newId("ev")
@@ -1274,6 +1309,24 @@ fun QuickAddScreen(
                         missingFieldMessage = missingFieldMessage,
                         saving = saving,
                         error = error,
+                        avisoPendiente = avisoParecido?.let { aviso ->
+                            val ahora = Clock.System.now().toEpochMilliseconds()
+                            if (conElAviso) avisoElegido(aviso, ahora) else preguntaDelAvisoPendiente(aviso, ahora)
+                        },
+                        conElAviso = conElAviso,
+                        onEsEsteAviso = {
+                            conElAviso = true
+                            // La fecha que se ve es la del aviso, que es la que se va a guardar.
+                            avisoParecido?.let { fecha = fechaDelAviso(it, Clock.System.now().toEpochMilliseconds()) }
+                        },
+                        onNoEsEsteAviso = {
+                            if (conElAviso) {
+                                conElAviso = false
+                            } else {
+                                avisoParecido?.let { avisosQueNoSon = avisosQueNoSon + it.id }
+                                avisoParecido = null
+                            }
+                        },
                         onSave = ::save,
                                 hasNoAccounts = accountsLoaded && accounts.isEmpty(),
                                 onCreateAccount = { showCreateSheet = true },
@@ -1341,6 +1394,14 @@ private fun EditorBody(
     missingFieldMessage: String? = null,
     saving: Boolean,
     error: String?,
+    /**
+     * «¿Es el aviso de hace 2 h? …» (ver `ElAvisoPendiente.kt`), o `null` si no hay ningún aviso
+     * pendiente con este monto. Va en el renglón de alto fijo del error, y el error le gana.
+     */
+    avisoPendiente: String? = null,
+    conElAviso: Boolean = false,
+    onEsEsteAviso: () -> Unit = {},
+    onNoEsEsteAviso: () -> Unit = {},
     onSave: () -> Unit,
     hasNoAccounts: Boolean = false,
     onCreateAccount: () -> Unit = {},
@@ -1550,9 +1611,18 @@ private fun EditorBody(
     // Dos renglones de alto: los mensajes de `toUserMessage()` más largos se parten en dos en
     // el ancho de un teléfono, y reservar de menos volvería a mover el teclado.
     Spacer(Modifier.height(8.dp))
-    Box(modifier = Modifier.fillMaxWidth().height(32.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().height(32.dp), contentAlignment = Alignment.CenterStart) {
         if (error != null) {
-            Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.align(Alignment.TopStart))
+        } else if (avisoPendiente != null) {
+            // El aviso del banco con este mismo monto, en el mismo lugar reservado: el teclado no se
+            // mueve cuando aparece. Ver `FilaDelAvisoPendiente`.
+            FilaDelAvisoPendiente(
+                texto = avisoPendiente,
+                elegido = conElAviso,
+                onEsEste = onEsEsteAviso,
+                onNo = onNoEsEsteAviso,
+            )
         }
     }
 
