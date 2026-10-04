@@ -162,6 +162,7 @@ internal class InvalidaElInicioAlEscribir(
     // Leer un papel puede dejar una propuesta en «Por revisar»: es una escritura.
     override suspend fun leerPapel(documentoId: String, anotarAunqueEsteAnotado: Boolean): com.jvillada.movi.shared.model.LecturaDelPapel = trasEscribir { delegado.leerPapel(documentoId, anotarAunqueEsteAnotado) }
     override suspend fun confirmarComprobante(smsId: String, eventoId: String): Unit = trasEscribir { delegado.confirmarComprobante(smsId, eventoId) }
+    override suspend fun confirmSmsCon(id: String, eventoId: String): Unit = trasEscribir { delegado.confirmSmsCon(id, eventoId) }
     override suspend fun importStatement(decision: ImportDecision): Unit = trasEscribir { delegado.importStatement(decision) }
     override suspend fun deleteStatementImport(id: String): Unit = trasEscribir { delegado.deleteStatementImport(id) }
     override suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition = trasEscribir { delegado.putScreen(slug, sections) }

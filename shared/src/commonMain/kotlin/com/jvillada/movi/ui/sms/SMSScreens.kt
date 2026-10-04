@@ -707,7 +707,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     val idDeLaPropuesta = pagoActual?.propuestaDe ?: smsId
     val avisoDeLaPropuesta = pagoActual?.miembros?.firstOrNull { it.id == idDeLaPropuesta }
 
-    /** Confirma el aviso diciendo, si es un comprobante, con qué movimiento quedó. */
+    /**
+     * Confirma el aviso diciendo con qué movimiento quedó: el server lo guarda en el aviso, y si es
+     * un comprobante además cuelga el papel de la cuenta de ese movimiento.
+     */
     suspend fun confirmarElAviso(eventoId: String) {
         val elPago = pagoActual
         when {
@@ -715,7 +718,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 elPago.grupoId, ConfirmarElMismoPago(idsDelPago, eventoExistenteId = eventoId),
             )
             esComprobante -> Repositories.wallets.confirmarComprobante(smsId, eventoId)
-            else -> Repositories.wallets.confirmSms(smsId)
+            else -> Repositories.wallets.confirmSmsCon(smsId, eventoId)
         }
     }
 
@@ -843,6 +846,16 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         ofreceVincularDeuda(parsed!!.type, selectedCategory ?: parsed!!.category, transferId = null)
     LaunchedEffect(ofreceVinculo) {
         if (!ofreceVinculo) cuentaDeDeudaElegida = null
+    }
+    // «Pagaste $X en la tarjeta de credito *9208 desde la cuenta *8133»: el mensaje dice cuál deuda
+    // se paga, así que queda elegida (ver [deudaQueNombraElMensaje]). Solo hasta que él toque el
+    // selector: si la quita o elige otra, Movi no se la vuelve a poner.
+    val deudaQueNombra = deudaQueNombraElMensaje(cuentaDelSms)
+    var deudaTocadaAMano by remember { mutableStateOf(false) }
+    LaunchedEffect(ofreceVinculo, deudaQueNombra?.id) {
+        if (ofreceVinculo && !deudaTocadaAMano && cuentaDeDeudaElegida == null && deudaQueNombra != null) {
+            cuentaDeDeudaElegida = deudaQueNombra
+        }
     }
 
     fun confirm() {
@@ -1421,7 +1434,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     SelectorDeCuentaDeDeuda(
                         cuentas = accounts,
                         seleccionada = cuentaDeDeudaElegida,
-                        onSeleccionar = { cuentaDeDeudaElegida = it },
+                        onSeleccionar = { deudaTocadaAMano = true; cuentaDeDeudaElegida = it },
                     )
                 }
 

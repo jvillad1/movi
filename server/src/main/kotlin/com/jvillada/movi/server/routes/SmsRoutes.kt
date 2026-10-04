@@ -364,7 +364,7 @@ internal const val SIN_CATEGORIA = "Otros"
  */
 internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategorias): ParsedSms {
     if (parsed.category == CARD_PAYMENT_CATEGORY) return parsed
-    val recuerdo = memoria.recuerdoDe(parsed.merchant) ?: return parsed
+    val recuerdo = memoria.recuerdoDe(parsed.merchant) ?: return conLasCategoriasDelDueno(parsed, memoria)
     val huella = huellaDeUnMovimiento(parsed.merchant)
     return parsed.copy(
         category = recuerdo.categoria,
@@ -375,6 +375,19 @@ internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategoria
             "Así lo anotaste ${recuerdo.cuantos} veces"
         },
     )
+}
+
+/**
+ * **Cuando la memoria no sabe nada de este comercio, las palabras clave en SU vocabulario.** `parseSms`
+ * propone con el catálogo de la app porque no sabe de quién es el mensaje («Comida» para un
+ * supermercado); acá ya se sabe, y si él usa «Mercado», es «Mercado». La memoria siempre gana: esto
+ * corre solo cuando [MemoriaDeCategorias.recuerdoDe] no encontró nada. Solo gastos: un ingreso no
+ * tiene comercio que reconocer.
+ */
+internal fun conLasCategoriasDelDueno(parsed: ParsedSms, memoria: MemoriaDeCategorias): ParsedSms {
+    if (parsed.type != TransactionType.EXPENSE) return parsed
+    val suya = categoriaProbablePorElNombre(parsed.merchant, memoria.categoriasDelDueno) ?: return parsed
+    return parsed.copy(category = suya)
 }
 
 /** Cuántos días alrededor del mensaje se busca lo ya anotado: un gasto se anota el día o un par después. */
@@ -435,6 +448,31 @@ fun Route.smsRoutes() {
     get("/api/sms/origenes-mudos") {
         val uid = call.userId()
         call.respond(dbQuery { origenesMudosDe(uid, System.currentTimeMillis()) })
+    }
+
+    /**
+     * Los avisos confirmados cuyo movimiento ya no está vivo (anulado o borrado): el cuadre de «lo
+     * que entró solo». Ver `avisosConfirmadosSinMovimiento`. Literal, así que gana sobre
+     * `/api/sms/{id}`.
+     */
+    get("/api/sms/confirmados-sin-movimiento") {
+        val uid = call.userId()
+        call.respond(dbQuery { avisosConfirmadosSinMovimiento(uid) })
+    }
+
+    /**
+     * Los avisos pendientes con este monto, moneda y tipo, de las últimas 48 h: lo que «Agregar»
+     * ofrece como «¿Es el aviso de hace 2 h?». Ver `avisosPendientesParecidos`. Sin monto o con un
+     * tipo que no se entiende, 400.
+     */
+    get("/api/sms/pendientes-parecidos") {
+        val uid = call.userId()
+        val monto = call.request.queryParameters["monto"]?.toLongOrNull()
+            ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val tipo = call.request.queryParameters["tipo"]?.let { t -> TransactionType.entries.firstOrNull { it.name == t } }
+            ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val moneda = call.request.queryParameters["moneda"]?.takeIf { it.isNotBlank() } ?: "COP"
+        call.respond(dbQuery { avisosPendientesParecidos(uid, monto, moneda, tipo, ahora = System.currentTimeMillis()) })
     }
 
     get("/api/sms/{id}") {
@@ -526,13 +564,13 @@ fun Route.smsRoutes() {
     post("/api/sms/{id}/confirm") {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
-        // Ola 2: con qué movimiento se confirmó un comprobante (el que se acaba de crear, o el que
-        // ya estaba, «Es este»). Opcional: un cliente viejo no lo manda y todo sigue igual.
+        // Con qué movimiento se confirmó (el que se acaba de crear, o el que ya estaba: «Es este»).
+        // Opcional: un cliente viejo no lo manda y el server lo deduce cuando puede. Se guarda en
+        // el aviso (`evento_id`, `confirmado_en`) y, si es un comprobante, además se cuelga el
+        // papel de la cuenta de ese movimiento. Ver `confirmarElAviso`.
         val eventoId = call.request.queryParameters["eventoId"]?.takeIf { it.isNotBlank() }
         val updated = dbQuery {
-            val n = SmsMessages.update({ (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }) {
-                it[state] = SMS_STATE_CONFIRMED
-            }
+            val n = confirmarElAviso(uid, id, eventoId, ahora = System.currentTimeMillis())
             if (n > 0 && eventoId != null && esIdDeComprobante(id)) enlazarElComprobante(uid, id, eventoId)
             n
         }

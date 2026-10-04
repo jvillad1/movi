@@ -159,12 +159,26 @@ data class RecuerdoDeCategoria(
  */
 class MemoriaDeCategorias private constructor(
     private val porHuella: Map<String, LoQueMoviRecuerda>,
+    /**
+     * **Las categorías que el dueño usa**, las de sus anotaciones (sin las que no se aprenden). Es su
+     * vocabulario: con esto la red de seguridad ([categoriaProbablePorElNombre]) propone «Mercado»
+     * a quien lo usa, y nunca una categoría que él no tiene.
+     */
+    val categoriasDelDueno: Set<String> = emptySet(),
 ) {
     val cuantasHuellas: Int get() = porHuella.size
 
-    /** Lo que Movi recuerda de este texto, o `null` si nunca vio nada parecido. */
-    fun recuerdoDe(texto: String): LoQueMoviRecuerda? =
-        huellaDeUnMovimiento(texto)?.let { porHuella[it] }
+    /**
+     * Lo que Movi recuerda de este texto, o `null` si nunca vio nada parecido.
+     *
+     * Primero la huella exacta; si no hay, **la del nombre que el banco recortó**: ver
+     * [huellaPorPrefijo].
+     */
+    fun recuerdoDe(texto: String): LoQueMoviRecuerda? {
+        val huella = huellaDeUnMovimiento(texto) ?: return null
+        porHuella[huella]?.let { return it }
+        return huellaPorPrefijo(huella, porHuella.keys)?.let { porHuella[it] }
+    }
 
     /**
      * Las entradas de la memoria, listas para viajar por la red — ver [RecuerdoDeCategoria]. El
@@ -210,11 +224,47 @@ class MemoriaDeCategorias private constructor(
                         cuantos = ganadora.value.size,
                     )
                 }
-            return MemoriaDeCategorias(porHuella)
+            val categorias = anotaciones
+                .map { it.categoria.trim() }
+                .filter { it.isNotEmpty() && it !in CATEGORIAS_QUE_NO_SE_APRENDEN }
+                .toSet()
+            return MemoriaDeCategorias(porHuella, categorias)
         }
 
         val vacia: MemoriaDeCategorias get() = MemoriaDeCategorias(emptyMap())
     }
+}
+
+/**
+ * Lo mínimo que tiene que medir el más corto de dos nombres para que uno valga por el otro cuando
+ * difieren solo en la cola. Seis letras es «tostao» o «lasdoce»: menos de eso, «cafe» o «pan», ya
+ * son palabras comunes y no un comercio.
+ */
+private const val LARGO_MINIMO_DEL_PREFIJO = 6
+
+/**
+ * **El mismo comercio, con el nombre recortado por el banco.** Bancolombia corta el comercio a 20
+ * letras: «IL CAPUCCINO CAFETER», «CRIMINAL TAQUERIA PR», «TOSTAO CAFE Y PAN VI». Y el dueño, al
+ * anotarlo, escribe el nombre entero («Criminal Taqueria») o el que el banco mandó otra vez con otra
+ * sucursal pegada. Las huellas exactas no se encuentran nunca; la auditoría de la ingesta lo vio en
+ * los datos reales.
+ *
+ * Entre las huellas de nombre de [conocidas], la que es prefijo de [huella] o tiene a [huella] de
+ * prefijo, con el más corto de los dos de al menos [LARGO_MINIMO_DEL_PREFIJO] letras. Si hay varias,
+ * la más larga (la que más letras comparte). Las huellas de número (llave, cuenta, cajero) no se
+ * recortan nunca: un número a medias es otro número.
+ */
+fun huellaPorPrefijo(huella: String, conocidas: Collection<String>): String? {
+    if (!huella.startsWith("nombre:")) return null
+    val propia = huella.removePrefix("nombre:")
+    return conocidas
+        .filter { it.startsWith("nombre:") && it != huella }
+        .filter { conocida ->
+            val otra = conocida.removePrefix("nombre:")
+            minOf(otra.length, propia.length) >= LARGO_MINIMO_DEL_PREFIJO &&
+                (otra.startsWith(propia) || propia.startsWith(otra))
+        }
+        .maxByOrNull { minOf(it.length - "nombre:".length, propia.length) }
 }
 
 /**
@@ -228,29 +278,112 @@ class MemoriaDeCategorias private constructor(
  * qué se fue la plata» quedaba partido entre «Comida» y «Restaurantes» sin que nadie lo hubiera
  * pedido.
  */
-fun categoriaProbablePorElNombre(nombre: String): String? {
-    val texto = normalizarParaBuscar(nombre)
-    val palabras = texto.split(' ')
-    /** Nombres largos y propios: aparecer adentro ya es evidencia suficiente. */
-    fun contiene(vararg claves: String) = claves.any { it in texto }
+fun categoriaProbablePorElNombre(
+    nombre: String,
     /**
-     * Marcas cortas, y por eso **palabra completa**: «d1» y «ara» adentro de otra palabra no son la
-     * tienda («Cámara», «Guitarra»), y una categoría equivocada cuesta más que una sin adivinar.
+     * Las categorías que el dueño usa (ver [MemoriaDeCategorias.categoriasDelDueno]). Vacío = no se
+     * sabe, y vale la del catálogo de la app, como siempre. Ver [PALABRAS_CLAVE] para cómo se elige.
      */
-    fun esPalabra(vararg claves: String) = claves.any { clave -> palabras.any { it == clave } }
-    return when {
-        esPalabra("uber", "didi", "cabify", "terpel", "primax") ||
-            contiene("taxi", "estacion de servicio") -> "Transporte"
-        esPalabra("d1", "ara", "exito", "carulla", "olimpica") ||
-            contiene("crepes", "waffles", "rappi", "mcdonald", "dominos", "juan valdez",
-                "starbucks", "panaderia", "carnes y", "supermercado") -> "Comida"
-        contiene("drogas", "farmacia", "cruz verde", "medicina prepagada", "clinica", "laboratorio") ||
-            esPalabra("eps", "farmatodo", "colsubsidio") -> "Salud"
-        contiene("netflix", "spotify", "disney", "youtube", "prime video", "crunchyroll") ||
-            esPalabra("hbo") -> "Entretenimiento"
-        contiene("movistar", "acueducto", "gas natural") ||
-            esPalabra("claro", "tigo", "wom", "epm", "energia") -> "Servicios"
-        contiene("anthropic", "openai", "github", "railway", "google cloud", "microsoft", "apple.com") -> "Tecnología"
-        else -> null
-    }
+    categoriasDelDueno: Set<String> = emptySet(),
+): String? {
+    val texto = normalizarParaBuscar(nombre)
+    val palabras = texto.split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
+    val regla = PALABRAS_CLAVE.firstOrNull { it.reconoce(texto, palabras) } ?: return null
+    return laQueUsaElDueno(regla.categorias, categoriasDelDueno)
 }
+
+/**
+ * **De las categorías posibles de una regla, la que corresponde a este dueño**: la primera que él
+ * usa; si no usa ninguna, la primera que la app ofrece a todo el mundo ([PREDEFINED_CATEGORIES]); y
+ * si tampoco, `null` — nunca una categoría que él no tiene, y nunca «Otros».
+ */
+private fun laQueUsaElDueno(posibles: List<String>, delDueno: Set<String>): String? {
+    val suyas = delDueno.associateBy { claveComparableDeNombre(it) }
+    posibles.firstNotNullOfOrNull { suyas[claveComparableDeNombre(it)] }?.let { return it }
+    val delCatalogo = PREDEFINED_CATEGORIES.map { it.name }.toSet()
+    return posibles.firstOrNull { it in delCatalogo }
+}
+
+/**
+ * Una regla de la red de seguridad: si el nombre **contiene** alguna de [contiene] (nombres largos y
+ * propios: aparecer adentro ya es evidencia) o **es** alguna de [palabras] (marcas cortas: «d1» y
+ * «ara» adentro de otra palabra no son la tienda, «Cámara», «Guitarra»), propone [categorias], en
+ * ese orden de preferencia.
+ */
+private class PalabrasClave(
+    val categorias: List<String>,
+    val contiene: List<String> = emptyList(),
+    val palabras: List<String> = emptyList(),
+) {
+    fun reconoce(texto: String, palabrasDelTexto: List<String>): Boolean =
+        contiene.any { it in texto } || palabras.any { it in palabrasDelTexto }
+}
+
+/**
+ * **Las palabras clave**, con lo que compra el dueño de verdad (auditoría de la ingesta, 4-oct-2026:
+ * la propuesta coincidía con su categoría solo en el 19 % de los avisos, y 175 de 225 salían en
+ * «Otros»). Van en orden: gana la primera regla que reconoce el nombre.
+ *
+ * Los nombres van como los escribe el banco, que **recorta**: «MCDONAL D EGA», «IL CAPUCCINO
+ * CAFETER», «CRIMINAL TAQUERIA PR». Por eso «mcdonal» y «cafeter» y no la palabra entera.
+ *
+ * Las categorías van en el vocabulario del dueño cuando lo tiene («Mercado» antes que «Comida» para
+ * un supermercado, «Gimnasio», «Cuidado personal»), y si no, en el de la app. Ver [laQueUsaElDueno].
+ */
+private val PALABRAS_CLAVE: List<PalabrasClave> = listOf(
+    PalabrasClave(
+        categorias = listOf("Transporte"),
+        contiene = listOf("taxi", "estacion de servicio", "gasolina", "parqueadero", "parqueo", "peaje", "cabify"),
+        palabras = listOf("uber", "didi", "terpel", "primax", "texaco", "esso", "indriver", "beat"),
+    ),
+    PalabrasClave(
+        categorias = listOf("Mercado", "Comida"),
+        contiene = listOf("supermercado", "carulla", "olimpica", "jumbo", "makro", "euro supermercado", "surtimax", "justo y bueno"),
+        palabras = listOf("d1", "ara", "exito", "isimo"),
+    ),
+    PalabrasClave(
+        categorias = listOf("Salud"),
+        contiene = listOf(
+            "drogas", "drogueria", "farmacia", "farmatodo", "cruz verde", "medicina prepagada", "clinica",
+            "laboratorio", "colsubsidio", "odontolog", "optica", "hospital",
+        ),
+        palabras = listOf("eps"),
+    ),
+    PalabrasClave(
+        categorias = listOf("Gimnasio", "Salud"),
+        contiene = listOf("gimnasio", "bodytech", "smart fit", "smartfit", "action black"),
+        palabras = listOf("gym"),
+    ),
+    PalabrasClave(
+        categorias = listOf("Cuidado personal"),
+        contiene = listOf("barber", "peluqueria", "barberia"),
+        palabras = listOf("spa"),
+    ),
+    PalabrasClave(
+        categorias = listOf("Comida"),
+        contiene = listOf(
+            "crepes", "waffles", "rappi", "mcdonal", "dominos", "juan valdez", "starbucks", "panaderia",
+            "carnes y", "kokoriko", "subway", "tostao", "cafeter", "taqueria", "restaurante", "pizza",
+            "burger", "hamburgues", "frisby", "el corral", "kfc", "arepa", "helader", "pasteleria",
+            "sandwich", "dunkin", "pergamino",
+        ),
+        palabras = listOf("cafe", "bar", "comidas", "oma", "presto"),
+    ),
+    PalabrasClave(
+        categorias = listOf("Entretenimiento"),
+        contiene = listOf(
+            "netflix", "spotify", "disney", "youtube", "prime video", "crunchyroll", "cinemark", "cine colombia",
+            "procinal", "cinepolis", "directv", "paramount", "max.com", "steam", "playstation", "xbox",
+        ),
+        palabras = listOf("hbo", "cine", "cines"),
+    ),
+    PalabrasClave(
+        categorias = listOf("Servicios"),
+        contiene = listOf("movistar", "acueducto", "gas natural", "vanti"),
+        palabras = listOf("claro", "tigo", "wom", "epm", "energia"),
+    ),
+    PalabrasClave(
+        categorias = listOf("Tecnología"),
+        contiene = listOf("anthropic", "openai", "github", "railway", "google cloud", "microsoft", "apple.com", "google one"),
+    ),
+)
