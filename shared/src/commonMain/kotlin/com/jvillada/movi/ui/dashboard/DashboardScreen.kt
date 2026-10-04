@@ -421,6 +421,15 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getAnomalias() }
                     .onSuccess { a -> data = data.copy(anomalias = a); llegado = llegado.copy(anomalias = a) }
             }
+            // 4-oct-2026: las cuentas a las que les envía plata sin nombre. Secundario, como las
+            // anomalías: si falla, «Para revisar» sigue sin este aviso.
+            launch {
+                runCatching { Repositories.wallets.getDestinosSugeridos() }.onSuccess { s ->
+                    val n = s.count { it.enviado.isNotEmpty() }
+                    data = data.copy(cuentasDeOtrosSinNombre = n)
+                    llegado = llegado.copy(cuentasDeOtrosSinNombre = n)
+                }
+            }
         }
         // Con la misma guarda que la instantánea (ver `usuario`): una carga que termina después
         // del logout no puede dejarle al próximo usuario la plata del anterior en memoria.

@@ -164,6 +164,11 @@ data class DashboardData(
      * demás. Ver `anomaliasVisiblesDe`.
      */
     val anomalias: List<com.jvillada.movi.shared.model.Anomalia>? = null,
+    /**
+     * 4-oct-2026: **cuántas cuentas a las que les envía plata no tienen nombre** (los sugeridos de
+     * `GET /api/destinos/sugeridos` con algo enviado). Cero mientras no llegó: no se avisa nada.
+     */
+    val cuentasDeOtrosSinNombre: Int = 0,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -886,6 +891,7 @@ internal fun cosasParaRevisarDe(
     // haya ninguna sin cuadrar. Misma disciplina que el resto de este archivo.
     avisoDeCuadre = textoDelAvisoDeCuadre(cuentasSinCuadrar(data.accounts.orEmpty(), ahora)),
     bancosMudos = data.bancosMudos,
+    cuentasDeOtrosSinNombre = data.cuentasDeOtrosSinNombre,
 )
 
 /**
