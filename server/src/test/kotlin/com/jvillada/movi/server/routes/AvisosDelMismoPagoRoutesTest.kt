@@ -11,6 +11,13 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.AvisosDelMismoPago
+import com.jvillada.movi.shared.model.ConfirmarElMismoPago
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.GrupoDeAvisos
+import com.jvillada.movi.shared.model.MismoPagoConfirmado
+import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
+import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.RespuestaDelSync
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
@@ -38,6 +45,7 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Date
 import kotlin.test.BeforeTest
@@ -251,5 +259,155 @@ class AvisosDelMismoPagoRoutesTest {
         assertNull(sinCampos.grupoId)
         assertEquals(emptyList(), sinCampos.miembrosDelGrupo)
         assertNull(sinCampos.yaAnotadoCon)
+    }
+
+    // ── Confirmar, ignorar, ya anotado ─────────────────────────────────────────
+
+    private fun movimiento(uid: String, id: String = "ev_panaderia") = FinancialEvent(
+        id = id, accountId = "cuenta-$uid", type = TransactionType.EXPENSE, amount = 12_300,
+        category = "Comida", description = "PANADERIA LA ESQ", timestamp = 1_790_000_000_000L,
+    )
+
+    private suspend fun ApplicationTestBuilder.grupo(uid: String, grupoId: String): GrupoDeAvisos =
+        cliente().get("/api/sms/grupo/$grupoId") { header(HttpHeaders.Authorization, "Bearer ${token(uid)}") }.body()
+
+    private suspend fun ApplicationTestBuilder.confirmar(uid: String, grupoId: String, pedido: ConfirmarElMismoPago) =
+        cliente().post("/api/sms/grupo/$grupoId/confirmar") {
+            header(HttpHeaders.Authorization, "Bearer ${token(uid)}")
+            contentType(ContentType.Application.Json)
+            setBody(pedido)
+        }
+
+    private fun movimientosDe(uid: String): Long = transaction { Events.selectAll().where { Events.userId eq uid }.count() }
+
+    private fun enlaces(uid: String): Map<String, String?> = transaction {
+        SmsMessages.selectAll().where { SmsMessages.userId eq uid }.associate { it[SmsMessages.id] to it[SmsMessages.eventoId] }
+    }
+
+    @Test
+    fun `los avisos del pago traen primero el que mas dice`() = testApplication {
+        application { testModule() }
+        subir(a, deWallet, delSms, deLaApp)
+        val g = grupo(a, bandeja(a).first().grupoId!!)
+        // Los tres traen comercio y cuenta: gana el SMS, el registro del banco.
+        assertEquals("sms_rt_1", g.propuestaDe)
+        assertEquals("sms_rt_1", g.miembros.first().id)
+        assertEquals(3, g.miembros.size)
+        assertNull(g.yaAnotadoCon)
+        assertEquals(HttpStatusCode.NotFound, cliente().get("/api/sms/grupo/no-existe") { header(HttpHeaders.Authorization, "Bearer ${token(a)}") }.status)
+    }
+
+    @Test
+    fun `confirmar el pago crea un movimiento y cierra los tres avisos`() = testApplication {
+        application { testModule() }
+        subir(a, deWallet, delSms, deLaApp)
+        val g = grupo(a, bandeja(a).first().grupoId!!)
+
+        val respuesta = confirmar(a, g.grupoId, ConfirmarElMismoPago(g.miembros.map { it.id }, evento = movimiento(a)))
+        assertEquals(HttpStatusCode.OK, respuesta.status, respuesta.bodyAsText())
+        val hecho: MismoPagoConfirmado = respuesta.body()
+        assertTrue(hecho.creado)
+        assertEquals("ev_panaderia", hecho.eventoId)
+        assertEquals(3, hecho.cerrados.size)
+
+        assertEquals(1, movimientosDe(a))
+        assertTrue(bandeja(a).all { it.state == SMS_STATE_CONFIRMED })
+        assertEquals(setOf("ev_panaderia"), enlaces(a).values.toSet())
+        assertEquals(0, cuantosPagosPorRevisar(bandeja(a)))
+    }
+
+    @Test
+    fun `el doble toque no crea dos movimientos`() = testApplication {
+        application { testModule() }
+        subir(a, deWallet, delSms, deLaApp)
+        val g = grupo(a, bandeja(a).first().grupoId!!)
+        val ids = g.miembros.map { it.id }
+
+        // Dos toques: cada uno con su propio id de movimiento, como los arma la app.
+        val primero: MismoPagoConfirmado = confirmar(a, g.grupoId, ConfirmarElMismoPago(ids, evento = movimiento(a, "ev_1"))).body()
+        val segundo = confirmar(a, g.grupoId, ConfirmarElMismoPago(ids, evento = movimiento(a, "ev_2")))
+        assertEquals(HttpStatusCode.OK, segundo.status)
+        val repetido: MismoPagoConfirmado = segundo.body()
+
+        assertTrue(primero.creado)
+        assertEquals(false, repetido.creado)
+        assertEquals("ev_1", repetido.eventoId)
+        assertEquals(1, movimientosDe(a))
+    }
+
+    @Test
+    fun `con un aviso ya confirmado, el pago se muestra ya anotado y se cierra sin crear nada`() = testApplication {
+        application { testModule() }
+        subir(a, deWallet, delSms, deLaApp)
+        // Aprobó uno por el camino de antes (un APK viejo).
+        assertEquals(HttpStatusCode.OK, cliente().post("/api/sms/notif_wallet/confirm") { header(HttpHeaders.Authorization, "Bearer ${token(a)}") }.status)
+
+        val lista = bandeja(a).associateBy { it.id }
+        assertEquals("notif_wallet", lista.getValue("sms_rt_1").yaAnotadoCon)
+        assertEquals("notif_wallet", lista.getValue("notif_app").yaAnotadoCon)
+        val g = grupo(a, lista.getValue("sms_rt_1").grupoId!!)
+        assertEquals("notif_wallet", g.yaAnotadoCon)
+
+        // «Cerrar»: sin movimiento.
+        val cierre: MismoPagoConfirmado = confirmar(a, g.grupoId, ConfirmarElMismoPago(g.miembros.map { it.id })).body()
+        assertEquals(false, cierre.creado)
+        assertEquals(setOf("sms_rt_1", "notif_app"), cierre.cerrados.toSet())
+        assertEquals(0, movimientosDe(a))
+        assertEquals(0, cuantosPagosPorRevisar(bandeja(a)))
+    }
+
+    @Test
+    fun `Es este enlaza los avisos al movimiento que ya estaba`() = testApplication {
+        application { testModule() }
+        subir(a, deWallet, delSms)
+        transaction {
+            Events.insert {
+                it[id] = "ev_a_mano"; it[userId] = a; it[accountId] = "cuenta-$a"; it[type] = "EXPENSE"; it[amount] = 12_300
+                it[category] = "Comida"; it[description] = "Panadería"; it[merchant] = null; it[timestamp] = 1_790_000_000_000L
+                it[eventSource] = "MANUAL"; it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+        val grupoId = bandeja(a).first().grupoId!!
+        val hecho: MismoPagoConfirmado = confirmar(a, grupoId, ConfirmarElMismoPago(listOf("sms_rt_1", "notif_wallet"), eventoExistenteId = "ev_a_mano")).body()
+        assertEquals(false, hecho.creado)
+        assertEquals(1, movimientosDe(a))
+        assertEquals(setOf("ev_a_mano"), enlaces(a).values.toSet())
+    }
+
+    @Test
+    fun `sin movimiento ni nada anotado no se cierra, y un rechazo no deja nada a medias`() = testApplication {
+        application { testModule() }
+        subir(a, deWallet, delSms)
+        val grupoId = bandeja(a).first().grupoId!!
+        val ids = listOf("sms_rt_1", "notif_wallet")
+        assertEquals(HttpStatusCode.Conflict, confirmar(a, grupoId, ConfirmarElMismoPago(ids)).status)
+        // La cuenta de otro usuario: 404, y ningún aviso quedó confirmado.
+        assertEquals(HttpStatusCode.NotFound, confirmar(a, grupoId, ConfirmarElMismoPago(ids, evento = movimiento(b))).status)
+        assertEquals(HttpStatusCode.BadRequest, confirmar(a, grupoId, ConfirmarElMismoPago(ids, evento = movimiento(a).copy(amount = 0))).status)
+        assertEquals(0, movimientosDe(a))
+        assertTrue(bandeja(a).all { it.state == SMS_STATE_PENDING })
+    }
+
+    @Test
+    fun `ignorar el pago ignora todos sus avisos`() = testApplication {
+        application { testModule() }
+        subir(a, deWallet, delSms, deLaApp)
+        val grupoId = bandeja(a).first().grupoId!!
+        assertEquals(HttpStatusCode.NoContent, postear(a, "/api/sms/grupo/$grupoId/ignorar", AvisosDelMismoPago(listOf("sms_rt_1", "notif_wallet", "notif_app"))))
+        assertTrue(bandeja(a).all { it.state == SMS_STATE_IGNORED })
+        assertEquals(0, cuantosPagosPorRevisar(bandeja(a)))
+    }
+
+    @Test
+    fun `otro usuario no puede ver, confirmar ni ignorar el pago`() = testApplication {
+        application { testModule() }
+        subir(a, deWallet, delSms)
+        val grupoId = bandeja(a).first().grupoId!!
+        val ids = listOf("sms_rt_1", "notif_wallet")
+        assertEquals(HttpStatusCode.NotFound, cliente().get("/api/sms/grupo/$grupoId") { header(HttpHeaders.Authorization, "Bearer ${token(b)}") }.status)
+        assertEquals(HttpStatusCode.NotFound, confirmar(b, grupoId, ConfirmarElMismoPago(ids, evento = movimiento(b))).status)
+        assertEquals(HttpStatusCode.NotFound, postear(b, "/api/sms/grupo/$grupoId/ignorar", AvisosDelMismoPago(ids)))
+        assertEquals(0, movimientosDe(b))
+        assertTrue(bandeja(a).all { it.state == SMS_STATE_PENDING })
     }
 }
