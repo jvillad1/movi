@@ -2,17 +2,24 @@ package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.correo.ConfigDeCorreoEntrante
+import com.jvillada.movi.server.correo.ContenidoDeResend
+import com.jvillada.movi.server.correo.CorreoEntrante
+import com.jvillada.movi.server.correo.EVENTO_CORREO_RECIBIDO
+import com.jvillada.movi.server.correo.FirmaDeSvix
+import com.jvillada.movi.server.correo.LectorDeCorreosRecibidos
 import com.jvillada.movi.server.correo.MAX_CUERPO_DE_CORREO_BYTES
+import com.jvillada.movi.server.correo.correoDeResend
 import com.jvillada.movi.server.correo.direccionDeReenvio
 import com.jvillada.movi.server.correo.esElMismoSecreto
 import com.jvillada.movi.server.correo.idDeCorreo
 import com.jvillada.movi.server.correo.leerCorreoEntrante
+import com.jvillada.movi.server.correo.leerEventoDeResend
 import com.jvillada.movi.server.correo.marcaDeOrigenDelCorreo
 import com.jvillada.movi.server.correo.momentoDelCorreo
 import com.jvillada.movi.server.correo.secretoPresentado
 import com.jvillada.movi.server.correo.textoDelCorreo
 import com.jvillada.movi.server.correo.tokenDeCorreoDe
-import com.jvillada.movi.server.correo.tokenDelDestinatario
+import com.jvillada.movi.server.correo.tokensDeLosDestinatarios
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
@@ -22,7 +29,9 @@ import com.jvillada.movi.server.sms.SmsKey
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.log
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.contentLength
+import io.ktor.server.request.receive
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -145,64 +154,11 @@ fun Route.correoEntranteRoutes() {
                 RespuestaDelCorreo(guardado = false, motivo = "No pude leer el correo."),
             )
 
-        val token = tokenDelDestinatario(correo.destinatarios)
-            ?: return@post call.respond(
-                HttpStatusCode.Accepted,
-                RespuestaDelCorreo(guardado = false, motivo = "La dirección de destino no trae el token de ningún usuario."),
-            )
-
-        // La tabla de usuarios de Movi tiene un puñado de filas y el token se deriva del id, así que
-        // se resuelve recorriéndolas. Si algún día son miles, esto pide una columna indexada — no
-        // una tabla nueva.
-        val uid = dbQuery {
-            Users.selectAll().map { it[Users.id] }.firstOrNull { tokenDeCorreoDe(it) == token }
-        } ?: return@post call.respond(
-            HttpStatusCode.Accepted,
-            RespuestaDelCorreo(guardado = false, motivo = "Esa dirección no corresponde a ninguna cuenta."),
-        )
-
-        val texto = textoDelCorreo(correo.asunto, correo.cuerpo)
-        val tiempo = momentoDelCorreo(correo.fecha, ahora = System.currentTimeMillis())
-        val id = idDeCorreo(correo.idDelMensaje, texto, tiempo)
-        val marca = marcaDeOrigenDelCorreo(correo.nombreDelRemitente, correo.remitente)
-
-        val guardado = dbQuery {
-            val yaEstaPorId = SmsMessages.selectAll()
-                .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
-                .any()
-            if (yaEstaPorId) return@dbQuery false
-
-            // El MISMO dedupe que `/api/sms/sync`, con la misma clave (texto + tiempo): una alerta
-            // que ya llegó por SMS o por notificación no vuelve a entrar por correo. Ver `SmsDedupe`
-            // para por qué el texto solo no alcanza y por qué el `bank` queda fuera de la clave.
-            val existentes = SmsMessages.selectAll()
-                .where { SmsMessages.userId eq uid }
-                .map { SmsKey(it[SmsMessages.text], it[SmsMessages.time]) }
-            if (SmsDedupeIndex(existentes).isDuplicate(SmsKey(texto, tiempo))) return@dbQuery false
-
-            // El server es dueño del estado, igual que en el sync: llega «por confirmar» y son
-            // /confirm y /ignore los que lo mueven — salvo lo que no es un movimiento (el «tu
-            // extracto está listo», una promoción), que entra apartado con su motivo.
-            val (estado, motivo) = comoLlega(texto, marca)
-            SmsMessages.insert {
-                it[SmsMessages.id] = id
-                it[userId] = uid
-                it[time] = tiempo
-                it[bank] = marca
-                it[text] = texto
-                it[state] = estado
-                it[motivoApartado] = motivo?.name
-                it[det] = ""
-            }
-            true
-        }
-
-        call.respond(
-            HttpStatusCode.Accepted,
-            if (guardado) RespuestaDelCorreo(guardado = true, id = id)
-            else RespuestaDelCorreo(guardado = false, motivo = "Ese correo ya estaba en la bandeja."),
-        )
+        val (estado, respuesta) = guardarCorreoEntrante(correo)
+        call.respond(estado, respuesta)
     }
+
+    post("/api/correo-entrante/resend") { correoDeResendRoute(call) }
 }
 
 /**
@@ -226,4 +182,188 @@ fun Route.direccionDeCorreoRoutes() {
             ),
         )
     }
+}
+
+/**
+ * **El camino único de un correo ya leído**, venga del proveedor que venga: atribución por el token
+ * de la dirección, el MISMO dedupe que `/api/sms/sync`, la MISMA decisión de si es un movimiento
+ * (`comoLlega` → `queEsEsteMensaje`) y la MISMA tabla `sms_messages`. Postmark/Mailgun y Resend
+ * solo difieren en cómo llegan hasta un [CorreoEntrante]; de acá en adelante no hay dos versiones
+ * de nada.
+ *
+ * Devuelve el código y el cuerpo que se contestan: 202 en todos los casos (guardado, ya estaba, o
+ * sin dueño — reintentar no arregla una dirección mal armada).
+ */
+private suspend fun guardarCorreoEntrante(correo: CorreoEntrante): Pair<HttpStatusCode, RespuestaDelCorreo> {
+    val tokens = tokensDeLosDestinatarios(correo.destinatarios)
+    if (tokens.isEmpty()) {
+        return HttpStatusCode.Accepted to
+            RespuestaDelCorreo(guardado = false, motivo = "La dirección de destino no trae el token de ningún usuario.")
+    }
+
+    // La tabla de usuarios de Movi tiene un puñado de filas y el token se deriva del id, así que
+    // se resuelve recorriéndolas. Si algún día son miles, esto pide una columna indexada — no
+    // una tabla nueva. Gana el primer token (en orden de confianza) que sea de alguien.
+    val uid = dbQuery {
+        val porToken = Users.selectAll().map { it[Users.id] }.associateBy { tokenDeCorreoDe(it) }
+        tokens.firstNotNullOfOrNull { porToken[it] }
+    } ?: return HttpStatusCode.Accepted to
+        RespuestaDelCorreo(guardado = false, motivo = "Esa dirección no corresponde a ninguna cuenta.")
+
+    val texto = textoDelCorreo(correo.asunto, correo.cuerpo)
+    val tiempo = momentoDelCorreo(correo.fecha, ahora = System.currentTimeMillis())
+    val id = idDeCorreo(correo.idDelMensaje, texto, tiempo)
+    val marca = marcaDeOrigenDelCorreo(correo.nombreDelRemitente, correo.remitente)
+
+    val guardado = dbQuery {
+        val yaEstaPorId = SmsMessages.selectAll()
+            .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
+            .any()
+        if (yaEstaPorId) return@dbQuery false
+
+        // El MISMO dedupe que `/api/sms/sync`, con la misma clave (texto + tiempo): una alerta
+        // que ya llegó por SMS o por notificación no vuelve a entrar por correo. Ver `SmsDedupe`
+        // para por qué el texto solo no alcanza y por qué el `bank` queda fuera de la clave.
+        val existentes = SmsMessages.selectAll()
+            .where { SmsMessages.userId eq uid }
+            .map { SmsKey(it[SmsMessages.text], it[SmsMessages.time]) }
+        if (SmsDedupeIndex(existentes).isDuplicate(SmsKey(texto, tiempo))) return@dbQuery false
+
+        // El server es dueño del estado, igual que en el sync: llega «por confirmar» y son
+        // /confirm y /ignore los que lo mueven — salvo lo que no es un movimiento (el «tu
+        // extracto está listo», una promoción, la confirmación de reenvío de Gmail), que entra
+        // apartado con su motivo.
+        val (estado, motivo) = comoLlega(texto, marca)
+        SmsMessages.insert {
+            it[SmsMessages.id] = id
+            it[userId] = uid
+            it[time] = tiempo
+            it[bank] = marca
+            it[text] = texto
+            it[state] = estado
+            it[motivoApartado] = motivo?.name
+            it[det] = ""
+        }
+        true
+    }
+
+    return HttpStatusCode.Accepted to
+        if (guardado) RespuestaDelCorreo(guardado = true, id = id)
+        else RespuestaDelCorreo(guardado = false, motivo = "Ese correo ya estaba en la bandeja.")
+}
+
+/**
+ * # `POST /api/correo-entrante/resend` — el webhook `email.received` de Resend
+ *
+ * Pública como la de arriba, pero con otra puerta: **la firma Svix** del webhook
+ * (`RESEND_WEBHOOK_SECRET`, ver [FirmaDeSvix]). Resend no deja poner una contraseña en la URL ni
+ * una cabecera propia; firma cada entrega, y eso es mejor: la firma cubre el cuerpo, y el
+ * timestamp impide reenviar una entrega vieja.
+ *
+ * El webhook no trae el cuerpo del correo: con su `email_id` se pide el contenido a la API
+ * ([LectorDeCorreosRecibidos]) y se arma un [CorreoEntrante] ([correoDeResend]), que sigue por
+ * [guardarCorreoEntrante] como cualquier otro.
+ *
+ * | Caso | Código | Por qué |
+ * |---|---|---|
+ * | sin `RESEND_WEBHOOK_SECRET` | 503 | apagado; nada entra |
+ * | firma ausente, inválida o timestamp a más de 5 min | 401 | no se lee nada más |
+ * | más de [MAX_CORREOS_POR_MINUTO] | 429 | |
+ * | cuerpo > [MAX_CUERPO_DE_CORREO_BYTES] | 413 | |
+ * | otro evento (`email.sent`, …) | 200 | no es asunto de esta ruta; reintentarlo no sirve |
+ * | sin clave de API en el server | 503 | Resend reintenta; cuando la clave esté, entra |
+ * | la API falla o no encuentra el correo | 502 | **Resend reintenta** (5 s, 5 min, 30 min, 2 h…) |
+ * | sin token, ya estaba, guardado | 202 | igual que la de arriba |
+ */
+private suspend fun correoDeResendRoute(call: ApplicationCall) {
+    val secreto = ConfigDeCorreoEntrante.secretoDeResend()
+    if (secreto.isNullOrBlank()) {
+        return call.respond(
+            HttpStatusCode.ServiceUnavailable,
+            RespuestaDelCorreo(guardado = false, motivo = "El correo entrante por Resend no está configurado en este servidor."),
+        )
+    }
+
+    val anunciado = call.request.contentLength()
+    if (anunciado != null && anunciado > MAX_CUERPO_DE_CORREO_BYTES) {
+        return call.respond(
+            HttpStatusCode.PayloadTooLarge,
+            RespuestaDelCorreo(guardado = false, motivo = "El evento es demasiado grande."),
+        )
+    }
+    // Los bytes crudos, no el texto: la firma se calcula sobre el cuerpo exacto que mandó Resend.
+    val crudo = call.receive<ByteArray>()
+    if (crudo.size > MAX_CUERPO_DE_CORREO_BYTES) {
+        return call.respond(
+            HttpStatusCode.PayloadTooLarge,
+            RespuestaDelCorreo(guardado = false, motivo = "El evento es demasiado grande."),
+        )
+    }
+
+    val cabeceras = call.request.headers
+    val firmaValida = FirmaDeSvix.esValida(
+        secreto = secreto,
+        id = cabeceras["svix-id"] ?: cabeceras["webhook-id"],
+        timestamp = cabeceras["svix-timestamp"] ?: cabeceras["webhook-timestamp"],
+        firmas = cabeceras["svix-signature"] ?: cabeceras["webhook-signature"],
+        cuerpo = crudo,
+        ahoraSegundos = System.currentTimeMillis() / 1000,
+    )
+    if (!firmaValida) {
+        call.application.log.warn("correo entrante (Resend) rechazado: firma ausente, inválida o vieja")
+        return call.respond(HttpStatusCode.Unauthorized, RespuestaDelCorreo(guardado = false, motivo = "No autorizado."))
+    }
+
+    if (!RateLimiter.allow(
+            "correo-entrante-resend:${ConfigDeCorreoEntrante.baldeDelSecreto(secreto)}",
+            maxAttempts = MAX_CORREOS_POR_MINUTO,
+            windowMs = VENTANA_DE_CORREO_MS,
+        )
+    ) {
+        return call.respond(
+            HttpStatusCode.TooManyRequests,
+            RespuestaDelCorreo(guardado = false, motivo = "Demasiados correos seguidos."),
+        )
+    }
+
+    val evento = leerEventoDeResend(String(crudo, Charsets.UTF_8))
+        ?: return call.respond(
+            HttpStatusCode.Accepted,
+            RespuestaDelCorreo(guardado = false, motivo = "No pude leer el evento."),
+        )
+    if (evento.tipo != EVENTO_CORREO_RECIBIDO) {
+        return call.respond(HttpStatusCode.OK, RespuestaDelCorreo(guardado = false, motivo = "Evento ignorado."))
+    }
+    val idDelCorreo = evento.idDelCorreo
+        ?: return call.respond(
+            HttpStatusCode.Accepted,
+            RespuestaDelCorreo(guardado = false, motivo = "El evento no trae el id del correo."),
+        )
+
+    val correo = when (val contenido = LectorDeCorreosRecibidos.actual.traer(idDelCorreo)) {
+        is ContenidoDeResend.Encontrado -> correoDeResend(contenido.json, evento)
+            ?: return call.respond(
+                HttpStatusCode.Accepted,
+                RespuestaDelCorreo(guardado = false, motivo = "No pude leer el correo."),
+            )
+        ContenidoDeResend.SinClave -> return call.respond(
+            HttpStatusCode.ServiceUnavailable,
+            RespuestaDelCorreo(guardado = false, motivo = "Falta la clave de la API de Resend en el servidor."),
+        )
+        ContenidoDeResend.DemasiadoGrande -> return call.respond(
+            HttpStatusCode.Accepted,
+            RespuestaDelCorreo(guardado = false, motivo = "El correo es demasiado grande."),
+        )
+        ContenidoDeResend.NoEncontrado -> return call.respond(
+            HttpStatusCode.BadGateway,
+            RespuestaDelCorreo(guardado = false, motivo = "Resend no encontró ese correo."),
+        )
+        is ContenidoDeResend.Fallo -> return call.respond(
+            HttpStatusCode.BadGateway,
+            RespuestaDelCorreo(guardado = false, motivo = "No pude traer el correo de Resend."),
+        )
+    }
+
+    val (estado, respuesta) = guardarCorreoEntrante(correo)
+    call.respond(estado, respuesta)
 }
