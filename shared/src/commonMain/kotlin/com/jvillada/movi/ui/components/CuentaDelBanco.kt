@@ -33,6 +33,14 @@ enum class OrigenDeLaCuentaDelBanco {
     /** El dueño la eligió con el dedo en esta pantalla. */
     A_MANO,
 
+    /**
+     * **La sabe Movi por otro lado**, no por el aviso: el correo de PSE no dice desde qué cuenta se
+     * pagó, y el server la propone por los pagos anteriores a esa misma deuda, la regla recurrente de
+     * esa empresa o la última vez que le pagó (`ParsedSms.cuentaSugeridaId`). Le gana a la de por
+     * defecto —es memoria, no la primera del abecedario— pero no a un número escrito en el aviso.
+     */
+    SUGERIDA_POR_MOVI,
+
     /** No hay ninguna cuenta que sirva. No se resuelve nada: la elige él. */
     NINGUNA,
 }
@@ -332,7 +340,24 @@ fun avisoDeLaCuentaDelBanco(
     queLoDijo: String = "el mensaje",
 ): String? = when (origen) {
     OrigenDeLaCuentaDelBanco.POR_EL_NUMERO -> "Por el número que dice $queLoDijo"
+    OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI -> "Por lo que Movi sabe de este pago"
     OrigenDeLaCuentaDelBanco.POR_DEFECTO -> "La puso Movi"
     OrigenDeLaCuentaDelBanco.NINGUNA -> "Elígela tú"
     OrigenDeLaCuentaDelBanco.POR_EL_BANCO, OrigenDeLaCuentaDelBanco.A_MANO -> null
+}
+
+/**
+ * **La cuenta que propone el server, cuando el aviso no dice ninguna.** Solo reemplaza una
+ * resolución que era una suposición ([OrigenDeLaCuentaDelBanco.POR_DEFECTO]) o nada
+ * ([OrigenDeLaCuentaDelBanco.NINGUNA]): lo que eligió el dueño, lo que dice el número del aviso o la
+ * marca de la cuenta mandan sobre esto. Una sugerida que ya no está entre sus cuentas no cuenta.
+ */
+fun conLaCuentaQueSugiereMovi(
+    resuelta: CuentaDelBanco,
+    accounts: List<Account>,
+    sugeridaId: String?,
+): CuentaDelBanco {
+    if (resuelta.origen != OrigenDeLaCuentaDelBanco.POR_DEFECTO && resuelta.origen != OrigenDeLaCuentaDelBanco.NINGUNA) return resuelta
+    val sugerida = sugeridaId?.let { id -> accounts.firstOrNull { it.id == id } } ?: return resuelta
+    return CuentaDelBanco(sugerida, OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI)
 }
