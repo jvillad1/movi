@@ -149,9 +149,11 @@ class DestinoConocidoTest {
     }
 
     @Test
-    fun `un ingreso no recibe el nombre del destino`() {
+    fun `un ingreso que nombra al destino se propone como lo que llego de el, nunca como lo que se le mando`() {
+        // 4-oct-2026: la plata que entra también se reconoce. Lo que no puede pasar es que un
+        // ingreso se lea «Transferencia a Caro»: lo que entró no es algo que se mandó.
         val recibido = sms("Transferencia recibida", TransactionType.INCOME)
-        assertEquals("Transferencia recibida", conElDestinoConocido(recibido, elSmsDeCotrafa, destinos).merchant)
+        assertEquals("Transferencia de Caro", conElDestinoConocido(recibido, elSmsDeCotrafa, destinos).merchant)
     }
 
     @Test
@@ -534,8 +536,12 @@ class DestinoConocidoTest {
         assertEquals("", nuevo.id)
         assertEquals("12345678", nuevo.numero)
         assertEquals("mamá", nuevo.deQuien)
-        // Caro ya tiene número: uno nuevo con su nombre no le pisa el que tiene.
-        assertEquals("", destinoParaGuardar(IdentificadorDelDestino(TipoDeIdentificador.NUMERO, "12345678"), "Caro", null, destinos).id)
+        // 4-oct-2026: un tercero tiene tantos números como haga falta. Uno nuevo con el nombre de
+        // Caro se le SUMA, y el que ya tenía sigue siendo el primero (el que lee el APK instalado).
+        val otroNumero = destinoParaGuardar(IdentificadorDelDestino(TipoDeIdentificador.NUMERO, "12345678"), "Caro", null, destinos)
+        assertEquals("dst_caro", otroNumero.id)
+        assertEquals("31973270756", otroNumero.numero)
+        assertEquals(listOf("31973270756", "12345678"), otroNumero.numeros())
     }
 
     @Test
