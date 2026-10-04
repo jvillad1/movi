@@ -53,6 +53,7 @@ import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.ofreceVincularDeuda
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.identificadorDelDestinoEn
+import com.jvillada.movi.ui.destinos.FilaDelTercero
 import com.jvillada.movi.ui.destinos.FilaGuardarElDestino
 import com.jvillada.movi.ui.destinos.nombreParaLaFila
 import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
@@ -740,12 +741,16 @@ internal fun ContenidoDelMovimiento(
             // un número o una llave que ninguna cuenta guardada conoce. Guardarla no toca este
             // movimiento: desde ahí «Cuentas de otros» lo cuenta, porque el texto del banco no se
             // reescribe nunca (ver `nombraAlDestino` en `:core`).
-            if (destinoGuardadoAca != null) {
+            // 4-oct-2026: si ya es de un tercero guardado, su nombre lleva a su ficha («Ver todo lo de
+            // Caro»): lo que le enviaste, lo que te envió y sus movimientos, sin salir de acá.
+            val tercero = destinoGuardadoAca ?: destinosParaGuardar.deQuienEs(aQuienFue)
+                ?.takeIf { !isTransferLeg(event) && !isOpeningBalance(event) }
+            if (tercero != null) {
                 Spacer(Modifier.height(16.dp))
-                Text(
-                    "«${destinoGuardadoAca!!.nombre}» quedó en tus cuentas de otros. Este movimiento ya cuenta ahí.",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
+                FilaDelTercero(
+                    tercero = tercero,
+                    recienGuardado = destinoGuardadoAca != null,
+                    otros = destinosParaGuardar.guardados.orEmpty().filter { it.id != tercero.id },
                 )
             } else if (aQuienFue != null && destinosParaGuardar.ofrece(aQuienFue, cuentas)) {
                 Spacer(Modifier.height(20.dp))
@@ -754,6 +759,7 @@ internal fun ContenidoDelMovimiento(
                 FilaGuardarElDestino(
                     identificador = aQuienFue,
                     nombreSugerido = nombreParaLaFila(aQuienFue, event.merchant),
+                    textoDelAviso = event.rawPayload,
                     destinos = destinosParaGuardar.guardados.orEmpty(),
                     onGuardado = { guardado ->
                         destinosParaGuardar.alGuardar(guardado)
