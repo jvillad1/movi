@@ -85,10 +85,10 @@ internal const val MAX_CUERPO_DE_CORREO_BYTES = 256 * 1024
 private val json = Json { isLenient = true; ignoreUnknownKeys = true }
 
 /** Las direcciones que aparecen en una cabecera tipo `"Banco" <alertas@banco.com>, otro@x.com`. */
-private val direccionRegex = Regex("""[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}""")
+internal val direccionRegex = Regex("""[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}""")
 
 /** El nombre de pantalla de `"Bancolombia" <alertas@…>` o `Bancolombia <alertas@…>`. */
-private val nombreRegex = Regex("""^\s*"?([^"<]*?)"?\s*<""")
+internal val nombreRegex = Regex("""^\s*"?([^"<]*?)"?\s*<""")
 
 /**
  * **Lee el cuerpo de la petición del proveedor, venga como venga.**
@@ -206,7 +206,7 @@ private fun comoFormulario(crudo: String): CamposDelCorreo? = runCatching {
     CamposDelCorreo(plano)
 }.getOrNull()
 
-private fun direcciones(crudo: String?): List<String> =
+internal fun direcciones(crudo: String?): List<String> =
     crudo?.let { texto -> direccionRegex.findAll(texto).map { it.value.trim().lowercase() }.toList() }.orEmpty()
 
 /**
@@ -229,12 +229,22 @@ private fun direcciones(crudo: String?): List<String> =
  * Y si no hay token no hay a quién atribuirlo — la ruta contesta 202 y **no escribe nada**.
  * Adivinar el dueño sería meterle a alguien un movimiento ajeno en su bandeja de plata.
  */
-fun tokenDelDestinatario(destinatarios: List<String>): String? =
-    destinatarios.firstNotNullOfOrNull { direccion ->
+fun tokenDelDestinatario(destinatarios: List<String>): String? = tokensDeLosDestinatarios(destinatarios).firstOrNull()
+
+/**
+ * **Todos** los tokens de [destinatarios], en el mismo orden de confianza y sin repetir.
+ *
+ * La ruta prueba uno por uno hasta dar con el de un usuario, en vez de quedarse con el primero:
+ * con Resend la lista mezcla el destinatario de sobre con las cabeceras del correo reenviado, y
+ * una dirección de Gmail con su propio `+` (`juan+bancos@gmail.com`) que viniera antes no puede
+ * tapar la de Movi. Probar varios no abre nada: un token que no es de nadie no escribe.
+ */
+fun tokensDeLosDestinatarios(destinatarios: List<String>): List<String> =
+    destinatarios.mapNotNull { direccion ->
         val local = direccion.substringBefore('@')
         if (!local.contains('+')) null
         else local.substringAfterLast('+').trim().takeIf { it.isNotBlank() }
-    }
+    }.distinct()
 
 /**
  * **El token de un usuario**, derivado de su id y nada más.
@@ -357,13 +367,22 @@ private val FORMATO_DEL_WIRE: DateTimeFormatter =
  * fila sin fecha ordenaría mal la bandeja entera.
  */
 fun momentoDelCorreo(fecha: String?, ahora: Long, zone: ZoneId = AppClock.zone): String {
-    val instante = fecha?.trim()?.takeIf { it.isNotBlank() }?.let { crudo ->
-        crudo.toLongOrNull()?.let { segundos -> runCatching { Instant.ofEpochSecond(segundos) }.getOrNull() }
-            ?: runCatching { ZonedDateTime.parse(crudo, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant() }.getOrNull()
-            ?: runCatching { Instant.parse(crudo) }.getOrNull()
-    } ?: Instant.ofEpochMilli(ahora)
+    val instante = instanteDelCorreo(fecha) ?: Instant.ofEpochMilli(ahora)
     return instante.atZone(zone).format(FORMATO_DEL_WIRE)
 }
+
+/**
+ * La fecha cruda leída como instante, o `null` si no se entiende: epoch en segundos, RFC 1123 (con
+ * o sin el comentario final que agregan algunos servidores, `… +0000 (UTC)`) o ISO 8601 (el
+ * `created_at` de Resend).
+ */
+internal fun instanteDelCorreo(fecha: String?): Instant? =
+    fecha?.trim()?.takeIf { it.isNotBlank() }?.let { crudo ->
+        val sinComentario = crudo.replace(Regex("""\s*\([^)]*\)\s*$"""), "")
+        crudo.toLongOrNull()?.let { segundos -> runCatching { Instant.ofEpochSecond(segundos) }.getOrNull() }
+            ?: runCatching { ZonedDateTime.parse(sinComentario, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant() }.getOrNull()
+            ?: runCatching { Instant.parse(crudo) }.getOrNull()
+    }
 
 /**
  * Id del wire. Prefijo propio, distinto de `sms_`, `sms_rt_` y `notif_`: el hook de push del server

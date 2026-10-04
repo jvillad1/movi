@@ -18,12 +18,33 @@ object ConfigDeCorreoEntrante {
     fun secreto(): String? = resolver("movi.correo.secreto", "INBOUND_EMAIL_SECRET")
 
     /**
-     * La dirección que dio el proveedor (`9f3c…@inbound.postmarkapp.com`, `alertas@midominio.com`).
-     * Solo se usa para poder **decirle al dueño** a qué dirección reenviar; la ruta no la mira.
+     * El signing secret (`whsec_…`) del webhook de Resend. `null` = la ruta de Resend
+     * (`/api/correo-entrante/resend`) está apagada. Es otra puerta que la de [secreto]: cada
+     * proveedor tiene la suya y una no abre la otra.
+     */
+    fun secretoDeResend(): String? = resolver("movi.correo.resend.secreto", "RESEND_WEBHOOK_SECRET")
+
+    /**
+     * La clave con que se pide el contenido del correo a la API de Resend. `RESEND_RECEIVING_API_KEY`
+     * si está (una clave de «Full access» aparte), y si no la `RESEND_API_KEY` de los recordatorios.
+     *
+     * Leer correos recibidos **exige una clave de «Full access»**: una de «Sending access» solo
+     * puede enviar (https://resend.com/docs/api-reference/api-keys/create-api-key). Si la de los
+     * recordatorios es de solo envío, la API contesta 401/403 y la ruta lo dice en el log.
+     */
+    fun claveDeLaApiDeResend(): String? =
+        resolver("movi.correo.resend.clave", "RESEND_RECEIVING_API_KEY")
+            ?: resolver("movi.resend.apiKey", "RESEND_API_KEY")
+
+    /**
+     * La dirección que dio el proveedor (`alertas@<id>.resend.app`, `9f3c…@inbound.postmarkapp.com`,
+     * `alertas@midominio.com`). Solo se usa para poder **decirle al dueño** a qué dirección
+     * reenviar; la ruta no la mira.
      */
     fun direccionBase(): String? = resolver("movi.correo.direccion", "INBOUND_EMAIL_ADDRESS")
 
-    fun estaConfigurado(): Boolean = !secreto().isNullOrBlank()
+    /** ¿Hay alguna puerta abierta? La de Postmark/Mailgun o la de Resend. */
+    fun estaConfigurado(): Boolean = !secreto().isNullOrBlank() || !secretoDeResend().isNullOrBlank()
 
     /**
      * **El balde del rate limit, que no puede ser el secreto.** `RateLimiter` guarda la clave en un

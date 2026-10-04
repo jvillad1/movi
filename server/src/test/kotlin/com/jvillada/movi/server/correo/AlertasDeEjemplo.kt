@@ -124,3 +124,86 @@ fun alertaMailgunJson(
   "timestamp": $epochSegundos
 }
 """.trimIndent()
+
+/**
+ * El webhook `email.received` de **Resend**, con la forma que documenta
+ * https://resend.com/docs/webhooks/emails/received: solo metadatos, sin cuerpo. El `to` es la
+ * cabecera del correo reenviado por Gmail (el Gmail del dueño); la dirección de Movi viene en
+ * `received_for`.
+ */
+fun eventoDeResend(
+    idDelCorreo: String = "56761188-7520-42d8-8898-ff6fc54ce618",
+    tipo: String = "email.received",
+    recibidoPara: List<String> = emptyList(),
+    para: List<String> = listOf("juan@gmail.com"),
+): String = """
+{
+  "type": "$tipo",
+  "created_at": "2026-09-16T08:12:43.126Z",
+  "data": {
+    "email_id": "$idDelCorreo",
+    "created_at": "2026-09-16T08:12:42.894Z",
+    "from": "alertasynotificaciones@notificacionesbancolombia.com",
+    "to": [${para.joinToString(", ") { "\"$it\"" }}],
+    "bcc": [],
+    "cc": [],
+    "received_for": [${recibidoPara.joinToString(", ") { "\"$it\"" }}],
+    "message_id": "<8d1c4f2a-resend@bancolombia.com.co>",
+    "subject": "${aJson(ASUNTO_CUOTA_DE_MANEJO)}",
+    "attachments": []
+  }
+}
+""".trimIndent()
+
+/**
+ * Lo que contesta `GET /emails/receiving/{id}` para esa alerta
+ * (https://resend.com/docs/api-reference/emails/retrieve-received-email): `text`, `html` y
+ * `headers` (objeto, nombres en minúsculas). Un reenvío automático de Gmail conserva `From:` y
+ * `To:` del banco y agrega `X-Forwarded-To` con la dirección de destino.
+ */
+fun contenidoDeResend(
+    recibidoPara: List<String> = emptyList(),
+    reenviadoA: String? = null,
+    para: List<String> = listOf("juan@gmail.com"),
+    asunto: String = ASUNTO_CUOTA_DE_MANEJO,
+    cuerpo: String? = CUERPO_CUOTA_DE_MANEJO,
+    html: String? = null,
+    remitente: String = "alertasynotificaciones@notificacionesbancolombia.com",
+    nombreDelRemitente: String = "Bancolombia",
+    messageId: String = "<8d1c4f2a-resend@bancolombia.com.co>",
+    fecha: String = "Wed, 16 Sep 2026 03:12:41 -0500",
+): String {
+    val cabeceras = buildList {
+        add("\"from\": \"${aJson(nombreDelRemitente)} <$remitente>\"")
+        add("\"to\": \"${para.joinToString(", ")}\"")
+        add("\"date\": \"$fecha\"")
+        add("\"message-id\": \"$messageId\"")
+        if (reenviadoA != null) {
+            add("\"x-forwarded-to\": \"$reenviadoA\"")
+            add("\"x-forwarded-for\": \"juan@gmail.com $reenviadoA\"")
+        }
+        add("\"delivered-to\": \"juan@gmail.com\"")
+    }
+    return """
+{
+  "object": "email",
+  "id": "56761188-7520-42d8-8898-ff6fc54ce618",
+  "to": [${para.joinToString(", ") { "\"$it\"" }}],
+  "from": "$remitente",
+  "created_at": "2026-09-16T08:12:42.894Z",
+  "subject": "${aJson(asunto)}",
+  "html": ${html?.let { "\"${aJson(it)}\"" } ?: "null"},
+  "html_format": "cid",
+  "text": ${cuerpo?.let { "\"${aJson(it)}\"" } ?: "null"},
+  "headers": { ${cabeceras.joinToString(", ")} },
+  "bcc": [],
+  "cc": [],
+  "reply_to": [],
+  "received_for": [${recibidoPara.joinToString(", ") { "\"$it\"" }}],
+  "authentication": { "spf": "pass", "dkim": "pass", "dmarc": "pass" },
+  "message_id": "$messageId",
+  "raw": null,
+  "attachments": []
+}
+""".trimIndent()
+}
