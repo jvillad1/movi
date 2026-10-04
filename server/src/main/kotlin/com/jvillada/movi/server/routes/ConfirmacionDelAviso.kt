@@ -57,6 +57,9 @@ internal fun Transaction.confirmarElAviso(uid: String, smsId: String, eventoPedi
         if (yaTenia == null && evento != null) it[eventoId] = evento
         if (fila[SmsMessages.confirmadoEn] == null) it[confirmadoEn] = ahora
     }
+    // Y la memoria aprende el comercio del banco, si el movimiento no lo tenía (ver
+    // `aprenderElComercioDelAviso`).
+    if (yaTenia == null && evento != null) aprenderElComercioDelAviso(uid, fila.toSmsMessage(), evento)
     return 1
 }
 

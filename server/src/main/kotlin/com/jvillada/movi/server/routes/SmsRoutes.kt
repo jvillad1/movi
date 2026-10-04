@@ -364,7 +364,7 @@ internal const val SIN_CATEGORIA = "Otros"
  */
 internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategorias): ParsedSms {
     if (parsed.category == CARD_PAYMENT_CATEGORY) return parsed
-    val recuerdo = memoria.recuerdoDe(parsed.merchant) ?: return parsed
+    val recuerdo = memoria.recuerdoDe(parsed.merchant) ?: return conLasCategoriasDelDueno(parsed, memoria)
     val huella = huellaDeUnMovimiento(parsed.merchant)
     return parsed.copy(
         category = recuerdo.categoria,
@@ -375,6 +375,19 @@ internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategoria
             "Así lo anotaste ${recuerdo.cuantos} veces"
         },
     )
+}
+
+/**
+ * **Cuando la memoria no sabe nada de este comercio, las palabras clave en SU vocabulario.** `parseSms`
+ * propone con el catálogo de la app porque no sabe de quién es el mensaje («Comida» para un
+ * supermercado); acá ya se sabe, y si él usa «Mercado», es «Mercado». La memoria siempre gana: esto
+ * corre solo cuando [MemoriaDeCategorias.recuerdoDe] no encontró nada. Solo gastos: un ingreso no
+ * tiene comercio que reconocer.
+ */
+internal fun conLasCategoriasDelDueno(parsed: ParsedSms, memoria: MemoriaDeCategorias): ParsedSms {
+    if (parsed.type != TransactionType.EXPENSE) return parsed
+    val suya = categoriaProbablePorElNombre(parsed.merchant, memoria.categoriasDelDueno) ?: return parsed
+    return parsed.copy(category = suya)
 }
 
 /** Cuántos días alrededor del mensaje se busca lo ya anotado: un gasto se anota el día o un par después. */
@@ -445,6 +458,21 @@ fun Route.smsRoutes() {
     get("/api/sms/confirmados-sin-movimiento") {
         val uid = call.userId()
         call.respond(dbQuery { avisosConfirmadosSinMovimiento(uid) })
+    }
+
+    /**
+     * Los avisos pendientes con este monto, moneda y tipo, de las últimas 48 h: lo que «Agregar»
+     * ofrece como «¿Es el aviso de hace 2 h?». Ver `avisosPendientesParecidos`. Sin monto o con un
+     * tipo que no se entiende, 400.
+     */
+    get("/api/sms/pendientes-parecidos") {
+        val uid = call.userId()
+        val monto = call.request.queryParameters["monto"]?.toLongOrNull()
+            ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val tipo = call.request.queryParameters["tipo"]?.let { t -> TransactionType.entries.firstOrNull { it.name == t } }
+            ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val moneda = call.request.queryParameters["moneda"]?.takeIf { it.isNotBlank() } ?: "COP"
+        call.respond(dbQuery { avisosPendientesParecidos(uid, monto, moneda, tipo, ahora = System.currentTimeMillis()) })
     }
 
     get("/api/sms/{id}") {

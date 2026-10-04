@@ -2238,6 +2238,12 @@ class LocalRepository(
     override suspend fun confirmSmsCon(id: String, eventoId: String) = remote.confirmSmsCon(id, eventoId)
 
     override suspend fun getAvisosConfirmadosSinMovimiento() = remote.getAvisosConfirmadosSinMovimiento()
+
+    override suspend fun getAvisosPendientesParecidos(
+        monto: Long,
+        tipo: com.jvillada.movi.shared.model.TransactionType,
+        moneda: String,
+    ) = remote.getAvisosPendientesParecidos(monto, tipo, moneda)
     override suspend fun getOrigenesMudos() = remote.getOrigenesMudos()
     override suspend fun getStatementImports(): List<StatementImport> =
         remote.getStatementImports()

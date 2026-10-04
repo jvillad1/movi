@@ -741,6 +741,17 @@ interface WalletRepository {
         emptyList()
 
     /**
+     * `GET /api/sms/pendientes-parecidos`: los avisos pendientes con este monto, moneda y tipo,
+     * llegados hace menos de 48 h —lo que «Agregar» ofrece como «¿Es el aviso de hace 2 h?»—. Ver
+     * `AvisoPendienteParecido`. Vacía donde no se implementa: la hoja simplemente no pregunta.
+     */
+    suspend fun getAvisosPendientesParecidos(
+        monto: Long,
+        tipo: com.jvillada.movi.shared.model.TransactionType,
+        moneda: String,
+    ): List<com.jvillada.movi.shared.model.AvisoPendienteParecido> = emptyList()
+
+    /**
      * `GET /api/sms/origenes-mudos`: los orígenes de captura que se callaron («banco mudo», Ola 2).
      * Lo lee el aviso diario del teléfono; el Inicio los trae en el resumen.
      */
