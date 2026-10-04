@@ -40,7 +40,9 @@ sealed interface QueEsElMensaje {
  *
  * Se comprobó contra el histórico real del dueño (235 mensajes de Movi y 5.923 SMS de bancos del
  * teléfono): **ninguno de los que él confirmó** queda apartado. Los textos reales no están en el
- * repo; las pruebas usan textos sintéticos con la misma forma (`QueEsEsteMensajeTest`).
+ * repo; las pruebas usan textos sintéticos con la misma forma (`QueEsEsteMensajeTest`). Una
+ * excepción a propósito, desde el 4-oct-2026: la oferta de Crediágil con «tasa especial», que él
+ * había confirmado sin que fuera un movimiento (la auditoría con los datos reales la marcó).
  *
  * @param origen el rótulo `bank` de la fila («85540», «Notificación · Nu», «Correo · Bancolombia»).
  */
@@ -201,4 +203,7 @@ private val PROMOCION = listOf(
     "sorteo", "puntos colombia", "acumulaste", "% de interes", "% interes", "%interes", "tu360compras",
     "tu360movilidad", "tu360inmobiliario", "hot sale", "cyber days", "black days",
     "seguro contra el cancer", "seguro integral", "estrenar carro", "estrenar moto",
+    // «Con tu Crediagil, del 18 al 20 aprovecha tasa especial de 1.5% M.V.» (19-sep-2026): una
+    // oferta de crédito, sin ninguna de las marcas de arriba. Una tasa no es un movimiento.
+    "tasa especial", "aprovecha tasa",
 )

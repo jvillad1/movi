@@ -17,6 +17,8 @@ import com.jvillada.movi.server.sms.origenesMudosDe
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.server.sms.motivoParaApartar
+import com.jvillada.movi.server.sms.numerosPropiosDe
+import com.jvillada.movi.server.sms.sinLaCuentaPropia
 import com.jvillada.movi.shared.model.MOTIVO_DEVUELTO
 import com.jvillada.movi.shared.model.MotivoDeApartado
 import com.jvillada.movi.shared.model.motivoDeApartado
@@ -121,9 +123,19 @@ private val llaveRegex = Regex("""\bllave\s+(@?[A-Za-z0-9._-]{3,})""", RegexOpti
 
 /**
  * La cuenta **de destino**, que no es la de origen: `desde tu cuenta *3333` es de dónde salió la
- * plata y no identifica a nadie. Solo cuenta la que viene detrás de un « a ».
+ * plata y no identifica a nadie. Solo cuenta la que viene detrás de un « a » o de un « hacia »: el
+ * retiro de la Fiducuenta dice «Retiraste $3,500,000.00 de tu cuenta *9586 Fiducuenta …, hacia la
+ * cuenta *25318624146», y sin el «hacia» su comercio salía «Movimiento».
  */
-private val cuentaDestinoRegex = Regex("""\ba\s+(?:la\s+)?cuenta\s+\*?\s?(\d{4,})""", RegexOption.IGNORE_CASE)
+private val cuentaDestinoRegex = Regex("""\b(?:a|hacia)\s+(?:la\s+)?cuenta\s+\*?\s?(\d{4,})""", RegexOption.IGNORE_CASE)
+
+/**
+ * **El débito programado de Bancolombia**: «Bancolombia informa pago Factura Programada IGS
+ * MULTIASISTE Ref 12019266 por $36.890,00 desde Aho*8133.» El nombre de quien cobra va entre
+ * «Factura Programada» y «Ref»; sin esto el comercio salía «Movimiento» (2 SMS en septiembre, y el
+ * mismo texto llega por correo con «Notificación Informativa» adelante).
+ */
+private val facturaProgramadaRegex = Regex("""\bfactura\s+programada\s+(.+?)\s+ref\b""", RegexOption.IGNORE_CASE)
 
 /**
  * Avisos del banco que traen plata en el texto pero **no son un movimiento**: confirmarlos crearía
@@ -343,7 +355,8 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
             limpio(merchantInRegex.find(text)?.groupValues?.get(1))
                 ?: llaveRegex.find(text)?.let { "Pago QR · llave ${it.groupValues[1]}" }
                 ?: "Pago QR"
-        else -> limpio(pagoDeWalletRegex.find(text)?.groupValues?.get(1))
+        else -> facturaProgramadaRegex.find(text)?.groupValues?.get(1)?.replace(Regex("""\s+"""), " ")?.let(::limpio)
+            ?: limpio(pagoDeWalletRegex.find(text)?.groupValues?.get(1))
             // Antes que el «en …» genérico: ese corta en el primer punto y de «Coomeva Medicina
             // Prepagada S.A.» dejaba «Coomeva Medicina Prepagada S».
             // Y sin [limpio]: el punto final de «S.A.» es parte del nombre, no del mensaje.
@@ -566,7 +579,9 @@ fun Route.smsRoutes() {
         // cuenta *31973270756» no lo puede leer ningún humano). Ver `conElDestinoConocido`.
         val memoria = dbQuery { memoriaDe(uid) }
         val destinos = dbQuery { destinosDelDueno(uid) }
-        call.respond(conElDestinoConocido(conLoQueMoviRecuerda(parsed, memoria), sms.text, destinos))
+        // Y al final, una cuenta del dueño no se le ofrece como «de otro» (ver [sinLaCuentaPropia]).
+        val propios = dbQuery { numerosPropiosDe(uid) }
+        call.respond(sinLaCuentaPropia(conElDestinoConocido(conLoQueMoviRecuerda(parsed, memoria), sms.text, destinos), propios))
     }
 
     get("/api/sms/{id}/coincidencias") {
