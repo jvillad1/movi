@@ -16,11 +16,14 @@ import kotlin.math.roundToLong
  * Cuánto pueden separarse dos avisos del mismo pago **entre SMS y notificaciones**. Llegan a
  * segundos: en el histórico del dueño (238 mensajes, 25-jul a 4-oct-2026) los 14 pagos avisados
  * dos veces quedaron a 0 minutos (13) o a 1 (1), y el resultado es el mismo con cualquier ventana
- * de 1 a 15 minutos. El par siguiente aparece recién a los 21 minutos —$3.300 en una máquina
- * expendedora, avisado por Glim y por Google Wallet con dos comercios distintos— y no hay forma de
- * saber si era un pago o dos. Diez minutos cubre una demora del teléfono sin llegar ahí.
+ * de 1 a 15 minutos. El par siguiente aparece a los 21 minutos —$3.300 en una máquina expendedora,
+ * avisado por Glim y por Google Wallet con dos comercios distintos («ZELO VENDING…» / «PWS*ZELO
+ * GROUP»)— y **sí era un solo pago**: el dueño confirmó el de Glim e ignoró el de Wallet, y en Glim
+ * hay un solo cargo. Google Wallet a veces avisa tarde. Con 30 minutos ese par se junta, y entre 15 y
+ * 240 minutos el histórico no agrega ningún otro par (4-oct-2026). Si alguna vez junta dos compras
+ * distintas, «No son el mismo pago» las separa para siempre.
  */
-internal const val MINUTOS_PARA_EL_MISMO_PAGO: Long = 10
+internal const val MINUTOS_PARA_EL_MISMO_PAGO: Long = 30
 
 /**
  * **Cuando uno de los dos es un correo**, la ventana es más ancha: el correo del banco pasa por su
