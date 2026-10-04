@@ -126,8 +126,7 @@ fun AIChatScreen(
             // (ya se mandaron y se pagaron una vez) y con tope. Ver [mensajesParaEnviar].
             val history = mensajesParaEnviar(messages)
             val reply = runCatching { Repositories.wallets.chatAi(AiChatRequest(history)) }
-            val replyText = reply.getOrNull()?.text
-                ?: "No pude conectarme con el AI. ${reply.exceptionOrNull()?.message ?: ""}"
+            val replyText = textoDeLaRespuesta(reply.getOrNull(), reply.exceptionOrNull())
             messages.add(ChatMessage(ChatRole.ASSISTANT, replyText, propuestas = reply.getOrNull()?.propuestas.orEmpty()))
             loading = false
         }

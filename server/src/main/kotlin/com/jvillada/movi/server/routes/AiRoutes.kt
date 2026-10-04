@@ -49,6 +49,8 @@ import com.jvillada.movi.server.ai.ejecutarHerramienta
 import com.jvillada.movi.server.ai.guardarLaConversacion
 import io.ktor.server.application.log
 import com.jvillada.movi.server.ai.laPreguntaPideCriterio
+import com.jvillada.movi.server.ai.avisarQueLaIaNoEstaDisponible
+import com.jvillada.movi.server.ai.fallaDeLaIa
 import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
 import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
 import com.jvillada.movi.server.ai.MODELO_PARA_CONSEJOS
@@ -240,6 +242,13 @@ private fun fabricaDeAnthropic(): FabricaDeModelos? {
         )
     }
 }
+
+/**
+ * Lo que dice la burbuja cuando la API no contesta por la cuenta. La app muestra su propia frase
+ * (ver `textoDeLaRespuesta` en `:shared`); esta es para un APK que todavía no conoce el código.
+ */
+internal const val MOVI_AI_NO_DISPONIBLE: String =
+    "Movi AI no está disponible ahora. Inténtalo de nuevo más tarde."
 
 fun Route.aiRoutes() = aiRoutes(fabricaDePrueba = null)
 
@@ -433,6 +442,18 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
         }
         reply.onSuccess { call.respond(AiChatResponse(text = stripEmojis(it.texto), propuestas = propuestas.propuestas)) }
             .onFailure {
+                // **La cuenta de Anthropic, no la pregunta.** Sin saldo, con la clave rechazada o la
+                // API saturada, la burbuja decía «Error llamando a Claude: 400 …credit balance…»:
+                // inglés, crudo, y sin decir que no es algo que el dueño arregle reintentando.
+                val falla = fallaDeLaIa(it)
+                if (falla != null) {
+                    avisarQueLaIaNoEstaDisponible("Movi AI", falla, it)
+                    call.respond(
+                        HttpStatusCode.ServiceUnavailable,
+                        AiChatResponse(text = MOVI_AI_NO_DISPONIBLE, codigo = falla.codigo),
+                    )
+                    return@onFailure
+                }
                 call.respond(
                     HttpStatusCode.InternalServerError,
                     AiChatResponse(text = "Error llamando a Claude: ${it.message ?: "desconocido"}"),
