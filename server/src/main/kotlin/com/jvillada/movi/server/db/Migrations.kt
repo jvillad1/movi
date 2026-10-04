@@ -8,6 +8,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.rem
 import org.jetbrains.exposed.sql.Transaction
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
@@ -41,6 +42,26 @@ object Migrations {
         renameLegacyNewSmsStateToPending()
         createUniqueTransferLegIndex()
         apartarLosPendientesQueNoSonMovimientos()
+        pasarLosIdentificadoresALaLista()
+    }
+
+    /**
+     * **Un tercero, varios identificadores** (4-oct-2026). Lo que ya está en `numero` y `llave` pasa
+     * a `identificadores`, la lista que lee todo lo nuevo. Solo toca las filas con la lista en NULL
+     * —o sea, las que nunca se migraron—, así que correrla dos veces no cambia nada la segunda.
+     * `numero` y `llave` NO se tocan: el APK instalado los sigue leyendo.
+     */
+    fun Transaction.pasarLosIdentificadoresALaLista() {
+        val pendientes = KnownDestinations.selectAll()
+            .where { KnownDestinations.identificadores.isNull() }
+            .map { Triple(it[KnownDestinations.id], it[KnownDestinations.numero], it[KnownDestinations.llave]) }
+        pendientes.forEach { (id, numero, llave) ->
+            val lista = identificadoresDeSiempre(numero, llave)
+            KnownDestinations.update({ KnownDestinations.id eq id }) {
+                it[KnownDestinations.identificadores] = identificadoresComoJson(lista)
+            }
+        }
+        if (pendientes.isNotEmpty()) migrationsLog.info("known_destinations: ${pendientes.size} pasados a la lista de identificadores")
     }
 
     /**

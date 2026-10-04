@@ -108,6 +108,14 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun createDestino(destino: DestinoConocido): DestinoConocido = trasEscribir { delegado.createDestino(destino) }
     override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido = trasEscribir { delegado.updateDestino(id, destino) }
     override suspend fun deleteDestino(id: String): Unit = trasEscribir { delegado.deleteDestino(id) }
+    override suspend fun agregarIdentificador(id: String, pedido: com.jvillada.movi.shared.model.AgregarIdentificador) =
+        trasEscribir { delegado.agregarIdentificador(id, pedido) }
+    override suspend fun quitarIdentificador(id: String, identificador: com.jvillada.movi.shared.model.IdentificadorDelDestino) =
+        trasEscribir { delegado.quitarIdentificador(id, identificador) }
+    override suspend fun descartarSugerido(pedido: com.jvillada.movi.shared.model.DescartarSugerido) =
+        trasEscribir { delegado.descartarSugerido(pedido) }
+    override suspend fun renombrarMovimientosDelDestino(id: String, ids: List<String>) =
+        trasEscribir { delegado.renombrarMovimientosDelDestino(id, ids) }
     override suspend fun createAccount(account: Account): Account = trasEscribir { delegado.createAccount(account) }
     override suspend fun deleteAccount(id: String): Unit = trasEscribir { delegado.deleteAccount(id) }
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent = trasEscribir { delegado.postEvent(event) }

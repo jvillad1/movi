@@ -90,6 +90,10 @@ class SchemaDeArranqueTest {
         // `destinosDelDueno`) nombra esta columna: sin el ALTER, «Cuentas de otros» entera y el
         // `/parse` de cada SMS caerían con «column does not exist».
         "known_destinations" to "llave",
+        // 4-oct-2026 — un tercero con varios identificadores, y si es persona o comercio. Las dos
+        // las nombra `aDestino`, o sea TODA lectura de destinos y el `/parse` de cada SMS.
+        "known_destinations" to "identificadores",
+        "known_destinations" to "tipo",
         // Ola 2 — los días del aviso de banco mudo. `users` existe en producción y `toProfile()` —o
         // sea TODA lectura del perfil— nombra esta columna.
         "users" to "dias_para_banco_mudo",

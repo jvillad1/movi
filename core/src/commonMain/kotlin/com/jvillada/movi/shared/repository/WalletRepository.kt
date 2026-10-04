@@ -38,6 +38,13 @@ import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.MovimientosDelDestino
+import com.jvillada.movi.shared.model.AgregarIdentificador
+import com.jvillada.movi.shared.model.DescartarSugerido
+import com.jvillada.movi.shared.model.DestinoSugerido
+import com.jvillada.movi.shared.model.DestinosDescartados
+import com.jvillada.movi.shared.model.IdentificadorDelDestino
+import com.jvillada.movi.shared.model.MovimientosParaRenombrar
+import com.jvillada.movi.shared.model.RenombradosDelDestino
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -132,6 +139,36 @@ interface WalletRepository {
 
     /** Los movimientos que fueron a ese destino, del más reciente al más viejo. 404 si no es suyo. */
     suspend fun getMovimientosDelDestino(id: String): MovimientosDelDestino
+
+    // ── Terceros a la mano (4-oct-2026) ──────────────────────────────────────
+    //
+    // Con cuerpo por defecto para que los repositorios de prueba no tengan que conocerlos: el que
+    // no los implementa contesta como un server que no los tiene, y la pantalla lo trata como
+    // «no hay sugeridos».
+
+    /** Lo que Movi encontró solo en los avisos y movimientos. Ver `destinosSugeridos` en `:core`. */
+    suspend fun getDestinosSugeridos(): List<DestinoSugerido> = noLoTiene("getDestinosSugeridos")
+
+    /** «Ignorar» o «Es mía» sobre un sugerido. */
+    suspend fun descartarSugerido(pedido: DescartarSugerido): Unit = noLoTiene("descartarSugerido")
+
+    /** Las claves que la fila «¿De quién es…?» no tiene que ofrecer. */
+    suspend fun getDestinosDescartados(): DestinosDescartados = noLoTiene("getDestinosDescartados")
+
+    /** Suma un identificador a un tercero ya guardado. 409 si es de otro (sin `mover`). */
+    suspend fun agregarIdentificador(id: String, pedido: AgregarIdentificador): DestinoConocido =
+        noLoTiene("agregarIdentificador")
+
+    /** Le quita un identificador. 400 si es el último. */
+    suspend fun quitarIdentificador(id: String, identificador: IdentificadorDelDestino): DestinoConocido =
+        noLoTiene("quitarIdentificador")
+
+    /** Los movimientos de nombre ilegible que se le pueden poner su nombre. */
+    suspend fun getRenombrablesDelDestino(id: String): MovimientosParaRenombrar = noLoTiene("getRenombrablesDelDestino")
+
+    /** Renombra los que el dueño confirmó. El server vuelve a validar cada uno. */
+    suspend fun renombrarMovimientosDelDestino(id: String, ids: List<String>): RenombradosDelDestino =
+        noLoTiene("renombrarMovimientosDelDestino")
 
     suspend fun getSmsMessages(): List<SmsMessage>
     suspend fun getSms(id: String): SmsMessage
@@ -689,3 +726,6 @@ interface WalletRepository {
     suspend fun restoreScreen(slug: String): ScreenDefinition
     suspend fun isScreenAdmin(): Boolean
 }
+
+/** Lo que contesta un repositorio que no implementa una lectura o escritura nueva. */
+private fun noLoTiene(que: String): Nothing = throw UnsupportedOperationException("$que no está disponible aquí")

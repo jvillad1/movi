@@ -1965,6 +1965,20 @@ class LocalRepository(
     override suspend fun deleteDestino(id: String) = remote.deleteDestino(id)
     override suspend fun getMovimientosDelDestino(id: String): MovimientosDelDestino =
         remote.getMovimientosDelDestino(id)
+    // Terceros a la mano (4-oct-2026): igual que el resto de los destinos, solo en línea.
+    override suspend fun getDestinosSugeridos() = remote.getDestinosSugeridos()
+    override suspend fun descartarSugerido(pedido: com.jvillada.movi.shared.model.DescartarSugerido) =
+        remote.descartarSugerido(pedido)
+    override suspend fun getDestinosDescartados() = remote.getDestinosDescartados()
+    override suspend fun agregarIdentificador(id: String, pedido: com.jvillada.movi.shared.model.AgregarIdentificador) =
+        remote.agregarIdentificador(id, pedido)
+    override suspend fun quitarIdentificador(id: String, identificador: com.jvillada.movi.shared.model.IdentificadorDelDestino) =
+        remote.quitarIdentificador(id, identificador)
+    override suspend fun getRenombrablesDelDestino(id: String) = remote.getRenombrablesDelDestino(id)
+    // Renombrar es una escritura sobre movimientos: el espejo local se pone al día en la próxima
+    // lectura de eventos (llevan `lastEditedAt`, igual que una corrección de concepto en la web).
+    override suspend fun renombrarMovimientosDelDestino(id: String, ids: List<String>) =
+        remote.renombrarMovimientosDelDestino(id, ids)
     override suspend fun getSmsMessages(): List<SmsMessage> = remote.getSmsMessages()
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)
     override suspend fun parseSms(id: String): ParsedSms = remote.parseSms(id)

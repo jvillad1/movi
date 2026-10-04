@@ -33,6 +33,23 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.identificadoresDelDestino
+import com.jvillada.movi.shared.model.AgregarIdentificador
+import com.jvillada.movi.shared.model.DescartarSugerido
+import com.jvillada.movi.shared.model.DestinoSugerido
+import com.jvillada.movi.shared.model.MotivoDeDescarte
+import com.jvillada.movi.shared.model.TipoDeTercero
+import com.jvillada.movi.shared.model.clave
+import com.jvillada.movi.shared.model.comoSeDice
+import com.jvillada.movi.shared.model.comoSeLeeEnLaFicha
+import com.jvillada.movi.shared.model.conIdentificadores
+import com.jvillada.movi.shared.model.normalizarParaBuscar
+import com.jvillada.movi.shared.model.soloLosDigitos
+import com.jvillada.movi.shared.model.tipoOPersona
+import com.jvillada.movi.shared.model.todosLosIdentificadores
+import com.jvillada.movi.ui.components.toUserMessage
+import com.jvillada.movi.ui.credits.FieldBox
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
@@ -92,10 +109,16 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
     var destinos by remember { mutableStateOf<List<DestinoConocido>>(emptyList()) }
     var cuentas by remember { mutableStateOf<List<Account>>(emptyList()) }
     var ajustes by remember { mutableStateOf(PeriodSettings()) }
+    // 4-oct-2026: lo que Movi encontró solo. Secundario: si falla, la pantalla sigue con lo guardado.
+    var sugeridos by remember { mutableStateOf<List<DestinoSugerido>>(emptyList()) }
+    var verTodosLosSugeridos by remember { mutableStateOf(false) }
+    var busqueda by remember { mutableStateOf("") }
     var cargando by remember { mutableStateOf(true) }
     // Ver [NoSePudoLeer]: «Aún no hay ninguna» solo si la lectura contestó.
     var leidos by remember { mutableStateOf(false) }
     var loadKey by remember { mutableStateOf(0) }
+    var errorDeSugerido by remember { mutableStateOf<String?>(null) }
+    val alcance = rememberCoroutineScope()
 
     // Qué hoja está abierta. El detalle y el formulario son dos hojas y no una: mezclar campos
     // editables con una lista de plata que se lee hace que no se entienda qué se está mirando.
@@ -114,9 +137,64 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
         runCatching { Repositories.wallets.getUserProfile() }
             .onSuccess { ajustes = PeriodSettings(it.periodCutoffDay, it.periodStarts) }
+        runCatching { Repositories.wallets.getDestinosSugeridos() }.onSuccess { sugeridos = it }
         cargando = false
     }
     val noSeLeyo = !cargando && !leidos
+
+    /** Sacar un sugerido de la vista apenas se resolvió, sin esperar la próxima lectura. */
+    fun resuelto(s: DestinoSugerido) {
+        sugeridos = sugeridos.filterNot { it.identificador.clave == s.identificador.clave }
+    }
+
+    fun guardarSugerido(s: DestinoSugerido, nombre: String) {
+        errorDeSugerido = null
+        alcance.launch {
+            val nuevo = DestinoConocido(nombre = nombre.trim(), numero = "", tipo = s.tipo)
+                .conIdentificadores(listOf(s.identificador) + s.otrosIdentificadores)
+            runCatching { Repositories.wallets.createDestino(nuevo) }
+                .onSuccess { creado ->
+                    resuelto(s)
+                    destinos = (destinos + creado).sortedBy { normalizarParaBuscar(it.nombre) }
+                    // La ficha abre sola: ahí está «Ponerle el nombre a N movimientos anteriores».
+                    if (s.renombrables > 0) detalle = creado
+                }
+                .onFailure { errorDeSugerido = it.toUserMessage() }
+        }
+    }
+
+    fun unirSugerido(s: DestinoSugerido, tercero: DestinoConocido) {
+        errorDeSugerido = null
+        alcance.launch {
+            var actualizado: DestinoConocido? = null
+            val resultado = runCatching {
+                actualizado = Repositories.wallets.agregarIdentificador(tercero.id, AgregarIdentificador(s.identificador))
+                // El nombre que acompaña a la llave también la reconoce; si ya era de otro, se deja.
+                s.otrosIdentificadores.forEach { otro ->
+                    runCatching { Repositories.wallets.agregarIdentificador(tercero.id, AgregarIdentificador(otro)) }
+                        .onSuccess { actualizado = it }
+                }
+            }
+            resultado.onSuccess {
+                resuelto(s)
+                actualizado?.let { a -> destinos = destinos.map { if (it.id == a.id) a else it } }
+                if (s.renombrables > 0) detalle = actualizado
+            }.onFailure { errorDeSugerido = it.toUserMessage() }
+        }
+    }
+
+    fun descartar(s: DestinoSugerido, motivo: MotivoDeDescarte) {
+        errorDeSugerido = null
+        alcance.launch {
+            runCatching { Repositories.wallets.descartarSugerido(DescartarSugerido(s.identificador, motivo)) }
+                .onSuccess { resuelto(s) }
+                .onFailure { errorDeSugerido = it.toUserMessage() }
+        }
+    }
+
+    val visibles = remember(destinos, busqueda) { filtrarTerceros(destinos, busqueda) }
+    val personas = visibles.filter { it.tipoOPersona() == TipoDeTercero.PERSONA }
+    val comercios = visibles.filter { it.tipoOPersona() == TipoDeTercero.COMERCIO }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
@@ -166,11 +244,75 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
                 contentPadding = PaddingValues(horizontal = 16.dp),
             ) {
                 item {
-                    MinSectionHeader(
-                        title = "Guardadas",
-                        count = if (destinos.isNotEmpty()) destinos.size else null,
+                    Text(
+                        QUE_SON_EN_UNA_LINEA,
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 14.dp),
                     )
-                    if (destinos.isEmpty() && !cargando) {
+                }
+
+                // ── Lo que Movi encontró solo ─────────────────────────────────────────
+                if (sugeridos.isNotEmpty()) {
+                    item {
+                        Column(modifier = Modifier.testTag(TAG_SUGERIDOS)) {
+                            Text(
+                                tituloDeLosSugeridos(sugeridos.size),
+                                style = Movi.textos.titulo,
+                                color = Movi.colores.texto,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
+                            )
+                            Text(
+                                "Guárdalas con un toque y Movi les pone el nombre en tus avisos y movimientos.",
+                                style = Movi.textos.apoyo,
+                                color = Movi.colores.textoMedio,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
+                            )
+                            if (errorDeSugerido != null) {
+                                Text(
+                                    errorDeSugerido!!,
+                                    style = Movi.textos.apoyo,
+                                    color = Movi.colores.sale,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                                )
+                            }
+                        }
+                    }
+                    val aMostrar = if (verTodosLosSugeridos) sugeridos else sugeridos.take(SUGERIDOS_A_LA_VISTA)
+                    items(aMostrar, key = { "sug-" + it.identificador.clave }) { s ->
+                        Column {
+                            TarjetaDeSugerido(
+                                sugerido = s,
+                                pareceDe = s.pareceDe?.let { id -> destinos.firstOrNull { it.id == id } },
+                                onGuardar = { nombre -> guardarSugerido(s, nombre) },
+                                onUnir = { tercero -> unirSugerido(s, tercero) },
+                                onDescartar = { motivo -> descartar(s, motivo) },
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        }
+                    }
+                    if (sugeridos.size > SUGERIDOS_A_LA_VISTA) {
+                        item {
+                            Enlace(
+                                if (verTodosLosSugeridos) "Ver menos" else "Ver ${sugeridos.size - SUGERIDOS_A_LA_VISTA} más",
+                                { verTodosLosSugeridos = !verTodosLosSugeridos },
+                                modifier = Modifier.padding(start = 4.dp, bottom = 14.dp),
+                            )
+                        }
+                    }
+                    item { Spacer(Modifier.height(8.dp)) }
+                }
+
+                if (destinos.size > TERCEROS_PARA_BUSCAR) {
+                    item {
+                        FieldBox("Buscar por nombre, número o llave", busqueda, { busqueda = it })
+                        Spacer(Modifier.height(14.dp))
+                    }
+                }
+
+                if (destinos.isEmpty() && !cargando) {
+                    item {
+                        MinSectionHeader(title = "Guardadas")
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
@@ -189,12 +331,21 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
                 // `cargando`: una recarga con destinos ya pintados (guardar uno, volver del
                 // detalle) sigue con `items(destinos)` de siempre.
                 if (cargando && !leidos) {
+                    item { MinSectionHeader(title = "Guardadas") }
                     destinosEsqueleto()
                 } else {
-                    items(destinos) { d ->
-                        Column {
-                            FichaDelDestino(d, onClick = { detalle = d })
-                            Spacer(Modifier.height(10.dp))
+                    // 4-oct-2026: Personas y Comercios. Un comercio (la arepería del QR) no se lee
+                    // como «la cuenta de alguien».
+                    seccionDeTerceros("Personas", personas) { detalle = it }
+                    seccionDeTerceros("Comercios", comercios) { detalle = it }
+                    if (busqueda.isNotBlank() && visibles.isEmpty()) {
+                        item {
+                            Text(
+                                "Ninguna cuenta guardada coincide con «${busqueda.trim()}».",
+                                style = Movi.textos.apoyo,
+                                color = Movi.colores.textoMedio,
+                                modifier = Modifier.padding(start = 4.dp),
+                            )
                         }
                     }
                 }
@@ -206,8 +357,10 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
             DetalleDelDestinoSheet(
                 destino = d,
                 ajustes = ajustes,
+                otros = destinos.filter { it.id != d.id },
                 onDismiss = { detalle = null },
                 onEditar = { detalle = null; formulario = d; formularioAbierto = true },
+                onCambio = { loadKey++ },
             )
         }
 
@@ -221,6 +374,155 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 }
+
+/** Cuántos sugeridos se ven antes de «Ver N más»: una lista larga de propuestas se ignora entera. */
+internal const val SUGERIDOS_A_LA_VISTA: Int = 5
+
+/** Desde cuántos terceros guardados aparece el buscador. */
+internal const val TERCEROS_PARA_BUSCAR: Int = 8
+
+/** El tag del bloque de lo que Movi encontró. */
+const val TAG_SUGERIDOS: String = "destinos-sugeridos"
+
+/** «Movi encontró 3 cuentas a las que les envías plata». */
+internal fun tituloDeLosSugeridos(n: Int): String =
+    if (n == 1) "Movi encontró 1 cuenta a la que le envías plata" else "Movi encontró $n cuentas a las que les envías plata"
+
+/** Qué son, en una línea: lo primero que se lee en la pantalla. */
+internal const val QUE_SON_EN_UNA_LINEA: String =
+    "Las cuentas de otras personas y comercios a los que les pagas. No suman en tu plata."
+
+/** Los terceros que coinciden con [busqueda] por nombre, nota o cualquiera de sus identificadores. */
+internal fun filtrarTerceros(destinos: List<DestinoConocido>, busqueda: String): List<DestinoConocido> {
+    val q = normalizarParaBuscar(busqueda.trim())
+    if (q.isEmpty()) return destinos
+    val digitos = soloLosDigitos(q)
+    return destinos.filter { d ->
+        normalizarParaBuscar(d.nombre).contains(q) ||
+            normalizarParaBuscar(d.deQuien.orEmpty()).contains(q) ||
+            d.todosLosIdentificadores().any { id ->
+                normalizarParaBuscar(id.valor).contains(q) || (digitos.length >= 3 && soloLosDigitos(id.valor).contains(digitos))
+            }
+    }
+}
+
+private fun LazyListScope.seccionDeTerceros(
+    titulo: String,
+    terceros: List<DestinoConocido>,
+    onAbrir: (DestinoConocido) -> Unit,
+) {
+    if (terceros.isEmpty()) return
+    item { MinSectionHeader(title = titulo, count = terceros.size) }
+    items(terceros, key = { "dst-" + it.id }) { d ->
+        Column {
+            FichaDelDestino(d, onClick = { onAbrir(d) })
+            Spacer(Modifier.height(10.dp))
+        }
+    }
+    item { Spacer(Modifier.height(8.dp)) }
+}
+
+/**
+ * **Una cuenta que Movi encontró sola** (4-oct-2026): cómo la nombra el banco, cuántas veces y
+ * cuánto, y tres salidas — **Guardar** (con el nombre prellenado, un toque), **Es mía** e
+ * **Ignorar**. Si se parece a un tercero guardado, primero la pregunta: **«¿Es Caro?»** — nunca se
+ * une sola.
+ */
+@Composable
+private fun TarjetaDeSugerido(
+    sugerido: DestinoSugerido,
+    pareceDe: DestinoConocido?,
+    onGuardar: (String) -> Unit,
+    onUnir: (DestinoConocido) -> Unit,
+    onDescartar: (MotivoDeDescarte) -> Unit,
+) {
+    val hoy = remember { hoyEnAppZone() }
+    var noEsEse by remember(sugerido.identificador.clave) { mutableStateOf(false) }
+    var nombre by remember(sugerido.identificador.clave) { mutableStateOf(sugerido.nombrePropuesto) }
+    var escribiendoNombre by remember(sugerido.identificador.clave) { mutableStateOf(false) }
+    var ocupado by remember(sugerido.identificador.clave) { mutableStateOf(false) }
+
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_SUGERIDOS + ":" + sugerido.identificador.clave),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(16.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    sugerido.nombrePropuesto.ifEmpty { sugerido.identificador.comoSeDice.replaceFirstChar { it.uppercaseChar() } },
+                    style = Movi.textos.titulo,
+                    color = Movi.colores.texto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    detalleDelSugerido(sugerido, hoy),
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                if (sugerido.enviado.isNotEmpty()) TotalesEnColumna(sugerido.enviado, alineadoAlFinal = true)
+                if (sugerido.recibido.isNotEmpty()) {
+                    Text(
+                        "te envió " + sugerido.recibido.entries.sortedBy { it.key }.joinToString(" · ") { formatMoney(it.value, it.key) },
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+
+        if (pareceDe != null && !noEsEse) {
+            Text("¿Es ${pareceDe.nombre}?", style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            Text(
+                "Se le suma esta forma de reconocerla. No se crea otra.",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoApagado,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Pastilla("Sí, es ${pareceDe.nombre}", { ocupado = true; onUnir(pareceDe) }, principal = true, enabled = !ocupado)
+                Pastilla("No, es otra", { noEsEse = true }, enabled = !ocupado)
+            }
+            return@MinCard
+        }
+
+        if (escribiendoNombre) {
+            FieldBox("Nombre. Ej: Caro", nombre, { nombre = it })
+            Spacer(Modifier.height(8.dp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Pastilla(
+                if (nombre.isBlank() && !escribiendoNombre) "Ponerle nombre" else "Guardar",
+                {
+                    if (nombre.isBlank()) {
+                        escribiendoNombre = true
+                    } else {
+                        ocupado = true
+                        onGuardar(nombre)
+                    }
+                },
+                principal = true,
+                enabled = !ocupado && (!escribiendoNombre || nombre.isNotBlank()),
+            )
+            Pastilla(ES_MIA, { ocupado = true; onDescartar(MotivoDeDescarte.ES_MIA) }, enabled = !ocupado)
+            Pastilla("Ignorar", { ocupado = true; onDescartar(MotivoDeDescarte.IGNORADO) }, enabled = !ocupado)
+        }
+    }
+}
+
+/** «·3068 · Persona · 2 veces · último 19 sep». */
+internal fun detalleDelSugerido(s: DestinoSugerido, hoy: kotlinx.datetime.LocalDate): String =
+    listOfNotNull(
+        comoSeLeeEnLaFicha(s.identificador).takeIf { s.nombrePropuesto.isNotEmpty() },
+        s.tipo.comoSeDice(),
+        if (s.veces == 1) "1 vez" else "${s.veces} veces",
+        "último " + etiquetaDeFecha(fechaDeEpoch(s.ultimo), hoy).replaceFirstChar { it.lowercaseChar() },
+    ).joinToString(" · ")
 
 /**
  * Lo que la pantalla vacía explica. Va acá y no adentro del `Composable` para que se lea completo
@@ -240,11 +542,20 @@ internal const val QUE_ES_ESTO: String =
 internal fun subtituloDelDestino(destino: DestinoConocido): String =
     (identificadoresDelDestino(destino) + listOfNotNull(destino.deQuien)).joinToString(" · ")
 
-/** «Este período»: lo de [DestinoConocido.totalesDelPeriodo], o que no hubo nada. */
-internal fun loDeEstePeriodo(destino: DestinoConocido): String =
-    destino.totalesDelPeriodo.filterValues { it != 0L }.entries.sortedBy { it.key }
+/**
+ * «Este período»: lo que le enviaste y lo que te envió ([DestinoConocido.totalesDelPeriodo] y
+ * [DestinoConocido.recibidosDelPeriodo]), o que no hubo nada.
+ */
+internal fun loDeEstePeriodo(destino: DestinoConocido): String {
+    fun cifras(m: Map<String, Long>) = m.filterValues { it != 0L }.entries.sortedBy { it.key }
         .joinToString(" · ") { (moneda, total) -> formatMoney(total, moneda) }
-        .ifEmpty { "nada todavía" }
+    val enviado = cifras(destino.totalesDelPeriodo)
+    val recibido = cifras(destino.recibidosDelPeriodo)
+    return listOfNotNull(
+        enviado.takeIf { it.isNotEmpty() }?.let { if (recibido.isEmpty()) it else "enviaste $it" },
+        recibido.takeIf { it.isNotEmpty() }?.let { "te envió $it" },
+    ).joinToString(" · ").ifEmpty { "nada todavía" }
+}
 
 /**
  * **Una cuenta de otro, de un vistazo** (30-sep): el nombre, cómo la reconoce el banco y de quién
@@ -277,12 +588,23 @@ private fun FichaDelDestino(destino: DestinoConocido, onClick: () -> Unit) {
                 // Sin movimientos NO se escribe «$0»: un cero dicho con la misma letra que una
                 // cifra real se lee como «no le mandaste nada», y lo que pasa casi siempre es que
                 // el banco todavía no nombró ese número en ningún mensaje.
-                if (destino.cuantos == 0) {
+                val cuantos = destino.cuantos + destino.cuantosRecibidos
+                if (cuantos == 0) {
                     Text("Sin movimientos", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
                 } else {
-                    TotalesEnColumna(destino.totales, alineadoAlFinal = true)
+                    if (destino.totales.isNotEmpty()) TotalesEnColumna(destino.totales, alineadoAlFinal = true)
+                    // Lo que te envió va debajo y en chico: la cifra grande es lo que le mandaste,
+                    // que es lo que esta pantalla vino a contestar.
+                    if (destino.recibidos.isNotEmpty()) {
+                        Text(
+                            "te envió " + destino.recibidos.entries.sortedBy { it.key }
+                                .joinToString(" · ") { formatMoney(it.value, it.key) },
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.entra,
+                        )
+                    }
                     Text(
-                        if (destino.cuantos == 1) "1 movimiento" else "${destino.cuantos} movimientos",
+                        if (cuantos == 1) "1 movimiento" else "$cuantos movimientos",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.padding(top = 2.dp),
@@ -290,10 +612,10 @@ private fun FichaDelDestino(destino: DestinoConocido, onClick: () -> Unit) {
                 }
             }
         }
-        // Lo de este período y el último envío, solo si hubo alguno: sin envíos ya lo dice
+        // Lo de este período y el último movimiento, solo si hubo alguno: sin ninguno ya lo dice
         // «Sin movimientos», y dos renglones vacíos más no agregan nada.
-        val ultimo = destino.ultimo
-        if (destino.cuantos > 0) {
+        val ultimo = listOfNotNull(destino.ultimo, destino.ultimoRecibido).maxByOrNull { it.timestamp }
+        if (destino.cuantos + destino.cuantosRecibidos > 0) {
             Spacer(Modifier.height(12.dp))
             RenglonDeLaFicha("Este período", loDeEstePeriodo(destino))
             if (ultimo != null) {

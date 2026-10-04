@@ -28,6 +28,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AgregarIdentificador
+import com.jvillada.movi.shared.model.DescartarSugerido
+import com.jvillada.movi.shared.model.MotivoDeDescarte
+import com.jvillada.movi.shared.model.TipoDeTercero
+import com.jvillada.movi.shared.model.comoSeDice
+import com.jvillada.movi.shared.model.destinoConEseIdentificador
+import com.jvillada.movi.shared.model.identificadoresDelDestino
+import com.jvillada.movi.shared.model.tipoProbable
+import com.jvillada.movi.ui.components.SelectorSegmentado
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.IdentificadorDelDestino
 import com.jvillada.movi.shared.model.TipoDeIdentificador
@@ -58,6 +67,15 @@ const val AGREGAR_UNA_NOTA: String = "Agregar una nota (ej. esposa)"
 
 /** Lo que dice el campo de la nota, ya desplegado. */
 internal const val NOTA_DEL_DESTINO: String = "Nota (opcional). Ej: esposa, papá"
+
+/** El enlace que suma el dato a un tercero que ya está guardado (4-oct-2026). */
+const val ES_DE_UN_TERCERO_QUE_YA_TENGO: String = "Es de un tercero que ya tengo"
+
+/** El enlace que dice que la cuenta es del dueño: la fila no vuelve a preguntar. */
+const val ES_MIA: String = "Es mía"
+
+/** El tag de la lista de terceros que se abre con [ES_DE_UN_TERCERO_QUE_YA_TENGO]. */
+const val TAG_TERCEROS_QUE_YA_TENGO: String = "terceros-que-ya-tengo"
 
 /**
  * **La pregunta de la fila**, según lo que el banco haya dicho: «¿De quién es la cuenta ·0756?»,
@@ -94,12 +112,16 @@ internal fun nombreParaLaFila(identificador: IdentificadorDelDestino, nombreDelB
 @Composable
 internal fun rememberDestinosParaGuardar(hacenFalta: Boolean): DestinosParaGuardar {
     var destinos by remember { mutableStateOf<List<DestinoConocido>?>(null) }
+    var descartados by remember { mutableStateOf<Set<String>>(emptySet()) }
     LaunchedEffect(hacenFalta) {
         if (hacenFalta && destinos == null) {
             runCatching { Repositories.wallets.getDestinos() }.onSuccess { destinos = it }
+            // Lo que el dueño ya dijo que es suyo o que ignore, y lo que Movi sabe que es suyo (4-oct).
+            // Si falla, se pregunta igual: es mejor preguntar de más que callar algo nuevo.
+            runCatching { Repositories.wallets.getDestinosDescartados() }.onSuccess { descartados = it.claves.toSet() }
         }
     }
-    return DestinosParaGuardar(destinos) { guardado ->
+    return DestinosParaGuardar(destinos, descartados) { guardado ->
         destinos = destinos.orEmpty().filterNot { it.id == guardado.id } + guardado
     }
 }
@@ -107,8 +129,13 @@ internal fun rememberDestinosParaGuardar(hacenFalta: Boolean): DestinosParaGuard
 /** Lo que devuelve [rememberDestinosParaGuardar]: la lista y cómo sumarle el recién guardado. */
 internal class DestinosParaGuardar(
     val guardados: List<DestinoConocido>?,
+    val descartados: Set<String> = emptySet(),
     val alGuardar: (DestinoConocido) -> Unit,
 ) {
+    /** El tercero guardado que ya se reconoce por [identificador], si hay uno solo. */
+    fun deQuienEs(identificador: IdentificadorDelDestino?): DestinoConocido? =
+        identificador?.let { id -> guardados?.let { destinoConEseIdentificador(id, it) } }
+
     /**
      * ¿Se ofrece la fila para [identificador]? Ver `ofreceGuardarElDestino` en `:core`.
      *
@@ -117,7 +144,7 @@ internal class DestinosParaGuardar(
      * sus cuentas nombra la de destino igual que una transferencia a otra persona.
      */
     fun ofrece(identificador: IdentificadorDelDestino?, cuentas: List<Account>): Boolean =
-        guardados != null && cuentas.isNotEmpty() && ofreceGuardarElDestino(identificador, guardados, cuentas)
+        guardados != null && cuentas.isNotEmpty() && ofreceGuardarElDestino(identificador, guardados, cuentas, descartados)
 }
 
 /**
@@ -141,9 +168,21 @@ internal class DestinosParaGuardar(
  * guardados la tienen y «Cuentas de otros» la muestra—, pero ahora se pide detrás del enlace
  * [AGREGAR_UNA_NOTA].
  *
- * Si el nombre que escribe ya es el de una cuenta guardada a la que le falta este dato («Caro»
- * tiene el número y esto es su llave), **se le agrega a esa** en vez de crear una segunda — lo
- * decide `destinoParaGuardar` en `:core`, y la fila lo dice antes de guardar.
+ * Si el nombre que escribe ya es el de una cuenta guardada («Caro» tiene el número y esto es su
+ * llave), **se le agrega a esa** en vez de crear una segunda — lo decide `destinoParaGuardar` en
+ * `:core`, y la fila lo dice antes de guardar.
+ *
+ * ## Desde el 4-oct-2026
+ *
+ * - **«Es de un tercero que ya tengo»** abre la lista de los guardados: elegir uno le suma este
+ *   identificador (`agregarIdentificador`), sin escribir nada. Es el caso de Caro, que el banco a
+ *   veces nombra por la cuenta y Nu por su nombre completo.
+ * - **Persona o comercio**, prellenado con [tipoProbable] (un pago por QR es un comercio) y
+ *   cambiable con un toque.
+ * - **«Es mía»**: la cuenta es del dueño; la fila no vuelve a preguntar (`descartarSugerido`).
+ *
+ * [textoDelAviso] es el texto del banco, si quien muestra la fila lo tiene: con él se reconoce un
+ * pago por QR.
  */
 @Composable
 internal fun FilaGuardarElDestino(
@@ -152,23 +191,60 @@ internal fun FilaGuardarElDestino(
     destinos: List<DestinoConocido>,
     onGuardado: (DestinoConocido) -> Unit,
     modifier: Modifier = Modifier,
+    textoDelAviso: String? = null,
 ) {
     val alcance = rememberCoroutineScope()
     var abierta by remember(identificador) { mutableStateOf(false) }
     var nombre by remember(identificador, nombreSugerido) { mutableStateOf(nombreSugerido) }
     var deQuien by remember(identificador) { mutableStateOf("") }
     var conNota by remember(identificador) { mutableStateOf(false) }
+    var tipo by remember(identificador) { mutableStateOf(tipoProbable(identificador, textoDelAviso)) }
+    var eligiendoTercero by remember(identificador) { mutableStateOf(false) }
+    var esMia by remember(identificador) { mutableStateOf(false) }
     var guardando by remember { mutableStateOf(false) }
     var error by remember(identificador) { mutableStateOf<String?>(null) }
 
-    val aGuardar = destinoParaGuardar(identificador, nombre, deQuien, destinos)
+    val aGuardar = destinoParaGuardar(identificador, nombre, deQuien, destinos, tipo)
     val loQueFalta = rechazoDelDestino(aGuardar.nombre, aGuardar.numero, aGuardar.deQuien, aGuardar.llave)
     val sePuedeGuardar = loQueFalta == null && !guardando
     // «Caro» ya existe y esto se le suma: se dice, para que no parezca que se crea otra.
     val seSumaA = aGuardar.takeIf { it.id.isNotEmpty() }
-    // Ya hay una con ese nombre y con este mismo tipo de dato: se crearía una segunda «Caro».
-    val yaHayOtraConEseNombre = seSumaA == null && nombre.isNotBlank() &&
-        destinos.any { normalizarParaBuscar(it.nombre.trim()) == normalizarParaBuscar(nombre.trim()) }
+
+    fun sumarA(tercero: DestinoConocido) {
+        if (guardando) return
+        guardando = true
+        error = null
+        alcance.launch {
+            val resultado = runCatching {
+                Repositories.wallets.agregarIdentificador(tercero.id, AgregarIdentificador(identificador))
+            }
+            guardando = false
+            resultado.onSuccess { onGuardado(it) }.onFailure { error = it.toUserMessage() }
+        }
+    }
+
+    fun marcarComoMia() {
+        if (guardando) return
+        guardando = true
+        error = null
+        alcance.launch {
+            val resultado = runCatching {
+                Repositories.wallets.descartarSugerido(DescartarSugerido(identificador, MotivoDeDescarte.ES_MIA))
+            }
+            guardando = false
+            resultado.onSuccess { esMia = true }.onFailure { error = it.toUserMessage() }
+        }
+    }
+
+    if (esMia) {
+        Text(
+            "Listo: ${identificador.comoSeDice} es tuya. Movi no vuelve a preguntar.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = modifier.fillMaxWidth().testTag(TAG_GUARDAR_EL_DESTINO),
+        )
+        return
+    }
 
     fun guardar() {
         if (!sePuedeGuardar) return
@@ -213,6 +289,16 @@ internal fun FilaGuardarElDestino(
         Spacer(Modifier.height(12.dp))
         FieldBox("Nombre. Ej: Caro", nombre, { nombre = it })
         Spacer(Modifier.height(8.dp))
+        // Solo para uno nuevo: si se suma a uno guardado, ese ya dijo lo que es.
+        if (seSumaA == null) {
+            SelectorSegmentado(
+                labels = TipoDeTercero.entries.map { it.comoSeDice() },
+                selected = tipo.ordinal,
+                onSelect = { tipo = TipoDeTercero.entries[it] },
+                enabled = !guardando,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
         if (conNota) {
             FieldBox(NOTA_DEL_DESTINO, deQuien, { deQuien = it })
         } else {
@@ -230,7 +316,6 @@ internal fun FilaGuardarElDestino(
         Text(
             when {
                 seSumaA != null -> "Se agrega a «${seSumaA.nombre}», que ya tienes guardada."
-                yaHayOtraConEseNombre -> "Ya tienes una cuenta guardada con ese nombre. Esta queda aparte."
                 else -> "No es una cuenta tuya: no entra en tu plata. Movi le pone este nombre a lo que le envíes."
             },
             style = Movi.textos.apoyo,
@@ -262,5 +347,83 @@ internal fun FilaGuardarElDestino(
             Spacer(Modifier.height(6.dp))
             Text(loQueFalta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
+
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (destinos.isNotEmpty()) {
+                Enlace(ES_DE_UN_TERCERO_QUE_YA_TENGO, { eligiendoTercero = !eligiendoTercero }, enabled = !guardando)
+            }
+            Enlace(ES_MIA, { marcarComoMia() }, enabled = !guardando)
+        }
+        if (eligiendoTercero) {
+            Spacer(Modifier.height(6.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth().testTag(TAG_TERCEROS_QUE_YA_TENGO),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                destinos.sortedBy { normalizarParaBuscar(it.nombre) }.forEach { tercero ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(enabled = !guardando, role = Role.Button) { sumarA(tercero) }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(tercero.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
+                        Text(
+                            identificadoresDelDestino(tercero).take(2).joinToString(" · "),
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoApagado,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** El tag de la fila «Es de Caro · Ver su ficha» del detalle de un movimiento. */
+const val TAG_FILA_DEL_TERCERO: String = "fila-del-tercero"
+
+/** El enlace que abre la ficha del tercero desde un movimiento. */
+const val VER_SU_FICHA: String = "Ver su ficha"
+
+/**
+ * **«Es de Caro, en tus cuentas de otros · Ver su ficha»** (4-oct-2026): en el detalle de un
+ * movimiento que ya es de un tercero guardado. Tocarla abre su ficha ([DetalleDelDestinoSheet]) con
+ * todo lo que le enviaste y te envió — el «Ver todo lo de Caro» que Movimientos no tiene como
+ * filtro. [recienGuardado] = se acaba de guardar desde esta misma hoja.
+ */
+@Composable
+internal fun FilaDelTercero(
+    tercero: DestinoConocido,
+    recienGuardado: Boolean,
+    otros: List<DestinoConocido>,
+    modifier: Modifier = Modifier,
+) {
+    var fichaAbierta by remember(tercero.id) { mutableStateOf(false) }
+    Row(
+        modifier = modifier.fillMaxWidth().testTag(TAG_FILA_DEL_TERCERO),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            if (recienGuardado) "«${tercero.nombre}» quedó en tus cuentas de otros. Este movimiento ya cuenta ahí."
+            else "Es de «${tercero.nombre}», en tus cuentas de otros.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.weight(1f),
+        )
+        Pastilla(VER_SU_FICHA, { fichaAbierta = true }, principal = true)
+    }
+    if (fichaAbierta) {
+        DetalleDelDestinoSheet(
+            destino = tercero,
+            ajustes = null,
+            onDismiss = { fichaAbierta = false },
+            onEditar = null,
+            otros = otros,
+        )
     }
 }

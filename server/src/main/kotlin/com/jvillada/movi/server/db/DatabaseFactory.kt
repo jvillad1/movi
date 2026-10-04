@@ -66,7 +66,7 @@ object DatabaseFactory {
             // EnlacesCompartidos (compartir con un tercero) es tabla NUEVA y entra por acá: su
             // índice único sobre el hash y el de `user_id` se crean junto con ella, sobre una tabla
             // vacía, y en los arranques siguientes `create` la ve existir y no emite nada.
-            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas)
+            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados)
             // Screens: `seed_version` (Ola 4) — sin esta columna una instalación ya desplegada
             // no podría recibir la generación nueva del Inicio.
             // Users: `avatar_color` (F42 · F46) — mismo motivo, columna nueva en tabla vieja.
@@ -105,6 +105,9 @@ object DatabaseFactory {
             // tabla entra a esta lista por el mismo motivo que CategoryPrefs: existe en producción
             // desde la Ola V con los destinos del dueño. Su único índice (`user_id`) ya existe, así
             // que el único DDL es el ADD COLUMN (ver `KnownDestinationsLlaveColumnTest`).
+            // KnownDestinations: `identificadores` y `tipo` (4-oct-2026, un tercero con varios
+            // identificadores) — las dos NULLABLE, mismo motivo que `llave`. La migración
+            // `pasarLosIdentificadoresALaLista` llena la primera desde `numero`/`llave`.
             // SmsMessages: `motivo_apartado` (3-oct-2026, los mensajes que no son movimientos) —
             // NULLABLE, y la tabla existe en producción con los mensajes del dueño, así que entra a
             // esta lista por lo mismo que KnownDestinations. Su único índice (`user_id`) ya existe:

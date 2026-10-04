@@ -960,8 +960,34 @@ object KnownDestinations : Table("known_destinations") {
      * `numero` sigue como estaba). Ver `KnownDestinationsLlaveColumnTest`.
      */
     val llave     = varchar("llave", 80).nullable()
+    /**
+     * **Todos sus identificadores** (4-oct-2026) — números, llaves y el nombre con que lo nombra el
+     * banco —, como JSON de `List<IdentificadorDelDestino>`. Una columna y no una tabla aparte a
+     * propósito: lo que menos rompe. Cada consulta que lee destinos ya lee esta fila, y una tabla
+     * nueva obligaría a cada prueba que crea `known_destinations` a crear también la otra.
+     *
+     * NULLABLE: las filas que ya existen la reciben en NULL con el `ADD COLUMN`, y la migración
+     * `pasarLosIdentificadoresALaLista` la llena desde [numero] y [llave] al arrancar. Mientras sea
+     * NULL, leerla igual devuelve el número y la llave de siempre (ver `aDestino`).
+     */
+    val identificadores = text("identificadores").nullable()
+    /** `PERSONA` o `COMERCIO` (4-oct-2026). NULLABLE: los destinos viejos no lo dijeron. */
+    val tipo      = varchar("tipo", 16).nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_known_destinations_user_id", false, userId) }
+}
+
+/**
+ * **Los sugeridos que el dueño descartó** (4-oct-2026): «Ignorar» o «Es mía» sobre una cuenta que
+ * Movi encontró sola en sus avisos. Sin esto el mismo sugerido volvería en cada lectura. La clave
+ * es la de `IdentificadorDelDestino.clave` (`NUMERO:41279033068`, `LLAVE:@juan`).
+ */
+object DestinosDescartados : Table("destinos_descartados") {
+    val userId    = varchar("user_id", 50)
+    val clave     = varchar("clave", 120)
+    val motivo    = varchar("motivo", 16)
+    val creadoEn  = long("creado_en")
+    override val primaryKey = PrimaryKey(userId, clave)
 }
 
 object Screens : Table("screen_definitions") {

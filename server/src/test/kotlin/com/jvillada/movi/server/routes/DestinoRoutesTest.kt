@@ -576,20 +576,20 @@ class DestinoRoutesTest {
     }
 
     /**
-     * **Cuando el banco trae el nombre real, ese nombre manda** — decisión documentada en
-     * `sePuedeRenombrar` (`:core`): «a la llave @pedro … a PEDRO GOMEZ» sigue diciendo «PEDRO
-     * GOMEZ», no «Transferencia a Pedro». Lo que SÍ cambia con la llave guardada: el envío cuenta en
-     * «Cuentas de otros» (lo engancha la llave del texto del banco), y Reconciliar ya no ofrece
-     * guardarla porque el identificador es conocido.
+     * **Con un tercero guardado, su nombre manda sobre el que escribe el banco** (4-oct-2026; antes
+     * el del banco ganaba). «a la llave @pedro … a PEDRO GOMEZ» se propone «Transferencia a Pedro»:
+     * el dueño ya le dio un nombre a esa persona, y es el que pidió leer en cuanto llega el aviso. Lo
+     * que el dueño escribió (la memoria) sigue mandando sobre los dos. Y el envío cuenta en «Cuentas
+     * de otros» aunque el movimiento se confirme con el nombre del banco.
      */
     @Test
-    fun `con el nombre real del banco no se renombra, pero el envio cuenta para el destino`() = testApplication {
+    fun `con el nombre del banco se propone el del tercero guardado, y el envio cuenta para el destino`() = testApplication {
         wireApp()
         assertEquals(HttpStatusCode.Created, postDestino("""{"nombre":"Pedro","numero":"","llave":"@pedro"}""").status)
         val texto = "Bancolombia: ANA, transferiste \$25,910.00 a la llave @pedro desde tu cuenta *8133 a PEDRO GOMEZ el 10/09/26 a las 08:50."
         guardarSms("sms-pedro", texto)
         val leido = leer("sms-pedro")
-        assertEquals("PEDRO GOMEZ", leido["merchant"]!!.jsonPrimitive.content)
+        assertEquals("Transferencia a Pedro", leido["merchant"]!!.jsonPrimitive.content)
         assertEquals("@pedro", leido["identificadorDelDestino"]!!.jsonPrimitive.content)
 
         // Confirmado con el nombre del banco, cuenta igual: el texto crudo viaja con el movimiento.

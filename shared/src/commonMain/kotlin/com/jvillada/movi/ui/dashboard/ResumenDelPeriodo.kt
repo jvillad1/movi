@@ -240,7 +240,7 @@ data class CosaParaRevisar(
  * Ola C: [POR_REVISAR] reemplaza a `SMS` — los mensajes del banco por confirmar y los candidatos a
  * pago de tarjeta se revisan en la misma bandeja. No viaja ni se guarda: vive solo en la UI.
  */
-enum class DestinoDeRevision { MOVIMIENTOS, RECURRENTES, PRESUPUESTOS, CREDITOS, POR_REVISAR, SUSCRIPCIONES, CUADRE, CAPTURA }
+enum class DestinoDeRevision { MOVIMIENTOS, RECURRENTES, PRESUPUESTOS, CREDITOS, POR_REVISAR, SUSCRIPCIONES, CUADRE, CAPTURA, CUENTAS_DE_OTROS }
 
 /**
  * **Lo que el Inicio recomienda mirar hoy**, de lo más urgente a lo más opcional.
@@ -274,6 +274,11 @@ fun cosasParaRevisar(
      * solo y el período se ve más barato de lo que es.
      */
     bancosMudos: List<OrigenMudo> = emptyList(),
+    /**
+     * 4-oct-2026: cuántas cuentas a las que les envía plata no tienen nombre (lo que Movi encontró
+     * solo). No es urgente: va abajo, junto al cuadre.
+     */
+    cuentasDeOtrosSinNombre: Int = 0,
     cuantas: Int = 4,
 ): List<CosaParaRevisar> {
     val todas = buildList {
@@ -355,6 +360,15 @@ fun cosasParaRevisar(
                 ),
             )
         }
+        if (cuentasDeOtrosSinNombre > 0) {
+            add(
+                CosaParaRevisar(
+                    texto = textoDeCuentasSinNombre(cuentasDeOtrosSinNombre),
+                    detalle = "Ponles nombre y Movi las reconoce sola cuando llegue el aviso del banco.",
+                    destino = DestinoDeRevision.CUENTAS_DE_OTROS,
+                ),
+            )
+        }
         if (flujoDelPeriodo < 0) {
             add(
                 CosaParaRevisar(
@@ -367,6 +381,11 @@ fun cosasParaRevisar(
     }
     return todas.sortedByDescending { it.urgente }.take(cuantas)
 }
+
+/** «3 cuentas a las que les envías plata no tienen nombre». */
+fun textoDeCuentasSinNombre(n: Int): String =
+    if (n == 1) "1 cuenta a la que le envías plata no tiene nombre"
+    else "$n cuentas a las que les envías plata no tienen nombre"
 
 /**
  * **Cuánta plata del período quedó sin categoría.** Los dos nombres, porque durante un tiempo Movi

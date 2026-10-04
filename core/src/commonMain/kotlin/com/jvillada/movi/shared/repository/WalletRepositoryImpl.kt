@@ -46,6 +46,14 @@ import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.MovimientosDelDestino
+import com.jvillada.movi.shared.model.AgregarIdentificador
+import com.jvillada.movi.shared.model.DescartarSugerido
+import com.jvillada.movi.shared.model.DestinoSugerido
+import com.jvillada.movi.shared.model.DestinosDescartados
+import com.jvillada.movi.shared.model.IdentificadorDelDestino
+import com.jvillada.movi.shared.model.MovimientosParaRenombrar
+import com.jvillada.movi.shared.model.RenombradosDelDestino
+import com.jvillada.movi.shared.model.RenombrarMovimientos
 import com.jvillada.movi.shared.model.DeleteBudgetRequest
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
@@ -294,6 +302,58 @@ class WalletRepositoryImpl(
 
     override suspend fun getMovimientosDelDestino(id: String): MovimientosDelDestino =
         client.get("$baseUrl/api/destinos/$id/movimientos").body()
+
+    override suspend fun getDestinosSugeridos(): List<DestinoSugerido> =
+        conElTextoDelRechazo(client.get("$baseUrl/api/destinos/sugeridos")).body()
+
+    override suspend fun descartarSugerido(pedido: DescartarSugerido) {
+        conElTextoDelRechazo(
+            client.post("$baseUrl/api/destinos/sugeridos/descartar") {
+                contentType(ContentType.Application.Json)
+                setBody(pedido)
+            },
+        )
+    }
+
+    override suspend fun getDestinosDescartados(): DestinosDescartados =
+        conElTextoDelRechazo(client.get("$baseUrl/api/destinos/descartados")).body()
+
+    // Mismo idioma que createDestino: el 409 («ya lo tiene Daniel») y el 422 («es tu cuenta») traen
+    // su texto, y ese texto es el que la pantalla muestra.
+    override suspend fun agregarIdentificador(id: String, pedido: AgregarIdentificador): DestinoConocido =
+        conElTextoDelRechazo(
+            client.post("$baseUrl/api/destinos/$id/identificadores") {
+                contentType(ContentType.Application.Json)
+                setBody(pedido)
+            },
+        ).body()
+
+    override suspend fun quitarIdentificador(id: String, identificador: IdentificadorDelDestino): DestinoConocido =
+        conElTextoDelRechazo(
+            client.post("$baseUrl/api/destinos/$id/identificadores/quitar") {
+                contentType(ContentType.Application.Json)
+                setBody(identificador)
+            },
+        ).body()
+
+    override suspend fun getRenombrablesDelDestino(id: String): MovimientosParaRenombrar =
+        conElTextoDelRechazo(client.get("$baseUrl/api/destinos/$id/renombrables")).body()
+
+    override suspend fun renombrarMovimientosDelDestino(id: String, ids: List<String>): RenombradosDelDestino =
+        conElTextoDelRechazo(
+            client.post("$baseUrl/api/destinos/$id/renombrar") {
+                contentType(ContentType.Application.Json)
+                setBody(RenombrarMovimientos(ids))
+            },
+        ).body()
+
+    /** El 4xx con su texto, como [ApiException]; si salió bien, la respuesta tal cual. */
+    private suspend fun conElTextoDelRechazo(response: io.ktor.client.statement.HttpResponse): io.ktor.client.statement.HttpResponse {
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response
+    }
 
     override suspend fun getSmsMessages(): List<SmsMessage> =
         client.get("$baseUrl/api/sms").body()
