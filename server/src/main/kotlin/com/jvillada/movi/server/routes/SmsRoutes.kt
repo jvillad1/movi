@@ -198,6 +198,27 @@ private val pagoDesdeLaCuentaDeNu = Regex("""\bpago\s+aprobado\b|\bpagaste\s+en\
  */
 private val abonoALaTarjeta = Regex("""\brecibimos\s+pago\b.*?\ba\s+tu\s+tarjeta\b""", RegexOption.IGNORE_CASE)
 
+/**
+ * **El avance de una tarjeta de crédito** (4-oct-2026): «Bancolombia: Hiciste un avance de $6,200,000
+ * en tu SUC VIRTUAL el 17:43 03/10/2026 desde tu T.Credito *9208 a la cuenta *8133.» Llegó solo por
+ * correo, y se leía como un GASTO de $6,2 M llamado «tu SUC VIRTUAL», con la cuenta propia *8133
+ * ofrecida como «¿de quién es esta cuenta?».
+ *
+ * Es plata prestada que ENTRA a la cuenta de ahorros: el dueño lo anotó como un desembolso de la
+ * tarjeta a la cuenta (la pata del banco con «Desembolso de crédito», que cuenta como plata que
+ * entra; la de la tarjeta como traspaso). Confirmar un aviso todavía no arma esas dos patas —un
+ * traspaso no acepta una tarjeta en ninguna punta, y un desembolso suelto no se deja escribir—, así
+ * que se propone lo que sí se puede: un **ingreso** en la cuenta de destino, «Avance de la tarjeta
+ * *9208», con [AVANCE_CATEGORY]. La deuda de la tarjeta queda por cargar aparte.
+ */
+private val avanceRegex = Regex("""\bhiciste\s+un\s+avance\b""", RegexOption.IGNORE_CASE)
+
+/** La tarjeta de la que salió el avance: «desde tu T.Credito *9208». */
+private val tarjetaDelAvanceRegex = Regex("""\bT\.?\s*Cred(?:ito)?\.?\s*\*+\s?(\d{4,})""", RegexOption.IGNORE_CASE)
+
+/** La categoría de un avance de tarjeta, mientras confirmar no arme el desembolso de dos patas. */
+internal const val AVANCE_CATEGORY = "Avance de tarjeta"
+
 /** A quién se le pagó desde la cuenta de Nu: lo que va entre «Pagaste en» y « con tu cuenta». */
 private val pagasteEnRegex = Regex("""\bpagaste\s+en\s+(.+?)\s+con\s+tu\s+cuenta\b""", RegexOption.IGNORE_CASE)
 
@@ -291,10 +312,12 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val recargaDeBeneficios = if ("tarjeta de beneficios" in minusculas) recargaDeBeneficiosRegex.find(text) else null
 
     val esAbonoALaTarjeta = abonoALaTarjeta.containsMatchIn(text)
+    val esAvance = avanceRegex.containsMatchIn(text)
 
     val type = when {
         recargaDeBeneficios != null -> TransactionType.INCOME
         esAbonoALaTarjeta -> TransactionType.INCOME
+        esAvance -> TransactionType.INCOME
         text.contains("Recibiste", ignoreCase = true) -> TransactionType.INCOME
         text.contains("Nómina recibida", ignoreCase = true) -> TransactionType.INCOME
         text.contains("Compra", ignoreCase = true) -> TransactionType.EXPENSE
@@ -308,6 +331,8 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val merchant = when {
         text.contains("Nómina recibida", ignoreCase = true) -> "Nómina"
         esAbonoALaTarjeta -> "Pago de tarjeta"
+        esAvance -> tarjetaDelAvanceRegex.find(text)?.let { "Avance de la tarjeta *${it.groupValues[1].takeLast(4)}" }
+            ?: "Avance de tarjeta"
         recargaDeBeneficios != null ->
             limpio(recargaDeBeneficios.groupValues[1])?.let { "Recarga de beneficios · $it" } ?: "Recarga de beneficios"
         type == TransactionType.INCOME -> limpio(merchantOfRegex.find(text)?.groupValues?.get(1)) ?: "Transferencia recibida"
@@ -331,10 +356,15 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
             ?: if ("transferiste" in minusculas) "Transferencia" else "Movimiento"
     }
 
-    val category = if (esAbonoALaTarjeta) CARD_PAYMENT_CATEGORY else categoryFor(text, merchant, type, esPagoDeNu)
+    val category = when {
+        esAbonoALaTarjeta -> CARD_PAYMENT_CATEGORY
+        esAvance -> AVANCE_CATEGORY
+        else -> categoryFor(text, merchant, type, esPagoDeNu)
+    }
     // A quién fue (o de quién vino): la misma lectura que hacen la bandeja y el detalle de un
-    // movimiento, en `:core`. Un pago de tarjeta no es a una persona, así que no lo lleva.
-    val identificador = if (category == CARD_PAYMENT_CATEGORY) null else identificadorDelDestinoEn(text)
+    // movimiento, en `:core`. Un pago de tarjeta no es a una persona, así que no lo lleva; un avance
+    // tampoco: la cuenta que nombra («a la cuenta *8133») es la del dueño, no la de un tercero.
+    val identificador = if (category == CARD_PAYMENT_CATEGORY || esAvance) null else identificadorDelDestinoEn(text)
     return ParsedSms(
         amount, merchant, type, category, currency,
         identificadorDelDestino = identificador?.valor,
@@ -389,7 +419,7 @@ internal const val SIN_CATEGORIA = "Otros"
  *   puso nombre a ese destinatario, ese nombre es suyo.
  */
 internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategorias): ParsedSms {
-    if (parsed.category == CARD_PAYMENT_CATEGORY) return parsed
+    if (parsed.category in CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA) return parsed
     val recuerdo = memoria.recuerdoDe(parsed.merchant) ?: return parsed
     val huella = huellaDeUnMovimiento(parsed.merchant)
     return parsed.copy(
@@ -402,6 +432,13 @@ internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategoria
         },
     )
 }
+
+/**
+ * Las categorías que dice el aviso y no la costumbre: el pago de tarjeta (ver arriba), y el avance
+ * de tarjeta, que nombra la tarjeta por su número —«Avance de la tarjeta *9208»— y con eso la
+ * memoria lo confundiría con cualquier otro movimiento de esa tarjeta, cambiándole hasta el nombre.
+ */
+private val CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA = setOf(CARD_PAYMENT_CATEGORY, AVANCE_CATEGORY)
 
 /** Cuántos días alrededor del mensaje se busca lo ya anotado: un gasto se anota el día o un par después. */
 internal const val DIAS_PARA_COINCIDIR: Long = 3
