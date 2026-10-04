@@ -132,27 +132,22 @@ sealed class Screen {
     data object Categorias : Screen()
 
     /**
-     * **«Cuentas de otros»** — el registro de cuentas ajenas: verlas, registrarlas, renombrarlas
-     * y borrarlas, y ver qué se le mandó a cada una.
+     * **«Personas y comercios»** — el registro de cuentas y llaves ajenas (la esposa, el papá, la
+     * cancha, el parqueadero): verlas, guardarlas, unirlas y ver qué se le mandó a cada una y qué
+     * mandó cada una. Se llamó «Te deben» y después «Cuentas de otros» (ver `DestinoConocido`).
      *
-     * No vive dentro de `Screen.Accounts` **a propósito**, y no es una decisión de dibujo:
-     * `Screen.Accounts` lista la plata del dueño, y una cuenta de otra persona no es su plata (ver
-     * `DestinoConocido`). Ponerlas en la misma pantalla invitaría exactamente a la confusión que
-     * el modelo evita.
+     * No vive dentro de `Screen.Accounts` **a propósito**: `Screen.Accounts` lista la plata del
+     * dueño, y la cuenta de otra persona no es su plata.
      *
-     * Ola C, tarea 4: la primera puerta fue una tarjeta de Patrimonio que se llamaba «Te deben»
-     * (hoy «Cuentas de otros», ver `SeccionDeCuentasDeOtros` en `AccountsScreen.kt`, justo debajo
-     * de las cuentas propias desde el 29-sep) — antes de esa tarea no tenía ninguna, «Más» dejó
-     * de ser pestaña (Task 3) y esta pantalla se quedó sin como llegar.
+     * **La puerta principal es Movimientos** (4-oct-2026, ver `RenglonDePersonasYComercios`): es
+     * donde se piensa «¿a quién le mandé plata?», y el dueño pidió un acceso «muy fácil de
+     * encontrar». Por eso marca la pestaña Movimientos ([navTabFor]). Siguen las puertas de
+     * Patrimonio (sin cifra: no es plata suya) y de Ajustes, y la alerta de Hoy.
      *
-     * Ola V: **«Cuentas de otros» en Ajustes** ([MasScreen][com.jvillada.movi.ui.mas.MasScreen]) es
-     * la segunda — el dueño no la buscó en Patrimonio, la buscó en Ajustes, y esta pantalla no es
-     * solo «a quién le presté», es un registro que ahora también alimenta a las reglas recurrentes.
-     * Marca la pestaña Patrimonio igual (ver [navTabFor]), así que la flecha «atrás» respeta la
-     * historia real y cae en la puerta por la que se entró — Ajustes o Patrimonio, cualquiera haya
-     * sido — y solo usa el `fallback` de la pantalla (Patrimonio) cuando no hay historial.
+     * [abrir] es el id de un tercero cuya ficha se abre al llegar: lo pide «Ver su ficha» desde el
+     * detalle de un movimiento. Un `data class` por eso, con el precedente de [Transactions].
      */
-    data object Destinos : Screen()
+    data class Destinos(val abrir: String? = null) : Screen()
 
     /**
      * «Documentos» — los papeles del dueño guardados en Movi (extractos, nóminas, contratos).
@@ -256,8 +251,8 @@ sealed class Screen {
  * Ola C (2026-09): cuatro lugares, los mismos en el teléfono y en la web — **Hoy** (¿cómo estoy?),
  * **Movimientos** (¿qué pasó?), **Plan** (¿cuánto puedo gastar y qué me falta pagar?) y
  * **Patrimonio** (¿cuánto tengo y cuánto debo?). Cada pantalla marca la pestaña de la pregunta que
- * contesta: Presupuestos es Plan; Créditos, el cuadre, «Cuentas de otros» y el detalle de cualquier
- * cuenta son Patrimonio.
+ * contesta: Presupuestos es Plan; Créditos, el cuadre y el detalle de cualquier cuenta son
+ * Patrimonio; «Personas y comercios» es Movimientos (a quién le mandaste plata).
  *
  * «Más» dejó de ser pestaña: Ajustes y lo que se abre desde ahí (Perfil, Categorías, Documentos,
  * Compartir, Movi AI, la captura del banco…) se alcanzan tocando el avatar, así que no marcan
@@ -268,9 +263,9 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Dashboard -> NavTab.HOY
     // «Por revisar» y el detalle de un mensaje se abren desde Movimientos (su renglón «N por
     // revisar»): marcan esa pestaña, no Ajustes.
-    is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile -> NavTab.MOVIMIENTOS
+    is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile, is Screen.Destinos -> NavTab.MOVIMIENTOS
     is Screen.Plan, Screen.Budgets, Screen.Periodos, is Screen.DetalleDePeriodo -> NavTab.PLAN
-    Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos, Screen.Destinos -> NavTab.PATRIMONIO
+    Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos -> NavTab.PATRIMONIO
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse. Hoy las dos (Cuentas y Créditos) son Patrimonio.
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))

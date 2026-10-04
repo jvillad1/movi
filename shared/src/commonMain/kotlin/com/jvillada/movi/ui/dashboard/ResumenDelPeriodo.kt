@@ -364,7 +364,7 @@ fun cosasParaRevisar(
             add(
                 CosaParaRevisar(
                     texto = textoDeCuentasSinNombre(cuentasDeOtrosSinNombre),
-                    detalle = "Ponles nombre y Movi las reconoce sola cuando llegue el aviso del banco.",
+                    detalle = "Les envías plata seguido. Ponles nombre en Personas y comercios y Movi los reconoce en tus avisos.",
                     destino = DestinoDeRevision.CUENTAS_DE_OTROS,
                 ),
             )
@@ -384,8 +384,8 @@ fun cosasParaRevisar(
 
 /** «3 cuentas a las que les envías plata no tienen nombre». */
 fun textoDeCuentasSinNombre(n: Int): String =
-    if (n == 1) "1 cuenta a la que le envías plata no tiene nombre"
-    else "$n cuentas a las que les envías plata no tienen nombre"
+    if (n == 1) "1 persona o comercio sin nombre"
+    else "$n personas o comercios sin nombre"
 
 /**
  * **Cuánta plata del período quedó sin categoría.** Los dos nombres, porque durante un tiempo Movi
