@@ -96,9 +96,10 @@ internal val nombreRegex = Regex("""^\s*"?([^"<]*?)"?\s*<""")
  * Postmark y Mailgun no se parecen en nada —`TextBody` contra `body-plain`, `OriginalRecipient`
  * contra `recipient`— y Mailgun además postea `application/x-www-form-urlencoded` y no JSON. Por
  * eso acá no hay un `@Serializable` por proveedor sino una búsqueda por lista de nombres
- * candidatos, sin distinguir mayúsculas: un proveedor nuevo (Resend, Cloudflare Email Workers)
- * normalmente entra sin tocar nada, y uno que renombre un campo degrada a «no pude leerlo» en vez
- * de tirar una excepción.
+ * candidatos, sin distinguir mayúsculas: un proveedor nuevo que postee el correo entero
+ * (Cloudflare Email Workers) normalmente entra sin tocar nada, y uno que renombre un campo degrada
+ * a «no pude leerlo» en vez de tirar una excepción. Resend NO postea el correo entero (solo
+ * metadatos): tiene su propia lectura en `CorreoDeResend.kt`.
  *
  * Devuelve `null` si el cuerpo no es ni JSON ni un formulario, o si no trae NADA de texto (ni
  * asunto ni cuerpo): eso no es un correo, es ruido.
