@@ -601,6 +601,18 @@ object SmsMessages : Table("sms_messages") {
      * `SmsMessagesMotivoApartadoColumnTest`).
      */
     val motivoApartado = varchar("motivo_apartado", 40).nullable()
+    /**
+     * **«No es el mismo pago»** (4-oct-2026): el dueño dijo que este aviso es un pago aparte, y
+     * nunca más se junta con otros avisos (ver `AvisosDelMismoPago.kt`). `TRUE` solo ahí; `NULL` en
+     * todo lo demás. NULLABLE por lo mismo que [motivoApartado].
+     */
+    val noEsElMismoPago = bool("no_es_el_mismo_pago").nullable()
+    /**
+     * **El movimiento con que se confirmó** este aviso, cuando se sabe: lo escribe el confirmar de
+     * los avisos de un mismo pago (`POST /api/sms/grupo/{id}/confirmar`). `NULL` en lo confirmado
+     * antes, y en lo que no está confirmado. NULLABLE por lo mismo que [motivoApartado].
+     */
+    val eventoId = varchar("evento_id", 64).nullable()
     override val primaryKey = PrimaryKey(id, userId)  // per-user: the same SMS id may exist for different users
     init { index("idx_sms_messages_user_id", false, userId) }
 }

@@ -30,6 +30,7 @@ import com.jvillada.movi.shared.model.huellaDeUnMovimiento
 import com.jvillada.movi.shared.model.laHuellaEsUnNumero
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.AvisoPorRevisar
+import com.jvillada.movi.shared.model.AvisosDelMismoPago
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.RespuestaDelSync
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
@@ -46,8 +47,8 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
-import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
@@ -423,14 +424,8 @@ fun Route.smsRoutes() {
      */
     get("/api/sms") {
         val uid = call.userId()
-        val list = dbQuery {
-            SmsMessages.selectAll()
-                .where { SmsMessages.userId eq uid }
-                .orderBy(SmsMessages.time to SortOrder.DESC)
-                .map { it.toSmsMessage() }
-        }
-        // Los pendientes que parecen el mismo pago que otro aviso lo dicen antes de aprobarse.
-        call.respond(conLosAvisosParecidos(list, ahora = System.currentTimeMillis()))
+        // Los avisos del mismo pago salen marcados (`grupoId`): la bandeja muestra uno por pago.
+        call.respond(dbQuery { bandejaConLosPagos(uid, ahora = System.currentTimeMillis()) })
     }
 
     /**
@@ -451,16 +446,35 @@ fun Route.smsRoutes() {
                 .firstOrNull()?.toSmsMessage()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
         if (sms.state != SMS_STATE_PENDING) return@get call.respond(sms)
-        // Para saber si se parece a otro aviso hacen falta los demás; la marca es la misma que en
-        // la bandeja, con la misma regla ([conLosAvisosParecidos]).
-        val todos = dbQuery {
-            SmsMessages.selectAll()
-                .where { SmsMessages.userId eq uid }
-                .map { it.toSmsMessage() }
-        }
-        val marcado = conLosAvisosParecidos(todos, ahora = System.currentTimeMillis(), soloElDe = sms.id)
+        // Para saber de qué pago es parte hacen falta los demás avisos; la marca es la misma que en
+        // la bandeja, con la misma regla ([bandejaConLosPagos]).
+        val marcado = dbQuery { bandejaConLosPagos(uid, ahora = System.currentTimeMillis()) }
             .firstOrNull { it.id == sms.id }
         call.respond(marcado ?: sms)
+    }
+
+    /**
+     * **«Este es otro pago»**: el aviso [id] no va con los demás avisos con que Movi lo juntó, y
+     * nunca más se junta con ninguno (`no_es_el_mismo_pago`). Desde ahí es su propia tarjeta en «Por
+     * revisar». Idempotente; 404 si no es del usuario.
+     */
+    post("/api/sms/{id}/no-es-el-mismo-pago") {
+        val uid = call.userId()
+        val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val n = dbQuery { separarDelMismoPago(uid, listOf(id)) }
+        call.respond(if (n == 0) HttpStatusCode.NotFound else HttpStatusCode.NoContent)
+    }
+
+    /**
+     * **«No son el mismo pago»**, para todos los avisos de la tarjeta de una vez: cada uno vuelve a
+     * ser su propio pago y no se junta más. Solo toca los avisos del usuario; 404 si ninguno lo es.
+     */
+    post("/api/sms/grupo/{grupoId}/desagrupar") {
+        val uid = call.userId()
+        val cuerpo = runCatching { call.receive<AvisosDelMismoPago>() }.getOrNull()
+            ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val n = dbQuery { separarDelMismoPago(uid, cuerpo.miembros) }
+        call.respond(if (n == 0) HttpStatusCode.NotFound else HttpStatusCode.NoContent)
     }
 
     get("/api/sms/{id}/parse") {
@@ -671,7 +685,15 @@ fun Route.smsRoutes() {
         // insertado ahora, en `pending` (lo que entró apartado no se avisa) y con movimiento.
         // Best-effort como la push: sin destinos (o si la consulta falla) se avisa con el nombre
         // que mandó el banco, y nunca se cae el sync por esto.
-        val pendientes = inserted.filter { it.id !in apartadosAhora }
+        //
+        // Un pago, un aviso: lo que se juntó con un aviso que ya estaba (el SMS que llegó un minuto
+        // después de la notificación) no se vuelve a avisar. Ver [losQueAbrenUnPago].
+        val pendientes = inserted.filter { it.id !in apartadosAhora }.let { recien ->
+            if (recien.isEmpty()) recien
+            else runCatching { losQueAbrenUnPago(recien, dbQuery { bandejaConLosPagos(uid, System.currentTimeMillis()) }) }
+                .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+                .getOrDefault(recien)
+        }
         val destinos = if (pendientes.isEmpty()) emptyList() else runCatching { dbQuery { destinosDelDueno(uid) } }
             .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
             .getOrDefault(emptyList())
@@ -716,6 +738,17 @@ internal fun comoLlega(texto: String, origen: String): Pair<String, MotivoDeApar
 }
 
 /**
+ * Marca [ids] (los del usuario) como «no es el mismo pago»: nunca más se juntan con otros avisos.
+ * Devuelve cuántas filas eran suyas. Dentro de una transacción.
+ */
+internal fun separarDelMismoPago(uid: String, ids: List<String>): Int {
+    if (ids.isEmpty()) return 0
+    return SmsMessages.update({ (SmsMessages.userId eq uid) and (SmsMessages.id inList ids.distinct()) }) {
+        it[noEsElMismoPago] = true
+    }
+}
+
+/**
  * ¿La fila la subió la captura de notificaciones? El teléfono las rotula «Notificación · Nombre de
  * la app» (`FiltroDeNotificaciones.kt`, en `:shared`); los SMS llegan con el código del remitente
  * («85540») y los correos con «Correo · …».
@@ -723,7 +756,7 @@ internal fun comoLlega(texto: String, origen: String): Pair<String, MotivoDeApar
 internal fun esUnaNotificacion(origen: String): Boolean =
     origen.trimStart().startsWith("Notificación", ignoreCase = true)
 
-private fun org.jetbrains.exposed.sql.ResultRow.toSmsMessage() = SmsMessage(
+internal fun org.jetbrains.exposed.sql.ResultRow.toSmsMessage() = SmsMessage(
     id    = this[SmsMessages.id],
     time  = this[SmsMessages.time],
     bank  = this[SmsMessages.bank],

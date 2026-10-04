@@ -43,6 +43,7 @@ import com.jvillada.movi.shared.model.saldoDeTuPlata
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
+import com.jvillada.movi.shared.model.cuantosPagosPorRevisar
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
@@ -184,7 +185,12 @@ fun Route.dashboardRoutes() {
                 monthSpent = spentByCategory.values.sum(),
                 spentByCategory = spentByCategory,
                 cardPaymentCandidates = cardPaymentCandidateCount(uid, voidedIds, accountTypeById),
-                pendingSms = filasDeSms.count { (_, _, state) -> state == SMS_STATE_PENDING },
+                // **Pagos, no avisos** (4-oct-2026): un pago avisado por SMS, por la app del banco y
+                // por Google Wallet es UNO por revisar — la misma cuenta que la bandeja y que el
+                // renglón de Movimientos (`cuantosPagosPorRevisar`, en :core). Agrupar lee el texto,
+                // así que solo se pide la bandeja entera cuando hay algo pendiente.
+                pendingSms = if (filasDeSms.none { (_, _, state) -> state == SMS_STATE_PENDING }) 0
+                else cuantosPagosPorRevisar(bandejaConLosPagos(uid, ahora)),
                 smsTotal = captura.total,
                 smsLastAt = captura.ultimo,
                 // Ola 2: los orígenes de captura que se callaron (lee las mismas filas otra vez, con

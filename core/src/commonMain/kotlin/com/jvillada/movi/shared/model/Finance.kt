@@ -817,6 +817,25 @@ data class SmsMessage(
      * ve el mensaje como «IGNORADO», que es verdad).
      */
     val apartadoPor: String? = null,
+    /**
+     * **El pago del que este aviso es parte** (4-oct-2026, «un pago, una tarjeta»): el id del aviso
+     * más antiguo de los que avisan el mismo pago por canales distintos (el SMS, la notificación de
+     * la app del banco, la de Google Wallet, el correo). Todos los avisos de ese pago llevan el
+     * mismo valor; `null` es «este aviso es su propio pago». Lo calcula el server al leer la
+     * bandeja, solo para los pagos que todavía tienen algo pendiente. Ver `AvisosDelMismoPago.kt`.
+     *
+     * Con valor por defecto, como [parecidoA]: un APK viejo lo ignora y sigue viendo un aviso por
+     * tarjeta, con la línea «Parece el mismo pago…» de siempre.
+     */
+    val grupoId: String? = null,
+    /** Los ids de todos los avisos de ese mismo pago (este incluido), del más viejo al más nuevo. Vacía sin [grupoId]. */
+    val miembrosDelGrupo: List<String> = emptyList(),
+    /**
+     * **Ya está anotado con otro aviso**: el id del aviso del mismo pago que el dueño ya confirmó.
+     * Solo en los pendientes. Confirmar este crearía el mismo movimiento dos veces; lo que queda es
+     * cerrarlo (o decir que no es el mismo pago).
+     */
+    val yaAnotadoCon: String? = null,
 )
 
 @Serializable
