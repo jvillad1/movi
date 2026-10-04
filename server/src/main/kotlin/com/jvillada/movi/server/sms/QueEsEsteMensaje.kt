@@ -53,6 +53,12 @@ fun queEsEsteMensaje(texto: String, origen: String?): QueEsElMensaje {
     val t = normalizarParaBuscar(texto)
     if (t.isEmpty()) return QueEsElMensaje.Movimiento
 
+    // La confirmación de reenvío de Gmail le gana a todo: la manda Google, no un banco, y no
+    // puede ser un movimiento. Se aparta con su motivo para que el código quede legible.
+    if (CONFIRMACION_DE_REENVIO.any { it in t }) {
+        return QueEsElMensaje.NoEsMovimiento(MotivoDeApartado.CONFIRMACION_DE_REENVIO)
+    }
+
     // «Nos alegra que todo esté bien. Si tu transacción fue aprobada… si fue rechazada…»: la
     // respuesta a una verificación, que nombra las dos cosas y no es ninguna.
     if (DESPUES_DE_VERIFICAR.any { it in t }) return QueEsElMensaje.NoEsMovimiento(MotivoDeApartado.AVISO_DE_SEGURIDAD)
@@ -120,6 +126,18 @@ private val formaDeWallet = Regex(""":\s*(cop|usd)\s*[0-9][0-9.,]*\s+with\s""")
 
 private fun tieneLaFormaDeUnMovimiento(t: String): Boolean =
     FORMAS_DE_MOVIMIENTO.any { it in t } || formaDeWallet.containsMatchIn(t)
+
+/**
+ * **El correo con que Gmail pide confirmar un reenvío**, en inglés y en español: llega a la
+ * dirección de Movi el día que el dueño arma el reenvío (Gmail → Configuración → Reenvío) y trae un
+ * código de confirmación y un enlace `mail-settings.google.com/mail/vf-…`. Frases del aviso, no
+ * palabras sueltas: ningún banco escribe «gmail forwarding confirmation».
+ */
+private val CONFIRMACION_DE_REENVIO = listOf(
+    "gmail forwarding confirmation", "has requested to automatically forward mail",
+    "confirmacion de reenvio de gmail", "reenviar automaticamente el correo", "reenviar correo automaticamente",
+    "mail-settings.google.com/mail/vf-",
+)
 
 /** Lo que no pasó y [NO_PASARON] no cubre: «esta vez no continuamos la transacción». */
 private val NO_PASO = listOf("no continuamos la transaccion")

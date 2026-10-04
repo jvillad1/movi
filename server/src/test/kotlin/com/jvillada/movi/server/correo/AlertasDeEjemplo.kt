@@ -207,3 +207,37 @@ fun contenidoDeResend(
 }
 """.trimIndent()
 }
+
+/** El código de la confirmación de reenvío sintética. */
+const val CODIGO_DE_REENVIO_DE_EJEMPLO = "987654321"
+
+/**
+ * **La confirmación de reenvío de Gmail**, sintética pero con la forma del correo real: Google lo
+ * manda DIRECTO a la dirección de Movi (sin reenvío de por medio) cuando el dueño la agrega en
+ * Gmail → Configuración → Reenvío, con el código en el asunto y en el cuerpo, y un enlace
+ * `mail-settings.google.com/mail/vf-…`.
+ */
+fun asuntoDeConfirmacionDeReenvio(gmail: String = "juan@gmail.com") =
+    "(#$CODIGO_DE_REENVIO_DE_EJEMPLO) Gmail Forwarding Confirmation - Receive Mail from $gmail"
+
+fun cuerpoDeConfirmacionDeReenvio(destino: String, gmail: String = "juan@gmail.com") = """
+    $gmail has requested to automatically forward mail to your email
+    address $destino.
+    Confirmation code: $CODIGO_DE_REENVIO_DE_EJEMPLO
+
+    To allow $gmail to automatically forward mail to your address,
+    please click the link below to confirm the request:
+
+    https://mail-settings.google.com/mail/vf-%5BANGjdJ_ejemplo%5D-ejemplo
+
+    If you click the link and it appears to be broken, please copy and paste it
+    into a new browser window. If you aren't able to access the link, you
+    can send the confirmation code
+    $CODIGO_DE_REENVIO_DE_EJEMPLO to $gmail.
+
+    Thanks for using Gmail!
+
+    Sincerely,
+
+    The Gmail Team
+""".trimIndent()

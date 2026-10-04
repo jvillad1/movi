@@ -33,6 +33,12 @@ enum class MotivoDeApartado(
     RESUMEN_DE_GASTOS("resumen de tus gastos"),
     NO_PASO("rechazado, no pasó"),
     SIN_MONTO("aviso sin monto"),
+    /**
+     * El correo con que Gmail pide confirmar un reenvío («Gmail Forwarding Confirmation»): llega a
+     * la dirección de Movi cuando el dueño arma el reenvío, y trae el código y el enlace que hay que
+     * usar. No es un movimiento, pero se guarda entero para poder leer el código.
+     */
+    CONFIRMACION_DE_REENVIO("confirmación de reenvío de Gmail"),
 }
 
 /**

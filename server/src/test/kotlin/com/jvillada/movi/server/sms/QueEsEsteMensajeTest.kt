@@ -1,9 +1,13 @@
 package com.jvillada.movi.server.sms
 
+import com.jvillada.movi.server.correo.asuntoDeConfirmacionDeReenvio
+import com.jvillada.movi.server.correo.cuerpoDeConfirmacionDeReenvio
+import com.jvillada.movi.server.correo.textoDelCorreo
 import com.jvillada.movi.server.routes.parseSms
 import com.jvillada.movi.shared.model.MotivoDeApartado
 import com.jvillada.movi.shared.model.MotivoDeApartado.AVISO_DE_SEGURIDAD
 import com.jvillada.movi.shared.model.MotivoDeApartado.CODIGO_DE_VERIFICACION
+import com.jvillada.movi.shared.model.MotivoDeApartado.CONFIRMACION_DE_REENVIO
 import com.jvillada.movi.shared.model.MotivoDeApartado.EXTRACTO_DISPONIBLE
 import com.jvillada.movi.shared.model.MotivoDeApartado.NO_PASO
 import com.jvillada.movi.shared.model.MotivoDeApartado.PROMOCION
@@ -170,5 +174,25 @@ class QueEsEsteMensajeTest {
     fun `el DECLINED de Google Wallet no es un gasto`() {
         assertNull(parseSms("TIENDA EJEMPLO: DECLINED - COP12,000 with Glim ••0000", deWallet))
         assertNotNull(parseSms("TIENDA EJEMPLO: COP12,000 with Glim ••0000", deWallet))
+    }
+
+    /**
+     * La confirmación de reenvío de Gmail llega a la dirección de Movi como cualquier correo: no es
+     * un movimiento, y tiene su propio motivo para que el código se pueda leer después.
+     */
+    @Test
+    fun `la confirmacion de reenvio de Gmail se aparta con su motivo`() {
+        val origen = "Correo · Gmail Team"
+        val ingles = textoDelCorreo(
+            asuntoDeConfirmacionDeReenvio(),
+            cuerpoDeConfirmacionDeReenvio("alertas+1122334455667788@abc123.resend.app"),
+        )
+        assertEquals(CONFIRMACION_DE_REENVIO, motivo(ingles, origen))
+        assertEquals(
+            CONFIRMACION_DE_REENVIO,
+            motivo("(#123456789) Confirmación de reenvío de Gmail - Recibir correo de juan@gmail.com", origen),
+        )
+        // Sin las frases de Gmail, un correo del banco sigue su camino de siempre.
+        assertNull(motivo("Bancolombia te informa: Compraste \$18.500,00 en TIENDA DE PRUEBA con tu T.Deb *1111.", deCorreo))
     }
 }

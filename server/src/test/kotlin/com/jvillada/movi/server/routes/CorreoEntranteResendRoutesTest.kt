@@ -3,7 +3,10 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.correo.ContenidoDeResend
 import com.jvillada.movi.server.correo.LectorDeCorreosRecibidos
+import com.jvillada.movi.server.correo.CODIGO_DE_REENVIO_DE_EJEMPLO
 import com.jvillada.movi.server.correo.SMS_EQUIVALENTE_CUOTA_DE_MANEJO
+import com.jvillada.movi.server.correo.asuntoDeConfirmacionDeReenvio
+import com.jvillada.movi.server.correo.cuerpoDeConfirmacionDeReenvio
 import com.jvillada.movi.server.correo.contenidoDeResend
 import com.jvillada.movi.server.correo.eventoDeResend
 import com.jvillada.movi.server.correo.firmarComoSvix
@@ -306,5 +309,40 @@ class CorreoEntranteResendRoutesTest {
         } finally {
             System.clearProperty("movi.correo.secreto")
         }
+    }
+
+    /**
+     * **La confirmación de reenvío de Gmail queda guardada y legible**: Google la manda directo a la
+     * dirección de Movi (el token viene en el `to`), entra apartada con su motivo, y el código y el
+     * enlace quedan en el texto de la fila — el dueño lo ve en el historial, o se lee por SQL.
+     */
+    @Test
+    fun `la confirmacion de reenvio de Gmail queda apartada y con el codigo legible`() = testApplication {
+        application { testModule() }
+        correosEnResend["confirmacion"] = ContenidoDeResend.Encontrado(
+            contenidoDeResend(
+                para = listOf(direccionDeA),
+                remitente = "forwarding-noreply@google.com",
+                nombreDelRemitente = "Gmail Team",
+                asunto = asuntoDeConfirmacionDeReenvio(),
+                cuerpo = cuerpoDeConfirmacionDeReenvio(direccionDeA),
+                messageId = "<confirmacion@google.com>",
+            ),
+        )
+        val r = client.webhook(eventoDeResend(idDelCorreo = "confirmacion", para = listOf(direccionDeA)))
+        assertEquals(HttpStatusCode.Accepted, r.status)
+        assertTrue(guardado(r.bodyAsText()))
+
+        val fila = transaction {
+            SmsMessages.selectAll().single().let {
+                listOf(it[SmsMessages.userId], it[SmsMessages.state], it[SmsMessages.motivoApartado], it[SmsMessages.text], it[SmsMessages.bank])
+            }
+        }
+        assertEquals(userAId, fila[0])
+        assertEquals("ignored", fila[1], "no espera una decisión en «Por revisar»")
+        assertEquals("CONFIRMACION_DE_REENVIO", fila[2])
+        assertTrue(CODIGO_DE_REENVIO_DE_EJEMPLO in fila[3]!!, "el código se puede leer")
+        assertTrue("mail-settings.google.com/mail/vf-" in fila[3]!!, "y el enlace también")
+        assertEquals("Correo · Gmail Team", fila[4])
     }
 }
