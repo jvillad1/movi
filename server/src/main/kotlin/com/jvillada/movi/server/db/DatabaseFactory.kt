@@ -115,6 +115,8 @@ object DatabaseFactory {
             // SmsMessages: `no_es_el_mismo_pago` y `evento_id` (4-oct-2026, los avisos de un mismo
             // pago) — las dos NULLABLE, mismo caso: dos ADD COLUMN y nada más (ver
             // `SmsMessagesMismoPagoColumnTest`).
+            // SmsMessages: `confirmado_en` (4-oct-2026, con qué y cuándo se confirmó cada aviso) —
+            // NULLABLE, mismo caso: un ADD COLUMN y nada más (ver `SmsMessagesConfirmadoEnColumnTest`).
             SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }

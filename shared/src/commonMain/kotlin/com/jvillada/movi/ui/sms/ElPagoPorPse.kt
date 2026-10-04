@@ -6,6 +6,8 @@ import com.jvillada.movi.shared.model.CreateTransferRequest
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.time.AppTimeZone
+import com.jvillada.movi.ui.components.CuentaDelBanco
+import com.jvillada.movi.ui.components.deudaQueNombraElMensaje
 import kotlin.math.roundToLong
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
@@ -76,3 +78,12 @@ fun avisoDelTraspaso(hacia: Account?, origen: Account?): String =
     } else {
         "Un traspaso necesita la cuenta tuya a la que fue la plata. Si no está en Movi, créala, o elige otra categoría."
     }
+
+/**
+ * **La deuda que queda elegida al revisar un aviso**: la que el mensaje nombra por su número (ver
+ * [deudaQueNombraElMensaje]) y, si no nombra ninguna, la que Movi reconoció en el aviso
+ * ([ParsedSms.deudaSugeridaId], el correo de PSE). El número escrito es un dato; lo otro, memoria.
+ */
+fun deudaPropuestaDelAviso(resuelta: CuentaDelBanco, deudaSugeridaId: String?, accounts: List<Account>): Account? =
+    deudaQueNombraElMensaje(resuelta)
+        ?: deudaSugeridaId?.let { id -> accounts.firstOrNull { it.id == id } }

@@ -708,7 +708,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     val idDeLaPropuesta = pagoActual?.propuestaDe ?: smsId
     val avisoDeLaPropuesta = pagoActual?.miembros?.firstOrNull { it.id == idDeLaPropuesta }
 
-    /** Confirma el aviso diciendo, si es un comprobante, con qué movimiento quedó. */
+    /**
+     * Confirma el aviso diciendo con qué movimiento quedó: el server lo guarda en el aviso, y si es
+     * un comprobante además cuelga el papel de la cuenta de ese movimiento.
+     */
     suspend fun confirmarElAviso(eventoId: String) {
         val elPago = pagoActual
         when {
@@ -716,7 +719,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 elPago.grupoId, ConfirmarElMismoPago(idsDelPago, eventoExistenteId = eventoId),
             )
             esComprobante -> Repositories.wallets.confirmarComprobante(smsId, eventoId)
-            else -> Repositories.wallets.confirmSms(smsId)
+            else -> Repositories.wallets.confirmSmsCon(smsId, eventoId)
         }
     }
 
@@ -851,12 +854,17 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     LaunchedEffect(ofreceVinculo) {
         if (!ofreceVinculo) cuentaDeDeudaElegida = null
     }
-    // El crédito o la tarjeta que Movi reconoció en el aviso (Banco de Occidente ↔ «Vehículo 8761»),
-    // ya elegido: confirmar arma el traspaso de dos patas que marca la cuota del período. Se puede
-    // cambiar o quitar como siempre; solo se pone si todavía no hay ninguna elegida.
-    LaunchedEffect(ofreceVinculo, parsed?.deudaSugeridaId, accounts) {
-        if (ofreceVinculo && cuentaDeDeudaElegida == null) {
-            cuentaDeDeudaElegida = parsed?.deudaSugeridaId?.let { id -> accounts.firstOrNull { it.id == id } }
+    // La deuda que se paga queda elegida, en este orden: la que el mensaje NOMBRA por su número
+    // («Pagaste $X en la tarjeta de credito *9208 desde la cuenta *8133», ver
+    // [deudaQueNombraElMensaje]), y si no nombra ninguna, la que Movi reconoció en el aviso (el correo
+    // de PSE: Banco de Occidente ↔ «Vehículo 8761», [ParsedSms.deudaSugeridaId]). Confirmar arma el
+    // traspaso de dos patas que marca la cuota del período. Solo hasta que él toque el selector: si
+    // la quita o elige otra, Movi no se la vuelve a poner.
+    val deudaPropuesta = deudaPropuestaDelAviso(cuentaDelSms, parsed?.deudaSugeridaId, accounts)
+    var deudaTocadaAMano by remember { mutableStateOf(false) }
+    LaunchedEffect(ofreceVinculo, deudaPropuesta?.id) {
+        if (ofreceVinculo && !deudaTocadaAMano && cuentaDeDeudaElegida == null && deudaPropuesta != null) {
+            cuentaDeDeudaElegida = deudaPropuesta
         }
     }
     /** «Depósito a tu cuenta NU»: se anota como traspaso a esa cuenta, no como gasto. Ver [destinoDelTraspaso]. */
@@ -1465,7 +1473,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     SelectorDeCuentaDeDeuda(
                         cuentas = accounts,
                         seleccionada = cuentaDeDeudaElegida,
-                        onSeleccionar = { cuentaDeDeudaElegida = it },
+                        onSeleccionar = { deudaTocadaAMano = true; cuentaDeDeudaElegida = it },
                     )
                 }
 

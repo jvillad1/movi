@@ -96,4 +96,31 @@ class ElPagoPorPseTest {
         assertNull(destinoDelTraspaso(deposito.copy(traspasoHaciaId = "c1"), TRANSFER_CATEGORY, ahorros, todas), "un traspaso no toca una tarjeta")
         assertNull(destinoDelTraspaso(deposito, TRANSFER_CATEGORY, null, todas))
     }
+
+    private val amex = Account("c2", "AMEX 9208", AccountType.CREDIT_CARD, 0)
+    private val carro = Account("l1", "Vehículo 8761", AccountType.LOAN, 0)
+
+    @Test
+    fun `el numero del mensaje le gana a la cuenta y a la deuda que sugiere Movi`() {
+        val conAmex = todas + amex + carro
+        val texto = "Bancolombia: Pagaste \$974,550 en la tarjeta de credito *9208 desde la cuenta *9497, el 15/08/2026 19:37."
+        val porNumero = resolverCuentaDelBanco(conAmex, UsoDeCuenta.ORIGEN_DE_GASTO, "85784", textoDelMensaje = texto)
+        val resuelta = conLaCuentaQueSugiereMovi(porNumero, conAmex, sugeridaId = "a1")
+        assertEquals(OrigenDeLaCuentaDelBanco.POR_EL_NUMERO, resuelta.origen)
+        assertEquals(afc, resuelta.cuenta, "la cuenta que escribió el banco, no la sugerida")
+        assertEquals(amex, deudaPropuestaDelAviso(resuelta, deudaSugeridaId = "l1", accounts = conAmex), "la tarjeta que nombra el mensaje")
+    }
+
+    @Test
+    fun `sin numero en el mensaje, vale lo que sugiere Movi, y el destino leido se conserva`() {
+        val conCarro = todas + carro
+        val porDefecto = resolverCuentaDelBanco(conCarro, UsoDeCuenta.ORIGEN_DE_GASTO, "Correo · PSE", textoDelMensaje = pse)
+        val resuelta = conLaCuentaQueSugiereMovi(porDefecto, conCarro, sugeridaId = "a1")
+        assertEquals(ahorros, resuelta.cuenta)
+        assertEquals(carro, deudaPropuestaDelAviso(resuelta, deudaSugeridaId = "l1", accounts = conCarro))
+        assertNull(deudaPropuestaDelAviso(resuelta, deudaSugeridaId = null, accounts = conCarro))
+
+        val conDestino = CuentaDelBanco(null, OrigenDeLaCuentaDelBanco.NINGUNA, destino = amex)
+        assertEquals(amex, conLaCuentaQueSugiereMovi(conDestino, todas + amex, "a1").destino)
+    }
 }
