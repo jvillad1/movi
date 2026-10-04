@@ -186,6 +186,18 @@ private val plataQueLlegaANu = Regex("""te lleg[oó] dinero|\brecibiste\s+\$?\s*
  */
 private val pagoDesdeLaCuentaDeNu = Regex("""\bpago\s+aprobado\b|\bpagaste\s+en\s""", RegexOption.IGNORE_CASE)
 
+/**
+ * **El abono que llega A la tarjeta** (4-oct-2026): «Bancolombia: Recibimos pago por $9,000,000.00 a
+ * tu tarjeta de credito **9208 desde Wompi-PSE». Es plata que ENTRA a la tarjeta —le baja la
+ * deuda—, y se leía como gasto: confirmado así, le **sumaba** $9 M de deuda a la AMEX. Pasó dos
+ * veces en septiembre ($18,8 M, los dos abonos de un tercero que el dueño terminó armando a mano).
+ *
+ * Solo la forma de Bancolombia, que dice «a tu tarjeta». El «Recibimos tu pago» de Nu no: ese lo
+ * captura el teléfono del lado de la cuenta de ahorros de Nu, de donde SALIÓ la plata, y ahí sí es
+ * una salida (ver [pagoDeNu]).
+ */
+private val abonoALaTarjeta = Regex("""\brecibimos\s+pago\b.*?\ba\s+tu\s+tarjeta\b""", RegexOption.IGNORE_CASE)
+
 /** A quién se le pagó desde la cuenta de Nu: lo que va entre «Pagaste en» y « con tu cuenta». */
 private val pagasteEnRegex = Regex("""\bpagaste\s+en\s+(.+?)\s+con\s+tu\s+cuenta\b""", RegexOption.IGNORE_CASE)
 
@@ -278,8 +290,11 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val currency = if (monedaDelSms?.equals("USD", ignoreCase = true) == true) "USD" else "COP"
     val recargaDeBeneficios = if ("tarjeta de beneficios" in minusculas) recargaDeBeneficiosRegex.find(text) else null
 
+    val esAbonoALaTarjeta = abonoALaTarjeta.containsMatchIn(text)
+
     val type = when {
         recargaDeBeneficios != null -> TransactionType.INCOME
+        esAbonoALaTarjeta -> TransactionType.INCOME
         text.contains("Recibiste", ignoreCase = true) -> TransactionType.INCOME
         text.contains("Nómina recibida", ignoreCase = true) -> TransactionType.INCOME
         text.contains("Compra", ignoreCase = true) -> TransactionType.EXPENSE
@@ -292,6 +307,7 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val esPagoDeNu = origen != null && origenNu.containsMatchIn(origen) && pagoDeNu.containsMatchIn(text)
     val merchant = when {
         text.contains("Nómina recibida", ignoreCase = true) -> "Nómina"
+        esAbonoALaTarjeta -> "Pago de tarjeta"
         recargaDeBeneficios != null ->
             limpio(recargaDeBeneficios.groupValues[1])?.let { "Recarga de beneficios · $it" } ?: "Recarga de beneficios"
         type == TransactionType.INCOME -> limpio(merchantOfRegex.find(text)?.groupValues?.get(1)) ?: "Transferencia recibida"
@@ -315,7 +331,7 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
             ?: if ("transferiste" in minusculas) "Transferencia" else "Movimiento"
     }
 
-    val category = categoryFor(text, merchant, type, esPagoDeNu)
+    val category = if (esAbonoALaTarjeta) CARD_PAYMENT_CATEGORY else categoryFor(text, merchant, type, esPagoDeNu)
     // A quién fue (o de quién vino): la misma lectura que hacen la bandeja y el detalle de un
     // movimiento, en `:core`. Un pago de tarjeta no es a una persona, así que no lo lleva.
     val identificador = if (category == CARD_PAYMENT_CATEGORY) null else identificadorDelDestinoEn(text)
