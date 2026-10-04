@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
+import com.jvillada.movi.shared.model.esBien
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 
@@ -37,10 +38,18 @@ enum class OrigenDeLaCuentaDelBanco {
     NINGUNA,
 }
 
-/** Qué cuenta quedó puesta, y por qué. */
+/**
+ * Qué cuenta quedó puesta, y por qué.
+ *
+ * [destino] es la **otra** cuenta suya que el mensaje nombra como destino: «Pagaste $X en la tarjeta
+ * de credito \*9208 desde la cuenta \*8133» sale de la cuenta (8133) y va a la AMEX (9208). `null`
+ * si el mensaje no nombra ningún destino, o si el destino no es una cuenta suya (la cuenta de un
+ * tercero). Ver [deudaQueNombraElMensaje] para qué se hace con él.
+ */
 data class CuentaDelBanco(
     val cuenta: Account?,
     val origen: OrigenDeLaCuentaDelBanco,
+    val destino: Account? = null,
 )
 
 /**
@@ -94,6 +103,59 @@ private val numerosQueNombraElMensaje = Regex("""(?:\*|\bterminada\s+en|[•●]
 private val digitosDelNombre = Regex("""\d+""")
 
 /**
+ * **Lo que va justo antes de un número que es el DESTINO de la plata**, no la cuenta de donde sale:
+ * «… a la cuenta \*N», «… hacia la cuenta \*N», «… a tu tarjeta de credito \*\*N», «Pagaste $X en
+ * la tarjeta de credito \*N desde la cuenta \*8133». Se mira sobre el texto ya normalizado (sin
+ * tildes ni mayúsculas) y sin el asterisco ni las viñetas del número.
+ *
+ * Todo lo demás —«de tu cuenta \*9586», «en tu cuenta \*8133», «desde tu T.Credito \*9208», «con tu
+ * T.Deb \*4057», «asociada a T.Cred \*3684», «terminada en 1336»— nombra la cuenta suya que el
+ * movimiento toca.
+ */
+private val antesDeUnDestino =
+    Regex("""(?:\b(?:a|hacia)\s+(?:la|tu)\s+(?:cuenta|tarjeta(?:\s+de\s+credito)?)|\ben\s+la\s+tarjeta\s+de\s+credito)$""")
+
+/** ¿El número que empieza en [inicio] es el destino de la plata? Ver [antesDeUnDestino]. */
+private fun esUnDestino(texto: String, inicio: Int): Boolean {
+    val antes = texto.substring(maxOf(0, inicio - 60), inicio).trimEnd(' ', '*', '•', '●')
+    return antesDeUnDestino.containsMatchIn(normalizarParaBuscar(antes))
+}
+
+/**
+ * Los números que el mensaje nombra, cada uno con su papel: los que nombran la cuenta que el
+ * movimiento toca (`false`) y los que nombran a dónde va la plata (`true`), en el orden del texto.
+ */
+private fun numerosDelMensaje(texto: String): List<Pair<String, Boolean>> =
+    numerosQueNombraElMensaje.findAll(texto).map { it.groupValues[1] to esUnDestino(texto, it.range.first) }.toList()
+
+/**
+ * **La cuenta de [candidatas] que lleva estos dígitos**, o `null` si no hay una sola. Se comparan los
+ * últimos cuatro de lo que dice el mensaje contra cada corrida de dígitos del nombre, así que el
+ * número completo también sirve: «hacia la cuenta \*02955068133» encuentra «Bancolombia Ahorros
+ * 8133». Y un nombre puede llevar varios números («Bancolombia Ahorros 8133 · 4057»: la cuenta y su
+ * tarjeta débito).
+ */
+private fun cuentaConLosDigitos(digitos: String, texto: String, candidatas: List<Account>): Account? {
+    val ultimosCuatro = digitos.takeLast(4)
+    val coinciden = candidatas.filter { cuenta ->
+        digitosDelNombre.findAll(cuenta.name).any { it.value == ultimosCuatro }
+    }
+    if (coinciden.size == 1) return coinciden.single()
+    // **Empate por moneda.** La Master Black tiene dos cuentas con el mismo número, una en pesos
+    // y otra en dólares, así que «T.Cred *3684» coincide con las dos y no se elegía ninguna. Si
+    // el mensaje ESCRIBE la moneda («Compraste USD20,00», «COP249.000,00»), esa desempata. Un «$» a
+    // secas no: sin la palabra no se adivina (ver el test del empate).
+    val moneda = when {
+        Regex("""\bUSD\s*[0-9]""", RegexOption.IGNORE_CASE).containsMatchIn(texto) -> "USD"
+        Regex("""\bCOP\s*[0-9]""", RegexOption.IGNORE_CASE).containsMatchIn(texto) -> "COP"
+        else -> null
+    }
+    val deEsaMoneda = coinciden.filter { it.currency == moneda }
+    if (moneda != null && coinciden.size > 1 && deEsaMoneda.size == 1) return deEsaMoneda.single()
+    return null
+}
+
+/**
  * **A qué cuenta suya se refiere un mensaje que nombra un número.**
  *
  * El dueño lo vio en la pantalla de reconciliar: el SMS decía *«Retiraste $3.500.000 de tu cuenta
@@ -116,30 +178,48 @@ private val digitosDelNombre = Regex("""\d+""")
  * dejará cambiarla. Elegir una de dos al azar sería exactamente el accidente que
  * [resolverCuentaDelBanco] vino a cerrar: **no saber y equivocarse no pueden verse igual**.
  *
- * Se recorren los números en el orden en que aparecen porque un traspaso nombra dos —de dónde sale
- * y a dónde va— y el primero es el de origen, que es la cuenta que el movimiento afecta.
+ * Un traspaso nombra dos números —de dónde sale y a dónde va— y **el orden del texto no dice cuál
+ * es cuál**: «desde tu cuenta \*8133 a la cuenta \*N» pone primero el origen, pero «Pagaste $X en la
+ * tarjeta de credito \*9208 desde la cuenta \*8133» pone primero el destino. Por eso cada número se
+ * lee con lo que lo precede ([antesDeUnDestino]) y acá solo cuentan los que nombran la cuenta que
+ * el movimiento toca.
  */
 internal fun cuentaPorElNumero(texto: String, candidatas: List<Account>): Account? {
-    numerosQueNombraElMensaje.findAll(texto).forEach { hallazgo ->
-        val ultimosCuatro = hallazgo.groupValues[1].takeLast(4)
-        val coinciden = candidatas.filter { cuenta ->
-            digitosDelNombre.findAll(cuenta.name).any { it.value == ultimosCuatro }
-        }
-        if (coinciden.size == 1) return coinciden.single()
-        // **Empate por moneda.** La Master Black tiene dos cuentas con el mismo número, una en pesos
-        // y otra en dólares, así que «T.Cred *3684» coincide con las dos y no se elegía ninguna. Si
-        // el mensaje ESCRIBE la moneda («Compraste USD20,00», «COP249.000,00»), esa desempata. Un «$» a
-        // secas no: sin la palabra no se adivina (ver el test del empate).
-        val moneda = when {
-            Regex("""\bUSD\s*[0-9]""", RegexOption.IGNORE_CASE).containsMatchIn(texto) -> "USD"
-            Regex("""\bCOP\s*[0-9]""", RegexOption.IGNORE_CASE).containsMatchIn(texto) -> "COP"
-            else -> null
-        }
-        val deEsaMoneda = coinciden.filter { it.currency == moneda }
-        if (moneda != null && coinciden.size > 1 && deEsaMoneda.size == 1) return deEsaMoneda.single()
+    // Solo los números que nombran la cuenta que el movimiento toca: en «Pagaste $X en la tarjeta de
+    // credito *9208 desde la cuenta *8133» el primero es el DESTINO (la AMEX que se paga) y elegirlo
+    // anotaba el pago como un gasto EN la tarjeta. Ver [cuentaDestinoPorElNumero].
+    numerosDelMensaje(texto).filterNot { it.second }.forEach { (digitos, _) ->
+        cuentaConLosDigitos(digitos, texto, candidatas)?.let { return it }
     }
     return null
 }
+
+/**
+ * **La cuenta suya a la que va la plata**, cuando el mensaje la nombra como destino («… a la
+ * tarjeta \*9208», «… hacia la cuenta \*02955068133»). La misma regla de los cuatro dígitos y del
+ * empate que [cuentaPorElNumero]; `null` si el destino no es una cuenta suya.
+ */
+internal fun cuentaDestinoPorElNumero(texto: String, candidatas: List<Account>): Account? {
+    numerosDelMensaje(texto).filter { it.second }.forEach { (digitos, _) ->
+        cuentaConLosDigitos(digitos, texto, candidatas)?.let { return it }
+    }
+    return null
+}
+
+/** ¿El mensaje nombra algún número como la cuenta que el movimiento toca (aunque no sea de las suyas)? */
+private fun nombraLaCuentaQueToca(texto: String): Boolean = numerosDelMensaje(texto).any { !it.second }
+
+/**
+ * **La deuda que el mensaje dice que se está pagando.** «Pagaste $X en la tarjeta de credito \*9208
+ * desde la cuenta \*8133»: la plata sale de la cuenta y va a la AMEX, que es una tarjeta suya. Eso
+ * no es un gasto EN la tarjeta sino el pago de una deuda, y es exactamente lo que ofrece «¿A cuál
+ * crédito o tarjeta corresponde?» (Ola Y, `ofreceVincularDeuda`): la pantalla la deja elegida.
+ *
+ * Solo una tarjeta o un crédito, y solo si no es la misma cuenta de donde sale la plata.
+ */
+fun deudaQueNombraElMensaje(resuelta: CuentaDelBanco): Account? =
+    resuelta.destino
+        ?.takeIf { it.type.group == AccountGroup.DEUDA && it.id != resuelta.cuenta?.id }
 
 /** «Nu» o «Nubank» como palabra: no «Número», no «Nuevo», no «Continuar». */
 private val palabraNu = Regex("""\bnu(?:bank)?\b""", RegexOption.IGNORE_CASE)
@@ -269,17 +349,43 @@ fun resolverCuentaDelBanco(
      */
     textoDelMensaje: String = "",
 ): CuentaDelBanco {
+    // **El número se busca en TODAS sus cuentas, no solo en las que sirven para este uso.** Es un
+    // dato escrito por el banco, no una suposición: «Retiraste … de tu cuenta *9586 Fiducuenta» es
+    // la Fiducuenta aunque una inversión no sea de donde sale un gasto, y la AMEX *9208 que se paga
+    // es la AMEX aunque una tarjeta no reciba ingresos. Antes se filtraba por uso ANTES de buscar,
+    // y los tres retiros de la Fiducuenta caían en Bancolombia Ahorros. Solo los bienes quedan
+    // afuera: la casa no tiene número de cuenta.
+    val conNumero = accounts.filterNot { it.esBien }
+    val destino = cuentaDestinoPorElNumero(textoDelMensaje, conNumero)
+
     val aMano = accounts.firstOrNull { it.id == elegidaAMano }
-    if (aMano != null) return CuentaDelBanco(aMano, OrigenDeLaCuentaDelBanco.A_MANO)
+    if (aMano != null) return CuentaDelBanco(aMano, OrigenDeLaCuentaDelBanco.A_MANO, destino?.takeIf { it.id != aMano.id })
 
     val candidatas = cuentasPara(accounts, uso).principales
 
     // **El número que el mensaje escribió, antes que el nombre del banco.** Es el único paso que
     // lee un dato en vez de suponer, así que va primero: un SMS de Bancolombia que nombra la
     // Fiducuenta tiene que caer en la Fiducuenta y no en la primera cuenta que diga «Bancolombia».
-    val porElNumero = cuentaPorElNumero(textoDelMensaje, candidatas)
-    if (porElNumero != null) return CuentaDelBanco(porElNumero, OrigenDeLaCuentaDelBanco.POR_EL_NUMERO)
+    val porElNumero = cuentaPorElNumero(textoDelMensaje, conNumero)
+    if (porElNumero != null) {
+        return CuentaDelBanco(porElNumero, OrigenDeLaCuentaDelBanco.POR_EL_NUMERO, destino?.takeIf { it.id != porElNumero.id })
+    }
+    // El mensaje solo nombra una cuenta suya, y como destino: «Recibimos pago por $9.000.000 a tu
+    // tarjeta de credito **9208». No dice de qué cuenta salió (la pagó otro), así que la única
+    // cuenta suya en juego es esa. Si el mensaje SÍ nombra la cuenta de origen y no es de las
+    // suyas («… desde la cuenta *8133» con una «Bancolombia Ahorros» sin número), el destino NO es
+    // la cuenta del movimiento: sigue la cadena de siempre y el destino viaja aparte.
+    if (destino != null && !nombraLaCuentaQueToca(textoDelMensaje)) {
+        return CuentaDelBanco(destino, OrigenDeLaCuentaDelBanco.POR_EL_NUMERO)
+    }
+    return resolverSinElNumero(candidatas, banco, textoDelMensaje).copy(destino = destino)
+}
 
+/**
+ * El resto de la cadena, cuando el mensaje no dijo un número que sea de las suyas: la marca, Nu, el
+ * nombre del banco y, al final, la primera cuenta de banco.
+ */
+private fun resolverSinElNumero(candidatas: List<Account>, banco: String, textoDelMensaje: String): CuentaDelBanco {
     // La marca que dice el aviso cuando no dice el número: la app de Glim, o la etiqueta de la
     // tarjeta en Google Wallet. Ver [cuentaPorLaMarca]. Va rotulada como la coincidencia por banco:
     // el nombre de la cuenta («Glim Alimentación 3037») ya dice por qué está ahí.
@@ -297,7 +403,15 @@ fun resolverCuentaDelBanco(
         ?.let { nombre -> candidatas.firstOrNull { it.name.contains(nombre, ignoreCase = true) } }
     if (porElBanco != null) return CuentaDelBanco(porElBanco, OrigenDeLaCuentaDelBanco.POR_EL_BANCO)
 
-    val deBanco = candidatas.firstOrNull {
+    // **El defecto es una suposición, y una suposición nunca cae en plata condicionada.** La AFC
+    // (vivienda) es la primera cuenta de ahorros por orden alfabético, así que cada ingreso a la
+    // *8133 —la cuenta de ahorros de verdad— se proponía en la AFC: 4 de 4 en los datos reales.
+    // Al gasto ya no le llegaba (`ORIGEN_DE_GASTO` la excluye), pero a un ingreso sí: a la AFC le
+    // entran aportes, y por eso `DESTINO_DE_INGRESO` la ofrece. Ofrecerla está bien; elegirla sola
+    // no. Si el banco escribe el número de la AFC, o el mensaje viene de ella, los pasos de arriba
+    // la encuentran igual (el extracto de Skandia es de Skandia).
+    val libres = candidatas.filter { it.condicionadaA.isNullOrBlank() }
+    val deBanco = libres.firstOrNull {
         it.type.group == AccountGroup.DINERO && it.type != AccountType.CASH
     }
     return if (deBanco != null) {

@@ -844,6 +844,16 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     LaunchedEffect(ofreceVinculo) {
         if (!ofreceVinculo) cuentaDeDeudaElegida = null
     }
+    // «Pagaste $X en la tarjeta de credito *9208 desde la cuenta *8133»: el mensaje dice cuál deuda
+    // se paga, así que queda elegida (ver [deudaQueNombraElMensaje]). Solo hasta que él toque el
+    // selector: si la quita o elige otra, Movi no se la vuelve a poner.
+    val deudaQueNombra = deudaQueNombraElMensaje(cuentaDelSms)
+    var deudaTocadaAMano by remember { mutableStateOf(false) }
+    LaunchedEffect(ofreceVinculo, deudaQueNombra?.id) {
+        if (ofreceVinculo && !deudaTocadaAMano && cuentaDeDeudaElegida == null && deudaQueNombra != null) {
+            cuentaDeDeudaElegida = deudaQueNombra
+        }
+    }
 
     fun confirm() {
         if (working) return
@@ -1421,7 +1431,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     SelectorDeCuentaDeDeuda(
                         cuentas = accounts,
                         seleccionada = cuentaDeDeudaElegida,
-                        onSeleccionar = { cuentaDeDeudaElegida = it },
+                        onSeleccionar = { deudaTocadaAMano = true; cuentaDeDeudaElegida = it },
                     )
                 }
 
