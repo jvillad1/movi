@@ -40,6 +40,8 @@ import com.jvillada.movi.shared.model.clave
 import com.jvillada.movi.shared.model.colasPropiasEn
 import com.jvillada.movi.shared.model.conIdentificadores
 import com.jvillada.movi.shared.model.conLoQueSeLeMando
+import com.jvillada.movi.shared.model.conTipoInferido
+import com.jvillada.movi.shared.model.unirTerceros
 import com.jvillada.movi.shared.model.destinosSugeridos
 import com.jvillada.movi.shared.model.esUnNombreIlegible
 import com.jvillada.movi.shared.model.mismoIdentificador
@@ -59,7 +61,6 @@ import com.jvillada.movi.shared.model.rastroDeUnMovimiento
 import com.jvillada.movi.shared.model.rechazoDelDestino
 import com.jvillada.movi.shared.model.soloLosDigitos
 import com.jvillada.movi.shared.model.todosLosIdentificadores
-import com.jvillada.movi.shared.model.totalesHaciaElDestino
 import com.jvillada.movi.shared.model.vaHaciaElDestino
 import com.jvillada.movi.shared.model.vieneDelDestino
 import io.ktor.http.HttpStatusCode
@@ -117,14 +118,11 @@ fun Route.destinoRoutes() {
             val uid = call.userId()
             val destinos = dbQuery { destinosDe(uid) }
             if (destinos.isEmpty()) return@get call.respond(emptyList<DestinoConocido>())
-            // Una sola lectura de movimientos para todos los destinos: el cruce es en memoria (ver
-            // `vaHaciaElDestino`), y una consulta por destino sería N+1 sobre la tabla más grande.
-            val eventos = loadNonVoidedEvents(uid)
-            // El período en curso del DUEÑO (su corte, sus inicios propios): es lo que lee la
-            // tarjeta «Cuentas de otros» de Patrimonio. Ver `DestinoConocido.totalesDelPeriodo`.
-            val ajustes = ajustesDePeriodoDe(uid)
-            val ahora = System.currentTimeMillis()
-            call.respond(destinos.map { conLoQueSeLeMando(it, eventos, ajustes, ahora) })
+            // Una sola lectura de movimientos (y de avisos) para todos los destinos: el cruce es en
+            // memoria (ver `vaHaciaElDestino`), y una consulta por destino sería N+1 sobre la tabla
+            // más grande. Ver [paraCompletar].
+            val completar = paraCompletar(uid)
+            call.respond(destinos.map(completar::completar))
         }
 
         post {
@@ -173,10 +171,7 @@ fun Route.destinoRoutes() {
             }
             // Recién creado ya puede tener movimientos: el dueño lo registra DESPUÉS de haberle
             // transferido, que es literalmente el caso que trajo esta feature.
-            call.respond(
-                HttpStatusCode.Created,
-                conLoQueSeLeMando(destino, loadNonVoidedEvents(uid), ajustesDePeriodoDe(uid), System.currentTimeMillis()),
-            )
+            call.respond(HttpStatusCode.Created, paraCompletar(uid).completar(destino))
         }
 
         put("/{id}") {
@@ -208,7 +203,7 @@ fun Route.destinoRoutes() {
             ).conIdentificadores(pedidos)
             val actualizadas = dbQuery { guardarDestino(uid, destino) }
             if (actualizadas == 0) return@put call.respond(HttpStatusCode.NotFound)
-            call.respond(conLoQueSeLeMando(destino, loadNonVoidedEvents(uid), ajustesDePeriodoDe(uid), System.currentTimeMillis()))
+            call.respond(paraCompletar(uid).completar(destino))
         }
 
         delete("/{id}") {
@@ -236,14 +231,13 @@ fun Route.destinoRoutes() {
             val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Falta el id")
             val destino = dbQuery { destinoDe(uid, id) } ?: return@get call.respond(HttpStatusCode.NotFound)
 
-            val eventos = loadNonVoidedEvents(uid)
-            val suyos = movimientosHaciaElDestino(destino, eventos)
-            val conTotales = conLoQueSeLeMando(destino, eventos, ajustesDePeriodoDe(uid), System.currentTimeMillis())
+            val completar = paraCompletar(uid)
+            val suyos = movimientosHaciaElDestino(destino, completar.eventos)
             call.respond(
                 MovimientosDelDestino(
-                    destino = conTotales.copy(totales = totalesHaciaElDestino(suyos), cuantos = suyos.size),
+                    destino = completar.completar(destino),
                     movimientos = suyos,
-                    recibidos = movimientosDesdeElDestino(destino, eventos),
+                    recibidos = movimientosDesdeElDestino(destino, completar.eventos),
                 ),
             )
         }
@@ -295,7 +289,7 @@ fun Route.destinoRoutes() {
             }
             val (status, cuerpo) = resultado
             if (cuerpo is DestinoConocido) {
-                call.respond(status, conLoQueSeLeMando(cuerpo, loadNonVoidedEvents(uid), ajustesDePeriodoDe(uid), System.currentTimeMillis()))
+                call.respond(status, paraCompletar(uid).completar(cuerpo))
             } else {
                 call.respond(status, cuerpo as String)
             }
@@ -316,10 +310,38 @@ fun Route.destinoRoutes() {
             }
             val (status, cuerpo) = resultado
             if (cuerpo is DestinoConocido) {
-                call.respond(status, conLoQueSeLeMando(cuerpo, loadNonVoidedEvents(uid), ajustesDePeriodoDe(uid), System.currentTimeMillis()))
+                call.respond(status, paraCompletar(uid).completar(cuerpo))
             } else {
                 call.respond(status, cuerpo as String)
             }
+        }
+
+        /**
+         * **Unir dos fichas de la misma persona o comercio** (4-oct-2026): todo lo de `{id}` pasa a
+         * `{con}` (sus números, llaves y nombres; la nota y el tipo si `{con}` no los tiene), las
+         * reglas recurrentes que apuntaban a `{id}` pasan a `{con}`, y `{id}` se borra. **Ningún
+         * movimiento se toca**: se reconocen por el texto del banco, y ahora todos esos datos son
+         * de `{con}`.
+         *
+         * Las dos tienen que ser del dueño: si una no existe o es de otro, 404 y nada cambia.
+         */
+        post("/{id}/unir/{con}") {
+            val uid = call.userId()
+            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta el id")
+            val con = call.parameters["con"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta con quién unir")
+            if (id == con) return@post call.respond(HttpStatusCode.BadRequest, "Es la misma ficha")
+            val unido = dbQuery {
+                val seVa = destinoDe(uid, id) ?: return@dbQuery null
+                val queda = destinoDe(uid, con) ?: return@dbQuery null
+                val resultado = unirTerceros(seVa, queda)
+                guardarDestino(uid, resultado)
+                RecurringRules.update({
+                    (RecurringRules.userId eq uid) and (RecurringRules.destinoConocidoId eq id)
+                }) { it[RecurringRules.destinoConocidoId] = con }
+                KnownDestinations.deleteWhere { (KnownDestinations.id eq id) and (KnownDestinations.userId eq uid) }
+                resultado
+            } ?: return@post call.respond(HttpStatusCode.NotFound)
+            call.respond(paraCompletar(uid).completar(unido))
         }
 
         // ── Lo que Movi encontró solo ───────────────────────────────────────────
@@ -583,4 +605,33 @@ private suspend fun rechazoPorLoQueYaTiene(
         }
     }
     return null
+}
+
+/**
+ * **Lo que hace falta para completar un tercero al leerlo**: sus totales (de los movimientos y el
+ * período del dueño) y su tipo deducido de los avisos si el dueño no lo eligió (ver
+ * `conTipoInferido`, que no escribe nada). Se lee una vez por pedido y sirve para todos.
+ */
+internal class ParaCompletar(
+    val eventos: List<com.jvillada.movi.shared.model.FinancialEvent>,
+    private val ajustes: com.jvillada.movi.shared.model.PeriodSettings,
+    private val textosDelBanco: List<String>,
+    private val ahora: Long,
+) {
+    fun completar(destino: DestinoConocido): DestinoConocido =
+        conTipoInferido(conLoQueSeLeMando(destino, eventos, ajustes, ahora), textosDelBanco)
+}
+
+/** Los terceros del usuario, alfabéticos, sin derivados. Lo lee Movi AI. */
+internal suspend fun tercerosDe(uid: String): List<DestinoConocido> = dbQuery { destinosDe(uid) }
+
+internal suspend fun paraCompletar(uid: String, ahora: Long = System.currentTimeMillis()): ParaCompletar {
+    val eventos = loadNonVoidedEvents(uid)
+    val avisos = dbQuery {
+        SmsMessages.selectAll().where { SmsMessages.userId eq uid }
+            // Lo apartado no es un movimiento (un código, una publicidad): no dice a quién se pagó.
+            .filter { it[SmsMessages.motivoApartado] == null }
+            .map { it[SmsMessages.text] }
+    }
+    return ParaCompletar(eventos, ajustesDePeriodoDe(uid), avisos + eventos.mapNotNull { it.rawPayload }, ahora)
 }
