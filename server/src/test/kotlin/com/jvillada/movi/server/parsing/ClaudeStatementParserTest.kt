@@ -221,4 +221,18 @@ class ClaudeStatementParserTest {
         assertEquals(1, bloques.size)
         assertTrue(bloques.single().cacheControl().isPresent, "sin cache_control cada pedazo paga el prompt entero")
     }
+
+    @Test
+    fun `el prompt del extracto deja afuera los movimientos de periodos anteriores`() {
+        // El extracto de la Master traía «Movimientos antes de 15 jul»: 15 compras diferidas a 36
+        // cuotas que ya habían entrado en junio o julio, y el extractor las devolvía como gastos
+        // nuevos (~US$1.050 de más). Lo único que lo frena es esta sección del prompt.
+        val prompt = ClaudeStatementParser.buildSystemPrompt(emptyList())
+        assertTrue("PERÍODO FACTURADO" in prompt)
+        assertTrue("SOLO los movimientos del período facturado" in prompt)
+        assertTrue("Movimientos antes de" in prompt)
+        // Va debajo de las reglas de tarjetas, no suelta al final.
+        assertTrue(prompt.indexOf("PERÍODO FACTURADO") > prompt.indexOf("TARJETAS DE CRÉDITO"))
+        assertTrue(prompt.indexOf("PERÍODO FACTURADO") < prompt.indexOf("FECHAS SIN AÑO"))
+    }
 }

@@ -60,7 +60,7 @@ object ClaudeStatementParser {
      * decisión de producto, no un `filter` — y meterla apurada acá es exactamente cómo esta app
      * se ganó sus últimos cuatro defectos.
      */
-    private fun buildSystemPrompt(rules: List<MerchantRule>): String {
+    internal fun buildSystemPrompt(rules: List<MerchantRule>): String {
         val rulesJson = if (rules.isEmpty()) "[]"
         else json.encodeToString(ListSerializer(MerchantRule.serializer()), rules)
         val expenseCats = PREDEFINED_CATEGORIES
@@ -99,6 +99,11 @@ TARJETAS DE CRÉDITO (cuando el extracto tiene columnas "Número cuotas" y "Valo
 - Usá siempre la columna "Valor movimiento" (precio total de la compra), NUNCA "Valor Cuota/Abono"
 - Incluí cargos por INTERESES CORRIENTES y CUOTA DE MANEJO como EXPENSE
 - Los pagos/abonos a la tarjeta (ABONO, ABONO DEBITO AUTOMATICO, PAGO ALTERNATIVO) SÍ se incluyen, como INCOME — reducen la deuda de la tarjeta.
+
+PERÍODO FACTURADO (tarjetas y créditos rotativos):
+- Extraé SOLO los movimientos del período facturado (la sección "Nuevos movimientos" o equivalente, con fecha dentro del período del encabezado).
+- NO incluyas las secciones de movimientos de períodos anteriores ("Movimientos antes de …", compras diferidas que ya venían de extractos anteriores y solo muestran su cuota o saldo pendiente): ya se contaron con el extracto en que entraron.
+- Los cargos que el banco liquida en el resumen (intereses, cuota de manejo, otros cargos) cuentan solo si aparecen como fila con fecha en el detalle del período.
 
 FECHAS SIN AÑO:
 - Si las fechas no incluyen año (ej: "15/04", "1/01", "3 ene"), buscá el año en el encabezado del documento (campos DESDE, HASTA, FECHA DE CORTE, periodo facturado) y asignáselo a todas las transacciones
