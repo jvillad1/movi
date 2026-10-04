@@ -213,6 +213,11 @@ open class NoOpRepository(
     override suspend fun confirmSms(id: String) {}
     override suspend fun ignoreSms(id: String) {}
     override suspend fun devolverSmsALaBandeja(id: String) {}
+    override suspend fun getAvisosDelMismoPago(grupoId: String): GrupoDeAvisos = GrupoDeAvisos(grupoId, emptyList(), grupoId)
+    override suspend fun confirmarElMismoPago(grupoId: String, pedido: ConfirmarElMismoPago): MismoPagoConfirmado = MismoPagoConfirmado()
+    override suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>) {}
+    override suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>) {}
+    override suspend fun esteEsOtroPago(id: String) {}
     override suspend fun getFinanceSummary(scope: Scope) = error("stub")
     override suspend fun getDashboardSummary(scope: Scope) = error("stub")
     override suspend fun getPeriodos(): List<ResumenDePeriodo> = error("stub")

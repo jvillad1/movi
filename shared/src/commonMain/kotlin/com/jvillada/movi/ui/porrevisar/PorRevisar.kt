@@ -15,6 +15,7 @@ import com.jvillada.movi.shared.model.alertaDeCapturaEnInicio
 import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.soloLoQueLlegoSolo
+import com.jvillada.movi.shared.model.unoPorPago
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.sms.mensajesMasRecientesPrimero
 import com.jvillada.movi.ui.transactions.MovementRow
@@ -36,6 +37,14 @@ import com.jvillada.movi.ui.transactions.collapseTransfers
 /** Los mensajes del banco que esperan que el dueño los confirme o los ignore, del más nuevo al más viejo. */
 fun mensajesPorRevisar(mensajes: List<SmsMessage>): List<SmsMessage> =
     mensajesMasRecientesPrimero(mensajes).filter { it.state == SMS_STATE_PENDING }
+
+/**
+ * **Los pagos que esperan**, uno por pago y del más nuevo al más viejo (4-oct-2026): un pago
+ * avisado por SMS, por la app del banco y por Google Wallet es UNA tarjeta, la del aviso más
+ * reciente de los tres. Es lo que pinta la bandeja y lo que cuenta [cuantosPorRevisar], con la
+ * misma regla que el Inicio ([unoPorPago], en `:core`).
+ */
+fun pagosPorRevisar(mensajes: List<SmsMessage>): List<SmsMessage> = unoPorPago(mensajesPorRevisar(mensajes))
 
 /**
  * **Los movimientos que entraron solos** —por SMS, por un extracto, por OCR— y de los que el dueño
@@ -65,7 +74,8 @@ fun cuantosPorRevisar(
     dias: List<EventDay>?,
     candidatos: List<FinancialEvent>?,
 ): Int =
-    (mensajes?.let { mensajesPorRevisar(it).size } ?: 0) +
+    // Pagos, no avisos: el mismo pago avisado tres veces cuenta una.
+    (mensajes?.let { pagosPorRevisar(it).size } ?: 0) +
         (dias?.let { renglonesQueEntraronSolos(it).size } ?: 0) +
         (candidatos?.size ?: 0)
 

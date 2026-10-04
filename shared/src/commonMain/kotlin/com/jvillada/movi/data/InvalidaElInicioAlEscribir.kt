@@ -74,6 +74,11 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun confirmSms(id: String): Unit = trasEscribir { delegado.confirmSms(id) }
     override suspend fun ignoreSms(id: String): Unit = trasEscribir { delegado.ignoreSms(id) }
     override suspend fun devolverSmsALaBandeja(id: String): Unit = trasEscribir { delegado.devolverSmsALaBandeja(id) }
+    override suspend fun confirmarElMismoPago(grupoId: String, pedido: ConfirmarElMismoPago): MismoPagoConfirmado =
+        trasEscribir { delegado.confirmarElMismoPago(grupoId, pedido) }
+    override suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>): Unit = trasEscribir { delegado.ignorarElMismoPago(grupoId, miembros) }
+    override suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>): Unit = trasEscribir { delegado.noSonElMismoPago(grupoId, miembros) }
+    override suspend fun esteEsOtroPago(id: String): Unit = trasEscribir { delegado.esteEsOtroPago(id) }
     override suspend fun createBudget(budget: Budget): Budget = trasEscribir { delegado.createBudget(budget) }
     override suspend fun updateBudget(category: String, budget: Budget): Budget = trasEscribir { delegado.updateBudget(category, budget) }
     override suspend fun deleteBudget(category: String): Unit = trasEscribir { delegado.deleteBudget(category) }

@@ -64,6 +64,8 @@ import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.GrupoDeAvisos
+import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.avisoDeCaptura
@@ -614,6 +616,9 @@ internal fun TarjetaDeMensajeDelBanco(
     }
 }
 
+/** El tag de la tarjeta con los avisos del mismo pago en Reconciliar. */
+const val TAG_AVISOS_DEL_PAGO_EN_RECONCILIAR: String = "avisos-del-pago-en-reconciliar"
+
 @Composable
 fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     val goBack = LocalGoBack.current
@@ -686,10 +691,32 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      */
     val esComprobante = esIdDeComprobante(smsId)
 
+    /**
+     * «Un pago, una tarjeta» (4-oct-2026): los avisos del mismo pago, si este es uno de varios. La
+     * propuesta sale del que más dice ([GrupoDeAvisos.propuestaDe]), confirmar crea UN movimiento y
+     * cierra todos, e ignorar los ignora a todos. `null` es un aviso suelto: el camino de siempre.
+     */
+    var pago by remember { mutableStateOf<GrupoDeAvisos?>(null) }
+    /** Sube cuando el dueño saca un aviso del pago («Este es otro pago»): se vuelve a leer todo. */
+    var relecturaDelPago by remember { mutableStateOf(0) }
+    val pagoActual = pago?.takeIf { it.miembros.size > 1 }
+    val idsDelPago = pagoActual?.miembros?.map { it.id }.orEmpty()
+    /** El aviso del pago que ya se confirmó: el pago ya tiene su movimiento y solo falta cerrar los demás. */
+    val yaAnotadoCon = pagoActual?.yaAnotadoCon?.let { id -> pagoActual.miembros.firstOrNull { it.id == id } }
+    /** De qué aviso sale la propuesta: el que más dice del pago, o este mismo. */
+    val idDeLaPropuesta = pagoActual?.propuestaDe ?: smsId
+    val avisoDeLaPropuesta = pagoActual?.miembros?.firstOrNull { it.id == idDeLaPropuesta }
+
     /** Confirma el aviso diciendo, si es un comprobante, con qué movimiento quedó. */
     suspend fun confirmarElAviso(eventoId: String) {
-        if (esComprobante) Repositories.wallets.confirmarComprobante(smsId, eventoId)
-        else Repositories.wallets.confirmSms(smsId)
+        val elPago = pagoActual
+        when {
+            elPago != null -> Repositories.wallets.confirmarElMismoPago(
+                elPago.grupoId, ConfirmarElMismoPago(idsDelPago, eventoExistenteId = eventoId),
+            )
+            esComprobante -> Repositories.wallets.confirmarComprobante(smsId, eventoId)
+            else -> Repositories.wallets.confirmSms(smsId)
+        }
     }
 
     /** «Es este»: el SMS queda confirmado sin crear nada, porque el movimiento ya existía. */
@@ -708,13 +735,17 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         }
     }
 
-    LaunchedEffect(smsId) {
+    LaunchedEffect(smsId, relecturaDelPago) {
         intentar { Repositories.wallets.getSms(smsId) }.onSuccess { sms = it }
             .onFailure { error = "No pude cargar el SMS" }
+        // Los avisos del mismo pago. Si no se pueden leer, se revisa este solo, como siempre.
+        pago = sms?.grupoId?.let { grupoId -> intentar { Repositories.wallets.getAvisosDelMismoPago(grupoId) }.getOrNull() }
         // El otro aviso del mismo pago, para poder decir cuál es. Si no se lee, la línea se dice igual.
-        sms?.parecidoA?.let { id -> intentar { Repositories.wallets.getSms(id) }.onSuccess { otroAviso = it } }
-        intentar { Repositories.wallets.parseSms(smsId) }
-            .onSuccess { parsed = it; selectedCategory = it.category }
+        if (pago == null) {
+            sms?.parecidoA?.let { id -> intentar { Repositories.wallets.getSms(id) }.onSuccess { otroAviso = it } }
+        }
+        intentar { Repositories.wallets.parseSms(pago?.takeIf { it.miembros.size > 1 }?.propuestaDe ?: smsId) }
+            .onSuccess { parsed = it; if (selectedCategory == null) selectedCategory = it.category }
             // El server explica por qué (un aviso que no es un movimiento, por ejemplo), y se
             // dice donde se estaba esperando la sugerencia.
             .onFailure { noSePudoLeer = it.toUserMessage() }
@@ -723,11 +754,11 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     // Si ya está anotado, se ofrece antes de crear otro: confirmar siempre creaba uno nuevo. Va en
     // su propio efecto —en paralelo con las demás lecturas y no detrás de ellas— y con reintento:
     // hasta que conteste, anotar está apagado.
-    LaunchedEffect(smsId, reintentoDeRevision) {
+    LaunchedEffect(idDeLaPropuesta, reintentoDeRevision) {
         coincidencias = null
         noSePudoRevisar = false
         anotarSinRevisar = false
-        intentar { Repositories.wallets.getSmsCoincidencias(smsId) }
+        intentar { Repositories.wallets.getSmsCoincidencias(idDeLaPropuesta) }
             .onSuccess { coincidencias = it }
             .onFailure { noSePudoRevisar = true }
     }
@@ -753,7 +784,11 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     // abecedario, que en las cuentas del dueño puede ser el «Vehículo 4083». Ahora las candidatas
     // salen del criterio de `:core`, y si no hay ninguna no se resuelve nada: el botón queda
     // apagado (ya lo estaba) y la fila «Cuenta» pide que la elija.
-    val cuentaDelSms = resolverCuentaDelBanco(
+    val cuentaDelSms = if (pagoActual != null) {
+        // Un pago avisado varias veces: la mejor lectura de todos sus avisos (el número del SMS
+        // aunque el comercio salga de Google Wallet). Ver [resolverCuentaDelPago].
+        resolverCuentaDelPago(accounts, usoDeCuenta, pagoActual.miembros, cuentaElegida)
+    } else resolverCuentaDelBanco(
         accounts = accounts,
         uso = usoDeCuenta,
         banco = currentSms?.bank.orEmpty(),
@@ -812,6 +847,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
 
     fun confirm() {
         if (working) return
+        // Ya confirmado (un segundo toque que llegó tarde): nada más que hacer.
+        if (sms?.state.let { it != null && it != SMS_STATE_PENDING }) return
         // La revisión de «¿ya lo anotaste?» tiene que haber contestado. Si falló, el primer toque
         // solo arma «Anotar de todas formas»: anotar sin revisar es una decisión explícita.
         if (coincidencias == null) {
@@ -840,11 +877,39 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     cuentaId = acct.id,
                     leido = p.copy(merchant = comercio ?: p.merchant),
                     categoria = cat,
-                    // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelSms].
-                    momento = momentoDelSms(sms?.time.orEmpty(), ahora = Clock.System.now().toEpochMilliseconds()),
-                    textoDelSms = sms?.text.orEmpty(),
+                    // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelSms]. De un pago
+                    // avisado varias veces, cuando llegó el primer aviso.
+                    momento = momentoDelSms(
+                        pagoActual?.miembros?.minByOrNull { momentoDelSms(it.time, Long.MAX_VALUE) }?.time ?: sms?.time.orEmpty(),
+                        ahora = Clock.System.now().toEpochMilliseconds(),
+                    ),
+                    textoDelSms = (avisoDeLaPropuesta ?: sms)?.text.orEmpty(),
                     origen = if (esComprobante) EventSource.OCR else EventSource.SMS,
                 )
+                val elPago = pagoActual
+                if (elPago != null) {
+                    // Un solo movimiento para todos los avisos, en una transacción del server: si
+                    // ya estaba anotado (un doble toque, otro teléfono) no crea otro.
+                    val hecho = Repositories.wallets.confirmarElMismoPago(
+                        elPago.grupoId, ConfirmarElMismoPago(idsDelPago, evento = event),
+                    )
+                    UsedCategoriesCache.record(cat, p.type)
+                    if (hecho.creado) {
+                        cuentaDeDeuda?.let { deuda ->
+                            runCatching {
+                                Repositories.wallets.vincularPagoDeDeuda(
+                                    eventId = hecho.eventoId ?: event.id,
+                                    request = VincularPagoDeDeudaRequest(
+                                        debtAccountId = deuda.id,
+                                        transferId = newId("tr"),
+                                        toEventId = newId("ev"),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    return@intentar
+                }
                 Repositories.wallets.postEvent(event)
                 movimientoCreado = true
                 // Una categoría creada acá tiene que ser conocida en el siguiente aviso: sin esto
@@ -897,13 +962,46 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         working = true
         error = null
         coroutine.launch {
-            val result = intentar { Repositories.wallets.ignoreSms(smsId) }
+            val elPago = pagoActual
+            val result = intentar {
+                if (elPago != null) Repositories.wallets.ignorarElMismoPago(elPago.grupoId, idsDelPago)
+                else Repositories.wallets.ignoreSms(smsId)
+            }
             working = false
             result.onSuccess {
                 sms = sms?.copy(state = SMS_STATE_IGNORED)
                 goBack(Screen.PorRevisar)
             }
                 .onFailure { error = it.toUserMessage() }
+        }
+    }
+
+    /** «Cerrar»: el pago ya tiene su movimiento (otro aviso se confirmó antes); se cierran los demás sin crear nada. */
+    fun cerrarElPago() {
+        val elPago = pagoActual ?: return
+        if (working) return
+        working = true
+        error = null
+        coroutine.launch {
+            intentar { Repositories.wallets.confirmarElMismoPago(elPago.grupoId, ConfirmarElMismoPago(idsDelPago)) }
+                .onSuccess {
+                    working = false
+                    sms = sms?.copy(state = SMS_STATE_CONFIRMED)
+                    goBack(Screen.PorRevisar)
+                }
+                .onFailure { working = false; error = it.toUserMessage() }
+        }
+    }
+
+    /** «Este es otro pago»: ese aviso sale del pago para siempre, y se vuelve a leer lo que queda. */
+    fun esOtroPago(id: String) {
+        if (working) return
+        working = true
+        error = null
+        coroutine.launch {
+            intentar { Repositories.wallets.esteEsOtroPago(id) }
+                .onSuccess { working = false; relecturaDelPago++ }
+                .onFailure { working = false; error = it.toUserMessage() }
         }
     }
 
@@ -921,8 +1019,44 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
         ) {
             item {
+                // «Un pago, una tarjeta»: los avisos del mismo pago, cada uno con «Este es otro pago».
+                if (pagoActual != null) {
+                    MinSectionHeader(title = "El mismo pago, avisado ${pagoActual.miembros.size} veces")
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth().testTag(TAG_AVISOS_DEL_PAGO_EN_RECONCILIAR),
+                        variant = MinCardVariant.Default,
+                        padding = PaddingValues(18.dp),
+                    ) {
+                        if (yaAnotadoCon != null) {
+                            Text(avisoYaAnotado(yaAnotadoCon), style = Movi.textos.cuerpo, color = Movi.colores.aviso)
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        pagoActual.miembros.forEachIndexed { i, aviso ->
+                            if (i > 0) {
+                                Spacer(Modifier.height(12.dp))
+                                Hairline()
+                                Spacer(Modifier.height(12.dp))
+                            }
+                            TextoDelAviso(aviso) {
+                                // El confirmado ya es el movimiento: no se saca de acá.
+                                if (aviso.state == SMS_STATE_PENDING) {
+                                    Text(
+                                        ESTE_ES_OTRO_PAGO,
+                                        style = Movi.textos.apoyo,
+                                        color = Movi.colores.marca,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier
+                                            .clickable(enabled = !working, role = Role.Button) { esOtroPago(aviso.id) }
+                                            .padding(start = 8.dp, top = 2.dp, bottom = 2.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                }
                 // Arriba de todo: antes de mirar el resto, que sepa que otro aviso parece este mismo pago.
-                if (currentSms?.state == SMS_STATE_PENDING && currentSms.parecidoA != null) {
+                if (pagoActual == null && currentSms?.state == SMS_STATE_PENDING && currentSms.parecidoA != null) {
                     MinCard(
                         modifier = Modifier.fillMaxWidth(),
                         variant = MinCardVariant.Elevated,
@@ -932,8 +1066,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     }
                     Spacer(Modifier.height(14.dp))
                 }
-                MinSectionHeader(title = if (esComprobante) "Lo que Movi leyó del papel" else "SMS recibido")
-                MinCard(
+                if (pagoActual == null) MinSectionHeader(title = if (esComprobante) "Lo que Movi leyó del papel" else "SMS recibido")
+                if (pagoActual == null) MinCard(
                     modifier = Modifier.fillMaxWidth(),
                     variant = MinCardVariant.Default,
                     padding = PaddingValues(18.dp),
@@ -1308,7 +1442,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         val alreadyResolved = currentSms != null && currentSms.state != SMS_STATE_PENDING
         // Junto al botón, que es donde se mira cuando no prende: por qué todavía no, o que la
         // revisión falló y se puede reintentar.
-        if (!alreadyResolved) {
+        if (!alreadyResolved && yaAnotadoCon == null) {
             if (coincidencias == null && !noSePudoRevisar) {
                 Text(
                     "Revisando si ya está anotado…",
@@ -1350,19 +1484,23 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             // Hasta que la revisión de «¿ya lo anotaste?» conteste, no se anota. Si falló, se puede,
             // pero con un segundo toque que dice lo que hace.
             val revisionContesto = coincidencias != null || noSePudoRevisar
-            val canConfirm = parsed != null && resolvedAccount != null && !working && !alreadyResolved && revisionContesto
+            // Ya anotado con otro aviso del pago: lo único que falta es cerrar los demás.
+            val soloCerrar = yaAnotadoCon != null
+            val canConfirm = !working && !alreadyResolved &&
+                (soloCerrar || (parsed != null && resolvedAccount != null && revisionContesto))
             Box(
                 modifier = Modifier
                     .weight(1.7f)
                     .height(50.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (canConfirm) Movi.colores.texto else Movi.colores.tarjeta)
-                    .clickable(enabled = canConfirm) { confirm() },
+                    .clickable(enabled = canConfirm) { if (soloCerrar) cerrarElPago() else confirm() },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     when {
                         working -> "Guardando…"
+                        soloCerrar -> "Cerrar los avisos"
                         anotarSinRevisar -> "Anotar de todas formas"
                         else -> "Confirmar"
                     },

@@ -1,5 +1,8 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.ConfirmarElMismoPago
+import com.jvillada.movi.shared.model.GrupoDeAvisos
+import com.jvillada.movi.shared.model.MismoPagoConfirmado
 import com.jvillada.movi.shared.model.OrigenDelRecuerdo
 import com.jvillada.movi.shared.model.RecuerdoDelAsistente
 import com.jvillada.movi.shared.model.EstadoDePropuesta
@@ -1986,6 +1989,13 @@ class LocalRepository(
     override suspend fun confirmSms(id: String) = remote.confirmSms(id)
     override suspend fun ignoreSms(id: String) = remote.ignoreSms(id)
     override suspend fun devolverSmsALaBandeja(id: String) = remote.devolverSmsALaBandeja(id)
+    // Los avisos del banco viven solo en el server: los pagos que se arman con ellos también.
+    override suspend fun getAvisosDelMismoPago(grupoId: String): GrupoDeAvisos = remote.getAvisosDelMismoPago(grupoId)
+    override suspend fun confirmarElMismoPago(grupoId: String, pedido: ConfirmarElMismoPago): MismoPagoConfirmado =
+        remote.confirmarElMismoPago(grupoId, pedido)
+    override suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>) = remote.ignorarElMismoPago(grupoId, miembros)
+    override suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>) = remote.noSonElMismoPago(grupoId, miembros)
+    override suspend fun esteEsOtroPago(id: String) = remote.esteEsOtroPago(id)
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary = remote.getFinanceSummary(scope)
     // Igual que getFinanceSummary: es un agregado que solo el server puede calcular con todo lo
     // que sabe (SMS, descartes de candidatos, eventos de todos los dispositivos). Sin red falla
