@@ -49,6 +49,9 @@ class SchemaDeArranqueTest {
      * sumá su par acá: si su tabla no está en `createMissingTablesAndColumns`, este test falla.
      */
     private val columnasNuevasSobreTablasViejas = listOf(
+        // 3-oct-2026 — por qué Movi apartó un mensaje. `sms_messages` existe en producción con los
+        // mensajes del dueño, y TODA lectura de la bandeja nombra la columna (`toSmsMessage`).
+        "sms_messages" to "motivo_apartado",
         "subscriptions" to "periodicidad",   // #155 — periodicidad mensual/anual
         "users" to "sms_alert_muted",        // #168 — silenciar el aviso de captura de SMS
         // Ola 19 — la marca de «este monto lo corregí yo», que el barrido consulta en CADA

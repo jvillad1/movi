@@ -147,6 +147,12 @@ interface WalletRepository {
     suspend fun getSmsCoincidencias(id: String): List<FinancialEvent>
     suspend fun confirmSms(id: String)
     suspend fun ignoreSms(id: String)
+    /**
+     * `POST /api/sms/{id}/era-un-movimiento` (3-oct-2026): devuelve a «Por revisar» un mensaje que
+     * Movi apartó solo porque no parecía un movimiento (ver `MensajesApartados.kt`). El server no lo
+     * vuelve a apartar.
+     */
+    suspend fun devolverSmsALaBandeja(id: String)
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary
     /**
      * Cifras del Inicio ya reducidas en el server (`GET /api/dashboard/summary`): gasto del mes

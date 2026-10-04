@@ -16,6 +16,10 @@ import com.jvillada.movi.server.sms.memoriaDe
 import com.jvillada.movi.server.sms.origenesMudosDe
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.sms.SmsKey
+import com.jvillada.movi.server.sms.motivoParaApartar
+import com.jvillada.movi.shared.model.MOTIVO_DEVUELTO
+import com.jvillada.movi.shared.model.MotivoDeApartado
+import com.jvillada.movi.shared.model.motivoDeApartado
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.MemoriaDeCategorias
 import com.jvillada.movi.shared.model.conElDestinoConocido
@@ -124,9 +128,12 @@ private val NO_SON_MOVIMIENTOS = listOf("ampliacion de plazo", "ampliación de p
  * desde #346, pero Bancolombia manda lo mismo («Transacción rechazada»). Mismo mecanismo que
  * [NO_SON_MOVIMIENTOS]: aparece la frase y no hay movimiento.
  */
-private val NO_PASARON = listOf(
+internal val NO_PASARON = listOf(
     "rechazada", "rechazado",
     "declinada", "declinado",
+    // Google Wallet, en inglés: «FARMATODO: DECLINED - COP17,150 with Glim ••3037». Se leía como un
+    // gasto de $17.150 que nunca salió (el dueño lo tuvo que ignorar a mano, 2-oct-2026).
+    "declined",
     "no aprobada", "no aprobado", "no fue aprobada", "no fue aprobado",
     "no exitosa", "no exitoso", "no fue exitosa", "no fue exitoso",
     // Glim: «Fondos insuficientes ⛔: Se rechazó tu pago por $17.150,00 COP.» — el pretérito no
@@ -529,10 +536,39 @@ fun Route.smsRoutes() {
         if (updated == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.NoContent)
     }
 
+    /**
+     * **«Era un movimiento»**: devuelve a la bandeja un mensaje que Movi apartó solo (ver
+     * `MensajesApartados.kt` en `:core`). Queda `pending` y con la marca [MOTIVO_DEVUELTO], así que
+     * ni la pasada del arranque ni ninguna regla futura lo vuelve a apartar: el dueño ya decidió.
+     *
+     * Solo sirve para lo que apartó Movi. Lo que ignoró el dueño se queda como él lo dejó (409),
+     * y lo de otro usuario no existe (404).
+     */
+    post("/api/sms/{id}/era-un-movimiento") {
+        val uid = call.userId()
+        val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val resultado = dbQuery {
+            val fila = SmsMessages.selectAll()
+                .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
+                .firstOrNull() ?: return@dbQuery HttpStatusCode.NotFound
+            val apartado = fila[SmsMessages.state] == SMS_STATE_IGNORED &&
+                motivoDeApartado(fila[SmsMessages.motivoApartado]) != null
+            if (!apartado) return@dbQuery HttpStatusCode.Conflict
+            SmsMessages.update({ (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }) {
+                it[state] = SMS_STATE_PENDING
+                it[motivoApartado] = MOTIVO_DEVUELTO
+            }
+            HttpStatusCode.NoContent
+        }
+        call.respond(resultado)
+    }
+
     post("/api/sms/sync") {
         val uid = call.userId()
         val messages = call.receive<List<SmsMessage>>()
         val inserted = mutableListOf<SmsMessage>()
+        // Lo que entró apartado no se avisa: ni la push, ni el «Movi anotó» del teléfono.
+        val apartadosAhora = mutableSetOf<String>()
         val insertedCount = dbQuery {
             // Collect existing rows for this user so we can skip duplicates
             // without touching rows that may already have a user-set state.
@@ -590,10 +626,14 @@ fun Route.smsRoutes() {
                     it[text]   = msg.text
                     // El server es dueño del estado: /confirm y /ignore lo mueven, el cliente
                     // nunca lo decide. "pending" es el nombre único del recién llegado en todo
-                    // el sistema (ver SmsMessages en Tables.kt) — salvo el aviso de una app que
-                    // no puede ser plata, que entra ya ignorado: ver [estadoAlLlegar].
-                    it[state]  = estadoAlLlegar(msg)
+                    // el sistema (ver SmsMessages en Tables.kt) — salvo lo que no es un
+                    // movimiento (un recordatorio, un código, una promo), que entra apartado:
+                    // `ignored` con su motivo. Ver `queEsEsteMensaje`.
+                    val motivo = motivoParaApartar(msg.text, msg.bank)
+                    it[state]  = if (motivo == null) SMS_STATE_PENDING else SMS_STATE_IGNORED
+                    it[motivoApartado] = motivo?.name
                     it[det]    = msg.det
+                    if (motivo != null) apartadosAhora += msg.id
                 }
                 dedupe.add(key)
                 inserted += msg
@@ -609,7 +649,7 @@ fun Route.smsRoutes() {
         // (SmsReader.android.kt) upload historical, unfiltered inbox contents — pushing
         // for those would spam the user with notifications for old SMS. Only messages
         // captured live by SmsRealtimeReceiver (ids prefixed `sms_rt_`) participate.
-        val realtimeCaptures = inserted.filter { it.id.startsWith("sms_rt_") }
+        val realtimeCaptures = inserted.filter { it.id.startsWith("sms_rt_") && it.id !in apartadosAhora }
         if (realtimeCaptures.isNotEmpty() && WebPushSender.isConfigured()) {
             runCatching {
                 // La push también dice el nombre del destino: sin esto el aviso del teléfono decía
@@ -628,10 +668,10 @@ fun Route.smsRoutes() {
 
         // Ola 1 · Movi avisa: lo que quedó esperando en «Por revisar», ya leído, para que el
         // teléfono avise «Movi anotó $180.000» con las mismas palabras que la bandeja. Solo lo
-        // insertado ahora, en `pending` (lo que entró ya ignorado no se avisa) y con movimiento.
+        // insertado ahora, en `pending` (lo que entró apartado no se avisa) y con movimiento.
         // Best-effort como la push: sin destinos (o si la consulta falla) se avisa con el nombre
         // que mandó el banco, y nunca se cae el sync por esto.
-        val pendientes = inserted.filter { estadoAlLlegar(it) == SMS_STATE_PENDING }
+        val pendientes = inserted.filter { it.id !in apartadosAhora }
         val destinos = if (pendientes.isEmpty()) emptyList() else runCatching { dbQuery { destinosDelDueno(uid) } }
             .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
             .getOrDefault(emptyList())
@@ -659,31 +699,21 @@ internal fun avisosPorRevisar(pendientes: List<SmsMessage>, destinos: List<Desti
     }
 
 /**
- * **Con qué estado entra un mensaje a la bandeja.** Casi siempre `pending`: la bandeja es del
- * dueño y lo que no se sabe leer se le muestra, porque perder un movimiento sin señal es peor que
- * enseñarle un mensaje de más (ver el dedupe de arriba, que razona igual).
+ * **Con qué estado entra un mensaje a la bandeja**, y con qué motivo si entra apartado. Casi siempre
+ * `pending`: la bandeja es del dueño y lo que no se sabe leer se le muestra, porque perder un
+ * movimiento sin señal es peor que enseñarle un mensaje de más.
  *
- * La excepción es **el aviso de una app que no trae ni un número**. El 22-sep Google Wallet
- * publicó «Set up a shortcut to pay: Now you can double press the power button…», la captura de
- * notificaciones lo subió como cualquier otra, y quedó en la bandeja del dueño esperando que lo
- * confirmara como movimiento. Las apps de pago publican de todo —consejos, promociones, pasos de
- * configuración— y un movimiento, en cambio, **siempre** trae un monto.
+ * La excepción es lo que [com.jvillada.movi.server.sms.queEsEsteMensaje] reconoce como no-movimiento
+ * —un recordatorio de pago, un código, una promoción, el aviso de una app sin un solo número (era la
+ * única excepción hasta el 3-oct-2026)—: entra `ignored` **con su motivo**, para que el historial
+ * diga «Movi lo apartó: …» y ofrezca «Era un movimiento». Ignorar no es borrar: la fila se guarda.
  *
- * Por eso el criterio es tan corto, y es a propósito: **ni un dígito**. No se le pide al parser
- * que decida, porque el parser puede no conocer el formato de un pago nuevo y entonces una compra
- * de verdad se iría a ignorados sin que nadie la viera. Sin ningún número, en cambio, no hay monto
- * posible — es el único lado en el que este filtro no puede equivocarse. Una promo que diga «5 %
- * de descuento» sigue entrando pendiente, y está bien: es el error barato.
- *
- * **Solo para notificaciones.** Un SMS del banco sin números —«actualizaste tu clave»— el dueño
- * lo quiere ver: es su canal con el banco y ahí decide él.
- *
- * Y **ignorar no es borrar**: la fila se guarda con `ignored`, igual que cuando el dueño toca
- * «Ignorar». Si algún día aparece algo que no debió caer acá, está en la base.
+ * La usan el correo entrante y las pruebas; el sync hace lo mismo en línea.
  */
-internal fun estadoAlLlegar(msg: SmsMessage): String =
-    if (esUnaNotificacion(msg.bank) && msg.text.none { it.isDigit() }) SMS_STATE_IGNORED
-    else SMS_STATE_PENDING
+internal fun comoLlega(texto: String, origen: String): Pair<String, MotivoDeApartado?> {
+    val motivo = motivoParaApartar(texto, origen)
+    return (if (motivo == null) SMS_STATE_PENDING else SMS_STATE_IGNORED) to motivo
+}
 
 /**
  * ¿La fila la subió la captura de notificaciones? El teléfono las rotula «Notificación · Nombre de
@@ -700,4 +730,8 @@ private fun org.jetbrains.exposed.sql.ResultRow.toSmsMessage() = SmsMessage(
     text  = this[SmsMessages.text],
     state = this[SmsMessages.state],
     det   = this[SmsMessages.det],
+    // Solo lo que apartó Movi y sigue apartado: `DEVUELTO` no viaja, ni un motivo sobre un
+    // mensaje que el dueño ya movió de estado.
+    apartadoPor = this[SmsMessages.motivoApartado]
+        ?.takeIf { this[SmsMessages.state] == SMS_STATE_IGNORED && motivoDeApartado(it) != null },
 )

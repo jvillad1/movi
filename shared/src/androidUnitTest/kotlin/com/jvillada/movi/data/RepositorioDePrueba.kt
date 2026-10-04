@@ -63,6 +63,7 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = noUsado("getSmsCoincidencias")
     override suspend fun confirmSms(id: String): Unit = noUsado("confirmSms")
     override suspend fun ignoreSms(id: String) = noUsado("ignoreSms")
+    override suspend fun devolverSmsALaBandeja(id: String): Unit = noUsado("devolverSmsALaBandeja")
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary = noUsado("getFinanceSummary")
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = noUsado("getDashboardSummary")
     override suspend fun getPeriodos(): List<ResumenDePeriodo> = noUsado("getPeriodos")

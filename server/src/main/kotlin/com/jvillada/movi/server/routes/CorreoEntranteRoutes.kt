@@ -19,7 +19,6 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.sms.SmsDedupeIndex
 import com.jvillada.movi.server.sms.SmsKey
-import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.log
@@ -181,15 +180,18 @@ fun Route.correoEntranteRoutes() {
                 .map { SmsKey(it[SmsMessages.text], it[SmsMessages.time]) }
             if (SmsDedupeIndex(existentes).isDuplicate(SmsKey(texto, tiempo))) return@dbQuery false
 
+            // El server es dueño del estado, igual que en el sync: llega «por confirmar» y son
+            // /confirm y /ignore los que lo mueven — salvo lo que no es un movimiento (el «tu
+            // extracto está listo», una promoción), que entra apartado con su motivo.
+            val (estado, motivo) = comoLlega(texto, marca)
             SmsMessages.insert {
                 it[SmsMessages.id] = id
                 it[userId] = uid
                 it[time] = tiempo
                 it[bank] = marca
                 it[text] = texto
-                // El server es dueño del estado, igual que en el sync: llega «por confirmar» y son
-                // /confirm y /ignore los que lo mueven.
-                it[state] = SMS_STATE_PENDING
+                it[state] = estado
+                it[motivoApartado] = motivo?.name
                 it[det] = ""
             }
             true

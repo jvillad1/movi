@@ -592,6 +592,15 @@ object SmsMessages : Table("sms_messages") {
     val text   = text("text")
     val state  = varchar("state", 20)
     val det    = varchar("det", 255)
+    /**
+     * **Por qué Movi apartó este mensaje** (3-oct-2026): el nombre de un `MotivoDeApartado` cuando
+     * entró —o quedó— `ignored` porque no es un movimiento, o `DEVUELTO` cuando el dueño dijo «Era
+     * un movimiento» y no se vuelve a apartar. `NULL` en todo lo demás. NULLABLE a propósito: la
+     * tabla existe en producción con los mensajes del dueño, y el ALTER que emite
+     * `createMissingTablesAndColumns` no puede fallar sobre filas que ya están (ver
+     * `SmsMessagesMotivoApartadoColumnTest`).
+     */
+    val motivoApartado = varchar("motivo_apartado", 40).nullable()
     override val primaryKey = PrimaryKey(id, userId)  // per-user: the same SMS id may exist for different users
     init { index("idx_sms_messages_user_id", false, userId) }
 }
