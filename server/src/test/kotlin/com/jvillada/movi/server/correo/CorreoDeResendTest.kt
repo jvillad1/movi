@@ -74,6 +74,15 @@ class CorreoDeResendTest {
     }
 
     @Test
+    fun `el token tambien vale como direccion entera, por si el mas no sobrevive`() {
+        val token = tokenDeCorreoDe("user-1")
+        assertEquals(listOf(token), tokensDeLosDestinatarios(listOf("$token@abc123.resend.app")))
+        // Solo con la forma exacta de un token: una dirección cualquiera sin `+` no cuenta.
+        assertEquals(emptyList(), tokensDeLosDestinatarios(listOf("alertas@abc123.resend.app", "juan@gmail.com")))
+        assertEquals(emptyList(), tokensDeLosDestinatarios(listOf("1122334455@abc123.resend.app")), "10 dígitos no son un token")
+    }
+
+    @Test
     fun `sin texto usa el HTML sin interpretarlo, y sin nada de texto es null`() {
         val evento = leerEventoDeResend(eventoDeResend())!!
         val conHtml = correoDeResend(

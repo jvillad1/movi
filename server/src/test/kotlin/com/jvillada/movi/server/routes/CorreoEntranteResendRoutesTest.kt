@@ -169,6 +169,16 @@ class CorreoEntranteResendRoutesTest {
     }
 
     @Test
+    fun `la direccion hecha solo del token tambien llega a su duenio`() = testApplication {
+        application { testModule() }
+        val soloElToken = "${tokenDeCorreoDe(userBId)}@$dominio"
+        correosEnResend["56761188-7520-42d8-8898-ff6fc54ce618"] =
+            ContenidoDeResend.Encontrado(contenidoDeResend(recibidoPara = listOf(soloElToken)))
+        assertEquals(HttpStatusCode.Accepted, client.webhook(eventoDeResend()).status)
+        assertEquals(listOf(userBId), filas().map { it[0] })
+    }
+
+    @Test
     fun `el mismo webhook reintentado deja una sola fila`() = testApplication {
         application { testModule() }
         correosEnResend["56761188-7520-42d8-8898-ff6fc54ce618"] =

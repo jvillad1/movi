@@ -238,13 +238,25 @@ fun tokenDelDestinatario(destinatarios: List<String>): String? = tokensDeLosDest
  * con Resend la lista mezcla el destinatario de sobre con las cabeceras del correo reenviado, y
  * una dirección de Gmail con su propio `+` (`juan+bancos@gmail.com`) que viniera antes no puede
  * tapar la de Movi. Probar varios no abre nada: un token que no es de nadie no escribe.
+ *
+ * **La otra forma: el token como dirección entera** (`<token>@<id>.resend.app`). El subdominio de
+ * Resend recibe «cualquier dirección» (catch-all), pero su documentación no dice en ninguna parte
+ * que el `+` llegue intacto. Si un día no llega —o Gmail no deja verificar una dirección con `+`—,
+ * el dueño reenvía a `<token>@…` sin tocar código: una parte local sin `+` que tiene exactamente la
+ * forma de un token (16 hex, ver [tokenDeCorreoDe]) también cuenta.
  */
 fun tokensDeLosDestinatarios(destinatarios: List<String>): List<String> =
     destinatarios.mapNotNull { direccion ->
         val local = direccion.substringBefore('@')
-        if (!local.contains('+')) null
-        else local.substringAfterLast('+').trim().takeIf { it.isNotBlank() }
+        when {
+            local.contains('+') -> local.substringAfterLast('+').trim().takeIf { it.isNotBlank() }
+            formaDeToken.matches(local) -> local
+            else -> null
+        }
     }.distinct()
+
+/** La forma exacta de [tokenDeCorreoDe]: 16 caracteres hexadecimales en minúscula. */
+private val formaDeToken = Regex("""^[0-9a-f]{16}$""")
 
 /**
  * **El token de un usuario**, derivado de su id y nada más.
