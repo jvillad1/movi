@@ -593,9 +593,10 @@ class SmsSyncTest {
     }
 
     /**
-     * La regla es solo para NOTIFICACIONES. Un SMS del banco sin números —un aviso de clave,
-     * de seguridad— lo sigue viendo el dueño: la bandeja de «Mensajes del banco» es suya y ahí
-     * decide él.
+     * La regla del «sin números» es solo para NOTIFICACIONES. Un SMS del banco sin números lo
+     * sigue viendo el dueño: la bandeja de «Mensajes del banco» es suya y ahí decide él. (Desde el
+     * 3-oct-2026 un aviso de clave o de seguridad sí se aparta, pero por lo que dice —ver
+     * `QueEsEsteMensajeTest`—, no por no tener números.)
      */
     @Test
     fun `un SMS del banco sin numeros sigue pendiente`() = testApplication {
@@ -604,7 +605,7 @@ class SmsSyncTest {
             smsClient(this), mintToken(userAId, userAEmail),
             makeSms(
                 id = "sms_aviso_clave",
-                text = "Bancolombia: actualizaste tu clave principal. Si no fuiste tu, llamanos.",
+                text = "Bancolombia: tu nueva tarjeta llegara pronto a tu direccion.",
                 time = "2026-09-22 12:00",
                 bank = "85540",
             ),

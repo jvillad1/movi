@@ -73,6 +73,7 @@ internal class InvalidaElInicioAlEscribir(
     // un mensaje del banco desde Por revisar y volver dejaba la bandeja y Movimientos en esqueleto.
     override suspend fun confirmSms(id: String): Unit = trasEscribir { delegado.confirmSms(id) }
     override suspend fun ignoreSms(id: String): Unit = trasEscribir { delegado.ignoreSms(id) }
+    override suspend fun devolverSmsALaBandeja(id: String): Unit = trasEscribir { delegado.devolverSmsALaBandeja(id) }
     override suspend fun createBudget(budget: Budget): Budget = trasEscribir { delegado.createBudget(budget) }
     override suspend fun updateBudget(category: String, budget: Budget): Budget = trasEscribir { delegado.updateBudget(category, budget) }
     override suspend fun deleteBudget(category: String): Unit = trasEscribir { delegado.deleteBudget(category) }

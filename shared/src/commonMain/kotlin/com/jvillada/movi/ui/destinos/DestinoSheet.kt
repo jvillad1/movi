@@ -22,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
@@ -42,9 +44,9 @@ import com.jvillada.movi.ui.credits.SectionLabel
 import kotlinx.coroutines.launch
 
 /**
- * **Guardar, renombrar o borrar una cuenta de otra persona.** Cuatro campos y nada más: el nombre,
- * el número, la llave (30-sep: Nu y Bre-B identifican por llave; con uno de los dos basta) y de
- * quién es.
+ * **Guardar, renombrar o borrar una cuenta de otra persona.** Tres campos y nada más: el nombre,
+ * el número y la llave (30-sep: Nu y Bre-B identifican por llave; con uno de los dos basta). La
+ * nota de quién es (esposa, papá) va detrás de [AGREGAR_UNA_NOTA], desplegada si ya había una.
  *
  * ### La llave y el `PUT`
  *
@@ -75,6 +77,8 @@ fun DestinoSheet(
     var nombre by remember { mutableStateOf(existente?.nombre ?: "") }
     var numero by remember { mutableStateOf(existente?.numero ?: "") }
     var deQuien by remember { mutableStateOf(existente?.deQuien ?: "") }
+    // La nota se despliega sola cuando ya había una: esconder un dato guardado sería perderlo de vista.
+    var conNota by remember { mutableStateOf(!existente?.deQuien.isNullOrBlank()) }
     // Un nombre guardado como llave (lo que Nu escribe al recibir) se muestra como se lee.
     var llave by remember {
         mutableStateOf(existente?.llaveNormalizada()?.let { if (laLlaveEsUnNombre(it)) enTituloCaso(it) else it } ?: "")
@@ -212,9 +216,24 @@ fun DestinoSheet(
 
             Spacer(Modifier.height(18.dp))
 
-            SectionLabel("DE QUIÉN ES (OPCIONAL)")
-            Spacer(Modifier.height(8.dp))
-            FieldBox("Ej: esposa, papá", deQuien, { deQuien = it })
+            // La nota (`deQuien`) ya no es un campo con el mismo peso que el nombre: casi siempre el
+            // nombre ES de quién es (3-oct-2026). Queda detrás de un enlace, como en la fila de
+            // «¿De quién es la cuenta ·0756?».
+            if (conNota) {
+                SectionLabel("NOTA (OPCIONAL)")
+                Spacer(Modifier.height(8.dp))
+                FieldBox("Ej: esposa, papá", deQuien, { deQuien = it })
+            } else {
+                Text(
+                    AGREGAR_UNA_NOTA,
+                    style = Movi.textos.apoyo,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.marca,
+                    modifier = Modifier
+                        .clickable(enabled = !guardando, role = Role.Button) { conNota = true }
+                        .padding(vertical = 4.dp),
+                )
+            }
 
             if (error != null) {
                 Spacer(Modifier.height(8.dp))

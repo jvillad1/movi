@@ -47,6 +47,8 @@ import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.momentoDelSms
 import com.jvillada.movi.shared.model.esIdDeComprobante
 import com.jvillada.movi.shared.model.soloLoQueLlegoSolo
+import com.jvillada.movi.shared.model.loApartoMovi
+import com.jvillada.movi.shared.model.textoDelApartado
 import com.jvillada.movi.shared.model.Captura
 import com.jvillada.movi.shared.model.MAX_DIAS_PARA_BANCO_MUDO
 import com.jvillada.movi.shared.model.OrigenMudo
@@ -334,12 +336,31 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                         sms,
                         onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) },
                         parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
+                        // «Era un movimiento»: lo que Movi apartó vuelve a «Por revisar». Se ve
+                        // devuelto en el acto y se relee la lista cuando el server contesta.
+                        onEraUnMovimiento = {
+                            coroutine.launch {
+                                intentar { Repositories.wallets.devolverSmsALaBandeja(sms.id) }
+                                    .onSuccess {
+                                        smsItems = smsItems?.map {
+                                            if (it.id == sms.id) it.copy(state = SMS_STATE_PENDING, apartadoPor = null) else it
+                                        }
+                                        refreshKey++
+                                    }
+                            }
+                        },
                     )
                 }
             }
         }
     }
 }
+
+/** El botón que devuelve a «Por revisar» lo que Movi apartó solo. */
+const val ERA_UN_MOVIMIENTO: String = "Era un movimiento"
+
+/** El tag de la línea «Movi lo apartó: …» de una tarjeta del historial. */
+const val TAG_MOTIVO_DEL_APARTADO: String = "motivo-del-apartado"
 
 /** El tag de la tarjeta del aviso de banco mudo en Captura del banco. */
 const val TAG_AJUSTE_DE_BANCO_MUDO: String = "ajuste-de-banco-mudo"
@@ -469,7 +490,13 @@ internal fun TarjetaDeMensajeDelBanco(
      * «Captura del banco» no lo usa.
      */
     pie: (@Composable () -> Unit)? = null,
+    /**
+     * «Era un movimiento», para lo que Movi apartó solo ([loApartoMovi]): el historial de «Captura
+     * del banco» lo pasa; la bandeja no, porque ahí nunca llega un apartado.
+     */
+    onEraUnMovimiento: (() -> Unit)? = null,
 ) {
+    val apartado = loApartoMovi(sms)
     MinCard(
         modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
         variant = MinCardVariant.Elevated,
@@ -505,11 +532,14 @@ internal fun TarjetaDeMensajeDelBanco(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            val (label, color) = when (sms.state) {
+            val (label, color) = when {
+                apartado -> "APARTADO" to Movi.colores.textoMedio
+                else -> when (sms.state) {
                 SMS_STATE_PENDING -> "PENDIENTE" to Movi.colores.aviso
                 SMS_STATE_CONFIRMED -> "CONFIRMADO" to Movi.colores.entra
                 SMS_STATE_IGNORED -> "IGNORADO" to Movi.colores.textoMedio
                 else -> sms.state.uppercase() to Movi.colores.textoMedio
+                }
             }
             // Un renglón siempre. Con el espaciado completo de `rotulo` (1,7 sp),
             // «CONFIRMADO» no entraba al lado de la fecha: primero se partía en
@@ -529,6 +559,16 @@ internal fun TarjetaDeMensajeDelBanco(
         if (sms.state == SMS_STATE_PENDING && sms.parecidoA != null) {
             Spacer(Modifier.height(8.dp))
             LineaDelMismoPago(parecidoA)
+        }
+        // Por qué no está en «Por revisar»: lo apartó Movi, no él.
+        textoDelApartado(sms)?.let { porQue ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                porQue,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.testTag(TAG_MOTIVO_DEL_APARTADO),
+            )
         }
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
@@ -552,6 +592,16 @@ internal fun TarjetaDeMensajeDelBanco(
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Text("Revisar", style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+                }
+            } else if (apartado && onEraUnMovimiento != null) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
+                        .clickable(role = Role.Button, onClick = onEraUnMovimiento)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text(ERA_UN_MOVIMIENTO, style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                 }
             }
         }

@@ -1,11 +1,15 @@
 package com.jvillada.movi.server.db
 
+import com.jvillada.movi.server.sms.motivoParaApartar
+import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
+import com.jvillada.movi.shared.model.esIdDeComprobante
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.rem
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
 
@@ -36,6 +40,7 @@ object Migrations {
         restampStatementEventsToBogota()
         renameLegacyNewSmsStateToPending()
         createUniqueTransferLegIndex()
+        apartarLosPendientesQueNoSonMovimientos()
     }
 
     /**
@@ -151,4 +156,41 @@ object Migrations {
         SmsMessages.update({ SmsMessages.state eq LEGACY_SMS_STATE_NEW }) {
             it[state] = SMS_STATE_PENDING
         }
+
+    /**
+     * **Los pendientes que ya estaban en la base y no son movimientos se apartan también** (3-oct-2026),
+     * con la misma función que decide al llegar (`queEsEsteMensaje`). Corre en cada arranque, así
+     * que una regla nueva alcanza a lo viejo apenas se despliega.
+     *
+     * Lo que **no** toca, a propósito:
+     *
+     * - nada que no esté `pending`: lo confirmado y lo que ignoró el dueño ya lo decidió él;
+     * - lo que el dueño devolvió con «Era un movimiento» (`motivo_apartado = 'DEVUELTO'`): solo se
+     *   miran las filas **sin** motivo;
+     * - los comprobantes que él mismo compartió (`cmp_…`, Ola 2): los mandó para revisarlos.
+     *
+     * Idempotente: lo apartado deja de estar `pending`, y la segunda corrida no lo ve.
+     *
+     * @return filas apartadas
+     */
+    fun Transaction.apartarLosPendientesQueNoSonMovimientos(): Int {
+        val aApartar = SmsMessages.selectAll()
+            .where { (SmsMessages.state eq SMS_STATE_PENDING) and (SmsMessages.motivoApartado.isNull()) }
+            .mapNotNull { fila ->
+                val id = fila[SmsMessages.id]
+                if (esIdDeComprobante(id)) return@mapNotNull null
+                val motivo = motivoParaApartar(fila[SmsMessages.text], fila[SmsMessages.bank]) ?: return@mapNotNull null
+                Triple(id, fila[SmsMessages.userId], motivo)
+            }
+        for ((id, uid, motivo) in aApartar) {
+            SmsMessages.update({
+                (SmsMessages.id eq id) and (SmsMessages.userId eq uid) and (SmsMessages.state eq SMS_STATE_PENDING)
+            }) {
+                it[state] = SMS_STATE_IGNORED
+                it[motivoApartado] = motivo.name
+            }
+        }
+        if (aApartar.isNotEmpty()) migrationsLog.info("Se apartaron ${aApartar.size} mensajes pendientes que no son movimientos")
+        return aApartar.size
+    }
 }

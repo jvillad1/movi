@@ -807,6 +807,16 @@ data class SmsMessage(
      * Con valor por defecto para que el teléfono lo siga subiendo sin él y un APK viejo lo ignore.
      */
     val parecidoA: String? = null,
+    /**
+     * **Por qué Movi lo apartó** (3-oct-2026): el nombre de un [MotivoDeApartado] cuando el server
+     * reconoció que el mensaje no es un movimiento (un recordatorio de pago, un código, una promo) y
+     * lo guardó como [SMS_STATE_IGNORED] sin preguntarle al dueño. `null` en todo lo demás, incluido
+     * lo que ignoró él. Ver `MensajesApartados.kt`.
+     *
+     * Con valor por defecto, como [parecidoA]: el teléfono no lo manda y un APK viejo lo ignora (y
+     * ve el mensaje como «IGNORADO», que es verdad).
+     */
+    val apartadoPor: String? = null,
 )
 
 @Serializable

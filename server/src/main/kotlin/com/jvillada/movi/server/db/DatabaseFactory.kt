@@ -105,7 +105,11 @@ object DatabaseFactory {
             // tabla entra a esta lista por el mismo motivo que CategoryPrefs: existe en producción
             // desde la Ola V con los destinos del dueño. Su único índice (`user_id`) ya existe, así
             // que el único DDL es el ADD COLUMN (ver `KnownDestinationsLlaveColumnTest`).
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations)
+            // SmsMessages: `motivo_apartado` (3-oct-2026, los mensajes que no son movimientos) —
+            // NULLABLE, y la tabla existe en producción con los mensajes del dueño, así que entra a
+            // esta lista por lo mismo que KnownDestinations. Su único índice (`user_id`) ya existe:
+            // el único DDL es el ADD COLUMN (ver `SmsMessagesMotivoApartadoColumnTest`).
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }

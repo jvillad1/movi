@@ -1971,6 +1971,7 @@ class LocalRepository(
     override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = remote.getSmsCoincidencias(id)
     override suspend fun confirmSms(id: String) = remote.confirmSms(id)
     override suspend fun ignoreSms(id: String) = remote.ignoreSms(id)
+    override suspend fun devolverSmsALaBandeja(id: String) = remote.devolverSmsALaBandeja(id)
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary = remote.getFinanceSummary(scope)
     // Igual que getFinanceSummary: es un agregado que solo el server puede calcular con todo lo
     // que sabe (SMS, descartes de candidatos, eventos de todos los dispositivos). Sin red falla

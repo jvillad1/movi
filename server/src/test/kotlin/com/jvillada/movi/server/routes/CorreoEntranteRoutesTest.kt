@@ -305,6 +305,34 @@ class CorreoEntranteRoutesTest {
         assertTrue("clave fue actualizada" in filas()[0].third)
     }
 
+    /**
+     * **Un correo que no es un movimiento entra apartado** (3-oct-2026): el «tu extracto está
+     * listo» se guarda —nada se pierde— pero `ignored` y con su motivo, con la misma función que
+     * decide en el sync. La alerta de una compra sigue entrando pendiente.
+     */
+    @Test
+    fun `el aviso de extracto disponible entra apartado, la compra no`() = testApplication {
+        application { testModule() }
+        for ((asunto, cuerpo) in listOf(
+            "Tu extracto" to "Bancolombia: tu extracto de septiembre de tu tarjeta *2222 ya esta disponible en la app.",
+            "Compra" to "Bancolombia: Compraste \$18.500,00 en TIENDA DE PRUEBA con tu T.Deb *1111, el 01/10/2026 a las 10:00.",
+        )) {
+            val r = client.post("/api/correo-entrante") {
+                header(HttpHeaders.Authorization, basic(secretoDelWebhook))
+                contentType(ContentType.Application.Json)
+                setBody(alertaPostmark(direccionDeA, asunto = asunto, cuerpo = cuerpo, messageId = "$asunto@ejemplo.test"))
+            }
+            assertEquals(HttpStatusCode.Accepted, r.status)
+        }
+        val estados = transaction {
+            SmsMessages.selectAll().associate {
+                it[SmsMessages.text].contains("extracto") to (it[SmsMessages.state] to it[SmsMessages.motivoApartado])
+            }
+        }
+        assertEquals("ignored" to "EXTRACTO_DISPONIBLE", estados[true])
+        assertEquals("pending" to null, estados[false])
+    }
+
     @Test
     fun `cada usuario tiene su direccion, y el correo cae en su bandeja`() = testApplication {
         application { testModule() }

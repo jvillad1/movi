@@ -323,6 +323,10 @@ class WalletRepositoryImpl(
         client.post("$baseUrl/api/sms/$id/ignore")
     }
 
+    override suspend fun devolverSmsALaBandeja(id: String) {
+        client.post("$baseUrl/api/sms/$id/era-un-movimiento").exigirExito()
+    }
+
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
         client.get("$baseUrl/api/finance-summary?scope=${scope.name}").body()
 
