@@ -707,7 +707,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     val idDeLaPropuesta = pagoActual?.propuestaDe ?: smsId
     val avisoDeLaPropuesta = pagoActual?.miembros?.firstOrNull { it.id == idDeLaPropuesta }
 
-    /** Confirma el aviso diciendo, si es un comprobante, con qué movimiento quedó. */
+    /**
+     * Confirma el aviso diciendo con qué movimiento quedó: el server lo guarda en el aviso, y si es
+     * un comprobante además cuelga el papel de la cuenta de ese movimiento.
+     */
     suspend fun confirmarElAviso(eventoId: String) {
         val elPago = pagoActual
         when {
@@ -715,7 +718,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 elPago.grupoId, ConfirmarElMismoPago(idsDelPago, eventoExistenteId = eventoId),
             )
             esComprobante -> Repositories.wallets.confirmarComprobante(smsId, eventoId)
-            else -> Repositories.wallets.confirmSms(smsId)
+            else -> Repositories.wallets.confirmSmsCon(smsId, eventoId)
         }
     }
 

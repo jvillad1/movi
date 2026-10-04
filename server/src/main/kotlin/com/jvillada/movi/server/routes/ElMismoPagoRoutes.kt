@@ -140,6 +140,9 @@ internal fun confirmarElMismoPago(
             SmsMessages.update({ (SmsMessages.userId eq uid) and (SmsMessages.id inList pendientes) }) {
                 it[state] = SMS_STATE_CONFIRMED
                 if (eventoId != null) it[SmsMessages.eventoId] = eventoId
+                // Cuándo (auditoría de la ingesta, arreglo 6). Solo los que estaban pendientes, en
+                // esta misma transacción: un segundo toque no encuentra pendientes y no lo mueve.
+                it[SmsMessages.confirmadoEn] = ahora
             }
         }
         return Confirmacion.Hecha(MismoPagoConfirmado(eventoId = eventoId, creado = creado, cerrados = pendientes))

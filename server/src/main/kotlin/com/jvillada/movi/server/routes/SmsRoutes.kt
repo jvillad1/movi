@@ -437,6 +437,16 @@ fun Route.smsRoutes() {
         call.respond(dbQuery { origenesMudosDe(uid, System.currentTimeMillis()) })
     }
 
+    /**
+     * Los avisos confirmados cuyo movimiento ya no está vivo (anulado o borrado): el cuadre de «lo
+     * que entró solo». Ver `avisosConfirmadosSinMovimiento`. Literal, así que gana sobre
+     * `/api/sms/{id}`.
+     */
+    get("/api/sms/confirmados-sin-movimiento") {
+        val uid = call.userId()
+        call.respond(dbQuery { avisosConfirmadosSinMovimiento(uid) })
+    }
+
     get("/api/sms/{id}") {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
@@ -526,13 +536,13 @@ fun Route.smsRoutes() {
     post("/api/sms/{id}/confirm") {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
-        // Ola 2: con qué movimiento se confirmó un comprobante (el que se acaba de crear, o el que
-        // ya estaba, «Es este»). Opcional: un cliente viejo no lo manda y todo sigue igual.
+        // Con qué movimiento se confirmó (el que se acaba de crear, o el que ya estaba: «Es este»).
+        // Opcional: un cliente viejo no lo manda y el server lo deduce cuando puede. Se guarda en
+        // el aviso (`evento_id`, `confirmado_en`) y, si es un comprobante, además se cuelga el
+        // papel de la cuenta de ese movimiento. Ver `confirmarElAviso`.
         val eventoId = call.request.queryParameters["eventoId"]?.takeIf { it.isNotBlank() }
         val updated = dbQuery {
-            val n = SmsMessages.update({ (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }) {
-                it[state] = SMS_STATE_CONFIRMED
-            }
+            val n = confirmarElAviso(uid, id, eventoId, ahora = System.currentTimeMillis())
             if (n > 0 && eventoId != null && esIdDeComprobante(id)) enlazarElComprobante(uid, id, eventoId)
             n
         }
