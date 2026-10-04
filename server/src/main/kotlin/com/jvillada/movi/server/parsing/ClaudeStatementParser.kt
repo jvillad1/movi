@@ -398,6 +398,12 @@ Si no muestra ningún movimiento de plata (un certificado, un saldo, una publici
         }
     }
 
+    /**
+     * El array JSON de la respuesta, en movimientos. **Una fila de $0 no es un movimiento**: el
+     * prompt pide montos enteros, así que lo de menos de una unidad (los intereses diarios de $0,15,
+     * un ajuste de USD 0,06) volvía como `amount: 0` y entraba a la revisión como una fila sin
+     * plata. Se descarta acá, no en el prompt: es la red que no depende de que el modelo obedezca.
+     */
     fun parseJson(rawText: String): List<ParsedTransaction> {
         val start = rawText.indexOf('[')
         val end = rawText.lastIndexOf(']')
@@ -405,6 +411,7 @@ Si no muestra ningún movimiento de plata (un certificado, un saldo, una publici
         val arrayJson = rawText.substring(start, end + 1)
         return runCatching {
             json.decodeFromString(ListSerializer(ClaudeRow.serializer()), arrayJson)
+                .filter { it.amount != 0L }
                 .map { row ->
                     ParsedTransaction(
                         id = UUID.randomUUID().toString(),

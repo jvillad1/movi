@@ -235,4 +235,15 @@ class ClaudeStatementParserTest {
         assertTrue(prompt.indexOf("PERÍODO FACTURADO") > prompt.indexOf("TARJETAS DE CRÉDITO"))
         assertTrue(prompt.indexOf("PERÍODO FACTURADO") < prompt.indexOf("FECHAS SIN AÑO"))
     }
+
+    @Test
+    fun `una fila de monto cero no es un movimiento`() {
+        val json = """[
+          {"date":"2026-09-01","merchant":"Intereses","amount":0,"currency":"COP","type":"INCOME","category":"Otros ingresos","description":"Abono intereses","rawText":"ABONO INTERESES 0,15"},
+          {"date":"2026-09-01","merchant":"Exito","amount":45000,"currency":"COP","type":"EXPENSE","category":"Mercado","description":"Compra","rawText":"COMPRA EXITO 45.000"},
+          {"date":"2026-09-02","merchant":"Ajuste","amount":0,"currency":"USD","type":"EXPENSE","category":"Otros","description":"Ajuste","rawText":"AJUSTE 0,06"}
+        ]"""
+        val result = ClaudeStatementParser.parseJson(json)
+        assertEquals(listOf("Exito"), result.map { it.merchant })
+    }
 }
