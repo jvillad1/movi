@@ -8,6 +8,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -35,6 +39,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -57,6 +62,7 @@ class ReconciliarConLasDosPatasTest {
     private val masterBlack = Account("m", "Master Black 3684", AccountType.CREDIT_CARD, -2_000_000)
     private val amex = Account("x", "AMEX 9208", AccountType.CREDIT_CARD, 0)
     private val fiducuenta = Account("f", "Fiducuenta 9586", AccountType.INVESTMENT, 20_000_000)
+    private val masterBlackUsd = Account("mu", "Master Black USD", AccountType.CREDIT_CARD, -500, currency = "USD")
 
     private val pagoDeTarjeta = SmsMessage(
         id = "sms_pago",
@@ -81,10 +87,14 @@ class ReconciliarConLasDosPatasTest {
         Repositories.sustitutoDePrueba = null
     }
 
-    private inner class Repo(private val sms: SmsMessage, private val leido: ParsedSms) : RepositorioDePrueba() {
+    private inner class Repo(
+        private val sms: SmsMessage,
+        private val leido: ParsedSms,
+        private val cuentas: List<Account> = listOf(ahorros, otra, masterBlack, amex, fiducuenta),
+    ) : RepositorioDePrueba() {
         val conPatas = mutableListOf<Pair<String, DosPatasDelAviso>>()
         val sueltos = mutableListOf<FinancialEvent>()
-        override suspend fun getAccounts(): List<Account> = listOf(ahorros, otra, masterBlack, amex, fiducuenta)
+        override suspend fun getAccounts(): List<Account> = cuentas
         override suspend fun getSms(id: String): SmsMessage = sms
         override suspend fun parseSms(id: String): ParsedSms = leido
         override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = emptyList()
@@ -104,6 +114,7 @@ class ReconciliarConLasDosPatasTest {
         composeRule.onNodeWithTag(TAG_RESUMEN_DE_LAS_DOS_PATAS)
             .assertIsDisplayed()
             .assertTextEquals("Sale de Bancolombia Ahorros 8133 · entra a Master Black 3684 como pago")
+        composeRule.onNodeWithTag(TAG_MONTO_EN_LA_MONEDA_DE_LA_DEUDA).assertDoesNotExist()
 
         tocar("Confirmar")
 
@@ -115,6 +126,30 @@ class ReconciliarConLasDosPatasTest {
         assertEquals(masterBlack.id, patas.destinoId)
         assertEquals(386_902L, patas.monto)
         assertEquals(3, setOf(patas.transferId, patas.origenEventId, patas.destinoEventId).size)
+        assertNull(patas.montoEnLaMonedaDeLaDeuda, "entre pesos no hay nada que convertir")
+    }
+
+    @Test
+    fun pagar_en_pesos_la_tarjeta_en_dolares_pide_cuanto_bajo_la_deuda_y_lo_manda() {
+        // La tarjeta en dólares la propone Movi (como el correo de PSE): el aviso no la nombra.
+        val pago = pagoDeTarjeta.copy(id = "sms_pago_usd", text = "Bancolombia: Pagaste \$480.000 en la tarjeta de credito desde la cuenta *8133")
+        val leido = ParsedSms(480_000.0, "Pago de tarjeta", TransactionType.EXPENSE, CARD_PAYMENT_CATEGORY, deudaSugeridaId = masterBlackUsd.id)
+        val repo = Repo(pago, leido, cuentas = listOf(ahorros, masterBlackUsd))
+        montar(repo, pago.id)
+
+        composeRule.onNodeWithTag(TAG_RESUMEN_DE_LAS_DOS_PATAS)
+            .assertTextEquals("Sale de Bancolombia Ahorros 8133 · entra a Master Black USD como pago")
+        composeRule.onNodeWithText(rotuloDelMontoEnLaDeuda("USD")).assertIsDisplayed()
+        composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(TAG_MONTO_EN_LA_MONEDA_DE_LA_DEUDA)), useUnmergedTree = true)
+            .performTextInput("120")
+        composeRule.waitForIdle()
+        tocar("Confirmar")
+
+        val (_, patas) = repo.conPatas.single()
+        assertEquals(OperacionDelAviso.PAGO_DE_TARJETA, patas.operacion)
+        assertEquals(masterBlackUsd.id, patas.destinoId)
+        assertEquals(480_000L, patas.monto, "lo que salió de la cuenta, en pesos")
+        assertEquals(120L, patas.montoEnLaMonedaDeLaDeuda, "lo que bajó la deuda, en dólares")
     }
 
     @Test

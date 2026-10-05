@@ -167,13 +167,39 @@ fun destinosElegibles(accounts: List<Account>, origen: Account?): List<Account> 
     accounts.filter { it.id != origen?.id && it.type.group != AccountGroup.DEUDA && !it.esBien }
 
 /**
+ * **¿Hay que preguntar cuánto bajó la deuda en su moneda?** Al pagar una tarjeta en otra moneda (la
+ * Master Black en dólares desde Ahorros en pesos): el aviso dice lo que salió de la cuenta, no lo que
+ * bajó la deuda. Sin la tasa del día el server no lo inventa (contesta 422 y lo pide); con ella, el
+ * campo es opcional.
+ */
+fun pideElMontoEnLaMonedaDeLaDeuda(propuestas: DosPatasPropuestas?): Boolean =
+    propuestas != null && propuestas.operacion == OperacionDelAviso.PAGO_DE_TARJETA &&
+        propuestas.origen.currency != propuestas.destino.currency
+
+/** «¿Cuánto bajó la deuda en USD?»: el rótulo del campo, con la moneda de la tarjeta. */
+fun rotuloDelMontoEnLaDeuda(moneda: String): String = "¿Cuánto bajó la deuda en $moneda?"
+
+/** Lo que dice debajo del campo: de dónde sale la cifra, y qué pasa si se deja vacío. */
+const val AYUDA_DEL_MONTO_EN_LA_DEUDA: String =
+    "La tarjeta y la cuenta están en monedas distintas. Escribe lo que bajó la deuda según el banco. " +
+        "Si lo dejas vacío, Movi usa la tasa del día; si no la tiene, te lo pide."
+
+/** El tag del campo «¿Cuánto bajó la deuda en USD?». */
+const val TAG_MONTO_EN_LA_MONEDA_DE_LA_DEUDA: String = "sms:dos-patas:monto-en-la-deuda"
+
+/**
  * **El pedido que viaja al server**: las dos puntas, el monto que dice el aviso, cuándo llegó, la nota
  * del aviso (la «Descripción» de PSE) y tres ids nuevos, que hacen idempotente un reintento.
+ *
+ * [montoEnLaMonedaDeLaDeuda] es lo que el dueño escribió en «¿Cuánto bajó la deuda en USD?»; solo
+ * viaja en un pago de tarjeta entre monedas ([pideElMontoEnLaMonedaDeLaDeuda]) y si es mayor que cero.
+ * Sin él, el server convierte con la tasa del día.
  */
 fun pedidoDeDosPatas(
     propuestas: DosPatasPropuestas,
     leido: ParsedSms,
     momento: Long,
+    montoEnLaMonedaDeLaDeuda: Long? = null,
     nuevoId: (String) -> String,
 ): DosPatasDelAviso = DosPatasDelAviso(
     operacion = propuestas.operacion,
@@ -186,6 +212,8 @@ fun pedidoDeDosPatas(
     destinoEventId = nuevoId("ev"),
     nota = leido.nota,
     avisoDelLadoQueEntra = propuestas.entrante,
+    montoEnLaMonedaDeLaDeuda = montoEnLaMonedaDeLaDeuda
+        ?.takeIf { it > 0L && pideElMontoEnLaMonedaDeLaDeuda(propuestas) },
 )
 
 /** El tag del renglón «Sale de … · entra a …» en la tarjeta de resumen. */

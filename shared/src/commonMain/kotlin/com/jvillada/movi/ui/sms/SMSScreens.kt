@@ -87,6 +87,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.quickadd.simboloDeMoneda
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.model.fechaCortaDeSms
@@ -696,6 +697,11 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      * que propone Movi ([origenPropuestoDelAviso]). Comparte con el destino el selector de la tarjeta.
      */
     var origenElegidoId by remember { mutableStateOf<String?>(null) }
+    /**
+     * Pagar una tarjeta en otra moneda: lo que el dueño escribió en «¿Cuánto bajó la deuda en USD?».
+     * `null` = vacío, y el server convierte con la tasa del día (sin ella contesta 422 y lo pide).
+     */
+    var montoEnLaDeuda by remember { mutableStateOf<Long?>(null) }
 
     /**
      * Ola 2: la propuesta salió de un comprobante que el dueño compartió (ver `Papeles.kt` en
@@ -940,6 +946,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         // Se lee ACÁ, antes del `coroutine.launch`: si el dueño toca dos veces rápido, la segunda
         // pasada no puede ver un estado que la primera ya limpió a mitad de camino.
         val dosPatas = lasDosPatas
+        val enLaDeuda = montoEnLaDeuda
         // Un traspaso o un avance sin la cuenta a la que entró: el botón ya está apagado.
         if (faltaElDestino) return
         working = true
@@ -963,7 +970,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     // Las dos patas en una transacción del server, con este aviso (o todos los del
                     // pago) enlazados a la del dinero. Un doble toque no crea otras: el server ve el
                     // aviso ya anotado y contesta con las mismas.
-                    val pedido = pedidoDeDosPatas(dosPatas, p, momento, ::newId)
+                    val pedido = pedidoDeDosPatas(dosPatas, p, momento, montoEnLaMonedaDeLaDeuda = enLaDeuda, nuevoId = ::newId)
                     val elPago = pagoActual
                     if (elPago != null) {
                         Repositories.wallets.confirmarElMismoPago(elPago.grupoId, ConfirmarElMismoPago(idsDelPago, patas = pedido))
@@ -1521,6 +1528,24 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         seleccionada = cuentaDeDeudaElegida,
                         onSeleccionar = { deudaTocadaAMano = true; cuentaDeDeudaElegida = it },
                     )
+                }
+
+                // Pagar una tarjeta en otra moneda (hueco de #439): el aviso dice lo que salió de la
+                // cuenta; cuánto bajó la deuda lo dice el banco. Sin la tasa del día el server no lo
+                // inventa y lo pide: este es el lugar donde escribirlo.
+                val pagoEntreMonedas = lasDosPatas?.takeIf { pideElMontoEnLaMonedaDeLaDeuda(it) }
+                if (pagoEntreMonedas != null) {
+                    Spacer(Modifier.height(14.dp))
+                    MoneyField(
+                        value = montoEnLaDeuda,
+                        onValueChange = { montoEnLaDeuda = it },
+                        label = rotuloDelMontoEnLaDeuda(pagoEntreMonedas.destino.currency),
+                        placeholder = simboloDeMoneda(pagoEntreMonedas.destino.currency) + " 0",
+                        prefix = simboloDeMoneda(pagoEntreMonedas.destino.currency),
+                        modifier = Modifier.testTag(TAG_MONTO_EN_LA_MONEDA_DE_LA_DEUDA),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(AYUDA_DEL_MONTO_EN_LA_DEUDA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
 
                 if (error != null) {
