@@ -67,6 +67,7 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.GrupoDeAvisos
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.avisoDeCaptura
 import com.jvillada.movi.shared.model.capturaDeSms
@@ -787,18 +788,24 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     // abecedario, que en las cuentas del dueño puede ser el «Vehículo 4083». Ahora las candidatas
     // salen del criterio de `:core`, y si no hay ninguna no se resuelve nada: el botón queda
     // apagado (ya lo estaba) y la fila «Cuenta» pide que la elija.
-    val cuentaDelSms = if (pagoActual != null) {
-        // Un pago avisado varias veces: la mejor lectura de todos sus avisos (el número del SMS
-        // aunque el comercio salga de Google Wallet). Ver [resolverCuentaDelPago].
-        resolverCuentaDelPago(accounts, usoDeCuenta, pagoActual.miembros, cuentaElegida)
-    } else resolverCuentaDelBanco(
+    val cuentaDelSms = conLaCuentaQueSugiereMovi(
+        resuelta = if (pagoActual != null) {
+            // Un pago avisado varias veces: la mejor lectura de todos sus avisos (el número del SMS
+            // aunque el comercio salga de Google Wallet). Ver [resolverCuentaDelPago].
+            resolverCuentaDelPago(accounts, usoDeCuenta, pagoActual.miembros, cuentaElegida)
+        } else resolverCuentaDelBanco(
+            accounts = accounts,
+            uso = usoDeCuenta,
+            banco = currentSms?.bank.orEmpty(),
+            elegidaAMano = cuentaElegida,
+            // El SMS entero: adentro está el número de cuenta que el banco escribió, y ese es el único
+            // dato duro de toda esta pantalla sobre a qué cuenta va el movimiento.
+            textoDelMensaje = currentSms?.text.orEmpty(),
+        ),
+        // El correo de PSE no dice la cuenta: si el texto no la nombra, vale la que sabe Movi
+        // (pagos anteriores a esa deuda, la regla recurrente, la última vez). Ver `ElPagoPorPse.kt`.
         accounts = accounts,
-        uso = usoDeCuenta,
-        banco = currentSms?.bank.orEmpty(),
-        elegidaAMano = cuentaElegida,
-        // El SMS entero: adentro está el número de cuenta que el banco escribió, y ese es el único
-        // dato duro de toda esta pantalla sobre a qué cuenta va el movimiento.
-        textoDelMensaje = currentSms?.text.orEmpty(),
+        sugeridaId = parsed?.cuentaSugeridaId,
     )
     val resolvedAccount = cuentaDelSms.cuenta
 
@@ -847,16 +854,21 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     LaunchedEffect(ofreceVinculo) {
         if (!ofreceVinculo) cuentaDeDeudaElegida = null
     }
-    // «Pagaste $X en la tarjeta de credito *9208 desde la cuenta *8133»: el mensaje dice cuál deuda
-    // se paga, así que queda elegida (ver [deudaQueNombraElMensaje]). Solo hasta que él toque el
-    // selector: si la quita o elige otra, Movi no se la vuelve a poner.
-    val deudaQueNombra = deudaQueNombraElMensaje(cuentaDelSms)
+    // La deuda que se paga queda elegida, en este orden: la que el mensaje NOMBRA por su número
+    // («Pagaste $X en la tarjeta de credito *9208 desde la cuenta *8133», ver
+    // [deudaQueNombraElMensaje]), y si no nombra ninguna, la que Movi reconoció en el aviso (el correo
+    // de PSE: Banco de Occidente ↔ «Vehículo 8761», [ParsedSms.deudaSugeridaId]). Confirmar arma el
+    // traspaso de dos patas que marca la cuota del período. Solo hasta que él toque el selector: si
+    // la quita o elige otra, Movi no se la vuelve a poner.
+    val deudaPropuesta = deudaPropuestaDelAviso(cuentaDelSms, parsed?.deudaSugeridaId, accounts)
     var deudaTocadaAMano by remember { mutableStateOf(false) }
-    LaunchedEffect(ofreceVinculo, deudaQueNombra?.id) {
-        if (ofreceVinculo && !deudaTocadaAMano && cuentaDeDeudaElegida == null && deudaQueNombra != null) {
-            cuentaDeDeudaElegida = deudaQueNombra
+    LaunchedEffect(ofreceVinculo, deudaPropuesta?.id) {
+        if (ofreceVinculo && !deudaTocadaAMano && cuentaDeDeudaElegida == null && deudaPropuesta != null) {
+            cuentaDeDeudaElegida = deudaPropuesta
         }
     }
+    /** «Depósito a tu cuenta NU»: se anota como traspaso a esa cuenta, no como gasto. Ver [destinoDelTraspaso]. */
+    val haciaElTraspaso = destinoDelTraspaso(parsed, selectedCategory ?: parsed?.category, resolvedAccount, accounts)
 
     fun confirm() {
         if (working) return
@@ -884,18 +896,33 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             // a revisar, el siguiente «Confirmar» crearía un segundo movimiento en silencio.
             var movimientoCreado = false
             intentar {
+                // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelSms]. De un pago
+                // avisado varias veces, cuando llegó el primer aviso; y si el aviso dice otro día
+                // (el correo de PSE que llegó tarde), ese día.
+                val momento = momentoConLaFechaDelAviso(
+                    momentoDelSms(
+                        pagoActual?.miembros?.minByOrNull { momentoDelSms(it.time, Long.MAX_VALUE) }?.time ?: sms?.time.orEmpty(),
+                        ahora = Clock.System.now().toEpochMilliseconds(),
+                    ),
+                    p.fecha,
+                )
+                val hacia = destinoDelTraspaso(p, cat, acct, accounts)
+                if (hacia != null) {
+                    // Un traspaso entre cuentas suyas: las dos patas en una transacción del server, y el
+                    // aviso queda enlazado a la que sale de esta cuenta.
+                    val traspaso = traspasoDelAviso(p, acct, hacia, momento, ::newId)
+                    Repositories.wallets.createTransfer(traspaso)
+                    movimientoCreado = true
+                    confirmarElAviso(traspaso.fromEventId)
+                    return@intentar
+                }
                 val event = movimientoConfirmadoDelSms(
                     // Mismo motivo que en QuickAddScreen — ver newId().
                     id = newId("ev"),
                     cuentaId = acct.id,
                     leido = p.copy(merchant = comercio ?: p.merchant),
                     categoria = cat,
-                    // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelSms]. De un pago
-                    // avisado varias veces, cuando llegó el primer aviso.
-                    momento = momentoDelSms(
-                        pagoActual?.miembros?.minByOrNull { momentoDelSms(it.time, Long.MAX_VALUE) }?.time ?: sms?.time.orEmpty(),
-                        ahora = Clock.System.now().toEpochMilliseconds(),
-                    ),
+                    momento = momento,
                     textoDelSms = (avisoDeLaPropuesta ?: sms)?.text.orEmpty(),
                     origen = if (esComprobante) EventSource.OCR else EventSource.SMS,
                 )
@@ -1291,7 +1318,9 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         // Lo que Movi haya adivinado se dice acá, antes de guardar. Un SMS no
                         // trae la cuenta escrita: la pone la app, y eso hay que confesarlo en la
                         // pantalla y no descubrirlo después en Movimientos.
-                        hint = avisoDeLaCuentaDelBanco(cuentaDelSms.origen),
+                        hint = if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI) {
+                            parsed?.cuentaSugeridaPor ?: avisoDeLaCuentaDelBanco(cuentaDelSms.origen)
+                        } else avisoDeLaCuentaDelBanco(cuentaDelSms.origen),
                         action = if (eligiendoCuenta) "Cerrar" else "Cambiar",
                         onClick = { eligiendoCuenta = !eligiendoCuenta },
                     )
@@ -1430,6 +1459,16 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 // Ola Y: opcional, y solo con esas dos categorías sobre un gasto — ver
                 // `ofreceVincularDeuda`. Debajo de las pastillas de categoría, porque depende de
                 // cuál quedó elegida.
+                // «Depósito a tu cuenta NU»: dice qué se va a anotar, o por qué no se puede así.
+                if ((selectedCategory ?: parsed?.category) == TRANSFER_CATEGORY && parsed != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        avisoDelTraspaso(haciaElTraspaso, resolvedAccount),
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                    )
+                }
+
                 if (ofreceVinculo) {
                     Spacer(Modifier.height(14.dp))
                     SelectorDeCuentaDeDeuda(
@@ -1733,7 +1772,8 @@ internal fun movimientoConfirmadoDelSms(
     amount = leido.amount.roundToLong(),
     currency = leido.currency,
     category = categoria,
-    description = leido.merchant,
+    // Con lo que el aviso dijo de para qué fue, si lo dijo (la «Descripción» de PSE).
+    description = descripcionConLaNota(leido.merchant, leido.nota),
     merchant = leido.merchant,
     source = origen,
     rawPayload = textoDelSms.ifBlank { null },

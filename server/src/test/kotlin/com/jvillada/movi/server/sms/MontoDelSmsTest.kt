@@ -101,4 +101,40 @@ class MontoDelSmsTest {
 
         assertEquals(20_417.0, assertNotNull(parseSms(sms)).amount)
     }
+
+    // ── El monto sin separadores, que es como escribe el correo ──────────────
+
+    /**
+     * El correo de Bancolombia pega los dígitos: «$386902». La regex del monto exigía grupos de tres
+     * después del primer bloque y se quedaba con «386» — un pago de $386.902 propuesto de $386.
+     */
+    @Test
+    fun `el pago de tarjeta del correo, con el monto pegado, se lee entero`() {
+        val correo = "Notificación Transaccional Bancolombia: Pagaste \$386902 en la tarjeta de credito *3684 " +
+            "desde la cuenta *8133, el 27/09/2026 09:17."
+        assertEquals(386_902.0, assertNotNull(parseSms(correo, "Correo · Bancolombia")).amount)
+        assertEquals(1_542_634.0, assertNotNull(parseSms("Pagaste \$1542634 en la tarjeta de credito *3684")).amount)
+    }
+
+    @Test
+    fun `sin separadores tambien con COP y USD pegados, y con decimales`() {
+        assertEquals(249_000.0, assertNotNull(parseSms("Compraste COP249000 en RAPPI")).amount)
+        val usd = assertNotNull(parseSms("Compraste USD20 en ANTHROPIC"))
+        assertEquals(20.0, usd.amount)
+        assertEquals("USD", usd.currency)
+        assertEquals(1_234.56, assertNotNull(parseSms("Pagaste \$1234,56 en TIENDA")).amount)
+    }
+
+    @Test
+    fun `lo que se leia con separadores se sigue leyendo igual`() {
+        // Uno por cada forma que ya existía: ninguno puede cambiar con la forma nueva.
+        assertEquals(974_550.0, assertNotNull(parseSms("Pagaste \$974,550 en la tarjeta de credito *9208")).amount)
+        assertEquals(3_500_000.0, assertNotNull(parseSms("Retiraste \$3,500,000.00 de tu cuenta *9586")).amount)
+        assertEquals(93_900.0, assertNotNull(parseSms("Compraste COP93.900,00 en DTV*DIRECTVGO")).amount)
+        assertEquals(4_178_163.0, assertNotNull(parseSms("Valor: \$ 4.178.163,00")).amount)
+        assertEquals(138_600.0, assertNotNull(parseSms("Valor: \$ 138.600")).amount)
+        assertEquals(115_113.07, assertNotNull(parseSms("Valor: \$ 115.113,07")).amount)
+        assertEquals(1.5, assertNotNull(parseSms("Compraste \$1.50 en X")).amount)
+        assertEquals(3.5, assertNotNull(parseSms("Compraste \$3,5 en X")).amount)
+    }
 }

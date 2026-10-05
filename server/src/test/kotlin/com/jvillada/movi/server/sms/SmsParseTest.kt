@@ -155,8 +155,34 @@ class SmsParseTest {
         val p = assertNotNull(parseSms("Bancolombia: Recibimos pago por 9.809.799 a tu tarjeta de credito **2222 desde Wompi-PSE, el 08/09/2026 07:56:38."))
         assertEquals(9_809_799.0, p.amount)
         assertEquals(CARD_PAYMENT_CATEGORY, p.category)
+        assertEquals(TransactionType.INCOME, p.type, "es plata que ENTRA a la tarjeta")
         val otro = assertNotNull(parseSms("Bancolombia: Pagaste \$1,008,902 en la tarjeta de credito *2222 desde la cuenta *3333, el 29/08/2026."))
         assertEquals(CARD_PAYMENT_CATEGORY, otro.category)
+    }
+
+    /**
+     * **El abono a la tarjeta es plata que entra a la tarjeta**, no un gasto: leído como EXPENSE y
+     * confirmado, le sumaba la deuda en vez de bajarla. Pasó con dos abonos de un tercero a la AMEX
+     * en septiembre ($9.000.000 y $9.809.799). El «Pagaste … en la tarjeta … desde la cuenta» sigue
+     * siendo una salida: ese aviso habla desde la cuenta de ahorros.
+     */
+    @Test
+    fun `recibimos pago a tu tarjeta es un ingreso en la tarjeta, no un gasto`() {
+        val abono = assertNotNull(
+            parseSms("Bancolombia: Recibimos pago por \$9,000,000.00 a tu tarjeta de credito **2222 desde Wompi-PSE, el 04/09/2026 08:11."),
+        )
+        assertEquals(9_000_000.0, abono.amount)
+        assertEquals(TransactionType.INCOME, abono.type)
+        assertEquals(CARD_PAYMENT_CATEGORY, abono.category)
+        assertEquals("Pago de tarjeta", abono.merchant)
+        assertNull(abono.identificadorDelDestino, "un abono a la tarjeta propia no ofrece guardar a nadie")
+
+        val pagoDesdeLaCuenta = assertNotNull(parseSms("Bancolombia: Pagaste \$974,550 en la tarjeta de credito *2222 desde la cuenta *3333, el 15/08/2026 19:37."))
+        assertEquals(TransactionType.EXPENSE, pagoDesdeLaCuenta.type)
+
+        // El de Nu, que el teléfono captura del lado de la cuenta de ahorros, sigue siendo una salida.
+        val nu = assertNotNull(parseSms("¡Bravo! Pagaste tu tarjeta de crédito Nu: Recibimos tu pago por \$1.998,96.", origen = "Notificación · Nu"))
+        assertEquals(TransactionType.EXPENSE, nu.type)
     }
 
     /**
