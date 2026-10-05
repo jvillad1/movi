@@ -45,7 +45,12 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esIdDeComprobante
 import com.jvillada.movi.shared.model.esUnComprobante
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.contentType
+import com.jvillada.movi.shared.model.ConfirmarElMismoPago
+import com.jvillada.movi.shared.model.DosPatasDelAviso
+import com.jvillada.movi.shared.model.AVANCE_DE_TARJETA_CATEGORY
 import io.ktor.server.application.log
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -221,18 +226,17 @@ private val abonoALaTarjeta = Regex("""\brecibimos\s+pago\b.*?\ba\s+tu\s+tarjeta
  *
  * Es plata prestada que ENTRA a la cuenta de ahorros: el dueño lo anotó como un desembolso de la
  * tarjeta a la cuenta (la pata del banco con «Desembolso de crédito», que cuenta como plata que
- * entra; la de la tarjeta como traspaso). Confirmar un aviso todavía no arma esas dos patas —un
- * traspaso no acepta una tarjeta en ninguna punta, y un desembolso suelto no se deja escribir—, así
- * que se propone lo que sí se puede: un **ingreso** en la cuenta de destino, «Avance de la tarjeta
- * *9208», con [AVANCE_CATEGORY]. La deuda de la tarjeta queda por cargar aparte.
+ * entra; la de la tarjeta como traspaso). Se lee como un **ingreso** «Avance de la tarjeta *9208»
+ * con [AVANCE_CATEGORY]; al confirmarlo con la cuenta a la que entró, la app pide las dos patas
+ * ([com.jvillada.movi.shared.model.OperacionDelAviso.AVANCE]) y el server las escribe juntas.
  */
 private val avanceRegex = Regex("""\bhiciste\s+un\s+avance\b""", RegexOption.IGNORE_CASE)
 
 /** La tarjeta de la que salió el avance: «desde tu T.Credito *9208». */
 private val tarjetaDelAvanceRegex = Regex("""\bT\.?\s*Cred(?:ito)?\.?\s*\*+\s?(\d{4,})""", RegexOption.IGNORE_CASE)
 
-/** La categoría de un avance de tarjeta, mientras confirmar no arme el desembolso de dos patas. */
-internal const val AVANCE_CATEGORY = "Avance de tarjeta"
+/** La categoría de un avance de tarjeta. Confirmado con la cuenta a la que entró, Movi arma las dos patas (ver `LasDosPatasDelAviso.kt`). */
+internal const val AVANCE_CATEGORY = AVANCE_DE_TARJETA_CATEGORY
 
 /**
  * A quién se le pagó desde la cuenta de Nu: lo que va entre «Pagaste en» y « con tu cuenta» (la
@@ -698,6 +702,29 @@ fun Route.smsRoutes() {
     post("/api/sms/{id}/confirm") {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        // **Con cuerpo: el aviso es de dos patas** (el pago de una tarjeta, una cuota, un traspaso, un
+        // avance; ver `LasDosPatasDelAviso.kt`). Va por [confirmarElMismoPago] con este único aviso:
+        // la misma función, la misma transacción, el mismo bloqueo y la misma idempotencia que un pago
+        // avisado varias veces. Contesta [MismoPagoConfirmado] con los ids de las dos patas.
+        //
+        // **Sin cuerpo, lo de siempre**: el APK 1.69 crea su movimiento y confirma así, y no cambia nada.
+        if (call.request.contentType().match(ContentType.Application.Json)) {
+            val patas = runCatching { call.receive<DosPatasDelAviso>() }.getOrNull()
+                ?: return@post call.respond(HttpStatusCode.BadRequest)
+            val conTasa = conLaTasaDelDia(uid, patas)
+            val resultado = dbQuery {
+                val hecho = confirmarElMismoPago(uid, listOf(id), ConfirmarElMismoPago(listOf(id), patas = conTasa), System.currentTimeMillis())
+                // Un comprobante, además, queda colgado de la cuenta de la pata del dinero.
+                if (hecho is Confirmacion.Hecha && esIdDeComprobante(id)) {
+                    hecho.respuesta.eventoId?.let { enlazarElComprobante(uid, id, it) }
+                }
+                hecho
+            }
+            return@post when (resultado) {
+                is Confirmacion.Hecha -> call.respond(resultado.respuesta)
+                is Confirmacion.Rechazada -> call.respond(resultado.estado, resultado.motivo)
+            }
+        }
         // Con qué movimiento se confirmó (el que se acaba de crear, o el que ya estaba: «Es este»).
         // Opcional: un cliente viejo no lo manda y el server lo deduce cuando puede. Se guarda en
         // el aviso (`evento_id`, `confirmado_en`) y, si es un comprobante, además se cuelga el

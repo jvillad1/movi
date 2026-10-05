@@ -1133,10 +1133,10 @@ private fun DestinoConocidoPickerField(
     // Con un destino ya puesto el selector se abre aunque la lista esté vacía o no haya llegado,
     // por el mismo motivo que en `AccountPickerField`: quitarlo tiene que poder pedirse siempre.
     val sePuedeElegir = destinos.isNotEmpty() || selectedId != null
-    SheetSectionLabel("DESTINO CONOCIDO (OPCIONAL)")
+    SheetSectionLabel("PERSONA O COMERCIO (OPCIONAL)")
     Spacer(Modifier.height(8.dp))
     Text(
-        "Si esto es una transferencia a alguien que ya tienes guardado en «Cuentas de otros», " +
+        "Si esto es una transferencia a alguien que ya tienes guardado en «Personas y comercios», " +
             "asócialo: Movi va a reconocer el pago aunque el banco no repita este nombre.",
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
@@ -1158,10 +1158,10 @@ private fun DestinoConocidoPickerField(
             Text(
                 text = when {
                     selected != null -> selected.nombre
-                    destinoSinNombre -> "Se conserva el destino elegido"
-                    fallaronLosDestinos -> "No pudimos cargar tus cuentas guardadas"
-                    destinos.isEmpty() -> "Aún no tienes ninguna cuenta guardada"
-                    else -> "Sin destino"
+                    destinoSinNombre -> "Se conserva el que estaba elegido"
+                    fallaronLosDestinos -> "No pudimos cargar tus personas y comercios"
+                    destinos.isEmpty() -> "Aún no tienes a nadie guardado"
+                    else -> "Ninguno"
                 },
                 style = Movi.textos.cuerpo,
                 color = if (selected != null) Movi.colores.texto else Movi.colores.textoMedio,
@@ -1181,7 +1181,7 @@ private fun DestinoConocidoPickerField(
                 .background(Movi.colores.tarjeta)
                 .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp)),
         ) {
-            AccountPickerRow(label = "Sin destino", selected = selectedId == null) { onPick(null) }
+            AccountPickerRow(label = "Ninguno", selected = selectedId == null) { onPick(null) }
             destinos.forEach { destino ->
                 AccountPickerRow(label = destino.nombre, selected = destino.id == selectedId) {
                     onPick(destino.id)

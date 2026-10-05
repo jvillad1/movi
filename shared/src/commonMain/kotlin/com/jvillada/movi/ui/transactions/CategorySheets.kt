@@ -750,7 +750,6 @@ internal fun ContenidoDelMovimiento(
                 FilaDelTercero(
                     tercero = tercero,
                     recienGuardado = destinoGuardadoAca != null,
-                    otros = destinosParaGuardar.guardados.orEmpty().filter { it.id != tercero.id },
                 )
             } else if (aQuienFue != null && destinosParaGuardar.ofrece(aQuienFue, cuentas)) {
                 Spacer(Modifier.height(20.dp))

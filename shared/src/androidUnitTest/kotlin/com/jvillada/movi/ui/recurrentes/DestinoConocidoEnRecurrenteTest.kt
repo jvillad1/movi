@@ -53,7 +53,7 @@ class DestinoConocidoEnRecurrenteTest {
         // `assertExists`, no `assertIsDisplayed`: la hoja recorta con `verticalScroll` y la
         // sección vive lejos en la lista de campos — lo que importa acá es que la composición la
         // ofrezca, no que ya esté a la vista sin haber rodado.
-        composeRule.onNodeWithText("DESTINO CONOCIDO (OPCIONAL)").assertExists()
+        composeRule.onNodeWithText("PERSONA O COMERCIO (OPCIONAL)").assertExists()
     }
 
     /**

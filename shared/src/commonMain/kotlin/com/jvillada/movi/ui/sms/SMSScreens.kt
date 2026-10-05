@@ -68,6 +68,8 @@ import com.jvillada.movi.shared.model.GrupoDeAvisos
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.avisoDeCaptura
 import com.jvillada.movi.shared.model.capturaDeSms
@@ -80,7 +82,6 @@ import com.jvillada.movi.shared.model.nombreDelMovimientoConElDestino
 import com.jvillada.movi.ui.destinos.FilaGuardarElDestino
 import com.jvillada.movi.ui.destinos.nombreParaLaFila
 import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
-import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.ui.transactions.SelectorDeCuentaDeDeuda
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
@@ -684,6 +685,12 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      * quedó pegada de una categoría anterior.
      */
     var cuentaDeDeudaElegida by remember { mutableStateOf<Account?>(null) }
+    /**
+     * Arreglo 1 de la ingesta: la cuenta suya a la que fue la plata en un traspaso, o a la que entró
+     * un avance, elegida con el dedo. `null` = la que propone Movi ([destinoPropuestoDelAviso]).
+     */
+    var destinoElegidoId by remember { mutableStateOf<String?>(null) }
+    var eligiendoDestino by remember { mutableStateOf(false) }
 
     /**
      * Ola 2: la propuesta salió de un comprobante que el dueño compartió (ver `Papeles.kt` en
@@ -867,8 +874,29 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             cuentaDeDeudaElegida = deudaPropuesta
         }
     }
-    /** «Depósito a tu cuenta NU»: se anota como traspaso a esa cuenta, no como gasto. Ver [destinoDelTraspaso]. */
-    val haciaElTraspaso = destinoDelTraspaso(parsed, selectedCategory ?: parsed?.category, resolvedAccount, accounts)
+    // ── Las dos patas (arreglo 1 de la auditoría de la ingesta) ─────────────────────────────────
+    // Un aviso con destino propio —la tarjeta o el crédito que se paga, la cuenta a la que fue un
+    // traspaso o a la que entró un avance— se confirma con sus dos patas, y la tarjeta de resumen lo
+    // dice antes: «Sale de … · entra a …». Ver `LasDosPatasEnReconciliar.kt`.
+    val categoriaActual = selectedCategory ?: parsed?.category
+    val destinoNombrado = destinoPropuestoDelAviso(parsed, cuentaDelSms, accounts)
+    // «Retiraste … de tu cuenta *9586 Fiducuenta hacia la cuenta *02955068133»: si el destino es una
+    // cuenta suya, es un traspaso. Se propone una vez; si él elige otra categoría, manda la suya.
+    LaunchedEffect(parsed, destinoNombrado?.id) {
+        val p = parsed ?: return@LaunchedEffect
+        if (p.type == TransactionType.EXPENSE && destinoNombrado != null && selectedCategory == p.category &&
+            p.category != CARD_PAYMENT_CATEGORY && p.category != CUOTA_CATEGORY
+        ) {
+            selectedCategory = TRANSFER_CATEGORY
+        }
+    }
+    val pideDestino = pideLaCuentaDeDestino(parsed, categoriaActual, resolvedAccount)
+    val destinoDeLasPatas = if (!pideDestino) null else {
+        destinoElegidoId?.let { id -> accounts.firstOrNull { it.id == id } } ?: destinoNombrado
+    }
+    val lasDosPatas = dosPatasPropuestas(parsed, categoriaActual, resolvedAccount, cuentaDeDeudaElegida, destinoDeLasPatas)
+    /** Un traspaso o un avance sin la cuenta a la que entró no se confirma: el avance bajaría la deuda de la tarjeta. */
+    val faltaElDestino = pideDestino && lasDosPatas == null
 
     fun confirm() {
         if (working) return
@@ -886,11 +914,13 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         val cat = selectedCategory ?: parsed?.category ?: return
         val acct = resolvedAccount ?: return
         val p = parsed ?: return
-        working = true
-        error = null
         // Se lee ACÁ, antes del `coroutine.launch`: si el dueño toca dos veces rápido, la segunda
         // pasada no puede ver un estado que la primera ya limpió a mitad de camino.
-        val cuentaDeDeuda = cuentaDeDeudaElegida
+        val dosPatas = lasDosPatas
+        // Un traspaso o un avance sin la cuenta a la que entró: el botón ya está apagado.
+        if (faltaElDestino) return
+        working = true
+        error = null
         coroutine.launch {
             // Si el movimiento se crea y marcar el aviso falla, el aviso sigue pendiente: sin volver
             // a revisar, el siguiente «Confirmar» crearía un segundo movimiento en silencio.
@@ -906,14 +936,17 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     ),
                     p.fecha,
                 )
-                val hacia = destinoDelTraspaso(p, cat, acct, accounts)
-                if (hacia != null) {
-                    // Un traspaso entre cuentas suyas: las dos patas en una transacción del server, y el
-                    // aviso queda enlazado a la que sale de esta cuenta.
-                    val traspaso = traspasoDelAviso(p, acct, hacia, momento, ::newId)
-                    Repositories.wallets.createTransfer(traspaso)
-                    movimientoCreado = true
-                    confirmarElAviso(traspaso.fromEventId)
+                if (dosPatas != null) {
+                    // Las dos patas en una transacción del server, con este aviso (o todos los del
+                    // pago) enlazados a la del dinero. Un doble toque no crea otras: el server ve el
+                    // aviso ya anotado y contesta con las mismas.
+                    val pedido = pedidoDeDosPatas(dosPatas, p, momento, ::newId)
+                    val elPago = pagoActual
+                    if (elPago != null) {
+                        Repositories.wallets.confirmarElMismoPago(elPago.grupoId, ConfirmarElMismoPago(idsDelPago, patas = pedido))
+                    } else {
+                        Repositories.wallets.confirmarConLasDosPatas(smsId, pedido)
+                    }
                     return@intentar
                 }
                 val event = movimientoConfirmadoDelSms(
@@ -930,24 +963,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 if (elPago != null) {
                     // Un solo movimiento para todos los avisos, en una transacción del server: si
                     // ya estaba anotado (un doble toque, otro teléfono) no crea otro.
-                    val hecho = Repositories.wallets.confirmarElMismoPago(
+                    Repositories.wallets.confirmarElMismoPago(
                         elPago.grupoId, ConfirmarElMismoPago(idsDelPago, evento = event),
                     )
                     UsedCategoriesCache.record(cat, p.type)
-                    if (hecho.creado) {
-                        cuentaDeDeuda?.let { deuda ->
-                            runCatching {
-                                Repositories.wallets.vincularPagoDeDeuda(
-                                    eventId = hecho.eventoId ?: event.id,
-                                    request = VincularPagoDeDeudaRequest(
-                                        debtAccountId = deuda.id,
-                                        transferId = newId("tr"),
-                                        toEventId = newId("ev"),
-                                    ),
-                                )
-                            }
-                        }
-                    }
                     return@intentar
                 }
                 Repositories.wallets.postEvent(event)
@@ -955,22 +974,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 // Una categoría creada acá tiene que ser conocida en el siguiente aviso: sin esto
                 // la bandeja no recarga el caché y «Colegio» se volvía a ofrecer como «Crear».
                 UsedCategoriesCache.record(cat, p.type)
-                // Ola Y: si eligió una deuda, arma el traspaso completo. Es best-effort a propósito
-                // — el movimiento YA quedó guardado como gasto suelto en la línea de arriba, así
-                // que si esto falla no se pierde nada: queda exactamente como si no hubiera elegido
-                // ninguna cuenta, y se puede completar después desde el editor del movimiento.
-                cuentaDeDeuda?.let { deuda ->
-                    runCatching {
-                        Repositories.wallets.vincularPagoDeDeuda(
-                            eventId = event.id,
-                            request = VincularPagoDeDeudaRequest(
-                                debtAccountId = deuda.id,
-                                transferId = newId("tr"),
-                                toEventId = newId("ev"),
-                            ),
-                        )
-                    }
-                }
+                // Con una deuda elegida, las dos patas ya salieron arriba (`dosPatas`): acá llega solo
+                // lo que es un movimiento suelto.
                 confirmarElAviso(event.id)
             }.onSuccess {
                 working = false
@@ -1258,6 +1263,21 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                                 letterSpacing = (-0.4).sp,
                             )
                         }
+                        // Arreglo 1 de la ingesta: lo que se va a crear, antes de confirmar.
+                        LasDosPatasEnElResumen(
+                            propuestas = lasDosPatas,
+                            pideDestino = pideDestino,
+                            destino = destinoDeLasPatas,
+                            esAvance = esUnAvanceDeLaTarjeta(p, categoriaActual, resolvedAccount),
+                            eligiendo = eligiendoDestino,
+                            habilitado = !working && (currentSms == null || currentSms.state == SMS_STATE_PENDING),
+                            onCambiar = { eligiendoDestino = !eligiendoDestino },
+                            elegibles = destinosElegibles(accounts, resolvedAccount),
+                            onElegir = { cuenta ->
+                                destinoElegidoId = cuenta.id
+                                eligiendoDestino = false
+                            },
+                        )
                     }
                 }
 
@@ -1277,6 +1297,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         FilaGuardarElDestino(
                             identificador = identificador,
                             nombreSugerido = nombreParaLaFila(identificador, leidoParaGuardar.merchant),
+                            textoDelAviso = sms?.text,
                             destinos = destinosParaGuardar.guardados.orEmpty(),
                             onGuardado = { guardado ->
                                 destinosParaGuardar.alGuardar(guardado)
@@ -1458,11 +1479,12 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 // Ola Y: opcional, y solo con esas dos categorías sobre un gasto — ver
                 // `ofreceVincularDeuda`. Debajo de las pastillas de categoría, porque depende de
                 // cuál quedó elegida.
-                // «Depósito a tu cuenta NU»: dice qué se va a anotar, o por qué no se puede así.
-                if ((selectedCategory ?: parsed?.category) == TRANSFER_CATEGORY && parsed != null) {
+                // Un traspaso sin la cuenta a la que fue la plata: por qué todavía no se puede. Con la
+                // cuenta, lo que se va a crear ya lo dice la tarjeta de resumen.
+                if (categoriaActual == TRANSFER_CATEGORY && parsed != null && lasDosPatas == null) {
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        avisoDelTraspaso(haciaElTraspaso, resolvedAccount),
+                        avisoDelTraspaso(null, resolvedAccount),
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )
@@ -1539,7 +1561,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             // Ya anotado con otro aviso del pago: lo único que falta es cerrar los demás.
             val soloCerrar = yaAnotadoCon != null
             val canConfirm = !working && !alreadyResolved &&
-                (soloCerrar || (parsed != null && resolvedAccount != null && revisionContesto))
+                (soloCerrar || (parsed != null && resolvedAccount != null && revisionContesto && !faltaElDestino))
             Box(
                 modifier = Modifier
                     .weight(1.7f)

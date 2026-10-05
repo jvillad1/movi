@@ -110,6 +110,14 @@ data class DestinoConocido(
     val recibidosDelPeriodo: Map<String, Long> = emptyMap(),
     /** Lo último que te llegó de este tercero — derivado. `null` si nunca te mandó nada. */
     val ultimoRecibido: UltimoEnvio? = null,
+    /**
+     * **[tipo] lo dedujo Movi y nadie lo eligió** (4-oct-2026) — derivado. Los terceros guardados
+     * antes de que existiera el tipo no lo tienen, y la cancha y el parqueadero (pagados por QR)
+     * salían como personas. El server lo deduce al leer ([conTipoInferido]) **sin escribirlo**: si
+     * el dueño nunca lo eligió, sigue siendo una deducción, y una deducción mejor mañana tiene que
+     * poder cambiarlo. La app manda `tipo = null` al guardar si esto es `true` y no lo tocó.
+     */
+    val tipoInferido: Boolean = false,
 )
 
 /**
@@ -280,18 +288,18 @@ private val DIGITOS_DEL_NOMBRE = Regex("""\d+""")
 
 /** Lo que se le dice a quien intenta registrar como ajeno un número que es de una cuenta suya. */
 fun mensajeDeNumeroPropio(nombreDeLaCuenta: String): String =
-    "Ese número es el de tu cuenta «$nombreDeLaCuenta». Un destino es una cuenta de otra persona: " +
-        "si la registras aquí, Movi le pondría el nombre de otro a tus propios movimientos."
+    "Ese número es el de tu cuenta «$nombreDeLaCuenta». Si lo guardas en $PERSONAS_Y_COMERCIOS, " +
+        "Movi le pondría el nombre de otro a tus propios movimientos."
 
 /** Lo que se le dice a quien registra dos veces la misma llave. */
 fun mensajeDeLlaveRepetida(nombreDelOtro: String): String =
-    "Ya tienes «$nombreDelOtro» con esa llave. Edítalo en vez de agregar otro: dos destinos con la " +
-        "misma llave se llevarían los mismos movimientos."
+    "«$nombreDelOtro» ya tiene esa llave. Si es la misma persona o comercio, únelos desde su ficha: " +
+        "dos fichas con la misma llave se llevarían los mismos movimientos."
 
 /** Lo que se le dice a quien registra dos veces el mismo número. */
 fun mensajeDeNumeroRepetido(nombreDelOtro: String): String =
-    "Ya tienes «$nombreDelOtro» con ese número. Edítalo en vez de agregar otro: dos destinos con el " +
-        "mismo número se llevarían los mismos movimientos."
+    "«$nombreDelOtro» ya tiene ese número. Si es la misma persona o comercio, únelos desde su ficha: " +
+        "dos fichas con el mismo número se llevarían los mismos movimientos."
 
 /**
  * Los números de cuenta que un texto del banco nombra.
@@ -535,11 +543,32 @@ fun vieneDelDestino(evento: FinancialEvent, destino: DestinoConocido): Boolean {
     return elConceptoDiceElNombre(evento, destino)
 }
 
+/**
+ * **La señal del nombre en el concepto.** El nombre tiene que estar como palabra completa **y** en
+ * un lugar donde nombra a alguien (4-oct-2026): el concepto entero («Señor Gol»), al comienzo
+ * («Caro mercado»), o detrás de una palabra que dice a quién o de quién («Transferencia a Caro»,
+ * «Plata para Caro», «Regalo de Caro»). Hasta esa fecha bastaba la palabra suelta, y «Almuerzo caro»
+ * —«caro» como adjetivo— se sumaba a lo que se le mandó a Caro: un total inflado en la ficha y en
+ * lo que contesta Movi AI. La revisión de la Ola V ya lo había marcado como agravante.
+ */
 private fun elConceptoDiceElNombre(evento: FinancialEvent, destino: DestinoConocido): Boolean {
     val nombre = enPalabras(destino.nombre)
     if (nombre.trim().length < 3) return false
-    return listOfNotNull(evento.description, evento.merchant).any { enPalabras(it).contains(nombre) }
+    return listOfNotNull(evento.description, evento.merchant).any { texto ->
+        val palabras = enPalabras(texto)
+        var i = palabras.indexOf(nombre)
+        while (i >= 0) {
+            val antes = palabras.substring(0, i).trim().substringAfterLast(' ')
+            if (antes.isEmpty() || antes in PALABRAS_QUE_NOMBRAN_A_ALGUIEN) return@any true
+            i = palabras.indexOf(nombre, i + 1)
+        }
+        false
+    }
 }
+
+/** Las palabras que, antes de un nombre, dicen que es a quién o de quién fue la plata. */
+private val PALABRAS_QUE_NOMBRAN_A_ALGUIEN =
+    setOf("a", "al", "de", "del", "para", "pa", "con", "donde", "le", "les", "por", "hacia", "desde")
 
 /**
  * El texto en palabras, con un espacio de centinela a cada punta: así `contains(" caro ")` es una

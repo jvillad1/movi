@@ -2022,6 +2022,7 @@ class LocalRepository(
         remote.agregarIdentificador(id, pedido)
     override suspend fun quitarIdentificador(id: String, identificador: com.jvillada.movi.shared.model.IdentificadorDelDestino) =
         remote.quitarIdentificador(id, identificador)
+    override suspend fun unirDestinos(id: String, con: String) = remote.unirDestinos(id, con)
     override suspend fun getRenombrablesDelDestino(id: String) = remote.getRenombrablesDelDestino(id)
     // Renombrar es una escritura sobre movimientos: el espejo local se pone al día en la próxima
     // lectura de eventos (llevan `lastEditedAt`, igual que una corrección de concepto en la web).
@@ -2281,6 +2282,10 @@ class LocalRepository(
         remote.confirmarComprobante(smsId, eventoId)
 
     override suspend fun confirmSmsCon(id: String, eventoId: String) = remote.confirmSmsCon(id, eventoId)
+    // Dos patas enlazadas y una deuda que se mueve: directo al server, como `payInstallment` y
+    // `vincularPagoDeDeuda`. El espejo local las trae en la próxima lectura de eventos.
+    override suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso) =
+        remote.confirmarConLasDosPatas(smsId, patas)
 
     override suspend fun getAvisosConfirmadosSinMovimiento() = remote.getAvisosConfirmadosSinMovimiento()
 

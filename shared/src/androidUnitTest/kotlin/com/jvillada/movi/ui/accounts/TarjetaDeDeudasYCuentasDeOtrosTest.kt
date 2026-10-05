@@ -160,7 +160,7 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
         assertEquals(1, contarTag(TAG_TARJETA_DE_DEUDAS))
         assertEquals(1, contarTag(TAG_TARJETA_DE_CUENTAS_DE_OTROS))
         assertTrue(!hay("Deudas"), "el título de la tarjeta es parte de los datos, no del esqueleto")
-        assertTrue(!hay("Cuentas de otros"))
+        assertTrue(!hay("Personas y comercios"))
         assertTrue(!hay("\$0"), "nada de cifras inventadas mientras cuelga la lectura")
     }
 
@@ -198,35 +198,31 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
         assertTrue(!hay("\$0"), "sin deudas no hay cifra que mostrar, solo el subtítulo")
     }
 
+    /**
+     * 4-oct-2026: «Personas y comercios» en Patrimonio es una puerta secundaria y **sin cifra**:
+     * decía cuánto se les mandó este período con la letra de los saldos, en la pantalla de lo que es
+     * TUYO. Los nombres siguen, primero a quien más se le mandó.
+     */
     @Test
-    fun `Cuentas de otros dice los nombres y cuanto se les mando este periodo`() {
+    fun `Personas y comercios dice los nombres y ninguna cifra`() {
         montar(destinos = { listOf(destino, mama, papa) })
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Cuentas de otros", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Personas y comercios", useUnmergedTree = true).assertExists()
         assertTrue(!hay("Te deben"), "el nombre viejo se fue: no es plata que le deban")
+        assertTrue(!hay("Cuentas de otros"), "un solo nombre en toda la app")
         // Primero a quien más se le mandó este período (Papá), después el resto.
         composeRule.onNodeWithText("Papá, Caro y Mamá", useUnmergedTree = true).assertExists()
-        // 300.000 (Caro) + 1.000.000 (Papá): la suma de lo que el server derivó, no una cuenta nueva.
-        composeRule.onNodeWithText("\$1.300.000", useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText("este período", useUnmergedTree = true).assertExists()
+        assertTrue(!hay("\$1.300.000"), "plata de otros no se muestra en Patrimonio")
+        assertTrue(!hay("este período"))
     }
 
     @Test
-    fun `Cuentas de otros sin nada enviado este periodo no inventa un cero`() {
-        montar(destinos = { listOf(mama) })
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithText("Mamá · nada enviado este período", useUnmergedTree = true).assertExists()
-        assertTrue(!hay("\$0"), "sin envíos no hay cifra, se dice con palabras")
-    }
-
-    @Test
-    fun `Cuentas de otros sin ninguna guardada invita a guardar una`() {
+    fun `Personas y comercios sin nadie guardado invita a guardar`() {
         montar()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Guarda la cuenta de alguien a quien le envías plata", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Guarda a quién le envías plata", useUnmergedTree = true).assertExists()
     }
 
     /**
@@ -234,7 +230,7 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
      * de «Cuadre de saldos» — no al fondo, debajo de Deudas, donde estaba.
      */
     @Test
-    fun `Cuentas de otros va debajo de las cuentas propias y antes del cuadre`() {
+    fun `Personas y comercios va debajo de las cuentas propias y antes del cuadre`() {
         montar(cuentas = { listOf(nu) }, destinos = { listOf(destino) })
         composeRule.waitForIdle()
 
@@ -261,13 +257,13 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
     }
 
     @Test
-    fun `tocar Cuentas de otros abre la pantalla`() {
+    fun `tocar Personas y comercios abre la pantalla`() {
         montar(destinos = { listOf(destino) })
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag(TAG_TARJETA_DE_CUENTAS_DE_OTROS, useUnmergedTree = true).performClick()
 
-        assertEquals(Screen.Destinos, navegoA)
+        assertEquals(Screen.Destinos(), navegoA)
     }
 
     // ── «Cuadrar» es la tarjeta «Cuadre de saldos», no una acción del encabezado ─────
@@ -314,7 +310,7 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
     // ── Error con reintento ───────────────────────────────────────────────────
 
     @Test
-    fun `si Creditos o Cuentas de otros fallan, cada tarjeta dice que no pudo leer`() {
+    fun `si Creditos o Personas y comercios fallan, cada tarjeta dice que no pudo leer`() {
         montar(
             creditos = { throw ApiException(503) },
             destinos = { throw ApiException(503) },
@@ -322,7 +318,7 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
         composeRule.waitForIdle()
 
         assertTrue(hay("No pudimos cargar tus deudas"))
-        assertTrue(hay("No pudimos cargar Cuentas de otros"))
+        assertTrue(hay("No pudimos cargar tus personas y comercios"))
     }
 
     @Test

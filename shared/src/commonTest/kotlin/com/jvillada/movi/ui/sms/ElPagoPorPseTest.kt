@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.sms
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.OperacionDelAviso
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
@@ -75,26 +76,31 @@ class ElPagoPorPseTest {
     private val deposito = ParsedSms(500_000.0, "NU Compañía de Financiamiento", TransactionType.EXPENSE, TRANSFER_CATEGORY, traspasoHaciaId = "a3", nota = "Depósito a tu cuenta NU")
 
     @Test
-    fun `el deposito a tu cuenta Nu se anota como traspaso desde la cuenta de origen`() {
-        val hacia = assertNotNull(destinoDelTraspaso(deposito, TRANSFER_CATEGORY, ahorros, todas))
+    fun `el deposito a tu cuenta Nu se anota como traspaso de dos patas desde la cuenta de origen`() {
+        val resuelta = CuentaDelBanco(ahorros, OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI)
+        val hacia = assertNotNull(destinoPropuestoDelAviso(deposito, resuelta, todas))
         assertEquals(nu, hacia)
+        val propuestas = assertNotNull(dosPatasPropuestas(deposito, TRANSFER_CATEGORY, ahorros, deudaElegida = null, destinoElegido = hacia))
+        assertEquals(OperacionDelAviso.TRASPASO, propuestas.operacion)
+        assertEquals("Sale de Bancolombia Ahorros · entra a Nu como traspaso", propuestas.resumen)
         var n = 0
-        val traspaso = traspasoDelAviso(deposito, ahorros, hacia, momento = 1_000L) { prefijo -> "${prefijo}_${n++}" }
-        assertEquals("a1", traspaso.fromAccountId)
-        assertEquals("a3", traspaso.toAccountId)
-        assertEquals(500_000L, traspaso.amount)
-        assertEquals("Depósito a tu cuenta NU", traspaso.note)
-        assertEquals(setOf(traspaso.transferId, traspaso.fromEventId, traspaso.toEventId).size, 3)
-        assertEquals("Se anota como traspaso de Bancolombia Ahorros a Nu: no cuenta como gasto.", avisoDelTraspaso(hacia, ahorros))
+        val pedido = pedidoDeDosPatas(propuestas, deposito, momento = 1_000L) { prefijo -> "${prefijo}_${n++}" }
+        assertEquals("a1", pedido.origenId)
+        assertEquals("a3", pedido.destinoId)
+        assertEquals(500_000L, pedido.monto)
+        assertEquals("Depósito a tu cuenta NU", pedido.nota)
+        assertEquals(setOf(pedido.transferId, pedido.origenEventId, pedido.destinoEventId).size, 3)
     }
 
     @Test
     fun `sin destino, con otra categoria o entre la misma cuenta no hay traspaso`() {
-        assertNull(destinoDelTraspaso(deposito.copy(traspasoHaciaId = null), TRANSFER_CATEGORY, ahorros, todas))
-        assertNull(destinoDelTraspaso(deposito, CUOTA_CATEGORY, ahorros, todas), "si el dueño eligió otra categoría, es lo que eligió")
-        assertNull(destinoDelTraspaso(deposito, TRANSFER_CATEGORY, nu, todas))
-        assertNull(destinoDelTraspaso(deposito.copy(traspasoHaciaId = "c1"), TRANSFER_CATEGORY, ahorros, todas), "un traspaso no toca una tarjeta")
-        assertNull(destinoDelTraspaso(deposito, TRANSFER_CATEGORY, null, todas))
+        val resuelta = CuentaDelBanco(ahorros, OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI)
+        assertNull(destinoPropuestoDelAviso(deposito.copy(traspasoHaciaId = null), resuelta, todas))
+        assertNull(dosPatasPropuestas(deposito, CUOTA_CATEGORY, ahorros, null, nu), "si el dueño eligió otra categoría, es lo que eligió")
+        assertNull(destinoPropuestoDelAviso(deposito, CuentaDelBanco(nu, OrigenDeLaCuentaDelBanco.POR_EL_BANCO), todas))
+        assertNull(destinoPropuestoDelAviso(deposito.copy(traspasoHaciaId = "c1"), resuelta, todas), "un traspaso no toca una tarjeta")
+        assertNull(destinoPropuestoDelAviso(deposito, CuentaDelBanco(null, OrigenDeLaCuentaDelBanco.NINGUNA), todas))
+        assertEquals("Un traspaso necesita la cuenta tuya a la que fue la plata. Si no está en Movi, créala, o elige otra categoría.", avisoDelTraspaso(null, ahorros))
     }
 
     private val amex = Account("c2", "AMEX 9208", AccountType.CREDIT_CARD, 0)

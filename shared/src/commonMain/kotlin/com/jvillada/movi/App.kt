@@ -344,7 +344,7 @@ fun App() {
                 Screen.Budgets           -> PresupuestosScreen(navigate)
                 is Screen.Plan           -> PlanScreen(navigate, segmento = currentScreen.segmento)
                 Screen.Categorias        -> CategoriasScreen(navigate)
-                Screen.Destinos          -> DestinosScreen(navigate)
+                is Screen.Destinos       -> DestinosScreen(navigate, abrir = currentScreen.abrir, conSugeridosAbiertos = currentScreen.sugeridos)
                 Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.Compartir         -> CompartirScreen(navigate)
                 Screen.LoQueMoviSabe     -> LoQueMoviSabeScreen(navigate)

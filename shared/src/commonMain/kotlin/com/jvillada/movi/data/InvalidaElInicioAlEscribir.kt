@@ -76,6 +76,8 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun devolverSmsALaBandeja(id: String): Unit = trasEscribir { delegado.devolverSmsALaBandeja(id) }
     override suspend fun confirmarElMismoPago(grupoId: String, pedido: ConfirmarElMismoPago): MismoPagoConfirmado =
         trasEscribir { delegado.confirmarElMismoPago(grupoId, pedido) }
+    override suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso): MismoPagoConfirmado =
+        trasEscribir { delegado.confirmarConLasDosPatas(smsId, patas) }
     override suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>): Unit = trasEscribir { delegado.ignorarElMismoPago(grupoId, miembros) }
     override suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>): Unit = trasEscribir { delegado.noSonElMismoPago(grupoId, miembros) }
     override suspend fun esteEsOtroPago(id: String): Unit = trasEscribir { delegado.esteEsOtroPago(id) }
@@ -117,6 +119,7 @@ internal class InvalidaElInicioAlEscribir(
         trasEscribir { delegado.agregarIdentificador(id, pedido) }
     override suspend fun quitarIdentificador(id: String, identificador: com.jvillada.movi.shared.model.IdentificadorDelDestino) =
         trasEscribir { delegado.quitarIdentificador(id, identificador) }
+    override suspend fun unirDestinos(id: String, con: String) = trasEscribir { delegado.unirDestinos(id, con) }
     override suspend fun descartarSugerido(pedido: com.jvillada.movi.shared.model.DescartarSugerido) =
         trasEscribir { delegado.descartarSugerido(pedido) }
     override suspend fun renombrarMovimientosDelDestino(id: String, ids: List<String>) =

@@ -19,6 +19,7 @@ import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_LEG_NOT_STANDALONE
+import com.jvillada.movi.shared.model.esIdDeComprobante
 import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.momentoDelSms
 import com.jvillada.movi.shared.model.rechazoDeLosTextos
@@ -35,6 +36,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.transactions.TransactionManager
 
 /**
  * # Un pago, una tarjeta: revisar, confirmar e ignorar los avisos de un mismo pago de una vez
@@ -83,7 +85,9 @@ fun Route.elMismoPagoRoutes() {
             ?: return@post call.respond(HttpStatusCode.BadRequest)
         val ids = pedido.miembros.distinct()
         if (ids.isEmpty() || grupoId !in ids) return@post call.respond(HttpStatusCode.BadRequest)
-        val resultado = dbQuery { confirmarElMismoPago(uid, ids, pedido, ahora = System.currentTimeMillis()) }
+        // La TRM del día, si hace falta, antes de bloquear los avisos (ver [conLaTasaDelDia]).
+        val conTasa = pedido.copy(patas = conLaTasaDelDia(uid, pedido.patas))
+        val resultado = dbQuery { confirmarElMismoPago(uid, ids, conTasa, ahora = System.currentTimeMillis()) }
         when (resultado) {
             is Confirmacion.Hecha -> call.respond(resultado.respuesta)
             is Confirmacion.Rechazada -> call.respond(resultado.estado, resultado.motivo)
@@ -145,7 +149,16 @@ internal fun confirmarElMismoPago(
                 it[SmsMessages.confirmadoEn] = ahora
             }
         }
-        return Confirmacion.Hecha(MismoPagoConfirmado(eventoId = eventoId, creado = creado, cerrados = pendientes))
+        return Confirmacion.Hecha(
+            MismoPagoConfirmado(
+                eventoId = eventoId,
+                creado = creado,
+                cerrados = pendientes,
+                // Si el movimiento es una pata (un pago de dos patas), también su hermana: un doble
+                // toque contesta lo mismo que el primero.
+                patas = eventoId?.let { TransactionManager.current().patasDelMovimiento(uid, it) }.orEmpty(),
+            ),
+        )
     }
 
     // **Ya anotado** (otro aviso del pago se confirmó antes, o este mismo pedido llegó dos veces):
@@ -160,6 +173,19 @@ internal fun confirmarElMismoPago(
         val esSuyo = Events.selectAll().where { (Events.id eq existente) and (Events.userId eq uid) }.count() > 0
         if (!esSuyo) return Confirmacion.Rechazada(HttpStatusCode.NotFound, "Ese movimiento no existe.")
         return cerrar(existente, creado = false)
+    }
+
+    // **Dos patas** (arreglo 1 de la auditoría de la ingesta): el pago de una tarjeta, una cuota, un
+    // traspaso o un avance. Las escribe [escribirLasPatasDelAviso] —la misma función para un aviso
+    // suelto y para un pago avisado varias veces— dentro de esta transacción y con estos avisos
+    // bloqueados; los avisos quedan enlazados a la pata del dinero.
+    pedido.patas?.let { patas ->
+        val propuesta = propuestaDelGrupo(filas.map { it.toSmsMessage() })
+        val origen = if (esIdDeComprobante(propuesta.id)) EventSource.OCR else EventSource.SMS
+        return when (val escritas = TransactionManager.current().escribirLasPatasDelAviso(uid, patas, origen, propuesta.text, ahora)) {
+            is PatasDelAviso.Escritas -> cerrar(escritas.pataDelAviso, creado = escritas.creadas)
+            is PatasDelAviso.Rechazadas -> Confirmacion.Rechazada(escritas.estado, escritas.motivo)
+        }
     }
 
     val pedidoDeEvento = pedido.evento

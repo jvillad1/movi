@@ -1,11 +1,8 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.balance.cargosYaCobradosEnElMes
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.toAccount
-import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.server.db.Accounts
-import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
@@ -14,7 +11,6 @@ import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.fx.convertirEntreMonedas
 import com.jvillada.movi.server.plugins.userId
-import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
@@ -28,10 +24,8 @@ import com.jvillada.movi.shared.model.VINCULO_SIN_TASA
 import com.jvillada.movi.shared.model.VINCULO_YA_ES_TRASPASO
 import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.shared.model.conPuntosDeMiles
-import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
 import com.jvillada.movi.shared.model.pagoDeCuotaLegs
 import com.jvillada.movi.shared.model.signedDelta
-import com.jvillada.movi.shared.model.validarInteresReal
 import com.jvillada.movi.shared.model.validarPagoDeCuota
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -43,8 +37,6 @@ import io.ktor.server.routing.route
 import kotlin.math.roundToLong
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
@@ -198,50 +190,17 @@ fun Route.vincularPagoDeDeudaRoutes() {
 
             // ── Cuánto de este pago baja de verdad la deuda — MISMA cuenta que el pago manual ──
             // Se recalcula siempre, incluso en un reintento: es barato (son lecturas) y así la
-            // respuesta describe lo mismo que la primera vez, sin una segunda rama de código.
-            val saldoAntesDelPago = loadNonVoidedEvents(uid, debtAccount.id)
-                .filter { it.transferId != body.transferId && it.currency == debtAccount.currency }
-                .sumOf { signedDelta(debtAccount.type, it.type, it.amount) }
-            val terms = if (debtAccount.type == AccountType.LOAN) {
-                dbQuery {
-                    Credits.selectAll()
-                        .where { (Credits.userId eq uid) and (Credits.accountId eq debtAccount.id) }
-                        .firstOrNull()?.toCreditTerms()
-                }
-            } else {
-                null
-            }
-            val yaCobradoEnElMes = run {
-                val delMes = loadNonVoidedEvents(uid, debtAccount.id)
-                    .filter { it.transferId != body.transferId && it.currency == debtAccount.currency && it.noAmortiza != null }
-                val pares = delMes.mapNotNull { it.transferId }.toSet()
-                val pagadoPorPar = if (pares.isEmpty()) emptyMap() else dbQuery {
-                    Events.selectAll()
-                        .where { (Events.userId eq uid) and (Events.transferId inList pares) and (Events.accountId neq debtAccount.id) }
-                        .associate { it[Events.transferId]!! to it[Events.amount] }
-                }
-                cargosYaCobradosEnElMes(delMes, epochMillisToAppDate(evento.timestamp), terms?.dayOfMonth) { fila ->
-                    fila.transferId?.let { pagadoPorPar[it] }
-                }
-            }
+            // respuesta describe lo mismo que la primera vez, sin una segunda rama de código. Ver
+            // [desgloseDelPagoDeDeuda].
             val cuota = if (fromAccount.currency != debtAccount.currency) montoConvertido ?: evento.amount else evento.amount
-            validarInteresReal(
-                body.interesReal, cuota, debtAccount.type,
-                terms?.insuranceMonthly, terms?.otrosCargosMensuales, yaCobradoEnElMes,
-            )?.let {
-                return@put call.respond(HttpStatusCode.UnprocessableEntity, it)
+            val desglose = when (
+                val calculado = dbQuery {
+                    desgloseDelPagoDeDeuda(uid, debtAccount, body.transferId, evento.timestamp, cuota, body.interesReal)
+                }
+            ) {
+                is DesgloseDelPago.Bien -> calculado.desglose
+                is DesgloseDelPago.Mal -> return@put call.respond(HttpStatusCode.UnprocessableEntity, calculado.motivo)
             }
-            val desglose = desglosarCuotaRegistrada(
-                cuota = cuota,
-                tipoDeLaDeuda = debtAccount.type,
-                saldoDeLaDeuda = saldoAntesDelPago,
-                rateEa = terms?.rateEa,
-                seguroMensual = terms?.insuranceMonthly,
-                otrosCargosMensuales = terms?.otrosCargosMensuales,
-                sinIntereses = terms?.sinIntereses ?: false,
-                interesReal = body.interesReal,
-                yaCobradoEnElMes = yaCobradoEnElMes,
-            )
             val (pataDelDinero, pataDeLaDeuda) = pagoDeCuotaLegs(pseudoRequest, fromAccount, debtAccount, desglose)
 
             // La pata del dinero YA EXISTE: se ACTUALIZA, no se inserta. Las dos escrituras

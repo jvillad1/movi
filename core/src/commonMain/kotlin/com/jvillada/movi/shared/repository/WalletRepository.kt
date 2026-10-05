@@ -163,6 +163,12 @@ interface WalletRepository {
     suspend fun agregarIdentificador(id: String, pedido: AgregarIdentificador): DestinoConocido =
         noLoTiene("agregarIdentificador")
 
+    /**
+     * **Une dos fichas de la misma persona o comercio** (4-oct-2026): todo lo de [id] pasa a [con] y
+     * [id] se borra. Devuelve [con] ya unida. Ningún movimiento se toca.
+     */
+    suspend fun unirDestinos(id: String, con: String): DestinoConocido = noLoTiene("unirDestinos")
+
     /** Le quita un identificador. 400 si es el último. */
     suspend fun quitarIdentificador(id: String, identificador: IdentificadorDelDestino): DestinoConocido =
         noLoTiene("quitarIdentificador")
@@ -752,6 +758,15 @@ interface WalletRepository {
      * implemente esto, es un `confirmSms` de siempre.
      */
     suspend fun confirmSmsCon(id: String, eventoId: String) = confirmSms(id)
+
+    /**
+     * **Confirma un aviso de dos patas** (el pago de una tarjeta, una cuota, un traspaso, un avance):
+     * `POST /api/sms/{id}/confirm` con [patas] en el cuerpo. El server escribe las dos patas y marca el
+     * aviso en una sola transacción, y contesta con sus ids; un doble toque contesta lo mismo. Va
+     * directo al server, como el traspaso y la Ola Y. Ver `DosPatasDelAviso`.
+     */
+    suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso): MismoPagoConfirmado =
+        throw UnsupportedOperationException("confirmarConLasDosPatas")
 
     /**
      * `GET /api/sms/confirmados-sin-movimiento`: los avisos confirmados cuyo movimiento se anuló o

@@ -334,6 +334,9 @@ class WalletRepositoryImpl(
             },
         ).body()
 
+    override suspend fun unirDestinos(id: String, con: String): DestinoConocido =
+        conElTextoDelRechazo(client.post("$baseUrl/api/destinos/$id/unir/$con")).body()
+
     override suspend fun quitarIdentificador(id: String, identificador: IdentificadorDelDestino): DestinoConocido =
         conElTextoDelRechazo(
             client.post("$baseUrl/api/destinos/$id/identificadores/quitar") {
@@ -1054,6 +1057,12 @@ class WalletRepositoryImpl(
     override suspend fun confirmSmsCon(id: String, eventoId: String) {
         client.post("$baseUrl/api/sms/$id/confirm?eventoId=$eventoId").exigirExito()
     }
+
+    override suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso): MismoPagoConfirmado =
+        client.post("$baseUrl/api/sms/$smsId/confirm") {
+            contentType(ContentType.Application.Json)
+            setBody(patas)
+        }.exigirExito().body()
 
     override suspend fun getAvisosConfirmadosSinMovimiento(): List<com.jvillada.movi.shared.model.AvisoConfirmadoSinMovimiento> =
         client.get("$baseUrl/api/sms/confirmados-sin-movimiento").exigirExito().body()
