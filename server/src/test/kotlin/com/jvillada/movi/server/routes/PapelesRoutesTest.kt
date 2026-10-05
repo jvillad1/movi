@@ -2,6 +2,7 @@ package com.jvillada.movi.server.routes
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.jvillada.movi.server.ai.FallasDeLaApiDePrueba
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
@@ -19,6 +20,8 @@ import com.jvillada.movi.server.parsing.LectorDePapelesConClaude
 import com.jvillada.movi.server.parsing.QueDiceElPapel
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.shared.model.IA_NO_DISPONIBLE
+import com.jvillada.movi.shared.model.IA_SIN_CREDITO
 import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.MerchantRule
 import com.jvillada.movi.shared.model.ParsedSms
@@ -69,6 +72,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -102,17 +106,23 @@ class PapelesRoutesTest {
         var vecesQueEs = 0
         var vecesExtracto = 0
         var ultimoContenido: ContenidoDelPapel? = null
+        /** Lo que lanzaría el SDK de Anthropic (sin saldo, clave rechazada…). `null` = contesta. */
+        var lanzaAlClasificar: Exception? = null
+        var lanzaAlExtraer: Exception? = null
         override suspend fun queEs(contenido: ContenidoDelPapel): QueDiceElPapel {
             vecesQueEs++
             ultimoContenido = contenido
+            lanzaAlClasificar?.let { throw it }
             return queDice
         }
         override suspend fun leerExtractoDeTexto(texto: String, reglas: List<MerchantRule>): ClaudeStatementParser.Lectura {
             vecesExtracto++
+            lanzaAlExtraer?.let { throw it }
             return ClaudeStatementParser.Lectura.Ok(filasDelExtracto)
         }
         override suspend fun leerExtractoDeImagen(bytes: ByteArray, mime: String, reglas: List<MerchantRule>): ClaudeStatementParser.Lectura {
             vecesExtracto++
+            lanzaAlExtraer?.let { throw it }
             return ClaudeStatementParser.Lectura.Ok(filasDelExtracto)
         }
     }
@@ -434,6 +444,58 @@ class PapelesRoutesTest {
     }
 
     @Test
+    fun `sin credito en Anthropic contesta 503 IA_SIN_CREDITO y el archivo queda guardado`() = testApplication {
+        wireApp()
+        lector.lanzaAlClasificar = FallasDeLaApiDePrueba.sinCredito()
+        val doc = subir(duenoId)
+
+        val res = leer(duenoId, doc)
+        assertEquals(HttpStatusCode.ServiceUnavailable, res.status)
+        assertEquals(IA_SIN_CREDITO, res.bodyAsText())
+        transaction {
+            assertEquals(1L, Documents.selectAll().where { Documents.id eq doc }.count())
+            assertEquals(0L, LecturasDePapeles.selectAll().count(), "nada guardado que tape el reintento con crédito")
+        }
+        assertTrue(filasDeLaBandeja(duenoId).isEmpty())
+    }
+
+    @Test
+    fun `si la API rechaza la lectura del extracto contesta 503 IA_NO_DISPONIBLE`() = testApplication {
+        wireApp()
+        lector.lanzaAlExtraer = FallasDeLaApiDePrueba.claveRechazada()
+        val pdf = pdfConLineas(
+            listOf(
+                "Bancolombia - Extracto de ahorros",
+                "01/09/2026 COMPRA EXITO 45.000",
+                "02/09/2026 UBER 18.500",
+                "03/09/2026 RAPPI 32.900",
+                "04/09/2026 NOMINA 4.500.000",
+            ),
+        )
+        val doc = subir(duenoId, nombre = "Extracto.pdf", contenido = pdf, mime = "application/pdf")
+
+        val res = leer(duenoId, doc)
+        assertEquals(HttpStatusCode.ServiceUnavailable, res.status)
+        assertEquals(IA_NO_DISPONIBLE, res.bodyAsText())
+        transaction { assertEquals(0L, LecturasDePapeles.selectAll().count()) }
+    }
+
+    @Test
+    fun `un error de verdad de la API no se disfraza de no disponible`() = testApplication {
+        wireApp()
+        lector.lanzaAlClasificar = FallasDeLaApiDePrueba.pedidoMalArmado()
+        val doc = subir(duenoId)
+        // Sin StatusPages en este módulo de prueba la excepción puede llegar a la prueba o como un
+        // 500: cualquiera de las dos vale, lo que no vale es un 503 con un código de «no disponible».
+        runCatching { leer(duenoId, doc) }
+            .onSuccess { res ->
+                assertEquals(HttpStatusCode.InternalServerError, res.status)
+                assertFalse(res.bodyAsText().contains("IA_"))
+            }
+            .onFailure { assertIs<com.anthropic.errors.BadRequestException>(it) }
+    }
+
+    @Test
     fun `un PDF con contrasena se explica sin llamar al lector`() = testApplication {
         wireApp()
         val doc = subir(duenoId, nombre = "extracto.pdf", contenido = pdfConClave(), mime = "application/pdf")
@@ -498,6 +560,43 @@ class PapelesRoutesTest {
         assertEquals(1, lectura.extracto?.newTransactions?.size)
         assertEquals(1, lector.vecesQueEs)
         assertEquals(1, lector.vecesExtracto)
+    }
+
+    @Test
+    fun `un extracto sin movimientos no abre la revision y no queda leido`() = testApplication {
+        wireApp()
+        // El extracto del crédito del vehículo: Movi lo toma por extracto y la lectura vuelve vacía.
+        lector.filasDelExtracto = emptyList()
+        val pdf = pdfConLineas(
+            listOf(
+                "Extracto credito vehiculo",
+                "01/09/2026 CUOTA A PAGAR 1.250.000",
+                "02/09/2026 SALDO CAPITAL 38.500.000",
+                "03/09/2026 INTERESES 410.000",
+                "04/09/2026 SEGURO 95.000",
+            ),
+        )
+        val doc = subir(duenoId, nombre = "Vehiculos.pdf", contenido = pdf, mime = "application/pdf")
+
+        val res = leer(duenoId, doc)
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
+        assertEquals(PAPEL_SIN_MOVIMIENTO, res.bodyAsText())
+        assertEquals(1, lector.vecesExtracto)
+        transaction {
+            assertEquals(1L, Documents.selectAll().where { Documents.id eq doc }.count(), "el archivo queda en Documentos")
+            assertEquals(0L, LecturasDePapeles.selectAll().count(), "una lectura vacía no se guarda")
+            assertEquals(0L, StatementImports.selectAll().count())
+        }
+    }
+
+    @Test
+    fun `una imagen que el clasificador llama extracto pero no trae filas tampoco abre la revision`() = testApplication {
+        wireApp()
+        lector.queDice = QueDiceElPapel.Extracto
+        lector.filasDelExtracto = emptyList()
+        val res = leer(duenoId, subir(duenoId, nombre = "portal.png"))
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
+        assertEquals(PAPEL_SIN_MOVIMIENTO, res.bodyAsText())
     }
 
     // ── Utilidades ─────────────────────────────────────────────────────────────

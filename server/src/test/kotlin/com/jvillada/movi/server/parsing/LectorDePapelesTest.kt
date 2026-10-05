@@ -140,6 +140,26 @@ class LectorDePapelesTest {
         assertEquals("USD 99", montoDelComprobante(99.0, "USD"))
     }
 
+    // ── El clasificador frente a créditos, facturas y desembolsos ───────────────
+
+    @Test
+    fun `el clasificador sabe que un credito sin movimientos y una factura sin pagar son NADA`() {
+        val prompt = ClaudeStatementParser.promptDelPapel()
+        assertTrue("CRÉDITO (hipoteca, vehículo, libre inversión, libranza)" in prompt)
+        assertTrue("lo que se DEBE, no un movimiento hecho" in prompt)
+        assertTrue("todavía no se ha pagado es {\"tipo\":\"NADA\"}" in prompt)
+        // Las reglas van después de la definición de NADA, que es la que afinan.
+        assertTrue(prompt.indexOf("CRÉDITO (hipoteca") > prompt.indexOf("devuelve: {\"tipo\":\"NADA\"}"))
+    }
+
+    @Test
+    fun `un desembolso es plata que entro`() {
+        assertTrue("Un desembolso de crédito es plata que ENTRÓ al titular: \"movimiento\":\"INCOME\"" in ClaudeStatementParser.promptDelPapel())
+        // Y lo que el modelo conteste así se lee como ingreso, no como el gasto de siempre.
+        val dijo = queDiceLaRespuesta("""{"tipo":"COMPROBANTE","monto":200000000,"moneda":"COP","movimiento":"INCOME","fecha":"2026-08-19","comercio":"Bancolombia","concepto":"Desembolso crédito hipotecario"}""")
+        assertEquals(TransactionType.INCOME, assertIs<QueDiceElPapel.Comprobante>(dijo).leido.tipo)
+    }
+
     // ── Cuándo un PDF ya es un extracto ─────────────────────────────────────────
 
     @Test
@@ -148,6 +168,24 @@ class LectorDePapelesTest {
         assertTrue(pareceUnExtracto(extracto))
         val comprobante = "Bancolombia\nTransferencia exitosa\n30/09/2026 Valor $250.000\nCuenta destino *0756"
         assertFalse(pareceUnExtracto(comprobante))
+    }
+
+    @Test
+    fun `los formatos de fecha de los extractos reales tambien son un extracto`() {
+        val listadoBancolombia = (1..4).joinToString("\n") { "0$it sept 2026 COMPRA EN EXITO -45.000,00" }
+        val nu = (1..4).joinToString("\n") { "2$it AGO 2026 Rappi \$ 32.900" }
+        val davibank = (1..4).joinToString("\n") { "2026/09/0$it;TRANSFERENCIA;1.250.000" }
+        val davivienda = (1..4).joinToString("\n") { "2026082$it PAGO PSE 120.000,00" }
+        val conPunto = (1..4).joinToString("\n") { "1$it oct. 2026 UBER 18.500" }
+        listOf(listadoBancolombia, nu, davibank, davivienda, conPunto).forEach { assertTrue(pareceUnExtracto(it), it) }
+    }
+
+    @Test
+    fun `un comprobante con una fecha larga sigue sin ser un extracto`() {
+        val comprobante = "Nu\nPago exitoso\n21 AGO 2026 14:05\nValor \$ 115.000\nReferencia 20260821"
+        assertFalse(pareceUnExtracto(comprobante))
+        // Un mes que no es mes no cuenta como fecha.
+        assertFalse(pareceUnExtracto((1..4).joinToString("\n") { "0$it xyz 2026 COMPRA 45.000" }))
     }
 
     @Test
