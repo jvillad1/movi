@@ -897,7 +897,7 @@ class WalletRepositoryImpl(
     override suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar> =
         client.get("$baseUrl/api/debitos-automaticos").exigirExito().body()
 
-    override suspend fun confirmarDebitoRecurrente(pedido: com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico): FinancialEvent =
+    override suspend fun confirmarDebitoAutomatico(pedido: com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico): List<FinancialEvent> =
         client.post("$baseUrl/api/debitos-automaticos/confirmar") {
             contentType(ContentType.Application.Json)
             setBody(pedido)

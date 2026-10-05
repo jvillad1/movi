@@ -25,7 +25,11 @@ import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.DosPatasDelAviso
+import com.jvillada.movi.shared.model.NOTA_DEL_DEBITO_AUTOMATICO
+import com.jvillada.movi.shared.model.OperacionDelAviso
 import com.jvillada.movi.shared.model.DEBITO_DE_REGLA_SIN_CUENTA
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -67,15 +71,60 @@ import java.time.YearMonth
  * en [DebitoAutomaticoPorConfirmar].
  *
  * La lectura no escribe nada. Lo que escribe lo dispara siempre un toque del dueño:
- * - la cuota de un crédito se confirma por el camino de siempre (`POST /api/payments/installment`,
- *   con los ids que la propuesta trae);
- * - un recurrente, por `POST /api/debitos-automaticos/confirmar` (el gasto + el sello del período,
- *   juntos);
+ * - «Sí, se cobró» es `POST /api/debitos-automaticos/confirmar`: la cuota de dos patas de un crédito
+ *   (por [escribirLasPatasDelAviso], la función de la confirmación de un aviso de dos patas), o el
+ *   gasto de un recurrente con el sello de su período;
  * - «No se cobró» es `POST /api/debitos-automaticos/descartar`.
  */
 fun Route.debitosAutomaticosRoutes() {
     get("/api/debitos-automaticos") {
         call.respond(debitosPorConfirmar(call.userId(), AppClock.today(), System.currentTimeMillis()))
+    }
+
+    /**
+     * **«Sí, se cobró»**, con el monto que el dueño confirmó («Cambiar monto» manda otro). Todo en una
+     * transacción, y con los ids que trajo la propuesta:
+     *
+     * - **La cuota de un crédito** (`credit_<cuenta>`): las dos patas por [escribirLasPatasDelAviso], la
+     *   misma función que confirma un aviso de dos patas — el desglose (interés, seguro, capital) contra
+     *   la deuda viva, [pagoDeCuotaLegs] y la idempotencia por ids. La fila de «Pagos del período» se
+     *   tilda sola porque la deriva la pata de la deuda (`PagosDeDeuda.kt`).
+     * - **Un recurrente**: el gasto (cuenta y categoría de la regla, fechado el día del vencimiento) y
+     *   el sello de ese período con ese gasto, por [sellarOcurrencia] —el de «Sí, fue este», con sus
+     *   guardas—. Si el sello no se puede poner, tampoco queda el gasto.
+     *
+     * El vencimiento tiene que haber llegado: el banco no debita antes. Con los mismos ids un segundo
+     * pedido contesta lo que ya quedó (200), con el monto que quedó. 404 si el crédito o la regla no
+     * son del usuario.
+     */
+    post("/api/debitos-automaticos/confirmar") {
+        val uid = call.userId()
+        val pedido = runCatching { call.receive<ConfirmarDebitoAutomatico>() }.getOrNull()
+            ?: return@post call.respond(HttpStatusCode.BadRequest, "No se pudo leer el pedido.")
+        if (!PERIODO.matches(pedido.periodo)) {
+            return@post call.respond(HttpStatusCode.BadRequest, "Periodo inválido: usa \"YYYY-MM\".")
+        }
+        if (!esIdDelDebito(pedido.eventoId, "ev_deb_")) {
+            return@post call.respond(HttpStatusCode.BadRequest, "Ese identificador no es de un débito automático.")
+        }
+        rechazoDelMonto(pedido.monto)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
+        val hoy = AppClock.today()
+        val ahora = System.currentTimeMillis()
+        val resultado: ConfirmacionDelDebito = try {
+            dbQuery {
+                if (pedido.ruleId.startsWith(CREDIT_RULE_PREFIX)) confirmarLaCuota(uid, pedido, hoy, ahora)
+                else confirmarElRecurrente(uid, pedido, hoy)
+            }
+        } catch (e: DebitoRechazado) {
+            ConfirmacionDelDebito.Rechazada(e.codigo, e.message ?: "")
+        }
+        when (resultado) {
+            is ConfirmacionDelDebito.Hecha -> call.respond(
+                if (resultado.nueva) HttpStatusCode.Created else HttpStatusCode.OK,
+                resultado.movimientos,
+            )
+            is ConfirmacionDelDebito.Rechazada -> call.respond(resultado.codigo, resultado.motivo)
+        }
     }
 
     /**
@@ -85,45 +134,6 @@ fun Route.debitosAutomaticosRoutes() {
      * Idempotente (un doble toque no falla ni mueve la fecha). No se valida que la regla exista: la
      * fila lleva el usuario, así que una regla ajena o inventada no le saca nada a nadie.
      */
-    /**
-     * **«Sí, se cobró» de un recurrente que se debita solo**: anota el gasto (con el id que trajo la
-     * propuesta, la cuenta y la categoría de la regla, fechado el día del vencimiento) y sella ese
-     * período con ese movimiento, **en una sola transacción**: un gasto anotado sin su sello volvería
-     * a proponerse, y un sello sin gasto es justo lo que el checklist ya no acepta.
-     *
-     * El sello pasa por [sellarOcurrencia], el mismo de «Sí, fue este», con todas sus guardas (el
-     * vencimiento tiene que haber llegado, el movimiento no puede cerrar otro período…).
-     *
-     * Idempotente por el id: con el mismo `eventoId` un segundo pedido devuelve el movimiento que ya
-     * quedó (200), con el monto que quedó. 404 si la regla no es del usuario; 409 si el id ya lo usa
-     * un movimiento ajeno o anulado.
-     */
-    post("/api/debitos-automaticos/confirmar") {
-        val uid = call.userId()
-        val pedido = runCatching { call.receive<ConfirmarDebitoAutomatico>() }.getOrNull()
-            ?: return@post call.respond(HttpStatusCode.BadRequest, "No se pudo leer el pedido.")
-        if (!PERIODO.matches(pedido.periodo)) {
-            return@post call.respond(HttpStatusCode.BadRequest, "Periodo inválido: usa \"YYYY-MM\".")
-        }
-        if (!pedido.eventoId.startsWith("ev_deb_") || pedido.eventoId.length > 50) {
-            return@post call.respond(HttpStatusCode.BadRequest, "Ese identificador no es de un débito automático.")
-        }
-        rechazoDelMonto(pedido.monto)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
-        val hoy = AppClock.today()
-        val resultado: ConfirmacionDelDebito = try {
-            dbQuery { confirmarElRecurrente(uid, pedido, hoy) }
-        } catch (e: DebitoRechazado) {
-            ConfirmacionDelDebito.Rechazada(e.codigo, e.message ?: "")
-        }
-        when (resultado) {
-            is ConfirmacionDelDebito.Hecha -> call.respond(
-                if (resultado.nueva) HttpStatusCode.Created else HttpStatusCode.OK,
-                resultado.evento,
-            )
-            is ConfirmacionDelDebito.Rechazada -> call.respond(resultado.codigo, resultado.motivo)
-        }
-    }
-
     post("/api/debitos-automaticos/descartar") {
         val uid = call.userId()
         val cuerpo = runCatching { call.receive<DescartarDebitoAutomatico>() }.getOrNull()
@@ -157,17 +167,66 @@ fun Route.debitosAutomaticosRoutes() {
 
 private val PERIODO = Regex("""^\d{4}-(0[1-9]|1[0-2])$""")
 
+private fun esIdDelDebito(id: String?, prefijo: String): Boolean =
+    id != null && id.startsWith(prefijo) && id.length <= 50
+
 private sealed interface ConfirmacionDelDebito {
-    data class Hecha(val evento: FinancialEvent, val nueva: Boolean) : ConfirmacionDelDebito
+    data class Hecha(val movimientos: List<FinancialEvent>, val nueva: Boolean) : ConfirmacionDelDebito
     data class Rechazada(val codigo: HttpStatusCode, val motivo: String) : ConfirmacionDelDebito
 }
 
 /** Corta la transacción entera: con una excepción, Exposed deshace lo que se alcanzó a escribir. */
 private class DebitoRechazado(val codigo: HttpStatusCode, motivo: String) : RuntimeException(motivo)
 
-/**
- * El cuerpo de `POST /api/debitos-automaticos/confirmar`, dentro de la transacción. Ver la ruta.
- */
+private const val TODAVIA_NO_VENCE = "Ese vencimiento todavía no llegó: el banco no lo ha cobrado."
+
+/** La cuota de un crédito, dentro de la transacción. Ver la ruta. */
+private fun Transaction.confirmarLaCuota(
+    uid: String,
+    pedido: ConfirmarDebitoAutomatico,
+    hoy: LocalDate,
+    ahora: Long,
+): ConfirmacionDelDebito {
+    val deudaId = pedido.ruleId.removePrefix(CREDIT_RULE_PREFIX)
+    val terms = Credits.selectAll()
+        .where { (Credits.userId eq uid) and (Credits.accountId eq deudaId) }
+        .firstOrNull()?.toCreditTerms()
+        ?: return ConfirmacionDelDebito.Rechazada(HttpStatusCode.NotFound, "Ese crédito no existe.")
+    val desde = terms.debitoAutomaticoDesde
+        ?: return ConfirmacionDelDebito.Rechazada(HttpStatusCode.UnprocessableEntity, "Ese crédito no se debita solo.")
+    val transferId = pedido.transferId
+    val pataDeLaDeuda = pedido.pataDeLaDeudaId
+    if (!esIdDelDebito(transferId, "tr_deb_") || !esIdDelDebito(pataDeLaDeuda, "ev_deb_")) {
+        return ConfirmacionDelDebito.Rechazada(HttpStatusCode.BadRequest, "Faltan los identificadores de la cuota.")
+    }
+    val vence = occurrenceInMonth(YearMonth.parse(pedido.periodo), terms.dayOfMonth)
+    if (vence.isAfter(hoy)) return ConfirmacionDelDebito.Rechazada(HttpStatusCode.BadRequest, TODAVIA_NO_VENCE)
+    val patas = DosPatasDelAviso(
+        operacion = OperacionDelAviso.CUOTA,
+        origenId = desde,
+        destinoId = deudaId,
+        monto = pedido.monto,
+        // El día que debitó el banco, aunque el dueño lo confirme después: es el que salda la cuota
+        // de ese período (ver `periodoQueSalda`).
+        timestamp = appDateToEpochMillis(vence) + MEDIODIA,
+        transferId = transferId!!,
+        origenEventId = pedido.eventoId,
+        destinoEventId = pataDeLaDeuda!!,
+        nota = NOTA_DEL_DEBITO_AUTOMATICO,
+    )
+    // Anotado por el dueño, no leído de un aviso: sin texto del banco y con origen MANUAL.
+    return when (val escritas = escribirLasPatasDelAviso(uid, patas, EventSource.MANUAL, textoDelAviso = null, ahora = ahora)) {
+        is PatasDelAviso.Rechazadas -> ConfirmacionDelDebito.Rechazada(escritas.estado, escritas.motivo)
+        is PatasDelAviso.Escritas -> ConfirmacionDelDebito.Hecha(
+            movimientos = Events.selectAll()
+                .where { (Events.userId eq uid) and (Events.transferId eq transferId) }
+                .map { it.toFinancialEvent() },
+            nueva = escritas.creadas,
+        )
+    }
+}
+
+/** El gasto de un recurrente y el sello de su período, dentro de la transacción. Ver la ruta. */
 private fun Transaction.confirmarElRecurrente(
     uid: String,
     pedido: ConfirmarDebitoAutomatico,
@@ -198,10 +257,11 @@ private fun Transaction.confirmarElRecurrente(
             return ConfirmacionDelDebito.Rechazada(HttpStatusCode.Conflict, "Ese movimiento ya no se puede usar. Vuelve a abrir «Por revisar».")
         }
         sellarOcurrencia(uid, rule, pedido.periodo, pedido.eventoId, hoy).alFallar()
-        return ConfirmacionDelDebito.Hecha(existente.toFinancialEvent(), nueva = false)
+        return ConfirmacionDelDebito.Hecha(listOf(existente.toFinancialEvent()), nueva = false)
     }
 
     val vence = occurrenceInMonth(YearMonth.parse(pedido.periodo), rule.dayOfMonth)
+    if (vence.isAfter(hoy)) return ConfirmacionDelDebito.Rechazada(HttpStatusCode.BadRequest, TODAVIA_NO_VENCE)
     val evento = FinancialEvent(
         id = pedido.eventoId,
         accountId = cuenta.id,
@@ -216,6 +276,7 @@ private fun Transaction.confirmarElRecurrente(
         source = EventSource.MANUAL,
         // Lo confirmó el dueño con su toque: no espera otra confirmación.
         reconciliationStatus = ReconciliationStatus.RECONCILED,
+        createdAt = System.currentTimeMillis(),
     )
     // Mismas guardas de texto que un movimiento cualquiera: la categoría y el nombre vienen de la
     // regla, que ya pasó por ellas, pero el insert no puede caer con un 500 por un texto largo.
@@ -223,10 +284,10 @@ private fun Transaction.confirmarElRecurrente(
         return ConfirmacionDelDebito.Rechazada(HttpStatusCode.UnprocessableEntity, it)
     }
     insertEventRow(uid, evento)
-    // Si el sello no se puede poner (el vencimiento no llegó, el período es viejo…), la excepción
-    // deshace también el gasto: nada a medias.
+    // Si el sello no se puede poner (el período es viejo, el movimiento ya cierra otro…), la
+    // excepción deshace también el gasto: nada a medias.
     sellarOcurrencia(uid, rule, pedido.periodo, pedido.eventoId, hoy).alFallar()
-    return ConfirmacionDelDebito.Hecha(evento, nueva = true)
+    return ConfirmacionDelDebito.Hecha(listOf(evento), nueva = true)
 }
 
 private fun MarcaResult.alFallar() {

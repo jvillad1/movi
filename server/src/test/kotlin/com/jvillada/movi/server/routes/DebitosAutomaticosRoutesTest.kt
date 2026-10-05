@@ -19,14 +19,16 @@ import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
-import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.OrigenDelDebito
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.pagoDeCuotaDelDebito
+import com.jvillada.movi.shared.model.confirmacionDelDebito
+import com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico
+import com.jvillada.movi.shared.model.EventSource
+import com.jvillada.movi.shared.model.NOTA_DEL_DEBITO_AUTOMATICO
 import com.jvillada.movi.shared.model.textoDelDebitoAutomatico
 import com.jvillada.movi.server.reminders.loadEventsBetween
 import io.ktor.client.request.get
@@ -88,8 +90,8 @@ class DebitosAutomaticosRoutesTest {
     private val ahorrosDelOtro = "acc_ahorros_otro"
     private val cuota = 1_204_064L
 
-    /** El 15 de octubre de 2026: vence la cuota del Libre inversión 9695 (día 15). */
-    private val dia15: LocalDate = LocalDate.of(2026, 10, 15)
+    /** El 15 de julio de 2026, ya pasado (no se confirma lo que no venció): vence la cuota del 9695. */
+    private val dia15: LocalDate = LocalDate.of(2026, 7, 15)
 
     @BeforeTest
     fun setUp() {
@@ -162,11 +164,12 @@ class DebitosAutomaticosRoutesTest {
         configureRouting()
     }
 
-    private suspend fun ApplicationTestBuilder.pagar(pedido: CreatePagoDeCuotaRequest, uid: String = duenoId): HttpResponse =
-        client.post("/api/payments/installment") {
+    /** «Sí, se cobró»: lo mismo que manda la tarjeta de «Por revisar». */
+    private suspend fun ApplicationTestBuilder.pagar(pedido: ConfirmarDebitoAutomatico, uid: String = duenoId): HttpResponse =
+        client.post("/api/debitos-automaticos/confirmar") {
             header(HttpHeaders.Authorization, "Bearer ${token(uid)}")
             contentType(ContentType.Application.Json)
-            setBody(json.encodeToString(CreatePagoDeCuotaRequest.serializer(), pedido))
+            setBody(json.encodeToString(ConfirmarDebitoAutomatico.serializer(), pedido))
         }
 
     private suspend fun ApplicationTestBuilder.descartar(d: DebitoAutomaticoPorConfirmar, uid: String = duenoId): HttpResponse =
@@ -189,8 +192,8 @@ class DebitosAutomaticosRoutesTest {
         val d = propuestas(dia15).single()
         assertEquals(OrigenDelDebito.CUOTA_DE_CREDITO, d.origen)
         assertEquals("credit_$credito", d.ruleId)
-        assertEquals("2026-10", d.periodo)
-        assertEquals("2026-10-15", d.vence)
+        assertEquals("2026-07", d.periodo)
+        assertEquals("2026-07-15", d.vence)
         assertEquals(cuota, d.monto)
         assertEquals(ahorros, d.cuentaId)
         assertEquals(credito, d.deudaId)
@@ -223,7 +226,7 @@ class DebitosAutomaticosRoutesTest {
         application { testModule() }
         creditoConDebito()
         val d = propuestas(dia15).single()
-        val res = pagar(assertNotNull(pagoDeCuotaDelDebito(d, d.monto)))
+        val res = pagar((confirmacionDelDebito(d, d.monto)))
         assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
 
         val patas = eventosDelDueno().filter { it.transferId == d.transferId }
@@ -232,6 +235,8 @@ class DebitosAutomaticosRoutesTest {
         assertEquals(TransactionType.EXPENSE, dinero.type)
         assertEquals(cuota, dinero.amount)
         assertEquals(CUOTA_CATEGORY, dinero.category)
+        assertEquals(EventSource.MANUAL, dinero.source, "lo anotó el dueño: no se hace pasar por un aviso del banco")
+        assertTrue(dinero.description.endsWith(NOTA_DEL_DEBITO_AUTOMATICO), dinero.description)
         assertEquals(appDateToEpochMillis(dia15) + 12 * 3_600_000L, dinero.timestamp, "se anota el día que debitó el banco")
         val deuda = patas.single { it.accountId == credito }
         assertEquals(TransactionType.INCOME, deuda.type)
@@ -247,7 +252,10 @@ class DebitosAutomaticosRoutesTest {
         creditoConDebito(dia = hoy.dayOfMonth)
         val d = propuestasHttp(this).single()
         assertEquals(hoy.toString(), d.vence)
-        assertEquals(HttpStatusCode.Created, pagar(assertNotNull(pagoDeCuotaDelDebito(d, d.monto))).status)
+        // Antes del vencimiento el banco no cobra: el server no deja confirmar el del mes que viene.
+        val proximo = hoy.plusMonths(1).toString().take(7)
+        assertEquals(HttpStatusCode.BadRequest, pagar(confirmacionDelDebito(d, d.monto).copy(periodo = proximo)).status)
+        assertEquals(HttpStatusCode.Created, pagar((confirmacionDelDebito(d, d.monto))).status)
 
         val ocurrencias = client.get("/api/payments/occurrences") {
             header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}")
@@ -264,7 +272,7 @@ class DebitosAutomaticosRoutesTest {
     fun `confirmar dos veces no duplica`() = testApplication {
         application { testModule() }
         creditoConDebito()
-        val pedido = assertNotNull(pagoDeCuotaDelDebito(propuestas(dia15).single(), cuota))
+        val pedido = (confirmacionDelDebito(propuestas(dia15).single(), cuota))
         assertEquals(HttpStatusCode.Created, pagar(pedido).status)
         assertEquals(HttpStatusCode.OK, pagar(pedido).status, "el doble toque contesta lo que ya quedó")
         assertEquals(2, eventosDelDueno().count { it.transferId == pedido.transferId })
@@ -275,7 +283,7 @@ class DebitosAutomaticosRoutesTest {
         application { testModule() }
         creditoConDebito()
         val d = propuestas(dia15).single()
-        assertEquals(HttpStatusCode.Created, pagar(assertNotNull(pagoDeCuotaDelDebito(d, 1_250_000L))).status)
+        assertEquals(HttpStatusCode.Created, pagar((confirmacionDelDebito(d, 1_250_000L))).status)
         val dinero = eventosDelDueno().single { it.transferId == d.transferId && it.accountId == ahorros }
         assertEquals(1_250_000L, dinero.amount)
         assertTrue(propuestas(dia15).isEmpty(), "con otro monto también salda el período")
@@ -286,7 +294,7 @@ class DebitosAutomaticosRoutesTest {
         application { testModule() }
         creditoConDebito()
         val d = propuestas(dia15).single()
-        pagar(assertNotNull(pagoDeCuotaDelDebito(d, cuota)))
+        pagar((confirmacionDelDebito(d, cuota)))
         transaction {
             eventosDelDueno().filter { it.transferId == d.transferId }.forEach { pata ->
                 VoidEvents.insert {
@@ -297,7 +305,7 @@ class DebitosAutomaticosRoutesTest {
         }
         val otra = propuestas(dia15).single()
         assertTrue(otra.transferId != d.transferId, "con los ids viejos el pago anulado contestaría por el nuevo")
-        assertEquals(HttpStatusCode.Created, pagar(assertNotNull(pagoDeCuotaDelDebito(otra, cuota))).status)
+        assertEquals(HttpStatusCode.Created, pagar((confirmacionDelDebito(otra, cuota))).status)
         assertTrue(propuestas(dia15).isEmpty())
     }
 
@@ -312,7 +320,7 @@ class DebitosAutomaticosRoutesTest {
         assertEquals(HttpStatusCode.NoContent, descartar(d).status, "idempotente")
         assertTrue(propuestas(dia15).isEmpty())
         assertTrue(propuestas(dia15.plusDays(4)).isEmpty())
-        assertEquals("2026-11", propuestas(dia15.plusMonths(1)).single().periodo)
+        assertEquals("2026-08", propuestas(dia15.plusMonths(1)).single().periodo)
         assertTrue(eventosDelDueno().none { it.category == CUOTA_CATEGORY }, "decir que no, no anota nada")
     }
 
@@ -328,7 +336,7 @@ class DebitosAutomaticosRoutesTest {
         assertEquals(HttpStatusCode.NoContent, descartar(d, uid = otroId).status)
         assertEquals(1, propuestas(dia15).size)
         // Y con los ids de la propuesta del dueño, el otro no puede anotarle la cuota.
-        assertEquals(HttpStatusCode.NotFound, pagar(assertNotNull(pagoDeCuotaDelDebito(d, cuota)), uid = otroId).status)
+        assertEquals(HttpStatusCode.NotFound, pagar((confirmacionDelDebito(d, cuota)), uid = otroId).status)
         assertEquals(1, propuestas(dia15).size)
     }
 
@@ -346,7 +354,7 @@ class DebitosAutomaticosRoutesTest {
         val hoy = AppClock.today()
         creditoConDebito(dia = hoy.dayOfMonth)
         val d = propuestasHttp(this).single()
-        pagar(assertNotNull(pagoDeCuotaDelDebito(d, cuota)))
+        pagar((confirmacionDelDebito(d, cuota)))
         // Ni proponerla ni confirmarla escribe un aviso: «banco mudo» y la captura no la ven.
         assertEquals(0L, transaction { SmsMessages.selectAll().count() })
         val bandeja = client.get("/api/sms") { header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}") }
@@ -360,8 +368,8 @@ class DebitosAutomaticosRoutesTest {
         creditoConDebito()
         transaction {
             SmsMessages.insert {
-                it[id] = "sms_debito"; it[userId] = duenoId; it[time] = "2026-10-15 06:10"; it[bank] = "85540"
-                it[text] = "Bancolombia: Pagaste \$1,204,064.00 a Bancolombia Credito desde tu producto 8133 el 15/10/2026 06:10:00."
+                it[id] = "sms_debito"; it[userId] = duenoId; it[time] = "2026-07-15 06:10"; it[bank] = "85540"
+                it[text] = "Bancolombia: Pagaste \$1,204,064.00 a Bancolombia Credito desde tu producto 8133 el 15/07/2026 06:10:00."
                 it[state] = SMS_STATE_PENDING; it[det] = "Bancolombia Credito"
             }
         }
@@ -375,10 +383,10 @@ class DebitosAutomaticosRoutesTest {
         application { testModule() }
         creditoConDebito()
         val d = propuestas(dia15).single()
-        pagar(assertNotNull(pagoDeCuotaDelDebito(d, cuota)))
+        pagar((confirmacionDelDebito(d, cuota)))
         // El correo de Bancolombia llega al otro día: «¿Ya lo anotaste?» tiene que ver la pata del dinero.
         val leido = assertNotNull(
-            parseSms("Bancolombia: Pagaste \$1,204,064.00 a Bancolombia Credito desde tu producto 8133 el 15/10/2026 06:10:00."),
+            parseSms("Bancolombia: Pagaste \$1,204,064.00 a Bancolombia Credito desde tu producto 8133 el 15/07/2026 06:10:00."),
         )
         val momento = appDateToEpochMillis(dia15.plusDays(1)) + 9 * 3_600_000L
         val iguales = coincidenciasDelSms(leido, momento, eventosDelDueno())

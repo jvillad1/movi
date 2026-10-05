@@ -114,8 +114,8 @@ enum class OrigenDelDebito { CUOTA_DE_CREDITO, RECURRENTE }
  *
  * [pataDelDineroId], [pataDeLaDeudaId] y [transferId] los pone el server, **deterministas por
  * (regla, período)**: confirmar dos veces —un doble toque, una respuesta perdida— manda los mismos
- * ids y `POST /api/payments/installment` contesta lo que ya quedó guardado en vez de duplicar. Si un
- * pago anterior con esos ids se anuló, el server elige los siguientes libres.
+ * ids y `POST /api/debitos-automaticos/confirmar` contesta lo que ya quedó guardado en vez de
+ * duplicar. Si un pago anterior con esos ids se anuló, el server elige los siguientes libres.
  *
  * @property periodo el `"YYYY-MM"` del vencimiento (el sello del período, `OccurrenceState.period`).
  * @property vence el día del vencimiento, ISO. Es la fecha con que se anota el movimiento: el banco
@@ -156,39 +156,15 @@ fun montoDelDebito(monto: Long, moneda: String): String =
     if (moneda == "COP") "$${conPuntosDeMiles(monto)}" else "$moneda ${conPuntosDeMiles(monto)}"
 
 /**
- * **La cuota de dos patas que confirma el débito**, por el MISMO camino que el pago de cuota de
- * siempre (`POST /api/payments/installment`): el server recalcula el desglose (interés, seguro,
- * capital) contra la deuda viva, igual que si el dueño la anotara desde Agregar.
+ * Cuerpo de `POST /api/debitos-automaticos/confirmar`: **«Sí, se cobró»**, con el [monto] que el dueño
+ * confirmó («Cambiar monto»: la cuota puede variar) y los ids que trajo la propuesta.
  *
- * TODO(rama G, `ingesta-dos-patas`): cuando la función de servidor que arma las dos patas al
- * confirmar un aviso esté en master, la confirmación del débito puede pasar a ser un endpoint propio
- * que la llame en el server. Hoy no hace falta: este pedido ya es idempotente por los ids.
+ * - **La cuota de un crédito**: el server escribe las dos patas con la función de la confirmación de un
+ *   aviso de dos patas (`escribirLasPatasDelAviso`): [eventoId] es la pata del dinero,
+ *   [pataDeLaDeudaId] la de la deuda, [transferId] las enlaza.
+ * - **Un recurrente**: [eventoId] es el gasto, y el server sella el período con él.
  *
- * [monto] es el que el dueño confirmó («Cambiar monto»): la cuota puede variar. `null` si la
- * propuesta no es de un crédito.
- */
-fun pagoDeCuotaDelDebito(debito: DebitoAutomaticoPorConfirmar, monto: Long): CreatePagoDeCuotaRequest? {
-    if (debito.origen != OrigenDelDebito.CUOTA_DE_CREDITO) return null
-    val deuda = debito.deudaId ?: return null
-    val transfer = debito.transferId ?: return null
-    val pataDeLaDeuda = debito.pataDeLaDeudaId ?: return null
-    return CreatePagoDeCuotaRequest(
-        fromAccountId = debito.cuentaId,
-        debtAccountId = deuda,
-        amount = monto,
-        timestamp = epochDeFecha(debito.vence),
-        note = NOTA_DEL_DEBITO_AUTOMATICO,
-        transferId = transfer,
-        fromEventId = debito.pataDelDineroId,
-        toEventId = pataDeLaDeuda,
-    )
-}
-
-/**
- * Cuerpo de `POST /api/debitos-automaticos/confirmar`: **«Sí, se cobró» de un recurrente** (la cuota
- * de un crédito va por [pagoDeCuotaDelDebito]). El server anota el gasto con [eventoId] —el id que
- * trajo la propuesta— y sella el período con ese movimiento, todo en una transacción. Con el mismo
- * id, confirmar dos veces devuelve el mismo movimiento.
+ * Con los mismos ids, confirmar dos veces devuelve lo que ya quedó.
  */
 @kotlinx.serialization.Serializable
 data class ConfirmarDebitoAutomatico(
@@ -196,12 +172,20 @@ data class ConfirmarDebitoAutomatico(
     val periodo: String,
     val monto: Long,
     val eventoId: String,
+    val transferId: String? = null,
+    val pataDeLaDeudaId: String? = null,
 )
 
-/** El pedido que confirma un recurrente con [monto], o `null` si la propuesta es de un crédito. */
-fun confirmacionDelRecurrente(debito: DebitoAutomaticoPorConfirmar, monto: Long): ConfirmarDebitoAutomatico? =
-    if (debito.origen != OrigenDelDebito.RECURRENTE) null
-    else ConfirmarDebitoAutomatico(debito.ruleId, debito.periodo, monto, debito.pataDelDineroId)
+/** El pedido que confirma [debito] con [monto]: los ids son los de la propuesta, nunca unos nuevos. */
+fun confirmacionDelDebito(debito: DebitoAutomaticoPorConfirmar, monto: Long): ConfirmarDebitoAutomatico =
+    ConfirmarDebitoAutomatico(
+        ruleId = debito.ruleId,
+        periodo = debito.periodo,
+        monto = monto,
+        eventoId = debito.pataDelDineroId,
+        transferId = debito.transferId,
+        pataDeLaDeudaId = debito.pataDeLaDeudaId,
+    )
 
 /** Cuerpo de `POST /api/debitos-automaticos/descartar`: «No se cobró» para ese vencimiento. */
 @kotlinx.serialization.Serializable

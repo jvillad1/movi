@@ -33,9 +33,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.NOTA_DEL_DEBITO_AUTOMATICO
-import com.jvillada.movi.shared.model.OrigenDelDebito
-import com.jvillada.movi.shared.model.confirmacionDelRecurrente
-import com.jvillada.movi.shared.model.pagoDeCuotaDelDebito
+import com.jvillada.movi.shared.model.confirmacionDelDebito
 import com.jvillada.movi.shared.model.textoDelDebitoAutomatico
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.MinCard
@@ -53,29 +51,16 @@ const val NO_SE_COBRO: String = "No se cobró"
 const val TAG_TARJETA_DEL_DEBITO: String = "tarjeta-del-debito-automatico"
 
 /**
- * **Confirmar un débito automático**: anota el movimiento con [monto] por el camino de siempre.
- *
- * - La cuota de un crédito va por `POST /api/payments/installment` ([pagoDeCuotaDelDebito]): las dos
- *   patas, el desglose que recalcula el server y los ids deterministas de la propuesta (un doble
- *   toque no duplica). La fila de «Pagos del período» se tilda sola, porque la deriva del movimiento.
- * - Un recurrente va por `POST /api/debitos-automaticos/confirmar` ([confirmacionDelRecurrente]): el
- *   gasto y el sello del período con ese gasto, juntos en el server.
+ * **Confirmar un débito automático**: el server anota el movimiento con [monto] y los ids de la
+ * propuesta (`POST /api/debitos-automaticos/confirmar`) — la cuota de dos patas de un crédito, con la
+ * misma función que confirma un aviso de dos patas, o el gasto de un recurrente con el sello de su
+ * período. Un doble toque no duplica. La fila de «Pagos del período» se tilda sola: la deriva el
+ * movimiento.
  *
  * Nunca se llama sin que el dueño toque «Sí, se cobró».
  */
 internal suspend fun confirmarElDebitoAutomatico(debito: DebitoAutomaticoPorConfirmar, monto: Long) {
-    when (debito.origen) {
-        OrigenDelDebito.CUOTA_DE_CREDITO -> {
-            val pedido = pagoDeCuotaDelDebito(debito, monto)
-                ?: error("A esta propuesta le faltan los datos del crédito.")
-            Repositories.wallets.payInstallment(pedido)
-        }
-        OrigenDelDebito.RECURRENTE -> {
-            val pedido = confirmacionDelRecurrente(debito, monto)
-                ?: error("A esta propuesta le faltan los datos del recurrente.")
-            Repositories.wallets.confirmarDebitoRecurrente(pedido)
-        }
-    }
+    Repositories.wallets.confirmarDebitoAutomatico(confirmacionDelDebito(debito, monto))
 }
 
 /**

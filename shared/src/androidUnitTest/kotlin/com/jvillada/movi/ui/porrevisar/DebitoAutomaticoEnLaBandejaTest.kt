@@ -13,14 +13,10 @@ import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico
-import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
-import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.NOTA_DEL_DEBITO_AUTOMATICO
 import com.jvillada.movi.shared.model.OrigenDelDebito
-import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.MoviTheme
@@ -32,7 +28,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -67,8 +62,7 @@ class DebitoAutomaticoEnLaBandejaTest {
         transferId = "tr_deb_abc",
     )
 
-    private var pagado: CreatePagoDeCuotaRequest? = null
-    private var recurrenteConfirmado: ConfirmarDebitoAutomatico? = null
+    private var confirmado: ConfirmarDebitoAutomatico? = null
     private var descartado: Pair<String, String>? = null
     private var debitos = listOf(debito)
 
@@ -81,18 +75,10 @@ class DebitoAutomaticoEnLaBandejaTest {
             id = "u1", email = "juan@movi.test", name = "Juan", avatarColor = "#4F7CFF", smsAlertMuted = false,
         )
         override suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar> = debitos
-        override suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult {
-            pagado = request
+        override suspend fun confirmarDebitoAutomatico(pedido: ConfirmarDebitoAutomatico): List<FinancialEvent> {
+            confirmado = pedido
             debitos = emptyList()
-            return PagoDeCuotaResult(deudaRestante = 0L, patas = emptyList())
-        }
-        override suspend fun confirmarDebitoRecurrente(pedido: ConfirmarDebitoAutomatico): FinancialEvent {
-            recurrenteConfirmado = pedido
-            debitos = emptyList()
-            return FinancialEvent(
-                id = pedido.eventoId, accountId = ahorros.id, type = TransactionType.EXPENSE, amount = pedido.monto,
-                category = "Seguros", description = "Seguro Sura", timestamp = 0L,
-            )
+            return emptyList()
         }
         override suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String) {
             descartado = ruleId to periodo
@@ -127,18 +113,17 @@ class DebitoAutomaticoEnLaBandejaTest {
     }
 
     @Test
-    fun `si se cobro manda la cuota con los ids y la fecha de la propuesta`() {
+    fun `si se cobro manda la cuota con los ids de la propuesta`() {
         montar()
         composeRule.onNodeWithText(SI_SE_COBRO).performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitUntil(5_000) { pagado != null }
-        val pedido = assertNotNull(pagado)
-        assertEquals(ahorros.id, pedido.fromAccountId)
-        assertEquals("acc_9695", pedido.debtAccountId)
-        assertEquals(1_204_064L, pedido.amount)
-        assertEquals("tr_deb_abc", pedido.transferId)
-        assertEquals("ev_deb_abc_s", pedido.fromEventId)
-        assertEquals("ev_deb_abc_e", pedido.toEventId)
-        assertEquals(NOTA_DEL_DEBITO_AUTOMATICO, pedido.note)
+        composeRule.waitUntil(5_000) { confirmado != null }
+        assertEquals(
+            ConfirmarDebitoAutomatico(
+                ruleId = "credit_acc_9695", periodo = "2026-10", monto = 1_204_064L,
+                eventoId = "ev_deb_abc_s", transferId = "tr_deb_abc", pataDeLaDeudaId = "ev_deb_abc_e",
+            ),
+            confirmado,
+        )
         composeRule.waitUntil(5_000) { !hay("¿se cobró?") }
     }
 
@@ -148,12 +133,12 @@ class DebitoAutomaticoEnLaBandejaTest {
         composeRule.onNodeWithText(NO_SE_COBRO).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { descartado != null }
         assertEquals("credit_acc_9695" to "2026-10", descartado)
-        assertEquals(null, pagado)
+        assertEquals(null, confirmado, "decir que no, no anota nada")
         composeRule.waitUntil(5_000) { hay(TODO_AL_DIA) }
     }
 
     @Test
-    fun `un recurrente se confirma por su propio camino, no como cuota`() {
+    fun `un recurrente se confirma con su gasto, sin patas de deuda`() {
         debitos = listOf(
             debito.copy(
                 ruleId = "rr_seguro", origen = OrigenDelDebito.RECURRENTE, nombre = "Seguro Sura", monto = 98_500L,
@@ -162,9 +147,8 @@ class DebitoAutomaticoEnLaBandejaTest {
         )
         montar()
         composeRule.onNodeWithText(SI_SE_COBRO).performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitUntil(5_000) { recurrenteConfirmado != null }
-        assertEquals(ConfirmarDebitoAutomatico("rr_seguro", "2026-10", 98_500L, "ev_deb_seg_s"), recurrenteConfirmado)
-        assertEquals(null, pagado, "un seguro no es la cuota de un crédito")
+        composeRule.waitUntil(5_000) { confirmado != null }
+        assertEquals(ConfirmarDebitoAutomatico("rr_seguro", "2026-10", 98_500L, "ev_deb_seg_s"), confirmado)
     }
 
     @Test

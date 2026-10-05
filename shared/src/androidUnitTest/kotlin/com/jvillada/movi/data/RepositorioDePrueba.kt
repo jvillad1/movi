@@ -135,7 +135,7 @@ open class RepositorioDePrueba : WalletRepository {
     /** Vacío y no `noUsado`: «Por revisar» y Movimientos lo piden siempre, y no tener débitos es lo normal. */
     override suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar> = emptyList()
     override suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String): Unit = noUsado("descartarDebitoAutomatico")
-    override suspend fun confirmarDebitoRecurrente(pedido: ConfirmarDebitoAutomatico): FinancialEvent = noUsado("confirmarDebitoRecurrente")
+    override suspend fun confirmarDebitoAutomatico(pedido: ConfirmarDebitoAutomatico): List<FinancialEvent> = noUsado("confirmarDebitoAutomatico")
     override suspend fun register(request: RegisterRequest): AuthResponse = noUsado("register")
     override suspend fun login(request: LoginRequest): AuthResponse = noUsado("login")
     override suspend fun renameAccount(id: String, name: String): Account = noUsado("renameAccount")

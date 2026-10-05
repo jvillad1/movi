@@ -28,7 +28,7 @@ import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.OrigenDelDebito
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.confirmacionDelRecurrente
+import com.jvillada.movi.shared.model.confirmacionDelDebito
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -246,7 +246,7 @@ class DebitoDeUnRecurrenteTest {
         val hoy = AppClock.today()
         reglaConDebito(dia = hoy.dayOfMonth)
         val d = propuestasHttp().single()
-        val res = confirmar(assertNotNull(confirmacionDelRecurrente(d, seguro)))
+        val res = confirmar((confirmacionDelDebito(d, seguro)))
         assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
 
         val gasto = eventos().single { it.id == d.pataDelDineroId }
@@ -266,11 +266,15 @@ class DebitoDeUnRecurrenteTest {
     fun `confirmar dos veces devuelve el mismo gasto`() = testApplication {
         application { testModule() }
         reglaConDebito(dia = AppClock.today().dayOfMonth)
-        val pedido = assertNotNull(confirmacionDelRecurrente(propuestasHttp().single(), seguro))
+        val pedido = (confirmacionDelDebito(propuestasHttp().single(), seguro))
         assertEquals(HttpStatusCode.Created, confirmar(pedido).status)
         val otra = confirmar(pedido.copy(monto = 1L))
         assertEquals(HttpStatusCode.OK, otra.status)
-        assertEquals(seguro, json.decodeFromString(FinancialEvent.serializer(), otra.bodyAsText()).amount, "contesta lo que quedó")
+        assertEquals(
+            seguro,
+            json.decodeFromString(ListSerializer(FinancialEvent.serializer()), otra.bodyAsText()).single().amount,
+            "contesta lo que quedó",
+        )
         assertEquals(1, eventos().count { it.id == pedido.eventoId })
     }
 
@@ -279,7 +283,7 @@ class DebitoDeUnRecurrenteTest {
         application { testModule() }
         reglaConDebito(dia = AppClock.today().dayOfMonth)
         val d = propuestasHttp().single()
-        assertEquals(HttpStatusCode.Created, confirmar(assertNotNull(confirmacionDelRecurrente(d, 103_200L))).status)
+        assertEquals(HttpStatusCode.Created, confirmar((confirmacionDelDebito(d, 103_200L))).status)
         assertEquals(103_200L, eventos().single { it.id == d.pataDelDineroId }.amount)
         assertTrue(propuestasHttp().isEmpty())
     }
@@ -289,9 +293,10 @@ class DebitoDeUnRecurrenteTest {
         application { testModule() }
         reglaConDebito(dia = AppClock.today().dayOfMonth)
         val d = propuestasHttp().single()
-        // Un período que todavía no vence: el sello lo rechaza y la transacción se deshace entera.
-        val futuro = AppClock.today().plusMonths(2).toString().take(7)
-        val res = confirmar(assertNotNull(confirmacionDelRecurrente(d, seguro)).copy(periodo = futuro))
+        // Un período demasiado viejo: el gasto se alcanza a escribir, el sello lo rechaza y la
+        // transacción se deshace entera.
+        val viejo = AppClock.today().minusMonths(14).toString().take(7)
+        val res = confirmar((confirmacionDelDebito(d, seguro)).copy(periodo = viejo))
         assertEquals(HttpStatusCode.BadRequest, res.status)
         assertTrue(eventos().none { it.id == d.pataDelDineroId }, "un gasto sin su sello volvería a proponerse")
     }
@@ -300,7 +305,7 @@ class DebitoDeUnRecurrenteTest {
     fun `otro duenio no puede confirmar lo ajeno`() = testApplication {
         application { testModule() }
         reglaConDebito(dia = AppClock.today().dayOfMonth)
-        val pedido = assertNotNull(confirmacionDelRecurrente(propuestasHttp().single(), seguro))
+        val pedido = (confirmacionDelDebito(propuestasHttp().single(), seguro))
         assertEquals(HttpStatusCode.NotFound, confirmar(pedido, uid = otroId).status)
         assertTrue(eventos().isEmpty())
         assertTrue(propuestas(AppClock.today(), uid = otroId).isEmpty())
