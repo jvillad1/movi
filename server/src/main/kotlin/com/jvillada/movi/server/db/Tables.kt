@@ -781,6 +781,14 @@ object Credits : Table("credit_terms") {
      * las filas que ya están. `Credits` ya está en esa lista.
      */
     val sinIntereses = bool("sin_intereses").nullable()
+    /**
+     * La cuenta de la que el banco debita la cuota solo; ver `CreditTerms.debitoAutomaticoDesde`.
+     * Nullable por lo mismo que las de arriba (`ADD COLUMN … NULL` dentro de la transacción de
+     * arranque no puede fallar), y sin FK a `accounts` por lo mismo que `recurring_rules.account_id`:
+     * si la cuenta se borra, el crédito no se borra con ella — se suelta el débito (ver
+     * `AccountRoutes`) y la propuesta deja de salir.
+     */
+    val debitoAutomaticoDesde = varchar("debito_automatico_desde", 50).nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)

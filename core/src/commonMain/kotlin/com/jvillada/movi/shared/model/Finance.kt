@@ -185,6 +185,28 @@ data class CreditTerms(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val sinIntereses: Boolean = false,
+    /**
+     * **El banco cobra esta cuota solo, de esta cuenta del dueño** (débito automático): el id de la
+     * cuenta de la que sale. `null` = la paga él a mano (PSE, la app, en la sucursal), que es el
+     * caso normal.
+     *
+     * Existe porque el banco **no avisa** cuando debita una cuota: ni SMS, ni notificación, ni
+     * correo. La auditoría de la ingesta (4-oct-2026) contó cinco cuotas cargadas a mano en 45 días
+     * —Libre inversión 9695, Crediágil 3090, Techo Gardenera— por esa sola razón. Con este dato,
+     * el día del vencimiento Movi le propone en «Por revisar» la cuota ya armada, con monto y
+     * cuenta, para que la confirme con un toque (ver [DebitoAutomaticoPorConfirmar]). **Nunca la
+     * anota sola**: el banco a veces no debita (sin saldo) o cobra otro monto.
+     *
+     * No convive con [payrollDeduction] ni con [paidBy]: esas dos dicen que la cuota NO sale de una
+     * cuenta suya, y esta dice de cuál sale. Lo valida [validarDebitoAutomatico] en la hoja y en el
+     * server.
+     *
+     * Viaja siempre, aunque valga `null`, por lo mismo que el resto: sin eso, **desmarcar el débito
+     * no lo apagaba**. Ver el KDoc de la clase. Un APK que no conoce el campo no lo manda y el server
+     * conserva el guardado (`PUT /api/credits/{id}` mira las claves del JSON).
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val debitoAutomaticoDesde: String? = null,
 )
 
 /** Lo que se le dice a quien marca «No cobra intereses» y además escribe una tasa. */

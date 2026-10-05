@@ -34,6 +34,8 @@ import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
+import com.jvillada.movi.shared.model.cuentasParaElDebito
+import com.jvillada.movi.shared.model.DEBITO_SIN_CUENTA
 import com.jvillada.movi.shared.model.validateCreditDisbursement
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.recurrentes.ReminderOptInField
@@ -160,10 +162,32 @@ fun CreditTermsSheet(
     // La otra forma de «esta cuota no sale de mi cuenta»: la paga otro. Ver
     // THIRD_PARTY_PAYMENT_CATEGORY en :core — de los nueve créditos del dueño, TRES son así.
     var quienPaga by remember { mutableStateOf(existingTerms?.paidBy ?: "") }
+    // La tercera respuesta a «¿esta cuota sale de tu cuenta?»: sí, y el banco la cobra solo. Con la
+    // cuenta, Movi propone la cuota armada en «Por revisar» el día que vence (nunca la anota sola).
+    // Ver `CreditTerms.debitoAutomaticoDesde`.
+    var seDebitaSolo by remember { mutableStateOf(existingTerms?.debitoAutomaticoDesde != null) }
+    var cuentaDelDebito by remember { mutableStateOf(existingTerms?.debitoAutomaticoDesde) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val termsValid = bank.isNotBlank() &&
+    // El débito solo aplica si la cuota sale de una cuenta suya: la libranza y «la paga otro» lo
+    // esconden, y al guardar se manda `null` (ver `validarDebitoAutomatico`).
+    val debitoVisible = !esLibranza && quienPaga.isBlank()
+    val debitoPendiente = debitoVisible && seDebitaSolo && cuentaDelDebito == null
+    // Las cuentas solo hacen falta para elegir de cuál se debita, y se leen cuando se marca la
+    // casilla (o al abrir un crédito que ya la tiene): no antes, para no pedir lo que no se usa.
+    var cuentasDelDebito by remember { mutableStateOf<List<Account>?>(null) }
+    var falloCuentasDelDebito by remember { mutableStateOf(false) }
+    LaunchedEffect(debitoVisible && seDebitaSolo, intentoDeCarga) {
+        if (!(debitoVisible && seDebitaSolo) || cuentasDelDebito != null) return@LaunchedEffect
+        falloCuentasDelDebito = false
+        runCatching { Repositories.wallets.getAccounts() }
+            .onSuccess { cuentasDelDebito = it }
+            .onFailure { falloCuentasDelDebito = true }
+    }
+    val monedaDelCredito = editing?.account?.currency ?: "COP"
+
+    val termsValid = !debitoPendiente && bank.isNotBlank() &&
         (principal ?: 0L) > 0L &&
         (sinIntereses || rateEa.toDoubleOrNull() != null) &&
         (termMonths.toIntOrNull() ?: 0) > 0 &&
@@ -242,6 +266,7 @@ fun CreditTermsSheet(
         // Va al final porque el bloque del desembolso va al final de la hoja: el capital tiene que
         // estar escrito antes para que el monto pueda venir con él puesto por defecto.
         motivoDelDesembolso != null -> motivoDelDesembolso
+        debitoPendiente -> DEBITO_SIN_CUENTA
         else -> null
     }
 
@@ -276,6 +301,9 @@ fun CreditTermsSheet(
                     // Mismo criterio que el seguro: 0 y «no hay» son lo mismo.
                     otrosCargosMensuales = otrosCargos?.takeIf { it > 0L },
                     sinIntereses = sinIntereses,
+                    // Solo si la cuota sale de una cuenta suya; desmarcar manda `null` explícito
+                    // (el campo viaja siempre, ver el KDoc de `CreditTerms`).
+                    debitoAutomaticoDesde = if (debitoVisible && seDebitaSolo) cuentaDelDebito else null,
                 )
                 if (editing == null && newAccountMode) {
                     // Alta atómica server-side: cuenta + deuda inicial + términos —**y el
@@ -671,6 +699,56 @@ fun CreditTermsSheet(
                 }
             }
 
+            // ¿El banco la cobra solo? Va después de «¿la paga alguien más?» porque solo se
+            // pregunta si la respuesta fue «no, la pago yo»: la libranza y el tercero ya dijeron
+            // que la cuota no sale de una cuenta suya.
+            if (debitoVisible) {
+                Spacer(Modifier.height(8.dp))
+                CasillaConExplicacion(
+                    marcada = seDebitaSolo,
+                    titulo = TITULO_DEL_DEBITO_AUTOMATICO,
+                    explicacion = if (seDebitaSolo) {
+                        "El banco no avisa cuando la cobra. El día que vence, Movi te la deja " +
+                            "lista en «Por revisar» para que confirmes si se cobró y cuánto."
+                    } else {
+                        "Márcalo si el banco la debita solo de una de tus cuentas (débito automático)."
+                    },
+                    habilitada = !saving,
+                    alCambiar = { seDebitaSolo = !seDebitaSolo },
+                )
+                if (seDebitaSolo) {
+                    Text("¿De qué cuenta la cobra?", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    Spacer(Modifier.height(8.dp))
+                    val opciones = cuentasDelDebito?.let { cuentasParaElDebito(it, monedaDelCredito) }
+                    when {
+                        falloCuentasDelDebito -> {
+                            Text(NO_PUDIMOS_CARGAR_TUS_CUENTAS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                            Text(
+                                "Reintentar",
+                                style = Movi.textos.cuerpo,
+                                color = Movi.colores.texto,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickable(enabled = !saving) { intentoDeCarga++ }.padding(vertical = 4.dp),
+                            )
+                        }
+                        opciones == null -> Text("Cargando tus cuentas…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        opciones.isEmpty() -> Text(
+                            "No tienes cuentas de dinero en esta moneda. Créala en Cuentas y vuelve.",
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                        )
+                        else -> opciones.forEach { acc ->
+                            SelectRow(
+                                label = acc.name,
+                                selected = cuentaDelDebito == acc.id,
+                                onClick = { cuentaDelDebito = acc.id },
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                    }
+                }
+            }
+
             // El recordatorio no aplica a una libranza ni a una cuota que paga otro: en los
             // dos casos ya se pagó sola.
             if (!esLibranza && quienPaga.isBlank()) {
@@ -755,6 +833,9 @@ fun CreditTermsSheet(
         Spacer(Modifier.height(20.dp))
     }
 }
+
+/** El título de la casilla del débito automático en la hoja del crédito. */
+const val TITULO_DEL_DEBITO_AUTOMATICO: String = "El banco la cobra solo"
 
 @Composable
 internal fun SectionLabel(text: String) {

@@ -72,6 +72,7 @@ import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
 import com.jvillada.movi.shared.model.signedDelta
 import com.jvillada.movi.shared.model.validarInteresReal
 import com.jvillada.movi.shared.model.validarTasaDelCredito
+import com.jvillada.movi.shared.model.validarDebitoAutomatico
 import io.ktor.http.ContentType
 import io.ktor.server.request.contentType
 
@@ -185,6 +186,8 @@ fun Route.creditRoutes() {
                 .let { it.copy(dayOfMonth = it.dayOfMonth.coerceIn(1, 31)) }
             // La misma regla que apaga el botón de la hoja. Ver `validarTasaDelCredito`.
             validarTasaDelCredito(terms)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
+            dbQuery { motivoDelDebitoAutomatico(uid, terms, cuentaAlAbrir.currency) }
+                ?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
             val opening = openingEventFor(cuentaAlAbrir, now = System.currentTimeMillis())
             // Las patas se construyen con `transferLegsFor`, la MISMA función que usa
             // `POST /api/transfers` (vive en :core justamente para eso): misma categoría
@@ -311,8 +314,15 @@ fun Route.creditRoutes() {
                 // mensaje, porque no hay StatusPages. Se recorta acá en vez de rechazar: nadie
                 // pierde un crédito por haber escrito de más en un rótulo.
                 .let { it.copy(paidBy = it.paidBy?.trim()?.take(60)?.takeIf { v -> v.isNotBlank() }) }
+                // El débito automático entra al club por el mismo agujero que los demás: un APK
+                // anterior no conoce el campo, y editar la nota desde el teléfono le apagaría a
+                // Movi la propuesta de la cuota que el banco cobra solo.
+                .let { if ("debitoAutomaticoDesde" in crudo) it else it.copy(debitoAutomaticoDesde = previo?.debitoAutomaticoDesde) }
+                .let { it.copy(debitoAutomaticoDesde = it.debitoAutomaticoDesde?.trim()?.takeIf { v -> v.isNotBlank() }) }
             // Crear y editar validan igual: la misma función que el alta y que la hoja.
             validarTasaDelCredito(body)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
+            dbQuery { motivoDelDebitoAutomatico(uid, body, account.currency) }
+                ?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
             // upsert atómico por PK (accountId): elimina la carrera check-then-insert.
             // lastRemindedPeriod no está en el body del upsert, así que se conserva
             // a propósito: un cambio de día aplica desde el mes siguiente (v1).
@@ -620,6 +630,23 @@ fun Route.creditRoutes() {
     }
 }
 
+/**
+ * El motivo para rechazar el débito automático de [terms], o `null` si está bien (o no hay). Lee la
+ * cuenta **del usuario** —una ajena se trata como inexistente, mismo aislamiento que el resto— y
+ * delega la regla en [validarDebitoAutomatico], la misma de la hoja.
+ */
+private fun org.jetbrains.exposed.sql.Transaction.motivoDelDebitoAutomatico(
+    uid: String,
+    terms: CreditTerms,
+    monedaDelCredito: String,
+): String? {
+    val id = terms.debitoAutomaticoDesde?.takeIf { it.isNotBlank() } ?: return null
+    val cuenta = Accounts.selectAll()
+        .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
+        .firstOrNull()?.toAccount()
+    return validarDebitoAutomatico(terms, cuenta, monedaDelCredito)
+}
+
 private fun fillTerms(
     it: org.jetbrains.exposed.sql.statements.UpdateBuilder<*>,
     uid: String,
@@ -641,6 +668,7 @@ private fun fillTerms(
     it[Credits.insuranceMonthly] = terms.insuranceMonthly?.takeIf { v -> v > 0L }
     it[Credits.otrosCargosMensuales] = terms.otrosCargosMensuales?.takeIf { v -> v > 0L }
     it[Credits.sinIntereses] = terms.sinIntereses
+    it[Credits.debitoAutomaticoDesde] = terms.debitoAutomaticoDesde?.trim()?.takeIf { v -> v.isNotBlank() }
 }
 
 private fun summaryFor(
