@@ -205,6 +205,10 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         dia.copy(items = dia.items.filterNot { (it.transferId ?: it.id) in movimientosResueltos })
     }
     val candidatos = lecturas.candidatos?.filterNot { it.id in candidatosResueltos }
+    // ── Lo que el banco cobró solo (débitos automáticos) ── bloque aparte: no son avisos del banco.
+    // Lo confirmado o descartado acá se va enseguida, sin esperar la relectura.
+    var debitosResueltos by remember { mutableStateOf(emptySet<String>()) }
+    val debitos = lecturas.debitos?.filterNot { it.clave in debitosResueltos }
     val nombresDeCuentas = remember(cuentas) { cuentas.associate { it.id to it.name } }
     val tiposDeCuentas = remember(cuentas) { cuentas.associate { it.id to it.type } }
 
@@ -212,9 +216,11 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     // pantalla (un reintento) no se vuelve al esqueleto.
     val cargando = (mensajes == null && lecturas.leyendoMensajes) ||
         (dias == null && leyendoDias) ||
-        (lecturas.candidatos == null && lecturas.leyendoCandidatos)
+        (lecturas.candidatos == null && lecturas.leyendoCandidatos) ||
+        (lecturas.debitos == null && lecturas.leyendoDebitos)
     // Con todo pintado, alguna lectura sigue en vuelo: lo pintado es lo de antes.
-    val actualizandoConAlgoALaVista = !cargando && (lecturas.leyendoMensajes || leyendoDias || lecturas.leyendoCandidatos)
+    val actualizandoConAlgoALaVista = !cargando &&
+        (lecturas.leyendoMensajes || leyendoDias || lecturas.leyendoCandidatos || lecturas.leyendoDebitos)
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         MinScreenHeader(
@@ -270,8 +276,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             }
 
             // «Todo al día» es un vacío: se afirma solo con lecturas que contestaron en esta visita.
-            if (bandejaAlDia(mensajes, dias, candidatos) && noSePudoActualizar) return@LazyColumn
-            if (bandejaAlDia(mensajes, dias, candidatos)) {
+            if (bandejaAlDia(mensajes, dias, candidatos, debitos) && noSePudoActualizar) return@LazyColumn
+            if (bandejaAlDia(mensajes, dias, candidatos, debitos)) {
                 item { TodoAlDia() }
                 // `mensajes` no es `null` acá —[bandejaAlDia] lo exige— y contestó
                 // vacía de verdad: nunca llegó un mensaje del banco a esta cuenta. Es la misma
@@ -283,6 +289,26 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     item { VacioDeLaCapturaEnLaBandeja(onNavigate) }
                 }
                 return@LazyColumn
+            }
+
+            // ── Lo que el banco cobró solo ────────────────────────────────────────
+            // Cuotas (y recurrentes) con débito automático, vencidas y sin movimiento. Ver
+            // [TarjetaDelDebitoAutomatico]: nada se anota hasta que el dueño confirma.
+            if (debitos == null) {
+                if (!lecturas.leyendoDebitos) {
+                    item { SeccionQueNoSeLeyo("No pudimos revisar lo que el banco cobra solo") { recarga++ } }
+                }
+            } else if (debitos.isNotEmpty()) {
+                item { MinSectionHeader(title = TITULO_DE_LOS_DEBITOS, count = debitos.size) }
+                debitos.forEach { debito ->
+                    item(key = "debito-${debito.clave}") {
+                        TarjetaDelDebitoAutomatico(debito, onResuelto = {
+                            debitosResueltos = debitosResueltos + debito.clave
+                            recarga++
+                        })
+                    }
+                }
+                item { Spacer(Modifier.height(14.dp)) }
             }
 
             // ── Mensajes del banco ────────────────────────────────────────────────

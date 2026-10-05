@@ -402,6 +402,20 @@ object AnomaliasDescartadas : Table("anomalias_descartadas") {
     override val primaryKey = PrimaryKey(userId, huella)
 }
 
+/**
+ * **Los débitos automáticos que el dueño dijo que no se cobraron** («No se cobró»), por regla y
+ * período del vencimiento. La propuesta se deriva en cada lectura (ver `DebitosAutomaticosRoutes`),
+ * así que el «no» tiene que quedar escrito o volvería en el próximo F5. El período siguiente trae
+ * otro vencimiento y vuelve a proponer. Tabla nueva: entra solo al `SchemaUtils.create` del arranque.
+ */
+object DebitosDescartados : Table("debitos_automaticos_descartados") {
+    val userId       = varchar("user_id", 50)
+    val ruleId       = varchar("rule_id", 80)
+    val periodo      = varchar("periodo", 7)
+    val descartadoEn = long("descartado_en")
+    override val primaryKey = PrimaryKey(userId, ruleId, periodo)
+}
+
 object Budgets : Table("budgets") {
     val userId       = varchar("user_id", 50)
     val category     = varchar("category", 100)

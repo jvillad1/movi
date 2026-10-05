@@ -1373,6 +1373,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                 mensajes = porRevisar.mensajes,
                 dias = if (diasLeidos) allDays else null,
                 candidatos = porRevisar.candidatos,
+                debitos = porRevisar.debitos,
             )
         } else {
             null

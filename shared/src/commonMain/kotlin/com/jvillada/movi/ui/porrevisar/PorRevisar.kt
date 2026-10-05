@@ -7,6 +7,7 @@ import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Lectura
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.rememberLectura
+import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
@@ -73,11 +74,14 @@ fun cuantosPorRevisar(
     mensajes: List<SmsMessage>?,
     dias: List<EventDay>?,
     candidatos: List<FinancialEvent>?,
+    /** Lo que el banco cobró solo y Movi propone armado (ver [DebitoAutomaticoPorConfirmar]). */
+    debitos: List<DebitoAutomaticoPorConfirmar>? = null,
 ): Int =
     // Pagos, no avisos: el mismo pago avisado tres veces cuenta una.
     (mensajes?.let { pagosPorRevisar(it).size } ?: 0) +
         (dias?.let { renglonesQueEntraronSolos(it).size } ?: 0) +
-        (candidatos?.size ?: 0)
+        (candidatos?.size ?: 0) +
+        (debitos?.size ?: 0)
 
 /** Lo que dice el renglón de Movimientos. Sin plural que conjugar: «1 por revisar», «4 por revisar». */
 fun textoDePorRevisar(cuantos: Int): String = "$cuantos por revisar"
@@ -91,9 +95,11 @@ fun bandejaAlDia(
     mensajes: List<SmsMessage>?,
     dias: List<EventDay>?,
     candidatos: List<FinancialEvent>?,
+    /** Default vacío: quien no pregunta por los débitos automáticos no los cuenta (ver [cuantosPorRevisar]). */
+    debitos: List<DebitoAutomaticoPorConfirmar>? = emptyList(),
 ): Boolean =
-    mensajes != null && dias != null && candidatos != null &&
-        cuantosPorRevisar(mensajes, dias, candidatos) == 0
+    mensajes != null && dias != null && candidatos != null && debitos != null &&
+        cuantosPorRevisar(mensajes, dias, candidatos, debitos) == 0
 
 /**
  * El renglón «la captura dejó de andar» de la bandeja, o `null` si no hay nada que decir.
@@ -122,17 +128,22 @@ fun avisoDeCapturaEnLaBandeja(mensajes: List<SmsMessage>?, silenciada: Boolean?)
 class LecturasPorRevisar internal constructor(
     private val deMensajes: Lectura<List<SmsMessage>>,
     private val deCandidatos: Lectura<List<FinancialEvent>>,
+    private val deDebitos: Lectura<List<DebitoAutomaticoPorConfirmar>>,
 ) {
     val mensajes: List<SmsMessage>? get() = deMensajes.valor
     val candidatos: List<FinancialEvent>? get() = deCandidatos.valor
+    /** Lo que el banco cobró solo y Movi propone armado; `null` hasta que la lectura contestó. */
+    val debitos: List<DebitoAutomaticoPorConfirmar>? get() = deDebitos.valor
     val leyendoMensajes: Boolean get() = deMensajes.actualizando
     val leyendoCandidatos: Boolean get() = deCandidatos.actualizando
+    val leyendoDebitos: Boolean get() = deDebitos.actualizando
 
-    /** Las dos lecturas terminaron, bien o mal: ya se puede decidir qué pintar. */
-    val terminaron: Boolean get() = !leyendoMensajes && !leyendoCandidatos
+    /** Las lecturas terminaron, bien o mal: ya se puede decidir qué pintar. */
+    val terminaron: Boolean get() = !leyendoMensajes && !leyendoCandidatos && !leyendoDebitos
 
     /** Alguna falló con lo de antes a la vista: lo que se ve es lo último que vimos. */
-    val falloConAlgoALaVista: Boolean get() = deMensajes.falloConAlgoALaVista || deCandidatos.falloConAlgoALaVista
+    val falloConAlgoALaVista: Boolean get() =
+        deMensajes.falloConAlgoALaVista || deCandidatos.falloConAlgoALaVista || deDebitos.falloConAlgoALaVista
 }
 
 /**
@@ -146,5 +157,6 @@ fun rememberLecturasPorRevisar(recarga: Int): LecturasPorRevisar {
     val candidatos = rememberLectura(ClaveDeLectura.CandidatosPagoDeTarjeta, recarga) {
         Repositories.wallets.getCardPaymentCandidates()
     }
-    return remember(mensajes, candidatos) { LecturasPorRevisar(mensajes, candidatos) }
+    val debitos = rememberLectura(ClaveDeLectura.DebitosAutomaticos, recarga) { Repositories.wallets.getDebitosAutomaticos() }
+    return remember(mensajes, candidatos, debitos) { LecturasPorRevisar(mensajes, candidatos, debitos) }
 }

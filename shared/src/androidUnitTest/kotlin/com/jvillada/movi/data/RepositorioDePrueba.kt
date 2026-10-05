@@ -132,6 +132,9 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun getEventOccurrenceMark(id: String): EventOccurrenceMark? = noUsado("getEventOccurrenceMark")
     override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = noUsado("getCardPaymentCandidates")
     override suspend fun dismissCardPaymentCandidate(id: String) = noUsado("dismissCardPaymentCandidate")
+    /** Vacío y no `noUsado`: «Por revisar» y Movimientos lo piden siempre, y no tener débitos es lo normal. */
+    override suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar> = emptyList()
+    override suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String): Unit = noUsado("descartarDebitoAutomatico")
     override suspend fun register(request: RegisterRequest): AuthResponse = noUsado("register")
     override suspend fun login(request: LoginRequest): AuthResponse = noUsado("login")
     override suspend fun renameAccount(id: String, name: String): Account = noUsado("renameAccount")

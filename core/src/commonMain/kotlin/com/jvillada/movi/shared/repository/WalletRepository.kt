@@ -15,6 +15,7 @@ import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
+import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
@@ -555,6 +556,17 @@ interface WalletRepository {
      * [com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY] si en verdad lo era.
      */
     suspend fun dismissCardPaymentCandidate(id: String)
+
+    /**
+     * **Lo que el banco cobró solo y Movi propone armado**: cuotas (y recurrentes) con débito
+     * automático, vencidas y sin movimiento que las pruebe. Solo lee: confirmar una cuota es
+     * [payInstallment] con [com.jvillada.movi.shared.model.pagoDeCuotaDelDebito]. Ver
+     * [com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar].
+     */
+    suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar>
+
+    /** «No se cobró»: esa propuesta no vuelve para ese período. Idempotente. */
+    suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String)
 
     /**
      * **Los otros movimientos del mismo destinatario que están en otra categoría**

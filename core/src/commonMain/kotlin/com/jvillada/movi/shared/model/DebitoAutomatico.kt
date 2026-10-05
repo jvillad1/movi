@@ -66,3 +66,107 @@ fun validarDebitoAutomatico(terms: CreditTerms, cuenta: Account?, monedaDelCredi
  */
 fun cuentasParaElDebito(cuentas: List<Account>, moneda: String = "COP"): List<Account> =
     cuentas.filter { it.type.group != AccountGroup.DEUDA && it.currency == moneda }
+
+// ── La propuesta en «Por revisar» ────────────────────────────────────────────
+
+/** De dónde sale la propuesta: la cuota de un crédito, o una regla recurrente común. */
+@kotlinx.serialization.Serializable
+enum class OrigenDelDebito { CUOTA_DE_CREDITO, RECURRENTE }
+
+/**
+ * **Una cuota (o un recurrente) que el banco debita solo, vencida y sin movimiento que la pruebe.**
+ * La arma `GET /api/debitos-automaticos` y la pinta «Por revisar» como una tarjeta lista para
+ * confirmar: «Débito automático: Cuota Libre inversión 9695 · $1.204.064 desde Bancolombia Ahorros
+ * — ¿se cobró?».
+ *
+ * ## Dónde vive, y por qué no es un aviso del banco
+ *
+ * Se **deriva en cada lectura** —igual que el checklist del período— y no se escribe en ningún lado
+ * hasta que el dueño decide. No es una fila de `sms_messages` a propósito: un aviso sintético con
+ * origen «Movi» heredaría la bandeja, pero también se haría pasar por algo que el banco dijo, y el
+ * banco justamente no dijo nada. Contaría como captura para «banco mudo» (`soloLoQueLlegoSolo`) y se
+ * agruparía con los avisos de verdad como si fuera uno más. Derivado, desaparece solo:
+ *
+ * - cuando hay un movimiento que salda ese vencimiento (la cuota de dos patas, o el pago del
+ *   recurrente) — incluido el que el dueño anote a mano o confirme desde un aviso que llegó tarde;
+ * - cuando el dueño dice «No se cobró» (queda en `debitos_automaticos_descartados` para ese período);
+ * - cuando hay un aviso del banco pendiente por el mismo monto: el aviso es mejor evidencia, y la
+ *   bandeja no muestra dos tarjetas para el mismo pago.
+ *
+ * ## Los ids
+ *
+ * [pataDelDineroId], [pataDeLaDeudaId] y [transferId] los pone el server, **deterministas por
+ * (regla, período)**: confirmar dos veces —un doble toque, una respuesta perdida— manda los mismos
+ * ids y `POST /api/payments/installment` contesta lo que ya quedó guardado en vez de duplicar. Si un
+ * pago anterior con esos ids se anuló, el server elige los siguientes libres.
+ *
+ * @property periodo el `"YYYY-MM"` del vencimiento (el sello del período, `OccurrenceState.period`).
+ * @property vence el día del vencimiento, ISO. Es la fecha con que se anota el movimiento: el banco
+ *   debita ese día, aunque el dueño lo confirme después.
+ * @property deudaId la cuenta del crédito, solo en [OrigenDelDebito.CUOTA_DE_CREDITO].
+ */
+@kotlinx.serialization.Serializable
+data class DebitoAutomaticoPorConfirmar(
+    val ruleId: String,
+    val periodo: String,
+    val origen: OrigenDelDebito,
+    val nombre: String,
+    val monto: Long,
+    val moneda: String = "COP",
+    val vence: String,
+    val cuentaId: String,
+    val cuentaNombre: String,
+    val categoria: String,
+    val pataDelDineroId: String,
+    val deudaId: String? = null,
+    val pataDeLaDeudaId: String? = null,
+    val transferId: String? = null,
+) {
+    /** La llave de la tarjeta en la bandeja: una por regla y período. */
+    val clave: String get() = "$ruleId@$periodo"
+}
+
+/** La nota con que queda anotado lo que se confirmó desde la propuesta: dice de dónde salió. */
+const val NOTA_DEL_DEBITO_AUTOMATICO: String = "Débito automático"
+
+/** «Débito automático: Cuota Libre inversión 9695 · $1.204.064 desde Bancolombia Ahorros — ¿se cobró?» */
+fun textoDelDebitoAutomatico(debito: DebitoAutomaticoPorConfirmar): String =
+    "$NOTA_DEL_DEBITO_AUTOMATICO: ${debito.nombre} · ${montoDelDebito(debito.monto, debito.moneda)} " +
+        "desde ${debito.cuentaNombre} — ¿se cobró?"
+
+/** El monto con su símbolo: pesos con «$», cualquier otra moneda con su código adelante. */
+fun montoDelDebito(monto: Long, moneda: String): String =
+    if (moneda == "COP") "$${conPuntosDeMiles(monto)}" else "$moneda ${conPuntosDeMiles(monto)}"
+
+/**
+ * **La cuota de dos patas que confirma el débito**, por el MISMO camino que el pago de cuota de
+ * siempre (`POST /api/payments/installment`): el server recalcula el desglose (interés, seguro,
+ * capital) contra la deuda viva, igual que si el dueño la anotara desde Agregar.
+ *
+ * TODO(rama G, `ingesta-dos-patas`): cuando la función de servidor que arma las dos patas al
+ * confirmar un aviso esté en master, la confirmación del débito puede pasar a ser un endpoint propio
+ * que la llame en el server. Hoy no hace falta: este pedido ya es idempotente por los ids.
+ *
+ * [monto] es el que el dueño confirmó («Cambiar monto»): la cuota puede variar. `null` si la
+ * propuesta no es de un crédito.
+ */
+fun pagoDeCuotaDelDebito(debito: DebitoAutomaticoPorConfirmar, monto: Long): CreatePagoDeCuotaRequest? {
+    if (debito.origen != OrigenDelDebito.CUOTA_DE_CREDITO) return null
+    val deuda = debito.deudaId ?: return null
+    val transfer = debito.transferId ?: return null
+    val pataDeLaDeuda = debito.pataDeLaDeudaId ?: return null
+    return CreatePagoDeCuotaRequest(
+        fromAccountId = debito.cuentaId,
+        debtAccountId = deuda,
+        amount = monto,
+        timestamp = epochDeFecha(debito.vence),
+        note = NOTA_DEL_DEBITO_AUTOMATICO,
+        transferId = transfer,
+        fromEventId = debito.pataDelDineroId,
+        toEventId = pataDeLaDeuda,
+    )
+}
+
+/** Cuerpo de `POST /api/debitos-automaticos/descartar`: «No se cobró» para ese vencimiento. */
+@kotlinx.serialization.Serializable
+data class DescartarDebitoAutomatico(val ruleId: String, val periodo: String)

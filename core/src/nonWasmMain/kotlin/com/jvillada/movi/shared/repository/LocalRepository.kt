@@ -66,6 +66,7 @@ import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.transferLegsFor
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.EventSource
@@ -1943,6 +1944,11 @@ class LocalRepository(
     // Igual que getCardPaymentCandidates arriba: no hay nada que espejar localmente — "No es" no
     // toca la categoría del evento, así que no hay ninguna fila local que quedaría desactualizada.
     override suspend fun dismissCardPaymentCandidate(id: String) = remote.dismissCardPaymentCandidate(id)
+    // Los débitos automáticos se derivan en el server en cada lectura (como el checklist): no hay
+    // nada que espejar. Sin conexión no se proponen, igual que no se puede marcar una ocurrencia.
+    override suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar> = remote.getDebitosAutomaticos()
+    override suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String) =
+        remote.descartarDebitoAutomatico(ruleId, periodo)
     /** Con caché: una meta sin señal es igual de útil que con señal — no cambia sola. */
     override suspend fun getGoals(): List<Goal> =
         leerConCache("goals") { remote.getGoals() }
