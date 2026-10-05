@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.computeBalances
+import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.server.db.Accounts
@@ -23,6 +25,7 @@ import com.jvillada.movi.server.reminders.virtualRuleFor
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.time.appDateToEpochMillis
+import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
@@ -311,7 +314,8 @@ private const val MEDIODIA = 12L * 60 * 60 * 1000
  * 3. **el dueño no dijo «No se cobró»** para ese período;
  * 4. **no hay un aviso del banco pendiente por el mismo monto** alrededor del vencimiento: si el
  *    banco sí avisó, ese aviso es la evidencia y la bandeja no pinta dos tarjetas para un pago;
- * 5. la cuenta del débito y la del crédito siguen existiendo.
+ * 5. la cuenta del débito y la del crédito siguen existiendo;
+ * 6. **el crédito todavía se debe**: con el saldo de la deuda en cero o menos, no hay cuota que cobrar.
  *
  * El monto propuesto es la cuota pactada. No se estima nada más: el dueño la cambia si el banco
  * cobró otra cifra.
@@ -344,6 +348,11 @@ private suspend fun cuotasPorConfirmar(uid: String, hoy: LocalDate, ahora: Long)
             if ("${rule.id}@$periodo" in descartados) return@mapNotNull null
             val cuenta = cuentas[terms.debitoAutomaticoDesde] ?: return@mapNotNull null
             val deuda = cuentas[terms.accountId] ?: return@mapNotNull null
+            // **Un crédito pagado no se cobra.** Si la deuda ya está en cero (o a favor), el banco no
+            // tiene qué debitar aunque el crédito siga marcado «El banco la cobra solo»: proponerla
+            // invitaría a anotar una cuota que no existe. El saldo es el de la cuenta, en su moneda,
+            // con los movimientos vivos — el mismo que muestra Créditos.
+            if (saldoDeLaDeuda(uid, deuda) <= 0L) return@mapNotNull null
             if (hayUnAvisoPendienteDelMismoPago(uid, rule.amount, cuenta.currency, vence, ahora)) return@mapNotNull null
             val ids = idsLibresDelDebito(rule.id, periodo)
             DebitoAutomaticoPorConfirmar(
@@ -365,6 +374,10 @@ private suspend fun cuotasPorConfirmar(uid: String, hoy: LocalDate, ahora: Long)
         }
     }
 }
+
+/** Lo que se debe hoy en [deuda] (positivo = deuda), en su moneda, sin los anulados. */
+private fun Transaction.saldoDeLaDeuda(uid: String, deuda: Account): Long =
+    computeBalances(deuda.type, loadNonVoidedEventsIn(uid, deuda.id))[deuda.currency] ?: 0L
 
 /**
  * Los recurrentes comunes de [debitosPorConfirmar]: las reglas marcadas «se debita solo», con cuenta,
