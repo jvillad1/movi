@@ -22,7 +22,7 @@ class CuentasSinNombreEnHoyTest {
         assertEquals("3 personas o comercios sin nombre", cosa.texto)
         assertEquals(DestinoDeRevision.CUENTAS_DE_OTROS, cosa.destino)
         assertFalse(cosa.urgente)
-        assertEquals("1 cuenta a la que le envías plata no tiene nombre", textoDeCuentasSinNombre(1))
+        assertEquals("1 persona o comercio sin nombre", textoDeCuentasSinNombre(1))
     }
 
     @Test

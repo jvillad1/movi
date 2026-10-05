@@ -186,7 +186,10 @@ fun DetalleDelDestinoSheet(
                     porPeriodo.forEach { p ->
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                nombreDe(p.periodo).replaceFirstChar { it.uppercase() },
+                                // Sin «de 2026» si es el año en curso: a 390 dp partía el renglón en dos.
+                                nombreDe(p.periodo)
+                                    .let { n -> if (p.periodo.year == enCurso?.year) n.removeSuffix(" de ${p.periodo.year}") else n }
+                                    .replaceFirstChar { it.uppercase() },
                                 style = Movi.textos.cuerpo,
                                 color = Movi.colores.textoMedio,
                                 modifier = Modifier.weight(1.4f),

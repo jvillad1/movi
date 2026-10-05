@@ -182,6 +182,17 @@ class TercerosALaManoEnPantallaTest {
         assertEquals(1, composeRule.onAllNodesWithTag(TAG_SUGERIDOS, useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 
+    /** La alerta de Hoy lleva acá: con lo que Movi encontró ya abierto, sin otro toque. */
+    @Test
+    fun `llegar desde la alerta de Hoy abre lo que Movi encontro`() {
+        Repositories.sustitutoDePrueba = Repo()
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { DestinosScreen(onNavigate = {}, conSugeridosAbiertos = true) } }
+        }
+        esperar("Empanadas")
+        assertTrue(hay("Ocultar"))
+    }
+
     @Test
     fun `guardar un sugerido es un toque, con el nombre prellenado`() {
         montar(Repo(sugeridos = listOf(qr)))

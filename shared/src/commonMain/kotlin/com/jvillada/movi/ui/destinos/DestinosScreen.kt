@@ -90,7 +90,8 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
  * - **La ficha** ([DetalleDelDestinoSheet]) es para leer; **Editar** ([DestinoSheet]) para cambiar,
  *   unir y borrar. Un movimiento de la ficha se abre con un toque ([HojaDelMovimiento]).
  *
- * [abrir] es el id de la ficha que se abre al llegar («Ver su ficha» desde un movimiento).
+ * [abrir] es el id de la ficha que se abre al llegar («Ver su ficha» desde un movimiento), y
+ * [conSugeridosAbiertos] llega con lo que Movi encontró ya abierto (la alerta de Hoy).
  *
  * ## Solo en línea, y dicho en voz alta
  *
@@ -99,13 +100,13 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
  * que no pudo leer y ofrece reintentar — no muestra una cifra vieja como si fuera la de hoy.
  */
 @Composable
-fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null) {
+fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSugeridosAbiertos: Boolean = false) {
     var destinos by remember { mutableStateOf<List<DestinoConocido>>(emptyList()) }
     var cuentas by remember { mutableStateOf<List<Account>>(emptyList()) }
     var ajustes by remember { mutableStateOf(PeriodSettings()) }
     // Lo que Movi encontró solo. Secundario: si falla, la pantalla sigue con lo guardado.
     var sugeridos by remember { mutableStateOf<List<DestinoSugerido>>(emptyList()) }
-    var verSugeridos by remember { mutableStateOf(false) }
+    var verSugeridos by remember { mutableStateOf(conSugeridosAbiertos) }
     var verTodosLosSugeridos by remember { mutableStateOf(false) }
     var busqueda by remember { mutableStateOf("") }
     var cargando by remember { mutableStateOf(true) }

@@ -145,9 +145,11 @@ sealed class Screen {
      * Patrimonio (sin cifra: no es plata suya) y de Ajustes, y la alerta de Hoy.
      *
      * [abrir] es el id de un tercero cuya ficha se abre al llegar: lo pide «Ver su ficha» desde el
-     * detalle de un movimiento. Un `data class` por eso, con el precedente de [Transactions].
+     * detalle de un movimiento. [sugeridos] = llegar con lo que Movi encontró ya abierto: lo pide la
+     * alerta de Hoy («3 personas o comercios sin nombre»), que no tiene sentido que lleve a una
+     * línea cerrada. Un `data class` por eso, con el precedente de [Transactions].
      */
-    data class Destinos(val abrir: String? = null) : Screen()
+    data class Destinos(val abrir: String? = null, val sugeridos: Boolean = false) : Screen()
 
     /**
      * «Documentos» — los papeles del dueño guardados en Movi (extractos, nóminas, contratos).
