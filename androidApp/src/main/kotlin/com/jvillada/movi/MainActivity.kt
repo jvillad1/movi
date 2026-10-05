@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import com.jvillada.movi.avisos.AvisoDeBancoMudoWorker
+import com.jvillada.movi.avisos.AvisoDeDebitosAutomaticosWorker
 import com.jvillada.movi.avisos.AvisoDeVencimientosWorker
 import com.jvillada.movi.avisos.Avisador
 import com.jvillada.movi.avisos.DestinoDesdeAfuera
@@ -62,6 +63,8 @@ class MainActivity : FragmentActivity() {
         AvisoDeVencimientosWorker.programar(applicationContext)
         // Ola 2: y el diario de «banco mudo» (decide al correr, igual que el de vencimientos).
         AvisoDeBancoMudoWorker.programar(applicationContext)
+        // Y el de lo que el banco cobra solo: «¿Se cobró la cuota?» el día del débito.
+        AvisoDeDebitosAutomaticosWorker.programar(applicationContext)
         // Si la app se abrió tocando un aviso, a qué pantalla va (lo cumple App() tras la puerta).
         recibirAviso(intent)
         // Ola 2 · «Compartir con Movi». Solo en un arranque de verdad: si Android recrea la

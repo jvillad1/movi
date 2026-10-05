@@ -328,6 +328,7 @@ private fun AvisosDelTelefonoCard() {
     var movimientos by remember { mutableStateOf(PreferenciasDeAvisos.avisarMovimientos(context)) }
     var vencimientos by remember { mutableStateOf(PreferenciasDeAvisos.avisarVencimientos(context)) }
     var bancoMudo by remember { mutableStateOf(PreferenciasDeAvisos.avisarBancoMudo(context)) }
+    var debitos by remember { mutableStateOf(PreferenciasDeAvisos.avisarDebitos(context)) }
 
     fun refrescar() {
         puede = puedeAvisar(context)
@@ -391,6 +392,16 @@ private fun AvisosDelTelefonoCard() {
         ) {
             bancoMudo = it
             PreferenciasDeAvisos.ponerAvisarBancoMudo(context, it)
+        }
+        // Lo que el banco cobra solo (cuotas y recurrentes marcados «se debita solo»): el banco no
+        // manda nada ese día, así que el aviso es de Movi. Una vez por débito y período.
+        FilaDeInterruptor(
+            texto = "Avisarme el día de un débito automático",
+            encendido = debitos,
+            habilitado = puede,
+        ) {
+            debitos = it
+            PreferenciasDeAvisos.ponerAvisarDebitos(context, it)
         }
     }
 }

@@ -151,6 +151,17 @@ fun textoDelDebitoAutomatico(debito: DebitoAutomaticoPorConfirmar): String =
     "$NOTA_DEL_DEBITO_AUTOMATICO: ${debito.nombre} · ${montoDelDebito(debito.monto, debito.moneda)} " +
         "desde ${debito.cuentaNombre} — ¿se cobró?"
 
+/**
+ * **Lo que el banco debió cobrar, dicho dentro de una frase**: «la cuota de Libre inversión 9695» para
+ * un crédito (la regla virtual se llama «Cuota Libre inversión 9695») y el nombre de la regla tal cual
+ * para un recurrente («Seguro del carro»). Lo usan el aviso del teléfono y la fila de Hoy, para que
+ * digan lo mismo.
+ */
+fun loQueSeCobra(debito: DebitoAutomaticoPorConfirmar): String = when (debito.origen) {
+    OrigenDelDebito.CUOTA_DE_CREDITO -> "la cuota de " + debito.nombre.removePrefix("Cuota ").trim()
+    OrigenDelDebito.RECURRENTE -> debito.nombre.trim()
+}
+
 /** El monto con su símbolo: pesos con «$», cualquier otra moneda con su código adelante. */
 fun montoDelDebito(monto: Long, moneda: String): String =
     if (moneda == "COP") "$${conPuntosDeMiles(monto)}" else "$moneda ${conPuntosDeMiles(monto)}"

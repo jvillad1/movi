@@ -1,6 +1,8 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.OrigenMudo
+import com.jvillada.movi.shared.model.loQueSeCobra
 import com.jvillada.movi.shared.model.textoDeOrigenMudo
 
 import com.jvillada.movi.shared.model.Budget
@@ -279,8 +281,15 @@ fun cosasParaRevisar(
      * solo). No es urgente: va abajo, junto al cuadre.
      */
     cuentasDeOtrosSinNombre: Int = 0,
+    /**
+     * Lo que el banco debió cobrar solo y nadie confirmó (`GET /api/debitos-automaticos`). Urgente:
+     * es plata que probablemente ya salió y todavía no cuenta. Lleva a «Por revisar», donde se
+     * confirma con un toque. La fila «venció y no está marcado» de esa misma cuota no se repite.
+     */
+    debitosPorConfirmar: List<DebitoAutomaticoPorConfirmar> = emptyList(),
     cuantas: Int = 4,
 ): List<CosaParaRevisar> {
+    val conDebito = debitosPorConfirmar.map { it.ruleId }.toSet()
     val todas = buildList {
         bancosMudos.forEach { mudo ->
             add(
@@ -292,7 +301,18 @@ fun cosasParaRevisar(
                 ),
             )
         }
-        val vencidos = checklist.filter { it.vencido }
+        textoDeDebitosEnHoy(debitosPorConfirmar)?.let { texto ->
+            add(
+                CosaParaRevisar(
+                    texto = texto,
+                    detalle = "El banco lo cobra solo y no avisa. Confírmalo en Por revisar para que cuente.",
+                    destino = DestinoDeRevision.POR_REVISAR,
+                    urgente = true,
+                ),
+            )
+        }
+        // La cuota que el banco debita sola ya tiene su fila arriba, con lo que hay que hacer.
+        val vencidos = checklist.filter { it.vencido && it.ruleId !in conDebito }
         if (vencidos.isNotEmpty()) {
             add(
                 CosaParaRevisar(
@@ -380,6 +400,16 @@ fun cosasParaRevisar(
         }
     }
     return todas.sortedByDescending { it.urgente }.take(cuantas)
+}
+
+/**
+ * «¿Se cobró la cuota de Libre inversión 9695?», o «2 débitos automáticos por confirmar». `null` sin
+ * ninguno: no hay fila.
+ */
+fun textoDeDebitosEnHoy(debitos: List<DebitoAutomaticoPorConfirmar>): String? = when (debitos.size) {
+    0 -> null
+    1 -> "¿Se cobró ${loQueSeCobra(debitos.single())}?"
+    else -> "${debitos.size} débitos automáticos por confirmar"
 }
 
 /** «3 cuentas a las que les envías plata no tienen nombre». */
