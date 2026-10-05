@@ -377,4 +377,36 @@ class CorreoEntranteRoutesTest {
         assertTrue(CUERPO_CUOTA_DE_MANEJO.lineSequence().first() in texto)
         assertTrue("Vigilado" !in texto, "la firma se corta")
     }
+
+    /**
+     * **El CUS evita el duplicado**: el mismo pago por PSE reenviado dos veces trae otro Message-Id
+     * y otra hora (el dedupe por texto + tiempo no lo ve), pero el mismo CUS. Entra una sola vez. Y
+     * un pago distinto, con otro CUS, sí entra.
+     */
+    @Test
+    fun `el mismo pago de PSE dos veces deja una sola fila, por su CUS`() = testApplication {
+        application { testModule() }
+        suspend fun mandar(messageId: String, fecha: String, cus: String = "700000009") =
+            client.post("/api/correo-entrante") {
+                header(HttpHeaders.Authorization, basic(secretoDelWebhook))
+                contentType(ContentType.Application.Json)
+                setBody(
+                    alertaPostmark(
+                        direccionDeA,
+                        asunto = com.jvillada.movi.server.correo.asuntoDePse(cus),
+                        cuerpo = com.jvillada.movi.server.correo.cuerpoDePse(cus = cus),
+                        messageId = messageId,
+                        fecha = fecha,
+                    ),
+                )
+            }
+        assertEquals(HttpStatusCode.Accepted, mandar("pse-1@achcolombia.com.co", "Sat, 03 Oct 2026 10:00:00 -0500").status)
+        val otraVez = mandar("pse-reenviado@gmail.com", "Sat, 03 Oct 2026 14:30:00 -0500")
+        assertEquals(HttpStatusCode.Accepted, otraVez.status)
+        assertEquals(false, cuerpoJson(otraVez.bodyAsText())["guardado"]!!.jsonPrimitive.boolean)
+        assertEquals(1, filas().size, "el mismo CUS es el mismo pago")
+
+        assertEquals(HttpStatusCode.Accepted, mandar("pse-2@achcolombia.com.co", "Sat, 03 Oct 2026 14:30:00 -0500", cus = "700000010").status)
+        assertEquals(2, filas().size, "otro CUS es otro pago")
+    }
 }

@@ -17,10 +17,15 @@ import com.jvillada.movi.server.sms.origenesMudosDe
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.server.sms.motivoParaApartar
+import com.jvillada.movi.server.sms.loQueMoviSabeDelPagoDe
+import com.jvillada.movi.server.sms.numerosPropiosDe
+import com.jvillada.movi.server.sms.sinLaCuentaPropia
 import com.jvillada.movi.shared.model.MOTIVO_DEVUELTO
 import com.jvillada.movi.shared.model.MotivoDeApartado
 import com.jvillada.movi.shared.model.motivoDeApartado
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.MemoriaDeCategorias
 import com.jvillada.movi.shared.model.conElDestinoConocido
 import com.jvillada.movi.shared.model.identificadorDelDestinoEn
@@ -59,8 +64,18 @@ import org.jetbrains.exposed.sql.update
  * `USD20,00` —estos dos en las compras con tarjeta de crédito—, y la regex de antes solo conocía el
  * `$`: 23 de los 98 SMS pendientes del dueño no se leían (sep-2026), entre ellos todos sus cobros de
  * Microsoft, Uber, Google, Anthropic y Railway.
+ *
+ * **Y el monto sin separadores** (4-oct-2026): el correo de Bancolombia escribe «Pagaste $386902 en
+ * la tarjeta…», todo pegado. La forma de arriba exigía grupos de tres después del primer bloque, así
+ * que se quedaba con «386»: un pago de $386.902 se proponía de $386, mil veces más chico y sin
+ * ninguna señal. Ahora hay dos formas: la de siempre, con al menos un separador de miles, y una
+ * corrida de dígitos con decimales opcionales. La primera se prueba antes, así que todo lo que ya se
+ * leía con separadores se sigue leyendo igual; lo que no los trae se lee entero.
  */
-private val amountRegex = Regex("""(\$|\bCOP|\bUSD)\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
+private val amountRegex = Regex(
+    """(\$|\bCOP|\bUSD)\s*([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?|[0-9]+(?:[.,][0-9]+)?)""",
+    RegexOption.IGNORE_CASE,
+)
 /** «Recibimos pago por 9.809.799 a tu tarjeta»: sin prefijo, pero con separador de miles. */
 private val amountPorRegex = Regex("""\bpor\s+([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
 /** «Recibiste 300.000,00 en tu cuenta» (Nu): sin prefijo ni «por», pero con separador de miles. */
@@ -111,9 +126,19 @@ private val llaveRegex = Regex("""\bllave\s+(@?[A-Za-z0-9._-]{3,})""", RegexOpti
 
 /**
  * La cuenta **de destino**, que no es la de origen: `desde tu cuenta *3333` es de dónde salió la
- * plata y no identifica a nadie. Solo cuenta la que viene detrás de un « a ».
+ * plata y no identifica a nadie. Solo cuenta la que viene detrás de un « a » o de un « hacia »: el
+ * retiro de la Fiducuenta dice «Retiraste $3,500,000.00 de tu cuenta *9586 Fiducuenta …, hacia la
+ * cuenta *25318624146», y sin el «hacia» su comercio salía «Movimiento».
  */
-private val cuentaDestinoRegex = Regex("""\ba\s+(?:la\s+)?cuenta\s+\*?\s?(\d{4,})""", RegexOption.IGNORE_CASE)
+private val cuentaDestinoRegex = Regex("""\b(?:a|hacia)\s+(?:la\s+)?cuenta\s+\*?\s?(\d{4,})""", RegexOption.IGNORE_CASE)
+
+/**
+ * **El débito programado de Bancolombia**: «Bancolombia informa pago Factura Programada IGS
+ * MULTIASISTE Ref 12019266 por $36.890,00 desde Aho*8133.» El nombre de quien cobra va entre
+ * «Factura Programada» y «Ref»; sin esto el comercio salía «Movimiento» (2 SMS en septiembre, y el
+ * mismo texto llega por correo con «Notificación Informativa» adelante).
+ */
+private val facturaProgramadaRegex = Regex("""\bfactura\s+programada\s+(.+?)\s+ref\b""", RegexOption.IGNORE_CASE)
 
 /**
  * Avisos del banco que traen plata en el texto pero **no son un movimiento**: confirmarlos crearía
@@ -176,8 +201,45 @@ private val plataQueLlegaANu = Regex("""te lleg[oó] dinero|\brecibiste\s+\$?\s*
  */
 private val pagoDesdeLaCuentaDeNu = Regex("""\bpago\s+aprobado\b|\bpagaste\s+en\s""", RegexOption.IGNORE_CASE)
 
-/** A quién se le pagó desde la cuenta de Nu: lo que va entre «Pagaste en» y « con tu cuenta». */
-private val pagasteEnRegex = Regex("""\bpagaste\s+en\s+(.+?)\s+con\s+tu\s+cuenta\b""", RegexOption.IGNORE_CASE)
+/**
+ * **El abono que llega A la tarjeta** (4-oct-2026): «Bancolombia: Recibimos pago por $9,000,000.00 a
+ * tu tarjeta de credito **9208 desde Wompi-PSE». Es plata que ENTRA a la tarjeta —le baja la
+ * deuda—, y se leía como gasto: confirmado así, le **sumaba** $9 M de deuda a la AMEX. Pasó dos
+ * veces en septiembre ($18,8 M, los dos abonos de un tercero que el dueño terminó armando a mano).
+ *
+ * Solo la forma de Bancolombia, que dice «a tu tarjeta». El «Recibimos tu pago» de Nu no: ese lo
+ * captura el teléfono del lado de la cuenta de ahorros de Nu, de donde SALIÓ la plata, y ahí sí es
+ * una salida (ver [pagoDeNu]).
+ */
+private val abonoALaTarjeta = Regex("""\brecibimos\s+pago\b.*?\ba\s+tu\s+tarjeta\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * **El avance de una tarjeta de crédito** (4-oct-2026): «Bancolombia: Hiciste un avance de $6,200,000
+ * en tu SUC VIRTUAL el 17:43 03/10/2026 desde tu T.Credito *9208 a la cuenta *8133.» Llegó solo por
+ * correo, y se leía como un GASTO de $6,2 M llamado «tu SUC VIRTUAL», con la cuenta propia *8133
+ * ofrecida como «¿de quién es esta cuenta?».
+ *
+ * Es plata prestada que ENTRA a la cuenta de ahorros: el dueño lo anotó como un desembolso de la
+ * tarjeta a la cuenta (la pata del banco con «Desembolso de crédito», que cuenta como plata que
+ * entra; la de la tarjeta como traspaso). Confirmar un aviso todavía no arma esas dos patas —un
+ * traspaso no acepta una tarjeta en ninguna punta, y un desembolso suelto no se deja escribir—, así
+ * que se propone lo que sí se puede: un **ingreso** en la cuenta de destino, «Avance de la tarjeta
+ * *9208», con [AVANCE_CATEGORY]. La deuda de la tarjeta queda por cargar aparte.
+ */
+private val avanceRegex = Regex("""\bhiciste\s+un\s+avance\b""", RegexOption.IGNORE_CASE)
+
+/** La tarjeta de la que salió el avance: «desde tu T.Credito *9208». */
+private val tarjetaDelAvanceRegex = Regex("""\bT\.?\s*Cred(?:ito)?\.?\s*\*+\s?(\d{4,})""", RegexOption.IGNORE_CASE)
+
+/** La categoría de un avance de tarjeta, mientras confirmar no arme el desembolso de dos patas. */
+internal const val AVANCE_CATEGORY = "Avance de tarjeta"
+
+/**
+ * A quién se le pagó desde la cuenta de Nu: lo que va entre «Pagaste en» y « con tu cuenta» (la
+ * notificación) o « con Cuenta Nu» (el correo: «Pagaste en Coomeva Medicina Prepagada S.A. con
+ * Cuenta Nu»).
+ */
+private val pagasteEnRegex = Regex("""\bpagaste\s+en\s+(.+?)\s+con\s+(?:tu\s+)?cuenta\b""", RegexOption.IGNORE_CASE)
 
 /**
  * **De Nu solo se lee lo que es una compra aprobada, un pago (a la tarjeta o desde la cuenta) o plata que llega.** Desde #346 el teléfono sube TODAS
@@ -256,6 +318,8 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val minusculas = text.lowercase()
     if (NO_SON_MOVIMIENTOS.any { it in minusculas }) return null
     if (NO_PASARON.any { it in minusculas }) return null
+    // El correo de PSE tiene su propia forma (Valor/Empresa/Descripción/CUS): ver `ElCorreoDePse.kt`.
+    if (esUnCorreoDePse(text)) return leerElCorreoDePse(text)
     if (origen != null && origenNu.containsMatchIn(origen) && !loDeNuEsUnMovimiento(minusculas)) return null
     val conPrefijo = amountRegex.find(text)
     val rawAmount = conPrefijo?.groupValues?.get(2)
@@ -268,8 +332,13 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val currency = if (monedaDelSms?.equals("USD", ignoreCase = true) == true) "USD" else "COP"
     val recargaDeBeneficios = if ("tarjeta de beneficios" in minusculas) recargaDeBeneficiosRegex.find(text) else null
 
+    val esAbonoALaTarjeta = abonoALaTarjeta.containsMatchIn(text)
+    val esAvance = avanceRegex.containsMatchIn(text)
+
     val type = when {
         recargaDeBeneficios != null -> TransactionType.INCOME
+        esAbonoALaTarjeta -> TransactionType.INCOME
+        esAvance -> TransactionType.INCOME
         text.contains("Recibiste", ignoreCase = true) -> TransactionType.INCOME
         text.contains("Nómina recibida", ignoreCase = true) -> TransactionType.INCOME
         text.contains("Compra", ignoreCase = true) -> TransactionType.EXPENSE
@@ -282,6 +351,9 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val esPagoDeNu = origen != null && origenNu.containsMatchIn(origen) && pagoDeNu.containsMatchIn(text)
     val merchant = when {
         text.contains("Nómina recibida", ignoreCase = true) -> "Nómina"
+        esAbonoALaTarjeta -> "Pago de tarjeta"
+        esAvance -> tarjetaDelAvanceRegex.find(text)?.let { "Avance de la tarjeta *${it.groupValues[1].takeLast(4)}" }
+            ?: "Avance de tarjeta"
         recargaDeBeneficios != null ->
             limpio(recargaDeBeneficios.groupValues[1])?.let { "Recarga de beneficios · $it" } ?: "Recarga de beneficios"
         type == TransactionType.INCOME -> limpio(merchantOfRegex.find(text)?.groupValues?.get(1)) ?: "Transferencia recibida"
@@ -292,7 +364,8 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
             limpio(merchantInRegex.find(text)?.groupValues?.get(1))
                 ?: llaveRegex.find(text)?.let { "Pago QR · llave ${it.groupValues[1]}" }
                 ?: "Pago QR"
-        else -> limpio(pagoDeWalletRegex.find(text)?.groupValues?.get(1))
+        else -> facturaProgramadaRegex.find(text)?.groupValues?.get(1)?.replace(Regex("""\s+"""), " ")?.let(::limpio)
+            ?: limpio(pagoDeWalletRegex.find(text)?.groupValues?.get(1))
             // Antes que el «en …» genérico: ese corta en el primer punto y de «Coomeva Medicina
             // Prepagada S.A.» dejaba «Coomeva Medicina Prepagada S».
             // Y sin [limpio]: el punto final de «S.A.» es parte del nombre, no del mensaje.
@@ -305,10 +378,15 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
             ?: if ("transferiste" in minusculas) "Transferencia" else "Movimiento"
     }
 
-    val category = categoryFor(text, merchant, type, esPagoDeNu)
+    val category = when {
+        esAbonoALaTarjeta -> CARD_PAYMENT_CATEGORY
+        esAvance -> AVANCE_CATEGORY
+        else -> categoryFor(text, merchant, type, esPagoDeNu)
+    }
     // A quién fue (o de quién vino): la misma lectura que hacen la bandeja y el detalle de un
-    // movimiento, en `:core`. Un pago de tarjeta no es a una persona, así que no lo lleva.
-    val identificador = if (category == CARD_PAYMENT_CATEGORY) null else identificadorDelDestinoEn(text)
+    // movimiento, en `:core`. Un pago de tarjeta no es a una persona, así que no lo lleva; un avance
+    // tampoco: la cuenta que nombra («a la cuenta *8133») es la del dueño, no la de un tercero.
+    val identificador = if (category == CARD_PAYMENT_CATEGORY || esAvance) null else identificadorDelDestinoEn(text)
     return ParsedSms(
         amount, merchant, type, category, currency,
         identificadorDelDestino = identificador?.valor,
@@ -363,7 +441,7 @@ internal const val SIN_CATEGORIA = "Otros"
  *   puso nombre a ese destinatario, ese nombre es suyo.
  */
 internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategorias): ParsedSms {
-    if (parsed.category == CARD_PAYMENT_CATEGORY) return parsed
+    if (parsed.category in CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA) return parsed
     val recuerdo = memoria.recuerdoDe(parsed.merchant) ?: return conLasCategoriasDelDueno(parsed, memoria)
     val huella = huellaDeUnMovimiento(parsed.merchant)
     return parsed.copy(
@@ -376,6 +454,44 @@ internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategoria
         },
     )
 }
+
+/**
+ * Las categorías que dice el aviso y no la costumbre: el pago de tarjeta (ver arriba), y el avance
+ * de tarjeta, que nombra la tarjeta por su número —«Avance de la tarjeta *9208»— y con eso la
+ * memoria lo confundiría con cualquier otro movimiento de esa tarjeta, cambiándole hasta el nombre.
+ *
+ * Y lo que el correo de PSE clasifica por la descripción (ver `ElCorreoDePse.kt`): la cuota de un
+ * crédito y el depósito a una cuenta propia. A la misma empresa se le paga de dos formas —a «NU
+ * Compañía de Financiamiento» el pago de la tarjeta y el depósito a la cuenta—, así que lo que el
+ * dueño anotó la vez pasada para esa empresa no dice qué es este pago.
+ */
+private val CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA =
+    setOf(CARD_PAYMENT_CATEGORY, AVANCE_CATEGORY, CUOTA_CATEGORY, TRANSFER_CATEGORY)
+
+/**
+ * **Un pago avisado por el banco y por PSE: la cuenta del uno, el nombre del otro.** El SMS de
+ * Bancolombia dice de qué cuenta salió («desde tu producto 8133») pero nombra a la empresa a medias
+ * («Banco de Occidente S A ATH») y no dice para qué fue; el correo de PSE del mismo pago dice
+ * «Empresa: Banco de Occidente» y «Descripción: PAGO Banco de Occidente - Prestamo». La propuesta de
+ * un pago avisado varias veces sale del aviso que nombra la cuenta (`propuestaDelGrupo`, que no se
+ * toca); esto le pone encima el comercio, la categoría y la nota del correo de PSE. El monto, la
+ * moneda y el tipo ya son los mismos: por eso se juntaron.
+ *
+ * **La fecha NO**: la del correo es solo un día, y el aviso del banco trae día y hora. Con otro aviso
+ * en el pago, el movimiento va a la hora del más viejo de ellos (lo hace la app con los miembros del
+ * pago); la «Fecha de la transacción» de PSE solo vale cuando el correo es el único aviso.
+ */
+internal fun conLoQueDiceElCorreoDePse(leido: ParsedSms, delCorreoDePse: ParsedSms?): ParsedSms =
+    if (delCorreoDePse == null) leido
+    else leido.copy(
+        merchant = delCorreoDePse.merchant,
+        category = delCorreoDePse.category,
+        nota = delCorreoDePse.nota,
+        fecha = null,
+        // Un pago a una empresa no es «una cuenta de otros».
+        identificadorDelDestino = null,
+        identificadorEsLlave = false,
+    )
 
 /**
  * **Cuando la memoria no sabe nada de este comercio, las palabras clave en SU vocabulario.** `parseSms`
@@ -528,10 +644,21 @@ fun Route.smsRoutes() {
         if (esUnComprobante(sms)) {
             dbQuery { parsedDeUnComprobante(uid, sms.id, sms.text) }?.let { return@get call.respond(it) }
         }
-        val parsed = parseSms(sms.text, sms.bank)
+        val leido = parseSms(sms.text, sms.bank)
             // No es un error de la app: el mensaje no trae un movimiento (un aviso, una ampliación de
             // plazo). Se dice así, porque la pantalla muestra este texto.
             ?: return@get call.respond(HttpStatusCode.UnprocessableEntity, "Este mensaje no trae un movimiento para anotar. Puedes ignorarlo.")
+        // El correo de PSE del mismo pago, si este aviso no lo es: ver [conLoQueDiceElCorreoDePse].
+        val otrosDelPago = if (sms.state != SMS_STATE_PENDING) emptyList() else dbQuery {
+            val bandeja = bandejaConLosPagos(uid, ahora = System.currentTimeMillis())
+            val miembros = bandeja.firstOrNull { it.id == sms.id }?.miembrosDelGrupo.orEmpty()
+            bandeja.filter { it.id in miembros && it.id != sms.id }
+        }
+        val correoDePse = if (esUnCorreoDePse(sms.text)) null else otrosDelPago.firstOrNull { esUnCorreoDePse(it.text) }
+        val parsed = conLoQueDiceElCorreoDePse(leido, correoDePse?.let { leerElCorreoDePse(it.text) })
+            // Si el propio correo de PSE es la propuesta de un pago con otros avisos, tampoco manda su
+            // fecha: el día y la hora salen del aviso del banco más viejo (ver [conLoQueDiceElCorreoDePse]).
+            .let { if (otrosDelPago.isNotEmpty()) it.copy(fecha = null) else it }
         // La historia del dueño entra acá y no adentro de `parseSms`: ese mismo parseo lo usan el
         // sync y la push, donde no hay a quién consultarle nada.
         //
@@ -541,7 +668,14 @@ fun Route.smsRoutes() {
         // cuenta *31973270756» no lo puede leer ningún humano). Ver `conElDestinoConocido`.
         val memoria = dbQuery { memoriaDe(uid) }
         val destinos = dbQuery { destinosDelDueno(uid) }
-        call.respond(conElDestinoConocido(conLoQueMoviRecuerda(parsed, memoria), sms.text, destinos))
+        // Y al final, una cuenta del dueño no se le ofrece como «de otro» (ver [sinLaCuentaPropia]).
+        val propios = dbQuery { numerosPropiosDe(uid) }
+        val propuesta = sinLaCuentaPropia(conElDestinoConocido(conLoQueMoviRecuerda(parsed, memoria), sms.text, destinos), propios)
+        // Lo que el correo de PSE no dice —desde qué cuenta, qué crédito o tarjeta abona, a qué cuenta
+        // propia fue un depósito— lo completa lo que el dueño ya tiene en Movi. Solo para los pagos
+        // de PSE: es donde falta, y así nada cambia para los demás avisos.
+        val esDePse = esUnCorreoDePse(sms.text) || correoDePse != null
+        call.respond(if (esDePse) dbQuery { loQueMoviSabeDelPagoDe(uid, propuesta) } else propuesta)
     }
 
     get("/api/sms/{id}/coincidencias") {

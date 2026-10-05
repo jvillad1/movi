@@ -167,6 +167,7 @@ internal fun resolverCuentaDelPago(
         com.jvillada.movi.ui.components.OrigenDeLaCuentaDelBanco.A_MANO,
         com.jvillada.movi.ui.components.OrigenDeLaCuentaDelBanco.POR_EL_NUMERO,
         com.jvillada.movi.ui.components.OrigenDeLaCuentaDelBanco.POR_EL_BANCO,
+        com.jvillada.movi.ui.components.OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI,
         com.jvillada.movi.ui.components.OrigenDeLaCuentaDelBanco.POR_DEFECTO,
         com.jvillada.movi.ui.components.OrigenDeLaCuentaDelBanco.NINGUNA,
     )
