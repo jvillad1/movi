@@ -208,4 +208,21 @@ class SmsDedupeTest {
         assertTrue(index.isDuplicate(SmsKey(uber, "2026-08-01 07:15")))
         assertFalse(index.isDuplicate(SmsKey(uber, "2026-08-02 07:15")))
     }
+
+    /**
+     * El viaje a Argentina (5-oct-2026): el barrido volvió a subir un SMS de Colombia con la hora
+     * corrida dos horas. El texto trae su propia fecha y hora, así que es el mismo SMS.
+     */
+    @Test
+    fun `un texto con su propia fecha y hora es el mismo SMS aunque time este corrido`() {
+        val conFecha = "Bancolombia: Transferiste \$60,000 desde tu cuenta *1111 a la cuenta *2222 el 30/09/2026 a las 18:18."
+        assertTrue(isSameSms(SmsKey(conFecha, "2026-09-30 20:18"), SmsKey(conFecha, "2026-09-30 18:18")))
+        assertTrue(traeSuPropiaFechaYHora(conFecha))
+    }
+
+    @Test
+    fun `un texto sin fecha propia sigue exigiendo la hora`() {
+        assertFalse(traeSuPropiaFechaYHora(uber))
+        assertFalse(isSameSms(SmsKey(uber, "2026-08-01 09:15"), SmsKey(uber, "2026-08-01 07:15")))
+    }
 }

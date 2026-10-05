@@ -127,8 +127,17 @@ class ConfirmacionDelAvisoTest {
             header(HttpHeaders.Authorization, "Bearer ${token(uid)}")
         }.status
 
-    private fun aviso(id: String, texto: String = textoTostao, time: String = hora) =
-        SmsMessage(id = id, time = time, bank = "85540", text = texto, state = "", det = "")
+    // El texto trae la fecha y la hora de SU `time`, como un SMS real de Bancolombia: dos avisos de
+    // días distintos con el mismo texto (y la misma fecha adentro) serían el mismo SMS para el
+    // dedupe (`isSameSms`, desde el viaje a Argentina del 5-oct-2026).
+    private fun aviso(id: String, texto: String? = null, time: String = hora) =
+        SmsMessage(id = id, time = time, bank = "85540", text = texto ?: textoTostaoDe(time), state = "", det = "")
+
+    private fun textoTostaoDe(time: String): String {
+        val (fecha, horaDelDia) = time.split(" ")
+        val (anio, mes, dia) = fecha.split("-")
+        return "Bancolombia: Compraste \$15.100,00 en TOSTAO CAFE Y PAN con tu T.Deb *1111, el $dia/$mes/$anio a las $horaDelDia."
+    }
 
     private val momento = momentoDelSms(hora, ahora = System.currentTimeMillis())
 

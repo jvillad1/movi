@@ -39,7 +39,14 @@ fun stableSmsId(address: String, date: Long, body: String): String {
  * una instancia sin arriesgar un `time` corrupto en una fila financiera.
  */
 fun smsWireTime(millis: Long): String =
-    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT).format(Date(millis))
+    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT)
+        // **En la hora de Movi, no en la del teléfono.** El 5-oct-2026 el dueño viajó a Argentina
+        // (UTC-3): el barrido volvió a leer 29 SMS recibidos en Colombia y los fechó dos horas
+        // más tarde, el dedupe del server (texto + hora ±1 min) no los reconoció y cayeron en
+        // «Por revisar» como nuevos. Con la zona fija, el mismo SMS da la misma hora esté donde
+        // esté el teléfono — la misma con la que el server fecha todo (`AppTimeZone`).
+        .apply { timeZone = java.util.TimeZone.getTimeZone(com.jvillada.movi.shared.time.AppTimeZone.DEFAULT_ID) }
+        .format(Date(millis))
 
 /**
  * Deriva máxima hacia ADELANTE que se le tolera a `DATE_SENT` respecto de `DATE`, antes de
