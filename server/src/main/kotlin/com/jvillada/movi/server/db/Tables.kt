@@ -486,6 +486,12 @@ object RecurringRules : Table("recurring_rules") {
      * la mantiene el DELETE de la cuenta, que pone esta columna en NULL en vez de borrar la
      * regla (ver `AccountRoutes`).
      */
+    /**
+     * «El banco la debita sola»; ver `RecurringRule.seDebitaSolo`. Nullable y se lee como `false`:
+     * `ADD COLUMN … NULL` es el único DDL que `createMissingTablesAndColumns` puede correr sin riesgo
+     * dentro de la transacción de arranque, y `RecurringRules` ya está en esa lista.
+     */
+    val seDebitaSolo       = bool("se_debita_solo").nullable()
     val accountId          = varchar("account_id", 50).nullable()
     /**
      * **Desde cuándo corre la regla** (ISO `"2026-08-15"`), o NULL = desde siempre. Ver

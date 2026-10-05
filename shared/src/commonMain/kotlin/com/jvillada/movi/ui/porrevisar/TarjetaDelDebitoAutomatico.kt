@@ -34,6 +34,7 @@ import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.NOTA_DEL_DEBITO_AUTOMATICO
 import com.jvillada.movi.shared.model.OrigenDelDebito
+import com.jvillada.movi.shared.model.confirmacionDelRecurrente
 import com.jvillada.movi.shared.model.pagoDeCuotaDelDebito
 import com.jvillada.movi.shared.model.textoDelDebitoAutomatico
 import com.jvillada.movi.theme.Movi
@@ -57,6 +58,8 @@ const val TAG_TARJETA_DEL_DEBITO: String = "tarjeta-del-debito-automatico"
  * - La cuota de un crédito va por `POST /api/payments/installment` ([pagoDeCuotaDelDebito]): las dos
  *   patas, el desglose que recalcula el server y los ids deterministas de la propuesta (un doble
  *   toque no duplica). La fila de «Pagos del período» se tilda sola, porque la deriva del movimiento.
+ * - Un recurrente va por `POST /api/debitos-automaticos/confirmar` ([confirmacionDelRecurrente]): el
+ *   gasto y el sello del período con ese gasto, juntos en el server.
  *
  * Nunca se llama sin que el dueño toque «Sí, se cobró».
  */
@@ -67,7 +70,11 @@ internal suspend fun confirmarElDebitoAutomatico(debito: DebitoAutomaticoPorConf
                 ?: error("A esta propuesta le faltan los datos del crédito.")
             Repositories.wallets.payInstallment(pedido)
         }
-        OrigenDelDebito.RECURRENTE -> error("Todavía no se puede confirmar un recurrente desde aquí.")
+        OrigenDelDebito.RECURRENTE -> {
+            val pedido = confirmacionDelRecurrente(debito, monto)
+                ?: error("A esta propuesta le faltan los datos del recurrente.")
+            Repositories.wallets.confirmarDebitoRecurrente(pedido)
+        }
     }
 }
 

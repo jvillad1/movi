@@ -1949,6 +1949,45 @@ class LocalRepository(
     override suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar> = remote.getDebitosAutomaticos()
     override suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String) =
         remote.descartarDebitoAutomatico(ruleId, periodo)
+
+    /**
+     * El gasto lo escribe el server (junto con el sello del período), así que se espeja acá con el
+     * id que él le puso —mismo motivo que [adjustCreditBalance]: Movimientos y Cuentas leen de esta
+     * base y el `SyncEngine` solo empuja—. Saltándose la fila si ya estaba: un reintento devuelve el
+     * mismo movimiento y no puede mover el saldo dos veces.
+     */
+    override suspend fun confirmarDebitoRecurrente(
+        pedido: com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico,
+    ): FinancialEvent = enDisco {
+        val evento = remote.confirmarDebitoRecurrente(pedido)
+        val uid = userId()
+        val now = Clock.System.now().toEpochMilliseconds()
+        db.transaction {
+            val yaEstaba = db.financialEventQueries.selectById(evento.id, uid).executeAsOneOrNull() != null
+            if (!yaEstaba) {
+                db.financialEventQueries.insert(
+                    evento.id, evento.accountId, evento.type.name, evento.amount,
+                    evento.category, evento.description, evento.merchant,
+                    evento.timestamp, evento.source.name, evento.rawPayload,
+                    evento.reconciliationStatus.name, evento.syncedAt ?: now, uid,
+                    evento.transferId,
+                    evento.createdAt ?: now,
+                    evento.noAmortiza,
+                    siNoSeRepite(evento.noSeRepite),
+                    evento.currency,
+                    evento.lastEditedAt,
+                )
+                val acct = db.accountQueries.selectById(evento.accountId).executeAsOneOrNull()
+                if (acct != null) {
+                    val tipo = AccountType.valueOf(acct.type)
+                    db.accountQueries.updateBalance(
+                        acct.balance + deltaDelEspejo(tipo, evento.type, evento.amount, evento.currency), acct.id,
+                    )
+                }
+            }
+        }
+        return@enDisco evento
+    }
     /** Con caché: una meta sin señal es igual de útil que con señal — no cambia sola. */
     override suspend fun getGoals(): List<Goal> =
         leerConCache("goals") { remote.getGoals() }

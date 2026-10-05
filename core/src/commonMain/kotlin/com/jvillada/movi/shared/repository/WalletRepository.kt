@@ -569,6 +569,14 @@ interface WalletRepository {
     suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String)
 
     /**
+     * «Sí, se cobró» de un **recurrente** que se debita solo: el server anota el gasto y sella el
+     * período con él, en una transacción. Devuelve el movimiento que quedó (para espejarlo). Con el
+     * mismo `eventoId`, un reintento devuelve el mismo. La cuota de un crédito no va por acá: va por
+     * [payInstallment].
+     */
+    suspend fun confirmarDebitoRecurrente(pedido: com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico): FinancialEvent
+
+    /**
      * **Los otros movimientos del mismo destinatario que están en otra categoría**
      * (`GET /api/events/{id}/parecidos`), para poder arreglarlos todos de una en vez de uno por
      * uno — que es justo lo que nadie hace, y por eso «Otros» se queda ahí.

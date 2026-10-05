@@ -12,7 +12,9 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -66,6 +68,7 @@ class DebitoAutomaticoEnLaBandejaTest {
     )
 
     private var pagado: CreatePagoDeCuotaRequest? = null
+    private var recurrenteConfirmado: ConfirmarDebitoAutomatico? = null
     private var descartado: Pair<String, String>? = null
     private var debitos = listOf(debito)
 
@@ -82,6 +85,14 @@ class DebitoAutomaticoEnLaBandejaTest {
             pagado = request
             debitos = emptyList()
             return PagoDeCuotaResult(deudaRestante = 0L, patas = emptyList())
+        }
+        override suspend fun confirmarDebitoRecurrente(pedido: ConfirmarDebitoAutomatico): FinancialEvent {
+            recurrenteConfirmado = pedido
+            debitos = emptyList()
+            return FinancialEvent(
+                id = pedido.eventoId, accountId = ahorros.id, type = TransactionType.EXPENSE, amount = pedido.monto,
+                category = "Seguros", description = "Seguro Sura", timestamp = 0L,
+            )
         }
         override suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String) {
             descartado = ruleId to periodo
@@ -139,6 +150,21 @@ class DebitoAutomaticoEnLaBandejaTest {
         assertEquals("credit_acc_9695" to "2026-10", descartado)
         assertEquals(null, pagado)
         composeRule.waitUntil(5_000) { hay(TODO_AL_DIA) }
+    }
+
+    @Test
+    fun `un recurrente se confirma por su propio camino, no como cuota`() {
+        debitos = listOf(
+            debito.copy(
+                ruleId = "rr_seguro", origen = OrigenDelDebito.RECURRENTE, nombre = "Seguro Sura", monto = 98_500L,
+                categoria = "Seguros", pataDelDineroId = "ev_deb_seg_s", deudaId = null, pataDeLaDeudaId = null, transferId = null,
+            ),
+        )
+        montar()
+        composeRule.onNodeWithText(SI_SE_COBRO).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { recurrenteConfirmado != null }
+        assertEquals(ConfirmarDebitoAutomatico("rr_seguro", "2026-10", 98_500L, "ev_deb_seg_s"), recurrenteConfirmado)
+        assertEquals(null, pagado, "un seguro no es la cuota de un crédito")
     }
 
     @Test

@@ -67,6 +67,23 @@ fun validarDebitoAutomatico(terms: CreditTerms, cuenta: Account?, monedaDelCredi
 fun cuentasParaElDebito(cuentas: List<Account>, moneda: String = "COP"): List<Account> =
     cuentas.filter { it.type.group != AccountGroup.DEUDA && it.currency == moneda }
 
+/** Ver [validarDebitoDeLaRegla]. */
+const val DEBITO_DE_REGLA_SIN_CUENTA: String = "Para que Movi te proponga el débito, elige de qué cuenta sale."
+
+/** Ver [validarDebitoDeLaRegla]. */
+const val DEBITO_DE_UN_INGRESO: String = "Solo un gasto se debita solo de tu cuenta."
+
+/**
+ * ¿Se puede marcar esta regla recurrente como «se debita sola»? `null` si sí (o si no se marca).
+ * Solo un gasto, y con la cuenta de la que la cobra el banco: sin cuenta no hay qué proponer.
+ */
+fun validarDebitoDeLaRegla(seDebitaSolo: Boolean, tipo: TransactionType, cuentaId: String?): String? = when {
+    !seDebitaSolo -> null
+    tipo != TransactionType.EXPENSE -> DEBITO_DE_UN_INGRESO
+    cuentaId.isNullOrBlank() -> DEBITO_DE_REGLA_SIN_CUENTA
+    else -> null
+}
+
 // ── La propuesta en «Por revisar» ────────────────────────────────────────────
 
 /** De dónde sale la propuesta: la cuota de un crédito, o una regla recurrente común. */
@@ -166,6 +183,25 @@ fun pagoDeCuotaDelDebito(debito: DebitoAutomaticoPorConfirmar, monto: Long): Cre
         toEventId = pataDeLaDeuda,
     )
 }
+
+/**
+ * Cuerpo de `POST /api/debitos-automaticos/confirmar`: **«Sí, se cobró» de un recurrente** (la cuota
+ * de un crédito va por [pagoDeCuotaDelDebito]). El server anota el gasto con [eventoId] —el id que
+ * trajo la propuesta— y sella el período con ese movimiento, todo en una transacción. Con el mismo
+ * id, confirmar dos veces devuelve el mismo movimiento.
+ */
+@kotlinx.serialization.Serializable
+data class ConfirmarDebitoAutomatico(
+    val ruleId: String,
+    val periodo: String,
+    val monto: Long,
+    val eventoId: String,
+)
+
+/** El pedido que confirma un recurrente con [monto], o `null` si la propuesta es de un crédito. */
+fun confirmacionDelRecurrente(debito: DebitoAutomaticoPorConfirmar, monto: Long): ConfirmarDebitoAutomatico? =
+    if (debito.origen != OrigenDelDebito.RECURRENTE) null
+    else ConfirmarDebitoAutomatico(debito.ruleId, debito.periodo, monto, debito.pataDelDineroId)
 
 /** Cuerpo de `POST /api/debitos-automaticos/descartar`: «No se cobró» para ese vencimiento. */
 @kotlinx.serialization.Serializable

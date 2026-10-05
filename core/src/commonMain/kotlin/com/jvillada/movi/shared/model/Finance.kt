@@ -753,6 +753,24 @@ data class RecurringRule(
      * misma limpieza).
      */
     val destinoConocidoId: String? = null,
+    /**
+     * **El banco la debita sola de [accountId]** (débito automático): un seguro, una suscripción, un
+     * servicio. Hermano de [CreditTerms.debitoAutomaticoDesde] para una regla común: el día que vence,
+     * si ningún movimiento la prueba, Movi la propone armada en «Por revisar» (ver
+     * [DebitoAutomaticoPorConfirmar]). Nunca la anota sola.
+     *
+     * Solo tiene sentido en un GASTO con cuenta: la cuenta de la regla es de dónde la debita el banco.
+     * Lo valida [validarDebitoDeLaRegla] en la hoja y en el server.
+     *
+     * **Tres estados en el wire, como [accountId]**, para que un APK que no conoce el campo no lo
+     * apague al editar el monto:
+     *  - `null` → «no lo toques» (default; un cliente viejo). En un POST, `null` es `false`.
+     *  - `true` / `false` → lo que eligió el dueño.
+     *
+     * El server siempre lo devuelve con valor (`false` en las reglas viejas). Columna nueva y
+     * nullable, `recurring_rules.se_debita_solo`, que `createMissingTablesAndColumns` agrega sin riesgo.
+     */
+    val seDebitaSolo: Boolean? = null,
 )
 
 @Serializable
