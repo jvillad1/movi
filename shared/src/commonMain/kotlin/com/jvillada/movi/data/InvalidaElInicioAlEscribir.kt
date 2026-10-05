@@ -144,6 +144,10 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun confirmEvent(id: String): FinancialEvent = trasEscribir { delegado.confirmEvent(id) }
     override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent = trasEscribir { delegado.updateEvent(id, cambios) }
     override suspend fun dismissCardPaymentCandidate(id: String): Unit = trasEscribir { delegado.dismissCardPaymentCandidate(id) }
+    override suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String): Unit =
+        trasEscribir { delegado.descartarDebitoAutomatico(ruleId, periodo) }
+    override suspend fun confirmarDebitoAutomatico(pedido: ConfirmarDebitoAutomatico): List<FinancialEvent> =
+        trasEscribir { delegado.confirmarDebitoAutomatico(pedido) }
     override suspend fun register(request: RegisterRequest): AuthResponse = trasEscribir { delegado.register(request) }
     override suspend fun login(request: LoginRequest): AuthResponse = trasEscribir { delegado.login(request) }
     override suspend fun renameAccount(id: String, name: String): Account = trasEscribir { delegado.renameAccount(id, name) }

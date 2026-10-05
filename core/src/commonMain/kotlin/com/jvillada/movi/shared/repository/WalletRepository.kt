@@ -15,6 +15,7 @@ import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
+import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
@@ -561,6 +562,23 @@ interface WalletRepository {
      * [com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY] si en verdad lo era.
      */
     suspend fun dismissCardPaymentCandidate(id: String)
+
+    /**
+     * **Lo que el banco cobró solo y Movi propone armado**: cuotas (y recurrentes) con débito
+     * automático, vencidas y sin movimiento que las pruebe. Solo lee; se confirma con
+     * [confirmarDebitoAutomatico]. Ver [com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar].
+     */
+    suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar>
+
+    /** «No se cobró»: esa propuesta no vuelve para ese período. Idempotente. */
+    suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String)
+
+    /**
+     * «Sí, se cobró»: el server anota la cuota de dos patas (crédito) o el gasto con el sello de su
+     * período (recurrente), en una transacción. Devuelve los movimientos que quedaron, para
+     * espejarlos. Con los mismos ids, un reintento devuelve los mismos.
+     */
+    suspend fun confirmarDebitoAutomatico(pedido: com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico): List<FinancialEvent>
 
     /**
      * **Los otros movimientos del mismo destinatario que están en otra categoría**

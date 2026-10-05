@@ -16,6 +16,8 @@ import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
+import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
+import com.jvillada.movi.shared.model.DescartarDebitoAutomatico
 import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
@@ -890,6 +892,22 @@ class WalletRepositoryImpl(
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
         }
+    }
+
+    override suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar> =
+        client.get("$baseUrl/api/debitos-automaticos").exigirExito().body()
+
+    override suspend fun confirmarDebitoAutomatico(pedido: com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico): List<FinancialEvent> =
+        client.post("$baseUrl/api/debitos-automaticos/confirmar") {
+            contentType(ContentType.Application.Json)
+            setBody(pedido)
+        }.exigirExito().body()
+
+    override suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String) {
+        client.post("$baseUrl/api/debitos-automaticos/descartar") {
+            contentType(ContentType.Application.Json)
+            setBody(DescartarDebitoAutomatico(ruleId, periodo))
+        }.exigirExito()
     }
 
     // ── Por qué acá NO alcanza con `.body()` ──────────────────────────────────────────────

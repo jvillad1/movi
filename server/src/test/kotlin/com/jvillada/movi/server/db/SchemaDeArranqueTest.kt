@@ -71,6 +71,10 @@ class SchemaDeArranqueTest {
         // «No cobra intereses»: la casilla que separa un préstamo familiar sin tasa de una tasa
         // que no se conoce. Toda consulta de créditos la nombra (`toCreditTerms`).
         "credit_terms" to "sin_intereses",
+        // El débito automático de una cuota: toda consulta de créditos la nombra (`toCreditTerms`).
+        "credit_terms" to "debito_automatico_desde",
+        // «Se debita solo» de una regla recurrente: `toRule()` —o sea toda lectura de recurrentes— la nombra.
+        "recurring_rules" to "se_debita_solo",
         // La edad de la versión de una cuenta, que es lo que hace perder al reenvío del teléfono
         // contra un renombre hecho en la web. `accounts` existe en producción con todas las
         // cuentas del dueño adentro, y `toAccount()` —o sea TODA lectura de cuentas— nombra esta

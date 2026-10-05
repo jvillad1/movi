@@ -58,6 +58,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.rechazoDelMonto
+import com.jvillada.movi.shared.model.validarDebitoDeLaRegla
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -94,6 +95,8 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     // Ola V: a qué destino conocido va este traspaso, si el dueño lo asoció. Ver
     // `RecurringRule.destinoConocidoId`.
     destinoConocidoId = this[RecurringRules.destinoConocidoId],
+    // «Se debita solo»: con valor siempre en la respuesta (las filas viejas, `false`).
+    seDebitaSolo = this[RecurringRules.seDebitaSolo] ?: false,
 )
 
 /**
@@ -162,8 +165,13 @@ fun Route.reminderRoutes() {
         }
         val newId = "rr_${UUID.randomUUID()}"
         var storedDestinoId: String? = null
+        // «Se debita solo» necesita la cuenta que quedó guardada (una ajena se guarda null), así que
+        // se valida adentro, antes de insertar. En un POST `null` es `false`.
+        var problemaDelDebito: String? = null
         val storedAccountId = dbQuery {
             val safeAccountId = accountIdIfOwned(uid, body.accountId)
+            problemaDelDebito = validarDebitoDeLaRegla(body.seDebitaSolo == true, body.type, safeAccountId)
+            if (problemaDelDebito != null) return@dbQuery null
             // Ola V: el destino es opcional y, si viene, tiene que ser de este usuario (ver
             // [destinoConocidoIdIfOwned]) — mismo criterio que la cuenta, arriba.
             val safeDestinoId = destinoConocidoIdIfOwned(uid, body.destinoConocidoId)
@@ -183,6 +191,7 @@ fun Route.reminderRoutes() {
                 // (ver [accountIdIfOwned]).
                 it[accountId] = safeAccountId
                 it[destinoConocidoId] = safeDestinoId
+                it[seDebitaSolo] = body.seDebitaSolo == true
                 // **Desde cuándo corre.** Lo manda quien crea la regla a partir de un movimiento
                 // que ya ocurrió: con la fecha de ese movimiento acá, la regla no se inventa
                 // ocurrencias en los períodos ANTERIORES. El período de ese movimiento sí existe,
@@ -196,6 +205,7 @@ fun Route.reminderRoutes() {
             }
             safeAccountId
         }
+        problemaDelDebito?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
         // **El movimiento que originó la regla queda como su evidencia.**
         //
         // Va en su propia transacción, DESPUÉS de que la regla existe y envuelto en un
@@ -238,6 +248,7 @@ fun Route.reminderRoutes() {
                 destinoConocidoId = storedDestinoId,
                 activeFrom = fechaIsoValida(body.activeFrom),
                 eventoDeOrigen = null,
+                seDebitaSolo = body.seDebitaSolo == true,
             ),
         )
     }
@@ -253,6 +264,8 @@ fun Route.reminderRoutes() {
         var storedAccountId: String? = null
         var storedDestinoId: String? = null
         var storedActiveFrom: String? = null
+        var storedSeDebitaSolo = false
+        var problemaDelDebito: String? = null
         val updated = dbQuery {
             // Ola 9 · D — **un cliente viejo NO puede borrar la cuenta sin querer.**
             //
@@ -296,6 +309,17 @@ fun Route.reminderRoutes() {
             val arranqueActual = filaActual?.get(RecurringRules.activeFrom)
             val arranqueGuardado = fechaIsoValida(body.activeFrom) ?: arranqueActual
             storedActiveFrom = arranqueGuardado
+            // «Se debita solo», con los tres estados de `RecurringRule.seDebitaSolo`: un `null` (APK
+            // viejo) conserva lo guardado. Si lo conservado ya no se sostiene —la regla cambió a
+            // ingreso o se quedó sin cuenta— se apaga en vez de rechazar al cliente que ni lo ve; si
+            // el dueño lo pidió explícito, sí se le dice por qué no.
+            val debitoPedido = body.seDebitaSolo ?: (filaActual?.get(RecurringRules.seDebitaSolo) ?: false)
+            val motivo = validarDebitoDeLaRegla(debitoPedido, body.type, safeAccountId)
+            if (motivo != null && body.seDebitaSolo == true) {
+                problemaDelDebito = motivo
+                return@dbQuery 0
+            }
+            storedSeDebitaSolo = debitoPedido && motivo == null
             RecurringRules.update({ (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }) {
                 it[name] = body.name
                 it[category] = body.category
@@ -306,8 +330,10 @@ fun Route.reminderRoutes() {
                 it[accountId] = safeAccountId
                 it[destinoConocidoId] = safeDestinoId
                 it[activeFrom] = arranqueGuardado
+                it[seDebitaSolo] = storedSeDebitaSolo
             }
         }
+        problemaDelDebito?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
         if (updated == 0) call.respond(HttpStatusCode.NotFound)
         else call.respond(
             body.copy(
@@ -315,6 +341,7 @@ fun Route.reminderRoutes() {
                 accountId = storedAccountId,
                 destinoConocidoId = storedDestinoId,
                 activeFrom = storedActiveFrom,
+                seDebitaSolo = storedSeDebitaSolo,
             ),
         )
     }
@@ -607,7 +634,7 @@ private const val MAX_MESES_HACIA_ATRAS: Long = 12
  * mensaje, y un cast sin chequear en el medio es exactamente donde se cuela el error que nadie
  * ve hasta que un usuario recibe un 500 en vez de un «ese movimiento está anulado».
  */
-private sealed interface MarcaResult {
+internal sealed interface MarcaResult {
     data class Ok(val occurrence: RecurringOccurrence) : MarcaResult
     data class Error(val code: HttpStatusCode, val message: String? = null) : MarcaResult
 }
@@ -624,7 +651,7 @@ private sealed interface MarcaResult {
  * Idempotente: reescribe la fila del período. Eso es lo que hace que «no fue este, fue aquel»
  * funcione sin un paso de deshacer en el medio.
  */
-private fun org.jetbrains.exposed.sql.Transaction.sellarOcurrencia(
+internal fun org.jetbrains.exposed.sql.Transaction.sellarOcurrencia(
     uid: String,
     rule: RecurringRule,
     period: String,

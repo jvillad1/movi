@@ -402,6 +402,20 @@ object AnomaliasDescartadas : Table("anomalias_descartadas") {
     override val primaryKey = PrimaryKey(userId, huella)
 }
 
+/**
+ * **Los débitos automáticos que el dueño dijo que no se cobraron** («No se cobró»), por regla y
+ * período del vencimiento. La propuesta se deriva en cada lectura (ver `DebitosAutomaticosRoutes`),
+ * así que el «no» tiene que quedar escrito o volvería en el próximo F5. El período siguiente trae
+ * otro vencimiento y vuelve a proponer. Tabla nueva: entra solo al `SchemaUtils.create` del arranque.
+ */
+object DebitosDescartados : Table("debitos_automaticos_descartados") {
+    val userId       = varchar("user_id", 50)
+    val ruleId       = varchar("rule_id", 80)
+    val periodo      = varchar("periodo", 7)
+    val descartadoEn = long("descartado_en")
+    override val primaryKey = PrimaryKey(userId, ruleId, periodo)
+}
+
 object Budgets : Table("budgets") {
     val userId       = varchar("user_id", 50)
     val category     = varchar("category", 100)
@@ -472,6 +486,12 @@ object RecurringRules : Table("recurring_rules") {
      * la mantiene el DELETE de la cuenta, que pone esta columna en NULL en vez de borrar la
      * regla (ver `AccountRoutes`).
      */
+    /**
+     * «El banco la debita sola»; ver `RecurringRule.seDebitaSolo`. Nullable y se lee como `false`:
+     * `ADD COLUMN … NULL` es el único DDL que `createMissingTablesAndColumns` puede correr sin riesgo
+     * dentro de la transacción de arranque, y `RecurringRules` ya está en esa lista.
+     */
+    val seDebitaSolo       = bool("se_debita_solo").nullable()
     val accountId          = varchar("account_id", 50).nullable()
     /**
      * **Desde cuándo corre la regla** (ISO `"2026-08-15"`), o NULL = desde siempre. Ver
@@ -781,6 +801,14 @@ object Credits : Table("credit_terms") {
      * las filas que ya están. `Credits` ya está en esa lista.
      */
     val sinIntereses = bool("sin_intereses").nullable()
+    /**
+     * La cuenta de la que el banco debita la cuota solo; ver `CreditTerms.debitoAutomaticoDesde`.
+     * Nullable por lo mismo que las de arriba (`ADD COLUMN … NULL` dentro de la transacción de
+     * arranque no puede fallar), y sin FK a `accounts` por lo mismo que `recurring_rules.account_id`:
+     * si la cuenta se borra, el crédito no se borra con ella — se suelta el débito (ver
+     * `AccountRoutes`) y la propuesta deja de salir.
+     */
+    val debitoAutomaticoDesde = varchar("debito_automatico_desde", 50).nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)

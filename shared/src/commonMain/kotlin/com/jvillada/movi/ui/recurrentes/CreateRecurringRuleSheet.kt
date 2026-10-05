@@ -28,6 +28,8 @@ import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.DEBITO_DE_REGLA_SIN_CUENTA
+import com.jvillada.movi.ui.components.CasillaDeSeleccion
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.sirvePara
 import com.jvillada.movi.shared.model.cuentasPara
@@ -180,6 +182,9 @@ fun CreateRecurringRuleSheet(
     var fallaronLosDestinos by remember { mutableStateOf(false) }
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existing?.remindMe ?: true) }
+    // «El banco la debita sola» (débito automático): con la cuenta de la regla, Movi la propone
+    // armada en «Por revisar» el día que vence. Ver `RecurringRule.seDebitaSolo`.
+    var seDebitaSolo by remember { mutableStateOf(existing?.seDebitaSolo == true) }
     var currency by remember { mutableStateOf(existingSub?.currency ?: "COP") }
     // Ola 16: cada cuánto llega el cobro. Arranca en MENSUAL, que es lo que era todo hasta hoy,
     // así que quien no toque estos chips crea exactamente lo mismo que creaba antes.
@@ -275,7 +280,11 @@ fun CreateRecurringRuleSheet(
     // suscripción y ninguna edición la convierte en regla. Sin esta rama, corregirle el monto a
     // un Netflix —pesos, mensual— lo habría guardado como una regla recurrente nueva.
     val seGuardaComoSuscripcion = editandoSuscripcion || enDolares || esAnual
-    val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && (dayOfMonth ?: 0) in 1..31 && !saving
+    // Solo un gasto de una regla (una suscripción no tiene la columna) se debita solo, y necesita la
+    // cuenta de la que sale: sin ella no hay qué proponer (`validarDebitoDeLaRegla`, igual en el server).
+    val debitoAplica = !seGuardaComoSuscripcion && selectedType == TransactionType.EXPENSE
+    val debitoSinCuenta = debitoAplica && seDebitaSolo && accountId == null
+    val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && (dayOfMonth ?: 0) in 1..31 && !saving && !debitoSinCuenta
     // F24: mismo patrón que las demás hojas de crear — la primera cosa que falta, no un botón
     // gris sin explicación.
     val missingFieldMessage = when {
@@ -284,6 +293,7 @@ fun CreateRecurringRuleSheet(
         // Ya no puede decir «entre 1 y 31»: con la cuadrícula, un día fuera de rango no existe.
         // Lo único que puede faltar es que el dueño todavía no haya tocado ninguno.
         (dayOfMonth ?: 0) !in 1..31 -> "Falta el día del mes"
+        debitoSinCuenta -> DEBITO_DE_REGLA_SIN_CUENTA
         else -> null
     }
 
@@ -389,6 +399,9 @@ fun CreateRecurringRuleSheet(
                         // preguntar por el pago que el dueño acaba de convertir en regla. Solo al
                         // crear: editar una regla no la origina ningún movimiento.
                         eventoDeOrigen = if (isEditMode) null else prefill?.eventId,
+                        // Explícito siempre (`true`/`false`): `null` es «no lo toques», y esta hoja
+                        // sí habla del débito. Un ingreso nunca se debita.
+                        seDebitaSolo = debitoAplica && seDebitaSolo,
                     )
                     if (isEditMode) {
                         runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
@@ -862,6 +875,12 @@ fun CreateRecurringRuleSheet(
                         onCheckedChange = { remindMe = it },
                         enabled = !saving,
                     )
+                    Spacer(Modifier.height(12.dp))
+                    CasillaDelDebitoAutomatico(
+                        marcada = seDebitaSolo,
+                        enabled = !saving,
+                        onCambiar = { seDebitaSolo = !seDebitaSolo },
+                    )
                 } else {
                     // V10: antes la casilla simplemente se esfumaba al tocar «Ingreso». Que un
                     // control desaparezca sin decir nada deja al dueño preguntándose si lo
@@ -926,6 +945,43 @@ fun CreateRecurringRuleSheet(
         }
 
         Spacer(Modifier.height(14.dp))
+    }
+}
+
+/** El título de la casilla «se debita solo» en la hoja de un recurrente. */
+const val TITULO_DEL_DEBITO_DE_LA_REGLA: String = "El banco lo cobra solo"
+
+/**
+ * **«El banco lo cobra solo»** (débito automático) en la hoja de un recurrente: el seguro o la
+ * suscripción que se debita de la cuenta elegida arriba. Marcada, Movi lo deja listo en «Por
+ * revisar» el día que vence para que el dueño confirme si se cobró y cuánto — nunca lo anota solo.
+ */
+@Composable
+private fun CasillaDelDebitoAutomatico(marcada: Boolean, enabled: Boolean, onCambiar: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled) { onCambiar() }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        CasillaDeSeleccion(marcada = marcada)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(TITULO_DEL_DEBITO_DE_LA_REGLA, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = if (marcada) {
+                    "El día que vence, Movi te lo deja listo en «Por revisar» para que confirmes si se " +
+                        "cobró de la cuenta de arriba, y cuánto."
+                } else {
+                    "Márcalo si el banco lo debita solo de tu cuenta (débito automático)."
+                },
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
+        }
     }
 }
 

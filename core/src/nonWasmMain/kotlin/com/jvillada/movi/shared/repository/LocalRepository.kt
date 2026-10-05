@@ -66,6 +66,7 @@ import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.transferLegsFor
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.EventSource
@@ -1943,6 +1944,50 @@ class LocalRepository(
     // Igual que getCardPaymentCandidates arriba: no hay nada que espejar localmente — "No es" no
     // toca la categoría del evento, así que no hay ninguna fila local que quedaría desactualizada.
     override suspend fun dismissCardPaymentCandidate(id: String) = remote.dismissCardPaymentCandidate(id)
+    // Los débitos automáticos se derivan en el server en cada lectura (como el checklist): no hay
+    // nada que espejar. Sin conexión no se proponen, igual que no se puede marcar una ocurrencia.
+    override suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar> = remote.getDebitosAutomaticos()
+    override suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String) =
+        remote.descartarDebitoAutomatico(ruleId, periodo)
+
+    /**
+     * Los movimientos los escribe el server (la cuota de dos patas, o el gasto con el sello del
+     * período), así que se espejan acá con los ids que él les puso —mismo motivo que
+     * [adjustCreditBalance]: Movimientos y Cuentas leen de esta base y el `SyncEngine` solo empuja—.
+     * Saltándose la fila que ya estaba: un reintento devuelve los mismos y no puede mover el saldo dos
+     * veces.
+     */
+    override suspend fun confirmarDebitoAutomatico(
+        pedido: com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico,
+    ): List<FinancialEvent> = enDisco {
+        val movimientos = remote.confirmarDebitoAutomatico(pedido)
+        val uid = userId()
+        val now = Clock.System.now().toEpochMilliseconds()
+        db.transaction {
+            movimientos.forEach { evento ->
+                val yaEstaba = db.financialEventQueries.selectById(evento.id, uid).executeAsOneOrNull() != null
+                if (yaEstaba) return@forEach
+                db.financialEventQueries.insert(
+                    evento.id, evento.accountId, evento.type.name, evento.amount,
+                    evento.category, evento.description, evento.merchant,
+                    evento.timestamp, evento.source.name, evento.rawPayload,
+                    evento.reconciliationStatus.name, evento.syncedAt ?: now, uid,
+                    evento.transferId,
+                    evento.createdAt ?: now,
+                    evento.noAmortiza,
+                    siNoSeRepite(evento.noSeRepite),
+                    evento.currency,
+                    evento.lastEditedAt,
+                )
+                val acct = db.accountQueries.selectById(evento.accountId).executeAsOneOrNull() ?: return@forEach
+                val tipo = AccountType.valueOf(acct.type)
+                db.accountQueries.updateBalance(
+                    acct.balance + deltaDelEspejo(tipo, evento.type, evento.amount, evento.currency), acct.id,
+                )
+            }
+        }
+        return@enDisco movimientos
+    }
     /** Con caché: una meta sin señal es igual de útil que con señal — no cambia sola. */
     override suspend fun getGoals(): List<Goal> =
         leerConCache("goals") { remote.getGoals() }

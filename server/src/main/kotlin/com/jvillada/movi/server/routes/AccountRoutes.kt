@@ -607,6 +607,11 @@ fun Route.accountRoutes() {
                 Accounts.update({ (Accounts.userId eq uid) and (Accounts.assetDebtId eq id) }) {
                     it[Accounts.assetDebtId] = null
                 }
+                // La cuota que el banco debitaba de esta cuenta sigue existiendo: se suelta el
+                // débito automático, no el crédito. Sin la cuenta no hay de dónde proponerlo.
+                Credits.update({ (Credits.userId eq uid) and (Credits.debitoAutomaticoDesde eq id) }) {
+                    it[Credits.debitoAutomaticoDesde] = null
+                }
                 Accounts.deleteWhere { (Accounts.id eq id) and (Accounts.userId eq uid) }
                 true
             }

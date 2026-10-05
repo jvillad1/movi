@@ -468,6 +468,10 @@ open class NoOpRepository(
     override suspend fun getEventOccurrenceMark(id: String): com.jvillada.movi.shared.model.EventOccurrenceMark? = null
 
     override suspend fun getCardPaymentCandidates() = emptyList<FinancialEvent>()
+    override suspend fun getDebitosAutomaticos() = emptyList<com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar>()
+    override suspend fun descartarDebitoAutomatico(ruleId: String, periodo: String) {}
+    override suspend fun confirmarDebitoAutomatico(pedido: com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico): List<FinancialEvent> =
+        error("NoOpRepository no confirma débitos")
     override suspend fun dismissCardPaymentCandidate(id: String) {
         dismissedCandidateIds += id
     }

@@ -35,4 +35,5 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     otrosCargosMensuales = this[Credits.otrosCargosMensuales]?.takeIf { it > 0L },
     // Nullable en la base, `false` en el wire: las filas viejas no la tienen.
     sinIntereses = this[Credits.sinIntereses] ?: false,
+    debitoAutomaticoDesde = this[Credits.debitoAutomaticoDesde]?.takeIf { it.isNotBlank() },
 )
