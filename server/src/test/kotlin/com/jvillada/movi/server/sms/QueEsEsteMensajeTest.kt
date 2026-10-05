@@ -94,7 +94,10 @@ class QueEsEsteMensajeTest {
         esMovimiento("Bancolombia confirma ampliacion de plazo por COP 1,234,567.89 en su TC MASTER *2222. La tasa es de 2.10%, el plazo de 36 meses. Conoce mas en https://bit.ly/ejemplo")
         esMovimiento("Bienvenido al plan de Asistencia de EJEMPLO en alianza con Bancolombia. ¡Disfrutalo ya! llamando al 6010000000 +info https://ejemplo.at/abc")
         esMovimiento("Bancolombia: Muy bien. Inscribiste la cuenta de un tercero desde APP Bancolombia. Si no fuiste tu, llamanos ahora: 6040000000.")
-        esMovimiento("Bancolombia: Octubre trae planes. Con tu Crediagil, del 18 al 20 aprovecha tasa especial de 1.5% M.V. (19.56% E.A.) Usalo desde app Mi Bancolombia")
+        // La oferta de Crediágil («aprovecha tasa especial») estuvo acá: el dueño la había confirmado
+        // en el histórico. La auditoría con los datos reales (4-oct-2026) la marcó como el único
+        // hueco —una promoción que no se apartaba— y desde entonces se aparta: ver
+        // `ElComercioQueSaliaMovimientoTest`.
         // Un enlace solo no hace promoción: el aviso del 4x1000 también trae uno.
         esMovimiento("Bancolombia. Tu cta de ahorros 3333 exenta del Impto de Gob 4x1000 supero el tope mensual de \$15.000.000 y se te cobrara el impuesto desde hoy bit.ly/ejemplo")
     }

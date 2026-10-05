@@ -40,7 +40,9 @@ sealed interface QueEsElMensaje {
  *
  * Se comprobó contra el histórico real del dueño (235 mensajes de Movi y 5.923 SMS de bancos del
  * teléfono): **ninguno de los que él confirmó** queda apartado. Los textos reales no están en el
- * repo; las pruebas usan textos sintéticos con la misma forma (`QueEsEsteMensajeTest`).
+ * repo; las pruebas usan textos sintéticos con la misma forma (`QueEsEsteMensajeTest`). Una
+ * excepción a propósito, desde el 4-oct-2026: la oferta de Crediágil con «tasa especial», que él
+ * había confirmado sin que fuera un movimiento (la auditoría con los datos reales la marcó).
  *
  * @param origen el rótulo `bank` de la fila («85540», «Notificación · Nu», «Correo · Bancolombia»).
  */
@@ -78,7 +80,19 @@ fun queEsEsteMensaje(texto: String, origen: String?): QueEsElMensaje {
         PROMOCION.any { it in t } -> MotivoDeApartado.PROMOCION
         else -> null
     }
-    return motivo?.let { QueEsElMensaje.NoEsMovimiento(it) } ?: QueEsElMensaje.Movimiento
+    if (motivo != null) return QueEsElMensaje.NoEsMovimiento(motivo)
+    // **Un correo de Nu sin la forma de un movimiento es publicidad.** Nu escribe por correo sus
+    // promociones («Haz crecer tu plata con las Cajitas…») sin ninguna de las marcas de arriba, y
+    // de Nu `parseSms` solo lee lo que tiene forma de movimiento (`loDeNuEsUnMovimiento`): un correo
+    // así nunca podría anotarse. Solo el correo: una notificación de Nu sigue la regla de oro.
+    if (origen != null && esUnCorreoDeNu(origen)) return QueEsElMensaje.NoEsMovimiento(MotivoDeApartado.PROMOCION)
+    return QueEsElMensaje.Movimiento
+}
+
+/** «Correo · Nu», «Correo · Nubank»: el rótulo de un correo que mandó Nu. */
+private fun esUnCorreoDeNu(origen: String): Boolean {
+    val o = normalizarParaBuscar(origen)
+    return o.startsWith("correo") && Regex("""\bnu(?:bank)?\b""").containsMatchIn(o.substringAfter("correo"))
 }
 
 /** Atajo: ¿lo aparta? `null` si es (o podría ser) un movimiento. */
@@ -99,6 +113,13 @@ private val FORMAS_DE_MOVIMIENTO = listOf(
     "le informa avance", "le informa un pago", "le informa recepcion", "te informa recepcion",
     "te informa pago", "informa transferencia", "informa retiro", "informa pago",
     "recibimos pago", "recibimos tu pago", "transferencia realizada", "transferencia recibida",
+    // «PSE - Transacción Aprobada CUS …» y el correo de Glim («Transacción aprobada con tu
+    // tarjeta de beneficios»): sin esto, el «PAGO MINIMO» de la descripción de un pago por PSE lo
+    // apartaba como recordatorio.
+    "transaccion aprobada",
+    // «Transacción exitosa y nuevo comercio guardado por PSE» (correo de Nu): repite un pago que ya
+    // llega por otro lado, pero ante la duda es movimiento y lo decide el dueño.
+    "transaccion exitosa",
     "compra aprobada", "pago aprobado", "fue aprobada", "fue aprobado", "hemos aprobado",
     "te llego dinero", "recargo ", "debitamos", "realizo debito", "realizo abono", "hizo un abono",
     "desembolso", "nomina recibida", "abono a tu", "abonamos", "consignacion", "reembolso",
@@ -201,4 +222,7 @@ private val PROMOCION = listOf(
     "sorteo", "puntos colombia", "acumulaste", "% de interes", "% interes", "%interes", "tu360compras",
     "tu360movilidad", "tu360inmobiliario", "hot sale", "cyber days", "black days",
     "seguro contra el cancer", "seguro integral", "estrenar carro", "estrenar moto",
+    // «Con tu Crediagil, del 18 al 20 aprovecha tasa especial de 1.5% M.V.» (19-sep-2026): una
+    // oferta de crédito, sin ninguna de las marcas de arriba. Una tasa no es un movimiento.
+    "tasa especial", "aprovecha tasa",
 )

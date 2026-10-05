@@ -212,7 +212,8 @@ private suspend fun guardarCorreoEntrante(correo: CorreoEntrante): Pair<HttpStat
 
     val texto = textoDelCorreo(correo.asunto, correo.cuerpo)
     val tiempo = momentoDelCorreo(correo.fecha, ahora = System.currentTimeMillis())
-    val id = idDeCorreo(correo.idDelMensaje, texto, tiempo)
+    // El CUS de PSE identifica el pago: dos copias del mismo correo dan el mismo id (ver [idDeCorreo]).
+    val id = idDeCorreo(correo.idDelMensaje, texto, tiempo, idExterno = cusDelCorreoDePse(texto)?.let { "pse-cus:$it" })
     val marca = marcaDeOrigenDelCorreo(correo.nombreDelRemitente, correo.remitente)
 
     val guardado = dbQuery {
