@@ -339,9 +339,12 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                         {
                                             FilaGuardarElDestino(
                                                 identificador = identificador,
-                                                // La tarjeta no tiene el nombre que leyó Movi: solo
-                                                // se prellena si el mensaje trae el de la persona.
+                                                // La tarjeta no tiene el nombre que leyó Movi: se
+                                                // prellena con el que trae el texto del banco («… a
+                                                // MARTA RUIZ», «Te llegó dinero de …»). Hasta el
+                                                // 4-oct quedaba vacío aunque el banco lo dijera.
                                                 nombreSugerido = nombreParaLaFila(identificador, nombreDelBanco = null),
+                                                textoDelAviso = sms.text,
                                                 destinos = destinosParaGuardar.guardados.orEmpty(),
                                                 // Guardada, la fila se va sola; al tocar «Revisar»
                                                 // el server ya propone «Transferencia a <nombre>».

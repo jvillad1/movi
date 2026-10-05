@@ -162,6 +162,12 @@ interface WalletRepository {
     suspend fun agregarIdentificador(id: String, pedido: AgregarIdentificador): DestinoConocido =
         noLoTiene("agregarIdentificador")
 
+    /**
+     * **Une dos fichas de la misma persona o comercio** (4-oct-2026): todo lo de [id] pasa a [con] y
+     * [id] se borra. Devuelve [con] ya unida. Ningún movimiento se toca.
+     */
+    suspend fun unirDestinos(id: String, con: String): DestinoConocido = noLoTiene("unirDestinos")
+
     /** Le quita un identificador. 400 si es el último. */
     suspend fun quitarIdentificador(id: String, identificador: IdentificadorDelDestino): DestinoConocido =
         noLoTiene("quitarIdentificador")

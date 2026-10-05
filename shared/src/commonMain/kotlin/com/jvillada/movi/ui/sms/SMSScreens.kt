@@ -1277,6 +1277,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         FilaGuardarElDestino(
                             identificador = identificador,
                             nombreSugerido = nombreParaLaFila(identificador, leidoParaGuardar.merchant),
+                            textoDelAviso = sms?.text,
                             destinos = destinosParaGuardar.guardados.orEmpty(),
                             onGuardado = { guardado ->
                                 destinosParaGuardar.alGuardar(guardado)

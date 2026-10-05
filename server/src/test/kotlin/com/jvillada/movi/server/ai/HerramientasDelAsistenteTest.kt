@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.KnownDestinations
 import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Users
@@ -48,12 +49,12 @@ class HerramientasDelAsistenteTest {
         transaction {
             // Las de la caja proyectada (Ola 4) también: `proyectar_caja` lee la lista del período.
             SchemaUtils.drop(
-                KnownDestinations, OccurrenceRejections, RecurringOccurrences, RecurringRules, Cards, Credits,
+                SmsMessages, KnownDestinations, OccurrenceRejections, RecurringOccurrences, RecurringRules, Cards, Credits,
                 Documents, VoidEvents, Events, Accounts, Users,
             )
             SchemaUtils.create(
                 Users, Accounts, Events, VoidEvents, Documents, Credits, Cards, RecurringRules, RecurringOccurrences,
-                OccurrenceRejections, KnownDestinations,
+                OccurrenceRejections, KnownDestinations, SmsMessages,
             )
             Users.insert {
                 it[id] = dueno; it[email] = "dueno@herramientas.test"; it[name] = "Camilo"
@@ -80,10 +81,12 @@ class HerramientasDelAsistenteTest {
         tipo: TransactionType = TransactionType.EXPENSE,
         moneda: String = "COP",
         estado: String = "RECONCILED",
+        raw: String? = null,
+        uid: String = dueno,
     ) = transaction {
         Events.insert {
             it[Events.id] = id
-            it[userId] = dueno
+            it[userId] = uid
             it[accountId] = cuenta
             it[type] = tipo.name
             it[amount] = monto
@@ -92,6 +95,7 @@ class HerramientasDelAsistenteTest {
             it[description] = nombre
             it[timestamp] = appDateToEpochMillis(LocalDate.parse(fecha)) + 12 * 3_600_000L
             it[reconciliationStatus] = estado
+            it[rawPayload] = raw
         }
     }
 
@@ -317,7 +321,8 @@ class HerramientasDelAsistenteTest {
         val ofrecidas = LAS_HERRAMIENTAS.map { it.name() }
 
         assertEquals(
-            setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS, PROYECTAR_CAJA, SIMULAR_ABONO) + HERRAMIENTAS_QUE_PROPONEN_NOMBRES,
+            setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS, PROYECTAR_CAJA, SIMULAR_ABONO, CONSULTAR_PERSONA_O_COMERCIO) +
+                HERRAMIENTAS_QUE_PROPONEN_NOMBRES,
             ofrecidas.toSet(),
         )
         // Las que proponen (Ola 3) no pasan por `ejecutarHerramienta`: las ejecuta `proponer`.
@@ -372,5 +377,59 @@ class HerramientasDelAsistenteTest {
 
         assertEquals(3, texto.lines().count { it.startsWith("- ") }, texto)
         assertTrue("7 más que no se listan" in texto)
+    }
+
+    // ── Personas y comercios (4-oct-2026) ────────────────────────────────────
+
+    private fun guardarTercero(id: String, nombre: String, numero: String, uid: String = dueno, deQuien: String? = null) = transaction {
+        KnownDestinations.insert {
+            it[KnownDestinations.id] = id; it[userId] = uid; it[KnownDestinations.nombre] = nombre
+            it[KnownDestinations.numero] = numero; it[KnownDestinations.deQuien] = deQuien; it[createdAt] = 1L
+        }
+    }
+
+    private val aCaro = "Bancolombia: Transferiste \$2,000,000 desde tu cuenta *9999 a la cuenta *55500001111 el 03/09/2026."
+
+    @Test
+    fun `lo que le mando a un tercero se reconoce por la cuenta aunque el movimiento se llame distinto`() {
+        guardarTercero("dst_caro", "Caro", "55500001111", deQuien = "esposa")
+        anotar("e1", "Cuota de Cotrafa", "Casa", 2_000_000, "2026-09-03", raw = aCaro)
+        anotar("e2", "Almuerzo caro", "Comida", 90_000, "2026-09-04")
+        anotar("e3", "Transferencia de Caro", "Otros", 400_000, "2026-09-10", tipo = TransactionType.INCOME)
+
+        val texto = preguntar(CONSULTAR_PERSONA_O_COMERCIO, "nombre" to "caro", "desde" to "2026-01-01", "hasta" to "2026-12-31")
+
+        assertTrue("Caro (persona, «esposa»)" in texto, texto)
+        assertTrue("Le envió: 2000000 COP en 1 movimientos" in texto, texto)
+        assertTrue("Recibió de ahí: 400000 COP en 1 movimientos" in texto, texto)
+        assertTrue("Cuota de Cotrafa" in texto, "renombrado y todo, el banco nombró su cuenta:\n$texto")
+        assertFalse("Almuerzo caro" in texto, "«caro» como adjetivo no es Caro:\n$texto")
+    }
+
+    @Test
+    fun `sin nombre lista a todos con lo de cada uno, y respeta las fechas`() {
+        guardarTercero("dst_caro", "Caro", "55500001111")
+        guardarTercero("dst_papa", "Papá", "77700003333")
+        anotar("e1", "Transferencia a Caro", "Casa", 2_000_000, "2026-09-03", raw = aCaro)
+        anotar("e0", "Transferencia a Caro", "Casa", 1_000_000, "2026-07-03", raw = aCaro)
+
+        val texto = preguntar(CONSULTAR_PERSONA_O_COMERCIO, "desde" to "2026-09-01", "hasta" to "2026-09-30")
+
+        assertTrue("- Caro (persona): le envió 2000000 COP; recibió de ahí 0" in texto, texto)
+        assertTrue("- Papá (persona): le envió 0" in texto, texto)
+    }
+
+    @Test
+    fun `un nombre que no es de nadie se contesta con la lista`() {
+        guardarTercero("dst_caro", "Caro", "55500001111")
+        val texto = preguntar(CONSULTAR_PERSONA_O_COMERCIO, "nombre" to "Pedro")
+        assertTrue("Los guardados son: Caro" in texto, texto)
+    }
+
+    @Test
+    fun `los terceros de otro usuario no se ven`() {
+        guardarTercero("dst_ajeno", "Caro", "55500001111", uid = "otro-usuario")
+        val texto = preguntar(CONSULTAR_PERSONA_O_COMERCIO, "nombre" to "Caro")
+        assertTrue("no tiene a nadie guardado" in texto, texto)
     }
 }

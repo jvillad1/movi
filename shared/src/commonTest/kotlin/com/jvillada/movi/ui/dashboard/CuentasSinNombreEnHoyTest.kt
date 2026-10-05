@@ -19,10 +19,10 @@ class CuentasSinNombreEnHoyTest {
     @Test
     fun con_sugeridos_avisa_y_lleva_a_cuentas_de_otros() {
         val cosa = cosas(3).single()
-        assertEquals("3 cuentas a las que les envías plata no tienen nombre", cosa.texto)
+        assertEquals("3 personas o comercios sin nombre", cosa.texto)
         assertEquals(DestinoDeRevision.CUENTAS_DE_OTROS, cosa.destino)
         assertFalse(cosa.urgente)
-        assertEquals("1 cuenta a la que le envías plata no tiene nombre", textoDeCuentasSinNombre(1))
+        assertEquals("1 persona o comercio sin nombre", textoDeCuentasSinNombre(1))
     }
 
     @Test

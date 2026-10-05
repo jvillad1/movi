@@ -28,6 +28,13 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.MoviTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.onNodeWithTag
+import com.jvillada.movi.shared.model.AgregarIdentificador
+import com.jvillada.movi.shared.model.sumarIdentificador
+import com.jvillada.movi.shared.model.todosLosIdentificadores
+import com.jvillada.movi.ui.LocalNavigate
+import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.porrevisar.PorRevisarScreen
 import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
@@ -48,7 +55,7 @@ import kotlin.test.assertTrue
  *
  * El pedido del dueño (29-sep): *«gestionar cuentas conocidas no propias es un feature que necesito
  * y debe ser de fácil acceso»*. Hasta acá, cuando el banco avisaba «Transferiste a la cuenta
- * *31973270756», la única forma de ponerle nombre era salir a Ajustes y copiar el número a mano.
+ * *55500000756», la única forma de ponerle nombre era salir a Ajustes y copiar el número a mano.
  *
  * Lo que se fija, montando las pantallas de verdad:
  *
@@ -74,7 +81,7 @@ class GuardarDesdeDondeApareceTest {
         id = "sms-1",
         time = "2026-09-29 10:02",
         bank = "Bancolombia",
-        text = "Bancolombia: Transferiste \$350.000 desde tu cuenta *8133 a la cuenta *31973270756 el 29/09/2026 a las 10:02.",
+        text = "Bancolombia: Transferiste \$350.000 desde tu cuenta *8133 a la cuenta *55500000756 el 29/09/2026 a las 10:02.",
         state = SMS_STATE_PENDING,
         det = "Transferencia · \$350.000",
     )
@@ -83,27 +90,27 @@ class GuardarDesdeDondeApareceTest {
         merchant = "Transferencia",
         type = TransactionType.EXPENSE,
         category = "Otros",
-        identificadorDelDestino = "31973270756",
+        identificadorDelDestino = "55500000756",
     )
 
     private val llego = SmsMessage(
         id = "sms-2",
         time = "2026-09-29 11:30",
         bank = "Notificación · Nu",
-        text = "Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave. Recibiste \$120.000.",
+        text = "Te llegó dinero de ANA PRUEBA SALAZAR con tu llave. Recibiste \$120.000.",
         state = SMS_STATE_PENDING,
-        det = "CAROLINA RESTREPO SALAZAR · \$120.000",
+        det = "ANA PRUEBA SALAZAR · \$120.000",
     )
     private val llegoLeida = ParsedSms(
         amount = 120_000.0,
-        merchant = "CAROLINA RESTREPO SALAZAR",
+        merchant = "ANA PRUEBA SALAZAR",
         type = TransactionType.INCOME,
         category = "Otros ingresos",
-        identificadorDelDestino = "carolina restrepo salazar",
+        identificadorDelDestino = "ana prueba salazar",
         identificadorEsLlave = true,
     )
 
-    private val caro = DestinoConocido(id = "dst_caro", nombre = "Caro", numero = "31973270756", deQuien = "esposa")
+    private val caro = DestinoConocido(id = "dst_caro", nombre = "Caro", numero = "55500000756", deQuien = "esposa")
 
     private val creados = mutableListOf<DestinoConocido>()
     private val actualizados = mutableListOf<DestinoConocido>()
@@ -126,6 +133,8 @@ class GuardarDesdeDondeApareceTest {
             destino.copy(id = "dst_nuevo").also { creados += it }
         override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido =
             destino.also { actualizados += it }
+        override suspend fun agregarIdentificador(id: String, pedido: AgregarIdentificador): DestinoConocido =
+            guardados.first { it.id == id }.let { sumarIdentificador(it, pedido.identificador) }.also { actualizados += it }
 
         // Por revisar y la hoja del movimiento.
         override suspend fun getSmsMessages(): List<SmsMessage> = listOf(sms)
@@ -149,21 +158,19 @@ class GuardarDesdeDondeApareceTest {
         reconciliar(Repo())
 
         esperar("¿De quién es la cuenta ·0756?")
-        tocar(GUARDAR_COMO)
-        // Un solo campo en la fila (3-oct): el nombre. La nota se pide detrás de un enlace; ya
-        // desplegada, va segunda —antes que el campo de «Comercio»—.
+        // Sin nombre en el aviso: «Ponerle nombre», el nombre y «Guardar» — dos toques.
+        tocar(PONERLE_NOMBRE)
         composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[0].performTextReplacement("Caro")
-        tocar(AGREGAR_UNA_NOTA)
-        composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[1].performTextReplacement("esposa")
         composeRule.waitForIdle()
-        tocar("Guardar cuenta")
+        tocar(GUARDAR)
         composeRule.waitUntil(timeoutMillis = 5_000) { creados.isNotEmpty() }
         composeRule.waitForIdle()
 
         val creado = creados.single()
         assertEquals("Caro", creado.nombre)
-        assertEquals("31973270756", creado.numero, "el número es el del mensaje, sin que él lo escriba")
-        assertEquals("esposa", creado.deQuien)
+        assertEquals("55500000756", creado.numero, "el número es el del mensaje, sin que él lo escriba")
+        assertNull(creado.deQuien, "la nota no se pide al guardar desde el aviso")
+        assertNull(creado.tipo, "el tipo lo deduce el server: no se pregunta")
         assertNull(creado.llave)
 
         // La propuesta cambió, y la fila se fue: ya es una cuenta conocida.
@@ -177,29 +184,22 @@ class GuardarDesdeDondeApareceTest {
     }
 
     /**
-     * **Un solo campo con peso** (3-oct-2026): el dueño vio la fila pedir «Nombre» y «De quién es»,
-     * que casi siempre son lo mismo. Abierta, la fila tiene el nombre y un enlace para la nota; sin
-     * tocar el enlace, se guarda sin nota.
+     * **Un solo campo, y nada más** (4-oct-2026): abierta, la fila suma solo el nombre. La nota y
+     * Persona/Comercio salieron: el tipo lo deduce Movi y la nota se pone en la ficha si hace falta.
      */
     @Test
-    fun `la fila abierta pide un solo campo y la nota es un enlace`() {
+    fun `la fila abierta pide un solo campo, sin nota ni persona o comercio`() {
         reconciliar(Repo())
 
         esperar("¿De quién es la cuenta ·0756?")
         val antes = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true).fetchSemanticsNodes().size
-        tocar(GUARDAR_COMO)
+        tocar(PONERLE_NOMBRE)
         val despues = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true).fetchSemanticsNodes().size
         assertEquals(1, despues - antes, "la fila abierta debe sumar un solo campo, el nombre")
-        assertTrue(hay(AGREGAR_UNA_NOTA), "falta el enlace de la nota")
-        assertFalse(hay("De quién es (opcional)"), "volvió el segundo campo con el mismo peso")
-
-        composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[0].performTextReplacement("Caro")
-        composeRule.waitForIdle()
-        tocar("Guardar cuenta")
-        composeRule.waitUntil(timeoutMillis = 5_000) { creados.isNotEmpty() }
-
-        assertEquals("Caro", creados.single().nombre)
-        assertNull(creados.single().deQuien, "sin tocar el enlace no hay nota")
+        assertFalse(hay(AGREGAR_UNA_NOTA), "la nota volvió a la fila")
+        assertFalse(hay("Comercio"), "Persona/Comercio volvió a la fila")
+        assertTrue(hay(YA_LO_TENGO_GUARDADO).not(), "sin nadie guardado no se ofrece elegir")
+        assertTrue(hay(ES_MIA))
     }
 
     @Test
@@ -223,19 +223,17 @@ class GuardarDesdeDondeApareceTest {
     fun `quien mando plata llega prellenado en Titulo Caso y se guarda como llave`() {
         reconciliar(Repo(sms = llego, parseo = llegoLeida))
 
-        esperar("¿Guardar a Carolina Restrepo Salazar en tus cuentas de otros?")
-        tocar(GUARDAR_COMO)
-        // Prellenado, y no en mayúsculas: se guarda sin escribir nada.
-        assertTrue(hayCampoCon("Carolina Restrepo Salazar"), "el nombre no llegó prellenado en Título Caso")
-        tocar("Guardar cuenta")
+        // Con el nombre, la fila cerrada ya es la pregunta y el botón: UN toque.
+        esperar("¿Guardar a «Ana Prueba Salazar»?")
+        composeRule.onNodeWithTag(TAG_GUARDAR_DE_UN_TOQUE, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(timeoutMillis = 5_000) { creados.isNotEmpty() }
         composeRule.waitForIdle()
 
         val creado = creados.single()
-        assertEquals("Carolina Restrepo Salazar", creado.nombre)
+        assertEquals("Ana Prueba Salazar", creado.nombre)
         assertEquals("", creado.numero, "un destino conocido solo por su llave va sin número")
-        assertEquals("carolina restrepo salazar", creado.llave)
-        assertTrue(hay("Transferencia de Carolina Restrepo Salazar"))
+        assertEquals("ana prueba salazar", creado.llave)
+        assertTrue(hay("Transferencia de Ana Prueba Salazar"))
     }
 
     @Test
@@ -248,17 +246,17 @@ class GuardarDesdeDondeApareceTest {
         )
 
         esperar("¿De quién es la llave 0092184713?")
-        tocar(GUARDAR_COMO)
+        tocar(PONERLE_NOMBRE)
         composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[0].performTextReplacement("caro")
         composeRule.waitForIdle()
         assertTrue(hay("Se agrega a «Caro», que ya tienes guardada."))
-        tocar("Guardar cuenta")
+        tocar(GUARDAR)
         composeRule.waitUntil(timeoutMillis = 5_000) { actualizados.isNotEmpty() }
 
         assertTrue(creados.isEmpty(), "creó una segunda «Caro» en vez de sumarle la llave")
         val actualizado = actualizados.single()
         assertEquals("dst_caro", actualizado.id)
-        assertEquals("31973270756", actualizado.numero)
+        assertEquals("55500000756", actualizado.numero)
         assertEquals("0092184713", actualizado.llave)
     }
 
@@ -271,15 +269,41 @@ class GuardarDesdeDondeApareceTest {
             MoviTheme { Box(Modifier.fillMaxSize()) { PorRevisarScreen(onNavigate = {}) } }
         }
         esperar("¿De quién es la cuenta ·0756?")
-        tocar(GUARDAR_COMO)
+        tocar(PONERLE_NOMBRE)
         composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[0].performTextReplacement("Caro")
         composeRule.waitForIdle()
-        tocar("Guardar cuenta")
+        tocar(GUARDAR)
         composeRule.waitUntil(timeoutMillis = 5_000) { creados.isNotEmpty() }
         composeRule.waitForIdle()
 
-        assertEquals("31973270756", creados.single().numero)
+        assertEquals("55500000756", creados.single().numero)
         assertFalse(hayLaFila())
+    }
+
+    /**
+     * **Por revisar prellena el nombre que trae el banco** (4-oct-2026): hasta esta fecha la tarjeta
+     * pasaba `nombreDelBanco = null` y el campo quedaba vacío aunque el aviso dijera «… a MARTA
+     * PRUEBA RUIZ». Ahora es un toque, y se guarda también ese nombre para reconocerla después.
+     */
+    @Test
+    fun `en Por revisar un Bre-B con el nombre se guarda de un toque, con la llave y el nombre`() {
+        val breB = transferencia.copy(
+            text = "Bancolombia: JUAN, transferiste \$37,221.00 a la llave @marta.prueba desde tu cuenta *8133 a MARTA PRUEBA RUIZ el 04/10/26 a las 10:02.",
+        )
+        Repositories.sustitutoDePrueba = Repo(sms = breB)
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { PorRevisarScreen(onNavigate = {}) } }
+        }
+        esperar("¿Guardar a «Marta Prueba Ruiz»?")
+        composeRule.onNodeWithTag(TAG_GUARDAR_DE_UN_TOQUE, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(timeoutMillis = 5_000) { creados.isNotEmpty() }
+
+        val creado = creados.single()
+        assertEquals("Marta Prueba Ruiz", creado.nombre)
+        assertEquals(
+            listOf("LLAVE:@marta.prueba", "LLAVE:marta prueba ruiz"),
+            creado.todosLosIdentificadores().map { "${it.tipo}:${it.valor}" },
+        )
     }
 
     @Test
@@ -313,16 +337,38 @@ class GuardarDesdeDondeApareceTest {
         hoja(Repo(), yaAnotado)
 
         esperar("¿De quién es la cuenta ·0756?")
-        tocar(GUARDAR_COMO)
+        tocar(PONERLE_NOMBRE)
         composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[0].performTextReplacement("Caro")
         composeRule.waitForIdle()
-        tocar("Guardar cuenta")
+        tocar(GUARDAR)
         composeRule.waitUntil(timeoutMillis = 5_000) { creados.isNotEmpty() }
         composeRule.waitForIdle()
 
-        assertEquals("31973270756", creados.single().numero)
-        assertTrue(hay("«Caro» quedó en tus cuentas de otros"))
+        assertEquals("55500000756", creados.single().numero)
+        assertTrue(hay("«Caro» quedó en Personas y comercios"))
         assertFalse(hayLaFila())
+    }
+
+    /**
+     * **«Ver su ficha» lleva a Personas y comercios con la ficha abierta** (4-oct-2026). Antes la
+     * abría como una hoja adentro de la hoja del movimiento, y en el teléfono salía vacía.
+     */
+    @Test
+    fun `ver su ficha desde un movimiento navega a Personas y comercios con esa ficha`() {
+        var navegoA: Screen? = null
+        Repositories.sustitutoDePrueba = Repo(guardados = listOf(caro))
+        composeRule.setContent {
+            MoviTheme {
+                CompositionLocalProvider(LocalNavigate provides { navegoA = it }) {
+                    Box(Modifier.fillMaxSize()) {
+                        HojaDelMovimiento(event = yaAnotado, cuentas = listOf(ahorros), onDismiss = {}, onCambiado = {})
+                    }
+                }
+            }
+        }
+        esperar("Es de «Caro»")
+        tocar(VER_SU_FICHA)
+        assertEquals(Screen.Destinos(abrir = "dst_caro"), navegoA)
     }
 
     @Test

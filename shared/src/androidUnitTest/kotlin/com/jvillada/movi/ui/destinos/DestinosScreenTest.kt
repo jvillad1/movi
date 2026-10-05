@@ -27,6 +27,10 @@ import com.jvillada.movi.shared.model.MovimientosDelDestino
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UltimoEnvio
 import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.IdentificadorDelDestino
+import com.jvillada.movi.shared.model.TipoDeIdentificador
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.formatMoney
@@ -39,12 +43,12 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
 /**
- * # «Cuentas de otros» se ve, se abre y se puede guardar desde la app
+ * # «Personas y comercios» se ve, se abre y se puede guardar desde la app
  *
  * Es la pantalla que hace cierta la regla del proyecto —nada se configura solo tocando código— así
- * que lo que se prueba es exactamente eso: que la lista muestre lo guardado con su total, que tocar
- * una ficha abra el detalle con sus movimientos, y que el alta llegue al repositorio con el número
- * ya normalizado.
+ * que lo que se prueba es exactamente eso: que la lista muestre lo guardado con lo de este período,
+ * que tocar una ficha abra el detalle con sus movimientos, y que el alta llegue al repositorio con
+ * un solo campo «número o llave» ya clasificado. Números sintéticos.
  *
  * Los clics de las hojas van por la **acción semántica** y no por coordenadas: la hoja es más alta
  * que la pantalla de prueba y un toque inyectado sobre un botón fuera de vista cae en el fondo
@@ -59,10 +63,11 @@ class DestinosScreenTest {
     private val caro = DestinoConocido(
         id = "dst_caro",
         nombre = "Caro",
-        numero = "31973270756",
+        numero = "55500000756",
         deQuien = "esposa",
         totales = mapOf("COP" to 4_931_488L),
         cuantos = 3,
+        totalesDelPeriodo = mapOf("COP" to 350_000L),
     )
 
     private val cotrafa = FinancialEvent(
@@ -110,6 +115,9 @@ class DestinosScreenTest {
         }
     }
 
+    private fun hay(texto: String): Boolean =
+        composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
     private fun tocar(texto: String) {
         composeRule.onAllNodes(hasClickAction() and (hasText(texto) or hasAnyChild(hasText(texto))), useUnmergedTree = true)
             .onFirst()
@@ -117,47 +125,55 @@ class DestinosScreenTest {
         composeRule.waitForIdle()
     }
 
-    /** Ficha → detalle → «Editar», hasta la hoja de edición. */
-    private fun abrirLaEdicion() {
-        composeRule.onAllNodesWithText("Caro", useUnmergedTree = true).onFirst().performClick()
-        esperarTexto("LE HAS ENVIADO")
-        tocar("Editar")
-        esperarTexto("Editar cuenta de otro")
+    private fun abrirLaNueva() {
+        esperarTexto("Nueva")
+        tocar("Nueva")
+        esperarTexto(NUEVA_PERSONA_O_COMERCIO)
     }
 
     @Test
-    fun `la lista muestra el nombre, la cola del numero, de quien es y el total`() {
+    fun `la lista muestra el nombre, la cola del numero, de quien es y lo de este periodo`() {
         montar(ConCaro())
 
         esperarTexto("Caro")
         composeRule.onAllNodesWithText("·0756 · esposa", useUnmergedTree = true).onFirst().assertIsDisplayed()
-        composeRule.onAllNodesWithText("3 movimientos", useUnmergedTree = true).onFirst().assertIsDisplayed()
-        // El total, con el formato de plata de la app.
-        esperarTexto("4.931.488")
+        esperarTexto(formatMoney(350_000L, "COP"))
+        assertTrue(hay("este período"))
+        // El total histórico vive en la ficha: con tres cifras por tarjeta no se sabía cuál mirar.
+        assertTrue(!hay("4.931.488"), "el total histórico no va en la lista")
+        assertTrue(hay(PERSONAS_Y_COMERCIOS_TITULO))
     }
 
     @Test
-    fun `tocar una cuenta abre el detalle con sus movimientos y el periodo`() {
+    fun `sin nada este periodo no inventa un cero`() {
+        montar(object : ConCaro() {
+            override suspend fun getDestinos(): List<DestinoConocido> = listOf(caro.copy(totalesDelPeriodo = emptyMap()))
+        })
+        esperarTexto("Nada este período")
+        assertTrue(!hay("\$0"))
+    }
+
+    @Test
+    fun `tocar una ficha abre lo de este periodo y sus movimientos`() {
         montar(ConCaro())
         esperarTexto("Caro")
 
         composeRule.onAllNodesWithText("Caro", useUnmergedTree = true).onFirst().performClick()
 
-        esperarTexto("LE HAS ENVIADO")
+        esperarTexto("ESTE PERÍODO")
+        esperarTexto("Le enviaste")
         esperarTexto("Cuota de Cotrafa 5413")
-        esperarTexto("POR PERÍODO")
-        // Y deja claro lo que esta pantalla NO es.
-        esperarTexto("No es una cuenta tuya")
+        esperarTexto("Persona · ·0756 · esposa")
     }
 
     @Test
-    fun `sin ninguna guardada explica que es esto y ofrece guardar la primera`() {
+    fun `sin nadie guardado explica que es esto y ofrece guardar el primero`() {
         montar(object : ConCaro() {
             override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
         })
 
-        esperarTexto("Guardar una cuenta de otra persona")
-        esperarTexto("No entran en tu plata")
+        esperarTexto("Guardar una persona o comercio")
+        esperarTexto("No suman en tu plata")
     }
 
     @Test
@@ -170,17 +186,18 @@ class DestinosScreenTest {
             }
         })
 
-        esperarTexto("No pudimos cargar las cuentas de otros")
+        esperarTexto("No pudimos cargar tus personas y comercios")
         tocar("Reintentar")
         composeRule.waitUntil(timeoutMillis = 5_000) { intentos >= 2 }
     }
 
     /**
-     * El alta llega al repositorio con **solo los dígitos**, aunque se pegue como lo manda el banco.
-     * Dos formas del mismo número no pueden verse como dos destinos distintos.
+     * **Un solo campo «número o llave»** (4-oct-2026): pegado como lo manda el banco se guarda como
+     * número de cuenta con solo los dígitos, y la hoja dice qué entendió. Sin nota y sin tipo: el
+     * tipo lo deduce el server.
      */
     @Test
-    fun `guardar una cuenta nueva manda el numero sin el asterisco`() {
+    fun `guardar uno nuevo pide nombre y un solo campo, y manda el numero sin el asterisco`() {
         var mandado: DestinoConocido? = null
         montar(object : ConCaro() {
             override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
@@ -190,75 +207,26 @@ class DestinosScreenTest {
             }
         })
 
-        esperarTexto("Guardar una cuenta de otra persona")
-        tocar("Guardar una cuenta de otra persona")
-        esperarTexto("Nueva cuenta de otro")
-
-        // Tres campos en orden: nombre, número, llave. La nota (de quién es) va detrás de un enlace
-        // desde el 3-oct: el nombre casi siempre ya lo dice.
+        abrirLaNueva()
         val editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
-        assertEquals(3, editables.fetchSemanticsNodes().size, "la nota no debe pesar lo mismo que el nombre")
+        assertEquals(2, editables.fetchSemanticsNodes().size, "nombre y «número o llave», nada más")
         editables[0].performTextInput("Caro")
-        editables[1].performTextInput("*319-7327-0756")
-        composeRule.onNodeWithText(AGREGAR_UNA_NOTA, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        editables[1].performTextInput("*555-0000-0756")
         composeRule.waitForIdle()
-        composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[3].performTextInput("esposa")
-        composeRule.waitForIdle()
+        esperarTexto("Número de cuenta ·0756")
 
-        tocar("Guardar cuenta")
+        tocar("Guardar")
         composeRule.waitUntil(timeoutMillis = 5_000) { mandado != null }
 
         assertEquals("Caro", mandado!!.nombre)
-        assertEquals("31973270756", mandado!!.numero, "se guardan solo los dígitos")
-        assertEquals("esposa", mandado!!.deQuien)
-        assertEquals(null, mandado!!.llave, "sin llave escrita no se manda ninguna")
-    }
-
-    // ── 30-sep: la ficha dice todo, y la llave se puede guardar y editar ──────
-
-    @Test
-    fun `la ficha dice los identificadores, lo de este periodo y el ultimo envio`() {
-        montar(object : ConCaro() {
-            override suspend fun getDestinos(): List<DestinoConocido> = listOf(
-                caro.copy(
-                    llave = "@caro",
-                    totalesDelPeriodo = mapOf("COP" to 350_000L),
-                    ultimo = UltimoEnvio("Transferencia a Caro", 350_000L, "COP", 1_790_000_000_000L),
-                ),
-            )
-        })
-
-        esperarTexto("·0756 · llave @caro · esposa")
-        esperarTexto("Este período")
-        esperarTexto("350.000")
-        esperarTexto("Último")
-        esperarTexto("Transferencia a Caro ·")
-        // El monto del último envío va en su propio texto, a la derecha: a 390 dp, pegado al final
-        // del renglón, era lo primero que se cortaba.
-        assertEquals(
-            2,
-            composeRule.onAllNodesWithText(formatMoney(350_000L, "COP"), useUnmergedTree = true).fetchSemanticsNodes().size,
-            "el de «Este período» y el del último envío, cada uno entero",
-        )
+        assertEquals("55500000756", mandado!!.numero, "se guardan solo los dígitos")
+        assertNull(mandado!!.llave)
+        assertNull(mandado!!.deQuien)
+        assertNull(mandado!!.tipo, "sin tocarlo, el tipo lo deduce el server")
     }
 
     @Test
-    fun `una cuenta conocida solo por su llave no muestra un numero vacio`() {
-        montar(object : ConCaro() {
-            override suspend fun getDestinos(): List<DestinoConocido> =
-                listOf(caro.copy(numero = "", llave = "carolina restrepo salazar", deQuien = null))
-        })
-
-        esperarTexto("Carolina Restrepo Salazar")
-        assertEquals(
-            0,
-            composeRule.onAllNodesWithText("·", useUnmergedTree = true).fetchSemanticsNodes().size,
-            "un «·» suelto por el número vacío",
-        )
-    }
-
-    @Test
-    fun `guardar una cuenta nueva solo con la llave`() {
+    fun `un celular se entiende como llave, y se puede dar vuelta`() {
         var mandado: DestinoConocido? = null
         montar(object : ConCaro() {
             override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
@@ -268,67 +236,28 @@ class DestinosScreenTest {
             }
         })
 
-        esperarTexto("Guardar una cuenta de otra persona")
-        tocar("Guardar una cuenta de otra persona")
-        esperarTexto("Nueva cuenta de otro")
+        abrirLaNueva()
         val editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
-        editables[0].performTextInput("Caro")
-        editables[2].performTextInput("@caro")
+        editables[0].performTextInput("Cancha")
+        editables[1].performTextInput("300 111 2222")
         composeRule.waitForIdle()
+        esperarTexto("Llave 3001112222")
+        tocar("Es un número de cuenta")
+        esperarTexto("Número de cuenta ·2222")
+        tocar("Es una llave")
+        esperarTexto("Llave 3001112222")
+        tocar("Es un comercio")
+        esperarTexto("Es una persona")
 
-        tocar("Guardar cuenta")
+        tocar("Guardar")
         composeRule.waitUntil(timeoutMillis = 5_000) { mandado != null }
-        assertEquals("", mandado!!.numero)
-        assertEquals("@caro", mandado!!.llave)
+        assertEquals(listOf(IdentificadorDelDestino(TipoDeIdentificador.LLAVE, "3001112222")), mandado!!.identificadores)
+        assertEquals(com.jvillada.movi.shared.model.TipoDeTercero.COMERCIO, mandado!!.tipo, "lo eligió: va")
     }
 
     /**
-     * **Editar un destino que solo tiene llave se puede** — antes la hoja no sabía de llaves y lo
-     * rechazaba por «falta el número». Y vaciar la llave manda `""` (bórrala), no `null` (que el
-     * server lee como «no la toques»).
-     */
-    @Test
-    fun `editar una cuenta de solo llave guarda, y vaciar la llave la borra`() {
-        val soloLlave = caro.copy(numero = "", llave = "@caro")
-        var mandado: DestinoConocido? = null
-        montar(object : ConCaro() {
-            override suspend fun getDestinos(): List<DestinoConocido> = listOf(soloLlave)
-            override suspend fun getMovimientosDelDestino(id: String): MovimientosDelDestino =
-                MovimientosDelDestino(destino = soloLlave, movimientos = emptyList())
-            override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido {
-                mandado = destino
-                return destino
-            }
-        })
-
-        esperarTexto("llave @caro")
-        abrirLaEdicion()
-        var editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
-        editables[3].performTextInput("esposa")
-        composeRule.waitForIdle()
-        tocar("Guardar cambios")
-        composeRule.waitUntil(timeoutMillis = 5_000) { mandado != null }
-        assertEquals("@caro", mandado!!.llave)
-        assertEquals("", mandado!!.numero)
-
-        // Con número, vaciar la llave la borra.
-        mandado = null
-        composeRule.waitForIdle()
-        abrirLaEdicion()
-        editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
-        editables[1].performTextInput("31973270756")
-        editables[2].performTextClearance()
-        composeRule.waitForIdle()
-        tocar("Guardar cambios")
-        composeRule.waitUntil(timeoutMillis = 5_000) { mandado != null }
-        assertEquals("", mandado!!.llave, "vaciar la llave tiene que mandar \"\", no null")
-    }
-
-    /**
-     * **La guarda del número propio se ve ANTES de mandar nada.** Si el número que escribe es el de
-     * una cuenta suya, la hoja lo dice con el nombre de la cuenta que chocó y el botón no guarda: un
-     * destino con un número propio haría que Movi le ponga el nombre de otra persona a sus propios
-     * movimientos.
+     * **La guarda del número propio se ve ANTES de mandar nada**: un número de una cuenta suya
+     * haría que Movi le ponga el nombre de otra persona a sus propios movimientos.
      */
     @Test
     fun `escribir el numero de una cuenta suya lo avisa y no guarda`() {
@@ -341,20 +270,19 @@ class DestinosScreenTest {
             }
         })
 
-        esperarTexto("Guardar una cuenta de otra persona")
-        tocar("Guardar una cuenta de otra persona")
-        esperarTexto("Nueva cuenta de otro")
-
+        abrirLaNueva()
         val editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
         editables[0].performTextInput("Yo mismo")
         editables[1].performTextInput("*9586")
         composeRule.waitForIdle()
 
         esperarTexto("Fiducuenta 9586")
-        tocar("Guardar cuenta")
+        tocar("Guardar")
         composeRule.waitForIdle()
         assertEquals(0, llamadas, "con un número propio el botón no puede guardar nada")
     }
 }
 
 private const val AVD_MOVI_DESTINOS = "w411dp-h731dp-xhdpi"
+
+private const val PERSONAS_Y_COMERCIOS_TITULO = "Personas y comercios"

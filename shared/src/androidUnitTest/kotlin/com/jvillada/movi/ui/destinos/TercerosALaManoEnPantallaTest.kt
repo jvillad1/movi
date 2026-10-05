@@ -169,25 +169,40 @@ class TercerosALaManoEnPantallaTest {
     }
 
     @Test
-    fun `cuentas de otros muestra lo que Movi encontro, con personas y comercios aparte`() {
+    fun `lo que Movi encontro va en una linea que se abre, y lo guardado queda a la vista`() {
         montar(Repo())
         esperar(tituloDeLosSugeridos(2))
-        assertTrue(hay("Empanadas"))
-        assertTrue(hay("Comercio · 3 veces"), "dice el tipo y las veces")
-        assertTrue(hay(QUE_SON_EN_UNA_LINEA), "explica en una línea qué son")
+        // 4-oct-2026: cerrado por defecto con algo guardado — antes tapaba la lista entera.
+        assertFalse(hay("Empanadas"), "los sugeridos tapaban lo guardado")
         assertTrue(hay("PERSONAS"), "las guardadas van por sección")
+        assertTrue(hay("Caro"))
+        tocar("Revisar")
+        esperar("Empanadas")
+        assertTrue(hay("Comercio · 3 veces"), "dice el tipo y las veces")
         assertEquals(1, composeRule.onAllNodesWithTag(TAG_SUGERIDOS, useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 
+    /** La alerta de Hoy lleva acá: con lo que Movi encontró ya abierto, sin otro toque. */
     @Test
-    fun `guardar un sugerido es un toque, con el nombre y el tipo prellenados`() {
+    fun `llegar desde la alerta de Hoy abre lo que Movi encontro`() {
+        Repositories.sustitutoDePrueba = Repo()
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { DestinosScreen(onNavigate = {}, conSugeridosAbiertos = true) } }
+        }
+        esperar("Empanadas")
+        assertTrue(hay("Ocultar"))
+    }
+
+    @Test
+    fun `guardar un sugerido es un toque, con el nombre prellenado`() {
         montar(Repo(sugeridos = listOf(qr)))
+        abrirLosSugeridos()
         esperar("Empanadas")
         tocar("Guardar")
         composeRule.waitUntil(timeoutMillis = 5_000) { creados.isNotEmpty() }
         val creado = creados.single()
         assertEquals("Empanadas", creado.nombre)
-        assertEquals(TipoDeTercero.COMERCIO, creado.tipo)
+        assertEquals(null, creado.tipo, "el tipo lo deduce el server al leer: no se guarda como elegido")
         assertEquals(listOf(qr.identificador), creado.identificadores)
         assertEquals("0099887766", creado.llave, "el APK instalado lee la llave de siempre")
         composeRule.waitForIdle()
@@ -197,6 +212,7 @@ class TercerosALaManoEnPantallaTest {
     @Test
     fun `es mia e ignorar se recuerdan`() {
         montar(Repo(sugeridos = listOf(qr)))
+        abrirLosSugeridos()
         esperar("Empanadas")
         tocar(ES_MIA)
         composeRule.waitUntil(timeoutMillis = 5_000) { descartados.isNotEmpty() }
@@ -206,6 +222,7 @@ class TercerosALaManoEnPantallaTest {
     @Test
     fun `es Caro pregunta y, si dice que si, le suma el identificador a Caro sin crear otra`() {
         montar(Repo(sugeridos = listOf(parecidoACaro)))
+        abrirLosSugeridos()
         esperar("¿Es Caro?")
         tocar("Sí, es Caro")
         composeRule.waitUntil(timeoutMillis = 5_000) { agregados.isNotEmpty() }
@@ -219,11 +236,9 @@ class TercerosALaManoEnPantallaTest {
         montar(Repo(sugeridos = emptyList()))
         esperar("Caro")
         composeRule.onAllNodesWithText("Caro", useUnmergedTree = true).onFirst().performClick()
-        esperar("CÓMO LO RECONOCE MOVI")
-        assertTrue(hay("·1111"))
-        assertTrue(hay("llave @caro.prueba"))
-        assertTrue(hay("Carolina Prueba Salazar"))
-        assertTrue(hay(AGREGAR_UN_IDENTIFICADOR))
+        esperar("ESTE PERÍODO")
+        // En una línea, debajo del nombre: qué es y cómo lo reconoce Movi.
+        assertTrue(hay("Persona · ·1111 · llave @caro.prueba · Carolina Prueba Salazar · esposa"))
 
         esperar(textoDePonerleElNombre(1))
         tocar("Ponerle el nombre")
@@ -241,8 +256,8 @@ class TercerosALaManoEnPantallaTest {
             MoviTheme { Box(Modifier.fillMaxSize()) { SMSReconcileScreen(onNavigate = {}, smsId = "sms-1") } }
         }
         esperar("¿De quién es la cuenta ·2222?")
-        tocar(GUARDAR_COMO)
-        tocar(ES_DE_UN_TERCERO_QUE_YA_TENGO)
+        tocar(PONERLE_NOMBRE)
+        tocar(YA_LO_TENGO_GUARDADO)
         esperar("Caro")
         composeRule.onAllNodes(
             hasClickAction() and hasAnyChild(hasText("Caro")),
@@ -257,6 +272,11 @@ class TercerosALaManoEnPantallaTest {
     }
 
     // ── Andamio ─────────────────────────────────────────────────────────────────
+
+    private fun abrirLosSugeridos() {
+        esperar("sin nombre")
+        tocar("Revisar")
+    }
 
     private fun hay(texto: String): Boolean =
         composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
