@@ -46,6 +46,15 @@ data class StatementParseResult(
      * atrás y volver a subirlo— es el id del que ya estaba, no uno nuevo.
      */
     val documentoId: String? = null,
+    /**
+     * **Cuáles de [newTransactions] son cargos o abonos del banco** (4x1000, cuota de manejo,
+     * intereses, rendimientos), y qué movimientos ya anotados pueden ser su suma. La revisión los
+     * agrupa en «Cargos y abonos del banco» y no propone los que ya están anotados en la cuenta del
+     * extracto (ver [estadoDelCargo]). Las filas ya traen la categoría del dueño para su cargo.
+     *
+     * Con default y aparte de las filas: un APK viejo lo ignora y las sigue viendo como nuevas.
+     */
+    val cargosDelBanco: List<CargoEnElExtracto> = emptyList(),
 )
 
 @Serializable

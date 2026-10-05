@@ -286,6 +286,11 @@ fun categoriaProbablePorElNombre(
      */
     categoriasDelDueno: Set<String> = emptySet(),
 ): String? {
+    // **Lo que el banco cobra o abona solo**, en un bloque aparte y antes que las palabras clave:
+    // «IVA CUOTA MANEJO» o «ABONO INTERESES AHORROS» no son un comercio, y si el dueño no tiene la
+    // categoría de ese cargo no se cae a las palabras clave — no se propone nada (ver [cargoDelBanco]
+    // y [categoriaDelCargo]). La memoria del dueño corre ANTES de llamar a esta función y le gana.
+    cargoDelBanco(nombre)?.let { return categoriaDelCargo(it, categoriasDelDueno) }
     val texto = normalizarParaBuscar(nombre)
     val palabras = texto.split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
     val regla = PALABRAS_CLAVE.firstOrNull { it.reconoce(texto, palabras) } ?: return null

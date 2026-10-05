@@ -204,6 +204,32 @@ class DebitosAutomaticosRoutesTest {
         assertEquals(1, propuestas(dia15.plusDays(3)).size, "días después sigue esperando la respuesta")
     }
 
+    /**
+     * **Un crédito pagado no se propone**, aunque siga marcado «El banco la cobra solo»: con la deuda en
+     * cero (o a favor) el banco no tiene qué debitar.
+     */
+    @Test
+    fun `un credito con la deuda en cero no se propone aunque tenga el debito marcado`() {
+        creditoConDebito()
+        transaction {
+            evento(duenoId, "pago_total_9695", credito, "INCOME", 30_000_000L, "Abono a capital", LocalDate.of(2026, 6, 1))
+        }
+        assertTrue(propuestas(dia15).isEmpty(), "en cero")
+        transaction {
+            evento(duenoId, "pago_de_mas_9695", credito, "INCOME", 10_000L, "Abono a capital", LocalDate.of(2026, 6, 2))
+        }
+        assertTrue(propuestas(dia15).isEmpty(), "a favor")
+    }
+
+    @Test
+    fun `un credito con algo por pagar todavia se propone`() {
+        creditoConDebito()
+        transaction {
+            evento(duenoId, "casi_todo_9695", credito, "INCOME", 29_999_000L, "Abono a capital", LocalDate.of(2026, 6, 1))
+        }
+        assertEquals(1, propuestas(dia15).size, "le quedan \$1.000: el banco todavía cobra")
+    }
+
     @Test
     fun `un credito sin debito automatico no se propone`() {
         creditoConDebito(desde = null)

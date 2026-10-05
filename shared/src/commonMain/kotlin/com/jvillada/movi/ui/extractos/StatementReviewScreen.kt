@@ -41,7 +41,13 @@ fun StatementReviewScreen(
     val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     var accounts by remember { mutableStateOf(emptyList<Account>()) }
-    var selectedIds by remember { mutableStateOf(result.newTransactions.map { it.id }.toSet()) }
+    // Lo que el dueño tildó o destildó con el dedo. El resto va por defecto: todo tildado, salvo un
+    // cargo del banco que ya está anotado sumado en la cuenta del extracto (ver `estadoDelCargo`).
+    // Es un mapa de excepciones y no un conjunto fijo porque la cuenta se resuelve DESPUÉS de abrir
+    // (llegan las cuentas, o el dueño la cambia), y con ella cambia qué cargo ya está anotado.
+    val elegidasAMano = remember { mutableStateMapOf<String, Boolean>() }
+    // Los cargos del banco que ya se anotaron desde su bloque, con «Anotar los N».
+    var cargosAnotados by remember { mutableStateOf(emptySet<String>()) }
     val reconciliations = remember { mutableStateMapOf<String, ReconciliationDecision>() }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -81,6 +87,19 @@ fun StatementReviewScreen(
     }
     val destinationAccount = destino.cuenta
 
+    val cargos = remember(result) { result.cargosDelBanco.associateBy { it.parsedId } }
+    val estadosDeLosCargos = remember(cargos, destinationAccount?.id) {
+        cargos.mapValues { (_, cargo) -> estadoDelCargo(cargo, destinationAccount?.id) }
+    }
+    val filasPorImportar = result.newTransactions.filter { it.id !in cargosAnotados }
+    val selectedIds = filasPorImportar
+        .filter { elegidasAMano[it.id] ?: (estadosDeLosCargos[it.id] !is EstadoDelCargo.YaAnotado) }
+        .map { it.id }
+        .toSet()
+    val filasDelBanco = filasPorImportar.filter { it.id in cargos }
+    val filasNuevas = filasPorImportar.filter { it.id !in cargos }
+    val cargosTildados = filasDelBanco.filter { it.id in selectedIds }
+
     val confirmedCount = reconciliations.values.count { it.confirm }
     // Las coincidencias que el dueño no tocó: no se importan ni se concilian. Antes eso pasaba en
     // silencio, y una coincidencia falsa sin revisar era una compra real que nunca entraba.
@@ -102,9 +121,9 @@ fun StatementReviewScreen(
                     accountId = acct.id,
                     bankName = result.bankName,
                     period = result.period,
-                    imports = result.newTransactions.filter { it.id in selectedIds },
+                    imports = filasPorImportar.filter { it.id in selectedIds },
                     reconciliations = reconciliations.values.toList(),
-                    skipped = result.newTransactions.map { it.id }.filter { it !in selectedIds },
+                    skipped = filasPorImportar.map { it.id }.filter { it !in selectedIds },
                     // El papel que la lectura archivó viaja de vuelta para que el server le
                     // cuelgue ESTA cuenta. Al subirlo todavía no se sabía cuál era —se elige
                     // acá—, así que sin este viaje de ida y vuelta todo extracto archivado se
@@ -118,6 +137,41 @@ fun StatementReviewScreen(
                 // Ola 2 #1: pop, no push — coherente con SMS (evita reimportar el mismo extracto
                 // si la ‹ de Transacciones vuelve acá).
                 goBack(Screen.Transactions())
+            }.onFailure {
+                working = false
+                error = it.toUserMessage()
+            }
+        }
+    }
+
+    /**
+     * **«Anotar los N»**: los cargos y abonos del banco tildados, de un toque, sin esperar al resto
+     * del extracto. Es un importe propio —con la misma cuenta y el mismo papel—, así que se deshace
+     * aparte desde «Extractos importados». Lo que queda en pantalla se importa después con el botón
+     * de siempre, sin estas filas.
+     */
+    fun anotarLosCargos() {
+        val acct = destinationAccount ?: return
+        val filas = cargosTildados
+        if (filas.isEmpty()) return
+        working = true; error = null
+        coroutine.launch {
+            runCatching {
+                Repositories.wallets.importStatement(
+                    ImportDecision(
+                        statementId = result.statementId,
+                        accountId = acct.id,
+                        bankName = result.bankName,
+                        period = result.period,
+                        imports = filas,
+                        reconciliations = emptyList(),
+                        skipped = emptyList(),
+                        documentoId = result.documentoId,
+                    ),
+                )
+            }.onSuccess {
+                working = false
+                cargosAnotados = cargosAnotados + filas.map { it.id }
             }.onFailure {
                 working = false
                 error = it.toUserMessage()
@@ -236,8 +290,38 @@ fun StatementReviewScreen(
                 }
             }
 
+            // Los cargos y abonos del banco, aparte y antes de las compras: son los que nadie revisa
+            // uno por uno.
+            if (cargos.isNotEmpty()) {
+                item(key = "cargos_del_banco") {
+                    BloqueDeCargosDelBanco(
+                        cuantos = filasDelBanco.size,
+                        tildados = cargosTildados.size,
+                        anotados = cargosAnotados.size,
+                        puedeAnotar = cargosTildados.isNotEmpty() && destinationAccount != null && !working && !imported,
+                        onAnotar = ::anotarLosCargos,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .padding(top = 12.dp, bottom = 4.dp),
+                    )
+                }
+                items(filasDelBanco, key = { it.id }) { tx ->
+                    NewTransactionRow(
+                        tx = tx,
+                        checked = tx.id in selectedIds,
+                        onToggle = { elegidasAMano[tx.id] = tx.id !in selectedIds },
+                        nota = estadosDeLosCargos[tx.id]?.let(::notaDelCargo),
+                        notaEsAviso = estadosDeLosCargos[tx.id] is EstadoDelCargo.PuedeEstarSumado,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 2.dp),
+                    )
+                }
+            }
+
             // New transactions section
-            if (result.newTransactions.isNotEmpty()) {
+            if (filasNuevas.isNotEmpty()) {
                 item {
                     Row(
                         modifier = Modifier
@@ -251,25 +335,21 @@ fun StatementReviewScreen(
                             "NUEVAS TRANSACCIONES",
                             style = Movi.textos.rotulo, color = Movi.colores.textoMedio,
                         )
-                        val allSelected = selectedIds.size == result.newTransactions.size
+                        val allSelected = filasNuevas.all { it.id in selectedIds }
                         Text(
                             if (allSelected) "Deseleccionar todas" else "Seleccionar todas",
                             style = Movi.textos.apoyo, color = Movi.colores.marca,
                             modifier = Modifier.clickable {
-                                selectedIds = if (allSelected) emptySet()
-                                    else result.newTransactions.map { it.id }.toSet()
+                                filasNuevas.forEach { elegidasAMano[it.id] = !allSelected }
                             },
                         )
                     }
                 }
-                items(result.newTransactions, key = { it.id }) { tx ->
+                items(filasNuevas, key = { it.id }) { tx ->
                     NewTransactionRow(
                         tx = tx,
                         checked = tx.id in selectedIds,
-                        onToggle = {
-                            selectedIds = if (tx.id in selectedIds)
-                                selectedIds - tx.id else selectedIds + tx.id
-                        },
+                        onToggle = { elegidasAMano[tx.id] = tx.id !in selectedIds },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 2.dp),
@@ -332,12 +412,65 @@ fun StatementReviewScreen(
     }
 }
 
+/**
+ * El encabezado del bloque «Cargos y abonos del banco (N)», con su botón para anotar los tildados de
+ * un toque. Después de anotarlos, dice cuántos quedaron anotados.
+ */
+@Composable
+private fun BloqueDeCargosDelBanco(
+    cuantos: Int,
+    tildados: Int,
+    anotados: Int,
+    puedeAnotar: Boolean,
+    onAnotar: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            "Cargos y abonos del banco ($cuantos)",
+            style = Movi.textos.rotulo, color = Movi.colores.textoMedio,
+        )
+        Text(
+            "Impuestos, comisiones e intereses que el banco cobra o abona solo. Destilda los que no quieras anotar.",
+            style = Movi.textos.apoyo, color = Movi.colores.textoApagado,
+        )
+        if (anotados > 0) {
+            Text(
+                if (anotados == 1) "Anotaste 1 cargo del banco." else "Anotaste $anotados cargos y abonos del banco.",
+                style = Movi.textos.apoyo, color = Movi.colores.entra, fontWeight = FontWeight.Medium,
+            )
+        }
+        if (cuantos > 0) {
+            OutlinedButton(
+                onClick = onAnotar,
+                enabled = puedeAnotar,
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(
+                    if (tildados == 1) "Anotar 1" else "Anotar los $tildados",
+                    style = Movi.textos.apoyo, color = if (puedeAnotar) Movi.colores.marca else Movi.colores.textoApagado,
+                )
+            }
+        }
+    }
+}
+
+/** Lo que se dice debajo de un cargo que ya puede estar anotado; nada si es nuevo. */
+private fun notaDelCargo(estado: EstadoDelCargo): String? = when (estado) {
+    EstadoDelCargo.Nuevo -> null
+    is EstadoDelCargo.YaAnotado -> "Ya anotado en «${estado.en.nombre}»"
+    is EstadoDelCargo.PuedeEstarSumado ->
+        "Puede que ya lo hayas anotado sumado: «${estado.en.nombre}» por ${formatMoney(estado.en.monto, estado.en.moneda)}"
+}
+
 @Composable
 private fun NewTransactionRow(
     tx: ParsedTransaction,
     checked: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    nota: String? = null,
+    notaEsAviso: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -357,6 +490,13 @@ private fun NewTransactionRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(tx.merchant, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Text("${tx.category} · ${fechaEnPalabras(tx.date, hoyEnAppZone())}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            if (nota != null) {
+                Text(
+                    nota,
+                    style = Movi.textos.apoyo,
+                    color = if (notaEsAviso) Movi.colores.aviso else Movi.colores.textoApagado,
+                )
+            }
         }
         val amountColor = if (tx.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.sale
         val prefix = if (tx.type == TransactionType.INCOME) "+" else "−"
