@@ -2236,6 +2236,10 @@ class LocalRepository(
         remote.confirmarComprobante(smsId, eventoId)
 
     override suspend fun confirmSmsCon(id: String, eventoId: String) = remote.confirmSmsCon(id, eventoId)
+    // Dos patas enlazadas y una deuda que se mueve: directo al server, como `payInstallment` y
+    // `vincularPagoDeDeuda`. El espejo local las trae en la próxima lectura de eventos.
+    override suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso) =
+        remote.confirmarConLasDosPatas(smsId, patas)
 
     override suspend fun getAvisosConfirmadosSinMovimiento() = remote.getAvisosConfirmadosSinMovimiento()
 

@@ -1037,6 +1037,12 @@ class WalletRepositoryImpl(
         client.post("$baseUrl/api/sms/$id/confirm?eventoId=$eventoId").exigirExito()
     }
 
+    override suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso): MismoPagoConfirmado =
+        client.post("$baseUrl/api/sms/$smsId/confirm") {
+            contentType(ContentType.Application.Json)
+            setBody(patas)
+        }.exigirExito().body()
+
     override suspend fun getAvisosConfirmadosSinMovimiento(): List<com.jvillada.movi.shared.model.AvisoConfirmadoSinMovimiento> =
         client.get("$baseUrl/api/sms/confirmados-sin-movimiento").exigirExito().body()
 

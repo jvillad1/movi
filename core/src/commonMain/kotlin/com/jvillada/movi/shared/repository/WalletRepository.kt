@@ -734,6 +734,15 @@ interface WalletRepository {
     suspend fun confirmSmsCon(id: String, eventoId: String) = confirmSms(id)
 
     /**
+     * **Confirma un aviso de dos patas** (el pago de una tarjeta, una cuota, un traspaso, un avance):
+     * `POST /api/sms/{id}/confirm` con [patas] en el cuerpo. El server escribe las dos patas y marca el
+     * aviso en una sola transacción, y contesta con sus ids; un doble toque contesta lo mismo. Va
+     * directo al server, como el traspaso y la Ola Y. Ver `DosPatasDelAviso`.
+     */
+    suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso): MismoPagoConfirmado =
+        throw UnsupportedOperationException("confirmarConLasDosPatas")
+
+    /**
      * `GET /api/sms/confirmados-sin-movimiento`: los avisos confirmados cuyo movimiento se anuló o
      * ya no existe. Ver `AvisoConfirmadoSinMovimiento`.
      */
