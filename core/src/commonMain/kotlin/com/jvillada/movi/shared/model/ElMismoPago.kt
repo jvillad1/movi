@@ -50,8 +50,10 @@ data class GrupoDeAvisos(
  *
  * - Con [evento]: el server lo crea y marca confirmados a todos los [miembros], en una transacción.
  * - Con [eventoExistenteId] («Es este»): no crea nada, enlaza los avisos a ese movimiento.
- * - Sin ninguno de los dos: solo vale si algún aviso ya estaba confirmado («ya anotado»), y cierra
- *   los demás.
+ * - Con [patas]: el server arma las dos patas del pago (una tarjeta, una cuota, un traspaso, un
+ *   avance; ver [DosPatasDelAviso]) y marca los avisos con la del dinero, en la misma transacción.
+ *   Un APK viejo no lo manda y sigue con [evento].
+ * - Sin ninguno: solo vale si algún aviso ya estaba confirmado («ya anotado»), y cierra los demás.
  *
  * Si algún miembro ya estaba confirmado, **nunca** se crea otro movimiento: así un doble toque, o
  * dos teléfonos a la vez, no duplican.
@@ -61,14 +63,21 @@ data class ConfirmarElMismoPago(
     val miembros: List<String>,
     val evento: FinancialEvent? = null,
     val eventoExistenteId: String? = null,
+    val patas: DosPatasDelAviso? = null,
 )
 
-/** Lo que contesta el confirmar: con qué movimiento quedó el pago, si se creó ahora y qué avisos se cerraron. */
+/**
+ * Lo que contesta el confirmar: con qué movimiento quedó el pago, si se creó ahora y qué avisos se
+ * cerraron. [patas] son los ids de todos los movimientos del pago cuando es de dos patas (la del
+ * dinero, que es [eventoId], y la otra); vacía si es un movimiento suelto. Un doble toque contesta
+ * lo mismo que el primero, con `creado = false`.
+ */
 @Serializable
 data class MismoPagoConfirmado(
     val eventoId: String? = null,
     val creado: Boolean = false,
     val cerrados: List<String> = emptyList(),
+    val patas: List<String> = emptyList(),
 )
 
 /** Cuerpo de `…/ignorar` y `…/desagrupar`: los avisos a los que se aplica. */

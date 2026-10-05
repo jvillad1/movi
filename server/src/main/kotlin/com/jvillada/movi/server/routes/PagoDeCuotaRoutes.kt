@@ -1,28 +1,20 @@
 package com.jvillada.movi.server.routes
 
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
-import com.jvillada.movi.server.balance.cargosYaCobradosEnElMes
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
-import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.insertEventRow
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.balance.toAccount
-import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.time.epochMillisToAppDate
-import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.DesgloseDeCuota
-import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.pagoDeCuotaLegs
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.signedDelta
-import com.jvillada.movi.shared.model.validarInteresReal
 import com.jvillada.movi.shared.model.validarPagoDeCuota
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -118,84 +110,29 @@ fun Route.pagoDeCuotaRoutes() {
 
             // ── Cuánto de esta cuota baja de verdad la deuda ─────────────────────────────────
             //
-            // **El server recalcula, no le cree al cliente.** La hoja de «Cuota» muestra el mismo
-            // desglose antes de guardar (con la MISMA función de `:core`), pero lo hace con el
-            // saldo que tenía cargado en pantalla: si el dueño dejó la hoja abierta y en el medio
-            // entró un SMS o se ajustó el saldo, ese número llegó viejo. Acá se deriva contra los
-            // eventos vivos, que es de donde sale la deuda de verdad.
-            //
-            // **Se excluyen las patas de ESTE pago**: un reintento con los mismos ids tiene que
-            // calcular el mismo interés que el primer intento, no uno sobre la deuda ya bajada.
-            //
-            // **Y se filtra por moneda**, igual que `computeBalances`, que agrupa por ella: sumar
-            // los deltas de todas las monedas daría una cifra que no es de ninguna, y esa cifra
-            // entra derecho al cálculo del interés. Hoy no muerde —los créditos del dueño son COP
-            // y `validarPagoDeCuota` ya exige que la cuenta y la deuda compartan moneda— pero la
-            // guarda cuesta una línea y el error costaría una deuda mal calculada en silencio.
-            val saldoAntesDelPago = loadNonVoidedEvents(uid, debt.id)
-                .filter { it.transferId != body.transferId && it.currency == debt.currency }
-                .sumOf { signedDelta(debt.type, it.type, it.amount) }
-            val terms = if (debt.type == AccountType.LOAN) {
-                dbQuery {
-                    Credits.selectAll()
-                        .where { (Credits.userId eq uid) and (Credits.accountId eq debt.id) }
-                        .firstOrNull()?.toCreditTerms()
+            // **El server recalcula, no le cree al cliente**: la hoja de «Cuota» muestra el mismo
+            // desglose antes de guardar, pero con el saldo que tenía cargado en pantalla. Acá se
+            // deriva contra los eventos vivos, sin las patas de ESTE pago (un reintento calcula lo
+            // mismo), por moneda, y con el interés real del extracto si vino —validado acá, antes de
+            // escribir nada—. La cuenta entera vive en [desgloseDelPagoDeDeuda], la misma que usan la
+            // Ola Y y la confirmación de un aviso de dos patas.
+            val desglose = when (
+                val calculado = dbQuery {
+                    desgloseDelPagoDeDeuda(
+                        uid = uid,
+                        deuda = debt,
+                        transferId = body.transferId,
+                        timestamp = body.timestamp,
+                        // Entre monedas (solo tarjetas, ver `validarPagoDeCuota`), la «cuota» que baja la
+                        // deuda es lo que el dueño dijo en la moneda de la deuda, no los pesos que salieron.
+                        cuota = if (from.currency != debt.currency) body.montoEnLaMonedaDeLaDeuda ?: body.amount else body.amount,
+                        interesReal = body.interesReal,
+                    )
                 }
-            } else {
-                null
+            ) {
+                is DesgloseDelPago.Bien -> calculado.desglose
+                is DesgloseDelPago.Mal -> return@post call.respond(HttpStatusCode.UnprocessableEntity, calculado.motivo)
             }
-            // ── El interés real, si vino, y sus guardas ──────────────────────────────────────
-            //
-            // La estimación de arriba se queda corta contra el extracto por más de $100.000 en
-            // una sola cuota del ·9695 (ver `CreatePagoDeCuotaRequest.interesReal`). Si el dueño
-            // escribió el interés del extracto, manda ese; si no vino —cliente viejo, o no lo
-            // tocó— se estima como siempre.
-            //
-            // **Se valida ACÁ y no se le cree a la hoja**, antes de escribir nada: un interés que
-            // deja el capital negativo haría SUBIR la deuda con un pago, y eso es 422 con el
-            // motivo, no un clamp silencioso. Misma función que apaga el botón en la app.
-            //
-            // **Y se valida contra lo que al mes le falta cobrar**, que es lo mismo que el desglose
-            // va a usar dos líneas más abajo: mirando el seguro ENTERO, un segundo pago chico de
-            // una cuota cuyo seguro ya se cobró se rechazaba con un cargo que nadie iba a cobrar.
-            // Por eso `yaCobradoEnElMes` se calcula ACÁ y no adentro de la llamada al desglose.
-            //
-            // Los otros pagos de esta deuda en el mismo mes que este (sin sus propias patas).
-            val yaCobradoEnElMes = run {
-                val delMes = loadNonVoidedEvents(uid, debt.id)
-                    .filter { it.transferId != body.transferId && it.currency == debt.currency && it.noAmortiza != null }
-                // La plata que salió de la cuenta en cada pago de antes: la otra pata de su par.
-                val pares = delMes.mapNotNull { it.transferId }.toSet()
-                val pagadoPorPar = if (pares.isEmpty()) emptyMap() else dbQuery {
-                    Events.selectAll()
-                        .where { (Events.userId eq uid) and (Events.transferId inList pares) and (Events.accountId neq debt.id) }
-                        .associate { it[Events.transferId]!! to it[Events.amount] }
-                }
-                // Por CUOTA, no por mes de calendario: ver `cuotaMasCercana`.
-                cargosYaCobradosEnElMes(delMes, epochMillisToAppDate(body.timestamp), terms?.dayOfMonth) { fila ->
-                    fila.transferId?.let { pagadoPorPar[it] }
-                }
-            }
-            validarInteresReal(
-                body.interesReal, body.amount, debt.type,
-                terms?.insuranceMonthly, terms?.otrosCargosMensuales, yaCobradoEnElMes,
-            )?.let {
-                return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
-            }
-            val desglose = desglosarCuotaRegistrada(
-                // Entre monedas (solo tarjetas, ver `validarPagoDeCuota`), la «cuota» que baja la
-                // deuda es lo que el dueño dijo en la moneda de la deuda, no los pesos que salieron.
-                cuota = if (from.currency != debt.currency) body.montoEnLaMonedaDeLaDeuda ?: body.amount else body.amount,
-                tipoDeLaDeuda = debt.type,
-                saldoDeLaDeuda = saldoAntesDelPago,
-                rateEa = terms?.rateEa,
-                seguroMensual = terms?.insuranceMonthly,
-                otrosCargosMensuales = terms?.otrosCargosMensuales,
-                sinIntereses = terms?.sinIntereses ?: false,
-                interesReal = body.interesReal,
-                // Calculado arriba, porque la validación mira lo mismo.
-                yaCobradoEnElMes = yaCobradoEnElMes,
-            )
 
             val (pataDelDinero, pataDeLaDeuda) = pagoDeCuotaLegs(body, from, debt, desglose)
 
