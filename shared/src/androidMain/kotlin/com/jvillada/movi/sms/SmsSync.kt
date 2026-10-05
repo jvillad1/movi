@@ -10,9 +10,6 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Único uploader del sensor hacia el endpoint idempotente `POST /api/sms/sync`.
@@ -46,8 +43,8 @@ data class SmsSyncItem(
 /** Item del camino de captura: normaliza timestamp y remitente al formato del wire. */
 fun captureItem(id: String, sender: String, body: String, ts: Long) = SmsSyncItem(
     id = id,
-    time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(ts)),
-    // SimpleDateFormat no es thread-safe: se construye por llamada a propósito.
+    // En la hora de Movi y no en la del teléfono: ver `smsWireTime` (el viaje a Argentina, 5-oct).
+    time = com.jvillada.movi.platform.smsWireTime(ts),
     bank = sender,
     text = body,
 )

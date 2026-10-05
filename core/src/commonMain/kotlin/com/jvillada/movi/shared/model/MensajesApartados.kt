@@ -39,6 +39,8 @@ enum class MotivoDeApartado(
      * usar. No es un movimiento, pero se guarda entero para poder leer el código.
      */
     CONFIRMACION_DE_REENVIO("confirmación de reenvío de Gmail"),
+    /** Una copia de un aviso que ya estaba (p. ej. el mismo SMS subido otra vez con la hora corrida). */
+    DUPLICADO("copia de un aviso que ya tenías"),
 }
 
 /**

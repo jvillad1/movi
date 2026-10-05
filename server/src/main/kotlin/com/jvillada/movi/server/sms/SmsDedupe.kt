@@ -100,10 +100,26 @@ fun parseSmsTime(raw: String): LocalDateTime? =
  */
 fun isSameSms(a: SmsKey, b: SmsKey): Boolean {
     if (a.text != b.text) return false
+    // **Un texto que trae su propia fecha y hora es único por sí mismo.** «Transferiste $60,000
+    // … el 30/09/2026 a las 18:18» no se repite entre dos movimientos reales, así que el mismo
+    // texto es el mismo SMS aunque `time` diga otra cosa. Lo que destapó el caso: un teléfono
+    // en otra zona horaria (Argentina, 5-oct-2026) volvió a subir 29 SMS de Colombia con la
+    // hora corrida dos horas, y la ventana de un minuto los dejó pasar como nuevos. Los SMS SIN
+    // fecha en el texto («Compra aprobada $28.500 en Uber BV.») siguen exigiendo la hora: esos sí
+    // se repiten byte por byte entre compras distintas.
+    if (traeSuPropiaFechaYHora(a.text)) return true
     val ta = parseSmsTime(a.time) ?: return false
     val tb = parseSmsTime(b.time) ?: return false
     return Duration.between(ta, tb).abs() <= SMS_DEDUPE_TOLERANCE
 }
+
+/** «03/10/2026», «02/10/26» junto con una hora «17:59»: el SMS dice cuándo pasó. */
+private val FECHA_EN_EL_TEXTO = Regex("""\b\d{1,2}/\d{1,2}/\d{2,4}\b""")
+private val HORA_EN_EL_TEXTO = Regex("""\b\d{1,2}:\d{2}\b""")
+
+/** ¿El texto trae fecha (dd/mm/aa[aa]) Y hora (hh:mm)? Ver [isSameSms]. */
+internal fun traeSuPropiaFechaYHora(texto: String): Boolean =
+    FECHA_EN_EL_TEXTO.containsMatchIn(texto) && HORA_EN_EL_TEXTO.containsMatchIn(texto)
 
 /** ¿[candidate] ya está entre [existing]? Función pura; [SmsDedupeIndex] la usa por bucket. */
 fun isDuplicateSms(candidate: SmsKey, existing: Iterable<SmsKey>): Boolean =
