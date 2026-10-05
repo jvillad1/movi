@@ -49,7 +49,7 @@ class ElTraspasoQueEntraTest {
     @Test
     fun los_avisos_reales_de_recibido_no_nombran_una_cuenta_de_origen() {
         // Las formas reales: el origen es una persona o «tu llave», no un número.
-        assertNull(numeroDelOrigenDelIngreso("Bancolombia: JUAN, recibiste una transferencia de PERSONA DE PRUEBA por \$95,000.00 en tu cuenta *8133 conectada a la llave @LLAVE el 23/08/26 a las 16:49."))
+        assertNull(numeroDelOrigenDelIngreso("Bancolombia: DUENO, recibiste una transferencia de PERSONA DE PRUEBA por \$95,000.00 en tu cuenta *8133 conectada a la llave @LLAVE el 23/08/26 a las 16:49."))
         assertNull(numeroDelOrigenDelIngreso("Recibiste 300.000,00 en tu cuenta: Te llegó dinero de PERSONA DE PRUEBA con tu llave."))
     }
 
