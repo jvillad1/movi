@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.shared.model.sinElOrigenDelIngreso
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -357,6 +358,10 @@ fun resolverCuentaDelBanco(
      */
     textoDelMensaje: String = "",
 ): CuentaDelBanco {
+    // **En un ingreso, «de tu cuenta \*9586» es de dónde VINO la plata**, no la cuenta del aviso: esa
+    // punta la lee `cuentaPropiaDeLaQueVinoElIngreso` (el traspaso que entra). Para resolver a qué
+    // cuenta entró se lee el texto sin ese tramo.
+    val texto = if (uso == UsoDeCuenta.DESTINO_DE_INGRESO) sinElOrigenDelIngreso(textoDelMensaje) else textoDelMensaje
     // **El número se busca en TODAS sus cuentas, no solo en las que sirven para este uso.** Es un
     // dato escrito por el banco, no una suposición: «Retiraste … de tu cuenta *9586 Fiducuenta» es
     // la Fiducuenta aunque una inversión no sea de donde sale un gasto, y la AMEX *9208 que se paga
@@ -364,7 +369,7 @@ fun resolverCuentaDelBanco(
     // y los tres retiros de la Fiducuenta caían en Bancolombia Ahorros. Solo los bienes quedan
     // afuera: la casa no tiene número de cuenta.
     val conNumero = accounts.filterNot { it.esBien }
-    val destino = cuentaDestinoPorElNumero(textoDelMensaje, conNumero)
+    val destino = cuentaDestinoPorElNumero(texto, conNumero)
 
     val aMano = accounts.firstOrNull { it.id == elegidaAMano }
     if (aMano != null) return CuentaDelBanco(aMano, OrigenDeLaCuentaDelBanco.A_MANO, destino?.takeIf { it.id != aMano.id })
@@ -374,7 +379,7 @@ fun resolverCuentaDelBanco(
     // **El número que el mensaje escribió, antes que el nombre del banco.** Es el único paso que
     // lee un dato en vez de suponer, así que va primero: un SMS de Bancolombia que nombra la
     // Fiducuenta tiene que caer en la Fiducuenta y no en la primera cuenta que diga «Bancolombia».
-    val porElNumero = cuentaPorElNumero(textoDelMensaje, conNumero)
+    val porElNumero = cuentaPorElNumero(texto, conNumero)
     if (porElNumero != null) {
         return CuentaDelBanco(porElNumero, OrigenDeLaCuentaDelBanco.POR_EL_NUMERO, destino?.takeIf { it.id != porElNumero.id })
     }
@@ -383,10 +388,10 @@ fun resolverCuentaDelBanco(
     // cuenta suya en juego es esa. Si el mensaje SÍ nombra la cuenta de origen y no es de las
     // suyas («… desde la cuenta *8133» con una «Bancolombia Ahorros» sin número), el destino NO es
     // la cuenta del movimiento: sigue la cadena de siempre y el destino viaja aparte.
-    if (destino != null && !nombraLaCuentaQueToca(textoDelMensaje)) {
+    if (destino != null && !nombraLaCuentaQueToca(texto)) {
         return CuentaDelBanco(destino, OrigenDeLaCuentaDelBanco.POR_EL_NUMERO)
     }
-    return resolverSinElNumero(candidatas, banco, textoDelMensaje).copy(destino = destino)
+    return resolverSinElNumero(candidatas, banco, texto).copy(destino = destino)
 }
 
 /**

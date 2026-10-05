@@ -45,11 +45,15 @@ import kotlin.math.roundToLong
  * siempre, con un solo movimiento.
  */
 
-/** Las dos puntas que el dueño va a confirmar, y qué hecho son. */
+/**
+ * Las dos puntas que el dueño va a confirmar, y qué hecho son. [entrante]: el aviso es del lado que
+ * recibe la plata (un traspaso que entra), y queda enlazado a la pata de [destino].
+ */
 data class DosPatasPropuestas(
     val operacion: OperacionDelAviso,
     val origen: Account,
     val destino: Account,
+    val entrante: Boolean = false,
 ) {
     /** «Sale de … · entra a … como pago»: lo que dice la tarjeta de resumen. */
     val resumen: String get() = resumenDeLasDosPatas(operacion, origen, destino)
@@ -66,6 +70,8 @@ data class DosPatasPropuestas(
  * - **Traspaso** («Traspaso», un gasto): con la cuenta suya a la que fue la plata ([destinoElegido]).
  * - **Avance** (el «Avance de tarjeta» que lee el server, un ingreso en la tarjeta de donde salió):
  *   con la cuenta suya a la que entró ([destinoElegido]).
+ * - **Traspaso que entra** («Traspaso», un ingreso): con la cuenta suya de la que vino la plata
+ *   ([origenElegido]). La cuenta del aviso es el destino; el aviso queda en la pata que entra.
  */
 fun dosPatasPropuestas(
     leido: ParsedSms?,
@@ -73,6 +79,7 @@ fun dosPatasPropuestas(
     cuenta: Account?,
     deudaElegida: Account?,
     destinoElegido: Account?,
+    origenElegido: Account? = null,
 ): DosPatasPropuestas? {
     if (leido == null || categoria == null || cuenta == null) return null
     fun si(operacion: OperacionDelAviso, origen: Account, destino: Account) =
@@ -80,6 +87,9 @@ fun dosPatasPropuestas(
     return when {
         esUnAvanceDeLaTarjeta(leido, categoria, cuenta) ->
             destinoElegido?.takeIf { it.currency == cuenta.currency }?.let { si(OperacionDelAviso.AVANCE, cuenta, it) }
+        esUnTraspasoQueEntra(leido, categoria, cuenta) ->
+            origenElegido?.takeIf { it.currency == cuenta.currency }
+                ?.let { si(OperacionDelAviso.TRASPASO, it, cuenta)?.copy(entrante = true) }
         leido.type != TransactionType.EXPENSE -> null
         categoria == CARD_PAYMENT_CATEGORY || categoria == CUOTA_CATEGORY -> {
             val deuda = deudaElegida ?: return null
@@ -103,6 +113,31 @@ fun dosPatasPropuestas(
 fun esUnAvanceDeLaTarjeta(leido: ParsedSms?, categoria: String?, cuenta: Account?): Boolean =
     leido != null && categoria == AVANCE_DE_TARJETA_CATEGORY && leido.type == TransactionType.INCOME &&
         cuenta?.type == AccountType.CREDIT_CARD
+
+/**
+ * **El traspaso avisado del lado que entra**: un ingreso con «Traspaso» en una cuenta suya de plata o
+ * de inversión. La otra punta —de dónde vino— la propone [origenPropuestoDelAviso] o la elige el
+ * dueño; sin ella no se confirma, porque un «Traspaso» suelto no existe.
+ */
+fun esUnTraspasoQueEntra(leido: ParsedSms?, categoria: String?, cuenta: Account?): Boolean =
+    leido?.type == TransactionType.INCOME && categoria == TRANSFER_CATEGORY &&
+        cuenta != null && cuenta.type.group != AccountGroup.DEUDA && !cuenta.esBien
+
+/** ¿La pantalla tiene que pedir «de qué cuenta vino»? En un traspaso que entra, sí. */
+fun pideLaCuentaDeOrigen(leido: ParsedSms?, categoria: String?, cuenta: Account?): Boolean =
+    esUnTraspasoQueEntra(leido, categoria, cuenta)
+
+/**
+ * **La cuenta de origen que queda propuesta** para un traspaso que entra: la cuenta propia que el
+ * server reconoció en el aviso («Recibiste $X de tu cuenta \*9586» → la Fiducuenta,
+ * [ParsedSms.traspasoDesdeId]). Nunca la misma cuenta del aviso, una deuda ni un bien. `null` si no
+ * sabe: la elige el dueño, o el aviso sigue como un ingreso.
+ */
+fun origenPropuestoDelAviso(leido: ParsedSms?, resuelta: CuentaDelBanco, accounts: List<Account>): Account? {
+    val id = leido?.traspasoDesdeId ?: return null
+    return accounts.firstOrNull { it.id == id }
+        ?.takeIf { it.id != resuelta.cuenta?.id && it.type.group != AccountGroup.DEUDA && !it.esBien }
+}
 
 /** ¿La pantalla tiene que pedir «a qué cuenta entra»? En un traspaso y en un avance, sí. */
 fun pideLaCuentaDeDestino(leido: ParsedSms?, categoria: String?, cuenta: Account?): Boolean =
@@ -150,6 +185,7 @@ fun pedidoDeDosPatas(
     origenEventId = nuevoId("ev"),
     destinoEventId = nuevoId("ev"),
     nota = leido.nota,
+    avisoDelLadoQueEntra = propuestas.entrante,
 )
 
 /** El tag del renglón «Sale de … · entra a …» en la tarjeta de resumen. */
@@ -165,6 +201,13 @@ fun tagDelDestinoElegible(id: String): String = "sms:dos-patas:destino:$id"
 fun faltaLaCuentaDeDestino(esAvance: Boolean): String =
     if (esAvance) "Elige a qué cuenta tuya entró el avance: sin eso, la deuda de la tarjeta quedaría mal."
     else "Elige a qué cuenta tuya fue la plata."
+
+/** Lo que dice la tarjeta cuando un traspaso que entra todavía no tiene la cuenta de la que vino. */
+const val FALTA_LA_CUENTA_DE_ORIGEN: String = "Elige de qué cuenta tuya vino la plata."
+
+/** Debajo de las categorías, cuando «Traspaso» sobre un ingreso no tiene todavía la cuenta de origen. */
+const val AVISO_DEL_TRASPASO_QUE_ENTRA: String =
+    "Un traspaso necesita la cuenta tuya de la que vino la plata. Si no está en Movi, créala, o elige otra categoría."
 
 /**
  * **Lo que confirmar va a crear**, dentro de la tarjeta de resumen: «Sale de Bancolombia Ahorros ·
@@ -183,6 +226,8 @@ internal fun LasDosPatasEnElResumen(
     onCambiar: () -> Unit,
     elegibles: List<Account>,
     onElegir: (Account) -> Unit,
+    /** Un traspaso que entra: lo que se elige es la cuenta de la que vino, no a la que fue. */
+    entrante: Boolean = false,
 ) {
     if (propuestas == null && !pideDestino) return
     Spacer(Modifier.height(12.dp))
@@ -190,7 +235,7 @@ internal fun LasDosPatasEnElResumen(
     Spacer(Modifier.height(12.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            propuestas?.resumen ?: faltaLaCuentaDeDestino(esAvance),
+            propuestas?.resumen ?: if (entrante) FALTA_LA_CUENTA_DE_ORIGEN else faltaLaCuentaDeDestino(esAvance),
             style = Movi.textos.apoyo,
             color = if (propuestas != null) Movi.colores.texto else Movi.colores.aviso,
             modifier = Modifier.weight(1f).testTag(TAG_RESUMEN_DE_LAS_DOS_PATAS),

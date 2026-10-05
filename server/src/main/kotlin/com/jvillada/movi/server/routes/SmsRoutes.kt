@@ -18,6 +18,7 @@ import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.server.sms.motivoParaApartar
 import com.jvillada.movi.server.sms.loQueMoviSabeDelPagoDe
+import com.jvillada.movi.server.sms.conElOrigenPropioDelIngresoDe
 import com.jvillada.movi.server.sms.numerosPropiosDe
 import com.jvillada.movi.server.sms.sinLaCuentaPropia
 import com.jvillada.movi.shared.model.MOTIVO_DEVUELTO
@@ -679,7 +680,9 @@ fun Route.smsRoutes() {
         // propia fue un depósito— lo completa lo que el dueño ya tiene en Movi. Solo para los pagos
         // de PSE: es donde falta, y así nada cambia para los demás avisos.
         val esDePse = esUnCorreoDePse(sms.text) || correoDePse != null
-        call.respond(if (esDePse) dbQuery { loQueMoviSabeDelPagoDe(uid, propuesta) } else propuesta)
+        val completa = if (esDePse) dbQuery { loQueMoviSabeDelPagoDe(uid, propuesta) } else propuesta
+        // Un ingreso que nombra como origen una cuenta suya es un traspaso (ver `ElTraspasoQueEntra.kt`).
+        call.respond(dbQuery { conElOrigenPropioDelIngresoDe(uid, completa, sms.text) })
     }
 
     get("/api/sms/{id}/coincidencias") {

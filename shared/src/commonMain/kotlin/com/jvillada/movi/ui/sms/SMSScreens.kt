@@ -691,6 +691,11 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      */
     var destinoElegidoId by remember { mutableStateOf<String?>(null) }
     var eligiendoDestino by remember { mutableStateOf(false) }
+    /**
+     * El traspaso que entra: la cuenta suya de la que vino la plata, elegida con el dedo. `null` = la
+     * que propone Movi ([origenPropuestoDelAviso]). Comparte con el destino el selector de la tarjeta.
+     */
+    var origenElegidoId by remember { mutableStateOf<String?>(null) }
 
     /**
      * Ola 2: la propuesta salió de un comprobante que el dueño compartió (ver `Papeles.kt` en
@@ -890,13 +895,31 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             selectedCategory = TRANSFER_CATEGORY
         }
     }
+    // «Recibiste $X de tu cuenta *9586 en tu cuenta *8133»: si el origen es una cuenta suya, es un
+    // traspaso que entra. Se propone una vez, igual que el de arriba; si él elige otra categoría, manda la suya.
+    val origenNombrado = origenPropuestoDelAviso(parsed, cuentaDelSms, accounts)
+    LaunchedEffect(parsed, origenNombrado?.id) {
+        val p = parsed ?: return@LaunchedEffect
+        if (p.type == TransactionType.INCOME && origenNombrado != null && selectedCategory == p.category) {
+            selectedCategory = TRANSFER_CATEGORY
+        }
+    }
     val pideDestino = pideLaCuentaDeDestino(parsed, categoriaActual, resolvedAccount)
     val destinoDeLasPatas = if (!pideDestino) null else {
         destinoElegidoId?.let { id -> accounts.firstOrNull { it.id == id } } ?: destinoNombrado
     }
-    val lasDosPatas = dosPatasPropuestas(parsed, categoriaActual, resolvedAccount, cuentaDeDeudaElegida, destinoDeLasPatas)
-    /** Un traspaso o un avance sin la cuenta a la que entró no se confirma: el avance bajaría la deuda de la tarjeta. */
-    val faltaElDestino = pideDestino && lasDosPatas == null
+    val pideOrigen = pideLaCuentaDeOrigen(parsed, categoriaActual, resolvedAccount)
+    val origenDeLasPatas = if (!pideOrigen) null else {
+        origenElegidoId?.let { id -> accounts.firstOrNull { it.id == id } } ?: origenNombrado
+    }
+    val lasDosPatas = dosPatasPropuestas(
+        parsed, categoriaActual, resolvedAccount, cuentaDeDeudaElegida, destinoDeLasPatas, origenElegido = origenDeLasPatas,
+    )
+    /**
+     * Un traspaso o un avance sin la cuenta a la que entró —o un traspaso que entra sin la cuenta de la
+     * que vino— no se confirma: el avance bajaría la deuda de la tarjeta, y un «Traspaso» suelto no existe.
+     */
+    val faltaElDestino = (pideDestino || pideOrigen) && lasDosPatas == null
 
     fun confirm() {
         if (working) return
@@ -1266,17 +1289,18 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         // Arreglo 1 de la ingesta: lo que se va a crear, antes de confirmar.
                         LasDosPatasEnElResumen(
                             propuestas = lasDosPatas,
-                            pideDestino = pideDestino,
-                            destino = destinoDeLasPatas,
+                            pideDestino = pideDestino || pideOrigen,
+                            destino = if (pideOrigen) origenDeLasPatas else destinoDeLasPatas,
                             esAvance = esUnAvanceDeLaTarjeta(p, categoriaActual, resolvedAccount),
                             eligiendo = eligiendoDestino,
                             habilitado = !working && (currentSms == null || currentSms.state == SMS_STATE_PENDING),
                             onCambiar = { eligiendoDestino = !eligiendoDestino },
                             elegibles = destinosElegibles(accounts, resolvedAccount),
                             onElegir = { cuenta ->
-                                destinoElegidoId = cuenta.id
+                                if (pideOrigen) origenElegidoId = cuenta.id else destinoElegidoId = cuenta.id
                                 eligiendoDestino = false
                             },
+                            entrante = pideOrigen,
                         )
                     }
                 }
@@ -1484,7 +1508,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 if (categoriaActual == TRANSFER_CATEGORY && parsed != null && lasDosPatas == null) {
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        avisoDelTraspaso(null, resolvedAccount),
+                        if (pideOrigen) AVISO_DEL_TRASPASO_QUE_ENTRA else avisoDelTraspaso(null, resolvedAccount),
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )

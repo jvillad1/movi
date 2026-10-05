@@ -56,6 +56,7 @@ class ReconciliarConLasDosPatasTest {
     private val otra = Account("o", "Nequi", AccountType.SAVINGS, 100_000)
     private val masterBlack = Account("m", "Master Black 3684", AccountType.CREDIT_CARD, -2_000_000)
     private val amex = Account("x", "AMEX 9208", AccountType.CREDIT_CARD, 0)
+    private val fiducuenta = Account("f", "Fiducuenta 9586", AccountType.INVESTMENT, 20_000_000)
 
     private val pagoDeTarjeta = SmsMessage(
         id = "sms_pago",
@@ -83,7 +84,7 @@ class ReconciliarConLasDosPatasTest {
     private inner class Repo(private val sms: SmsMessage, private val leido: ParsedSms) : RepositorioDePrueba() {
         val conPatas = mutableListOf<Pair<String, DosPatasDelAviso>>()
         val sueltos = mutableListOf<FinancialEvent>()
-        override suspend fun getAccounts(): List<Account> = listOf(ahorros, otra, masterBlack, amex)
+        override suspend fun getAccounts(): List<Account> = listOf(ahorros, otra, masterBlack, amex, fiducuenta)
         override suspend fun getSms(id: String): SmsMessage = sms
         override suspend fun parseSms(id: String): ParsedSms = leido
         override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = emptyList()
@@ -154,6 +155,29 @@ class ReconciliarConLasDosPatasTest {
         tocar("Confirmar")
         assertEquals(1, repo.sueltos.size)
         assertTrue(repo.conPatas.isEmpty())
+    }
+
+    @Test
+    fun el_aviso_que_entra_desde_una_cuenta_propia_se_confirma_como_traspaso() {
+        // Sintético, con la forma del brief: el aviso del lado que recibe nombra de dónde vino.
+        val recibido = pagoDeTarjeta.copy(
+            id = "sms_recibido",
+            text = "Bancolombia: Recibiste \$500.000 de tu cuenta *9586 en tu cuenta *8133 el 04/10/2026 a las 10:15.",
+        )
+        val leido = ParsedSms(500_000.0, "Desde Fiducuenta 9586", TransactionType.INCOME, "Transferencia", traspasoDesdeId = fiducuenta.id)
+        val repo = Repo(recibido, leido)
+        montar(repo, recibido.id)
+
+        composeRule.onNodeWithTag(TAG_RESUMEN_DE_LAS_DOS_PATAS)
+            .assertTextEquals("Sale de Fiducuenta 9586 · entra a Bancolombia Ahorros 8133 como traspaso")
+        tocar("Confirmar")
+
+        assertEquals(0, repo.sueltos.size, "no se anota un ingreso suelto")
+        val (_, patas) = repo.conPatas.single()
+        assertEquals(OperacionDelAviso.TRASPASO, patas.operacion)
+        assertEquals(fiducuenta.id, patas.origenId)
+        assertEquals(ahorros.id, patas.destinoId)
+        assertTrue(patas.avisoDelLadoQueEntra)
     }
 
     private fun montar(repo: Repo, smsId: String) {
