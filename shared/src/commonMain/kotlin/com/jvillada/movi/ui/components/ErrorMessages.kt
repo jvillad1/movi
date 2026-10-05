@@ -7,7 +7,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.shared.model.esCodigoDeIaNoDisponible
 import com.jvillada.movi.shared.repository.ApiException
+
+/**
+ * Lo que dice la app cuando el server contestó 503 con `IA_SIN_CREDITO` / `IA_NO_DISPONIBLE`: la
+ * API de Anthropic no contestó por la cuenta, no por el archivo. Ver `LaIaNoEstaDisponible.kt` en
+ * `:core`. «Compartir con Movi» y Movi AI tienen su propia frase, más precisa.
+ */
+const val LA_IA_NO_ESTA_DISPONIBLE: String = "La lectura con IA no está disponible ahora. Inténtalo más tarde."
+
+/** ¿Es el 503 del server que dice que la IA no está disponible? */
+fun Throwable.esIaNoDisponible(): Boolean =
+    this is ApiException && status == 503 && esCodigoDeIaNoDisponible(serverMessage)
 
 fun Throwable.toUserMessage(): String {
     // Cuando el server explicó el rechazo en el cuerpo, eso gana: es más específico que
@@ -32,6 +44,7 @@ fun Throwable.toUserMessage(): String {
     // de la plataforma, sin código HTTP ninguno.
     if (this is ApiException) {
         return when {
+            esIaNoDisponible() -> LA_IA_NO_ESTA_DISPONIBLE
             status == 401 -> "Sesión expirada. Inicia sesión de nuevo."
             status == 403 -> "No tienes permiso para hacer esto."
             status == 404 -> "Recurso no encontrado."

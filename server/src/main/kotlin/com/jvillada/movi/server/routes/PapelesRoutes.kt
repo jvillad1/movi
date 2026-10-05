@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
+import com.jvillada.movi.server.ai.MODELO_DE_EXTRACTOS
+import com.jvillada.movi.server.ai.conLaIa
 import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
@@ -190,12 +191,27 @@ internal suspend fun leerElPapel(
             val leido = try {
                 leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true)
             } catch (e: FallaAlProcesarExtracto) {
+                // «Extracto sin movimientos» está escrito para quien SUBIÓ un extracto («revisa que
+                // sea el del detalle»). Acá el dueño compartió un papel y fue Movi quien decidió que
+                // era un extracto: lo honesto es decir que el papel no muestra movimientos.
+                if (e.mensaje == EXTRACTO_SIN_MOVIMIENTOS) {
+                    throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_MOVIMIENTO)
+                }
                 throw FallaAlLeerElPapel(e.status, e.mensaje)
+            }
+            // **Un extracto vacío no abre la revisión.** Una revisión en «0 nuevas · 0
+            // coincidencias» se lee como «este mes ya estaba conciliado». Pasaba con el extracto del
+            // crédito del vehículo: cuota, saldo y tasa, sin lista de movimientos, que ni
+            // `detectDocumentType` ni el clasificador reconocían. `leerElExtracto` ya lo frena hoy
+            // (ver `fallaDeLaLectura`); esto es la red por si ese camino cambia, y además no deja
+            // guardada una lectura vacía que tape un reintento.
+            if (leido.filas.isEmpty() && !leido.esFamirios) {
+                throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_MOVIMIENTO)
             }
             dbQuery {
                 guardarLectura(
                     uid, huella, papel.id, QueEsElPapel.EXTRACTO, json.encodeToString(ExtractoLeido.serializer(), leido),
-                    if (leido.esFamirios) "famirios" else MODELO_DE_RESPALDO,
+                    if (leido.esFamirios) "famirios" else MODELO_DE_EXTRACTOS,
                 )
             }
             LecturaDelPapel(
@@ -242,7 +258,7 @@ private suspend fun clasificar(papel: PapelGuardado): Clasificado {
     if (esImagenParaExtraer(papel.nombre, papel.mime, mimeEsConfiable = true)) {
         val mime = ClaudeStatementParser.supportedImageMime(papel.mime, papel.nombre)
             ?: throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_IMAGEN_NO_SOPORTADA)
-        return deLoQueDijo(LectorDePapeles.actual.queEs(ContenidoDelPapel.Imagen(papel.bytes, mime)))
+        return deLoQueDijo(preguntarQueEs(ContenidoDelPapel.Imagen(papel.bytes, mime)))
     }
     val paraExtraer = nombreParaExtraerTexto(papel.nombre, papel.mime, mimeEsConfiable = true)
     when (paraExtraer.substringAfterLast('.', "").lowercase()) {
@@ -262,8 +278,18 @@ private suspend fun clasificar(papel: PapelGuardado): Clasificado {
     }
     if (texto.isBlank()) throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_TEXTO)
     if (pareceUnExtracto(texto)) return Clasificado.Extracto
-    return deLoQueDijo(LectorDePapeles.actual.queEs(ContenidoDelPapel.Texto(texto)))
+    return deLoQueDijo(preguntarQueEs(ContenidoDelPapel.Texto(texto)))
 }
+
+/**
+ * La clasificación, con la falla de la cuenta de Anthropic dicha como tal: 503 con el código
+ * (`IA_SIN_CREDITO` / `IA_NO_DISPONIBLE`), que la app traduce a «La lectura con IA no está
+ * disponible ahora…». El documento ya quedó guardado antes de esto, y no se guarda ninguna lectura.
+ */
+private suspend fun preguntarQueEs(contenido: ContenidoDelPapel): QueDiceElPapel =
+    conLaIa("clasificar un papel", { throw FallaAlLeerElPapel(HttpStatusCode.ServiceUnavailable, it.codigo) }) {
+        LectorDePapeles.actual.queEs(contenido)
+    }
 
 /** ¿La falla al abrir el PDF es su contraseña? PDFBox lanza [InvalidPasswordException]. */
 private fun tieneContrasena(e: Throwable): Boolean =

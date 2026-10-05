@@ -20,6 +20,8 @@ import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.IA_NO_DISPONIBLE
+import com.jvillada.movi.shared.model.IA_SIN_CREDITO
 import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
 import com.jvillada.movi.shared.model.NO_SE_PUDO_LEER_EL_PAPEL
@@ -137,6 +139,23 @@ class CompartirConMoviTest {
         assertTrue(resultado.guardado)
         assertEquals("Este PDF tiene contraseña y Movi no puede abrirlo.", resultado.motivo)
         assertEquals(NO_SE_PUDO_LEER_EL_PAPEL, tituloDelResultado(resultado))
+    }
+
+    @Test
+    fun si_la_ia_no_esta_disponible_lo_dice_y_que_el_archivo_quedo_guardado() = runBlocking {
+        listOf(IA_SIN_CREDITO, IA_NO_DISPONIBLE).forEach { codigo ->
+            val repo = RepoDePapeles(subir = { documento }, leer = { throw ApiException(503, codigo) })
+            val resultado = assertIs<ResultadoDelPapel.NoSePudo>(leerUnPapel(repo, archivo()))
+            assertTrue(resultado.guardado)
+            assertEquals(
+                "La lectura con IA no está disponible ahora. Tu archivo quedó guardado en Documentos.",
+                resultado.motivo,
+            )
+        }
+        // Un 503 cualquiera (el proxy de Railway, un despliegue) sigue siendo un error del server.
+        val repo = RepoDePapeles(subir = { documento }, leer = { throw ApiException(503, "<html>Bad gateway</html>") })
+        val resultado = assertIs<ResultadoDelPapel.NoSePudo>(leerUnPapel(repo, archivo()))
+        assertEquals("Error en el servidor. Intenta en unos minutos.", resultado.motivo)
     }
 
     @Test

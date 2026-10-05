@@ -947,6 +947,12 @@ data class AiChatResponse(
      * APK viejo lo ignora (`ignoreUnknownKeys`) y sigue viendo solo el texto.
      */
     val propuestas: List<AccionPropuesta> = emptyList(),
+    /**
+     * `null` casi siempre. [IA_SIN_CREDITO] o [IA_NO_DISPONIBLE] cuando la API de Anthropic no
+     * contestó por la cuenta (sin saldo, clave rechazada, saturada): la app muestra entonces su
+     * propia frase en vez de [text]. Un APK viejo lo ignora y muestra [text], que dice lo mismo.
+     */
+    val codigo: String? = null,
 )
 
 /**

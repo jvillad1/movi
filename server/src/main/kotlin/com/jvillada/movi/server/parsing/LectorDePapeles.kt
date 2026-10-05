@@ -147,9 +147,25 @@ private fun comprobanteDe(o: JsonObject): QueDiceElPapel.Comprobante? {
     )
 }
 
-/** Una línea con una fecha y un monto: la forma de una fila de extracto. */
+/**
+ * Una línea con una fecha y un monto: la forma de una fila de extracto.
+ *
+ * Las fechas que reconoce, cada una sacada de un extracto real del dueño (benchmark 2026-10-04: con
+ * solo las dos primeras reconocía 2 de 10 extractos, y los otros 8 pagaban una clasificación de más):
+ * - `15/07`, `15/07/2026`, `15-07-26` — las tarjetas de Bancolombia;
+ * - `2026-09-07` y `2026/09/07` — ISO, y el CSV de Davibank;
+ * - `06 sept 2026`, `21 AGO 2026` — el listado de Bancolombia y la Nu;
+ * - `20260828` — Davivienda.
+ */
 private val FILA_CON_FECHA_Y_MONTO = Regex(
-    """(\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b|\b\d{4}-\d{2}-\d{2}\b).*\d{1,3}([.,]\d{3})+""",
+    "(" +
+        """\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b""" +
+        """|\b\d{4}[-/]\d{2}[-/]\d{2}\b""" +
+        """|\b\d{1,2}\s+(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*\.?\s+\d{4}\b""" +
+        """|\b20\d{6}\b""" +
+        ")" +
+        """.*\d{1,3}([.,]\d{3})+""",
+    RegexOption.IGNORE_CASE,
 )
 
 /**

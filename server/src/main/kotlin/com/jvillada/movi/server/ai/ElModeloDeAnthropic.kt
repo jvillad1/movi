@@ -143,6 +143,9 @@ internal class ElModeloDeAnthropic(
             llamar(armar(modelo))
         } catch (falla: Exception) {
             val respaldo = modeloDeRespaldo ?: throw falla
+            // Sin saldo o con la clave rechazada, el respaldo falla igual —es la misma cuenta— y
+            // solo duplica la espera. Ver `FallaDeLaIa.sirveOtroModelo`.
+            if (fallaDeLaIa(falla)?.sirveOtroModelo == false) throw falla
             llamar(armar(respaldo))
         }
         ultima = respuesta

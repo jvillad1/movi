@@ -11,6 +11,7 @@ import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.repository.WalletRepository
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.esIaNoDisponible
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.CancellationException
 
@@ -92,6 +93,17 @@ sealed interface ResultadoDelPapel {
     data class NoSePudo(override val nombre: String, val motivo: String, val guardado: Boolean) : ResultadoDelPapel
 }
 
+/**
+ * La API de Anthropic no contestó por la cuenta (sin saldo, clave, saturada). El documento sí se
+ * guardó —eso pasa antes de leerlo—, así que se puede prometer.
+ */
+const val LECTURA_CON_IA_NO_DISPONIBLE: String =
+    "La lectura con IA no está disponible ahora. Tu archivo quedó guardado en Documentos."
+
+/** Por qué no se pudo leer un papel que ya quedó guardado, en las palabras de la app. */
+fun motivoAlLeerElPapel(e: Throwable): String =
+    if (e.esIaNoDisponible()) LECTURA_CON_IA_NO_DISPONIBLE else e.toUserMessage()
+
 /** Qué resultado es una lectura del server. */
 fun resultadoDe(nombre: String, lectura: LecturaDelPapel): ResultadoDelPapel = when {
     lectura.que == QueEsElPapel.EXTRACTO -> ResultadoDelPapel.Extracto(nombre, lectura)
@@ -126,7 +138,7 @@ suspend fun leerUnPapel(repo: WalletRepository, archivo: ArchivoCompartido): Res
     } catch (e: CancellationException) {
         throw e
     } catch (e: Throwable) {
-        ResultadoDelPapel.NoSePudo(archivo.nombre, e.toUserMessage(), guardado = true)
+        ResultadoDelPapel.NoSePudo(archivo.nombre, motivoAlLeerElPapel(e), guardado = true)
     }
 }
 
