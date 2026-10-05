@@ -497,7 +497,9 @@ internal fun BotonDeGuardar(texto: String, habilitado: Boolean, onClick: () -> U
             .fillMaxWidth()
             .height(alto.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(if (habilitado) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            // Sólido, como «Confirmar» en Reconciliar: el tonal de antes (marca al 16 %) se leía como un
+            // botón apagado aun habilitado (auditoría de Personas y comercios, 4-oct-2026).
+            .background(if (habilitado) Movi.colores.texto else Movi.colores.tarjeta)
             .clickable(enabled = habilitado, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -505,7 +507,7 @@ internal fun BotonDeGuardar(texto: String, habilitado: Boolean, onClick: () -> U
             text = texto,
             style = Movi.textos.titulo,
             fontWeight = FontWeight.Medium,
-            color = if (habilitado) Movi.colores.marca else Movi.colores.textoApagado,
+            color = if (habilitado) Movi.colores.fondo else Movi.colores.textoApagado,
         )
     }
 }
