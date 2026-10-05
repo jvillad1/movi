@@ -22,6 +22,8 @@ import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.DosPatasDelAviso
+import com.jvillada.movi.shared.model.OperacionDelAviso
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.GrupoDeAvisos
 import com.jvillada.movi.shared.model.MismoPagoConfirmado
@@ -270,5 +272,46 @@ class ElPagoPorPseDePuntaAPuntaTest {
         assertTrue(despues.occurred, "y está pagada")
         assertEquals(YearMonth.from(hoy).toString(), despues.period)
         assertEquals("ev-cuota-pse-deuda", despues.eventId)
+    }
+
+    /**
+     * Lo mismo con la app nueva (arreglo 1 de la ingesta): un solo pedido con las dos patas, sin el
+     * `vincular-deuda` de después. La cuota del período queda marcada igual, porque las patas salen de
+     * la misma función (`pagoDeCuotaLegs`) que lee `PagosDeDeuda.kt`.
+     */
+    @Test
+    fun `confirmar la cuota con las dos patas marca la fila del periodo en un solo paso`() = testApplication {
+        application { testModule() }
+        val reglaDelCredito = "$CREDIT_RULE_PREFIX$vehiculo"
+        val grupoId = assertNotNull(leer<List<SmsMessage>>("/api/sms").first { it.id == "sms_rt_occidente" }.grupoId)
+        val grupo = leer<GrupoDeAvisos>("/api/sms/grupo/$grupoId")
+        val p = leer<ParsedSms>("/api/sms/${grupo.propuestaDe}/parse")
+
+        val patas = DosPatasDelAviso(
+            operacion = OperacionDelAviso.CUOTA,
+            origenId = assertNotNull(p.cuentaSugeridaId),
+            destinoId = assertNotNull(p.deudaSugeridaId),
+            monto = cuota,
+            timestamp = appDateToEpochMillis(hoy),
+            transferId = "tr-pse-patas",
+            origenEventId = "ev-pse-patas-dinero",
+            destinoEventId = "ev-pse-patas-deuda",
+            nota = p.nota,
+        )
+        val confirmado = cliente().post("/api/sms/grupo/$grupoId/confirmar") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(ConfirmarElMismoPago(grupo.miembros.map { it.id }, patas = patas))
+        }
+        assertEquals(HttpStatusCode.OK, confirmado.status)
+        val hecho = confirmado.body<MismoPagoConfirmado>()
+        assertEquals(listOf("ev-pse-patas-dinero", "ev-pse-patas-deuda"), hecho.patas)
+        assertEquals(setOf("sms_rt_occidente", "correo_pse_occidente"), hecho.cerrados.toSet())
+
+        val despues = leer<List<OccurrenceState>>("/api/payments/occurrences").firstOrNull { it.ruleId == reglaDelCredito }
+        assertNotNull(despues, "la cuota del período aparece")
+        assertTrue(despues.occurred, "y está pagada, sin ningún paso más")
+        assertEquals(YearMonth.from(hoy).toString(), despues.period)
+        assertEquals("ev-pse-patas-deuda", despues.eventId)
     }
 }
