@@ -28,11 +28,13 @@ object Avisador {
     const val CANAL_MOVIMIENTOS = "movimientos"
     const val CANAL_VENCIMIENTOS = "vencimientos"
     const val CANAL_CAPTURA = "captura"
+    const val CANAL_DEBITOS = "debitos"
 
     /** Un id fijo por tipo: la notificación de «Por revisar» se reemplaza, no se apila. */
     private const val ID_MOVIMIENTOS = 7101
     private const val ID_VENCIMIENTOS = 7102
     private const val ID_BANCO_MUDO = 7103
+    private const val ID_DEBITOS = 7104
 
     /** Idempotente: Android ignora crear un canal que ya existe (solo actualiza su nombre). */
     fun crearCanales(context: Context) {
@@ -51,6 +53,11 @@ object Avisador {
         gestor.createNotificationChannel(
             NotificationChannel(CANAL_CAPTURA, "La captura del banco", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Cuando un banco que avisaba siempre lleva días sin mandar nada."
+            },
+        )
+        gestor.createNotificationChannel(
+            NotificationChannel(CANAL_DEBITOS, "Débitos automáticos", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "El día que el banco debió cobrar solo una cuota o un pago, para confirmar si se cobró."
             },
         )
     }
@@ -81,6 +88,11 @@ object Avisador {
     /** Ola 2: avisa que un banco dejó de mandar avisos (ver `textoDeBancosMudos`). Tocarla abre la captura. */
     fun avisarBancoMudo(context: Context, texto: TextoDeAviso) {
         publicar(context, ID_BANCO_MUDO, CANAL_CAPTURA, texto, ABRIR_CAPTURA, cuantos = maxOf(1, texto.lineas.size))
+    }
+
+    /** Avisa lo que el banco debió cobrar solo (ver `textoDeDebitosAutomaticos`). Tocarla abre «Por revisar». */
+    fun avisarDebitosAutomaticos(context: Context, texto: TextoDeAviso) {
+        publicar(context, ID_DEBITOS, CANAL_DEBITOS, texto, ABRIR_POR_REVISAR, cuantos = maxOf(1, texto.lineas.size))
     }
 
     /**
@@ -122,7 +134,7 @@ object Avisador {
             .setAutoCancel(true)
             // Montos y nombres de destinatarios: en la pantalla bloqueada, solo que hay un aviso.
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setCategory(if (canal == CANAL_VENCIMIENTOS) NotificationCompat.CATEGORY_REMINDER else NotificationCompat.CATEGORY_STATUS)
+            .setCategory(if (canal == CANAL_VENCIMIENTOS || canal == CANAL_DEBITOS) NotificationCompat.CATEGORY_REMINDER else NotificationCompat.CATEGORY_STATUS)
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(id, aviso) }
             .onFailure { Log.w(TAG, "no se pudo publicar el aviso $id", it) }

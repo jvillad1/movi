@@ -56,6 +56,10 @@ enum class OperacionDelAviso {
  * @property montoEnLaMonedaDeLaDeuda solo para pagar una tarjeta en otra moneda (ver
  *   [CreatePagoDeCuotaRequest.montoEnLaMonedaDeLaDeuda]). Si no viene, el server lo convierte con la
  *   TRM del día, igual que `vincular-deuda`.
+ * @property avisoDelLadoQueEntra el aviso es del lado que RECIBE la plata («Recibiste $X de tu cuenta
+ *   \*9586»): en un [OperacionDelAviso.TRASPASO], el aviso queda enlazado a la pata que entra a
+ *   [destinoId], que es el movimiento que describe. Falso por defecto: lo de siempre, el aviso de lo
+ *   que sale.
  */
 @Serializable
 data class DosPatasDelAviso(
@@ -70,15 +74,18 @@ data class DosPatasDelAviso(
     val nota: String? = null,
     val montoEnLaMonedaDeLaDeuda: Long? = null,
     val interesReal: Long? = null,
+    val avisoDelLadoQueEntra: Boolean = false,
 )
 
 /**
  * **El id de la pata que queda enlazada al aviso** (`sms_messages.evento_id`): la de la cuenta de
- * dinero, que es el movimiento que el aviso describe. En un avance es la que ENTRA a la cuenta; en lo
- * demás, la que sale de ella.
+ * dinero, que es el movimiento que el aviso describe. En un avance —y en un traspaso avisado del lado
+ * que recibe ([DosPatasDelAviso.avisoDelLadoQueEntra])— es la que ENTRA a la cuenta; en lo demás, la
+ * que sale de ella.
  */
 val DosPatasDelAviso.pataDelAviso: String
-    get() = if (operacion == OperacionDelAviso.AVANCE) destinoEventId else origenEventId
+    get() = if (operacion == OperacionDelAviso.AVANCE || (avisoDelLadoQueEntra && operacion == OperacionDelAviso.TRASPASO)) destinoEventId
+        else origenEventId
 
 /**
  * **¿Qué operación de dos patas admite este par de cuentas?** `null` si ninguna: dos deudas, la misma

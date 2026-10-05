@@ -949,6 +949,14 @@ data class ParsedSms(
      * NU» → la cuenta «Nu»). Con ella la app anota un traspaso, que no cuenta como gasto.
      */
     val traspasoHaciaId: String? = null,
+    /**
+     * **La cuenta propia de la que vino la plata**, cuando un ingreso nombra su origen y ese origen es
+     * del dueño («Recibiste $500.000 de tu cuenta \*9586 en tu cuenta \*8133» → la «Fiducuenta
+     * 9586»). Con ella la app propone un traspaso —sale de esa cuenta, entra a la del aviso— en vez
+     * de un ingreso suelto. Lo llena el server con [cuentaPropiaDeLaQueVinoElIngreso]; un APK viejo
+     * lo ignora.
+     */
+    val traspasoDesdeId: String? = null,
 )
 
 @Serializable

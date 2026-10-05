@@ -421,6 +421,12 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getAnomalias() }
                     .onSuccess { a -> data = data.copy(anomalias = a); llegado = llegado.copy(anomalias = a) }
             }
+            // Lo que el banco cobra solo (#440): el día del débito, «Para revisar» lleva a confirmarlo.
+            // Aparte y secundario, como las anomalías: si falla, no se dice nada de esto esta vez.
+            launch {
+                runCatching { Repositories.wallets.getDebitosAutomaticos() }
+                    .onSuccess { d -> data = data.copy(debitosPorConfirmar = d); llegado = llegado.copy(debitosPorConfirmar = d) }
+            }
             // 4-oct-2026: las cuentas a las que les envía plata sin nombre. Secundario, como las
             // anomalías: si falla, «Para revisar» sigue sin este aviso.
             launch {

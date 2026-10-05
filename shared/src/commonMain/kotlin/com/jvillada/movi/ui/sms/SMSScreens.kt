@@ -87,6 +87,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.quickadd.simboloDeMoneda
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.model.fechaCortaDeSms
@@ -691,6 +692,16 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      */
     var destinoElegidoId by remember { mutableStateOf<String?>(null) }
     var eligiendoDestino by remember { mutableStateOf(false) }
+    /**
+     * El traspaso que entra: la cuenta suya de la que vino la plata, elegida con el dedo. `null` = la
+     * que propone Movi ([origenPropuestoDelAviso]). Comparte con el destino el selector de la tarjeta.
+     */
+    var origenElegidoId by remember { mutableStateOf<String?>(null) }
+    /**
+     * Pagar una tarjeta en otra moneda: lo que el dueño escribió en «¿Cuánto bajó la deuda en USD?».
+     * `null` = vacío, y el server convierte con la tasa del día (sin ella contesta 422 y lo pide).
+     */
+    var montoEnLaDeuda by remember { mutableStateOf<Long?>(null) }
 
     /**
      * Ola 2: la propuesta salió de un comprobante que el dueño compartió (ver `Papeles.kt` en
@@ -890,13 +901,31 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             selectedCategory = TRANSFER_CATEGORY
         }
     }
+    // «Recibiste $X de tu cuenta *9586 en tu cuenta *8133»: si el origen es una cuenta suya, es un
+    // traspaso que entra. Se propone una vez, igual que el de arriba; si él elige otra categoría, manda la suya.
+    val origenNombrado = origenPropuestoDelAviso(parsed, cuentaDelSms, accounts)
+    LaunchedEffect(parsed, origenNombrado?.id) {
+        val p = parsed ?: return@LaunchedEffect
+        if (p.type == TransactionType.INCOME && origenNombrado != null && selectedCategory == p.category) {
+            selectedCategory = TRANSFER_CATEGORY
+        }
+    }
     val pideDestino = pideLaCuentaDeDestino(parsed, categoriaActual, resolvedAccount)
     val destinoDeLasPatas = if (!pideDestino) null else {
         destinoElegidoId?.let { id -> accounts.firstOrNull { it.id == id } } ?: destinoNombrado
     }
-    val lasDosPatas = dosPatasPropuestas(parsed, categoriaActual, resolvedAccount, cuentaDeDeudaElegida, destinoDeLasPatas)
-    /** Un traspaso o un avance sin la cuenta a la que entró no se confirma: el avance bajaría la deuda de la tarjeta. */
-    val faltaElDestino = pideDestino && lasDosPatas == null
+    val pideOrigen = pideLaCuentaDeOrigen(parsed, categoriaActual, resolvedAccount)
+    val origenDeLasPatas = if (!pideOrigen) null else {
+        origenElegidoId?.let { id -> accounts.firstOrNull { it.id == id } } ?: origenNombrado
+    }
+    val lasDosPatas = dosPatasPropuestas(
+        parsed, categoriaActual, resolvedAccount, cuentaDeDeudaElegida, destinoDeLasPatas, origenElegido = origenDeLasPatas,
+    )
+    /**
+     * Un traspaso o un avance sin la cuenta a la que entró —o un traspaso que entra sin la cuenta de la
+     * que vino— no se confirma: el avance bajaría la deuda de la tarjeta, y un «Traspaso» suelto no existe.
+     */
+    val faltaElDestino = (pideDestino || pideOrigen) && lasDosPatas == null
 
     fun confirm() {
         if (working) return
@@ -917,6 +946,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         // Se lee ACÁ, antes del `coroutine.launch`: si el dueño toca dos veces rápido, la segunda
         // pasada no puede ver un estado que la primera ya limpió a mitad de camino.
         val dosPatas = lasDosPatas
+        val enLaDeuda = montoEnLaDeuda
         // Un traspaso o un avance sin la cuenta a la que entró: el botón ya está apagado.
         if (faltaElDestino) return
         working = true
@@ -940,7 +970,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     // Las dos patas en una transacción del server, con este aviso (o todos los del
                     // pago) enlazados a la del dinero. Un doble toque no crea otras: el server ve el
                     // aviso ya anotado y contesta con las mismas.
-                    val pedido = pedidoDeDosPatas(dosPatas, p, momento, ::newId)
+                    val pedido = pedidoDeDosPatas(dosPatas, p, momento, montoEnLaMonedaDeLaDeuda = enLaDeuda, nuevoId = ::newId)
                     val elPago = pagoActual
                     if (elPago != null) {
                         Repositories.wallets.confirmarElMismoPago(elPago.grupoId, ConfirmarElMismoPago(idsDelPago, patas = pedido))
@@ -1266,17 +1296,18 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         // Arreglo 1 de la ingesta: lo que se va a crear, antes de confirmar.
                         LasDosPatasEnElResumen(
                             propuestas = lasDosPatas,
-                            pideDestino = pideDestino,
-                            destino = destinoDeLasPatas,
+                            pideDestino = pideDestino || pideOrigen,
+                            destino = if (pideOrigen) origenDeLasPatas else destinoDeLasPatas,
                             esAvance = esUnAvanceDeLaTarjeta(p, categoriaActual, resolvedAccount),
                             eligiendo = eligiendoDestino,
                             habilitado = !working && (currentSms == null || currentSms.state == SMS_STATE_PENDING),
                             onCambiar = { eligiendoDestino = !eligiendoDestino },
                             elegibles = destinosElegibles(accounts, resolvedAccount),
                             onElegir = { cuenta ->
-                                destinoElegidoId = cuenta.id
+                                if (pideOrigen) origenElegidoId = cuenta.id else destinoElegidoId = cuenta.id
                                 eligiendoDestino = false
                             },
+                            entrante = pideOrigen,
                         )
                     }
                 }
@@ -1484,7 +1515,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 if (categoriaActual == TRANSFER_CATEGORY && parsed != null && lasDosPatas == null) {
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        avisoDelTraspaso(null, resolvedAccount),
+                        if (pideOrigen) AVISO_DEL_TRASPASO_QUE_ENTRA else avisoDelTraspaso(null, resolvedAccount),
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )
@@ -1497,6 +1528,24 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         seleccionada = cuentaDeDeudaElegida,
                         onSeleccionar = { deudaTocadaAMano = true; cuentaDeDeudaElegida = it },
                     )
+                }
+
+                // Pagar una tarjeta en otra moneda (hueco de #439): el aviso dice lo que salió de la
+                // cuenta; cuánto bajó la deuda lo dice el banco. Sin la tasa del día el server no lo
+                // inventa y lo pide: este es el lugar donde escribirlo.
+                val pagoEntreMonedas = lasDosPatas?.takeIf { pideElMontoEnLaMonedaDeLaDeuda(it) }
+                if (pagoEntreMonedas != null) {
+                    Spacer(Modifier.height(14.dp))
+                    MoneyField(
+                        value = montoEnLaDeuda,
+                        onValueChange = { montoEnLaDeuda = it },
+                        label = rotuloDelMontoEnLaDeuda(pagoEntreMonedas.destino.currency),
+                        placeholder = simboloDeMoneda(pagoEntreMonedas.destino.currency) + " 0",
+                        prefix = simboloDeMoneda(pagoEntreMonedas.destino.currency),
+                        modifier = Modifier.testTag(TAG_MONTO_EN_LA_MONEDA_DE_LA_DEUDA),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(AYUDA_DEL_MONTO_EN_LA_DEUDA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
 
                 if (error != null) {

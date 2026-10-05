@@ -30,6 +30,8 @@ object PreferenciasDeAvisos {
     private const val KEY_HUELLA_VENCIMIENTOS = "huella_vencimientos"
     private const val KEY_BANCO_MUDO = "avisar_banco_mudo"
     private const val KEY_HUELLA_BANCO_MUDO = "huella_banco_mudo"
+    private const val KEY_DEBITOS = "avisar_debitos_automaticos"
+    private const val KEY_DEBITOS_AVISADOS = "debitos_automaticos_avisados"
 
     private val json = Json { ignoreUnknownKeys = true }
     private val listaDeAvisos = ListSerializer(AvisoPorRevisar.serializer())
@@ -58,6 +60,25 @@ object PreferenciasDeAvisos {
     fun huellaDeBancoMudo(context: Context): String? = prefs(context).getString(KEY_HUELLA_BANCO_MUDO, null)
     fun guardarHuellaDeBancoMudo(context: Context, huella: String) {
         prefs(context).edit().putString(KEY_HUELLA_BANCO_MUDO, huella).apply()
+    }
+
+    /** «Avisarme el día de un débito automático». Encendido por defecto, como los otros. */
+    fun avisarDebitos(context: Context): Boolean = prefs(context).getBoolean(KEY_DEBITOS, true)
+    fun ponerAvisarDebitos(context: Context, valor: Boolean) {
+        prefs(context).edit().putBoolean(KEY_DEBITOS, valor).apply()
+    }
+
+    /**
+     * Las claves (regla@período) de los débitos automáticos que este teléfono ya avisó, de la más
+     * vieja a la más nueva (ver `debitosParaAvisar` y `recordarDebitosAvisados`).
+     */
+    fun debitosAvisados(context: Context): List<String> =
+        prefs(context).getString(KEY_DEBITOS_AVISADOS, null)
+            ?.split('\n')?.filter { it.isNotBlank() }
+            .orEmpty()
+
+    fun guardarDebitosAvisados(context: Context, claves: List<String>) {
+        prefs(context).edit().putString(KEY_DEBITOS_AVISADOS, claves.joinToString("\n")).apply()
     }
 
     /** La tarjeta de Hoy ya se contestó («Activar avisos» o «Ahora no»): no vuelve a salir. */

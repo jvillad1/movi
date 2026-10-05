@@ -54,3 +54,17 @@ suspend fun leerOrigenesMudos(): List<com.jvillada.movi.shared.model.OrigenMudo>
         cliente.close()
     }
 }
+
+/**
+ * **Lo que el banco debió cobrar solo y nadie confirmó**, leído desde un Worker (`GET
+ * /api/debitos-automaticos`, la misma lista que pinta «Por revisar»). Contra el server directo, por lo
+ * mismo que [leerPagosDelPeriodo]. Lanza si la lectura falla; quien llama decide reintentar.
+ */
+suspend fun leerDebitosAutomaticos(): List<com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar> {
+    val cliente = createHttpClient()
+    try {
+        return WalletRepositoryImpl(cliente, apiBaseUrl).getDebitosAutomaticos()
+    } finally {
+        cliente.close()
+    }
+}

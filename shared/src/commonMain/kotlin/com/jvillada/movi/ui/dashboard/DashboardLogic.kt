@@ -169,6 +169,13 @@ data class DashboardData(
      * `GET /api/destinos/sugeridos` con algo enviado). Cero mientras no llegó: no se avisa nada.
      */
     val cuentasDeOtrosSinNombre: Int = 0,
+    /**
+     * **Lo que el banco debió cobrar solo y nadie confirmó** (`GET /api/debitos-automaticos`, la misma
+     * lista del bloque «Lo que el banco cobró solo» de «Por revisar»). Se pide aparte, como las
+     * anomalías: no entra en `/api/dashboard/summary`, que es la ruta caliente. `null` = no llegó, y
+     * «Para revisar» no dice nada de esto.
+     */
+    val debitosPorConfirmar: List<com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar>? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -892,6 +899,7 @@ internal fun cosasParaRevisarDe(
     avisoDeCuadre = textoDelAvisoDeCuadre(cuentasSinCuadrar(data.accounts.orEmpty(), ahora)),
     bancosMudos = data.bancosMudos,
     cuentasDeOtrosSinNombre = data.cuentasDeOtrosSinNombre,
+    debitosPorConfirmar = data.debitosPorConfirmar.orEmpty(),
 )
 
 /**

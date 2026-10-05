@@ -32,6 +32,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MismoPagoConfirmado
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.OperacionDelAviso
+import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -104,6 +105,9 @@ class LasDosPatasDelAvisoTest {
     private val textoDelRetiro = "Bancolombia: Retiraste \$4.200.000 de tu cuenta *9586 Fiducuenta hacia la cuenta *02955068133"
     private val textoDelAvance = "Bancolombia: Hiciste un avance de \$6,200,000 en tu SUC VIRTUAL desde tu T.Credito *9208 a la cuenta *8133."
     private val textoDeLaCuota = "Bancolombia: Pagaste \$4,178,163.00 a Banco de Occidente S A ATH desde tu producto 8133"
+    // Sintéticos, con la forma del brief: el aviso del lado que ENTRA, que nombra de dónde vino.
+    private val textoDelRecibidoPropio = "Bancolombia: Recibiste \$500.000 de tu cuenta *9586 en tu cuenta *8133 el 04/10/2026 a las 10:15."
+    private val textoDelRecibidoAjeno = "Bancolombia: Recibiste \$80.000 de la cuenta *4321 en tu cuenta *8133 el 04/10/2026 a las 10:20."
 
     @BeforeTest
     fun setUp() {
@@ -157,6 +161,8 @@ class LasDosPatasDelAvisoTest {
             aviso("sms_cuota", textoDeLaCuota, hora)
             aviso("correo_cuota", "Pago PSE · Banco de Occidente · \$ 4.178.163,00", hora, banco = "Correo · PSE")
             aviso("sms_del_otro", textoDelPago, hora, dueno = otro)
+            aviso("sms_recibido_propio", textoDelRecibidoPropio, hora)
+            aviso("sms_recibido_ajeno", textoDelRecibidoAjeno, hora)
         }
     }
 
@@ -217,6 +223,7 @@ class LasDosPatasDelAvisoTest {
         destino: String,
         monto: Long,
         clave: String,
+        entrante: Boolean = false,
     ) = DosPatasDelAviso(
         operacion = operacion,
         origenId = origen,
@@ -226,6 +233,7 @@ class LasDosPatasDelAvisoTest {
         transferId = "tr-$clave",
         origenEventId = "ev-$clave-sale",
         destinoEventId = "ev-$clave-entra",
+        avisoDelLadoQueEntra = entrante,
     )
 
     private suspend fun ApplicationTestBuilder.confirmar(avisoId: String, cuerpo: DosPatasDelAviso, quien: String = uid): HttpResponse =
@@ -255,6 +263,12 @@ class LasDosPatasDelAvisoTest {
     }
 
     private fun cuantosMovimientos(): Long = transaction { Events.selectAll().where { Events.userId eq uid }.count() }
+
+    private suspend fun ApplicationTestBuilder.leer(avisoId: String): ParsedSms {
+        val r = cliente().get("/api/sms/$avisoId/parse") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
+        assertEquals(HttpStatusCode.OK, r.status)
+        return r.body()
+    }
 
     private suspend fun ApplicationTestBuilder.ocurrencias(): List<OccurrenceState> {
         val r = cliente().get("/api/payments/occurrences") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
@@ -447,6 +461,67 @@ class LasDosPatasDelAvisoTest {
         assertEquals(HttpStatusCode.OK, otraVez.status)
         assertFalse(otraVez.body<MismoPagoConfirmado>().creado)
         assertEquals(antes, cuantosMovimientos())
+    }
+
+    // ── El traspaso avisado del lado que entra (hueco de #439) ───────────────────
+
+    @Test
+    fun `aviso entrante con origen propio - se propone como traspaso y confirmarlo arma las dos patas`() = testApplication {
+        application { testModule() }
+        val leido = leer("sms_recibido_propio")
+        assertEquals(TransactionType.INCOME, leido.type)
+        assertEquals(500_000.0, leido.amount)
+        assertEquals(fiducuenta, leido.traspasoDesdeId, "«de tu cuenta *9586» es la Fiducuenta 9586, suya")
+        assertEquals("Desde Fiducuenta 9586", leido.merchant)
+        assertNull(leido.identificadorDelDestino, "el otro lado es él mismo: nada que guardar como de otro")
+
+        val r = confirmar(
+            "sms_recibido_propio",
+            patas(OperacionDelAviso.TRASPASO, fiducuenta, ahorros, 500_000L, "entra", entrante = true),
+        )
+        assertEquals(HttpStatusCode.OK, r.status)
+        val hecho = r.body<MismoPagoConfirmado>()
+        assertEquals("ev-entra-entra", hecho.eventoId, "el aviso queda con la pata que ENTRA: es la que describe")
+
+        val legs = deEsteTraspaso("tr-entra")
+        val sale = legs.single { it.accountId == fiducuenta }
+        val entra = legs.single { it.accountId == ahorros }
+        assertEquals(TransactionType.EXPENSE, sale.type)
+        assertEquals(TransactionType.INCOME, entra.type)
+        assertEquals(TRANSFER_CATEGORY, sale.category)
+        assertEquals(TRANSFER_CATEGORY, entra.category)
+        assertFalse(sale.countsAsCashFlow || entra.countsAsCashFlow, "plata que ya era suya no entra a «Entró»")
+        assertEquals(textoDelRecibidoPropio, entra.rawPayload, "el texto del aviso va en la pata que describe")
+        assertNull(sale.rawPayload)
+        assertEquals(SMS_STATE_CONFIRMED to "ev-entra-entra", estadoDelAviso("sms_recibido_propio"))
+    }
+
+    @Test
+    fun `aviso entrante con origen ajeno - sigue siendo un ingreso`() = testApplication {
+        application { testModule() }
+        val leido = leer("sms_recibido_ajeno")
+        assertEquals(TransactionType.INCOME, leido.type)
+        assertNull(leido.traspasoDesdeId, "*4321 no es de ninguna cuenta suya")
+
+        // La app lo confirma como siempre: un ingreso suelto, y el aviso enlazado a él.
+        val antes = cuantosMovimientos()
+        transaction { evento("ev-ingreso-ajeno", ahorros, "INCOME", 80_000L, "Transferencia", hoy) }
+        val r = cliente().post("/api/sms/sms_recibido_ajeno/confirm?eventoId=ev-ingreso-ajeno") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+        }
+        assertEquals(HttpStatusCode.OK, r.status)
+        assertEquals(antes + 1, cuantosMovimientos(), "un solo movimiento: no hay traspaso")
+        val ingreso = movimientos(ahorros).single { it.id == "ev-ingreso-ajeno" }
+        assertNull(ingreso.transferId)
+        assertTrue(ingreso.countsAsCashFlow, "plata de otro sí entra a «Entró»")
+        assertEquals(SMS_STATE_CONFIRMED to "ev-ingreso-ajeno", estadoDelAviso("sms_recibido_ajeno"))
+    }
+
+    @Test
+    fun `un gasto que nombra su cuenta con «de tu cuenta» no es un traspaso que entra`() = testApplication {
+        application { testModule() }
+        // «Retiraste … de tu cuenta *9586 …»: ahí «de tu cuenta» es la cuenta que el gasto toca.
+        assertNull(leer("sms_retiro_fidu").traspasoDesdeId)
     }
 
     // ── El APK 1.69 ─────────────────────────────────────────────────────────────
