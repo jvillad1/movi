@@ -38,6 +38,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
 import com.jvillada.movi.shared.model.loQueSeLesMandoEstePeriodo
 import com.jvillada.movi.shared.model.nombresDeLasCuentasDeOtros
 import com.jvillada.movi.shared.model.group
@@ -366,7 +367,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         destinos = destinosGuardados,
                         cargando = cargandoCuentasDeOtros,
                         onReintentar = { refreshKey++ },
-                        onClick = { onNavigate(Screen.Destinos) },
+                        onClick = { onNavigate(Screen.Destinos()) },
                     )
                 }
 
@@ -960,16 +961,12 @@ internal fun resumenDeDeudas(creditos: List<CreditSummary>, tarjetas: List<CardS
 }
 
 /**
- * **«Cuentas de otros»**: la puerta a `DestinosScreen` desde Patrimonio, con los nombres («Caro,
- * Mamá y Papá») y cuánto se les mandó en el período en curso.
+ * **«Personas y comercios»** desde Patrimonio: una puerta secundaria a `DestinosScreen` (la
+ * principal está en Movimientos desde el 4-oct-2026), con los nombres («Caro, Mamá y Papá»).
  *
- * Se llamaba «Te deben» y era un nombre equivocado: no es plata que le deban, es el registro de las
- * cuentas a las que él les manda (la de Caro, para girarle). Tampoco es patrimonio: la cifra no
- * suma ni resta arriba — es lo que salió de sus cuentas hacia esas personas, que es la pregunta que
- * él se hace («¿cuánto le he mandado a Caro este mes?»).
- *
- * La cifra sale de [DestinoConocido.totalesDelPeriodo], que el server deriva con el período DEL
- * DUEÑO; acá solo se suma entre destinos ([loQueSeLesMandoEstePeriodo]), sin recalcular nada.
+ * **Sin cifra** (4-oct-2026). Decía «$7.690.860 este período» con la misma letra que los saldos, en la
+ * pantalla de lo que es TUYO — y es plata que se fue a otros. Lo que se le mandó a cada uno se lee
+ * en su ficha; acá quedan los nombres y la flecha.
  */
 @Composable
 private fun SeccionDeCuentasDeOtros(
@@ -982,40 +979,21 @@ private fun SeccionDeCuentasDeOtros(
         if (cargando) {
             FilaDeResumenPatrimonioEsqueleto(conCifra = false, testTag = TAG_TARJETA_DE_CUENTAS_DE_OTROS)
         } else {
-            NoSePudoLeer("No pudimos cargar Cuentas de otros", onReintentar = onReintentar)
+            NoSePudoLeer("No pudimos cargar tus personas y comercios", onReintentar = onReintentar)
         }
     } else {
-        val delPeriodo = loQueSeLesMandoEstePeriodo(destinos)
         FilaDeResumenPatrimonio(
-            titulo = "Cuentas de otros",
+            titulo = PERSONAS_Y_COMERCIOS,
             subtitulo = resumenDeCuentasDeOtros(destinos),
-            cifra = cifraDelPeriodo(delPeriodo),
-            detalleDeLaCifra = if (delPeriodo.isEmpty()) null else "este período",
             onClick = onClick,
             testTag = TAG_TARJETA_DE_CUENTAS_DE_OTROS,
         )
     }
 }
 
-/**
- * El subtítulo de la tarjeta de «Cuentas de otros»: los nombres, y si este período no se les mandó
- * nada, eso — un «$0» en el lugar de la cifra se leería como un dato y es una ausencia.
- */
-internal fun resumenDeCuentasDeOtros(destinos: List<DestinoConocido>): String = when {
-    destinos.isEmpty() -> "Guarda la cuenta de alguien a quien le envías plata"
-    loQueSeLesMandoEstePeriodo(destinos).isEmpty() -> "${nombresDeLasCuentasDeOtros(destinos)} · nada enviado este período"
-    else -> nombresDeLasCuentasDeOtros(destinos)
-}
-
-/**
- * La cifra, **una por moneda** y en pesos primero: sumar pesos con dólares da un número que no
- * existe (mismo criterio que `TotalesEnColumna`). Casi siempre es una sola.
- */
-internal fun cifraDelPeriodo(totales: Map<String, Long>): String? =
-    totales.entries
-        .sortedBy { if (it.key == "COP") "" else it.key }
-        .joinToString(" · ") { (moneda, total) -> formatMoney(total, moneda) }
-        .ifEmpty { null }
+/** El subtítulo de la tarjeta: los nombres, o la invitación a guardar el primero. */
+internal fun resumenDeCuentasDeOtros(destinos: List<DestinoConocido>): String =
+    if (destinos.isEmpty()) "Guarda a quién le envías plata" else nombresDeLasCuentasDeOtros(destinos)
 
 /**
  * La fila compartida de «Deudas» y «Cuentas de otros»: título, subtítulo, una cifra opcional y el chevron

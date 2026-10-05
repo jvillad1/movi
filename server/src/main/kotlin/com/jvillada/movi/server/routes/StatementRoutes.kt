@@ -23,6 +23,8 @@ import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
+import com.jvillada.movi.server.ai.FallaDeLaIa
+import com.jvillada.movi.server.ai.conLaIa
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.parsing.LectorDePapeles
 import com.jvillada.movi.server.parsing.FamiriosParser
@@ -252,6 +254,13 @@ internal data class ExtractoLeido(
     val numerosDeCuenta: List<String>,
 )
 
+/**
+ * La API de Anthropic no contestó por la cuenta (sin saldo, clave, saturada): 503 con el código, no
+ * un 500 crudo. Lo usan las tres rutas que pasan por [leerElExtracto].
+ */
+private fun fallaPorLaIa(falla: FallaDeLaIa): Nothing =
+    throw FallaAlProcesarExtracto(HttpStatusCode.ServiceUnavailable, falla.codigo)
+
 /** Lee el extracto (Claude o Famirios). Lanza [FallaAlProcesarExtracto]. Ver [ExtractoLeido]. */
 internal suspend fun leerElExtracto(
     uid: String,
@@ -288,7 +297,10 @@ internal suspend fun leerElExtracto(
                 "Formato de imagen no soportado. Sube PNG, JPG, GIF o WEBP (HEIC no se puede leer).",
             )
         bankName = StatementParser.detectBankName(fileName)
-        val lectura = LectorDePapeles.actual.leerExtractoDeImagen(bytes, imageMime, Stores.merchantRules.getRules(uid))
+        val reglas = Stores.merchantRules.getRules(uid)
+        val lectura = conLaIa("leer un extracto", ::fallaPorLaIa) {
+            LectorDePapeles.actual.leerExtractoDeImagen(bytes, imageMime, reglas)
+        }
         val falla = fallaDeLaLectura(lectura, esImagen = true)
         if (falla != null) throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, falla)
         parsed = (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
@@ -324,7 +336,10 @@ internal suspend fun leerElExtracto(
                 throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, LECTURA_FALLO)
             }
         } else {
-            val lectura = LectorDePapeles.actual.leerExtractoDeTexto(text, Stores.merchantRules.getRules(uid))
+            val reglas = Stores.merchantRules.getRules(uid)
+            val lectura = conLaIa("leer un extracto", ::fallaPorLaIa) {
+                LectorDePapeles.actual.leerExtractoDeTexto(text, reglas)
+            }
             val falla = fallaDeLaLectura(lectura, esImagen = false)
             if (falla != null) throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, falla)
             (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()

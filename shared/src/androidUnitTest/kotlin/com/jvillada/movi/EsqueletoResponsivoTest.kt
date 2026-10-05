@@ -87,7 +87,7 @@ class EsqueletoResponsivoTest {
 
     // Una pantalla de lectura de la pestaña Patrimonio (Cuentas de otros). Patrimonio misma es un
     // tablero desde la Ola W3.
-    private fun montar(pantalla: Screen = Screen.Destinos, tab: NavTab? = NavTab.PATRIMONIO) {
+    private fun montar(pantalla: Screen = Screen.Destinos(), tab: NavTab? = NavTab.PATRIMONIO) {
         composeRule.setContent {
             ConClaseDeAncho {
                 clase = LocalWindowWidthClass.current

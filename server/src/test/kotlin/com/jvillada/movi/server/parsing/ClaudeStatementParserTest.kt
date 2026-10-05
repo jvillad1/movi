@@ -1,5 +1,8 @@
 package com.jvillada.movi.server.parsing
 
+import com.anthropic.models.messages.MessageCreateParams
+import com.anthropic.models.messages.OutputConfig
+import com.jvillada.movi.server.ai.MODELO_DE_EXTRACTOS
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -193,5 +196,54 @@ class ClaudeStatementParserTest {
         // unsupported (HEIC) -> null so the route can 422 instead of crashing
         assertEquals(null, ClaudeStatementParser.supportedImageMime("image/heic", "foto.heic"))
         assertEquals(null, ClaudeStatementParser.supportedImageMime("", "foto.heic"))
+    }
+
+    // ── Cómo se le pide el extracto al modelo (benchmark 2026-10-04) ─────────────
+
+    private fun pedidoDeExtracto(): MessageCreateParams = with(ClaudeStatementParser) {
+        MessageCreateParams.builder().conLoDeSiempre(emptyList()).addUserMessage("01/09 EXITO 45.000").build()
+    }
+
+    @Test
+    fun `el extracto se lee con el modelo de extractos, no con un id escrito a mano`() {
+        assertEquals(MODELO_DE_EXTRACTOS, pedidoDeExtracto().model().asString())
+        assertEquals("claude-sonnet-5-5", MODELO_DE_EXTRACTOS)
+    }
+
+    @Test
+    fun `el extracto se pide con esfuerzo bajo`() {
+        assertEquals(OutputConfig.Effort.LOW, pedidoDeExtracto().outputConfig().get().effort().get())
+    }
+
+    @Test
+    fun `el prompt de sistema del extracto va cacheado`() {
+        val bloques = pedidoDeExtracto().system().get().asTextBlockParams()
+        assertEquals(1, bloques.size)
+        assertTrue(bloques.single().cacheControl().isPresent, "sin cache_control cada pedazo paga el prompt entero")
+    }
+
+    @Test
+    fun `el prompt del extracto deja afuera los movimientos de periodos anteriores`() {
+        // El extracto de la Master traía «Movimientos antes de 15 jul»: 15 compras diferidas a 36
+        // cuotas que ya habían entrado en junio o julio, y el extractor las devolvía como gastos
+        // nuevos (~US$1.050 de más). Lo único que lo frena es esta sección del prompt.
+        val prompt = ClaudeStatementParser.buildSystemPrompt(emptyList())
+        assertTrue("PERÍODO FACTURADO" in prompt)
+        assertTrue("SOLO los movimientos del período facturado" in prompt)
+        assertTrue("Movimientos antes de" in prompt)
+        // Va debajo de las reglas de tarjetas, no suelta al final.
+        assertTrue(prompt.indexOf("PERÍODO FACTURADO") > prompt.indexOf("TARJETAS DE CRÉDITO"))
+        assertTrue(prompt.indexOf("PERÍODO FACTURADO") < prompt.indexOf("FECHAS SIN AÑO"))
+    }
+
+    @Test
+    fun `una fila de monto cero no es un movimiento`() {
+        val json = """[
+          {"date":"2026-09-01","merchant":"Intereses","amount":0,"currency":"COP","type":"INCOME","category":"Otros ingresos","description":"Abono intereses","rawText":"ABONO INTERESES 0,15"},
+          {"date":"2026-09-01","merchant":"Exito","amount":45000,"currency":"COP","type":"EXPENSE","category":"Mercado","description":"Compra","rawText":"COMPRA EXITO 45.000"},
+          {"date":"2026-09-02","merchant":"Ajuste","amount":0,"currency":"USD","type":"EXPENSE","category":"Otros","description":"Ajuste","rawText":"AJUSTE 0,06"}
+        ]"""
+        val result = ClaudeStatementParser.parseJson(json)
+        assertEquals(listOf("Exito"), result.map { it.merchant })
     }
 }

@@ -143,6 +143,9 @@ internal class ElModeloDeAnthropic(
             llamar(armar(modelo))
         } catch (falla: Exception) {
             val respaldo = modeloDeRespaldo ?: throw falla
+            // Sin saldo o con la clave rechazada, el respaldo falla igual —es la misma cuenta— y
+            // solo duplica la espera. Ver `FallaDeLaIa.sirveOtroModelo`.
+            if (fallaDeLaIa(falla)?.sirveOtroModelo == false) throw falla
             llamar(armar(respaldo))
         }
         ultima = respuesta
@@ -437,6 +440,30 @@ private val HERRAMIENTAS_DE_LECTURA: List<Tool> = listOf(
         .inputSchema(
             Tool.InputSchema.builder()
                 .properties(Tool.InputSchema.Properties.builder().build())
+                .required(emptyList())
+                .build(),
+        )
+        .build(),
+    Tool.builder()
+        .name(CONSULTAR_PERSONA_O_COMERCIO)
+        .description(
+            "Lo que el usuario le envió y lo que recibió de una persona o comercio que guardó en «Personas y " +
+                "comercios» (su esposa, su papá, la cancha, el parqueadero), con el total por período y sus " +
+                "movimientos. Sin nombre, la lista de todos los guardados con lo de cada uno. Úsala SIEMPRE para " +
+                "«¿cuánto le he mandado a X?», «¿cuánto me envió X?», «¿a quién le mando más plata?»: reconoce los " +
+                "movimientos por el número de cuenta o la llave que nombró el banco aunque les hayan cambiado el " +
+                "nombre, cosa que $BUSCAR_MOVIMIENTOS por texto no hace. Sin fechas mira los últimos " +
+                "$MESES_HACIA_ATRAS_POR_DEFECTO meses. Lo enviado y lo recibido nunca se suman.",
+        )
+        .inputSchema(
+            Tool.InputSchema.builder()
+                .properties(
+                    Tool.InputSchema.Properties.builder()
+                        .putAdditionalProperty("nombre", texto("Cómo la guardó el usuario («Caro») o parte del nombre. Sin esto, la lista de todos."))
+                        .putAdditionalProperty("desde", texto("Fecha de calendario AAAA-MM-DD, inclusive."))
+                        .putAdditionalProperty("hasta", texto("Fecha de calendario AAAA-MM-DD, inclusive."))
+                        .build(),
+                )
                 .required(emptyList())
                 .build(),
         )

@@ -1,7 +1,9 @@
 package com.jvillada.movi.ui.ai
 
+import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
+import com.jvillada.movi.shared.model.esCodigoDeIaNoDisponible
 
 /**
  * # Lo que de verdad se le manda al asistente, y lo que solo se ve en pantalla
@@ -65,4 +67,19 @@ internal fun mensajesParaEnviar(historial: List<ChatMessage>): List<ChatMessage>
             )
         }
     }
+}
+
+/** Lo que dice la burbuja cuando el server contestó que la IA no está disponible (503 con código). */
+const val MOVI_AI_NO_DISPONIBLE: String = "Movi AI no está disponible ahora. Inténtalo de nuevo más tarde."
+
+/**
+ * **Qué se le muestra al dueño de una respuesta del chat.** Si el server dijo que la API de
+ * Anthropic no contestó por la cuenta (`codigo` = `IA_SIN_CREDITO` / `IA_NO_DISPONIBLE`), la frase
+ * de la app; si no, el texto del asistente. Sin respuesta (la red, un cuerpo que no se entendió),
+ * lo de siempre.
+ */
+internal fun textoDeLaRespuesta(respuesta: AiChatResponse?, falla: Throwable?): String = when {
+    respuesta != null && esCodigoDeIaNoDisponible(respuesta.codigo) -> MOVI_AI_NO_DISPONIBLE
+    respuesta != null -> respuesta.text
+    else -> "No pude conectarme con el AI. ${falla?.message ?: ""}"
 }

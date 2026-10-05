@@ -33,6 +33,20 @@ const val MODELO_PARA_CONSEJOS = "claude-sonnet-5"
 const val MODELO_DE_RESPALDO = "claude-opus-4-7"
 
 /**
+ * **El que lee extractos** (`ClaudeStatementParser.leer` / `leerImagen`, y por ellos «Compartir con
+ * Movi» y el importador). Una sola constante para los dos lugares que lo nombran: la llamada en sí
+ * y lo que `leerElPapel` anota en `lecturas_de_papeles.modelo`. Antes la llamada decía
+ * `"claude-opus-4-7"` a mano y la lectura guardaba [MODELO_DE_RESPALDO], que coincidían por
+ * casualidad.
+ *
+ * Sonnet 5.5 a esfuerzo bajo, por el benchmark del 2026-10-04 sobre 33 papeles reales: la misma
+ * precisión y exhaustividad que Opus 4.7 fila por fila, 64 % más barato y la mitad de lento. Haiku
+ * NO: lee mal montos con separadores mezclados (530.710,24 → 531) y cambia meses, errores que no se
+ * ven en la revisión. Clasificar sí lo hace Haiku ([MODELO_DE_TODOS_LOS_DIAS]).
+ */
+const val MODELO_DE_EXTRACTOS = "claude-sonnet-5-5"
+
+/**
  * **Cuántos mensajes de la conversación se le mandan.** El teléfono manda el hilo entero en cada
  * pregunta, así que sin esto una charla larga se paga completa cada vez. Ocho alcanza para que
  * entienda «¿y en julio?» después de haber hablado de agosto, que es el único caso donde el

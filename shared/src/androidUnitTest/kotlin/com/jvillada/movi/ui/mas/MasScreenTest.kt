@@ -45,7 +45,7 @@ class MasScreenTest {
     @get:Rule val composeRule = createComposeRule()
 
     private val lasDeAjustes = listOf(
-        "Perfil", "Categorías", "Documentos", "Cuentas de otros", "Compartir", "Movi AI", "Captura del banco",
+        "Perfil", "Categorías", "Documentos", "Personas y comercios", "Compartir", "Movi AI", "Captura del banco",
     )
     private val lasQueSonPestana = listOf(
         "Cuentas", "Cuadre de saldos", "Presupuestos", "Créditos", "Recurrentes",
@@ -113,15 +113,15 @@ class MasScreenTest {
 
     /** Ola V: la segunda puerta hacia `Screen.Destinos` — ver el KDoc de la clase. */
     @Test
-    fun `tocar Cuentas de otros abre Destinos`() {
+    fun `tocar Personas y comercios abre Destinos`() {
         var navegoA: Screen? = null
         composeRule.setContent {
             MoviTheme { MasScreen(onNavigate = { navegoA = it }) }
         }
 
-        composeRule.onNodeWithText("Cuentas de otros", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Personas y comercios", useUnmergedTree = true).performClick()
 
-        assertEquals(Screen.Destinos, navegoA)
+        assertEquals(Screen.Destinos(), navegoA)
     }
 
     /**

@@ -3,12 +3,15 @@ package com.jvillada.movi.server.parsing
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.models.messages.Base64ImageSource
+import com.anthropic.models.messages.CacheControlEphemeral
 import com.anthropic.models.messages.ContentBlockParam
 import com.anthropic.models.messages.ImageBlockParam
 import com.anthropic.models.messages.Message
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
+import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.TextBlockParam
+import com.jvillada.movi.server.ai.MODELO_DE_EXTRACTOS
 import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
 import com.jvillada.movi.shared.model.MerchantRule
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
@@ -57,7 +60,7 @@ object ClaudeStatementParser {
      * decisión de producto, no un `filter` — y meterla apurada acá es exactamente cómo esta app
      * se ganó sus últimos cuatro defectos.
      */
-    private fun buildSystemPrompt(rules: List<MerchantRule>): String {
+    internal fun buildSystemPrompt(rules: List<MerchantRule>): String {
         val rulesJson = if (rules.isEmpty()) "[]"
         else json.encodeToString(ListSerializer(MerchantRule.serializer()), rules)
         val expenseCats = PREDEFINED_CATEGORIES
@@ -96,6 +99,11 @@ TARJETAS DE CRÉDITO (cuando el extracto tiene columnas "Número cuotas" y "Valo
 - Usá siempre la columna "Valor movimiento" (precio total de la compra), NUNCA "Valor Cuota/Abono"
 - Incluí cargos por INTERESES CORRIENTES y CUOTA DE MANEJO como EXPENSE
 - Los pagos/abonos a la tarjeta (ABONO, ABONO DEBITO AUTOMATICO, PAGO ALTERNATIVO) SÍ se incluyen, como INCOME — reducen la deuda de la tarjeta.
+
+PERÍODO FACTURADO (tarjetas y créditos rotativos):
+- Extraé SOLO los movimientos del período facturado (la sección "Nuevos movimientos" o equivalente, con fecha dentro del período del encabezado).
+- NO incluyas las secciones de movimientos de períodos anteriores ("Movimientos antes de …", compras diferidas que ya venían de extractos anteriores y solo muestran su cuota o saldo pendiente): ya se contaron con el extracto en que entraron.
+- Los cargos que el banco liquida en el resumen (intereses, cuota de manejo, otros cargos) cuentan solo si aparecen como fila con fecha en el detalle del período.
 
 FECHAS SIN AÑO:
 - Si las fechas no incluyen año (ej: "15/04", "1/01", "3 ene"), buscá el año en el encabezado del documento (campos DESDE, HASTA, FECHA DE CORTE, periodo facturado) y asignáselo a todas las transacciones
@@ -210,10 +218,29 @@ Aplicá las reglas del usuario cuando el merchant coincida.
         else "ENCABEZADO DEL DOCUMENTO (contexto: de ahí sale el año, no tiene movimientos):\n" +
             encabezado + "\n\nPARTE ${indice + 1} DE $total DEL EXTRACTO:\n" + pedazo
 
-    private fun MessageCreateParams.Builder.conLoDeSiempre(rules: List<MerchantRule>) =
-        model("claude-opus-4-7")
+    /**
+     * **Cómo se le pide un extracto al modelo**, igual para texto e imagen.
+     *
+     * - [MODELO_DE_EXTRACTOS] (Sonnet 5.5) con esfuerzo **bajo**: así corrió el benchmark que lo
+     *   eligió. Piensa de forma adaptativa (no se puede apagar en ese modelo), y lo que piensa sale
+     *   del mismo [MAX_TOKENS_DE_SALIDA]: con 71 filas usó ~8.200 de salida, lejos del tope, pero si
+     *   empiezan a aparecer [Lectura.Incompleta] es lo primero que hay que mirar.
+     * - El prompt de sistema (~1.400 fichas, más las reglas del dueño) va **cacheado**: un extracto
+     *   troceado lo manda en cada pedazo, y desde el segundo se lee al 10 % del precio. Lo que
+     *   cambia de pedido a pedido —el pedazo, la imagen— va después, en el mensaje del usuario.
+     */
+    internal fun MessageCreateParams.Builder.conLoDeSiempre(rules: List<MerchantRule>) =
+        model(MODELO_DE_EXTRACTOS)
             .maxTokens(MAX_TOKENS_DE_SALIDA)
-            .systemOfTextBlockParams(listOf(TextBlockParam.builder().text(buildSystemPrompt(rules)).build()))
+            .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
+            .systemOfTextBlockParams(
+                listOf(
+                    TextBlockParam.builder()
+                        .text(buildSystemPrompt(rules))
+                        .cacheControl(CacheControlEphemeral.builder().build())
+                        .build(),
+                ),
+            )
 
     private fun textoDe(response: Message): String =
         response.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
@@ -323,7 +350,13 @@ Aplicá las reglas del usuario cuando el merchant coincida.
     /** Un comprobante en PDF tiene una página; más que esto ya es un extracto y lo decide la heurística. */
     private const val MAX_CARACTERES_DEL_PAPEL = 8_000
 
-    private fun promptDelPapel(): String {
+    /**
+     * El prompt del clasificador. Las tres reglas del final salieron del benchmark del 2026-10-04:
+     * el extracto del crédito del vehículo (cuota, saldo y tasa, sin movimientos) se iba a extracto
+     * y la lectura cara volvía vacía; el pantallazo del desembolso de la hipoteca (~$200 M) salía
+     * como un GASTO, y un desembolso es plata que entró (regla del dueño).
+     */
+    internal fun promptDelPapel(): String {
         val categorias = PREDEFINED_CATEGORIES.joinToString(", ") { it.name }
         return """
 Lees papeles financieros colombianos: capturas de pantalla de transferencias, recibos, pagos PSE, facturas pagadas y extractos. Decide qué es el papel y devuelve SOLO un objeto JSON, sin texto antes ni después.
@@ -344,6 +377,9 @@ Si muestra UN solo movimiento de plata (una transferencia, un pago, una compra, 
 
 Si muestra VARIOS movimientos (un extracto, un listado o un histórico de movimientos), devuelve: {"tipo":"EXTRACTO"}
 Si no muestra ningún movimiento de plata (un certificado, un saldo, una publicidad), devuelve: {"tipo":"NADA"}
+- El extracto o la pantalla de un CRÉDITO (hipoteca, vehículo, libre inversión, libranza) que muestra saldo, cuota a pagar, fecha límite o el desglose del último abono, sin una lista de movimientos, es {"tipo":"NADA"}: lo que dice es lo que se DEBE, no un movimiento hecho.
+- Una factura o cuenta de cobro que todavía no se ha pagado es {"tipo":"NADA"}.
+- Un desembolso de crédito es plata que ENTRÓ al titular: "movimiento":"INCOME".
 """.trimIndent()
     }
 
@@ -371,6 +407,12 @@ Si no muestra ningún movimiento de plata (un certificado, un saldo, una publici
         }
     }
 
+    /**
+     * El array JSON de la respuesta, en movimientos. **Una fila de $0 no es un movimiento**: el
+     * prompt pide montos enteros, así que lo de menos de una unidad (los intereses diarios de $0,15,
+     * un ajuste de USD 0,06) volvía como `amount: 0` y entraba a la revisión como una fila sin
+     * plata. Se descarta acá, no en el prompt: es la red que no depende de que el modelo obedezca.
+     */
     fun parseJson(rawText: String): List<ParsedTransaction> {
         val start = rawText.indexOf('[')
         val end = rawText.lastIndexOf(']')
@@ -378,6 +420,7 @@ Si no muestra ningún movimiento de plata (un certificado, un saldo, una publici
         val arrayJson = rawText.substring(start, end + 1)
         return runCatching {
             json.decodeFromString(ListSerializer(ClaudeRow.serializer()), arrayJson)
+                .filter { it.amount != 0L }
                 .map { row ->
                     ParsedTransaction(
                         id = UUID.randomUUID().toString(),

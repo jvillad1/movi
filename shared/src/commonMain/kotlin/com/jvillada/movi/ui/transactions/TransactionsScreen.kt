@@ -88,6 +88,7 @@ import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.ui.porrevisar.RenglonPorRevisar
 import com.jvillada.movi.ui.porrevisar.cuantosPorRevisar
 import com.jvillada.movi.ui.porrevisar.rememberLecturasPorRevisar
+import com.jvillada.movi.ui.destinos.RenglonDePersonasYComercios
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.plan.rememberMarcasDeRecurrentes
@@ -902,6 +903,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = refreshKey) { Repositories.wallets.getUserProfile() }
     val eventos = rememberLectura(ClaveDeLectura.EventosPorDia, reintento = refreshKey) { Repositories.wallets.getEventsByDay() }
     val cuentas = rememberLectura(ClaveDeLectura.Cuentas, reintento = refreshKey) { Repositories.wallets.getAccounts() }
+    // «Personas y comercios» (4-oct-2026): solo para los nombres del renglón que lleva ahí. La misma
+    // lectura que Patrimonio y la lista, recordada: no se pide dos veces al ir y volver.
+    val personasYComercios = rememberLectura(ClaveDeLectura.Destinos, reintento = refreshKey) { Repositories.wallets.getDestinos() }
     /**
      * El perfil a la vista: el leído, el recordado, o el que devolvió guardar el arranque de un
      * período desde esta pantalla (ver [Lectura.anotar] más abajo).
@@ -1342,6 +1346,16 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                     )
                 }
             }
+        }
+
+        // **La puerta principal a «Personas y comercios»** (4-oct-2026): siempre, de una línea, y no
+        // con la búsqueda abierta (buscar es otra tarea). Ver [RenglonDePersonasYComercios].
+        if (!searchActive) {
+            RenglonDePersonasYComercios(
+                destinos = personasYComercios.valor,
+                onClick = { onNavigate(Screen.Destinos()) },
+                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
+            )
         }
 
         textoDeRechazados(rechazados)?.let { texto ->

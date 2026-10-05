@@ -49,6 +49,8 @@ import com.jvillada.movi.server.ai.ejecutarHerramienta
 import com.jvillada.movi.server.ai.guardarLaConversacion
 import io.ktor.server.application.log
 import com.jvillada.movi.server.ai.laPreguntaPideCriterio
+import com.jvillada.movi.server.ai.avisarQueLaIaNoEstaDisponible
+import com.jvillada.movi.server.ai.fallaDeLaIa
 import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
 import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
 import com.jvillada.movi.server.ai.MODELO_PARA_CONSEJOS
@@ -126,8 +128,9 @@ El bloque "DATOS EXACTOS PARA ESTA PREGUNTA" lo calcula Movi con las mismas cuen
 PROPORCIONES: no describas una proporción con palabras ("casi todo", "casi iguala", "la mitad", "la mayoría", "mucho más") si el porcentaje de los datos no la sostiene. Cuando compares una cifra con otra, di el porcentaje que trae el bloque ("el 58 % de lo que entró"), no una impresión.
 NO SUPONGAS: si un nombre (una entidad, una cuenta, un tercero) no está explicado en los datos, no le inventes qué es ni para qué sirve, y no supongas de dónde sale su plata más allá de lo que dicen los datos. Está bien decir "no lo sé con estos datos".
 
-Para CONSULTAR lo que ya pasó tienes tres herramientas; con las dos de MIRAR ADELANTE (más abajo), son la única forma de saber algo que no esté en el bloque:
+Para CONSULTAR lo que ya pasó tienes cuatro herramientas; con las dos de MIRAR ADELANTE (más abajo), son la única forma de saber algo que no esté en el bloque:
 - buscar_movimientos: hechos concretos. "¿Qué compré en X?", "¿qué hubo entre estas fechas?", "¿esto ya lo había comprado?".
+- consultar_persona_o_comercio: lo que le envió y lo que recibió de una persona o comercio que guardó en "Personas y comercios" (su esposa, su papá, la cancha, el parqueadero), y la lista de esos guardados. "¿Cuánto le he mandado a Caro este año?", "¿cuánto me ha enviado mi papá?", "¿a quién le mando más plata?". Úsala SIEMPRE para esas preguntas en vez de buscar_movimientos por texto: reconoce los movimientos por el número de cuenta o la llave que nombró el banco, aunque el usuario les haya cambiado el nombre. Lo enviado y lo recibido van aparte: nunca los sumes.
 - totales_por_categoria: cuánto. "¿Cuánto gasté en Comida en agosto?", "¿gasté más que el mes pasado?".
 - buscar_documentos: lo que dicen sus papeles. "¿Qué seguro paga la cuenta X?", "¿qué tasa tiene ese crédito?", "¿tengo el extracto de agosto?".
 
@@ -240,6 +243,13 @@ private fun fabricaDeAnthropic(): FabricaDeModelos? {
         )
     }
 }
+
+/**
+ * Lo que dice la burbuja cuando la API no contesta por la cuenta. La app muestra su propia frase
+ * (ver `textoDeLaRespuesta` en `:shared`); esta es para un APK que todavía no conoce el código.
+ */
+internal const val MOVI_AI_NO_DISPONIBLE: String =
+    "Movi AI no está disponible ahora. Inténtalo de nuevo más tarde."
 
 fun Route.aiRoutes() = aiRoutes(fabricaDePrueba = null)
 
@@ -433,6 +443,18 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
         }
         reply.onSuccess { call.respond(AiChatResponse(text = stripEmojis(it.texto), propuestas = propuestas.propuestas)) }
             .onFailure {
+                // **La cuenta de Anthropic, no la pregunta.** Sin saldo, con la clave rechazada o la
+                // API saturada, la burbuja decía «Error llamando a Claude: 400 …credit balance…»:
+                // inglés, crudo, y sin decir que no es algo que el dueño arregle reintentando.
+                val falla = fallaDeLaIa(it)
+                if (falla != null) {
+                    avisarQueLaIaNoEstaDisponible("Movi AI", falla, it)
+                    call.respond(
+                        HttpStatusCode.ServiceUnavailable,
+                        AiChatResponse(text = MOVI_AI_NO_DISPONIBLE, codigo = falla.codigo),
+                    )
+                    return@onFailure
+                }
                 call.respond(
                     HttpStatusCode.InternalServerError,
                     AiChatResponse(text = "Error llamando a Claude: ${it.message ?: "desconocido"}"),

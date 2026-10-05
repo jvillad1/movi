@@ -50,26 +50,33 @@ import com.jvillada.movi.shared.model.rechazoDelDestino
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.credits.FieldBox
+import com.jvillada.movi.ui.LocalNavigate
+import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
+import com.jvillada.movi.shared.model.MAX_NOMBRE_DEL_DESTINO
+import com.jvillada.movi.shared.model.clave
+import com.jvillada.movi.shared.model.conIdentificadores
+import com.jvillada.movi.shared.model.elDestinoConoce
+import com.jvillada.movi.shared.model.normalizado
+import com.jvillada.movi.shared.model.normalizarLlave
+import com.jvillada.movi.shared.model.nombresCrudosDelBancoEn
+import com.jvillada.movi.shared.model.todosLosIdentificadores
+import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.launch
 
 /** El tag de la fila «¿De quién es la cuenta ·1234?», se muestre donde se muestre. */
 const val TAG_GUARDAR_EL_DESTINO: String = "guardar-el-destino"
 
-/** El botón que abre el formulario corto de la fila. */
-const val GUARDAR_COMO: String = "Guardar como…"
 
 /**
- * **El enlace que despliega la nota** (`deQuien`: esposa, papá). Se usa en la fila y en la hoja de
- * alta: el nombre casi siempre ya dice de quién es, así que la relación es un extra que se pide
- * solo si él quiere.
+ * **El enlace que despliega la nota** (`deQuien`: esposa, papá), en la hoja de guardar o editar: el
+ * nombre casi siempre ya dice de quién es, así que la relación es un extra que se pide solo si él
+ * quiere.
  */
 const val AGREGAR_UNA_NOTA: String = "Agregar una nota (ej. esposa)"
 
-/** Lo que dice el campo de la nota, ya desplegado. */
-internal const val NOTA_DEL_DESTINO: String = "Nota (opcional). Ej: esposa, papá"
-
-/** El enlace que suma el dato a un tercero que ya está guardado (4-oct-2026). */
-const val ES_DE_UN_TERCERO_QUE_YA_TENGO: String = "Es de un tercero que ya tengo"
+/** El enlace que suma el dato a alguien que ya está guardado (4-oct-2026). */
+const val YA_LO_TENGO_GUARDADO: String = "Ya lo tengo guardado"
 
 /** El enlace que dice que la cuenta es del dueño: la fila no vuelve a preguntar. */
 const val ES_MIA: String = "Es mía"
@@ -84,7 +91,7 @@ const val TAG_TERCEROS_QUE_YA_TENGO: String = "terceros-que-ya-tengo"
  */
 internal fun preguntaDelDestino(identificador: IdentificadorDelDestino): String =
     if (identificador.tipo == TipoDeIdentificador.LLAVE && laLlaveEsUnNombre(identificador.valor)) {
-        "¿Guardar a ${identificador.comoSeDice} en tus cuentas de otros?"
+        "¿Guardar a ${identificador.comoSeDice}?"
     } else {
         "¿De quién es ${identificador.comoSeDice}?"
     }
@@ -148,41 +155,34 @@ internal class DestinosParaGuardar(
 }
 
 /**
- * # «¿De quién es la cuenta ·1234? Guardar como…»
+ * # «¿Guardar a Marta Prueba Ruiz?» — guardar desde donde aparece, en uno o dos toques
  *
- * El pedido del dueño (29-sep): *«gestionar cuentas conocidas no propias es un feature que necesito
- * y debe ser de fácil acceso»*. Hasta acá, guardar una cuenta de otro obligaba a salir de donde
- * estaba —Ajustes o Patrimonio → Cuentas de otros → Nueva cuenta— y copiar el número a mano. Esta
- * fila la ofrece **donde el número aparece**: en «Reconciliar movimiento», en las tarjetas de «Por
- * revisar» y en el detalle de un movimiento.
+ * La fila que aparece donde el banco nombra una cuenta o una llave que nadie tiene guardada: en
+ * «Reconciliar movimiento», en las tarjetas de «Por revisar» y en el detalle de un movimiento.
+ * Quien la muestra ya decidió que hace falta ([DestinosParaGuardar.ofrece]).
  *
- * Quien la muestra ya decidió que hace falta ([DestinosParaGuardar.ofrece]); con un destino
- * conocido la fila no existe.
+ * ## Uno o dos toques (4-oct-2026)
  *
- * Cerrada es una pregunta y un botón. Abierta, **un solo campo**: el nombre, prellenado con el que
- * trajo el banco en Título Caso. El número o la llave no se escriben: son los del mensaje.
+ * - **Con el nombre** (el banco lo dijo: «… a MARTA PRUEBA RUIZ», «Te llegó dinero de …»): la fila
+ *   cerrada ya es la pregunta y el botón — «¿Guardar a «Marta Prueba Ruiz»? · Guardar». **Un toque.**
+ *   Si el nombre es el de alguien guardado, la pregunta es «¿Es de «Caro»? · Sumar»: se le agrega
+ *   el dato a esa ficha en vez de crear otra.
+ * - **Sin nombre** (un número suelto): «¿De quién es la cuenta ·0756? · Ponerle nombre» abre un solo
+ *   campo con su «Guardar». **Dos toques** y el nombre.
+ * - **«Otro…»** abre lo mismo para cambiar el nombre, elegir alguien ya guardado («Ya lo tengo
+ *   guardado», dos toques) o decir «Es mía».
  *
- * Hasta el 3-oct-2026 había un segundo campo con el mismo peso, «De quién es (opcional)», y el dueño
- * lo vio redundante: la fila ya pregunta «¿De quién es la cuenta ·0756?», y en casi todos los casos
- * el nombre ES de quién es. La relación (`deQuien`: esposa, papá) sigue existiendo —los destinos
- * guardados la tienen y «Cuentas de otros» la muestra—, pero ahora se pide detrás del enlace
- * [AGREGAR_UNA_NOTA].
+ * ## Lo que se sacó
  *
- * Si el nombre que escribe ya es el de una cuenta guardada («Caro» tiene el número y esto es su
- * llave), **se le agrega a esa** en vez de crear una segunda — lo decide `destinoParaGuardar` en
- * `:core`, y la fila lo dice antes de guardar.
+ * El selector Persona/Comercio y «Agregar una nota» estaban en la fila abierta: dos decisiones más
+ * para guardar un nombre. El tipo lo deduce el server de los avisos (ver `tipoInferido` en `:core`)
+ * y la nota se pone después, en la ficha, si alguna vez hace falta.
  *
- * ## Desde el 4-oct-2026
+ * Además del dato que pregunta, se guarda **el nombre con que lo nombra el banco** en ese mismo
+ * aviso («a la llave @x … a MARTA PRUEBA RUIZ»), como hacen los sugeridos: así el aviso siguiente lo
+ * reconoce aunque llegue por otro lado.
  *
- * - **«Es de un tercero que ya tengo»** abre la lista de los guardados: elegir uno le suma este
- *   identificador (`agregarIdentificador`), sin escribir nada. Es el caso de Caro, que el banco a
- *   veces nombra por la cuenta y Nu por su nombre completo.
- * - **Persona o comercio**, prellenado con [tipoProbable] (un pago por QR es un comercio) y
- *   cambiable con un toque.
- * - **«Es mía»**: la cuenta es del dueño; la fila no vuelve a preguntar (`descartarSugerido`).
- *
- * [textoDelAviso] es el texto del banco, si quien muestra la fila lo tiene: con él se reconoce un
- * pago por QR.
+ * [textoDelAviso] es el texto del banco, si quien muestra la fila lo tiene.
  */
 @Composable
 internal fun FilaGuardarElDestino(
@@ -194,21 +194,43 @@ internal fun FilaGuardarElDestino(
     textoDelAviso: String? = null,
 ) {
     val alcance = rememberCoroutineScope()
+    // El nombre que dijo el banco en el aviso, si quien llama no lo pasó.
+    val delAviso = remember(textoDelAviso) { textoDelAviso?.let { nombresCrudosDelBancoEn(it).firstOrNull() } }
+    val propuesto = nombreSugerido.ifBlank { delAviso?.let(::enTituloCaso).orEmpty() }.take(MAX_NOMBRE_DEL_DESTINO)
     var abierta by remember(identificador) { mutableStateOf(false) }
-    var nombre by remember(identificador, nombreSugerido) { mutableStateOf(nombreSugerido) }
-    var deQuien by remember(identificador) { mutableStateOf("") }
-    var conNota by remember(identificador) { mutableStateOf(false) }
-    var tipo by remember(identificador) { mutableStateOf(tipoProbable(identificador, textoDelAviso)) }
+    var nombre by remember(identificador, propuesto) { mutableStateOf(propuesto) }
     var eligiendoTercero by remember(identificador) { mutableStateOf(false) }
     var esMia by remember(identificador) { mutableStateOf(false) }
     var guardando by remember { mutableStateOf(false) }
     var error by remember(identificador) { mutableStateOf<String?>(null) }
 
-    val aGuardar = destinoParaGuardar(identificador, nombre, deQuien, destinos, tipo)
+    // Los otros datos del mismo aviso que lo reconocen (el nombre del banco junto a una llave), si
+    // no son ya de alguien.
+    val otros = remember(identificador, delAviso, destinos) {
+        listOfNotNull(delAviso?.let { IdentificadorDelDestino(TipoDeIdentificador.LLAVE, normalizarLlave(it)) })
+            .filter { it.clave != identificador.normalizado().clave && destinos.none { d -> elDestinoConoce(d, it) } }
+    }
+    val aGuardar = destinoParaGuardar(identificador, nombre, null, destinos).let { d ->
+        if (d.id.isEmpty()) d.conIdentificadores(d.todosLosIdentificadores() + otros) else d
+    }
     val loQueFalta = rechazoDelDestino(aGuardar.nombre, aGuardar.numero, aGuardar.deQuien, aGuardar.llave)
     val sePuedeGuardar = loQueFalta == null && !guardando
     // «Caro» ya existe y esto se le suma: se dice, para que no parezca que se crea otra.
     val seSumaA = aGuardar.takeIf { it.id.isNotEmpty() }
+
+    fun guardar() {
+        if (!sePuedeGuardar) return
+        guardando = true
+        error = null
+        alcance.launch {
+            val resultado = runCatching {
+                if (seSumaA != null) Repositories.wallets.agregarIdentificador(seSumaA.id, AgregarIdentificador(identificador))
+                else Repositories.wallets.createDestino(aGuardar)
+            }
+            guardando = false
+            resultado.onSuccess { onGuardado(it) }.onFailure { error = it.toUserMessage(); abierta = true }
+        }
+    }
 
     fun sumarA(tercero: DestinoConocido) {
         if (guardando) return
@@ -246,103 +268,61 @@ internal fun FilaGuardarElDestino(
         return
     }
 
-    fun guardar() {
-        if (!sePuedeGuardar) return
-        guardando = true
-        error = null
-        alcance.launch {
-            val resultado = runCatching {
-                if (aGuardar.id.isNotEmpty()) Repositories.wallets.updateDestino(aGuardar.id, aGuardar)
-                else Repositories.wallets.createDestino(aGuardar)
-            }
-            guardando = false
-            resultado.onSuccess { onGuardado(it) }.onFailure { error = it.toUserMessage() }
-        }
-    }
-
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_GUARDAR_EL_DESTINO)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                preguntaDelDestino(identificador),
+                preguntaDeLaFila(identificador, propuesto, seSumaA.takeIf { !abierta }),
                 style = Movi.textos.cuerpo,
                 color = Movi.colores.texto,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                if (abierta) "Cerrar" else GUARDAR_COMO,
-                style = Movi.textos.apoyo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.marca,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Movi.colores.marca.copy(alpha = 0.16f))
-                    .clickable(enabled = !guardando, role = Role.Button) { abierta = !abierta }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            )
-        }
-        if (!abierta) return@Column
-
-        Spacer(Modifier.height(12.dp))
-        FieldBox("Nombre. Ej: Caro", nombre, { nombre = it })
-        Spacer(Modifier.height(8.dp))
-        // Solo para uno nuevo: si se suma a uno guardado, ese ya dijo lo que es.
-        if (seSumaA == null) {
-            SelectorSegmentado(
-                labels = TipoDeTercero.entries.map { it.comoSeDice() },
-                selected = tipo.ordinal,
-                onSelect = { tipo = TipoDeTercero.entries[it] },
-                enabled = !guardando,
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-        if (conNota) {
-            FieldBox(NOTA_DEL_DESTINO, deQuien, { deQuien = it })
-        } else {
-            Text(
-                AGREGAR_UNA_NOTA,
-                style = Movi.textos.apoyo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.marca,
-                modifier = Modifier
-                    .clickable(enabled = !guardando, role = Role.Button) { conNota = true }
-                    .padding(vertical = 4.dp),
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
             when {
-                seSumaA != null -> "Se agrega a «${seSumaA.nombre}», que ya tienes guardada."
-                else -> "No es una cuenta tuya: no entra en tu plata. Movi le pone este nombre a lo que le envíes."
-            },
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoApagado,
-        )
-        if (error != null) {
+                abierta -> Pastilla("Cerrar", { abierta = false; eligiendoTercero = false }, enabled = !guardando)
+                propuesto.isNotBlank() -> {
+                    Pastilla(
+                        if (guardando) "Guardando…" else if (seSumaA != null) "Sumar" else GUARDAR,
+                        { guardar() },
+                        principal = true,
+                        enabled = sePuedeGuardar,
+                        modifier = Modifier.testTag(TAG_GUARDAR_DE_UN_TOQUE),
+                    )
+                    Pastilla(OTRO, { abierta = true }, enabled = !guardando)
+                }
+                else -> Pastilla(PONERLE_NOMBRE, { abierta = true }, principal = true, enabled = !guardando)
+            }
+        }
+        if (error != null && !abierta) {
             Spacer(Modifier.height(6.dp))
             Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
+        if (!abierta) return@Column
+
         Spacer(Modifier.height(10.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(if (sePuedeGuardar) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.fondo)
-                .clickable(enabled = sePuedeGuardar, role = Role.Button) { guardar() },
-            contentAlignment = Alignment.Center,
-        ) {
+        FieldBox("Nombre. Ej: Ana", nombre, { nombre = it })
+        Spacer(Modifier.height(8.dp))
+        if (seSumaA != null) {
             Text(
-                if (guardando) "Guardando…" else "Guardar cuenta",
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Medium,
-                color = if (sePuedeGuardar) Movi.colores.marca else Movi.colores.textoApagado,
+                "Se agrega a «${seSumaA.nombre}», que ya tienes guardada.",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoApagado,
             )
+            Spacer(Modifier.height(8.dp))
         }
-        // Lo primero que falta, como en la hoja de alta — no un botón gris sin explicación.
+        if (error != null) {
+            Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            Spacer(Modifier.height(6.dp))
+        }
+        BotonDeGuardar(
+            texto = if (guardando) "Guardando…" else GUARDAR,
+            habilitado = sePuedeGuardar,
+            onClick = { guardar() },
+            alto = 46,
+        )
+        // Lo primero que falta — no un botón gris sin explicación.
         if (loQueFalta != null && !guardando) {
             Spacer(Modifier.height(6.dp))
             Text(loQueFalta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -351,36 +331,41 @@ internal fun FilaGuardarElDestino(
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             if (destinos.isNotEmpty()) {
-                Enlace(ES_DE_UN_TERCERO_QUE_YA_TENGO, { eligiendoTercero = !eligiendoTercero }, enabled = !guardando)
+                Enlace(YA_LO_TENGO_GUARDADO, { eligiendoTercero = !eligiendoTercero }, enabled = !guardando)
             }
             Enlace(ES_MIA, { marcarComoMia() }, enabled = !guardando)
         }
         if (eligiendoTercero) {
             Spacer(Modifier.height(6.dp))
-            Column(
-                modifier = Modifier.fillMaxWidth().testTag(TAG_TERCEROS_QUE_YA_TENGO),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                destinos.sortedBy { normalizarParaBuscar(it.nombre) }.forEach { tercero ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable(enabled = !guardando, role = Role.Button) { sumarA(tercero) }
-                            .padding(vertical = 8.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(tercero.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
-                        Text(
-                            identificadoresDelDestino(tercero).take(2).joinToString(" · "),
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoApagado,
-                        )
-                    }
-                }
-            }
+            ListaDeTerceros(destinos, enabled = !guardando, modifier = Modifier.testTag(TAG_TERCEROS_QUE_YA_TENGO)) { sumarA(it) }
         }
     }
+}
+
+/** La pastilla que guarda de un toque. */
+const val TAG_GUARDAR_DE_UN_TOQUE: String = "guardar-de-un-toque"
+
+/** «Guardar», en la fila y en su campo. */
+const val GUARDAR: String = "Guardar"
+
+/** Abre la fila para cambiar el nombre, elegir alguien guardado o decir «Es mía». */
+const val OTRO: String = "Otro…"
+
+/** Abre el campo del nombre cuando el banco no lo dijo. */
+const val PONERLE_NOMBRE: String = "Ponerle nombre"
+
+/**
+ * La pregunta de la fila: «¿Guardar a «Marta Prueba Ruiz»?» con el nombre, «¿Es de «Caro»?» si ese
+ * nombre ya está guardado, o «¿De quién es la cuenta ·0756?» sin nombre.
+ */
+internal fun preguntaDeLaFila(
+    identificador: IdentificadorDelDestino,
+    nombre: String,
+    seSumaA: DestinoConocido?,
+): String = when {
+    seSumaA != null -> "¿Es de «${seSumaA.nombre}»? (${identificador.comoSeDice})"
+    nombre.isNotBlank() -> "¿Guardar a «$nombre»?"
+    else -> preguntaDelDestino(identificador)
 }
 
 /** El tag de la fila «Es de Caro · Ver su ficha» del detalle de un movimiento. */
@@ -390,40 +375,44 @@ const val TAG_FILA_DEL_TERCERO: String = "fila-del-tercero"
 const val VER_SU_FICHA: String = "Ver su ficha"
 
 /**
- * **«Es de Caro, en tus cuentas de otros · Ver su ficha»** (4-oct-2026): en el detalle de un
- * movimiento que ya es de un tercero guardado. Tocarla abre su ficha ([DetalleDelDestinoSheet]) con
- * todo lo que le enviaste y te envió — el «Ver todo lo de Caro» que Movimientos no tiene como
- * filtro. [recienGuardado] = se acaba de guardar desde esta misma hoja.
+ * **Quién abre la ficha de un tercero desde adentro de un movimiento.** «Personas y comercios» la abre
+ * en el lugar (el movimiento se abrió desde su ficha); en cualquier otra pantalla es `null` y «Ver su
+ * ficha» navega a «Personas y comercios» con la ficha abierta.
+ */
+val LocalAbrirFichaDelTercero = staticCompositionLocalOf<((DestinoConocido) -> Unit)?> { null }
+
+/**
+ * **«Es de «Caro», en Personas y comercios · Ver su ficha»**: en el detalle de un movimiento que ya
+ * es de alguien guardado. [recienGuardado] = se acaba de guardar desde esta misma hoja.
+ *
+ * Hasta el 4-oct-2026 la ficha se abría como una hoja ADENTRO de la hoja del movimiento, y en el
+ * teléfono —donde la hoja se dibuja en su lugar y no en el anfitrión— salía vacía. Ahora se abre en
+ * «Personas y comercios» ([Screen.Destinos] con `abrir`), donde además están «Editar» y la lista.
  */
 @Composable
 internal fun FilaDelTercero(
     tercero: DestinoConocido,
     recienGuardado: Boolean,
-    otros: List<DestinoConocido>,
     modifier: Modifier = Modifier,
 ) {
-    var fichaAbierta by remember(tercero.id) { mutableStateOf(false) }
+    val navegar = LocalNavigate.current
+    val abrirEnElLugar = LocalAbrirFichaDelTercero.current
     Row(
         modifier = modifier.fillMaxWidth().testTag(TAG_FILA_DEL_TERCERO),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            if (recienGuardado) "«${tercero.nombre}» quedó en tus cuentas de otros. Este movimiento ya cuenta ahí."
-            else "Es de «${tercero.nombre}», en tus cuentas de otros.",
+            if (recienGuardado) "«${tercero.nombre}» quedó en $PERSONAS_Y_COMERCIOS. Este movimiento ya cuenta ahí."
+            else "Es de «${tercero.nombre}», en $PERSONAS_Y_COMERCIOS.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             modifier = Modifier.weight(1f),
         )
-        Pastilla(VER_SU_FICHA, { fichaAbierta = true }, principal = true)
-    }
-    if (fichaAbierta) {
-        DetalleDelDestinoSheet(
-            destino = tercero,
-            ajustes = null,
-            onDismiss = { fichaAbierta = false },
-            onEditar = null,
-            otros = otros,
+        Pastilla(
+            VER_SU_FICHA,
+            { abrirEnElLugar?.invoke(tercero) ?: navegar(Screen.Destinos(abrir = tercero.id)) },
+            principal = true,
         )
     }
 }

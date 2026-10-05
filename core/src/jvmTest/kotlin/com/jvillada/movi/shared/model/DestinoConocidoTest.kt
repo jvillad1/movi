@@ -265,9 +265,11 @@ class DestinoConocidoTest {
     fun `nombraElNumeroDelDestino solo mira el numero, nunca el nombre suelto`() {
         val almuerzoCaro = gasto("ev-almuerzo", "Almuerzo caro", 45_000L, elVeintiseisDeAgosto)
         assertFalse(nombraElNumeroDelDestino(almuerzoCaro, caro), "el número no está en el texto")
-        assertTrue(
+        // 4-oct-2026: tampoco pega en vaHaciaElDestino — «caro» como adjetivo, detrás de
+        // «Almuerzo», no nombra a nadie (ver `elConceptoDiceElNombre`).
+        assertFalse(
             vaHaciaElDestino(almuerzoCaro, caro),
-            "vaHaciaElDestino SÍ acepta el nombre suelto — el agravante que encontró la revisión",
+            "el adjetivo «caro» no es Caro: inflaba lo que se le mandó",
         )
 
         val conElNumero = gasto(

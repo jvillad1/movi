@@ -8,6 +8,15 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.routes.CajaDelDueno
 import com.jvillada.movi.server.routes.cajaProyectadaDe
 import com.jvillada.movi.server.routes.creditosDe
+import com.jvillada.movi.server.routes.paraCompletar
+import com.jvillada.movi.server.routes.tercerosDe
+import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
+import com.jvillada.movi.shared.model.comoSeDice
+import com.jvillada.movi.shared.model.loDeCadaPeriodo
+import com.jvillada.movi.shared.model.movimientosDesdeElDestino
+import com.jvillada.movi.shared.model.movimientosHaciaElDestino
+import com.jvillada.movi.shared.model.terceroQueNombra
+import com.jvillada.movi.shared.model.totalesHaciaElDestino
 import com.jvillada.movi.server.routes.tarjetasDe
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.shared.model.EstrategiaDeSalida
@@ -93,6 +102,17 @@ const val PROYECTAR_CAJA = "proyectar_caja"
 const val SIMULAR_ABONO = "simular_abono"
 
 /**
+ * **Lo de una persona o comercio guardado** (4-oct-2026): «¿cuánto le he mandado a Caro este año?».
+ * Antes solo se podía contestar con [BUSCAR_MOVIMIENTOS] por texto, que pierde lo que el dueño
+ * renombró («Cuota de Cotrafa» que fue a Caro) y se lleva cualquier palabra que contenga «caro».
+ * Esta usa el mismo reconocimiento que la ficha (`vaHaciaElDestino`/`vieneDelDestino`).
+ */
+const val CONSULTAR_PERSONA_O_COMERCIO = "consultar_persona_o_comercio"
+
+/** Cuántos movimientos lista [CONSULTAR_PERSONA_O_COMERCIO] de un tercero. */
+internal const val TOPE_DE_MOVIMIENTOS_DE_UN_TERCERO = 20
+
+/**
  * **Cuánto se le manda cuando pide los documentos sin filtrar.** La lista entera de los 33 papeles
  * del dueño son casi ocho mil caracteres: tanto como costaba el contexto viejo completo, en una
  * sola consulta. Con este techo entra un tercio, el bloque dice que hay más, y el modelo puede
@@ -143,6 +163,7 @@ suspend fun ejecutarHerramienta(uid: String, llamada: LlamadaDeHerramienta): Str
         BUSCAR_DOCUMENTOS -> buscarDocumentos(uid, llamada.argumentos)
         PROYECTAR_CAJA -> textoDeLaCaja(cajaProyectadaDe(uid))
         SIMULAR_ABONO -> simularAbono(uid, llamada.argumentos)
+        CONSULTAR_PERSONA_O_COMERCIO -> consultarPersonaOComercio(uid, llamada.argumentos)
         else -> "No existe una herramienta que se llame «${llamada.nombre}»."
     }
 } catch (e: FechaIlegible) {
@@ -333,6 +354,76 @@ private suspend fun buscarDocumentos(uid: String, args: Map<String, String>): St
     }
     val presupuesto = if (texto == null) PRESUPUESTO_SIN_FILTRO else PRESUPUESTO_DE_DOCUMENTOS
     return renderizarDocumentos(elegidos, nombresDeCuenta, presupuesto).trim()
+}
+
+// ── Personas y comercios ─────────────────────────────────────────────────────
+
+/**
+ * **Lo enviado y lo recibido de una persona o comercio guardado**, entre dos fechas de calendario
+ * (sin fechas, los últimos [MESES_HACIA_ATRAS_POR_DEFECTO] meses). Sin `nombre`, la lista de todos
+ * con lo de cada uno en el rango. Las cifras son las de su ficha: el mismo reconocimiento por número,
+ * llave o nombre ([movimientosHaciaElDestino]/[movimientosDesdeElDestino]) y los mismos movimientos.
+ * Lo enviado y lo recibido van siempre aparte, por moneda.
+ */
+private suspend fun consultarPersonaOComercio(uid: String, args: Map<String, String>): String {
+    val desde = fechaDe(args["desde"]) ?: AppClock.today().minusMonths(MESES_HACIA_ATRAS_POR_DEFECTO)
+    val hasta = fechaDe(args["hasta"]) ?: AppClock.today()
+    val terceros = tercerosDe(uid)
+    if (terceros.isEmpty()) {
+        return "El usuario no tiene a nadie guardado en «$PERSONAS_Y_COMERCIOS». Se guardan desde ahí o desde el " +
+            "aviso del banco de una transferencia («¿De quién es la cuenta …?»)."
+    }
+    val inicio = appDateToEpochMillis(desde)
+    val finExclusivo = appDateToEpochMillis(hasta.plusDays(1))
+    val completar = paraCompletar(uid)
+    val enRango = completar.eventos.filter { it.timestamp >= inicio && it.timestamp < finExclusivo }
+    fun cifras(m: Map<String, Long>) = if (m.isEmpty()) "0" else m.entries.sortedBy { it.key }.joinToString(" y ") { "${it.value} ${it.key}" }
+
+    val nombre = args["nombre"]?.takeIf { it.isNotBlank() }
+    if (nombre == null) {
+        return buildString {
+            appendLine("Personas y comercios guardados, con lo de entre $desde y $hasta (enviado y recibido van aparte, nunca se suman):")
+            terceros.map(completar::completar).forEach { d ->
+                val ida = totalesHaciaElDestino(movimientosHaciaElDestino(d, enRango))
+                val vuelta = totalesHaciaElDestino(movimientosDesdeElDestino(d, enRango))
+                val tipo = d.tipo?.comoSeDice()?.lowercase() ?: "persona"
+                val nota = d.deQuien?.let { ", «$it»" }.orEmpty()
+                appendLine("- ${d.nombre} ($tipo$nota): le envió ${cifras(ida)}; recibió de ahí ${cifras(vuelta)}")
+            }
+        }.trim()
+    }
+    val tercero = terceroQueNombra(nombre, terceros)
+        ?: return "Ninguno de sus guardados se reconoce como «$nombre» (o se parece a más de uno). Los guardados son: " +
+            terceros.joinToString(", ") { it.nombre } + ". Vuelve a consultar con uno de esos nombres."
+    val d = completar.completar(tercero)
+    val enviados = movimientosHaciaElDestino(d, enRango)
+    val recibidos = movimientosDesdeElDestino(d, enRango)
+    val ajustes = ajustesDePeriodoDe(uid)
+    return buildString {
+        val tipo = d.tipo?.comoSeDice()?.lowercase() ?: "persona"
+        appendLine("${d.nombre} ($tipo${d.deQuien?.let { ", «$it»" }.orEmpty()}), entre $desde y $hasta:")
+        appendLine("- Le envió: ${cifras(totalesHaciaElDestino(enviados))} en ${enviados.size} movimientos")
+        appendLine("- Recibió de ahí: ${cifras(totalesHaciaElDestino(recibidos))} en ${recibidos.size} movimientos")
+        appendLine("(Enviado y recibido van aparte: no se suman ni se restan entre sí.)")
+        val porPeriodo = loDeCadaPeriodo(enviados, recibidos, ajustes)
+        if (porPeriodo.size > 1) {
+            appendLine("Por período del usuario:")
+            porPeriodo.forEach { p ->
+                appendLine("- ${nombreDe(p.periodo)}: envió ${cifras(p.enviado)}; recibió ${cifras(p.recibido)}")
+            }
+        }
+        val todos = (enviados + recibidos).sortedByDescending { it.timestamp }
+        if (todos.isNotEmpty()) {
+            appendLine("Movimientos:")
+            todos.take(TOPE_DE_MOVIMIENTOS_DE_UN_TERCERO).forEach { ev ->
+                val signo = if (ev.type == TransactionType.INCOME) "+" else "-"
+                appendLine("- ${epochMillisToAppDateString(ev.timestamp)} · ${ev.description}: $signo${ev.amount} ${ev.currency}")
+            }
+            if (todos.size > TOPE_DE_MOVIMIENTOS_DE_UN_TERCERO) {
+                appendLine("(y ${todos.size - TOPE_DE_MOVIMIENTOS_DE_UN_TERCERO} más que no se listan; los totales de arriba los suman todos)")
+            }
+        }
+    }.trim()
 }
 
 // ── La lectura, una sola y con las reglas de plata ───────────────────────────

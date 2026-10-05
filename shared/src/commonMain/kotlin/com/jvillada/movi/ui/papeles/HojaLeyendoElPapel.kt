@@ -40,7 +40,6 @@ import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.formatMoney
-import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
@@ -88,7 +87,7 @@ fun HojaLeyendoElPapel(
             resultados[i] = intentar { Repositories.wallets.leerPapel(resultado.lectura.documentoId, anotarAunqueEsteAnotado = true) }
                 .fold(
                     onSuccess = { resultadoDe(resultado.nombre, it) },
-                    onFailure = { ResultadoDelPapel.NoSePudo(resultado.nombre, it.toUserMessage(), guardado = true) },
+                    onFailure = { ResultadoDelPapel.NoSePudo(resultado.nombre, motivoAlLeerElPapel(it), guardado = true) },
                 )
             onCambio()
         }

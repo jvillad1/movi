@@ -1977,6 +1977,7 @@ class LocalRepository(
         remote.agregarIdentificador(id, pedido)
     override suspend fun quitarIdentificador(id: String, identificador: com.jvillada.movi.shared.model.IdentificadorDelDestino) =
         remote.quitarIdentificador(id, identificador)
+    override suspend fun unirDestinos(id: String, con: String) = remote.unirDestinos(id, con)
     override suspend fun getRenombrablesDelDestino(id: String) = remote.getRenombrablesDelDestino(id)
     // Renombrar es una escritura sobre movimientos: el espejo local se pone al día en la próxima
     // lectura de eventos (llevan `lastEditedAt`, igual que una corrección de concepto en la web).
