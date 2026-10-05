@@ -34,6 +34,7 @@ import org.apache.poi.ss.usermodel.WorkbookFactory
 import java.io.ByteArrayInputStream
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.sms.destinosDelDueno
+import com.jvillada.movi.server.sms.memoriaDe
 import com.jvillada.movi.server.storage.Stores
 import com.jvillada.movi.server.subscriptions.runSubscriptionDetection
 import com.jvillada.movi.shared.model.*
@@ -439,6 +440,18 @@ internal suspend fun conciliarYArchivar(
         }
     }
 
+    // **Lo que el banco cobra o abona solo** (4x1000, cuota de manejo, intereses, rendimientos): entra
+    // con la categoría del dueño —su memoria primero— y se marca aparte, con los movimientos que el
+    // dueño ya anotó sumados («4x1000 del 27 al 30 de septiembre») para que la revisión no los
+    // proponga dos veces. Contra los movimientos que el emparejador de arriba NO usó. Ver
+    // `CargosDelExtracto.kt` en :core.
+    val memoria = dbQuery { memoriaDe(uid) }
+    val (nuevasConCargos, cargosDelBanco) = cargosDelExtracto(
+        nuevas = newTransactions,
+        eventos = existing.filter { it.id !in yaEmparejados },
+        memoria = memoria,
+    )
+
     val period = if (isFamirios) {
         val years = parsed.mapNotNull { fechaDelExtracto(it.date)?.year }
         if (years.isEmpty()) "" else "${years.min()}–${years.max()}"
@@ -511,10 +524,11 @@ internal suspend fun conciliarYArchivar(
         statementId = UUID.randomUUID().toString(),
         bankName = bankName,
         period = period,
-        newTransactions = newTransactions,
+        newTransactions = nuevasConCargos,
         matches = matches,
         numerosDeCuenta = leido.numerosDeCuenta,
         documentoId = documentoId,
+        cargosDelBanco = cargosDelBanco,
     )
 }
 

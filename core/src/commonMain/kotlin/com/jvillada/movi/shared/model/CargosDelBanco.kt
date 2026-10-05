@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.serialization.Serializable
+
 /*
  * # Lo que el banco cobra o abona por su cuenta
  *
@@ -15,6 +17,7 @@ package com.jvillada.movi.shared.model
  */
 
 /** Las tres clases de cargo o abono que el banco hace solo. */
+@Serializable
 enum class ClaseDeCargo { IMPUESTO, COMISION, RENDIMIENTO }
 
 /** La categoría del dueño para el 4x1000 y la retención en la fuente. */
