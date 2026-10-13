@@ -1040,6 +1040,58 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         }
     }
 
+    // ── Repartir un envío entre varios pagos fijos (ver `RepartirEnReconciliar.kt`) ──────────────
+    // Solo para lo que salió: el server dice qué pagos del período puede saldar y si la suma es exacta.
+    var reparto by remember { mutableStateOf<com.jvillada.movi.shared.model.PropuestaDeReparto?>(null) }
+    LaunchedEffect(idDeLaPropuesta, parsed?.type) {
+        reparto = if (parsed?.type == TransactionType.EXPENSE) {
+            intentar { Repositories.wallets.getRepartoDelAviso(idDeLaPropuesta) }.getOrNull()
+        } else null
+    }
+
+    /** Un movimiento por pago, en una transacción del server: el mismo `…/confirmar` de siempre, con `reparto`. */
+    fun repartir(elegidos: List<Pair<com.jvillada.movi.shared.model.PagoParaRepartir, Long>>, recordar: Boolean) {
+        if (working) return
+        if (sms?.state.let { it != null && it != SMS_STATE_PENDING }) return
+        val p = parsed ?: return
+        val acct = resolvedAccount ?: return
+        val destinoARecordar = reparto?.destinoId?.takeIf { recordar }
+        working = true
+        error = null
+        coroutine.launch {
+            intentar {
+                val momento = momentoDelMovimientoDelAviso(sms, pagoActual, p, ahora = Clock.System.now().toEpochMilliseconds())
+                val partes = partesDelReparto(
+                    elegidos = elegidos,
+                    cuenta = acct,
+                    leido = p,
+                    momento = momento,
+                    textoDelAviso = (avisoDeLaPropuesta ?: sms)?.text.orEmpty(),
+                    esComprobante = esComprobante,
+                    nuevoId = ::newId,
+                )
+                // Un aviso suelto va por la misma ruta con un solo miembro: el server lo bloquea y lo
+                // marca igual que a un pago avisado varias veces.
+                val elPago = pagoActual
+                Repositories.wallets.confirmarElMismoPago(
+                    elPago?.grupoId ?: smsId,
+                    ConfirmarElMismoPago(
+                        miembros = if (elPago != null) idsDelPago else listOf(smsId),
+                        reparto = partes,
+                        recordarDestinoId = destinoARecordar,
+                    ),
+                )
+            }.onSuccess {
+                working = false
+                sms = sms?.copy(state = SMS_STATE_CONFIRMED)
+                goBack(Screen.PorRevisar)
+            }.onFailure {
+                working = false
+                error = it.toUserMessage()
+            }
+        }
+    }
+
     // ¿El SMS es de antes de que la cuenta elegida arrancara en Movi? Se recalcula al cambiar de cuenta.
     var antesDeLaCuenta by remember { mutableStateOf<kotlinx.datetime.LocalDate?>(null) }
     LaunchedEffect(resolvedAccount?.id, currentSms?.time) {
@@ -1269,6 +1321,16 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             }
                         }
                     }
+                }
+
+                // «Son 2 pagos: Hipoteca Papá $2.228.152 + Libranza Papá $2.051.848», o repartir a mano.
+                val elReparto = reparto
+                if (elReparto != null && yaAnotadoCon == null && (currentSms == null || currentSms.state == SMS_STATE_PENDING)) {
+                    TarjetaDelReparto(
+                        propuesta = elReparto,
+                        habilitado = !working && resolvedAccount != null,
+                        onRepartir = { elegidos, recordar -> repartir(elegidos, recordar) },
+                    )
                 }
 
                 Spacer(Modifier.height(14.dp))

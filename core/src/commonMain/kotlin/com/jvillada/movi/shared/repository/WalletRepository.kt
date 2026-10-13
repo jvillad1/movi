@@ -201,6 +201,14 @@ interface WalletRepository {
      */
     suspend fun getPropuestasDeLaBandeja(): com.jvillada.movi.shared.model.PropuestasDeLaBandeja =
         com.jvillada.movi.shared.model.PropuestasDeLaBandeja()
+
+    /**
+     * **Repartir un envío entre varios pagos fijos** (`GET /api/sms/{id}/reparto`): los pagos del
+     * período que el aviso puede saldar y la suma exacta, si hay una. Sin pagos donde no se
+     * implementa: Reconciliar no ofrece repartir. Se confirma con [confirmarElMismoPago] y `reparto`.
+     */
+    suspend fun getRepartoDelAviso(id: String): com.jvillada.movi.shared.model.PropuestaDeReparto =
+        com.jvillada.movi.shared.model.PropuestaDeReparto(avisoId = id)
     suspend fun confirmSms(id: String)
     suspend fun ignoreSms(id: String)
     /**

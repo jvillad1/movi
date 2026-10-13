@@ -137,6 +137,7 @@ fun loQueMoviEntendio(
         nombraOtraCuentaSuya = nombraOtraCuentaSuya,
         categoriasDelDueno = propuestas.categoriasDelDueno,
         antesDeLaCuenta = cuenta != null && esAntesDeLaCuenta(momento, propuestas.inicioDeLasCuentas[cuenta.id]),
+        seReparte = propuesta.seReparte,
     )
     if (dudas.isNotEmpty() || cuenta == null) return LoQueMoviEntendio(null, dudas)
     return LoQueMoviEntendio(

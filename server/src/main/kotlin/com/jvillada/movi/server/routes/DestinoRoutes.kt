@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.DestinosDescartados
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.KnownDestinations
@@ -218,6 +219,8 @@ fun Route.destinoRoutes() {
                 RecurringRules.update({
                     (RecurringRules.userId eq uid) and (RecurringRules.destinoConocidoId eq id)
                 }) { it[RecurringRules.destinoConocidoId] = null }
+                // Lo mismo para la cuota de un crédito que se le giraba (`CreditTerms.destinoConocidoId`).
+                Credits.update({ (Credits.userId eq uid) and (Credits.destinoConocidoId eq id) }) { it[Credits.destinoConocidoId] = null }
                 KnownDestinations.deleteWhere { (KnownDestinations.id eq id) and (KnownDestinations.userId eq uid) }
             }
             // Borrar un destino **no toca un solo movimiento**: lo que se olvida es el nombre y la
@@ -338,6 +341,7 @@ fun Route.destinoRoutes() {
                 RecurringRules.update({
                     (RecurringRules.userId eq uid) and (RecurringRules.destinoConocidoId eq id)
                 }) { it[RecurringRules.destinoConocidoId] = con }
+                Credits.update({ (Credits.userId eq uid) and (Credits.destinoConocidoId eq id) }) { it[Credits.destinoConocidoId] = con }
                 KnownDestinations.deleteWhere { (KnownDestinations.id eq id) and (KnownDestinations.userId eq uid) }
                 resultado
             } ?: return@post call.respond(HttpStatusCode.NotFound)

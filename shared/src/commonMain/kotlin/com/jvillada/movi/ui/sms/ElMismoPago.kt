@@ -316,9 +316,9 @@ internal fun TextoDelAviso(aviso: SmsMessage, accion: (@Composable () -> Unit)? 
 internal fun PastillaDelPago(
     texto: String,
     habilitada: Boolean,
-    onClick: () -> Unit,
     principal: Boolean = false,
     modifier: Modifier = Modifier,
+    onClick: () -> Unit,
 ) {
     Box(
         modifier = modifier

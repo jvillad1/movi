@@ -23,6 +23,7 @@ import com.jvillada.movi.shared.model.PropuestasDeLaBandeja
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.conElDestinoConocido
 import com.jvillada.movi.shared.model.esUnComprobante
 import com.jvillada.movi.shared.model.identificador
@@ -183,6 +184,21 @@ private fun Transaction.inicioDeLasCuentasDe(uid: String): Map<String, Long> {
 fun Route.bandejaQueSeVaciaRoutes() {
     get("/api/sms/propuestas") {
         val uid = call.userId()
-        call.respond(dbQuery { propuestasDeLaBandeja(uid, ahora = System.currentTimeMillis()) })
+        val ahora = System.currentTimeMillis()
+        call.respond(conLoQueSeReparte(uid, dbQuery { propuestasDeLaBandeja(uid, ahora) }, ahora))
     }
 }
+
+/**
+ * Marca las propuestas que son **la suma exacta de varios pagos del período** del tercero al que
+ * fueron ([PropuestaDelAviso.seReparte]): esas se reparten en Reconciliar, y la fila no las anota
+ * como un solo movimiento. Solo mira las salidas; [propuestaDeRepartoDe] corta enseguida las que no
+ * van a nadie (una compra en un comercio).
+ */
+internal suspend fun conLoQueSeReparte(uid: String, leidas: PropuestasDeLaBandeja, ahora: Long): PropuestasDeLaBandeja =
+    leidas.copy(
+        propuestas = leidas.propuestas.map { propuesta ->
+            if (propuesta.leido?.type != TransactionType.EXPENSE) propuesta
+            else propuesta.copy(seReparte = propuestaDeRepartoDe(uid, propuesta.avisoId, ahora)?.exacto?.isNotEmpty() == true)
+        },
+    )

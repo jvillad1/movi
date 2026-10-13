@@ -38,6 +38,11 @@ data class PropuestaDelAviso(
     val noSePudoLeer: String? = null,
     val coincidencias: List<FinancialEvent> = emptyList(),
     val destinoSinNombre: Boolean = false,
+    /**
+     * El envío es **exactamente** la suma de 2 o 3 pagos que el dueño asoció a ese tercero (ver
+     * `RepartirUnEnvio.kt`): Reconciliar propone repartirlo, así que la fila no lo anota como uno.
+     */
+    val seReparte: Boolean = false,
 )
 
 /**
@@ -82,6 +87,9 @@ enum class DudaDelAviso {
 
     /** El aviso es de antes de que la cuenta arrancara en Movi: se contaría dos veces. */
     ANTES_DE_LA_CUENTA,
+
+    /** El envío es la suma exacta de varios pagos del período: se reparte en Reconciliar. */
+    SE_REPARTE,
 }
 
 /**
@@ -121,7 +129,8 @@ fun categoriaEntendida(leido: ParsedSms, categoriasDelDueno: Collection<String>)
  *    que necesita elegir patas —por la categoría ([CATEGORIAS_DE_DOS_PATAS]), por lo que el server ya
  *    dedujo (la deuda, el traspaso hacia o desde una cuenta suya) o porque el aviso nombra otra
  *    cuenta suya ([nombraOtraCuentaSuya], que resuelve la app)—.
- * 3. Y no es de antes de que la cuenta arrancara en Movi ([antesDeLaCuenta]).
+ * 3. Y no es de antes de que la cuenta arrancara en Movi ([antesDeLaCuenta]), ni un envío que es la
+ *    suma exacta de varios pagos del período ([seReparte]: ese se reparte en Reconciliar).
  *
  * Lo usan la fila y el lote: los dos confirman solo lo que sale vacío de acá.
  */
@@ -133,6 +142,7 @@ fun dudasDelAviso(
     nombraOtraCuentaSuya: Boolean,
     categoriasDelDueno: Collection<String>,
     antesDeLaCuenta: Boolean = false,
+    seReparte: Boolean = false,
 ): Set<DudaDelAviso> {
     if (leido == null) return setOf(DudaDelAviso.NO_SE_LEYO)
     val dudas = mutableSetOf<DudaDelAviso>()
@@ -146,6 +156,7 @@ fun dudasDelAviso(
         nombraOtraCuentaSuya
     if (dosPatas) dudas += DudaDelAviso.DOS_PATAS
     if (antesDeLaCuenta) dudas += DudaDelAviso.ANTES_DE_LA_CUENTA
+    if (seReparte) dudas += DudaDelAviso.SE_REPARTE
     return dudas
 }
 

@@ -809,6 +809,13 @@ object Credits : Table("credit_terms") {
      * `AccountRoutes`) y la propuesta deja de salir.
      */
     val debitoAutomaticoDesde = varchar("debito_automatico_desde", 50).nullable()
+    /**
+     * El tercero al que el dueño le gira la cuota; ver `CreditTerms.destinoConocidoId`. Nullable por
+     * lo mismo que las de arriba (`ADD COLUMN … NULL` dentro de la transacción de arranque no puede
+     * fallar), y sin FK a `known_destinations` por lo mismo que `recurring_rules.destino_conocido_id`:
+     * si el tercero se borra, el crédito suelta la referencia (ver `DestinoRoutes`).
+     */
+    val destinoConocidoId = varchar("destino_conocido_id", 50).nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)

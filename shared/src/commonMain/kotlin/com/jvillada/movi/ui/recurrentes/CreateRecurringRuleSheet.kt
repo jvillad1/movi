@@ -1118,7 +1118,7 @@ private fun AccountPickerField(
  * esto es una seña EXTRA del emparejador, no un dato que la regla necesite para tener sentido.
  */
 @Composable
-private fun DestinoConocidoPickerField(
+internal fun DestinoConocidoPickerField(
     destinos: List<DestinoConocido>,
     selectedId: String?,
     /** Revisión final, M3: ¿la lectura falló? Distingue «todavía no llegó / falló» de «no tiene». */

@@ -228,7 +228,8 @@ fun Route.creditRoutes() {
                     insertEventRow(uid, legs.first)
                     insertEventRow(uid, legs.second)
                 }
-                Credits.insert { fillTerms(it, uid, terms) }
+                // Un tercero ajeno no se guarda (ver `CreditTerms.destinoConocidoId`).
+                Credits.insert { fillTerms(it, uid, terms.copy(destinoConocidoId = destinoConocidoIdIfOwned(uid, terms.destinoConocidoId))) }
             }
             // Solo la pata del PRÉSTAMO entra al cálculo del resumen: `summaryFor` deriva el
             // saldo de ESTA cuenta, y la otra pata es de la cuenta corriente.
@@ -319,6 +320,18 @@ fun Route.creditRoutes() {
                 // Movi la propuesta de la cuota que el banco cobra solo.
                 .let { if ("debitoAutomaticoDesde" in crudo) it else it.copy(debitoAutomaticoDesde = previo?.debitoAutomaticoDesde) }
                 .let { it.copy(debitoAutomaticoDesde = it.debitoAutomaticoDesde?.trim()?.takeIf { v -> v.isNotBlank() }) }
+                // A quién le gira la cuota: tres estados, como en la regla (`null` = no lo toques,
+                // `""` = quítalo, un id = ese tercero si es suyo). Ver `CreditTerms.destinoConocidoId`.
+                .let { pedido ->
+                    val crudoDelDestino = pedido.destinoConocidoId
+                    pedido.copy(
+                        destinoConocidoId = when {
+                            crudoDelDestino == null -> previo?.destinoConocidoId
+                            crudoDelDestino.isBlank() -> null
+                            else -> dbQuery { destinoConocidoIdIfOwned(uid, crudoDelDestino) }
+                        },
+                    )
+                }
             // Crear y editar validan igual: la misma función que el alta y que la hoja.
             validarTasaDelCredito(body)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
             dbQuery { motivoDelDebitoAutomatico(uid, body, account.currency) }
@@ -669,6 +682,7 @@ private fun fillTerms(
     it[Credits.otrosCargosMensuales] = terms.otrosCargosMensuales?.takeIf { v -> v > 0L }
     it[Credits.sinIntereses] = terms.sinIntereses
     it[Credits.debitoAutomaticoDesde] = terms.debitoAutomaticoDesde?.trim()?.takeIf { v -> v.isNotBlank() }
+    it[Credits.destinoConocidoId] = terms.destinoConocidoId?.takeIf { v -> v.isNotBlank() }
 }
 
 private fun summaryFor(

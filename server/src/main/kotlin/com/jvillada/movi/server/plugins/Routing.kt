@@ -105,6 +105,7 @@ fun Application.configureRouting() {
             smsRoutes()
             elMismoPagoRoutes()
             bandejaQueSeVaciaRoutes()
+            repartoRoutes()
             direccionDeCorreoRoutes()
             aiRoutes()
             statementRoutes()
