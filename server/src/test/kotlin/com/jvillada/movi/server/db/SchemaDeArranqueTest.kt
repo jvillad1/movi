@@ -73,6 +73,9 @@ class SchemaDeArranqueTest {
         "credit_terms" to "sin_intereses",
         // El débito automático de una cuota: toda consulta de créditos la nombra (`toCreditTerms`).
         "credit_terms" to "debito_automatico_desde",
+        // El interés de una cuota según el extracto, y de qué cuota: `toCreditTerms` los nombra.
+        "credit_terms" to "interes_real",
+        "credit_terms" to "interes_real_cuota",
         // «Se debita solo» de una regla recurrente: `toRule()` —o sea toda lectura de recurrentes— la nombra.
         "recurring_rules" to "se_debita_solo",
         // La edad de la versión de una cuenta, que es lo que hace perder al reenvío del teléfono

@@ -176,6 +176,11 @@ data class DashboardData(
      * «Para revisar» no dice nada de esto.
      */
     val debitosPorConfirmar: List<com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar>? = null,
+    /**
+     * El saldo que dijo un aviso del banco y no coincide con Movi (`GET /api/cuadres-por-aviso`). Se
+     * pide aparte, como los débitos automáticos. `null` = no llegó, y no se dice nada.
+     */
+    val cuadresPorAviso: List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso>? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -900,6 +905,7 @@ internal fun cosasParaRevisarDe(
     bancosMudos = data.bancosMudos,
     cuentasDeOtrosSinNombre = data.cuentasDeOtrosSinNombre,
     debitosPorConfirmar = data.debitosPorConfirmar.orEmpty(),
+    cuadresPorAviso = data.cuadresPorAviso.orEmpty(),
 )
 
 /**

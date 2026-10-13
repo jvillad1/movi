@@ -37,4 +37,6 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     sinIntereses = this[Credits.sinIntereses] ?: false,
     debitoAutomaticoDesde = this[Credits.debitoAutomaticoDesde]?.takeIf { it.isNotBlank() },
     destinoConocidoId = this[Credits.destinoConocidoId]?.takeIf { it.isNotBlank() },
+    interesReal = this[Credits.interesReal],
+    interesRealCuota = this[Credits.interesRealCuota]?.takeIf { it.isNotBlank() },
 )

@@ -436,13 +436,29 @@ class WalletRepositoryImpl(
         client.get("$baseUrl/api/caja-proyectada/gasto-del-dia-a-dia").exigirExito().body()
 
     override suspend fun getAnomalias(): List<com.jvillada.movi.shared.model.Anomalia> =
-        client.get("$baseUrl/api/anomalias").exigirExito().body()
+        // `conDeudas=1`: esta app conoce los dos avisos de las deudas (ver `TipoDeAnomalia`).
+        client.get("$baseUrl/api/anomalias?conDeudas=1").exigirExito().body()
 
     override suspend fun descartarAnomalia(huella: String) {
         client.post("$baseUrl/api/anomalias/descartar") {
             contentType(ContentType.Application.Json)
             setBody(com.jvillada.movi.shared.model.DescartarAnomaliaRequest(huella))
         }.exigirExito()
+    }
+
+    override suspend fun getCuadresPorAviso(): List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso> =
+        client.get("$baseUrl/api/cuadres-por-aviso").exigirExito().body()
+
+    override suspend fun ajustarPorElAviso(avisoId: String): FinancialEvent? {
+        val respuesta = client.post("$baseUrl/api/cuadres-por-aviso/$avisoId/ajustar")
+        // 404 = ya no había nada que ajustar: un segundo toque, o la propuesta se resolvió en otro
+        // lado. No es un error que haya que mostrarle a nadie.
+        if (respuesta.status == HttpStatusCode.NotFound) return null
+        return respuesta.exigirExito().body()
+    }
+
+    override suspend fun descartarCuadrePorAviso(avisoId: String) {
+        client.post("$baseUrl/api/cuadres-por-aviso/$avisoId/descartar").exigirExito()
     }
 
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary =
@@ -959,8 +975,10 @@ class WalletRepositoryImpl(
     // «falta la clave», «no encontramos movimientos»— y sin esto el cuerpo se perdía adentro de la
     // excepción de deserialización. Escribir un buen mensaje de error no sirve de nada si el
     // camino por el que viaja lo tira.
+    // `conCreditos=1`: esta app sabe mostrar la propuesta del extracto de un crédito (ver
+    // `StatementParseResult.extractoDeCredito`); sin el parámetro el server lo rechaza como siempre.
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
-        client.post("$baseUrl/api/statements/upload") {
+        client.post("$baseUrl/api/statements/upload?conCreditos=1") {
             setBody(MultiPartFormDataContent(formData {
                 append("file", bytes, Headers.build {
                     append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
@@ -973,7 +991,16 @@ class WalletRepositoryImpl(
     // el cuerpo («no encontramos movimientos», «falta la clave»), y sin esto se pierde adentro de
     // la excepción de deserialización.
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
-        client.post("$baseUrl/api/documents/$id/leer-extracto").exigirExito().body()
+        client.post("$baseUrl/api/documents/$id/leer-extracto?conCreditos=1").exigirExito().body()
+
+    override suspend fun aceptarElExtractoDelCredito(
+        accountId: String,
+        resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeCredito,
+    ): CreditSummary =
+        client.post("$baseUrl/api/credits/$accountId/extracto") {
+            contentType(ContentType.Application.Json)
+            setBody(resumen)
+        }.exigirExito().body()
 
     // Los cuatro comprueban el status, como el resto del archivo. Sin esto `deleteDocument`
     // decía «listo» ante un 500 —el documento seguía ahí y la lista se recargaba igual— y un 401
