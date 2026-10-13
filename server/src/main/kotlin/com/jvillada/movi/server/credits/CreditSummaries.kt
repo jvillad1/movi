@@ -36,6 +36,7 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     // Nullable en la base, `false` en el wire: las filas viejas no la tienen.
     sinIntereses = this[Credits.sinIntereses] ?: false,
     debitoAutomaticoDesde = this[Credits.debitoAutomaticoDesde]?.takeIf { it.isNotBlank() },
+    destinoConocidoId = this[Credits.destinoConocidoId]?.takeIf { it.isNotBlank() },
     interesReal = this[Credits.interesReal],
     interesRealCuota = this[Credits.interesRealCuota]?.takeIf { it.isNotBlank() },
 )

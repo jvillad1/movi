@@ -139,7 +139,7 @@ internal fun confirmarElMismoPago(
     val pendientes = filas.filter { it[SmsMessages.state] == SMS_STATE_PENDING }.map { it[SmsMessages.id] }
     val confirmados = filas.filter { it[SmsMessages.state] == SMS_STATE_CONFIRMED }
 
-    fun cerrar(eventoId: String?, creado: Boolean): Confirmacion {
+    fun cerrar(eventoId: String?, creado: Boolean, todos: List<String>? = null): Confirmacion {
         if (pendientes.isNotEmpty()) {
             SmsMessages.update({ (SmsMessages.userId eq uid) and (SmsMessages.id inList pendientes) }) {
                 it[state] = SMS_STATE_CONFIRMED
@@ -156,7 +156,7 @@ internal fun confirmarElMismoPago(
                 cerrados = pendientes,
                 // Si el movimiento es una pata (un pago de dos patas), también su hermana: un doble
                 // toque contesta lo mismo que el primero.
-                patas = eventoId?.let { TransactionManager.current().patasDelMovimiento(uid, it) }.orEmpty(),
+                patas = todos ?: eventoId?.let { TransactionManager.current().patasDelMovimiento(uid, it) }.orEmpty(),
             ),
         )
     }
@@ -173,6 +173,17 @@ internal fun confirmarElMismoPago(
         val esSuyo = Events.selectAll().where { (Events.id eq existente) and (Events.userId eq uid) }.count() > 0
         if (!esSuyo) return Confirmacion.Rechazada(HttpStatusCode.NotFound, "Ese movimiento no existe.")
         return cerrar(existente, creado = false)
+    }
+
+    // **Repartir el envío entre varios pagos del período** (ver `RepartirElAviso.kt`): un movimiento
+    // por pago, en esta misma transacción y con estos avisos bloqueados. Los avisos quedan con el de
+    // la primera parte; la respuesta trae todos.
+    pedido.reparto?.let { partes ->
+        val propuesta = propuestaDelGrupo(filas.map { it.toSmsMessage() })
+        return when (val hecho = TransactionManager.current().escribirElReparto(uid, propuesta, partes, pedido.recordarDestinoId, ahora)) {
+            is Repartido.Hecho -> cerrar(hecho.eventoDelAviso, creado = true, todos = hecho.ids)
+            is Repartido.Rechazado -> Confirmacion.Rechazada(hecho.estado, hecho.motivo)
+        }
     }
 
     // **Dos patas** (arreglo 1 de la auditoría de la ingesta): el pago de una tarjeta, una cuota, un
@@ -204,7 +215,7 @@ internal fun confirmarElMismoPago(
     return cerrar(evento.id, creado = existente == null)
 }
 
-private sealed interface Validado {
+internal sealed interface Validado {
     data class Bien(val evento: FinancialEvent) : Validado
     data class Mal(val estado: HttpStatusCode, val motivo: String) : Validado
 }
@@ -214,7 +225,7 @@ private sealed interface Validado {
  * un mensaje del banco: ni medio traspaso ni un desembolso suelto, monto y textos con forma, una
  * fecha de este siglo y una cuenta del usuario. Sale como `SMS` y confirmado: lo revisó el dueño.
  */
-private fun movimientoDelAviso(uid: String, pedido: FinancialEvent, ahora: Long): Validado {
+internal fun movimientoDelAviso(uid: String, pedido: FinancialEvent, ahora: Long): Validado {
     if (pedido.transferId != null || pedido.category == TRANSFER_CATEGORY) {
         return Validado.Mal(HttpStatusCode.UnprocessableEntity, TRANSFER_LEG_NOT_STANDALONE)
     }
@@ -239,7 +250,7 @@ private fun movimientoDelAviso(uid: String, pedido: FinancialEvent, ahora: Long)
 }
 
 /** La misma fila que escribe `POST /api/events`. */
-private fun insertarMovimiento(uid: String, event: FinancialEvent) {
+internal fun insertarMovimiento(uid: String, event: FinancialEvent) {
     Events.insert {
         it[id] = event.id
         it[userId] = uid

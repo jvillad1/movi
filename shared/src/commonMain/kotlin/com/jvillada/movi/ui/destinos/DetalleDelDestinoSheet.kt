@@ -124,6 +124,14 @@ fun DetalleDelDestinoSheet(
     val delPeriodo = porPeriodo.firstOrNull { it.periodo == enCurso }
     val enviadoEstePeriodo = if (movimientos != null) delPeriodo?.enviado.orEmpty() else destino.totalesDelPeriodo
     val recibidoEstePeriodo = if (movimientos != null) delPeriodo?.recibido.orEmpty() else destino.recibidosDelPeriodo
+    // **Lo que le enviaste este período, por motivo** (la categoría de cada envío; ver
+    // `MotivoDelEnvio.kt`): «Mercado $2.000.000 · Cuota de crédito $1.300.000 · Tía $500.000».
+    val porMotivo = remember(movimientos, periodo, enCurso) {
+        val p = periodo
+        val m = movimientos
+        if (p == null || m == null || enCurso == null) emptyList()
+        else com.jvillada.movi.shared.model.enviadoPorMotivo(m.filter { com.jvillada.movi.shared.model.periodoDe(it.timestamp, p) == enCurso })
+    }
     // Lo enviado y lo recibido en una sola lista, del más reciente al más viejo.
     val todos = remember(movimientos, recibidos) {
         movimientos?.let { (it + recibidos).distinctBy { e -> e.id }.sortedByDescending { e -> e.timestamp } }
@@ -162,6 +170,24 @@ fun DetalleDelDestinoSheet(
             Row(modifier = Modifier.fillMaxWidth().testTag(TAG_ESTE_PERIODO_DEL_TERCERO)) {
                 ColumnaDeCifra("Le enviaste", enviadoEstePeriodo, Modifier.weight(1f))
                 ColumnaDeCifra("Te envió", recibidoEstePeriodo, Modifier.weight(1f), entra = true)
+            }
+            if (porMotivo.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Text("LO QUE LE ENVIASTE, POR MOTIVO", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(6.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.testTag(TAG_POR_MOTIVO_DEL_TERCERO)) {
+                    porMotivo.forEach { envio ->
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                envio.motivo + if (envio.cuantos > 1) " (${envio.cuantos})" else "",
+                                style = Movi.textos.cuerpo,
+                                color = Movi.colores.texto,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(formatMoney(envio.monto, envio.moneda), style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                        }
+                    }
+                }
             }
 
             renombrables?.takeIf { it.movimientos.isNotEmpty() }?.let { r ->
@@ -253,6 +279,9 @@ fun DetalleDelDestinoSheet(
         }
     }
 }
+
+/** El tag de «Lo que le enviaste, por motivo» en la ficha. */
+const val TAG_POR_MOTIVO_DEL_TERCERO: String = "ficha-del-tercero:por-motivo"
 
 /** El tag de la ficha de un tercero, para las pruebas. */
 const val TAG_FICHA_DEL_TERCERO: String = "ficha-del-tercero"

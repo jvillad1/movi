@@ -208,6 +208,18 @@ data class CreditTerms(
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val debitoAutomaticoDesde: String? = null,
     /**
+     * **A quién le gira la cuota**, si no la paga directo al banco: el tercero guardado al que manda
+     * la plata (el papá, que paga la Libranza BBVA y la Hipoteca Davibank con lo que él le gira). Es
+     * el mismo dato que [RecurringRule.destinoConocidoId] para una regla común, y lo usa lo mismo:
+     * repartir un envío a ese tercero entre los pagos que le corresponden (ver `RepartirUnEnvio.kt`).
+     *
+     * **Tres estados en el wire, como en la regla**, para que un cliente que no conoce el campo no lo
+     * borre al editar la cuota: `null` → «no lo toques»; `""` → «quítalo»; un id → ese tercero, si es
+     * del dueño. No viaja por defecto (no lleva `EncodeDefault`): la hoja de Créditos no lo manda y el
+     * server conserva el guardado. Columna nueva y nullable, `credit_terms.destino_conocido_id`.
+     */
+    val destinoConocidoId: String? = null,
+    /**
      * **El interés que el banco cobra en una cuota, dicho por el extracto**, para que le gane a la
      * estimación (`saldo × tasa mensual`). `null` = no hay, y Movi estima como siempre.
      *

@@ -384,6 +384,12 @@ class WalletRepositoryImpl(
     override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> =
         client.get("$baseUrl/api/sms/$id/coincidencias").body()
 
+    override suspend fun getPropuestasDeLaBandeja(): com.jvillada.movi.shared.model.PropuestasDeLaBandeja =
+        client.get("$baseUrl/api/sms/propuestas").exigirExito().body()
+
+    override suspend fun getRepartoDelAviso(id: String): com.jvillada.movi.shared.model.PropuestaDeReparto =
+        client.get("$baseUrl/api/sms/$id/reparto").exigirExito().body()
+
     override suspend fun confirmSms(id: String) {
         client.post("$baseUrl/api/sms/$id/confirm")
     }

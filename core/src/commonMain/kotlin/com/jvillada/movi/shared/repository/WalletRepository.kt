@@ -201,6 +201,23 @@ interface WalletRepository {
      * ya lo hubiera anotado a mano. Con esto la pantalla pregunta «¿es este?» antes.
      */
     suspend fun getSmsCoincidencias(id: String): List<FinancialEvent>
+
+    /**
+     * **La bandeja que se vacía sola** (`GET /api/sms/propuestas`): lo que Movi propone para cada pago
+     * pendiente —la misma propuesta de [parseSms] y las mismas coincidencias de [getSmsCoincidencias]—
+     * en una sola lectura, para que «Por revisar» sepa cuáles puede confirmar desde la fila. Vacía
+     * donde no se implementa: la bandeja ofrece «Revisar» en todas, como antes.
+     */
+    suspend fun getPropuestasDeLaBandeja(): com.jvillada.movi.shared.model.PropuestasDeLaBandeja =
+        com.jvillada.movi.shared.model.PropuestasDeLaBandeja()
+
+    /**
+     * **Repartir un envío entre varios pagos fijos** (`GET /api/sms/{id}/reparto`): los pagos del
+     * período que el aviso puede saldar y la suma exacta, si hay una. Sin pagos donde no se
+     * implementa: Reconciliar no ofrece repartir. Se confirma con [confirmarElMismoPago] y `reparto`.
+     */
+    suspend fun getRepartoDelAviso(id: String): com.jvillada.movi.shared.model.PropuestaDeReparto =
+        com.jvillada.movi.shared.model.PropuestaDeReparto(avisoId = id)
     suspend fun confirmSms(id: String)
     suspend fun ignoreSms(id: String)
     /**

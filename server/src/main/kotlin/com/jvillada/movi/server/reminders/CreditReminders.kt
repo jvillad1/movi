@@ -66,6 +66,9 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
         // crédito del dueño vuelve a deber su primera cuota el mismo día del desembolso. Los dos
         // significados y por qué son dos están en [RecurringRule.arranqueEsDesembolso].
         arranqueEsDesembolso = true,
+        // El tercero al que le gira la cuota (el papá): con esto un envío a él se puede repartir
+        // entre las cuotas que le corresponden (ver `RepartirUnEnvio.kt`).
+        destinoConocidoId = terms.destinoConocidoId,
     )
 
 /** Pares (regla virtual, lastRemindedPeriod) de todos los créditos del usuario. */

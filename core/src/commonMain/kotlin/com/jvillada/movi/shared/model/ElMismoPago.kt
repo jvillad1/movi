@@ -64,6 +64,14 @@ data class ConfirmarElMismoPago(
     val evento: FinancialEvent? = null,
     val eventoExistenteId: String? = null,
     val patas: DosPatasDelAviso? = null,
+    /**
+     * **Repartir el envío entre varios pagos del período** (ver `RepartirUnEnvio.kt`): un movimiento
+     * por pago, en la misma transacción y con el mismo bloqueo que los demás casos. Los avisos quedan
+     * con el movimiento de la primera parte. Un APK que no lo conoce no lo manda.
+     */
+    val reparto: List<ParteDelReparto>? = null,
+    /** Con [reparto]: dejar los pagos elegidos asociados a este tercero, para que la próxima vez se propongan solos. */
+    val recordarDestinoId: String? = null,
 )
 
 /**
