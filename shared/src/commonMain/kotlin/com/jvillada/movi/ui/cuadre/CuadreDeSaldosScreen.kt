@@ -35,6 +35,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.MAX_ACCOUNT_BALANCE_COP
+import com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso
 import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
@@ -99,6 +100,10 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
     // hay nada que cuadrar») abre la MISMA hoja que «Nueva cuenta» en Patrimonio, no una copia.
     var showCreateSheet by remember { mutableStateOf(false) }
 
+    // Lo que dijeron los avisos del banco que traían el saldo y no coincide con Movi. Secundario:
+    // si la lectura falla, la pantalla sigue con el cuadre a mano de siempre.
+    var propuestas by remember { mutableStateOf<List<PropuestaDeCuadrePorAviso>>(emptyList()) }
+
     // Lo que el dueño va escribiendo, por cuenta. `null` (o ausente) = campo vacío = no la cuadró.
     val escrito = remember { mutableStateMapOf<String, Long?>() }
     val coroutine = rememberCoroutineScope()
@@ -113,6 +118,7 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
             .onSuccess { cuentas = cuentasParaCuadrar(it); leidas = true }
             .onFailure { e -> error = e.toUserMessage() }
         cargando = false
+        intentar { Repositories.wallets.getCuadresPorAviso() }.onSuccess { propuestas = it }
     }
 
     val hoy = hoyEnAppZone()
@@ -199,6 +205,36 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
                                 "que te dice tu banco. Crea una cuenta para empezar.",
                             accion = "Crear una cuenta",
                             onAccion = { showCreateSheet = true },
+                        )
+                    }
+                }
+                // Lo que dijo el banco en un aviso, primero: ya trae la cifra, solo falta el sí.
+                if (propuestas.isNotEmpty()) {
+                    item {
+                        Text(
+                            "LO QUE DIJO EL BANCO",
+                            style = Movi.textos.rotulo,
+                            color = Movi.colores.textoMedio,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                    }
+                    items(propuestas, key = { "aviso-" + it.avisoId }) { propuesta ->
+                        TarjetaDelSaldoDelAviso(
+                            propuesta = propuesta,
+                            hoy = hoy,
+                            onResuelta = {
+                                propuestas = propuestas.filterNot { it.avisoId == propuesta.avisoId }
+                                loadKey++
+                            },
+                        )
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    item {
+                        Text(
+                            "O ESCRIBE TÚ EL SALDO",
+                            style = Movi.textos.rotulo,
+                            color = Movi.colores.textoMedio,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                         )
                     }
                 }

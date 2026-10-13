@@ -1,6 +1,11 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.computeBalances
+import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
+import com.jvillada.movi.server.balance.toAccount
+import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.AnomaliasDescartadas
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Subscriptions
@@ -11,7 +16,11 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.time.epochMillisToAppDateString
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Anomalia
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.deudasQueCrecen
+import com.jvillada.movi.shared.model.interesesLejosDelEstimado
 import com.jvillada.movi.shared.model.DescartarAnomaliaRequest
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
@@ -47,7 +56,10 @@ fun Route.anomaliasRoutes() {
     get("/api/anomalias") {
         val uid = call.userId()
         val ajustes = ajustesDePeriodoDe(uid)
-        call.respond(dbQuery { loQueSeSaleDeLoNormalDe(uid, AppClock.today(), ajustes) })
+        // Las de las deudas solo a quien las pide: un APK instalado no conoce esos tipos y perdería
+        // la lista entera al leerla (ver `TipoDeAnomalia`).
+        val conDeudas = call.request.queryParameters["conDeudas"] == "1"
+        call.respond(dbQuery { loQueSeSaleDeLoNormalDe(uid, AppClock.today(), ajustes, conDeudas) })
     }
 
     /**
@@ -86,7 +98,13 @@ private const val DIAS_DE_HISTORIA_DE_COMERCIOS = 120L
  * movimiento del dueño es anterior a su arranque), con la misma regla que el gasto del día a día de
  * la caja proyectada: un período a medio anotar haría ver todo «por encima».
  */
-internal fun Transaction.loQueSeSaleDeLoNormalDe(uid: String, hoy: LocalDate, ajustes: PeriodSettings): List<Anomalia> {
+internal fun Transaction.loQueSeSaleDeLoNormalDe(
+    uid: String,
+    hoy: LocalDate,
+    ajustes: PeriodSettings,
+    /** Sumar las dos de las deudas ([deudasQueCrecen], [interesesLejosDelEstimado]). */
+    conDeudas: Boolean = false,
+): List<Anomalia> {
     val primerMovimiento: Long = Events.select(Events.timestamp.min())
         .where { Events.userId eq uid }
         .firstOrNull()?.get(Events.timestamp.min())
@@ -94,7 +112,8 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(uid: String, hoy: LocalDate, aj
     val actual = periodoDe(appDateToEpochMillis(hoy) + MEDIO_DIA_MS, ajustes)
     val ventana = ventanaDe(actual, ajustes)
     val delPeriodo = loadEventsBetween(uid, ventana.first, ventana.last + 1)
-    if (delPeriodo.isEmpty()) return emptyList()
+    // Sin movimientos en el período no hay nada de lo del período que mirar; las deudas sí.
+    if (delPeriodo.isEmpty() && !conDeudas) return emptyList()
 
     val nombreDeCuenta = Accounts.selectAll().where { Accounts.userId eq uid }
         .associate { it[Accounts.id] to it[Accounts.name] }
@@ -140,7 +159,8 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(uid: String, hoy: LocalDate, aj
             nombreDeCuenta = nombreDeCuenta,
             diaDe = diaDe,
         ) +
-        comerciosNuevosConMontoAlto(delPeriodo, historia, primerMovimiento, nombreDeCuenta, diaDe)
+        comerciosNuevosConMontoAlto(delPeriodo, historia, primerMovimiento, nombreDeCuenta, diaDe) +
+        (if (conDeudas) loDeLasDeudas(uid, hoy, previo, ventanaPrevia, diaDe) else emptyList())
 
     val descartadas = AnomaliasDescartadas.selectAll()
         .where { AnomaliasDescartadas.userId eq uid }
@@ -150,3 +170,32 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(uid: String, hoy: LocalDate, aj
 }
 
 private const val MEDIO_DIA_MS = 12L * 60 * 60 * 1000
+
+/**
+ * Las dos de las deudas: la que creció entre el cierre del período anterior y el de antes
+ * ([deudasQueCrecen]), y el interés del extracto que se aparta de la estimación
+ * ([interesesLejosDelEstimado]). Sobre los movimientos vivos de las deudas, enteros (un saldo se
+ * suma desde el principio).
+ */
+private fun Transaction.loDeLasDeudas(
+    uid: String,
+    hoy: LocalDate,
+    cerrado: PeriodoFinanciero,
+    ventanaCerrada: LongRange,
+    diaDe: (Long) -> String,
+): List<Anomalia> {
+    val deudas = Accounts.selectAll().where { Accounts.userId eq uid }
+        .map { it.toAccount() }
+        .filter { it.type == AccountType.LOAN || it.type == AccountType.CREDIT_CARD }
+    if (deudas.isEmpty()) return emptyList()
+    val ids = deudas.map { it.id }.toSet()
+    val eventos = loadNonVoidedEventsIn(uid).filter { it.accountId in ids }
+    val terminos = Credits.selectAll().where { Credits.userId eq uid }.map { it.toCreditTerms() }.associateBy { it.accountId }
+    val creditos = deudas.filter { it.type == AccountType.LOAN && it.currency == "COP" }.map { cuenta ->
+        val saldo = computeBalances(cuenta.type, eventos.filter { it.accountId == cuenta.id })["COP"] ?: 0L
+        CreditSummary(account = cuenta.copy(balance = saldo), terms = terminos[cuenta.id], paidPct = null)
+    }
+    return deudasQueCrecen(deudas, eventos, ventanaCerrada, cerrado.prefijo, diaDe) +
+        interesesLejosDelEstimado(creditos, hoy.year, hoy.monthValue, hoy.dayOfMonth)
+}
+

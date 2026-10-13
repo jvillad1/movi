@@ -644,45 +644,15 @@ fun Route.smsRoutes() {
                 .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
                 .firstOrNull()?.toSmsMessage()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
-        // Ola 2: la propuesta de un comprobante no se lee con el parser de SMS sino con lo que leyó
-        // Claude del papel, ya pasado por la memoria y las cuentas de otros (ver `PapelesRoutes`).
-        if (esUnComprobante(sms)) {
-            dbQuery { parsedDeUnComprobante(uid, sms.id, sms.text) }?.let { return@get call.respond(it) }
+        // El cuerpo vive en `LaPropuestaDelAviso.kt`: la bandeja lee lo mismo para cada pago pendiente
+        // (`GET /api/sms/propuestas`), y las dos propuestas no pueden salir de dos copias.
+        val lectura = dbQuery { leerElAviso(uid, sms, loQueMoviSabeDelDueno(uid, ahora = System.currentTimeMillis())) }
+        when (lectura) {
+            is LecturaDelAviso.Leido -> call.respond(lectura.parsed)
+            // No es un error de la app: el mensaje no trae un movimiento. Se dice así, porque la
+            // pantalla muestra este texto.
+            is LecturaDelAviso.NoTraeMovimiento -> call.respond(HttpStatusCode.UnprocessableEntity, lectura.motivo)
         }
-        val leido = parseSms(sms.text, sms.bank)
-            // No es un error de la app: el mensaje no trae un movimiento (un aviso, una ampliación de
-            // plazo). Se dice así, porque la pantalla muestra este texto.
-            ?: return@get call.respond(HttpStatusCode.UnprocessableEntity, "Este mensaje no trae un movimiento para anotar. Puedes ignorarlo.")
-        // El correo de PSE del mismo pago, si este aviso no lo es: ver [conLoQueDiceElCorreoDePse].
-        val otrosDelPago = if (sms.state != SMS_STATE_PENDING) emptyList() else dbQuery {
-            val bandeja = bandejaConLosPagos(uid, ahora = System.currentTimeMillis())
-            val miembros = bandeja.firstOrNull { it.id == sms.id }?.miembrosDelGrupo.orEmpty()
-            bandeja.filter { it.id in miembros && it.id != sms.id }
-        }
-        val correoDePse = if (esUnCorreoDePse(sms.text)) null else otrosDelPago.firstOrNull { esUnCorreoDePse(it.text) }
-        val parsed = conLoQueDiceElCorreoDePse(leido, correoDePse?.let { leerElCorreoDePse(it.text) })
-            // Si el propio correo de PSE es la propuesta de un pago con otros avisos, tampoco manda su
-            // fecha: el día y la hora salen del aviso del banco más viejo (ver [conLoQueDiceElCorreoDePse]).
-            .let { if (otrosDelPago.isNotEmpty()) it.copy(fecha = null) else it }
-        // La historia del dueño entra acá y no adentro de `parseSms`: ese mismo parseo lo usan el
-        // sync y la push, donde no hay a quién consultarle nada.
-        //
-        // **Y las cuentas de otros van DESPUÉS de la memoria**, no antes. Ese orden es la decisión:
-        // si el dueño a ese número ya lo llamó «Mercado», sigue diciendo «Mercado» — el nombre que
-        // él puso es suyo. El destino solo habla donde no hablaba nadie, que es el caso real («a la
-        // cuenta *31973270756» no lo puede leer ningún humano). Ver `conElDestinoConocido`.
-        val memoria = dbQuery { memoriaDe(uid) }
-        val destinos = dbQuery { destinosDelDueno(uid) }
-        // Y al final, una cuenta del dueño no se le ofrece como «de otro» (ver [sinLaCuentaPropia]).
-        val propios = dbQuery { numerosPropiosDe(uid) }
-        val propuesta = sinLaCuentaPropia(conElDestinoConocido(conLoQueMoviRecuerda(parsed, memoria), sms.text, destinos), propios)
-        // Lo que el correo de PSE no dice —desde qué cuenta, qué crédito o tarjeta abona, a qué cuenta
-        // propia fue un depósito— lo completa lo que el dueño ya tiene en Movi. Solo para los pagos
-        // de PSE: es donde falta, y así nada cambia para los demás avisos.
-        val esDePse = esUnCorreoDePse(sms.text) || correoDePse != null
-        val completa = if (esDePse) dbQuery { loQueMoviSabeDelPagoDe(uid, propuesta) } else propuesta
-        // Un ingreso que nombra como origen una cuenta suya es un traspaso (ver `ElTraspasoQueEntra.kt`).
-        call.respond(dbQuery { conElOrigenPropioDelIngresoDe(uid, completa, sms.text) })
     }
 
     get("/api/sms/{id}/coincidencias") {
@@ -693,13 +663,7 @@ fun Route.smsRoutes() {
                 .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
                 .firstOrNull()?.toSmsMessage()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
-        val parsed = (if (esUnComprobante(sms)) dbQuery { parsedDeUnComprobante(uid, sms.id, sms.text) } else null)
-            ?: parseSms(sms.text, sms.bank)
-            ?: return@get call.respond(emptyList<FinancialEvent>())
-        val momento = momentoDelSms(sms.time, ahora = System.currentTimeMillis())
-        val margen = DIAS_PARA_COINCIDIR * 86_400_000L
-        val eventos = dbQuery { loadEventsBetween(uid, momento - margen, momento + margen + 1) }
-        call.respond(coincidenciasDelSms(parsed, momento, eventos))
+        call.respond(dbQuery { coincidenciasDelAviso(uid, sms, ahora = System.currentTimeMillis()) })
     }
 
     post("/api/sms/{id}/confirm") {

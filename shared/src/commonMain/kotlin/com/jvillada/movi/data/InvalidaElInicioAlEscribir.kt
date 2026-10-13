@@ -58,6 +58,8 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun deleteCreditTerms(accountId: String): Unit = trasEscribir { delegado.deleteCreditTerms(accountId) }
     override suspend fun registerPayrollDeduction(accountId: String): CreditSummary = trasEscribir { delegado.registerPayrollDeduction(accountId) }
     override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary = trasEscribir { delegado.adjustCreditBalance(accountId, targetBalance) }
+    override suspend fun aceptarElExtractoDelCredito(accountId: String, resumen: ResumenDelExtractoDeCredito): CreditSummary =
+        trasEscribir { delegado.aceptarElExtractoDelCredito(accountId, resumen) }
     override suspend fun adjustAccountBalance(accountId: String, targetBalance: Long): AdjustAccountBalanceResponse = trasEscribir { delegado.adjustAccountBalance(accountId, targetBalance) }
     override suspend fun createCard(request: CreateCardRequest): CardSummary = trasEscribir { delegado.createCard(request) }
     override suspend fun putCardTerms(terms: CardTerms): CardSummary = trasEscribir { delegado.putCardTerms(terms) }
@@ -107,6 +109,8 @@ internal class InvalidaElInicioAlEscribir(
     // Ola 4: «Está bien» en un aviso de lo que se sale de lo normal: la próxima lectura ya no lo trae.
     override suspend fun descartarAnomalia(huella: String) = trasEscribir { delegado.descartarAnomalia(huella) }
     override suspend fun descartarCierre(periodo: String) = trasEscribir { delegado.descartarCierre(periodo) }
+    override suspend fun ajustarPorElAviso(avisoId: String): FinancialEvent? = trasEscribir { delegado.ajustarPorElAviso(avisoId) }
+    override suspend fun descartarCuadrePorAviso(avisoId: String): Unit = trasEscribir { delegado.descartarCuadrePorAviso(avisoId) }
     override suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String?): RecuerdoDelAsistente =
         trasEscribir { delegado.guardarRecuerdo(texto, origen, propuestaId) }
     override suspend fun editarRecuerdo(id: String, texto: String): RecuerdoDelAsistente = trasEscribir { delegado.editarRecuerdo(id, texto) }

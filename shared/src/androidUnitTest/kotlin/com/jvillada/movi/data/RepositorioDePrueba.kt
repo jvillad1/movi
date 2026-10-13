@@ -62,7 +62,7 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun parseSms(id: String): ParsedSms = noUsado("parseSms")
     override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = noUsado("getSmsCoincidencias")
     override suspend fun confirmSms(id: String): Unit = noUsado("confirmSms")
-    override suspend fun ignoreSms(id: String) = noUsado("ignoreSms")
+    override suspend fun ignoreSms(id: String): Unit = noUsado("ignoreSms")
     override suspend fun devolverSmsALaBandeja(id: String): Unit = noUsado("devolverSmsALaBandeja")
     override suspend fun getAvisosDelMismoPago(grupoId: String): GrupoDeAvisos = noUsado("getAvisosDelMismoPago")
     override suspend fun confirmarElMismoPago(grupoId: String, pedido: ConfirmarElMismoPago): MismoPagoConfirmado = noUsado("confirmarElMismoPago")

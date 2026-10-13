@@ -433,6 +433,11 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getCierreDelPeriodo() }
                     .onSuccess { c -> data = data.copy(cierre = c) }
             }
+            // El saldo que dijo un aviso del banco y no coincide: secundario, como los débitos.
+            launch {
+                runCatching { Repositories.wallets.getCuadresPorAviso() }
+                    .onSuccess { c -> data = data.copy(cuadresPorAviso = c); llegado = llegado.copy(cuadresPorAviso = c) }
+            }
             // 4-oct-2026: las cuentas a las que les envía plata sin nombre. Secundario, como las
             // anomalías: si falla, «Para revisar» sigue sin este aviso.
             launch {

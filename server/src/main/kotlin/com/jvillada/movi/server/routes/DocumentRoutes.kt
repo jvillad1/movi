@@ -339,6 +339,7 @@ fun Route.documentRoutes() {
                 // Fix round 3, hallazgo 2: acá el mimeType lo puso el server al subir; el
                 // nombre es texto libre que el dueño edita después (ver `nombreParaExtraerTexto`).
                 mimeConfiable = true,
+                conCreditos = call.request.queryParameters["conCreditos"] == "1",
             )
             call.respond(resultado)
         } catch (e: FallaAlProcesarExtracto) {

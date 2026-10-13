@@ -16,8 +16,9 @@ expect object PushOptIn {
      * suscrito y el servidor con su fila, así que una portátil prestada seguía recibiendo en la
      * pantalla de bloqueo el nombre de la tarjeta y el monto de cada vencimiento del dueño,
      * **sin forma de revocarlo desde la cuenta** — el DELETE del server pide el endpoint, que
-     * solo conoce ese navegador. Hoy está latente porque en producción no hay claves VAPID; se
-     * arma solo con prenderlas.
+     * solo conoce ese navegador. Producción **sí** tiene claves VAPID (desde el 24-jul-2026,
+     * `/api/push/vapid-key` contesta 200), así que esto corre de verdad en cada navegador que
+     * activó las notificaciones.
      *
      * Tiene que ser lo PRIMERO de `clear()`: la web manda el DELETE con el token guardado, y
      * `clear()` lo borra. Y no puede lanzar nunca — en la web cruza a JS, donde cualquier cosa

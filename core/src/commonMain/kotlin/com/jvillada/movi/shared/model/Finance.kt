@@ -207,7 +207,62 @@ data class CreditTerms(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val debitoAutomaticoDesde: String? = null,
+    /**
+     * **A quién le gira la cuota**, si no la paga directo al banco: el tercero guardado al que manda
+     * la plata (el papá, que paga la Libranza BBVA y la Hipoteca Davibank con lo que él le gira). Es
+     * el mismo dato que [RecurringRule.destinoConocidoId] para una regla común, y lo usa lo mismo:
+     * repartir un envío a ese tercero entre los pagos que le corresponden (ver `RepartirUnEnvio.kt`).
+     *
+     * **Tres estados en el wire, como en la regla**, para que un cliente que no conoce el campo no lo
+     * borre al editar la cuota: `null` → «no lo toques»; `""` → «quítalo»; un id → ese tercero, si es
+     * del dueño. No viaja por defecto (no lleva `EncodeDefault`): la hoja de Créditos no lo manda y el
+     * server conserva el guardado. Columna nueva y nullable, `credit_terms.destino_conocido_id`.
+     */
+    val destinoConocidoId: String? = null,
+    /**
+     * **El interés que el banco cobra en una cuota, dicho por el extracto**, para que le gane a la
+     * estimación (`saldo × tasa mensual`). `null` = no hay, y Movi estima como siempre.
+     *
+     * La estimación se queda corta y siempre del mismo lado: en el Libre inversión ·9695 Movi
+     * estimaba $363.905 y el extracto cobró $473.227 (y $594.567 el mes siguiente). Hasta acá el
+     * interés real solo se podía escribir **en cada pago** ([CreatePagoDeCuotaRequest.interesReal]);
+     * las condiciones no lo sabían, y el plan del crédito seguía mostrando la estimación.
+     *
+     * Vale para **una sola cuota**, la de [interesRealCuota]: el interés cambia todos los meses con
+     * los días y el saldo, así que el del mes pasado no sirve para este. Cuando vale:
+     *
+     * - el pago de esa cuota lo usa en vez de estimar, si el dueño no escribió otro (`desgloseDelPagoDeDeuda`);
+     * - el plan lo usa como el interés del próximo período ([planDelCredito]).
+     *
+     * Lo escribe «Actualizar» en la propuesta de un extracto de crédito ([PropuestaDelExtractoDeCredito]).
+     *
+     * **Sin `@EncodeDefault`, a diferencia de los de arriba, y es a propósito**: la hoja de condiciones
+     * arma un `CreditTerms` nuevo sin este campo, y con la clave viajando siempre, guardar la nota
+     * borraría el interés del extracto. Así un `null` no viaja y el server conserva el guardado.
+     */
+    val interesReal: Long? = null,
+    /** La cuota (`"2026-10"`, la de [cuotaMasCercana] a su vencimiento) en que vale [interesReal]. */
+    val interesRealCuota: String? = null,
 )
+
+/**
+ * **El interés del extracto, si vale para la cuota [cuota]** (`"2026-10"`). `null` si no hay, o si es
+ * de otra cuota: el interés de un mes no es el del siguiente.
+ */
+fun CreditTerms.interesRealDeLaCuota(cuota: String): Long? =
+    interesReal?.takeIf { it >= 0L && interesRealCuota != null && interesRealCuota == cuota }
+
+/**
+ * **El interés del extracto que el plan puede usar hoy**: el de la cuota que viene o una posterior.
+ * Una vez que esa cuota pasó, el dato se queda guardado pero deja de mandar, y el plan vuelve a
+ * estimar. Sin [hoy] (quien no sabe la fecha) vale si existe.
+ */
+fun CreditTerms.interesRealVigente(hoy: kotlinx.datetime.LocalDate?): Long? {
+    val interes = interesReal?.takeIf { it >= 0L } ?: return null
+    val cuota = interesRealCuota ?: return null
+    if (hoy == null) return interes
+    return interes.takeIf { cuota >= cuotaMasCercana(hoy.year, hoy.monthNumber, hoy.dayOfMonth, dayOfMonth) }
+}
 
 /** Lo que se le dice a quien marca «No cobra intereses» y además escribe una tasa. */
 const val TASA_EN_CREDITO_SIN_INTERESES: String =
