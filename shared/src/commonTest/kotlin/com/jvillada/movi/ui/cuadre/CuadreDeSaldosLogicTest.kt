@@ -195,4 +195,43 @@ class CuadreDeSaldosLogicTest {
         val primeroDeAgosto = 1_785_603_600_000L
         assertEquals("Cuadrada el 1 de agosto", textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeAgosto), hoy))
     }
+
+    private fun propuesta(banco: Long, movi: Long) = com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso(
+        avisoId = "sms_1",
+        cuentaId = "acc-ahorros",
+        cuentaNombre = "Bancolombia Ahorros 8133",
+        origen = "85540",
+        saldoDelBanco = banco,
+        saldoEnMovi = movi,
+        momento = AHORA,
+    )
+
+    @Test
+    fun `la propuesta del aviso dice las dos cifras y el ajuste con su signo`() {
+        assertEquals(
+            "El banco dice \$138.407 y Movi \$138.361 → ajustar +\$46",
+            textoDeLaPropuestaPorAviso(propuesta(138_407L, 138_361L)),
+        )
+        assertTrue(textoDeLaPropuestaPorAviso(propuesta(100_000L, 100_500L)).endsWith("ajustar −\$500"))
+    }
+
+    @Test
+    fun `la fila del Inicio nombra la cuenta cuando es una sola`() {
+        assertNull(textoDeLasPropuestasPorAviso(emptyList()))
+        assertEquals(
+            "El saldo de Bancolombia Ahorros 8133 no coincide con el del banco",
+            textoDeLasPropuestasPorAviso(listOf(propuesta(1L, 2L))),
+        )
+        assertEquals(
+            "2 cuentas no coinciden con el saldo del banco",
+            textoDeLasPropuestasPorAviso(listOf(propuesta(1L, 2L), propuesta(3L, 4L))),
+        )
+    }
+
+    @Test
+    fun `de cuando es el saldo que se compara`() {
+        val hoy = LocalDate(2026, 9, 20)
+        assertEquals("Según el aviso de hoy", textoDelMomentoDelAviso(AHORA, hoy))
+        assertEquals("Según el aviso de ayer", textoDelMomentoDelAviso(AHORA - UN_DIA, hoy))
+    }
 }

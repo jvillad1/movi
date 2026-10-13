@@ -64,9 +64,13 @@ const val ESTIMADO_SOBRE_LA_DEUDA_DE_HOY: String =
  * llave. Un crédito sin plan —sin términos, sin movimientos, o con la deuda en otra moneda— no
  * entra al mapa, y su fila se queda sin estimación, que es exactamente lo que corresponde.
  */
-fun planesDeLasCuotas(credits: List<CreditSummary>): Map<String, PlanDelCredito> =
+fun planesDeLasCuotas(
+    credits: List<CreditSummary>,
+    // Para saber si el interés del extracto todavía es de la cuota que viene (`interesRealVigente`).
+    hoy: kotlinx.datetime.LocalDate = com.jvillada.movi.ui.fecha.hoyEnAppZone(),
+): Map<String, PlanDelCredito> =
     credits.mapNotNull { credito ->
-        planDelCredito(credito)?.let { plan -> (CREDIT_RULE_PREFIX + credito.account.id) to plan }
+        planDelCredito(credito, hoy)?.let { plan -> (CREDIT_RULE_PREFIX + credito.account.id) to plan }
     }.toMap()
 
 /**
@@ -107,6 +111,14 @@ fun textoDeLaCuotaEstimada(plan: PlanDelCredito, moneda: String = "COP"): String
         // en realidad no alcanza a cubrirla — el caso del Hipotecario ·2334.
         if (plan.capital > 0L) add(plata(plan.capital) + " a capital") else add("nada baja la deuda")
     }
-    val cabeza = if (plan.sinIntereses) NO_COBRA_INTERESES else ETIQUETA_ESTIMADO
+    val cabeza = when {
+        plan.sinIntereses -> NO_COBRA_INTERESES
+        // El interés lo dijo el extracto: no es una estimación, y decirlo así sería mentir al revés.
+        plan.interesDelExtracto -> ETIQUETA_SEGUN_EL_EXTRACTO
+        else -> ETIQUETA_ESTIMADO
+    }
     return cabeza + ": " + partes.joinToString(" · ")
 }
+
+/** La cabeza de la estimación cuando el interés de la cuota lo dijo el extracto. */
+const val ETIQUETA_SEGUN_EL_EXTRACTO: String = "Según el extracto"

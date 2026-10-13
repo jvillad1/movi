@@ -287,6 +287,11 @@ fun cosasParaRevisar(
      * confirma con un toque. La fila «venció y no está marcado» de esa misma cuota no se repite.
      */
     debitosPorConfirmar: List<DebitoAutomaticoPorConfirmar> = emptyList(),
+    /**
+     * El saldo que dijo un aviso del banco y no coincide con el de Movi (`GET /api/cuadres-por-aviso`).
+     * No es urgente, pero va antes del aviso de cuadre de siempre: este ya trae la cifra del banco.
+     */
+    cuadresPorAviso: List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso> = emptyList(),
     cuantas: Int = 4,
 ): List<CosaParaRevisar> {
     val conDebito = debitosPorConfirmar.map { it.ruleId }.toSet()
@@ -371,6 +376,15 @@ fun cosasParaRevisar(
         // Lo que sí pasa —y por eso está— es que la diferencia se compone en silencio: los
         // rendimientos de una cuenta de ahorros no llegan por SMS, así que si nadie los anota, el
         // saldo de Movi se va quedando corto mes a mes.
+        com.jvillada.movi.ui.cuadre.textoDeLasPropuestasPorAviso(cuadresPorAviso)?.let { texto ->
+            add(
+                CosaParaRevisar(
+                    texto = texto,
+                    detalle = "Te lo dijo el banco en un aviso. Con un toque Movi anota la diferencia.",
+                    destino = DestinoDeRevision.CUADRE,
+                ),
+            )
+        }
         if (avisoDeCuadre != null) {
             add(
                 CosaParaRevisar(

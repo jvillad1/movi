@@ -13,6 +13,11 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
+import com.jvillada.movi.shared.model.MerchantRule
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.insertIgnore
+import java.io.File
 
 /** Milisegundos de UTC-5 (Bogotá, sin horario de verano). */
 private const val BOGOTA_OFFSET_MS = 5L * 3_600_000L
@@ -22,6 +27,11 @@ private const val DAY_MS = 86_400_000L
 private const val LEGACY_SMS_STATE_NEW = "new"
 
 private val migrationsLog = LoggerFactory.getLogger("Migrations")
+
+/** Cómo se llamaban los archivos de reglas de comercio: `merchant-rules-<usuario>.json`. */
+private const val PREFIJO_DE_REGLAS = "merchant-rules-"
+
+private val jsonDeLasReglas = Json { ignoreUnknownKeys = true; isLenient = true }
 
 /** Índice único que expresa "una sola pata por traspaso y por lado" — ver su migración. */
 const val UNIQUE_TRANSFER_LEG_INDEX = "uq_events_transfer_leg"
@@ -43,6 +53,50 @@ object Migrations {
         createUniqueTransferLegIndex()
         apartarLosPendientesQueNoSonMovimientos()
         pasarLosIdentificadoresALaLista()
+        pasarLasReglasDeComercioALaBase()
+    }
+
+    /**
+     * **Las reglas de comercio que quedaron en un archivo pasan a la base** (`reglas_de_comercio`).
+     * Vivían en `movi-data/merchant-rules-<usuario>.json` dentro del contenedor, que se pierde en
+     * cada despliegue; lo que todavía esté en un archivo (un server local, o el contenedor de antes
+     * del primer despliegue con la tabla) se copia acá.
+     *
+     * Idempotente: inserta ignorando lo que ya existe, así que **lo de la base gana** sobre el archivo
+     * (una regla que el dueño cambió después no vuelve a la versión vieja). El archivo no se borra
+     * ni se renombra: la transacción de arranque podría deshacerse después, y entonces el archivo
+     * sería lo único que quedaría. Solo para usuarios que existen: un archivo de pruebas viejo no
+     * deja filas huérfanas. **Nada de esto puede tumbar el arranque**: un archivo ilegible se salta.
+     */
+    fun Transaction.pasarLasReglasDeComercioALaBase(carpeta: File = File("movi-data")) {
+        val archivos = runCatching {
+            carpeta.listFiles { f -> f.isFile && f.name.startsWith(PREFIJO_DE_REGLAS) && f.name.endsWith(".json") }
+        }.getOrNull().orEmpty()
+        if (archivos.isEmpty()) return
+        val usuarios = Users.selectAll().map { it[Users.id] }.toSet()
+        var pasadas = 0
+        archivos.sortedBy { it.name }.forEach { archivo ->
+            val uid = archivo.name.removePrefix(PREFIJO_DE_REGLAS).removeSuffix(".json")
+            if (uid !in usuarios) return@forEach
+            val reglas = runCatching {
+                jsonDeLasReglas.decodeFromString(ListSerializer(MerchantRule.serializer()), archivo.readText())
+            }.onFailure { migrationsLog.warn("reglas de comercio: no se pudo leer ${archivo.name}", it) }
+                .getOrNull() ?: return@forEach
+            val ahora = System.currentTimeMillis()
+            reglas.forEach { regla ->
+                val patron = regla.merchantPattern.trim().take(255)
+                val categoria = regla.category.trim().take(100)
+                if (patron.isEmpty() || categoria.isEmpty()) return@forEach
+                val n = ReglasDeComercio.insertIgnore {
+                    it[ReglasDeComercio.userId] = uid
+                    it[ReglasDeComercio.patron] = patron
+                    it[ReglasDeComercio.categoria] = categoria
+                    it[actualizadaEn] = ahora
+                }.insertedCount
+                pasadas += n
+            }
+        }
+        if (pasadas > 0) migrationsLog.info("reglas_de_comercio: $pasadas pasadas desde los archivos de movi-data")
     }
 
     /**

@@ -2032,6 +2032,8 @@ class LocalRepository(
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)
     override suspend fun parseSms(id: String): ParsedSms = remote.parseSms(id)
     override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = remote.getSmsCoincidencias(id)
+    override suspend fun getPropuestasDeLaBandeja() = remote.getPropuestasDeLaBandeja()
+    override suspend fun getRepartoDelAviso(id: String) = remote.getRepartoDelAviso(id)
     override suspend fun confirmSms(id: String) = remote.confirmSms(id)
     override suspend fun ignoreSms(id: String) = remote.ignoreSms(id)
     override suspend fun devolverSmsALaBandeja(id: String) = remote.devolverSmsALaBandeja(id)
@@ -2059,6 +2061,19 @@ class LocalRepository(
     // Ola 4: los avisos los calcula el server sobre toda la historia; sin red no hay avisos nuevos.
     override suspend fun getAnomalias(): List<com.jvillada.movi.shared.model.Anomalia> = remote.getAnomalias()
     override suspend fun descartarAnomalia(huella: String) = remote.descartarAnomalia(huella)
+    // El saldo del aviso contra el de Movi: se deriva en el server en cada lectura, sin nada que
+    // espejar. «Ajustar» sí escribe un movimiento, y ese se espeja como el de cualquier cuadre.
+    override suspend fun getCuadresPorAviso(): List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso> =
+        remote.getCuadresPorAviso()
+    override suspend fun ajustarPorElAviso(avisoId: String): FinancialEvent? = enDisco {
+        val ajuste = remote.ajustarPorElAviso(avisoId)
+        if (ajuste != null) {
+            val uid = userId()
+            db.transaction { mirrorEventLocally(ajuste, uid) }
+        }
+        return@enDisco ajuste
+    }
+    override suspend fun descartarCuadrePorAviso(avisoId: String) = remote.descartarCuadrePorAviso(avisoId)
     // Igual que getFinanceSummary/getDashboardSummary: la ventana de cada período (el corte, los
     // inicios propios) y sus cifras salen de TODO lo que el server sabe, no solo de este
     // dispositivo — sin red falla y «Tus períodos» lo dice con «Reintentar», no con una cuenta
@@ -2236,6 +2251,18 @@ class LocalRepository(
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = remote.requestPasswordReset(request)
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
         remote.uploadStatement(fileName, bytes, mimeType)
+    // Como [adjustCreditBalance]: el server escribe el ajuste y acá se espeja el que contestó.
+    override suspend fun aceptarElExtractoDelCredito(
+        accountId: String,
+        resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeCredito,
+    ): CreditSummary = enDisco {
+        val summary = remote.aceptarElExtractoDelCredito(accountId, resumen)
+        summary.adjustmentEvent?.let { ajuste ->
+            val uid = userId()
+            db.transaction { mirrorEventLocally(ajuste, uid) }
+        }
+        return@enDisco summary
+    }
     // Igual que uploadStatement: sin espejo local, siempre a la red.
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
         remote.readStatementFromDocument(id)

@@ -500,6 +500,17 @@ internal fun TarjetaDeMensajeDelBanco(
      * del banco» lo pasa; la bandeja no, porque ahí nunca llega un apartado.
      */
     onEraUnMovimiento: (() -> Unit)? = null,
+    /**
+     * **La bandeja que se vacía sola**: lo que Movi va a anotar («Comida · Bancolombia Ahorros ·
+     * $46.000») cuando ya entendió el aviso. Con esto y [onConfirmar] la tarjeta ofrece «Confirmar»
+     * directo; sin esto el botón principal sigue siendo «Revisar». Solo la bandeja lo pasa.
+     */
+    entendido: String? = null,
+    onConfirmar: (() -> Unit)? = null,
+    /** «Ignorar» en la fila: la bandeja lo pasa siempre; el historial no. */
+    onIgnorar: (() -> Unit)? = null,
+    /** Una acción de esta tarjeta está en curso: los botones se apagan. */
+    trabajando: Boolean = false,
 ) {
     val apartado = loApartoMovi(sms)
     MinCard(
@@ -583,7 +594,37 @@ internal fun TarjetaDeMensajeDelBanco(
         Spacer(Modifier.height(14.dp))
         Hairline()
         Spacer(Modifier.height(12.dp))
-        Row(
+        val confirmable = sms.state == SMS_STATE_PENDING && entendido != null && onConfirmar != null
+        if (confirmable) {
+            // La bandeja que se vacía sola: lo que Movi va a anotar y, debajo, las acciones de la
+            // fila. «Confirmar» solo cuando Movi ya tiene todo (ver `loQueMoviEntendio`).
+            LineaDeLoEntendido(entendido!!)
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PastillaDelPago(
+                    CONFIRMAR_EN_LA_FILA, principal = true, habilitada = !trabajando, onClick = onConfirmar!!,
+                    modifier = Modifier.testTag(TAG_CONFIRMAR_EN_LA_FILA),
+                )
+                PastillaDelPago("Revisar", habilitada = !trabajando, onClick = onRevisar)
+                onIgnorar?.let { PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = it) }
+            }
+        } else if (sms.state == SMS_STATE_PENDING && onIgnorar != null) {
+            // Con dudas, «Revisar» sigue siendo el principal; «Ignorar» va siempre en la fila. En el
+            // mismo renglón que lo que entendió Movi, para que la tarjeta no crezca.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(sms.det, style = Movi.textos.cuerpo, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
+                PastillaDelPago("Revisar", principal = true, habilitada = !trabajando, onClick = onRevisar)
+                PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = onIgnorar)
+            }
+        } else Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -956,16 +997,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             // a revisar, el siguiente «Confirmar» crearía un segundo movimiento en silencio.
             var movimientoCreado = false
             intentar {
-                // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelSms]. De un pago
-                // avisado varias veces, cuando llegó el primer aviso; y si el aviso dice otro día
-                // (el correo de PSE que llegó tarde), ese día.
-                val momento = momentoConLaFechaDelAviso(
-                    momentoDelSms(
-                        pagoActual?.miembros?.minByOrNull { momentoDelSms(it.time, Long.MAX_VALUE) }?.time ?: sms?.time.orEmpty(),
-                        ahora = Clock.System.now().toEpochMilliseconds(),
-                    ),
-                    p.fecha,
-                )
+                // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelMovimientoDelAviso].
+                val momento = momentoDelMovimientoDelAviso(sms, pagoActual, p, ahora = Clock.System.now().toEpochMilliseconds())
                 if (dosPatas != null) {
                     // Las dos patas en una transacción del server, con este aviso (o todos los del
                     // pago) enlazados a la del dinero. Un doble toque no crea otras: el server ve el
@@ -979,34 +1012,18 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     }
                     return@intentar
                 }
-                val event = movimientoConfirmadoDelSms(
-                    // Mismo motivo que en QuickAddScreen — ver newId().
-                    id = newId("ev"),
+                // Un movimiento suelto: el MISMO camino que la fila y el lote de «Por revisar» (ver
+                // `AnotarElAviso.kt`). Con una deuda elegida, las dos patas ya salieron arriba.
+                val event = movimientoDelAviso(
+                    leido = p,
                     cuentaId = acct.id,
-                    leido = p.copy(merchant = comercio ?: p.merchant),
                     categoria = cat,
+                    comercio = comercio,
                     momento = momento,
-                    textoDelSms = (avisoDeLaPropuesta ?: sms)?.text.orEmpty(),
-                    origen = if (esComprobante) EventSource.OCR else EventSource.SMS,
+                    textoDelAviso = (avisoDeLaPropuesta ?: sms)?.text.orEmpty(),
+                    esComprobante = esComprobante,
                 )
-                val elPago = pagoActual
-                if (elPago != null) {
-                    // Un solo movimiento para todos los avisos, en una transacción del server: si
-                    // ya estaba anotado (un doble toque, otro teléfono) no crea otro.
-                    Repositories.wallets.confirmarElMismoPago(
-                        elPago.grupoId, ConfirmarElMismoPago(idsDelPago, evento = event),
-                    )
-                    UsedCategoriesCache.record(cat, p.type)
-                    return@intentar
-                }
-                Repositories.wallets.postEvent(event)
-                movimientoCreado = true
-                // Una categoría creada acá tiene que ser conocida en el siguiente aviso: sin esto
-                // la bandeja no recarga el caché y «Colegio» se volvía a ofrecer como «Crear».
-                UsedCategoriesCache.record(cat, p.type)
-                // Con una deuda elegida, las dos patas ya salieron arriba (`dosPatas`): acá llega solo
-                // lo que es un movimiento suelto.
-                confirmarElAviso(event.id)
+                anotarElMovimientoDelAviso(smsId, pagoActual, event, esComprobante, alCrearElMovimiento = { movimientoCreado = true })
             }.onSuccess {
                 working = false
                 sms = sms?.copy(state = SMS_STATE_CONFIRMED)
@@ -1019,6 +1036,58 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 // Se vuelve a revisar «¿Ya lo anotaste?»: el que se acaba de crear aparece ahí con
                 // «Es este», que marca el aviso sin crear otro.
                 if (movimientoCreado) reintentoDeRevision++
+            }
+        }
+    }
+
+    // ── Repartir un envío entre varios pagos fijos (ver `RepartirEnReconciliar.kt`) ──────────────
+    // Solo para lo que salió: el server dice qué pagos del período puede saldar y si la suma es exacta.
+    var reparto by remember { mutableStateOf<com.jvillada.movi.shared.model.PropuestaDeReparto?>(null) }
+    LaunchedEffect(idDeLaPropuesta, parsed?.type) {
+        reparto = if (parsed?.type == TransactionType.EXPENSE) {
+            intentar { Repositories.wallets.getRepartoDelAviso(idDeLaPropuesta) }.getOrNull()
+        } else null
+    }
+
+    /** Un movimiento por pago, en una transacción del server: el mismo `…/confirmar` de siempre, con `reparto`. */
+    fun repartir(elegidos: List<Pair<com.jvillada.movi.shared.model.PagoParaRepartir, Long>>, recordar: Boolean) {
+        if (working) return
+        if (sms?.state.let { it != null && it != SMS_STATE_PENDING }) return
+        val p = parsed ?: return
+        val acct = resolvedAccount ?: return
+        val destinoARecordar = reparto?.destinoId?.takeIf { recordar }
+        working = true
+        error = null
+        coroutine.launch {
+            intentar {
+                val momento = momentoDelMovimientoDelAviso(sms, pagoActual, p, ahora = Clock.System.now().toEpochMilliseconds())
+                val partes = partesDelReparto(
+                    elegidos = elegidos,
+                    cuenta = acct,
+                    leido = p,
+                    momento = momento,
+                    textoDelAviso = (avisoDeLaPropuesta ?: sms)?.text.orEmpty(),
+                    esComprobante = esComprobante,
+                    nuevoId = ::newId,
+                )
+                // Un aviso suelto va por la misma ruta con un solo miembro: el server lo bloquea y lo
+                // marca igual que a un pago avisado varias veces.
+                val elPago = pagoActual
+                Repositories.wallets.confirmarElMismoPago(
+                    elPago?.grupoId ?: smsId,
+                    ConfirmarElMismoPago(
+                        miembros = if (elPago != null) idsDelPago else listOf(smsId),
+                        reparto = partes,
+                        recordarDestinoId = destinoARecordar,
+                    ),
+                )
+            }.onSuccess {
+                working = false
+                sms = sms?.copy(state = SMS_STATE_CONFIRMED)
+                goBack(Screen.PorRevisar)
+            }.onFailure {
+                working = false
+                error = it.toUserMessage()
             }
         }
     }
@@ -1252,6 +1321,16 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             }
                         }
                     }
+                }
+
+                // «Son 2 pagos: Hipoteca Papá $2.228.152 + Libranza Papá $2.051.848», o repartir a mano.
+                val elReparto = reparto
+                if (elReparto != null && yaAnotadoCon == null && (currentSms == null || currentSms.state == SMS_STATE_PENDING)) {
+                    TarjetaDelReparto(
+                        propuesta = elReparto,
+                        habilitado = !working && resolvedAccount != null,
+                        onRepartir = { elegidos, recordar -> repartir(elegidos, recordar) },
+                    )
                 }
 
                 Spacer(Modifier.height(14.dp))

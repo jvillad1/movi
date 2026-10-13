@@ -395,6 +395,24 @@ object CardPaymentDismissals : Table("card_payment_dismissals") {
  * fila acá la saca para siempre; una situación nueva (otro cobro, otro período) trae otra huella y
  * vuelve a avisar. Tabla nueva: entra solo al `SchemaUtils.create` del arranque.
  */
+/**
+ * **Las reglas de comercio que el importador de extractos aprende** («RAPPI» → «Comida»): cuando el
+ * dueño cambia la categoría de una fila al importar, se guarda acá y viaja en el prompt de la
+ * próxima lectura (ver `MerchantRulesStore`).
+ *
+ * Vivían en un archivo JSON del contenedor (`movi-data/merchant-rules-<usuario>.json`), y Railway
+ * arma un contenedor nuevo en cada despliegue: **cada despliegue las borraba**. Tabla nueva: entra
+ * solo al `SchemaUtils.create` del arranque. El contenido del archivo, si todavía existe, se pasa
+ * acá al arrancar (`Migrations.pasarLasReglasDeComercioALaBase`).
+ */
+object ReglasDeComercio : Table("reglas_de_comercio") {
+    val userId = varchar("user_id", 50)
+    val patron = varchar("patron", 255)
+    val categoria = varchar("categoria", 100)
+    val actualizadaEn = long("actualizada_en")
+    override val primaryKey = PrimaryKey(userId, patron)
+}
+
 object AnomaliasDescartadas : Table("anomalias_descartadas") {
     val userId       = varchar("user_id", 50)
     val huella       = varchar("huella", 300)
@@ -809,6 +827,21 @@ object Credits : Table("credit_terms") {
      * `AccountRoutes`) y la propuesta deja de salir.
      */
     val debitoAutomaticoDesde = varchar("debito_automatico_desde", 50).nullable()
+    /**
+     * El tercero al que el dueño le gira la cuota; ver `CreditTerms.destinoConocidoId`. Nullable por
+     * lo mismo que las de arriba (`ADD COLUMN … NULL` dentro de la transacción de arranque no puede
+     * fallar), y sin FK a `known_destinations` por lo mismo que `recurring_rules.destino_conocido_id`:
+     * si el tercero se borra, el crédito suelta la referencia (ver `DestinoRoutes`).
+     */
+    val destinoConocidoId = varchar("destino_conocido_id", 50).nullable()
+
+    /**
+     * El interés de una cuota según el extracto, y de qué cuota; ver `CreditTerms.interesReal`.
+     * Nullable por lo mismo que las de arriba: `ADD COLUMN … NULL` dentro de la transacción de
+     * arranque no puede fallar sobre los créditos que ya están (`SchemaDeArranqueTest`).
+     */
+    val interesReal = long("interes_real").nullable()
+    val interesRealCuota = varchar("interes_real_cuota", 7).nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)

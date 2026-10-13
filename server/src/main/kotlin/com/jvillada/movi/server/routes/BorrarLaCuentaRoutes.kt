@@ -6,7 +6,6 @@ import com.jvillada.movi.server.cuenta.borrarTodoLoDe
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
-import com.jvillada.movi.server.storage.Stores
 import com.jvillada.movi.shared.model.BorrarLaCuentaRequest
 import com.jvillada.movi.shared.model.PALABRA_PARA_BORRAR_LA_CUENTA
 import com.jvillada.movi.shared.model.PasswordPolicy
@@ -18,6 +17,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import java.io.File
 
 // Mismo balde que el cambio de contraseña (ver UserRoutes.kt): quien llama ya está autenticado, así
 // que la clave por usuario aísla de verdad, y 5 intentos cada 15 minutos alcanzan para errores de
@@ -34,8 +34,8 @@ internal const val CONTRASENA_NO_COINCIDE = "La contraseña no coincide"
  * log de cada pedido) y la palabra [PALABRA_PARA_BORRAR_LA_CUENTA]. Con un token robado no alcanza:
  * sin la contraseña, 403 y no se toca nada.
  *
- * Borra todo lo de la persona en **una transacción** (ver `cuenta/BorrarLaCuenta.kt`) y después las
- * reglas de comercio que el importador de extractos guarda en disco. Contesta 204; desde el pedido
+ * Borra todo lo de la persona en **una transacción** (ver `cuenta/BorrarLaCuenta.kt`) y después el
+ * archivo viejo de reglas de comercio, si quedó alguno. Contesta 204; desde el pedido
  * siguiente ningún token de esa cuenta entra, porque ya no hay fila de `users` contra la que
  * validarlo.
  */
@@ -66,11 +66,12 @@ fun Route.borrarLaCuentaRoutes() {
         }
 
         val filas = dbQuery { borrarTodoLoDe(uid) }
-        // Fuera de la transacción porque no está en la base: las reglas de comercio del importador
-        // viven en un archivo por usuario. Si esto fallara, la cuenta ya no existe y nadie puede leer
-        // ese archivo; se dice en el log en vez de contestar un error que la app no podría reintentar.
-        runCatching { Stores.merchantRules.borrar(uid) }
-            .onFailure { call.application.log.warn("borrar-cuenta: no pude borrar las reglas de comercio de $uid: ${it.message}") }
+        // Las reglas de comercio ya viven en la base (`reglas_de_comercio`, entra arriba), pero un
+        // server viejo pudo dejar el archivo de antes en `movi-data`. La migración solo lo lee para
+        // usuarios que existen, así que no resucitaría nada; igual es suyo, y se va. Si falla, la
+        // cuenta ya no existe y nadie puede leerlo: se dice en el log.
+        runCatching { File("movi-data", "merchant-rules-$uid.json").delete() }
+            .onFailure { call.application.log.warn("borrar-cuenta: no pude borrar el archivo viejo de reglas de $uid: ${it.message}") }
         call.application.log.info("borrar-cuenta: $uid borró su cuenta ($filas filas)")
         call.respond(HttpStatusCode.NoContent)
     }

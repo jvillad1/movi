@@ -183,7 +183,7 @@ internal fun senalesDe(data: DashboardData): SenalesParaPreguntar {
             .maxByOrNull { (p, _) -> p.excedente }
             ?.first
     }
-    val conPlan = data.credits.orEmpty().mapNotNull { c -> planDelCredito(c)?.let { c to it } }
+    val conPlan = data.credits.orEmpty().mapNotNull { c -> planDelCredito(c, com.jvillada.movi.ui.fecha.hoyEnAppZone())?.let { c to it } }
         .filter { (_, plan) -> plan.comoVa != ComoVaLaDeuda.SIN_DEUDA && plan.comoVa != ComoVaLaDeuda.SIN_TASA }
     val patrimonio = data.accounts?.let(::patrimonioDe)
     return SenalesParaPreguntar(

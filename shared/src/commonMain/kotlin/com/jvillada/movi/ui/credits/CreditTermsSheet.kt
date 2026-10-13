@@ -169,6 +169,19 @@ fun CreditTermsSheet(
     var cuentaDelDebito by remember { mutableStateOf(existingTerms?.debitoAutomaticoDesde) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // ¿A quién le giras la cuota? (`CreditTerms.destinoConocidoId`): el papá le paga al banco con lo
+    // que el dueño le manda. Con eso, un envío a él se reparte solo entre las cuotas que le tocan.
+    // Tres estados en el wire, como en la regla: ver [destinoParaElWire].
+    var destinoDeLaCuota by remember { mutableStateOf(existingTerms?.destinoConocidoId) }
+    var quitoElDestinoDeLaCuota by remember { mutableStateOf(false) }
+    var eligiendoDestinoDeLaCuota by remember { mutableStateOf(false) }
+    var destinosDeLaCuota by remember { mutableStateOf<List<com.jvillada.movi.shared.model.DestinoConocido>>(emptyList()) }
+    var fallaronLosDestinosDeLaCuota by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        com.jvillada.movi.data.intentar { Repositories.wallets.getDestinos() }
+            .onSuccess { destinosDeLaCuota = it }
+            .onFailure { fallaronLosDestinosDeLaCuota = true }
+    }
 
     // El débito solo aplica si la cuota sale de una cuenta suya: la libranza y «la paga otro» lo
     // esconden, y al guardar se manda `null` (ver `validarDebitoAutomatico`).
@@ -304,6 +317,8 @@ fun CreditTermsSheet(
                     // Solo si la cuota sale de una cuenta suya; desmarcar manda `null` explícito
                     // (el campo viaja siempre, ver el KDoc de `CreditTerms`).
                     debitoAutomaticoDesde = if (debitoVisible && seDebitaSolo) cuentaDelDebito else null,
+                    // `null` = no lo toques; `""` = lo quitó; un id = ese tercero.
+                    destinoConocidoId = com.jvillada.movi.ui.recurrentes.destinoParaElWire(destinoDeLaCuota, quitoElDestinoDeLaCuota),
                 )
                 if (editing == null && newAccountMode) {
                     // Alta atómica server-side: cuenta + deuda inicial + términos —**y el
@@ -747,6 +762,25 @@ fun CreditTermsSheet(
                         }
                     }
                 }
+            }
+
+            // ¿A quién le giras la cuota? Solo si la paga él (ni libranza ni «la paga otro»): es la
+            // persona a la que le manda la plata para que la pague, como el papá.
+            if (debitoVisible && !seDebitaSolo) {
+                Spacer(Modifier.height(16.dp))
+                com.jvillada.movi.ui.recurrentes.DestinoConocidoPickerField(
+                    destinos = destinosDeLaCuota,
+                    selectedId = destinoDeLaCuota,
+                    fallaronLosDestinos = fallaronLosDestinosDeLaCuota,
+                    open = eligiendoDestinoDeLaCuota,
+                    enabled = !saving,
+                    onToggle = { eligiendoDestinoDeLaCuota = !eligiendoDestinoDeLaCuota },
+                    onPick = {
+                        destinoDeLaCuota = it
+                        quitoElDestinoDeLaCuota = it == null
+                        eligiendoDestinoDeLaCuota = false
+                    },
+                )
             }
 
             // El recordatorio no aplica a una libranza ni a una cuota que paga otro: en los

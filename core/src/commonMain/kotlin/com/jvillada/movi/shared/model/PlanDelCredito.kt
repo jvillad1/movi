@@ -104,6 +104,11 @@ data class PlanDelCredito(
      * como una estimación. Default `false` para que un cliente viejo siga deserializando.
      */
     val sinIntereses: Boolean = false,
+    /**
+     * ¿[interes] es **el del extracto** ([CreditTerms.interesReal]) y no la estimación? La pantalla
+     * dice «Según el extracto» en vez de «Movi estima». Default `false` para un cliente viejo.
+     */
+    val interesDelExtracto: Boolean = false,
 ) {
     /**
      * Qué fracción de la cuota es **interés**, de 0 a 1, o `null` cuando no se puede saber (sin
@@ -327,6 +332,15 @@ fun planDeUnaDeuda(
      * producción (el de [planDelCredito] y los de `AbonoExtraordinario.kt`) lo pasan explícito.
      */
     sinIntereses: Boolean = false,
+    /**
+     * **El interés del próximo período según el extracto** ([CreditTerms.interesRealVigente]), si lo
+     * hay. Gana sobre `saldo × tasa mensual` en el primer mes —que es el que dice el extracto— y la
+     * proyección sigue con la tasa desde el segundo: el extracto habla de una cuota, no de todas.
+     *
+     * Solo cuando el plan ya se puede calcular (con tasa, o sin intereses declarado): sin tasa no
+     * hay con qué proyectar los meses siguientes, y un interés suelto no alcanza para afirmar nada.
+     */
+    interesRealDelMes: Long? = null,
 ): PlanDelCredito {
     val seguro = (seguroMensual ?: 0L).coerceAtLeast(0L)
     val otros = (otrosCargosMensuales ?: 0L).coerceAtLeast(0L)
@@ -359,7 +373,8 @@ fun planDeUnaDeuda(
         tasaMensualDeUnaEA(rateEa)
     }
     val saldo = saldoDeLaDeuda
-    val interes = interesDelPeriodo(saldo, tasaMensual)
+    val delExtracto = interesRealDelMes?.takeIf { it >= 0L }
+    val interes = delExtracto ?: interesDelPeriodo(saldo, tasaMensual)
     // Con tasa pero sin cuota el interés del mes SÍ se sabe, y decirlo no cuesta nada. Lo que no
     // hay es con qué proyectar. Ver [ComoVaLaDeuda.SIN_CUOTA].
     if (cuota <= 0L) return mudo(ComoVaLaDeuda.SIN_CUOTA, interes = interes)
@@ -375,7 +390,7 @@ fun planDeUnaDeuda(
         else -> ComoVaLaDeuda.LA_DEUDA_CRECE
     }
     val proyeccion =
-        if (comoVa == ComoVaLaDeuda.AMORTIZA) proyectarLaDeuda(saldo, tasaMensual, cuota, seguro + otros) else null
+        if (comoVa == ComoVaLaDeuda.AMORTIZA) proyectarLaDeuda(saldo, tasaMensual, cuota, seguro + otros, delExtracto) else null
     return PlanDelCredito(
         saldo = saldo,
         cuota = cuota,
@@ -388,6 +403,7 @@ fun planDeUnaDeuda(
         interesPorPagar = proyeccion?.interes,
         saleDeTuBolsillo = saleDeTuBolsillo,
         sinIntereses = sinIntereses,
+        interesDelExtracto = delExtracto != null,
     )
 }
 
@@ -408,7 +424,14 @@ fun planDeUnaDeuda(
  * Un saldo en cero o negativo **con** movimientos sí produce plan —[ComoVaLaDeuda.SIN_DEUDA]—
  * porque ahí el $0 es un hecho y no un «no sé»; simplemente no dice ni interés ni fecha.
  */
-fun planDelCredito(credit: CreditSummary): PlanDelCredito? {
+fun planDelCredito(
+    credit: CreditSummary,
+    /**
+     * Hoy, para saber si el interés del extracto ([CreditTerms.interesRealVigente]) todavía es de
+     * la cuota que viene. Sin él, vale si existe.
+     */
+    hoy: kotlinx.datetime.LocalDate? = null,
+): PlanDelCredito? {
     val terms = credit.terms ?: return null
     if (!credit.hasMovements) return null
     if (deudaEnOtraMoneda(credit)) return null
@@ -420,6 +443,7 @@ fun planDelCredito(credit: CreditSummary): PlanDelCredito? {
         otrosCargosMensuales = terms.otrosCargosMensuales,
         saleDeTuBolsillo = saleDeTuBolsillo(terms),
         sinIntereses = terms.sinIntereses,
+        interesRealDelMes = terms.interesRealVigente(hoy),
     )
 }
 
@@ -442,12 +466,19 @@ private data class Proyeccion(val meses: Int, val interes: Long)
  * registra una cuota, así que la proyección y la realidad no pueden divergir por redondeo. La
  * hipoteca más larga del dueño se resuelve en 232 vueltas.
  */
-private fun proyectarLaDeuda(saldo: Long, tasaMensual: Double, cuota: Long, loQueNoAmortiza: Long): Proyeccion? {
+private fun proyectarLaDeuda(
+    saldo: Long,
+    tasaMensual: Double,
+    cuota: Long,
+    loQueNoAmortiza: Long,
+    /** El interés del primer mes, si lo dijo el extracto; los siguientes, con la tasa. */
+    interesDelPrimerMes: Long? = null,
+): Proyeccion? {
     var restante = saldo
     var meses = 0
     var intereses = 0L
     while (restante > 0L && meses < MAX_MESES_PROYECTADOS) {
-        val interes = interesDelPeriodo(restante, tasaMensual)
+        val interes = if (meses == 0 && interesDelPrimerMes != null) interesDelPrimerMes else interesDelPeriodo(restante, tasaMensual)
         val capital = cuota - interes - loQueNoAmortiza
         // Defensa, no caso esperado: quien llama ya comprobó que amortiza HOY, y como el saldo solo
         // baja el interés solo baja con él. Si algún día deja de ser cierto, se contesta «no se

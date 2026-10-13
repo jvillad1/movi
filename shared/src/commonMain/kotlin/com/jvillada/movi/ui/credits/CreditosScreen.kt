@@ -135,7 +135,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     // El plan de cada préstamo (interés de la cuota, si amortiza, cuándo termina). Se calcula acá
     // una sola vez y baja a las tarjetas: la aritmética vive en `:core` para que el server y los
     // tres clientes vean el mismo número. Ver [PlanDelCredito].
-    val planes = remember(credits) { credits.orEmpty().associate { it.account.id to planDelCredito(it) } }
+    val planes = remember(credits) { credits.orEmpty().associate { it.account.id to planDelCredito(it, com.jvillada.movi.ui.fecha.hoyEnAppZone()) } }
     // ── La forma de la última carga (ver `FormaRecordada`) ──────────────────────
     // Se lee una vez, al montar: es lo que el esqueleto reserva mientras la lectura no contestó.
     val formaRecordada = remember { FormaRecordada.delAparato.creditos(SessionManager.userId) }

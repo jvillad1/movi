@@ -24,6 +24,7 @@ import com.jvillada.movi.server.db.PasswordResetTokens
 import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.server.db.ReglasDeComercio
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImportMatches
 import com.jvillada.movi.server.db.StatementImports
@@ -103,6 +104,7 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(LecturasDePapeles, LecturasDePapeles.userId),
     TablaDelUsuario(StatementImports, StatementImports.userId),
     TablaDelUsuario(StatementImportMatches, StatementImportMatches.userId),
+    TablaDelUsuario(ReglasDeComercio, ReglasDeComercio.userId),
     // Movi AI
     TablaDelUsuario(AiTurns, AiTurns.userId),
     TablaDelUsuario(ConversacionesDelAsistente, ConversacionesDelAsistente.userId),
