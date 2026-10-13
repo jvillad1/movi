@@ -198,6 +198,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     // el movimiento alcanzó a crearse, la relectura lo trae como «¿Ya lo anotaste?»; mientras tanto,
     // un segundo «Confirmar» no puede crear otro.
     var fallaronAca by remember { mutableStateOf(emptySet<String>()) }
+    var lote by remember { mutableStateOf<EstadoDelLote>(EstadoDelLote.Cerrado) }
     fun confirmarDesdeLaFila(anotacion: AnotacionEntendida) {
         sobreElPago(
             anotacion.cabezaId,
@@ -306,6 +307,38 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
 
+            // «Confirmar los N que Movi entendió»: arriba, con la lista de lo que va a anotar.
+            val delLote = mensajes?.let { m -> pagosPorRevisar(m).mapNotNull { entendidos[it.id] } }.orEmpty()
+            if (delLote.size >= MINIMO_PARA_EL_LOTE || lote !is EstadoDelLote.Cerrado) {
+                item(key = "lote") {
+                    TarjetaDelLote(
+                        lote = delLote,
+                        estado = lote,
+                        habilitado = pagoEnCurso == null,
+                        onPedir = { lote = EstadoDelLote.Preguntando },
+                        onCancelar = { lote = EstadoDelLote.Cerrado },
+                        onConfirmar = {
+                            val estos = delLote
+                            if (pagoEnCurso != null || estos.isEmpty()) return@TarjetaDelLote
+                            lote = EstadoDelLote.Anotando(0, estos.size)
+                            // Mientras corre el lote, las filas no confirman ni ignoran nada.
+                            pagoEnCurso = CLAVE_DEL_LOTE
+                            alcance.launch {
+                                val resultado = confirmarElLote(estos, alAvanzar = { lote = EstadoDelLote.Anotando(it, estos.size) }) {
+                                    confirmarLoEntendido(it, ahora = Clock.System.now().toEpochMilliseconds())
+                                }
+                                avisosResueltos = avisosResueltos +
+                                    resultado.anotados.flatMap { it.avisos }.associateWith { SMS_STATE_CONFIRMED }
+                                fallaronAca = fallaronAca + resultado.quedaron.map { it.first.cabezaId }
+                                lote = EstadoDelLote.Terminado(textoDelResultadoDelLote(resultado), quedaron = resultado.quedaron.isNotEmpty())
+                                pagoEnCurso = null
+                                recarga++
+                            }
+                        },
+                        onCerrar = { lote = EstadoDelLote.Cerrado },
+                    )
+                }
+            }
             // «Todo al día» es un vacío: se afirma solo con lecturas que contestaron en esta visita.
             if (bandejaAlDia(mensajes, dias, candidatos, debitos) && noSePudoActualizar) return@LazyColumn
             if (bandejaAlDia(mensajes, dias, candidatos, debitos)) {

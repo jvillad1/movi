@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.porrevisar
 
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DudaDelAviso
 import com.jvillada.movi.shared.model.GrupoDeAvisos
@@ -19,6 +20,7 @@ import com.jvillada.movi.ui.components.OrigenDeLaCuentaDelBanco
 import com.jvillada.movi.ui.components.conLaCuentaQueSugiereMovi
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.resolverCuentaDelBanco
+import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.sms.anotarElMovimientoDelAviso
 import com.jvillada.movi.ui.sms.avisosDelPago
 import com.jvillada.movi.ui.sms.deudaPropuestaDelAviso
@@ -159,4 +161,42 @@ suspend fun confirmarLoEntendido(anotacion: AnotacionEntendida, ahora: Long, alC
         esComprobante = esIdDeComprobante(anotacion.sms.id),
     )
     anotarElMovimientoDelAviso(anotacion.sms.id, anotacion.pago, evento, esIdDeComprobante(anotacion.sms.id), alCrearElMovimiento)
+}
+
+/** Cómo terminó el lote: lo que se anotó y lo que quedó en la bandeja, con por qué. */
+data class ResultadoDelLote(
+    val anotados: List<AnotacionEntendida>,
+    val quedaron: List<Pair<AnotacionEntendida, String>>,
+)
+
+/**
+ * **El lote, uno por uno.** Cada aviso es atómico por su cuenta: si uno falla, los demás siguen, y
+ * al final se sabe cuál quedó. Va en orden y no en paralelo: son pocos, y dos escrituras a la vez
+ * sobre la misma cuenta no ganan nada.
+ */
+suspend fun confirmarElLote(
+    lote: List<AnotacionEntendida>,
+    alAvanzar: (hechos: Int) -> Unit = {},
+    confirmar: suspend (AnotacionEntendida) -> Unit,
+): ResultadoDelLote {
+    val anotados = mutableListOf<AnotacionEntendida>()
+    val quedaron = mutableListOf<Pair<AnotacionEntendida, String>>()
+    lote.forEachIndexed { i, anotacion ->
+        intentar { confirmar(anotacion) }
+            .onSuccess { anotados += anotacion }
+            .onFailure { quedaron += anotacion to it.toUserMessage() }
+        alAvanzar(i + 1)
+    }
+    return ResultadoDelLote(anotados, quedaron)
+}
+
+/** «Se anotaron 3.» / «Se anotó 1. Quedó en la bandeja: …». */
+fun textoDelResultadoDelLote(resultado: ResultadoDelLote): String {
+    val n = resultado.anotados.size
+    val hechos = if (n == 1) "Se anotó 1." else "Se anotaron $n."
+    if (resultado.quedaron.isEmpty()) return hechos
+    val cuales = resultado.quedaron.joinToString(" ") { (anotacion, porQue) ->
+        "${anotacion.leido.merchant} (${anotacion.linea}): $porQue."
+    }
+    return "$hechos Quedó en la bandeja: $cuales"
 }

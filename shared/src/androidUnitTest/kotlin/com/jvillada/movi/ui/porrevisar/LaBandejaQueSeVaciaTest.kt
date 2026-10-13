@@ -166,4 +166,24 @@ class LaBandejaQueSeVaciaTest {
         assertEquals(listOf("cafe"), ignorados)
         assertTrue(publicados.isEmpty())
     }
+
+    @Test
+    fun `el lote confirma solo los que Movi entendio y dice cual quedo`() {
+        fallaElMercado = true
+        montar()
+
+        assertEquals(1, cuantos(tituloDelLote(2)))
+        tocar(botonDelLote(2))
+        // Pide confirmación una vez.
+        assertEquals(1, cuantos(preguntaDelLote(2)))
+        assertTrue(publicados.isEmpty())
+        tocar(SI_ANOTAR_EL_LOTE)
+        esperar { cuantos("Quedó en la bandeja") == 1 }
+
+        // El café se anotó; el mercado falló y los dos con dudas ni se intentaron.
+        assertEquals(listOf(46_000L), publicados.map { it.amount })
+        assertEquals(listOf("cafe"), confirmados.map { it.first })
+        assertEquals(1, cuantos("Se anotó 1."))
+        assertEquals(1, cuantos("Quedó en la bandeja: CARULLA"))
+    }
 }
