@@ -55,6 +55,15 @@ data class StatementParseResult(
      * Con default y aparte de las filas: un APK viejo lo ignora y las sigue viendo como nuevas.
      */
     val cargosDelBanco: List<CargoEnElExtracto> = emptyList(),
+    /**
+     * **El extracto era de un crédito**: no trae movimientos sino cómo va la deuda, y esto es la
+     * propuesta de actualizar Movi con eso (ver [PropuestaDelExtractoDeCredito]). La revisión lo
+     * muestra en vez de la lista de movimientos, que viene vacía.
+     *
+     * Solo lo manda el server a quien lo pide (`?conCreditos=1`): un APK viejo abriría una revisión
+     * vacía, así que a él se le sigue contestando el 422 de siempre («resumen de crédito»).
+     */
+    val extractoDeCredito: PropuestaDelExtractoDeCredito? = null,
 )
 
 @Serializable

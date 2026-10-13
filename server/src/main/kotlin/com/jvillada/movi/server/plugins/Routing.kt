@@ -96,6 +96,7 @@ fun Application.configureRouting() {
             debitosAutomaticosRoutes()
             periodosRoutes()
             creditRoutes()
+            extractoDeCreditoRoutes()
             cardRoutes()
             subscriptionRoutes()
             goalRoutes()

@@ -181,7 +181,10 @@ private fun textoDelInteresConTasa(plan: PlanDelCredito): String = when (plan.co
     ComoVaLaDeuda.SIN_DEUDA -> "Sin deuda registrada: todavía no corren intereses"
 
     else -> plan.fraccionDeInteres
-        ?.let { formatCOP(plan.interes) + " de interés · " + porcentaje(it) + " de la cuota" }
+        ?.let {
+            formatCOP(plan.interes) + (if (plan.interesDelExtracto) " de interés según el extracto · " else " de interés · ") +
+                porcentaje(it) + " de la cuota"
+        }
         ?: "Sin tasa registrada: no se sabe cuánto de la cuota es interés"
 }
 

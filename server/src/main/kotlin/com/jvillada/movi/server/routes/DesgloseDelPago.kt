@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.balance.cargosYaCobradosEnElMes
+import com.jvillada.movi.server.balance.cuotaMasCercana
 import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
 import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.server.db.Credits
@@ -10,6 +11,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DesgloseDeCuota
 import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
+import com.jvillada.movi.shared.model.interesRealDeLaCuota
 import com.jvillada.movi.shared.model.signedDelta
 import com.jvillada.movi.shared.model.validarInteresReal
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -71,6 +73,16 @@ internal fun Transaction.desgloseDelPagoDeDeuda(
         interesReal, cuota, deuda.type,
         terms?.insuranceMonthly, terms?.otrosCargosMensuales, yaCobradoEnElMes,
     )?.let { return DesgloseDelPago.Mal(it) }
+    // **El interés del extracto le gana a la estimación** (ver `CreditTerms.interesReal`): si el dueño
+    // no escribió uno en este pago y las condiciones tienen el de ESTA cuota, se usa ese. Solo en el
+    // primer pago de la cuota —el interés del mes se cobra una vez— y solo si cabe en lo pagado: un
+    // abono parcial más chico que el interés vuelve a la estimación, que sabe repartirlo.
+    val delExtracto = if (interesReal != null || terms == null || yaCobradoEnElMes != 0L) null else {
+        val fecha = epochMillisToAppDate(timestamp)
+        terms.interesRealDeLaCuota(cuotaMasCercana(fecha, terms.dayOfMonth))?.takeIf {
+            validarInteresReal(it, cuota, deuda.type, terms.insuranceMonthly, terms.otrosCargosMensuales, yaCobradoEnElMes) == null
+        }
+    }
     return DesgloseDelPago.Bien(
         desglosarCuotaRegistrada(
             cuota = cuota,
@@ -80,7 +92,7 @@ internal fun Transaction.desgloseDelPagoDeDeuda(
             seguroMensual = terms?.insuranceMonthly,
             otrosCargosMensuales = terms?.otrosCargosMensuales,
             sinIntereses = terms?.sinIntereses ?: false,
-            interesReal = interesReal,
+            interesReal = interesReal ?: delExtracto,
             yaCobradoEnElMes = yaCobradoEnElMes,
         ),
     )

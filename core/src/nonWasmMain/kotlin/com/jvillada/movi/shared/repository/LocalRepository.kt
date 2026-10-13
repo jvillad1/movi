@@ -2249,6 +2249,18 @@ class LocalRepository(
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = remote.requestPasswordReset(request)
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
         remote.uploadStatement(fileName, bytes, mimeType)
+    // Como [adjustCreditBalance]: el server escribe el ajuste y acá se espeja el que contestó.
+    override suspend fun aceptarElExtractoDelCredito(
+        accountId: String,
+        resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeCredito,
+    ): CreditSummary = enDisco {
+        val summary = remote.aceptarElExtractoDelCredito(accountId, resumen)
+        summary.adjustmentEvent?.let { ajuste ->
+            val uid = userId()
+            db.transaction { mirrorEventLocally(ajuste, uid) }
+        }
+        return@enDisco summary
+    }
     // Igual que uploadStatement: sin espejo local, siempre a la red.
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
         remote.readStatementFromDocument(id)

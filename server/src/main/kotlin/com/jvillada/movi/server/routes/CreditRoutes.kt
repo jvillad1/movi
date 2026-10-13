@@ -1,5 +1,8 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.interesRealDeLaCuota
+import com.jvillada.movi.server.balance.cuotaMasCercana
+
 import com.jvillada.movi.server.balance.cargosYaCobradosEnElMes
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.Events
@@ -319,6 +322,13 @@ fun Route.creditRoutes() {
                 // Movi la propuesta de la cuota que el banco cobra solo.
                 .let { if ("debitoAutomaticoDesde" in crudo) it else it.copy(debitoAutomaticoDesde = previo?.debitoAutomaticoDesde) }
                 .let { it.copy(debitoAutomaticoDesde = it.debitoAutomaticoDesde?.trim()?.takeIf { v -> v.isNotBlank() }) }
+                // El interés del extracto no lo escribe la hoja de condiciones —lo escribe
+                // «Actualizar» en la propuesta del extracto— y la hoja no lo manda (no viaja en
+                // `null`): sin la clave se conserva el guardado. Los dos van juntos.
+                .let {
+                    if ("interesReal" in crudo) it
+                    else it.copy(interesReal = previo?.interesReal, interesRealCuota = previo?.interesRealCuota)
+                }
             // Crear y editar validan igual: la misma función que el alta y que la hoja.
             validarTasaDelCredito(body)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
             dbQuery { motivoDelDebitoAutomatico(uid, body, account.currency) }
@@ -579,7 +589,15 @@ fun Route.creditRoutes() {
                 seguroMensual = terms.insuranceMonthly,
                 otrosCargosMensuales = terms.otrosCargosMensuales,
                 sinIntereses = terms.sinIntereses,
-                interesReal = pedido.interesReal,
+                // El del extracto de ESTA cuota, si el pedido no trae uno y cabe (ver `DesgloseDelPago`).
+                interesReal = pedido.interesReal ?: terms.takeIf { yaCobradoEnElMes == 0L }
+                    ?.interesRealDeLaCuota(cuotaMasCercana(vencimientoDelPeriodo, terms.dayOfMonth))
+                    ?.takeIf {
+                        validarInteresReal(
+                            it, terms.installment, AccountType.LOAN,
+                            terms.insuranceMonthly, terms.otrosCargosMensuales, yaCobradoEnElMes,
+                        ) == null
+                    },
                 // Calculado arriba, porque la validación mira lo mismo.
                 yaCobradoEnElMes = yaCobradoEnElMes,
             )
@@ -669,6 +687,8 @@ private fun fillTerms(
     it[Credits.otrosCargosMensuales] = terms.otrosCargosMensuales?.takeIf { v -> v > 0L }
     it[Credits.sinIntereses] = terms.sinIntereses
     it[Credits.debitoAutomaticoDesde] = terms.debitoAutomaticoDesde?.trim()?.takeIf { v -> v.isNotBlank() }
+    it[Credits.interesReal] = terms.interesReal?.takeIf { v -> v >= 0L }
+    it[Credits.interesRealCuota] = terms.interesRealCuota?.takeIf { v -> Regex("""\d{4}-\d{2}""").matches(v) }
 }
 
 private fun summaryFor(

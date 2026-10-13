@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.parsing
 
 import com.jvillada.movi.shared.model.MerchantRule
+import com.jvillada.movi.shared.model.ResumenDelExtractoDeCredito
 import com.jvillada.movi.shared.model.TransactionType
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -29,6 +30,15 @@ interface LectorDePapeles {
     suspend fun queEs(contenido: ContenidoDelPapel): QueDiceElPapel
     suspend fun leerExtractoDeTexto(texto: String, reglas: List<MerchantRule>): ClaudeStatementParser.Lectura
     suspend fun leerExtractoDeImagen(bytes: ByteArray, mime: String, reglas: List<MerchantRule>): ClaudeStatementParser.Lectura
+
+    /**
+     * **El extracto de un crédito**: el saldo de capital, el interés y el seguro de la cuota que
+     * viene, la tasa. `null` si el texto no tiene esa forma. El de verdad lo lee **sin IA**
+     * ([leerElExtractoDeCreditoDeBancolombia]): es una forma fija de diez renglones, y así funciona
+     * aunque la cuenta de Anthropic no tenga crédito. Pasa por acá para que las pruebas lo cambien.
+     */
+    suspend fun leerElExtractoDeUnCredito(texto: String): ResumenDelExtractoDeCredito? =
+        leerElExtractoDeCreditoDeBancolombia(texto)
 
     companion object {
         /** El lector que usa el server. Las pruebas lo cambian y lo devuelven. */

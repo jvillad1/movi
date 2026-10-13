@@ -809,6 +809,13 @@ object Credits : Table("credit_terms") {
      * `AccountRoutes`) y la propuesta deja de salir.
      */
     val debitoAutomaticoDesde = varchar("debito_automatico_desde", 50).nullable()
+    /**
+     * El interés de una cuota según el extracto, y de qué cuota; ver `CreditTerms.interesReal`.
+     * Nullable por lo mismo que las de arriba: `ADD COLUMN … NULL` dentro de la transacción de
+     * arranque no puede fallar sobre los créditos que ya están (`SchemaDeArranqueTest`).
+     */
+    val interesReal = long("interes_real").nullable()
+    val interesRealCuota = varchar("interes_real_cuota", 7).nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)

@@ -94,6 +94,15 @@ interface WalletRepository {
     suspend fun registerPayrollDeduction(accountId: String): CreditSummary
 
     suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary
+    /**
+     * `POST /api/credits/{id}/extracto`: «Actualizar» con lo que dijo el extracto del crédito —el
+     * seguro, la tasa y el interés de la cuota en las condiciones, y el ajuste del saldo al corte—.
+     * Ver `PropuestaDelExtractoDeCredito`. Default que falla para los dobles de prueba que no lo usan.
+     */
+    suspend fun aceptarElExtractoDelCredito(
+        accountId: String,
+        resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeCredito,
+    ): CreditSummary = throw UnsupportedOperationException("aceptarElExtractoDelCredito")
     // F20 — tarjetas de crédito: mismas reglas que los créditos (se leen siempre del server).
     suspend fun getCards(): List<CardSummary>
     suspend fun createCard(request: CreateCardRequest): CardSummary

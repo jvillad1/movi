@@ -235,8 +235,10 @@ internal suspend fun procesarExtracto(
      * texto libre que el dueño pudo haber editado después. Ver [nombreParaExtraerTexto].
      */
     mimeConfiable: Boolean = false,
+    /** Ver [leerElExtracto]: el cliente sabe mostrar la propuesta de un extracto de crédito. */
+    conCreditos: Boolean = false,
 ): StatementParseResult =
-    conciliarYArchivar(uid, fileName, mimeType, bytes, leerElExtracto(uid, fileName, mimeType, bytes, mimeConfiable), log)
+    conciliarYArchivar(uid, fileName, mimeType, bytes, leerElExtracto(uid, fileName, mimeType, bytes, mimeConfiable, conCreditos), log)
 
 /**
  * **Lo que dijo el papel, antes de mirar lo que ya existe.** Es la mitad cara de
@@ -253,6 +255,11 @@ internal data class ExtractoLeido(
     val filas: List<ParsedTransaction>,
     val esFamirios: Boolean,
     val numerosDeCuenta: List<String>,
+    /**
+     * El extracto era de un crédito y esto es lo que dijo (ver `ResumenDelExtractoDeCredito`). Con
+     * default para que las lecturas ya guardadas (`lecturas_de_papeles`) se sigan leyendo.
+     */
+    val resumenDeCredito: ResumenDelExtractoDeCredito? = null,
 )
 
 /**
@@ -269,6 +276,12 @@ internal suspend fun leerElExtracto(
     mimeType: String,
     bytes: ByteArray,
     mimeConfiable: Boolean = false,
+    /**
+     * **El cliente sabe mostrar la propuesta de un extracto de crédito** (`?conCreditos=1`). Sin
+     * esto, el extracto de un crédito se rechaza como siempre («resumen de crédito»): un APK viejo
+     * abriría una revisión vacía, que se lee como «este mes ya estaba conciliado».
+     */
+    conCreditos: Boolean = false,
 ): ExtractoLeido {
     if (bytes.isEmpty()) throw FallaAlProcesarExtracto(HttpStatusCode.BadRequest, "No file received")
     // Desde que esta ruta ARCHIVA el archivo (y no solo lo parsea), le aplica el mismo tope
@@ -315,6 +328,23 @@ internal suspend fun leerElExtracto(
         }
         textoDelExtracto = text
         val docType = StatementParser.detectDocumentType(text)
+        // El extracto de un crédito no trae movimientos sino cómo va la deuda: se lee eso (sin IA,
+        // ver `leerElExtractoDeCreditoDeBancolombia`) y se propone actualizar Movi. Si no se pudo
+        // leer, o el cliente no lo sabe mostrar, se rechaza como siempre.
+        if (docType == StatementDocumentType.LOAN_SUMMARY && conCreditos) {
+            val resumen = LectorDePapeles.actual.leerElExtractoDeUnCredito(text)
+            if (resumen != null) {
+                return ExtractoLeido(
+                    bankName = StatementParser.detectBankName(fileName, text),
+                    filas = emptyList(),
+                    esFamirios = false,
+                    // El número de la obligación primero: es el que nombra el crédito.
+                    numerosDeCuenta = (listOfNotNull(resumen.numero?.takeLast(4)) +
+                        StatementParser.numerosDeCuenta(fileName, text)).distinct(),
+                    resumenDeCredito = resumen,
+                )
+            }
+        }
         if (docType == StatementDocumentType.LOAN_SUMMARY || docType == StatementDocumentType.INVESTMENT_FUND) {
             val msg = when (docType) {
                 StatementDocumentType.LOAN_SUMMARY ->
@@ -376,6 +406,21 @@ internal suspend fun conciliarYArchivar(
     val parsed = leido.filas
     val bankName = leido.bankName
     val isFamirios = leido.esFamirios
+
+    leido.resumenDeCredito?.let { resumen ->
+        val periodo = resumen.fechaDeCorte?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            ?.let { "${monthName(it.monthValue)} ${it.year}" }.orEmpty()
+        return StatementParseResult(
+            statementId = UUID.randomUUID().toString(),
+            bankName = bankName,
+            period = periodo,
+            newTransactions = emptyList(),
+            matches = emptyList(),
+            numerosDeCuenta = leido.numerosDeCuenta,
+            documentoId = archivarElExtracto(uid, fileName, mimeType, bytes, periodo, bankName, log),
+            extractoDeCredito = dbQuery { propuestaDelExtractoDeCredito(uid, resumen, leido.numerosDeCuenta) },
+        )
+    }
 
     val voidedIds = dbQuery {
         VoidEvents.selectAll()
@@ -473,7 +518,34 @@ internal suspend fun conciliarYArchivar(
     // archivado falla, la importación NO se cae: el dueño vino a importar movimientos, y
     // perder eso por no poder guardar una copia sería cambiar un problema chico por uno
     // grande. Falla en silencio en el log, que es donde se mira.
-    val documentoId: String? = runCatching {
+    val documentoId: String? = archivarElExtracto(uid, fileName, mimeType, bytes, period, bankName, log)
+
+    return StatementParseResult(
+        statementId = UUID.randomUUID().toString(),
+        bankName = bankName,
+        period = period,
+        newTransactions = nuevasConCargos,
+        matches = matches,
+        numerosDeCuenta = leido.numerosDeCuenta,
+        documentoId = documentoId,
+        cargosDelBanco = cargosDelBanco,
+    )
+}
+
+/**
+ * **Archiva el papel en Documentos** y devuelve su id (el que ya estaba, si es el mismo archivo), o
+ * `null` si no se pudo: la lectura sigue igual. Ver el comentario de [conciliarYArchivar].
+ */
+private suspend fun archivarElExtracto(
+    uid: String,
+    fileName: String,
+    mimeType: String,
+    bytes: ByteArray,
+    period: String,
+    bankName: String,
+    log: (String, Throwable) -> Unit,
+): String? {
+    return runCatching {
         dbQuery {
             // **No se archiva dos veces el mismo papel.** Esto corre en la VISTA PREVIA, no
             // en la importación: subir «Extracto_agosto.pdf», mirarlo, volver atrás y volver
@@ -519,17 +591,6 @@ internal suspend fun conciliarYArchivar(
         // sin cuenta. Perder la importación por no poder colgar una etiqueta sería cambiar un
         // problema chico por uno grande, que es la misma regla del archivado entero.
         .getOrNull()
-
-    return StatementParseResult(
-        statementId = UUID.randomUUID().toString(),
-        bankName = bankName,
-        period = period,
-        newTransactions = nuevasConCargos,
-        matches = matches,
-        numerosDeCuenta = leido.numerosDeCuenta,
-        documentoId = documentoId,
-        cargosDelBanco = cargosDelBanco,
-    )
 }
 
 fun Route.statementRoutes() {
@@ -552,9 +613,11 @@ fun Route.statementRoutes() {
         try {
             // `mimeConfiable` se queda en su default (`false`): acá el mimeType lo manda el
             // navegador de quien sube, no el server (ver `nombreParaExtraerTexto`).
-            val resultado = procesarExtracto(uid, fileName, mimeType, bytes, log = { msg, t ->
-                call.application.log.warn(msg, t)
-            })
+            val resultado = procesarExtracto(
+                uid, fileName, mimeType, bytes,
+                log = { msg, t -> call.application.log.warn(msg, t) },
+                conCreditos = call.request.queryParameters["conCreditos"] == "1",
+            )
             call.respond(resultado)
         } catch (e: FallaAlProcesarExtracto) {
             call.respond(e.status, e.mensaje)
