@@ -18,6 +18,9 @@ package com.jvillada.movi.platform
 private fun jsSupported(): Boolean =
     js("(function(){try{return !!(window.moviPush && window.moviPush.supported())}catch(e){return false}})()")
 
+private fun jsNecesitaInstalar(): Boolean =
+    js("(function(){try{return !!(window.moviPush && window.moviPush.necesitaInstalar && window.moviPush.necesitaInstalar())}catch(e){return false}})()")
+
 private fun jsStatus(): String =
     js("(function(){try{return window.moviPush ? window.moviPush.status() : 'unsupported'}catch(e){return 'unsupported'}})()")
 
@@ -37,6 +40,7 @@ private fun jsForgetForLogout(): Boolean =
 
 actual object PushOptIn {
     actual val supported: Boolean get() = jsSupported()
+    actual val necesitaInstalar: Boolean get() = jsNecesitaInstalar()
     actual fun status(): String = jsStatus()
     actual fun enable() { jsEnable() }
     actual fun disable() { jsDisable() }
