@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.periodoDe
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
+import kotlinx.datetime.Clock
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 
@@ -55,10 +56,20 @@ class InstantaneaDelInicio(
      * carga que salió bien (ver el sello en `DashboardScreen`), o la próxima apertura pintaría como
      * «lo último que se supo» una pantalla a medio cargar.
      */
-    fun guardarDatos(userId: String?, data: DashboardData) {
+    fun guardarDatos(userId: String?, data: DashboardData, ahora: Long = Clock.System.now().toEpochMilliseconds()) {
         val id = userId?.takeIf { it.isNotBlank() } ?: return
-        codificar(data, DashboardData.serializer())?.let { escribir(claveDeDatos(id), it) }
+        codificar(data, DashboardData.serializer())?.let {
+            escribir(claveDeDatos(id), it)
+            // Cuándo: el widget de Android dice «a las 9:40» (ver `textoDelWidget`). Aparte y no
+            // dentro de [DashboardData], para que una instantánea vieja —sin hora— se siga leyendo.
+            escribir(claveDeSellado(id), ahora.toString())
+            avisar()
+        }
     }
+
+    /** Cuándo se guardó la instantánea de [userId] (epoch ms), o `null` si no se sabe. */
+    fun selladaEn(userId: String?): Long? =
+        userId?.takeIf { it.isNotBlank() }?.let { leer(claveDeSellado(it)) }?.toLongOrNull()
 
     /** La última definición SDUI válida del Inicio de [userId], o `null`. */
     fun definicion(userId: String?): ScreenDefinition? =
@@ -83,6 +94,9 @@ class InstantaneaDelInicio(
         val id = userId?.takeIf { it.isNotBlank() } ?: return
         escribir(claveDeDatos(id), null)
         escribir(claveDeDefinicion(id), null)
+        escribir(claveDeSellado(id), null)
+        // El widget se limpia con la sesión: sin instantánea dice «Abre Movi».
+        avisar()
     }
 
     private fun <T> codificar(valor: T, serializer: KSerializer<T>): String? =
@@ -115,8 +129,21 @@ class InstantaneaDelInicio(
         /** La que usa la app. Ver [sustitutoDePrueba]. */
         val delAparato: InstantaneaDelInicio get() = sustitutoDePrueba ?: real
 
+        /**
+         * **Quién se entera cuando la instantánea cambia** (se guardó una nueva, o se borró al cerrar
+         * sesión). En Android lo pone la `Application` para repintar el widget «Te quedan hoy» —que
+         * lee de acá— apenas la app tiene cifras nuevas; en la web y en iOS queda en `null`. Un
+         * aviso que falla no puede tumbar el guardado ni el cierre de sesión: va envuelto.
+         */
+        var alCambiar: (() -> Unit)? = null
+
+        private fun avisar() {
+            runCatching { alCambiar?.invoke() }
+        }
+
         private fun claveDeDatos(userId: String) = "inicio_instantanea_$userId"
         private fun claveDeDefinicion(userId: String) = "inicio_definicion_$userId"
+        private fun claveDeSellado(userId: String) = "inicio_instantanea_en_$userId"
     }
 }
 
