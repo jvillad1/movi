@@ -2032,6 +2032,7 @@ class LocalRepository(
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)
     override suspend fun parseSms(id: String): ParsedSms = remote.parseSms(id)
     override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = remote.getSmsCoincidencias(id)
+    override suspend fun getPropuestasDeLaBandeja() = remote.getPropuestasDeLaBandeja()
     override suspend fun confirmSms(id: String) = remote.confirmSms(id)
     override suspend fun ignoreSms(id: String) = remote.ignoreSms(id)
     override suspend fun devolverSmsALaBandeja(id: String) = remote.devolverSmsALaBandeja(id)

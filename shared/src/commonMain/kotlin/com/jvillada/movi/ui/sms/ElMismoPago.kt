@@ -194,6 +194,13 @@ internal fun TarjetaDelMismoPago(
     onNoSonElMismoPago: () -> Unit,
     onCerrar: () -> Unit,
     trabajando: Boolean = false,
+    /**
+     * La bandeja que se vacía sola: lo que Movi va a anotar («Comida · Bancolombia Ahorros ·
+     * $46.000») cuando ya entendió el pago. Con esto y [onConfirmar] la tarjeta ofrece «Confirmar»
+     * directo; sin esto, el botón principal sigue siendo «Revisar».
+     */
+    entendido: String? = null,
+    onConfirmar: (() -> Unit)? = null,
 ) {
     var abiertos by remember { mutableStateOf(false) }
     val yaAnotadoCon = avisos.firstNotNullOfOrNull { it.yaAnotadoCon }?.let { id -> avisos.firstOrNull { it.id == id } }
@@ -249,6 +256,11 @@ internal fun TarjetaDelMismoPago(
         Spacer(Modifier.height(10.dp))
         Hairline()
         Spacer(Modifier.height(12.dp))
+        val confirmable = !anotado && entendido != null && onConfirmar != null
+        if (confirmable) {
+            LineaDeLoEntendido(entendido!!)
+            Spacer(Modifier.height(10.dp))
+        }
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -256,9 +268,16 @@ internal fun TarjetaDelMismoPago(
         ) {
             if (anotado) {
                 PastillaDelPago("Cerrar", principal = true, habilitada = !trabajando, onClick = onCerrar)
+            } else if (confirmable) {
+                PastillaDelPago(
+                    CONFIRMAR_EN_LA_FILA, principal = true, habilitada = !trabajando, onClick = onConfirmar!!,
+                    modifier = Modifier.testTag(TAG_CONFIRMAR_EN_LA_FILA),
+                )
+                PastillaDelPago("Revisar", habilitada = !trabajando, onClick = onRevisar)
+                PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = onIgnorar)
             } else {
                 PastillaDelPago("Revisar", principal = true, habilitada = !trabajando, onClick = onRevisar)
-                PastillaDelPago("Ignorar", habilitada = !trabajando, onClick = onIgnorar)
+                PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = onIgnorar)
             }
             PastillaDelPago(NO_SON_EL_MISMO_PAGO, habilitada = !trabajando, onClick = onNoSonElMismoPago)
         }
@@ -294,9 +313,15 @@ internal fun TextoDelAviso(aviso: SmsMessage, accion: (@Composable () -> Unit)? 
 }
 
 @Composable
-private fun PastillaDelPago(texto: String, habilitada: Boolean, onClick: () -> Unit, principal: Boolean = false) {
+internal fun PastillaDelPago(
+    texto: String,
+    habilitada: Boolean,
+    onClick: () -> Unit,
+    principal: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .then(
                 if (principal) Modifier.background(Movi.colores.texto)
@@ -313,4 +338,30 @@ private fun PastillaDelPago(texto: String, habilitada: Boolean, onClick: () -> U
             maxLines = 1,
         )
     }
+}
+
+// ── La bandeja que se vacía sola ───────────────────────────────────────────────────────────────
+
+/** El botón de la fila que anota lo que Movi entendió, sin pasar por Reconciliar. */
+const val CONFIRMAR_EN_LA_FILA: String = "Confirmar"
+
+/** El botón de la fila que ignora el aviso (o todos los del pago). */
+const val IGNORAR_EN_LA_FILA: String = "Ignorar"
+
+/** El tag de «Confirmar» en una tarjeta de «Por revisar». */
+const val TAG_CONFIRMAR_EN_LA_FILA: String = "por-revisar:confirmar-en-la-fila"
+
+/** El tag de la línea «Comida · Bancolombia Ahorros · $46.000» de una tarjeta de «Por revisar». */
+const val TAG_LINEA_DE_LO_ENTENDIDO: String = "por-revisar:linea-de-lo-entendido"
+
+/** «Se anota: Comida · Bancolombia Ahorros · $46.000», justo encima de «Confirmar». */
+@Composable
+internal fun LineaDeLoEntendido(linea: String) {
+    Text(
+        "Se anota: $linea",
+        style = Movi.textos.apoyo,
+        color = Movi.colores.texto,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.testTag(TAG_LINEA_DE_LO_ENTENDIDO),
+    )
 }

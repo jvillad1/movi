@@ -64,6 +64,8 @@ sealed interface ClaveDeLectura<T : Any> {
     data object MensajesDelBanco : ClaveDeLectura<List<SmsMessage>>
     data object CandidatosPagoDeTarjeta : ClaveDeLectura<List<FinancialEvent>>
     data object DebitosAutomaticos : ClaveDeLectura<List<com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar>>
+    /** Lo que Movi propone para cada pago pendiente: la bandeja que se vacía sola. */
+    data object PropuestasDeLaBandeja : ClaveDeLectura<com.jvillada.movi.shared.model.PropuestasDeLaBandeja>
 
     /**
      * Lo que hace falta para la meta diaria del «Día a día» de Movimientos (ver `DiaADia`): las

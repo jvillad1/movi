@@ -68,6 +68,7 @@ import com.jvillada.movi.data.intentar
 import com.jvillada.movi.ui.components.toUserMessage
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.model.soloLoQueLlegoSolo
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
@@ -175,15 +176,35 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     var pagoEnCurso by remember { mutableStateOf<String?>(null) }
     var errorDeUnPago by remember { mutableStateOf<String?>(null) }
     val alcance = rememberCoroutineScope()
-    fun sobreElPago(grupoId: String, accion: suspend () -> Unit, alTerminar: () -> Unit) {
+    fun sobreElPago(grupoId: String, accion: suspend () -> Unit, alFallar: () -> Unit = {}, alTerminar: () -> Unit) {
         if (pagoEnCurso != null) return
         pagoEnCurso = grupoId
         errorDeUnPago = null
         alcance.launch {
             intentar { accion() }
                 .onSuccess { alTerminar(); recarga++ }
-                .onFailure { errorDeUnPago = it.toUserMessage() }
+                .onFailure { alFallar(); errorDeUnPago = it.toUserMessage() }
             pagoEnCurso = null
+        }
+    }
+
+    // ── La bandeja que se vacía sola ─────────────────────────────────────────────────────────
+    // Lo que Movi propone para cada pago pendiente (la misma propuesta y las mismas coincidencias de
+    // Reconciliar), para saber cuáles se confirman desde la fila. Sin esta lectura, todo es «Revisar».
+    val propuestas = rememberLectura(ClaveDeLectura.PropuestasDeLaBandeja, recarga) {
+        Repositories.wallets.getPropuestasDeLaBandeja()
+    }.valor
+    // Lo que falló acá desde la fila o en el lote: vuelve a «Revisar» hasta que el dueño lo mire. Si
+    // el movimiento alcanzó a crearse, la relectura lo trae como «¿Ya lo anotaste?»; mientras tanto,
+    // un segundo «Confirmar» no puede crear otro.
+    var fallaronAca by remember { mutableStateOf(emptySet<String>()) }
+    fun confirmarDesdeLaFila(anotacion: AnotacionEntendida) {
+        sobreElPago(
+            anotacion.cabezaId,
+            { confirmarLoEntendido(anotacion, ahora = Clock.System.now().toEpochMilliseconds()) },
+            alFallar = { fallaronAca = fallaronAca + anotacion.cabezaId },
+        ) {
+            avisosResueltos = avisosResueltos + anotacion.avisos.associateWith { SMS_STATE_CONFIRMED }
         }
     }
 
@@ -201,6 +222,16 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         }.toMap()
     }
     val destinosParaGuardar = rememberDestinosParaGuardar(hacenFalta = aQuienFue.isNotEmpty())
+    /** Cabeza de cada pago → lo que Movi va a anotar, para los pagos que entendió (ver [loQueMoviEntendio]). */
+    val entendidos: Map<String, AnotacionEntendida> = remember(mensajes, propuestas, cuentas, fallaronAca) {
+        val todos = mensajes ?: return@remember emptyMap()
+        val leidas = propuestas ?: return@remember emptyMap()
+        val ahora = Clock.System.now().toEpochMilliseconds()
+        pagosPorRevisar(todos)
+            .filter { it.id !in fallaronAca }
+            .mapNotNull { cabeza -> loQueMoviEntendio(cabeza, todos, leidas, cuentas, ahora).anotacion?.let { cabeza.id to it } }
+            .toMap()
+    }
     val dias = diasLeidos?.map { dia ->
         dia.copy(items = dia.items.filterNot { (it.transferId ?: it.id) in movimientosResueltos })
     }
@@ -348,6 +379,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                             avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_CONFIRMED }
                                         }
                                     },
+                                    entendido = entendidos[sms.id]?.linea,
+                                    onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
                                 )
                             }
                             return@forEach
@@ -356,6 +389,14 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                             TarjetaDeMensajeDelBanco(
                                 sms,
                                 onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) },
+                                entendido = entendidos[sms.id]?.linea,
+                                onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
+                                onIgnorar = {
+                                    sobreElPago(sms.id, { Repositories.wallets.ignoreSms(sms.id) }) {
+                                        avisosResueltos = avisosResueltos + (sms.id to SMS_STATE_IGNORED)
+                                    }
+                                },
+                                trabajando = pagoEnCurso == sms.id,
                                 // El otro aviso puede estar ya confirmado: se busca en la lista
                                 // entera, no solo entre los pendientes.
                                 parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
@@ -374,7 +415,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                                 destinos = destinosParaGuardar.guardados.orEmpty(),
                                                 // Guardada, la fila se va sola; al tocar «Revisar»
                                                 // el server ya propone «Transferencia a <nombre>».
-                                                onGuardado = destinosParaGuardar.alGuardar,
+                                                // Y la propuesta se relee: con el nombre, el aviso puede quedar entendido.
+                                                onGuardado = { guardado -> destinosParaGuardar.alGuardar(guardado); recarga++ },
                                             )
                                         }
                                     },
