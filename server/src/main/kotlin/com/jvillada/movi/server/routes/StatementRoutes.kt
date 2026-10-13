@@ -640,9 +640,9 @@ fun Route.statementRoutes() {
      *   lo reclama**, así que un vínculo huérfano se podía elegir como heredero y el movimiento
      *   quedaba colgado de un importe inexistente — vivo, sin anular, y fuera de toda pantalla.
      *
-     * Lo que queda **afuera** de la transacción es lo que no es de Postgres y no puede deshacerse
-     * con ella: las reglas de comercio (un archivo JSON) y la detección de suscripciones. Las dos
-     * son ayudas para la próxima vez; perderlas no le mueve un peso a nadie.
+     * Lo que queda **afuera** de la transacción son las ayudas para la próxima vez: las reglas de
+     * comercio (`reglas_de_comercio`, que una falla no puede tumbar) y la detección de
+     * suscripciones. Perderlas no le mueve un peso a nadie, así que no pueden deshacer un importe.
      */
     post("/api/statements/import") {
         val uid = call.userId()
@@ -661,8 +661,8 @@ fun Route.statementRoutes() {
         val importId = "si_${UUID.randomUUID()}"
         val resultado = dbQuery { escribirElImporte(uid, decision, importId) }
 
-        // Las reglas de comercio se guardan recién acá, con el importe ya confirmado: viven en un
-        // archivo JSON y no en la base, así que no pueden entrar al «todo o nada» de arriba.
+        // Las reglas de comercio se guardan recién acá, con el importe ya confirmado: son una ayuda
+        // para la próxima lectura, y una falla al guardarlas no puede deshacer el importe.
         resultado.reglas.forEach { Stores.merchantRules.saveRule(uid, it) }
 
         // Trigger silencioso de detección de suscripciones (spec 2026-07-22-detect-on-import):
@@ -839,9 +839,8 @@ private data class ResultadoDelImporte(
     val reconciledCount: Int,
     val sinFecha: Int,
     /**
-     * Las reglas de comercio que el importe aprendió. Salen de acá en vez de guardarse en el
-     * momento porque viven en un archivo JSON, no en la base: escribirlas dentro de la transacción
-     * las dejaría escritas aunque el importe se deshiciera solo.
+     * Las reglas de comercio que el importe aprendió. Salen de acá y se guardan después del importe
+     * (ver `MerchantRulesStore`): son una ayuda, y no pueden hacer fallar la transacción del importe.
      */
     val reglas: List<MerchantRule>,
 )

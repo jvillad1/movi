@@ -395,6 +395,24 @@ object CardPaymentDismissals : Table("card_payment_dismissals") {
  * fila acá la saca para siempre; una situación nueva (otro cobro, otro período) trae otra huella y
  * vuelve a avisar. Tabla nueva: entra solo al `SchemaUtils.create` del arranque.
  */
+/**
+ * **Las reglas de comercio que el importador de extractos aprende** («RAPPI» → «Comida»): cuando el
+ * dueño cambia la categoría de una fila al importar, se guarda acá y viaja en el prompt de la
+ * próxima lectura (ver `MerchantRulesStore`).
+ *
+ * Vivían en un archivo JSON del contenedor (`movi-data/merchant-rules-<usuario>.json`), y Railway
+ * arma un contenedor nuevo en cada despliegue: **cada despliegue las borraba**. Tabla nueva: entra
+ * solo al `SchemaUtils.create` del arranque. El contenido del archivo, si todavía existe, se pasa
+ * acá al arrancar (`Migrations.pasarLasReglasDeComercioALaBase`).
+ */
+object ReglasDeComercio : Table("reglas_de_comercio") {
+    val userId = varchar("user_id", 50)
+    val patron = varchar("patron", 255)
+    val categoria = varchar("categoria", 100)
+    val actualizadaEn = long("actualizada_en")
+    override val primaryKey = PrimaryKey(userId, patron)
+}
+
 object AnomaliasDescartadas : Table("anomalias_descartadas") {
     val userId       = varchar("user_id", 50)
     val huella       = varchar("huella", 300)
