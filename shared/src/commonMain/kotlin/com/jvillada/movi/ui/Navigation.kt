@@ -176,6 +176,11 @@ sealed class Screen {
      */
     data object LoQueMoviSabe : Screen()
     /**
+     * **Borrar mi cuenta**: la descarga de los datos primero, qué se borra, y la contraseña con la
+     * palabra BORRAR. Se abre desde Ajustes, abajo de todo.
+     */
+    data object BorrarLaCuenta : Screen()
+    /**
      * **«Cuadre de saldos»** — comparar de una sentada lo que Movi cree con lo que dice el banco,
      * y anotar la diferencia de cada cuenta como un ajuste.
      *
@@ -284,7 +289,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
     Screen.Mas, Screen.Profile, Screen.Goals, Screen.Extractos, is Screen.AIChat,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos,
-    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe -> true
+    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.BorrarLaCuenta -> true
     else -> false
 }
 
@@ -330,7 +335,20 @@ fun screenForTab(tab: NavTab): Screen = when (tab) {
     NavTab.ADD -> Screen.QuickAdd()
     NavTab.PLAN -> Screen.Plan()
     NavTab.PATRIMONIO -> Screen.Accounts
+    NavTab.MOVI_AI -> Screen.AIChat()
 }
+
+/**
+ * **Qué destino resalta la navegación** para [screen]: lo mismo que [navTabFor], más Movi AI, que
+ * en el rail tiene su propio lugar ([com.jvillada.movi.ui.components.destinoMoviAi]).
+ *
+ * Aparte de [navTabFor] a propósito: esa función decide también el encabezado (avatar o flecha,
+ * ver `leadingFor`) y en el teléfono Movi AI se abre desde Hoy, así que ahí sigue llevando flecha.
+ * La barra del teléfono no tiene a Movi AI entre sus cuatro, así que con el chat abierto no marca
+ * ninguna — igual que antes.
+ */
+fun destinoResaltado(screen: Screen): NavTab? =
+    if (screen is Screen.AIChat) NavTab.MOVI_AI else navTabFor(screen)
 
 /**
  * **Adónde se va de verdad** cuando se pide [screen].

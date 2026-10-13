@@ -15,7 +15,10 @@
         android:name="android.hardware.telephony"
         android:required="false" />
 
+    <!-- MoviAplicacion conecta el widget «Te quedan hoy» con la instantánea del Inicio en
+         cualquier proceso (ver su KDoc). -->
     <application
+        android:name="com.jvillada.movi.aplicacion.MoviAplicacion"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -75,6 +78,20 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- El widget «Te quedan hoy» (com.jvillada.movi.widget.WidgetTeQuedan): lee la instantánea
+             del Inicio que la app ya guarda; no pide red. -->
+        <receiver
+            android:name="com.jvillada.movi.widget.WidgetTeQuedan"
+            android:exported="false"
+            android:label="@string/widget_te_quedan">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_te_quedan_info" />
+        </receiver>
 
         <receiver
             android:name="com.jvillada.movi.sms.SmsRealtimeReceiver"

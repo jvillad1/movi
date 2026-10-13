@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    updatePeriodMillis: media hora, el mínimo que respeta el sistema. Además la app lo repinta cada vez
+    que guarda una instantánea nueva del Inicio (ver WidgetTeQuedan).
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_te_quedan_descripcion"
+    android:initialLayout="@layout/widget_te_quedan"
+    android:minWidth="180dp"
+    android:minHeight="80dp"
+    android:previewLayout="@layout/widget_te_quedan"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="3"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

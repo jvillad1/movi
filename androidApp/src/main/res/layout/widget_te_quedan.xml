@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    El widget «Te quedan hoy» (ver com.jvillada.movi.widget.WidgetTeQuedan). Los colores no van acá:
+    los pone el código desde Tokens.kt, en el tema que el dueño eligió en la app; los de acá (colors.xml)
+    son solo los de la vista previa y el primer cuadro. El fondo es una forma blanca que se tiñe con
+    `setColorFilter` (RemoteViews no deja cambiar el color de un shape).
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_raiz"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/widget_fondo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_fondo"
+        android:tint="@color/widget_tarjeta" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp">
+
+        <TextView
+            android:id="@+id/widget_rotulo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:text="Te quedan"
+            android:textColor="@color/widget_texto_medio"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/widget_cifra"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:text="Abre Movi"
+            android:textColor="@color/widget_texto"
+            android:textSize="26sp" />
+
+        <TextView
+            android:id="@+id/widget_pie"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:maxLines="1"
+            android:text="para ver cuánto te queda"
+            android:textColor="@color/widget_texto_apagado"
+            android:textSize="12sp" />
+    </LinearLayout>
+</FrameLayout>

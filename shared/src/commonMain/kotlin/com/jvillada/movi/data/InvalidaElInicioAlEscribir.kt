@@ -163,6 +163,9 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun changePassword(request: ChangePasswordRequest): String? = trasEscribir { delegado.changePassword(request) }
     override suspend fun cerrarSesionesEnTodosLosAparatos() = trasEscribir { delegado.cerrarSesionesEnTodosLosAparatos() }
     override fun olvidarDatosLocales(userId: String) = trasEscribir { delegado.olvidarDatosLocales(userId) }
+    override suspend fun borrarLaCuenta(request: com.jvillada.movi.shared.model.BorrarLaCuentaRequest) =
+        trasEscribir { delegado.borrarLaCuenta(request) }
+    override fun olvidarTodoLoDe(userId: String) = trasEscribir { delegado.olvidarTodoLoDe(userId) }
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = trasEscribir { delegado.requestPasswordReset(request) }
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult = trasEscribir { delegado.uploadStatement(fileName, bytes, mimeType) }
     override suspend fun readStatementFromDocument(id: String): StatementParseResult = trasEscribir { delegado.readStatementFromDocument(id) }

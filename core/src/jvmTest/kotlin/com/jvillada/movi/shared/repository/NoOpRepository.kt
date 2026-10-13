@@ -539,5 +539,6 @@ open class NoOpRepository(
     )
     override suspend fun changePassword(request: ChangePasswordRequest): String? = null
     override suspend fun cerrarSesionesEnTodosLosAparatos() {}
+    override suspend fun borrarLaCuenta(request: BorrarLaCuentaRequest) {}
     override suspend fun getExportLink() = EnlaceDeDescarga(url = "", expiraEn = 0L)
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +32,7 @@ import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
 import com.jvillada.movi.ui.ai.TITULO_LO_QUE_MOVI_SABE
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
+import com.jvillada.movi.ui.profile.BORRAR_MI_CUENTA
 
 private data class MasItem(
     val label: String,
@@ -127,6 +129,11 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
             items(visibleItems) { item ->
                 MasCard(item, onNavigate)
             }
+            // Abajo de todo y a lo ancho, separado de las fichas: se usa una vez, si es que se usa,
+            // y no puede quedar a un toque distraído de «Categorías».
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                FilaBorrarLaCuenta(onNavigate)
+            }
         }
     }
 }
@@ -181,5 +188,24 @@ private fun MasCard(item: MasItem, onNavigate: (Screen) -> Unit) {
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
+    }
+}
+
+/**
+ * «Borrar mi cuenta», al pie de Ajustes. Texto en el color de lo que sale y sin ficha: no es un
+ * ajuste más, es la salida. Abre [Screen.BorrarLaCuenta], que primero ofrece descargar los datos.
+ */
+@Composable
+private fun FilaBorrarLaCuenta(onNavigate: (Screen) -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Movi.espacios.seccion)
+            .clip(RoundedCornerShape(Movi.formas.normal))
+            .clickable { onNavigate(Screen.BorrarLaCuenta) }
+            .padding(vertical = Movi.espacios.amplio),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(BORRAR_MI_CUENTA, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.sale)
     }
 }

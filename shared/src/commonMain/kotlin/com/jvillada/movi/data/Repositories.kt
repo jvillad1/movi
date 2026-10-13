@@ -73,6 +73,17 @@ object Repositories {
      * construirlo revienta. Ahí se anota el pendiente, y se cumple la próxima vez que el
      * repositorio se construya (ver [realPerezoso]).
      */
+    /**
+     * **Después de borrar la cuenta: que en el aparato no quede NADA de [userId]**, tampoco lo que no
+     * había subido (ver `WalletRepository.olvidarTodoLoDe`). Lo llama la pantalla de borrar la cuenta
+     * con el repositorio ya construido —acaba de usarlo para el `DELETE`—; si no lo estuviera, no hay
+     * base abierta de la que borrar, y el cierre de sesión que sigue anota lo de siempre.
+     */
+    fun olvidarTodoLoDe(userId: String) {
+        sustitutoDePrueba?.let { it.olvidarTodoLoDe(userId); return }
+        if (realPerezoso.isInitialized()) real.olvidarTodoLoDe(userId)
+    }
+
     fun olvidarDatosLocales(userId: String) {
         sustitutoDePrueba?.let { it.olvidarDatosLocales(userId); return }
         if (realPerezoso.isInitialized()) real.olvidarDatosLocales(userId)

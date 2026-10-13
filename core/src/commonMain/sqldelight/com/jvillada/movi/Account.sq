@@ -157,3 +157,7 @@ deleteSyncedForUser:
 DELETE FROM account
 WHERE userId = :userId AND syncedAt IS NOT NULL
   AND id NOT IN (SELECT accountId FROM financial_event WHERE syncedAt IS NULL AND userId = :userId);
+
+-- Al borrar la cuenta: TODO lo del usuario, también lo que no subió (ver `olvidarTodoLoDe`).
+deleteAllForUser:
+DELETE FROM account WHERE userId = :userId;

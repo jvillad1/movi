@@ -49,7 +49,7 @@ import com.jvillada.movi.ui.atras
 import com.jvillada.movi.ui.hayAdondeVolver
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.navTabFor
+import com.jvillada.movi.ui.destinoResaltado
 import com.jvillada.movi.ui.muestraLaNavegacion
 import com.jvillada.movi.ui.opensAsOverlay
 import com.jvillada.movi.ui.screenForTab
@@ -68,6 +68,7 @@ import com.jvillada.movi.ui.dashboard.PrimerosPasosScreen
 import com.jvillada.movi.ui.goals.MetasScreen
 import com.jvillada.movi.ui.extractos.ExtractosScreen
 import com.jvillada.movi.ui.mas.MasScreen
+import com.jvillada.movi.ui.profile.BorrarLaCuentaScreen
 import com.jvillada.movi.ui.profile.PerfilScreen
 import com.jvillada.movi.ui.quickadd.QuickAddScreen
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
@@ -290,7 +291,8 @@ fun App() {
             CascaraDeAncho(
                 modifier = Modifier.fillMaxSize().background(Movi.colores.fondo),
             ) {
-                val activeTab = navTabFor(currentScreen)
+                // Con Movi AI, que en el rail tiene su lugar propio (ver [destinoResaltado]).
+                val activeTab = destinoResaltado(currentScreen)
                 // Ola C: Ajustes y lo que cuelga de ahí no marcan pestaña pero sí llevan la
                 // barra — ver [muestraLaNavegacion].
                 val conNavegacion = muestraLaNavegacion(currentScreen)
@@ -348,6 +350,7 @@ fun App() {
                 Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.Compartir         -> CompartirScreen(navigate)
                 Screen.LoQueMoviSabe     -> LoQueMoviSabeScreen(navigate)
+                Screen.BorrarLaCuenta    -> BorrarLaCuentaScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
@@ -408,6 +411,9 @@ fun App() {
                             // Ola 9 · B: el movimiento ya se guardó; recién ahora se evalúa si
                             // vale la pena ofrecer el recurrente.
                             onSavedEvent = { movimientoRecienGuardado = it },
+                            // «Guardar y anotar otro»: guardó y la hoja sigue abierta. La pantalla de
+                            // atrás vuelve a leer igual que con el «Guardar» de siempre.
+                            onSavedSinCerrar = { refreshTick++ },
                         )
                     }
                 }

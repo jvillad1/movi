@@ -18,6 +18,14 @@ internal sealed interface AccionDeTecla {
     data object Guardar : AccionDeTecla
 
     /**
+     * **⇧Enter: «Guardar y anotar otro».** Guarda y deja la hoja abierta para el siguiente, igual que
+     * el enlace de debajo del botón. Shift y no ⌘/Ctrl: ⌘Enter y Ctrl+Enter los usan los navegadores
+     * y los lectores de pantalla para otras cosas, y ⇧Enter es el «uno más» de las hojas de cálculo y
+     * los chats (salto de renglón sin enviar). Ver `alTeclear` en `QuickAddScreen`.
+     */
+    data object GuardarYOtro : AccionDeTecla
+
+    /**
      * Soltar Enter: no hace nada, pero **se consume**. Medido en el navegador: el soltar le llegaba
      * al `clickable` del velo de la hoja (el «toque afuera» que cierra), que lo toma como un clic y
      * cerraba la hoja antes de que el guardado alcanzara a salir — Enter cerraba sin guardar.
@@ -32,11 +40,21 @@ internal sealed interface AccionDeTecla {
  * Ctrl+1 o Shift+1 («!») son del navegador o de otra cosa, no dígitos del monto. Los dígitos de la
  * fila de arriba y los del teclado numérico valen igual; Enter también el del teclado numérico.
  *
+ * [conShift] va aparte de [conModificador] (⌘, Ctrl, Alt) por una sola tecla: **⇧Enter** es
+ * [AccionDeTecla.GuardarYOtro]. Con Shift, todo lo demás sigue sin ser de la hoja.
+ *
  * `null` = esta tecla no es de la hoja; que siga su camino.
  */
-internal fun accionDeTecla(tecla: Key, tipo: KeyEventType, conModificador: Boolean): AccionDeTecla? {
+internal fun accionDeTecla(
+    tecla: Key,
+    tipo: KeyEventType,
+    conModificador: Boolean,
+    conShift: Boolean = false,
+): AccionDeTecla? {
     if (conModificador) return null
-    if (tipo == KeyEventType.KeyUp && (tecla == Key.Enter || tecla == Key.NumPadEnter)) return AccionDeTecla.Consumir
+    val esEnter = tecla == Key.Enter || tecla == Key.NumPadEnter
+    if (tipo == KeyEventType.KeyUp && esEnter) return AccionDeTecla.Consumir
+    if (conShift) return if (tipo == KeyEventType.KeyDown && esEnter) AccionDeTecla.GuardarYOtro else null
     if (tipo != KeyEventType.KeyDown) return null
     DIGITOS[tecla]?.let { return AccionDeTecla.Digito(it) }
     return when (tecla) {

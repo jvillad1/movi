@@ -712,6 +712,23 @@ interface WalletRepository {
     fun olvidarDatosLocales(userId: String) {}
 
     /**
+     * **Borrar la cuenta** — `DELETE /api/me`, con la contraseña y la palabra de confirmación en el
+     * cuerpo. Lanza [ApiException] con 403 si la contraseña no coincide (y no se borró nada), 400 si
+     * falta la confirmación y 429 tras varios intentos. Después de esto ningún token de la cuenta
+     * sirve, el de este aparato tampoco: quien llama borra lo local ([olvidarTodoLoDe]) y cierra la
+     * sesión.
+     */
+    suspend fun borrarLaCuenta(request: com.jvillada.movi.shared.model.BorrarLaCuentaRequest)
+
+    /**
+     * **Después de borrar la cuenta: que en el aparato no quede NADA de [userId]**, tampoco lo que
+     * todavía no había subido. Es lo contrario de [olvidarDatosLocales], que guarda lo pendiente
+     * para cuando el dueño vuelva: acá no va a volver —la cuenta ya no existe— y esa plata no tiene
+     * a dónde subir. Sin espejo local (la web) no hay nada que borrar.
+     */
+    fun olvidarTodoLoDe(userId: String) {}
+
+    /**
      * Pide un enlace de recuperación por correo. Devuelve el CÓDIGO HTTP crudo en vez de un
      * cuerpo tipado a propósito: el servidor responde 202 idéntico exista o no el correo
      * (anti-enumeración) y 503 cuando el envío de correo no está configurado en el servidor,

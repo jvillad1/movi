@@ -2,4 +2,14 @@
 <resources>
     <!-- El fondo oscuro de Movi (Tokens.kt) — evita el destello blanco en el arranque -->
     <color name="movi_fondo">#07090C</color>
+    <!--
+        El widget «Te quedan hoy» ANTES de que la app lo pinte (la vista previa del selector de
+        widgets y el primer cuadro): el tema oscuro de Tokens.kt. Después los pone WidgetTeQuedan
+        desde Tokens.kt, en el tema elegido. `ElWidgetHablaLosTokensTest` compara estos cuatro con la
+        paleta: si un token cambia, esto no puede quedarse atrás.
+    -->
+    <color name="widget_tarjeta">#161D25</color>
+    <color name="widget_texto">#EAEEF2</color>
+    <color name="widget_texto_medio">#B4BEC9</color>
+    <color name="widget_texto_apagado">#95A0AD</color>
 </resources>

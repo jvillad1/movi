@@ -26,6 +26,8 @@ import com.jvillada.movi.ui.components.MinNavRail
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.ui.components.destinoMoviAi
+import com.jvillada.movi.ui.components.destinosDelRail
 import com.jvillada.movi.ui.components.destinosPrincipales
 import com.jvillada.movi.ui.components.leadingFor
 import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
@@ -108,6 +110,18 @@ class LasCuatroPestanasTest {
     }
 
     /**
+     * **Movi AI es del rail, no de la barra del teléfono.** Un quinto lugar abajo apretaría los cuatro
+     * rótulos que las pruebas de esta clase miden; en el teléfono Movi AI se abre desde Hoy.
+     */
+    @Test
+    fun `la barra del telefono no tiene a Movi AI`() {
+        montarBarra()
+
+        composeRule.onNodeWithText(destinoMoviAi.label, useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(destinoMoviAi.label, useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    /**
      * «Movimientos» va entero, no «Movs»: entra a 390 dp junto a las otras tres y el «+», en un solo
      * renglón y sin recortarse. Se miran los cuatro rótulos porque si la fila no entrara, el que se
      * recorta es el último (la `Row` le da a cada uno lo que sobra), no necesariamente el largo.
@@ -183,13 +197,31 @@ class LasCuatroPestanasTest {
     // ── El rail de la web ─────────────────────────────────────────────────────
 
     @Test
-    fun `el rail pinta las mismas cuatro y Agregar, sin Creditos ni Presupuestos ni Mas`() {
+    fun `el rail pinta las mismas cuatro, Movi AI y Agregar, sin Creditos ni Presupuestos ni Mas`() {
         montarRail()
 
         rotulos.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertIsDisplayed() }
+        composeRule.onNodeWithText("Movi AI", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Agregar", useUnmergedTree = true).assertIsDisplayed()
         loQueYaNoEsPestana.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
         assertEquals(4, destinosPrincipales.size)
+        assertEquals(destinosPrincipales + destinoMoviAi, destinosDelRail)
+    }
+
+    @Test
+    fun `tocar Movi AI en el rail lo elige, ancho y compacto`() {
+        montarRail()
+        composeRule.onNodeWithText("Movi AI", useUnmergedTree = true).performClick()
+        assertEquals(NavTab.MOVI_AI, elegida)
+    }
+
+    @Test
+    fun `el rail compacto tambien tiene a Movi AI`() {
+        montarRail(compacto = true)
+
+        composeRule.onNodeWithContentDescription("Movi AI", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Movi AI", useUnmergedTree = true).performClick()
+        assertEquals(NavTab.MOVI_AI, elegida)
     }
 
     @Test

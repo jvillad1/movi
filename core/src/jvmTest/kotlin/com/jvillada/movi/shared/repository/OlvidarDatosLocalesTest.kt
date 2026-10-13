@@ -191,4 +191,33 @@ class OlvidarDatosLocalesTest {
         assertEquals(listOf("v-con-mov"), migrada.voidEventQueries.selectUnsynced(a).executeAsList().map { it.id })
         assertTrue(migrada.voidEventQueries.selectUnsynced(b).executeAsList().isEmpty())
     }
+
+    // ── Borrar la cuenta: olvidarTodoLoDe ──────────────────────────────────────────────
+
+    /**
+     * **Después de borrar la cuenta no queda nada**, tampoco lo que no subió: la cuenta ya no existe
+     * en el server y esa plata no tiene a dónde subir. Es lo contrario de [olvidarDatosLocales].
+     */
+    @Test
+    fun olvidar_todo_borra_tambien_lo_que_no_subio() {
+        repo().olvidarTodoLoDe(a)
+
+        assertTrue(cuentas(a).isEmpty(), "quedaron cuentas: ${cuentas(a)}")
+        assertTrue(movimientos(a).isEmpty(), "quedaron movimientos: ${movimientos(a)}")
+        assertTrue(idsDeVoids().none { it.endsWith("-$a") }, "quedaron anulaciones: ${idsDeVoids()}")
+        assertEquals(null, db.remoteCacheQueries.get("recurrentes", a).executeAsOneOrNull(), "quedó el caché")
+        assertTrue(db.financialEventQueries.selectUnsynced(a).executeAsList().isEmpty(), "quedó algo por subir")
+    }
+
+    @Test
+    fun olvidar_todo_de_A_no_toca_nada_de_B() {
+        val antes = Triple(cuentas(b), movimientos(b), db.remoteCacheQueries.get("recurrentes", b).executeAsOneOrNull())
+        val voidsDeB = idsDeVoids().filter { it.endsWith("-$b") }.toSet()
+
+        repo().olvidarTodoLoDe(a)
+
+        assertEquals(antes, Triple(cuentas(b), movimientos(b), db.remoteCacheQueries.get("recurrentes", b).executeAsOneOrNull()))
+        assertEquals(voidsDeB, idsDeVoids().filter { it.endsWith("-$b") }.toSet())
+    }
 }
+
