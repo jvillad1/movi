@@ -38,6 +38,11 @@ fun StatementReviewScreen(
     onNavigate: (Screen) -> Unit,
     result: StatementParseResult,
 ) {
+    // El extracto de un crédito no trae movimientos: trae cómo va la deuda, y su revisión es otra.
+    result.extractoDeCredito?.let { propuesta ->
+        RevisionDelExtractoDeCredito(propuesta, titulo = listOf(result.bankName, result.period).filter { it.isNotBlank() }.joinToString(" · "))
+        return
+    }
     val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     var accounts by remember { mutableStateOf(emptyList<Account>()) }

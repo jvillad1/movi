@@ -162,3 +162,30 @@ fun textoDelUltimoCuadre(cuenta: Account, hoy: LocalDate): String {
         else -> "Cuadrada el $etiqueta"
     }
 }
+
+/**
+ * **La propuesta de un aviso que trajo el saldo, en una línea**: «El banco dice $138.407 y Movi
+ * $138.361 → ajustar +$46». Las dos cifras y el movimiento exacto, antes de tocar nada: la misma
+ * disciplina que [textoDelCuadre].
+ */
+fun textoDeLaPropuestaPorAviso(p: com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso): String =
+    "El banco dice ${formatMoney(p.saldoDelBanco, p.moneda)} y Movi ${formatMoney(p.saldoEnMovi, p.moneda)} " +
+        "→ ajustar ${montoDelAjuste(p.diferencia, p.moneda)}"
+
+/** De cuándo es el saldo que se compara: «Según el aviso de hoy», «Según el aviso del 3 de octubre». */
+fun textoDelMomentoDelAviso(momento: Long, hoy: LocalDate): String =
+    when (val etiqueta = etiquetaDeFecha(fechaDeEpoch(momento), hoy)) {
+        "Hoy" -> "Según el aviso de hoy"
+        "Ayer" -> "Según el aviso de ayer"
+        else -> "Según el aviso del $etiqueta"
+    }
+
+/**
+ * La fila de «Para revisar» del Inicio cuando hay propuestas, o `null` sin ninguna. Con una sola
+ * se nombra la cuenta, como el aviso de cuadre de siempre ([textoDelAvisoDeCuadre]).
+ */
+fun textoDeLasPropuestasPorAviso(propuestas: List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso>): String? = when {
+    propuestas.isEmpty() -> null
+    propuestas.size == 1 -> "El saldo de ${propuestas.first().cuentaNombre} no coincide con el del banco"
+    else -> "${propuestas.size} cuentas no coinciden con el saldo del banco"
+}
