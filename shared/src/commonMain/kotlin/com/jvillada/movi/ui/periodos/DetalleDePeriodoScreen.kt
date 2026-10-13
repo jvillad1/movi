@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.periodos
 
+import com.jvillada.movi.shared.model.PequenosQueSuman
+import com.jvillada.movi.shared.model.GASTO_CHICO_HASTA
+import com.jvillada.movi.shared.model.VECES_PARA_SUMAR
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -447,6 +450,8 @@ private fun SeccionesDeComoTeFue(detalle: DetalleDePeriodo, estado: EstadoDelDet
     Cabecera(detalle, estado.ajustes)
     DeDondeSalioLoQueFalto(detalle)
     EnQueSeFue(detalle)
+    // Solo si algún grupo suma algo que importe (el server ya lo decidió: ver `pequenosQueSuman`).
+    if (detalle.pequenosQueSuman.isNotEmpty()) PequenosQueSumanSeccion(detalle.pequenosQueSuman)
 }
 
 @Composable
@@ -913,6 +918,69 @@ private fun FilaDePresupuesto(p: PresupuestoDelPeriodo) {
                     .fillMaxWidth(fraccion.coerceIn(0f, 1f))
                     .clip(RoundedCornerShape(1.dp))
                     .background(color),
+            )
+        }
+    }
+}
+
+// ── Pequeños que suman ───────────────────────────────────────────────────────
+
+/** El título de la sección de los gastos hormiga. */
+const val TITULO_PEQUENOS_QUE_SUMAN: String = "Pequeños que suman"
+
+/** El tag de una fila de «Pequeños que suman», para las pruebas. */
+const val TAG_PEQUENO_QUE_SUMA: String = "pequeno-que-suma"
+
+/**
+ * El renglón de un grupo: «27 compras en Juan Valdez» o «12 gastos chicos de Comida». El total va
+ * aparte, a la derecha, como en el resto de las listas de plata.
+ */
+internal fun textoDePequenos(p: PequenosQueSuman): String =
+    if (p.porComercio) "${p.veces} compras en ${p.nombre}" else "${p.veces} gastos chicos de ${p.nombre}"
+
+/** Lo que la sección explica debajo del título: qué es «chico». */
+internal val PIE_DE_PEQUENOS_QUE_SUMAN: String =
+    "Gastos de hasta ${formatCOP(GASTO_CHICO_HASTA)} que se repiten ${VECES_PARA_SUMAR} veces o más."
+
+/**
+ * **Los gastos hormiga del período**: los chicos que se repiten, por comercio o por categoría, con
+ * cuántas veces y cuánto suman. Los arma el server ([DetalleDePeriodo.pequenosQueSuman]); acá solo se
+ * pintan.
+ */
+@Composable
+private fun PequenosQueSumanSeccion(grupos: List<PequenosQueSuman>) {
+    Column {
+        MinSectionHeader(title = TITULO_PEQUENOS_QUE_SUMAN)
+        MinCard(
+            modifier = Modifier.fillMaxWidth(),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(vertical = 4.dp),
+        ) {
+            grupos.forEach { grupo ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(TAG_PEQUENO_QUE_SUMA)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = textoDePequenos(grupo),
+                        style = Movi.textos.cuerpo,
+                        color = Movi.colores.texto,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.size(Movi.espacios.corto))
+                    Cifra(formatCOP(grupo.total), Movi.textos.monto, color = Movi.colores.texto)
+                }
+            }
+            Text(
+                text = PIE_DE_PEQUENOS_QUE_SUMAN,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoApagado,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
         }
     }

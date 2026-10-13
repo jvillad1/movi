@@ -73,6 +73,12 @@ data class DetalleDePeriodo(
      * Solo las fuentes con monto; sin ninguna, vacía.
      */
     val fuentesQueNoSonIngreso: List<FuenteDePlata> = emptyList(),
+    /**
+     * **«Pequeños que suman»**: los gastos chicos que se repiten en el período, por comercio o por
+     * categoría, con cuántas veces y cuánto suman (ver [pequenosQueSuman]). Vacía cuando ningún grupo
+     * suma algo que importe, y entonces el detalle no pinta la sección.
+     */
+    val pequenosQueSuman: List<PequenosQueSuman> = emptyList(),
 )
 
 /**
