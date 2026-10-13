@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.Icon
@@ -36,8 +37,11 @@ import com.jvillada.movi.theme.*
  * `navTabFor` en Navigation.kt) y lo que antes vivía en «Más» se abre tocando el avatar (Ajustes).
  *
  * [ADD] no es un lugar: es la hoja de «Agregar», que se abre encima de la pantalla actual.
+ *
+ * [MOVI_AI] es un destino **solo del rail** (desde 600 dp, ver [destinosDelRail]): en el teléfono la
+ * barra sigue con sus cuatro y Movi AI se abre desde Hoy.
  */
-enum class NavTab { HOY, MOVIMIENTOS, ADD, PLAN, PATRIMONIO }
+enum class NavTab { HOY, MOVIMIENTOS, ADD, PLAN, PATRIMONIO, MOVI_AI }
 
 /**
  * Un destino principal: pestaña + rótulo + ícono. [rotuloCorto] es el del rail compacto de una
@@ -64,6 +68,21 @@ val destinosPrincipales: List<DestinoPrincipal> = listOf(
     DestinoPrincipal(NavTab.PLAN, "Plan", Icons.AutoMirrored.Rounded.EventNote),
     DestinoPrincipal(NavTab.PATRIMONIO, "Patrimonio", Icons.Rounded.AccountBalance),
 )
+
+/**
+ * **Movi AI, como destino propio del rail.** La promesa central del producto —preguntarle a Movi— no
+ * tenía lugar en la navegación ancha: en la web había que volver a Hoy o abrir Ajustes para llegar.
+ * Lleva las chispas que ya usa Hoy en «Pregúntale a Movi».
+ *
+ * **Solo en el rail** (mediano y expandido): la barra del teléfono se queda con sus cuatro y el «+»
+ * —un quinto lugar ahí apretaría los rótulos que `LasCuatroPestanasTest` mide—, y en el teléfono
+ * Movi AI se sigue abriendo desde Hoy.
+ */
+val destinoMoviAi: DestinoPrincipal =
+    DestinoPrincipal(NavTab.MOVI_AI, "Movi AI", Icons.Rounded.AutoAwesome)
+
+/** Lo que pinta el rail, en orden: las cuatro pestañas y Movi AI. La barra del teléfono, no. */
+val destinosDelRail: List<DestinoPrincipal> = destinosPrincipales + destinoMoviAi
 
 @Composable
 fun MinBottomNav(

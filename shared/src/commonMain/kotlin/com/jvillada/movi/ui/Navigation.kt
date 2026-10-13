@@ -330,7 +330,20 @@ fun screenForTab(tab: NavTab): Screen = when (tab) {
     NavTab.ADD -> Screen.QuickAdd()
     NavTab.PLAN -> Screen.Plan()
     NavTab.PATRIMONIO -> Screen.Accounts
+    NavTab.MOVI_AI -> Screen.AIChat()
 }
+
+/**
+ * **Qué destino resalta la navegación** para [screen]: lo mismo que [navTabFor], más Movi AI, que
+ * en el rail tiene su propio lugar ([com.jvillada.movi.ui.components.destinoMoviAi]).
+ *
+ * Aparte de [navTabFor] a propósito: esa función decide también el encabezado (avatar o flecha,
+ * ver `leadingFor`) y en el teléfono Movi AI se abre desde Hoy, así que ahí sigue llevando flecha.
+ * La barra del teléfono no tiene a Movi AI entre sus cuatro, así que con el chat abierto no marca
+ * ninguna — igual que antes.
+ */
+fun destinoResaltado(screen: Screen): NavTab? =
+    if (screen is Screen.AIChat) NavTab.MOVI_AI else navTabFor(screen)
 
 /**
  * **Adónde se va de verdad** cuando se pide [screen].

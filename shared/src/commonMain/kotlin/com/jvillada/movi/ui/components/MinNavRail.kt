@@ -33,7 +33,7 @@ import com.jvillada.movi.theme.*
  * App.kt — ancho (216 dp) en escritorio y [compacto] (80 dp) en una ventana mediana. Ola C:
  * muestra **las mismas cuatro pestañas** que la barra del teléfono ([destinosPrincipales]) y
  * «Agregar» — sin Créditos, Presupuestos ni Más, que ahora viven adentro de Patrimonio, de Plan y
- * del avatar.
+ * del avatar. Y debajo de las cuatro, **Movi AI** ([destinoMoviAi]), que solo el rail tiene.
  */
 @Composable
 fun MinNavRail(
@@ -64,7 +64,7 @@ fun MinNavRail(
             modifier = Modifier.padding(start = 12.dp, bottom = 16.dp),
         )
 
-        destinosPrincipales.forEach { dest ->
+        destinosDelRail.forEach { dest ->
             RailItem(dest.tab, dest.label, dest.icon, active, onTabSelected)
         }
 
@@ -149,7 +149,7 @@ private fun RailCompacto(active: NavTab?, onTabSelected: (NavTab) -> Unit) {
             )
         }
         Spacer(Modifier.height(12.dp))
-        destinosPrincipales.forEach { dest ->
+        destinosDelRail.forEach { dest ->
             RailCompactoItem(dest, active, onTabSelected)
         }
     }

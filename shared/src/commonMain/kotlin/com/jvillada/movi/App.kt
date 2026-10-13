@@ -49,7 +49,7 @@ import com.jvillada.movi.ui.atras
 import com.jvillada.movi.ui.hayAdondeVolver
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.navTabFor
+import com.jvillada.movi.ui.destinoResaltado
 import com.jvillada.movi.ui.muestraLaNavegacion
 import com.jvillada.movi.ui.opensAsOverlay
 import com.jvillada.movi.ui.screenForTab
@@ -290,7 +290,8 @@ fun App() {
             CascaraDeAncho(
                 modifier = Modifier.fillMaxSize().background(Movi.colores.fondo),
             ) {
-                val activeTab = navTabFor(currentScreen)
+                // Con Movi AI, que en el rail tiene su lugar propio (ver [destinoResaltado]).
+                val activeTab = destinoResaltado(currentScreen)
                 // Ola C: Ajustes y lo que cuelga de ahí no marcan pestaña pero sí llevan la
                 // barra — ver [muestraLaNavegacion].
                 val conNavegacion = muestraLaNavegacion(currentScreen)
