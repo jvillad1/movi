@@ -108,6 +108,7 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta) = trasEscribir { delegado.resolverPropuesta(id, estado) }
     // Ola 4: «Está bien» en un aviso de lo que se sale de lo normal: la próxima lectura ya no lo trae.
     override suspend fun descartarAnomalia(huella: String) = trasEscribir { delegado.descartarAnomalia(huella) }
+    override suspend fun descartarCierre(periodo: String) = trasEscribir { delegado.descartarCierre(periodo) }
     override suspend fun ajustarPorElAviso(avisoId: String): FinancialEvent? = trasEscribir { delegado.ajustarPorElAviso(avisoId) }
     override suspend fun descartarCuadrePorAviso(avisoId: String): Unit = trasEscribir { delegado.descartarCuadrePorAviso(avisoId) }
     override suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String?): RecuerdoDelAsistente =

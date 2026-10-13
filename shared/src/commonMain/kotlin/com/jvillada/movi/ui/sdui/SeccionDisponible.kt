@@ -45,6 +45,8 @@ import com.jvillada.movi.ui.dashboard.disponibleDelInicio
 import com.jvillada.movi.ui.dashboard.fraseDelDisponible
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
 import com.jvillada.movi.ui.dashboard.rotuloDeLaSemana
+import com.jvillada.movi.ui.dashboard.CajaEnHoy
+import com.jvillada.movi.ui.Screen
 
 /**
  * # «Disponible»: cuánto queda del período, compacto y con UNA frase
@@ -74,9 +76,16 @@ internal fun DisponibleDelPeriodoSection(
     data: DashboardData,
     // Por parámetro para que una prueba fije el día; la pantalla usa el de hoy en Bogotá.
     hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
+    onNavigate: (Screen) -> Unit = {},
 ) {
     val disponible = disponibleDelInicio(data, hoy) ?: return
-    TarjetaDelDisponible(titulo = section.title ?: "Disponible", disponible = disponible)
+    Column {
+        TarjetaDelDisponible(titulo = section.title ?: "Disponible", disponible = disponible)
+        // Después de cuánto puedes gastar, cómo llegas al cierre: el día más justo de la caja
+        // proyectada de Plan, con la MISMA cuenta (ver `CajaEnHoy`).
+        Spacer(Modifier.height(Movi.espacios.medio))
+        CajaEnHoy(data = data, hoy = hoy, onNavigate = onNavigate)
+    }
 }
 
 /** La tarjeta del disponible, cargando o cargada: el mismo tag en las dos para medir que no salte. */

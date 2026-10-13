@@ -446,6 +446,20 @@ class WalletRepositoryImpl(
         }.exigirExito()
     }
 
+    override suspend fun getCierreDelPeriodo(): com.jvillada.movi.shared.model.CierreDelPeriodo? {
+        val respuesta = client.get("$baseUrl/api/cierre-del-periodo")
+        // 204 = no hay tarjeta que mostrar (pasaron los primeros días, se descartó, o no hay qué contar).
+        if (respuesta.status == HttpStatusCode.NoContent) return null
+        return respuesta.exigirExito().body()
+    }
+
+    override suspend fun descartarCierre(periodo: String) {
+        client.post("$baseUrl/api/cierre-del-periodo/descartar") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.DescartarCierreRequest(periodo))
+        }.exigirExito()
+    }
+
     override suspend fun getCuadresPorAviso(): List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso> =
         client.get("$baseUrl/api/cuadres-por-aviso").exigirExito().body()
 

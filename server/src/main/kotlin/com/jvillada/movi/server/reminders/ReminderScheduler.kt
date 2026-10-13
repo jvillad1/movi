@@ -101,6 +101,16 @@ private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
                     .warn("ReminderScheduler: error processing user $userId: ${it.message}", it)
             }
     }
+
+    // «Cerró tu período»: el resumen de cierre, una vez por usuario y período, los primeros días del
+    // período nuevo. Sin la clave de Resend no hace nada (ver `CorreoDeCierre.kt`).
+    runCatching {
+        mandarLosCierres(today, apiKey) { para, asunto, html ->
+            ResendClient.sendEmail(to = para, subject = asunto, html = html, apiKey = apiKey.orEmpty(), from = from)
+        }
+    }.onFailure {
+        org.slf4j.LoggerFactory.getLogger("ReminderScheduler").warn("ReminderScheduler: el resumen de cierre falló: ${it.message}", it)
+    }
 }
 
 private suspend fun processUser(

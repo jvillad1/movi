@@ -177,6 +177,21 @@ data class DashboardData(
      */
     val debitosPorConfirmar: List<com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar>? = null,
     /**
+     * **«vs. período pasado»**: el gasto por categoría del período anterior en sus primeros
+     * [diasComparados] días, los mismos que lleva este (ver `anteriorAMismaAltura` en `:core`). Viene
+     * en `/api/dashboard/summary`. `null` = no hay contra qué comparar (o no llegó): «¿En qué se va?»
+     * no pinta flechas.
+     */
+    val gastoDelAnterior: Map<String, Long>? = null,
+    val diasComparados: Int? = null,
+    /**
+     * **«Cerró tu período»** (`GET /api/cierre-del-periodo`): el resumen del período que acaba de
+     * cerrar, los primeros días del nuevo. `null` = no hay tarjeta (o no llegó). Se pide aparte, como
+     * las anomalías, y **no viaja en la instantánea del aparato**: dice qué día del período nuevo es y
+     * si se descartó, y pintarla de ayer podría mostrar una tarjeta que ya se cerró en otro aparato.
+     */
+    val cierre: com.jvillada.movi.shared.model.CierreDelPeriodo? = null,
+    /**
      * El saldo que dijo un aviso del banco y no coincide con Movi (`GET /api/cuadres-por-aviso`). Se
      * pide aparte, como los débitos automáticos. `null` = no llegó, y no se dice nada.
      */
@@ -993,6 +1008,9 @@ internal fun DashboardData.conResumenDelInicio(s: DashboardSummary): DashboardDa
     // El patrimonio ya partido (entrega A). La tarjeta lo usa solo si las cuentas no llegaron:
     // ver `patrimonioDelInicio`.
     patrimonio = s.patrimonio,
+    // «vs. período pasado». Misma respuesta, ninguna llamada nueva.
+    gastoDelAnterior = s.gastoDelAnteriorAMismaAltura,
+    diasComparados = s.diasComparados,
 )
 
 /**

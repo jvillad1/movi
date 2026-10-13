@@ -68,3 +68,18 @@ suspend fun leerDebitosAutomaticos(): List<com.jvillada.movi.shared.model.Debito
         cliente.close()
     }
 }
+
+/**
+ * **El resumen del período que acaba de cerrar**, leído desde un Worker (`GET /api/cierre-del-periodo`,
+ * lo mismo que pinta la tarjeta de Hoy). `null` = no hay nada que avisar (204). Contra el server
+ * directo, por lo mismo que [leerPagosDelPeriodo]. Lanza si la lectura falla; quien llama decide
+ * reintentar.
+ */
+suspend fun leerCierreDelPeriodo(): com.jvillada.movi.shared.model.CierreDelPeriodo? {
+    val cliente = createHttpClient()
+    try {
+        return WalletRepositoryImpl(cliente, apiBaseUrl).getCierreDelPeriodo()
+    } finally {
+        cliente.close()
+    }
+}

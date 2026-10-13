@@ -49,6 +49,12 @@ data class UserProfile(
      * avisar. Nunca `null` en la respuesta: cae a [DIAS_PARA_BANCO_MUDO_POR_DEFECTO].
      */
     val diasParaBancoMudo: Int = DIAS_PARA_BANCO_MUDO_POR_DEFECTO,
+    /**
+     * **El resumen de cierre del período por correo** («Cerró tu período»). Encendido por defecto; se
+     * apaga desde Perfil → Avisos. Nunca `null` en la respuesta: una cuenta que no lo tocó cae a
+     * `true` del lado del server.
+     */
+    val cierrePorCorreo: Boolean = true,
 )
 
 /**
@@ -83,6 +89,8 @@ data class UpdateProfileRequest(
     val smsAlertMuted: Boolean? = null,
     /** Días para el aviso de banco mudo, 0..[MAX_DIAS_PARA_BANCO_MUDO] (0 lo apaga). `null` = no tocar. */
     val diasParaBancoMudo: Int? = null,
+    /** Mandar (o no) el resumen de cierre del período por correo. `null` = no tocar. */
+    val cierrePorCorreo: Boolean? = null,
 )
 
 /**

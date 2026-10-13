@@ -43,6 +43,8 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.periodoAnterior
+import com.jvillada.movi.shared.model.pequenosQueSuman
+import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.tituloDelPeriodo
@@ -184,7 +186,24 @@ internal fun Transaction.detalleDePeriodo(
         tuPlataAlEmpezar = alEmpezar,
         tuPlataAlCerrar = alCerrar,
         fuentesQueNoSonIngreso = fuentes,
+        pequenosQueSuman = pequenosDelPeriodo(uid, desde, hasta, movimientos),
     )
+}
+
+/**
+ * **«Pequeños que suman»** de la ventana `[desde, hasta)`: los gastos chicos que se repiten, sobre los
+ * MISMOS gastos que suman «Salió» ([movimientos], la regla de «Gastos») — se leen completos para
+ * tener el comercio, pero solo pasan los que esa regla ya dejó pasar.
+ */
+private fun Transaction.pequenosDelPeriodo(
+    uid: String,
+    desde: Long,
+    hasta: Long,
+    movimientos: List<MovimientoDeFlujo>,
+): List<com.jvillada.movi.shared.model.PequenosQueSuman> {
+    val gastos = movimientos.filter { it.type == TransactionType.EXPENSE }.map { it.id }.toSet()
+    if (gastos.isEmpty()) return emptyList()
+    return pequenosQueSuman(loadEventsBetween(uid, desde, hasta).filter { it.id in gastos })
 }
 
 /**

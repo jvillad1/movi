@@ -10,6 +10,10 @@ import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.UpcomingPayment
+import com.jvillada.movi.shared.model.ContraElAnterior
+import com.jvillada.movi.shared.model.Tendencia
+import com.jvillada.movi.shared.model.contraElAnterior
+import com.jvillada.movi.ui.components.formatMoneyCompact
 
 /**
  * # El Inicio contesta «¿cómo voy en este período?»
@@ -39,9 +43,18 @@ data class CategoriaDelPeriodo(
     val gastado: Long,
     val fraccion: Float,
     val limite: Long? = null,
+    /**
+     * Lo gastado en esta categoría en el período pasado, a la misma altura (ver
+     * `anteriorAMismaAltura` en `:core`). `null` = no hay contra qué comparar y la fila no lleva
+     * flecha; cero = el período pasado no se gastó nada acá.
+     */
+    val anterior: Long? = null,
 ) {
     /** ¿Se pasó del presupuesto que el dueño le puso? Sin presupuesto no hay nada que decir. */
     val superada: Boolean get() = limite != null && limite > 0 && gastado > limite
+
+    /** La flecha de la fila: hacia dónde fue contra el período pasado, o `null` sin con qué medir. */
+    val contraElAnterior: ContraElAnterior? get() = contraElAnterior(gastado, anterior)
 }
 
 /**
@@ -61,6 +74,12 @@ fun categoriasDelPeriodo(
     gastoPorCategoria: Map<String, Long>,
     presupuestos: List<Budget> = emptyList(),
     cuantas: Int = 5,
+    /**
+     * El gasto del período pasado a la misma altura, por categoría (ver [DashboardData.gastoDelAnterior]).
+     * `null` = sin comparación: ninguna fila lleva flecha. Una categoría que no está en el mapa se
+     * gastó cero el período pasado.
+     */
+    gastoDelAnterior: Map<String, Long>? = null,
 ): List<CategoriaDelPeriodo> {
     val positivas = gastoPorCategoria.filterValues { it > 0 }
     val total = positivas.values.sum()
@@ -78,6 +97,7 @@ fun categoriasDelPeriodo(
             gastado = gastado,
             fraccion = gastado.toFloat() / total,
             limite = limitePorCategoria[nombre],
+            anterior = gastoDelAnterior?.let { it[nombre] ?: 0L },
         )
     }
     val cola = ordenadas.drop(cuantas)
@@ -88,7 +108,33 @@ fun categoriasDelPeriodo(
         gastado = restante,
         fraccion = restante.toFloat() / total,
         limite = if (cola.size == 1) limitePorCategoria[cola.first().key] else null,
+        // El grupo se compara contra lo que esas MISMAS categorías gastaron el período pasado.
+        anterior = gastoDelAnterior?.let { anterior -> cola.sumOf { anterior[it.key] ?: 0L } },
     )
+}
+
+/**
+ * El pie de «¿En qué se va?» cuando las filas llevan flecha: contra qué se comparan. `null` sin
+ * comparación. «Las flechas comparan con los primeros 12 días del período pasado.»
+ */
+fun pieDeLaComparacion(diasComparados: Int?): String? = when {
+    diasComparados == null || diasComparados <= 0 -> null
+    diasComparados == 1 -> "Las flechas comparan con el primer día del período pasado."
+    else -> "Las flechas comparan con los primeros $diasComparados días del período pasado."
+}
+
+/** «Gastaste $120.000 más que a esta altura del período pasado», para quien no ve la flecha. */
+fun descripcionDeLaFlecha(c: ContraElAnterior): String = when (c.tendencia) {
+    Tendencia.SUBE -> "${formatMoneyCompact(c.diferencia)} más que a esta altura del período pasado"
+    Tendencia.BAJA -> "${formatMoneyCompact(c.diferencia)} menos que a esta altura del período pasado"
+    Tendencia.IGUAL -> "Igual que a esta altura del período pasado"
+}
+
+/** «↑ $120.000», «↓ $45.000» o «= igual»: lo que la fila pinta al lado del porcentaje. */
+fun textoDeLaFlecha(c: ContraElAnterior): String = when (c.tendencia) {
+    Tendencia.SUBE -> "↑ ${formatMoneyCompact(c.diferencia)}"
+    Tendencia.BAJA -> "↓ ${formatMoneyCompact(c.diferencia)}"
+    Tendencia.IGUAL -> "= igual"
 }
 
 // ── Qué pagué y qué me falta ─────────────────────────────────────────────────

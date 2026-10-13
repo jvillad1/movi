@@ -329,6 +329,7 @@ private fun AvisosDelTelefonoCard() {
     var vencimientos by remember { mutableStateOf(PreferenciasDeAvisos.avisarVencimientos(context)) }
     var bancoMudo by remember { mutableStateOf(PreferenciasDeAvisos.avisarBancoMudo(context)) }
     var debitos by remember { mutableStateOf(PreferenciasDeAvisos.avisarDebitos(context)) }
+    var cierre by remember { mutableStateOf(PreferenciasDeAvisos.avisarCierre(context)) }
 
     fun refrescar() {
         puede = puedeAvisar(context)
@@ -402,6 +403,16 @@ private fun AvisosDelTelefonoCard() {
         ) {
             debitos = it
             PreferenciasDeAvisos.ponerAvisarDebitos(context, it)
+        }
+        // «Cerró tu período»: el día siguiente al corte, el resumen del período que terminó. El correo
+        // con el mismo resumen se apaga aparte, en Perfil → Avisos (es de la cuenta, no del teléfono).
+        FilaDeInterruptor(
+            texto = "Avisarme cuando cierre mi período",
+            encendido = cierre,
+            habilitado = puede,
+        ) {
+            cierre = it
+            PreferenciasDeAvisos.ponerAvisarCierre(context, it)
         }
     }
 }

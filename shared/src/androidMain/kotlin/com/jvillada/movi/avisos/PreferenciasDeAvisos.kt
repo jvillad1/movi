@@ -32,6 +32,8 @@ object PreferenciasDeAvisos {
     private const val KEY_HUELLA_BANCO_MUDO = "huella_banco_mudo"
     private const val KEY_DEBITOS = "avisar_debitos_automaticos"
     private const val KEY_DEBITOS_AVISADOS = "debitos_automaticos_avisados"
+    private const val KEY_CIERRE = "avisar_cierre_del_periodo"
+    private const val KEY_CIERRE_AVISADO = "cierre_del_periodo_avisado"
 
     private val json = Json { ignoreUnknownKeys = true }
     private val listaDeAvisos = ListSerializer(AvisoPorRevisar.serializer())
@@ -79,6 +81,18 @@ object PreferenciasDeAvisos {
 
     fun guardarDebitosAvisados(context: Context, claves: List<String>) {
         prefs(context).edit().putString(KEY_DEBITOS_AVISADOS, claves.joinToString("\n")).apply()
+    }
+
+    /** «Avisarme cuando cierre mi período». Encendido por defecto, como los otros. */
+    fun avisarCierre(context: Context): Boolean = prefs(context).getBoolean(KEY_CIERRE, true)
+    fun ponerAvisarCierre(context: Context, valor: Boolean) {
+        prefs(context).edit().putBoolean(KEY_CIERRE, valor).apply()
+    }
+
+    /** El período cuyo cierre este teléfono ya avisó, `"2026-09"` (ver `cierreParaAvisar`). */
+    fun cierreAvisado(context: Context): String? = prefs(context).getString(KEY_CIERRE_AVISADO, null)
+    fun guardarCierreAvisado(context: Context, periodo: String) {
+        prefs(context).edit().putString(KEY_CIERRE_AVISADO, periodo).apply()
     }
 
     /** La tarjeta de Hoy ya se contestó («Activar avisos» o «Ahora no»): no vuelve a salir. */

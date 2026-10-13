@@ -104,6 +104,9 @@ class SchemaDeArranqueTest {
         // Ola 2 — los días del aviso de banco mudo. `users` existe en producción y `toProfile()` —o
         // sea TODA lectura del perfil— nombra esta columna.
         "users" to "dias_para_banco_mudo",
+        // El período que se cuenta solo — el resumen de cierre por correo, encendido o no. También lo
+        // nombra `toProfile()`.
+        "users" to "cierre_por_correo",
     )
 
     /**
