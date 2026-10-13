@@ -303,5 +303,35 @@ class LaBandejaQueSeVaciaTest {
         assertEquals(SMS_STATE_PENDING to null, estado("sms_del_otro"))
     }
 
+    @Test
+    fun `un envio a alguien guardado toma el motivo del ultimo envio por el mismo monto`() = testApplication {
+        application { testModule() }
+        transaction {
+            KnownDestinations.insert {
+                it[id] = "dst_caro"; it[userId] = uid; it[nombre] = "Caro"; it[numero] = "31973270756"; it[createdAt] = 0L
+            }
+            // Dos envíos anteriores a Caro, renombrados por el dueño: el de $150.000 fue el mercado.
+            Events.insert {
+                it[id] = "ev-caro-mercado"; it[userId] = uid; it[accountId] = ahorros; it[type] = "EXPENSE"; it[amount] = 150_000L
+                it[category] = "Mercado"; it[description] = "Mercado"
+                it[rawPayload] = "Bancolombia: Transferiste \$150.000 desde tu cuenta *8133 a la cuenta *31973270756 el 10/09/2026."
+                it[timestamp] = appDateToEpochMillis(dia.minusDays(30)); it[eventSource] = "SMS"; it[reconciliationStatus] = "RECONCILED"
+            }
+            Events.insert {
+                it[id] = "ev-caro-tia"; it[userId] = uid; it[accountId] = ahorros; it[type] = "EXPENSE"; it[amount] = 500_000L
+                it[category] = "Tía"; it[description] = "Mesada tía"
+                it[rawPayload] = "Bancolombia: Transferiste \$500.000 desde tu cuenta *8133 a la cuenta *31973270756 el 01/10/2026."
+                it[timestamp] = appDateToEpochMillis(dia.minusDays(9)); it[eventSource] = "SMS"; it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+        val leido = parse("sms_a_caro")
+        assertEquals("Mercado", leido.category)
+        assertEquals("La última vez que le mandaste \$150.000 a Caro fue Mercado", leido.aprendidoDe)
+        // Y en la bandeja: ya tiene nombre, monto, cuenta y motivo.
+        val propuesta = propuestas().propuestas.single { it.avisoId == "sms_a_caro" }
+        assertEquals("Mercado", propuesta.leido!!.category)
+        assertFalse(propuesta.destinoSinNombre)
+    }
+
     private fun HttpStatusCode.isSuccess() = value in 200..299
 }

@@ -25,6 +25,8 @@ import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.conElDestinoConocido
+import com.jvillada.movi.shared.model.conElMotivoDelEnvio
+import com.jvillada.movi.shared.model.destinoQueNombra
 import com.jvillada.movi.shared.model.esUnComprobante
 import com.jvillada.movi.shared.model.identificador
 import com.jvillada.movi.shared.model.momentoDelSms
@@ -105,10 +107,14 @@ internal fun Transaction.leerElAviso(uid: String, sms: SmsMessage, sabe: LoQueMo
     // dueño a ese número ya lo llamó «Mercado», sigue diciendo «Mercado» — el nombre que él puso es
     // suyo. El destino solo habla donde no hablaba nadie. Ver `conElDestinoConocido`.
     // Y al final, una cuenta del dueño no se le ofrece como «de otro» (ver [sinLaCuentaPropia]).
-    val propuesta = sinLaCuentaPropia(
-        conElDestinoConocido(conLoQueMoviRecuerda(parsed, sabe.memoria), sms.text, sabe.destinos),
-        sabe.propios,
-    )
+    val conDestino = conElDestinoConocido(conLoQueMoviRecuerda(parsed, sabe.memoria), sms.text, sabe.destinos)
+    // **El motivo de un envío a alguien guardado** (ver `MotivoDelEnvio.kt`): si ya le mandó este
+    // mismo monto, la categoría de esa vez —a Caro, $1.300.000 es la cuota; $2.000.000, el mercado—.
+    // Se lee en todos los avisos del pago: el correo de PSE no dice la cuenta, el SMS sí.
+    val textos = (listOf(sms) + otrosDelPago).joinToString("\n") { it.text }
+    val conMotivo = if (sabe.destinos.isEmpty() || destinoQueNombra(textos, sabe.destinos) == null) conDestino
+    else conElMotivoDelEnvio(conDestino, parsed.category, textos, sabe.destinos, enviosRecientesDe(uid))
+    val propuesta = sinLaCuentaPropia(conMotivo, sabe.propios)
     // Lo que el correo de PSE no dice —desde qué cuenta, qué crédito o tarjeta abona, a qué cuenta
     // propia fue un depósito— lo completa lo que el dueño ya tiene en Movi. Solo para los pagos de
     // PSE: es donde falta, y así nada cambia para los demás avisos.
@@ -116,6 +122,15 @@ internal fun Transaction.leerElAviso(uid: String, sms: SmsMessage, sabe: LoQueMo
     val completa = if (esDePse) loQueMoviSabeDelPagoDe(uid, propuesta) else propuesta
     // Un ingreso que nombra como origen una cuenta suya es un traspaso (ver `ElTraspasoQueEntra.kt`).
     return LecturaDelAviso.Leido(conElOrigenPropioDelIngresoDe(uid, completa, sms.text))
+}
+
+/** Cuánto hacia atrás se busca el último envío por el mismo monto: un año y un poco. */
+private const val DIAS_DEL_MOTIVO = 400L
+
+/** Los movimientos vivos del último año: de ahí sale el motivo de un envío ([conElMotivoDelEnvio]). */
+private fun Transaction.enviosRecientesDe(uid: String): List<FinancialEvent> {
+    val ahora = System.currentTimeMillis()
+    return loadEventsBetween(uid, ahora - DIAS_DEL_MOTIVO * 86_400_000L, ahora + 86_400_000L)
 }
 
 /**
