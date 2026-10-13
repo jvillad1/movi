@@ -486,6 +486,13 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                 // texto) en vez de dejar un cuestionario que nunca se puede completar; la
                 // sección "Mi perfil financiero" se va con ella. Si algún día se construye el
                 // cuestionario, vuelve con contenido real.
+                if (!PushOptIn.supported && PushOptIn.necesitaInstalar) {
+                    Spacer(Modifier.height(14.dp))
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        MinSectionHeader(title = "Notificaciones")
+                        AvisosEnElIphone()
+                    }
+                }
                 if (PushOptIn.supported) {
                     Spacer(Modifier.height(14.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -779,3 +786,26 @@ const val CARGANDO: String = "Cargando…"
 
 /** Subtítulo de una fila cuyo valor guardado no se pudo leer. Nunca el valor por defecto. */
 const val NO_PUDIMOS_LEERLO: String = "No pudimos leerlo"
+
+/**
+ * Lo que Safari en un iPhone necesita para avisar: Movi en la pantalla de inicio. Es el único
+ * camino que Apple deja (iOS 16.4+), y desde una pestaña la web no puede instalarse sola ni abrir
+ * esa hoja: lo único útil es decir los dos toques. Ver [PushOptIn.necesitaInstalar].
+ */
+@Composable
+internal fun AvisosEnElIphone() {
+    MinCard(
+        modifier = Modifier.fillMaxWidth(),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Avisos en tu iPhone", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Text(
+                "Safari solo deja avisar a Movi si está en tu pantalla de inicio. Toca Compartir, " +
+                    "luego «Agregar a inicio», y abre Movi desde ese ícono: ahí aparece «Activar».",
+                style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
+            )
+        }
+    }
+}

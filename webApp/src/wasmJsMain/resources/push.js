@@ -30,6 +30,21 @@
         return 'serviceWorker' in navigator && 'PushManager' in window && !!token();
     }
 
+    // Safari en un iPhone o iPad, en una pestaña y no en la app agregada a la pantalla de
+    // inicio: ahí Apple no expone PushManager (solo lo da a la web «instalada», iOS 16.4+), y
+    // sin esto el interruptor desaparecía sin explicar nada. Un iPad moderno se presenta como
+    // Mac: se lo reconoce por la pantalla táctil.
+    function necesitaInstalar() {
+        try {
+            if (!token() || 'PushManager' in window) return false;
+            var ua = navigator.userAgent || '';
+            var ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            var instalada = navigator.standalone === true ||
+                (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+            return ios && !instalada;
+        } catch (e) { return false; }
+    }
+
     function b64ToU8(b64) {
         var pad = '='.repeat((4 - b64.length % 4) % 4);
         var raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
@@ -131,6 +146,7 @@
 
     window.moviPush = {
         supported: supported,
+        necesitaInstalar: necesitaInstalar,
         status: function () { return _status; },
         enable: function () { enable(); },
         disable: function () { disable(); },

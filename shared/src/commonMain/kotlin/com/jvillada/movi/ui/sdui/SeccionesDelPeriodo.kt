@@ -233,10 +233,9 @@ const val TAG_FLECHA_CONTRA_EL_ANTERIOR: String = "flecha-contra-el-anterior"
  * menos, «= igual» en gris. Rojo y verde son las señales de plata de siempre (`sale` / `entra`): más
  * gasto es plata que sale. Para quien no ve el color, la frase entera va en la descripción.
  *
- * **No es un sparkline, a propósito.** El único que queda escrito (`SimpleSparkline`, en
- * `components/Sparkline.kt`) dibuja una curva fija que no sale de ningún dato —el mismo defecto por el
- * que se borraron sus dos hermanos—, y la comparación tiene dos puntos (el pasado y el actual): una
- * línea entre dos puntos es una flecha con más tinta.
+ * **No es un sparkline, a propósito.** El último que había (`SimpleSparkline`) dibujaba una curva
+ * fija que no salía de ningún dato y se borró; además la comparación tiene dos puntos (el pasado y el
+ * actual): una línea entre dos puntos es una flecha con más tinta.
  */
 @Composable
 private fun FlechaContraElAnterior(flecha: ContraElAnterior) {

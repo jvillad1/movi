@@ -3,6 +3,14 @@ package com.jvillada.movi.platform
 /** Opt-in de notificaciones push. Solo la web (wasmJs) lo soporta hoy. */
 expect object PushOptIn {
     val supported: Boolean
+
+    /**
+     * **Safari en un iPhone, en una pestaña común.** Apple solo deja recibir avisos web a la app
+     * agregada a la pantalla de inicio (iOS 16.4+): en una pestaña no existe `PushManager`, así
+     * que [supported] da `false` y el interruptor desaparecía sin decir por qué. Con esto la
+     * pantalla puede explicar el paso que falta en vez de callar. `false` en todo lo demás.
+     */
+    val necesitaInstalar: Boolean
     fun status(): String   // "enabled" | "disabled" | "denied" | "unsupported"
     fun enable()
     fun disable()
