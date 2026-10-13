@@ -174,7 +174,7 @@ private fun SduiSection(
         // «Para revisar»: además de lo que está mal, dice qué hacer y lleva a donde se hace.
         "ALERTS" -> ParaRevisarSection(section, data, onNavigate)
         "CHECKLIST_DEL_PERIODO" -> ChecklistDelPeriodoSection(section, data, onNavigate)
-        "DISPONIBLE_DEL_PERIODO" -> DisponibleDelPeriodoSection(section, data)
+        "DISPONIBLE_DEL_PERIODO" -> DisponibleDelPeriodoSection(section, data, onNavigate = onNavigate)
         "GASTO_POR_CATEGORIA" -> GastoPorCategoriaSection(section, data, onNavigate)
         "QUICK_LINKS_WITH_TOTALS" -> QuickLinksSection(section, data, onNavigate, uriHandler)
         "CARD_ROW" -> CardRowSection(section, onNavigate, uriHandler)
