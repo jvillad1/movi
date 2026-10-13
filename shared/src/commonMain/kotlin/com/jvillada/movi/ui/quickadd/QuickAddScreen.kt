@@ -118,6 +118,12 @@ const val TAG_SUBIR_PAPEL_EN_AGREGAR: String = "quickadd:subir-papel"
 /** El enlace de debajo del botón de guardar que guarda y deja la hoja abierta. */
 const val GUARDAR_Y_ANOTAR_OTRO: String = "Guardar y anotar otro"
 internal const val TAG_GUARDAR_Y_ANOTAR_OTRO = "quickadd:guardar-y-anotar-otro"
+
+/**
+ * El atajo, dicho al lado del enlace cuando hay teclado físico. En palabras y no «⇧»: Space Grotesk no
+ * trae ese glifo y en la web salía un cuadrito (visto a ojo a 390 dp).
+ */
+internal const val ATAJO_GUARDAR_Y_ANOTAR_OTRO = "Shift + Enter"
 internal const val TAG_CONFIRMACION_DE_LO_ANOTADO = "quickadd:confirmacion-de-lo-anotado"
 
 /** Cuánto se queda a la vista «Anotado: …» después de «Guardar y anotar otro». */
@@ -1869,7 +1875,7 @@ private fun EditorBody(
                 // agranda solo hasta el mínimo táctil (Compose extiende el área de un nodo chico);
                 // con teclado físico se dice el atajo.
                 Text(
-                    text = if (LocalHayTecladoFisico.current) "$GUARDAR_Y_ANOTAR_OTRO  ·  ⇧ Enter" else GUARDAR_Y_ANOTAR_OTRO,
+                    text = if (LocalHayTecladoFisico.current) "$GUARDAR_Y_ANOTAR_OTRO  ·  $ATAJO_GUARDAR_Y_ANOTAR_OTRO" else GUARDAR_Y_ANOTAR_OTRO,
                     style = Movi.textos.apoyo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.marca,

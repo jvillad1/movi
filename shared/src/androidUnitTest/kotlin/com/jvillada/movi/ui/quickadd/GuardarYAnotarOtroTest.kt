@@ -179,7 +179,7 @@ class GuardarYAnotarOtroTest {
             pressKey(Key.One); pressKey(Key.Two); pressKey(Key.Zero); pressKey(Key.Zero); pressKey(Key.Zero)
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("$GUARDAR_Y_ANOTAR_OTRO  ·  ⇧ Enter").assertIsDisplayed()
+        composeRule.onNodeWithText("$GUARDAR_Y_ANOTAR_OTRO  ·  $ATAJO_GUARDAR_Y_ANOTAR_OTRO").assertIsDisplayed()
 
         composeRule.onRoot().performKeyInput { withKeyDown(Key.ShiftLeft) { pressKey(Key.Enter) } }
         composeRule.waitUntil(5_000) { guardados.size == 1 }
