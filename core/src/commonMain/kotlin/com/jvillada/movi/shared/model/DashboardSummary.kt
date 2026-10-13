@@ -134,6 +134,18 @@ data class DashboardSummary(
      * viejo lo ignora (`ignoreUnknownKeys`) y un APK nuevo sin este dato cae al orden de siempre.
      */
     val cuentaMasUsada: String? = null,
+    /**
+     * **«vs. período pasado»**: el gasto por categoría del período ANTERIOR, en sus primeros
+     * [diasComparados] días — los mismos que lleva el en curso (ver [anteriorAMismaAltura]). Misma
+     * regla que [spentByCategory]: la de «Gastos».
+     *
+     * `null` cuando no hay contra qué comparar: Movi no cubrió entero el período pasado (el primer
+     * movimiento del dueño es posterior a su arranque, y un período a medio anotar haría ver todo
+     * «por encima»), o el server es anterior al campo. Un APK viejo lo ignora.
+     */
+    val gastoDelAnteriorAMismaAltura: Map<String, Long>? = null,
+    /** Cuántos días del período pasado se compararon. `null` junto con [gastoDelAnteriorAMismaAltura]. */
+    val diasComparados: Int? = null,
 )
 
 /**

@@ -20,6 +20,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.jvillada.movi.shared.model.ContraElAnterior
+import com.jvillada.movi.shared.model.Tendencia
+import com.jvillada.movi.ui.dashboard.descripcionDeLaFlecha
+import com.jvillada.movi.ui.dashboard.pieDeLaComparacion
+import com.jvillada.movi.ui.dashboard.textoDeLaFlecha
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Anomalia
 import com.jvillada.movi.shared.model.EvidenciaDeAnomalia
@@ -110,6 +117,8 @@ internal fun GastoPorCategoriaSection(
         gastoPorCategoria = gasto,
         presupuestos = presupuestos,
         cuantas = if (todas) Int.MAX_VALUE else CATEGORIAS_EN_EL_INICIO,
+        // «vs. período pasado»: contra los mismos días del anterior (ver `anteriorAMismaAltura`).
+        gastoDelAnterior = data.gastoDelAnterior,
     )
     // Sin gasto no se pinta nada: una sección vacía que dice «$0» ocupa el mismo lugar que una con
     // información y no dice nada. Mismo criterio que ALERTS.
@@ -135,6 +144,11 @@ internal fun GastoPorCategoriaSection(
             categorias.forEachIndexed { i, categoria ->
                 FilaDeCategoria(categoria, entrada)
                 if (i < categorias.lastIndex) Spacer(Modifier.height(Movi.espacios.medio))
+            }
+            // Contra qué se comparan las flechas, dicho una vez y no en cada fila.
+            pieDeLaComparacion(data.diasComparados?.takeIf { data.gastoDelAnterior != null })?.let { pie ->
+                Spacer(Modifier.height(Movi.espacios.medio))
+                Text(text = pie, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             }
         }
     }
@@ -198,8 +212,44 @@ internal fun FilaDeCategoria(categoria: CategoriaDelPeriodo, entrada: Float) {
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
             )
+            categoria.contraElAnterior?.let { flecha ->
+                Spacer(Modifier.size(Movi.espacios.corto))
+                FlechaContraElAnterior(flecha)
+            }
         }
     }
+}
+
+/** El tag de la flecha «vs. período pasado» de una fila, para las pruebas. */
+const val TAG_FLECHA_CONTRA_EL_ANTERIOR: String = "flecha-contra-el-anterior"
+
+/**
+ * «↑ $120 mil» en rojo si se gastó más que a esta altura del período pasado, «↓ $45 mil» en verde si
+ * menos, «= igual» en gris. Rojo y verde son las señales de plata de siempre (`sale` / `entra`): más
+ * gasto es plata que sale. Para quien no ve el color, la frase entera va en la descripción.
+ *
+ * **No es un sparkline, a propósito.** El único que queda escrito (`SimpleSparkline`, en
+ * `components/Sparkline.kt`) dibuja una curva fija que no sale de ningún dato —el mismo defecto por el
+ * que se borraron sus dos hermanos—, y la comparación tiene dos puntos (el pasado y el actual): una
+ * línea entre dos puntos es una flecha con más tinta.
+ */
+@Composable
+private fun FlechaContraElAnterior(flecha: ContraElAnterior) {
+    val color = when (flecha.tendencia) {
+        Tendencia.SUBE -> Movi.colores.sale
+        Tendencia.BAJA -> Movi.colores.entra
+        Tendencia.IGUAL -> Movi.colores.textoApagado
+    }
+    val descripcion = descripcionDeLaFlecha(flecha)
+    Text(
+        text = textoDeLaFlecha(flecha),
+        style = Movi.textos.apoyo,
+        color = color,
+        maxLines = 1,
+        modifier = Modifier
+            .testTag(TAG_FLECHA_CONTRA_EL_ANTERIOR)
+            .semantics { contentDescription = descripcion },
+    )
 }
 
 // ── El checklist del período ─────────────────────────────────────────────────

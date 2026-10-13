@@ -146,6 +146,8 @@ fun Route.dashboardRoutes() {
                 .toSet()
 
             val (income, spentByCategory) = monthCashFlow(uid, monthStart, monthEnd, voidedIds, accountTypeById)
+            // «vs. período pasado»: el mismo gasto, del período anterior a la misma altura.
+            val contraElAnterior = gastoDelAnteriorAMismaAltura(uid, ahora, periodo, voidedIds, accountTypeById)
 
             // **Una sola lectura de `sms_messages` para las tres cifras que salen de ahí.**
             //
@@ -212,6 +214,8 @@ fun Route.dashboardRoutes() {
                 // La cuenta que «Agregar» debería sugerir primero, en vez de la primera por orden
                 // alfabético. Ver `cuentaMasUsada` acá abajo.
                 cuentaMasUsada = cuentaMasUsada(uid, ahora, voidedIds),
+                gastoDelAnteriorAMismaAltura = contraElAnterior?.first,
+                diasComparados = contraElAnterior?.second,
             )
         }
         call.respond(summary)
