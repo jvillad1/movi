@@ -776,13 +776,18 @@ private fun AlertBadge(label: String, count: Int, color: Color) {
  * verde. El presupuesto menos gastado se veía menos verde que el que estaba justo en el límite.
  *
  * Sin `else`: así el `when` es exhaustivo y un estado nuevo no puede colarse sin color.
+ *
+ * **13-oct-2026, decisión del dueño: «Cerca del límite» pasa a ámbar.** La revisión del 29-sep
+ * marcó que un verde junto a «Cerca del límite» dice lo contrario del texto; el dueño lo confirmó
+ * («sí, pásalo a ámbar»). «Al límite» (no queda nada) va igual, porque está más cerca todavía.
+ * Verde queda solo para DENTRO, con margen de sobra.
  */
 @Composable
 internal fun colorDelEstadoDePresupuesto(estado: EstadoDePresupuesto): Color = when (estado) {
     EstadoDePresupuesto.EXCEDIDO_MUCHO -> Movi.colores.sale
     EstadoDePresupuesto.EXCEDIDO_POCO -> Movi.colores.aviso
-    EstadoDePresupuesto.AL_LIMITE -> Movi.colores.entra
-    EstadoDePresupuesto.CERCA -> Movi.colores.entra
+    EstadoDePresupuesto.AL_LIMITE -> Movi.colores.aviso
+    EstadoDePresupuesto.CERCA -> Movi.colores.aviso
     EstadoDePresupuesto.DENTRO -> Movi.colores.entra
 }
 
