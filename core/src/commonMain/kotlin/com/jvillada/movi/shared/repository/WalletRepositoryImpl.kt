@@ -430,7 +430,8 @@ class WalletRepositoryImpl(
         client.get("$baseUrl/api/caja-proyectada/gasto-del-dia-a-dia").exigirExito().body()
 
     override suspend fun getAnomalias(): List<com.jvillada.movi.shared.model.Anomalia> =
-        client.get("$baseUrl/api/anomalias").exigirExito().body()
+        // `conDeudas=1`: esta app conoce los dos avisos de las deudas (ver `TipoDeAnomalia`).
+        client.get("$baseUrl/api/anomalias?conDeudas=1").exigirExito().body()
 
     override suspend fun descartarAnomalia(huella: String) {
         client.post("$baseUrl/api/anomalias/descartar") {
