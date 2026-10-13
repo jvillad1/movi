@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Movi</string>
+    <!-- El widget «Te quedan hoy» (com.jvillada.movi.widget.WidgetTeQuedan). -->
+    <string name="widget_te_quedan">Te quedan hoy</string>
+    <string name="widget_te_quedan_descripcion">Cuánto te queda en el período, sin abrir la app</string>
 </resources>

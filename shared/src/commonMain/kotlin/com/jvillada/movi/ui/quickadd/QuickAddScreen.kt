@@ -115,6 +115,31 @@ internal const val TAG_CAMPO_DE_NOTA = "quickadd:campo-de-nota"
 /** El botón «Subir comprobante o extracto» de Agregar (Ola 2). */
 const val TAG_SUBIR_PAPEL_EN_AGREGAR: String = "quickadd:subir-papel"
 
+/** El enlace de debajo del botón de guardar que guarda y deja la hoja abierta. */
+const val GUARDAR_Y_ANOTAR_OTRO: String = "Guardar y anotar otro"
+internal const val TAG_GUARDAR_Y_ANOTAR_OTRO = "quickadd:guardar-y-anotar-otro"
+
+/**
+ * El atajo, dicho al lado del enlace cuando hay teclado físico. En palabras y no «⇧»: Space Grotesk no
+ * trae ese glifo y en la web salía un cuadrito (visto a ojo a 390 dp).
+ */
+internal const val ATAJO_GUARDAR_Y_ANOTAR_OTRO = "Shift + Enter"
+internal const val TAG_CONFIRMACION_DE_LO_ANOTADO = "quickadd:confirmacion-de-lo-anotado"
+
+/** Cuánto se queda a la vista «Anotado: …» después de «Guardar y anotar otro». */
+private const val SEGUNDOS_DE_LA_CONFIRMACION = 5
+
+/**
+ * «Anotado: $45.000 · Comida» — lo que dice la hoja después de «Guardar y anotar otro». Con la nota si
+ * la hay («Anotado: $45.000 · Almuerzo»), que es como el dueño reconoce lo que acaba de escribir; si
+ * no, con la categoría. El monto en la moneda del movimiento, como lo dice el teclado.
+ */
+internal fun confirmacionDeLoAnotado(evento: FinancialEvent): String {
+    val monto = simboloDeMoneda(evento.currency) + formatAmountKeypadDisplay(evento.amount.toString())
+    val que = evento.description.takeIf { it.isNotBlank() && it != evento.category } ?: evento.category
+    return "Anotado: $monto · $que"
+}
+
 /**
  * **En qué moneda está la plata de esta cuenta** — la del movimiento que se anote contra ella.
  *
@@ -240,6 +265,12 @@ fun QuickAddScreen(
      * `shouldOfferRecurring`), así que ni siquiera se propone la pregunta.
      */
     onSavedEvent: (FinancialEvent) -> Unit = {},
+    /**
+     * **«Guardar y anotar otro»**: se guardó algo y la hoja SIGUE abierta. Es el aviso de [onSaved]
+     * sin el cierre: la pantalla de atrás tiene que volver a leer igual, o el movimiento recién
+     * anotado no aparece cuando la hoja se cierre. Ver [limpiarParaElSiguiente].
+     */
+    onSavedSinCerrar: () -> Unit = {},
 ) {
     val coroutine = rememberCoroutineScope()
     // El monto viaja como cadena de dígitos, que es lo que teclea el teclado numérico: un preset
@@ -383,6 +414,19 @@ fun QuickAddScreen(
 
     // Enter desde el teclado físico: cada pedido es un «Guardar». Ver `alTeclear`.
     var pedidosDeGuardar by remember { mutableStateOf(0) }
+    // ⇧Enter: cada pedido es un «Guardar y anotar otro». Mismo camino que Enter (ver `alTeclear`).
+    var pedidosDeGuardarYOtro by remember { mutableStateOf(0) }
+    /**
+     * «Anotado: $45.000 · Comida» — la confirmación breve de «Guardar y anotar otro». La hoja no se
+     * cierra, así que sin esto no habría ninguna señal de que el movimiento de recién quedó guardado:
+     * el monto vuelve a cero y nada más. Se va sola (ver el efecto de abajo) y con el próximo guardado.
+     */
+    var ultimoAnotado by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(ultimoAnotado) {
+        if (ultimoAnotado == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(SEGUNDOS_DE_LA_CONFIRMACION * 1_000L)
+        ultimoAnotado = null
+    }
 
     // Dónde estaba la hoja ANTES de abrir un sub-picker. Ver [recordarScroll].
     var scrollAntesDelPicker by remember { mutableStateOf(0) }
@@ -824,7 +868,33 @@ fun QuickAddScreen(
         avisoParecido = encontrado
     }
 
-    fun save() {
+    /**
+     * **Lo que hace «Guardar y anotar otro» después de guardar**: deja la hoja como recién abierta
+     * para el movimiento siguiente, menos lo que casi siempre se repite en una tanda.
+     *
+     * - **Se conservan** la cuenta, la fecha y la pestaña (Gasto o Ingreso): quien anota de una
+     *   sentada los gastos del día los anota casi siempre contra la misma tarjeta y el mismo día.
+     * - **Se limpian** el monto, la nota y la categoría. La categoría vuelve al valor por defecto de la
+     *   pestaña ([categoriaPorDefectoPara], el mismo con que abre la hoja) y deja de contar como
+     *   elegida a mano, así la nota del siguiente puede volver a sugerirla. El aviso del banco que se
+     *   ofreció para el monto anterior también se va: era de ESE monto.
+     *
+     * Es una función aparte, y no líneas sueltas en [save], para que lo que se conserva y lo que se
+     * limpia se lea de una vez — es justo lo que la prueba fija.
+     */
+    fun limpiarParaElSiguiente(tipo: TransactionType) {
+        amount = ""
+        note = ""
+        category = categoriaPorDefectoPara(tipo, usedCategories, categoryPrefs, usosRecientes)
+        categoriaElegidaAMano = false
+        sugerenciaVigente = null
+        categoriaAntesDeLaSugerencia = null
+        tipoDeLaSugerenciaVigente = null
+        avisoParecido = null
+        conElAviso = false
+    }
+
+    fun save(yAnotarOtro: Boolean = false) {
         if (!canSave) return
         /*
          * **La misma guarda, dicha donde de verdad decide.**
@@ -852,6 +922,7 @@ fun QuickAddScreen(
         // Se lee acá, antes del `launch`: un toque en «Quitar» a mitad del guardado no cambia lo que
         // ya se decidió guardar.
         val elAviso = avisoParecido?.takeIf { conElAviso }
+        ultimoAnotado = null
         coroutine.launch {
             val deLaHoja = movimientoDeLaHoja(
                 // El id sale del BORRADOR, no de acá adentro: ver [idDelBorrador] más arriba.
@@ -904,7 +975,13 @@ fun QuickAddScreen(
                 // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
                 // paso, así que un ofrecimiento suyo se iría con ella).
                 onSavedEvent(event)
-                onSaved()
+                if (yAnotarOtro) {
+                    ultimoAnotado = confirmacionDeLoAnotado(event)
+                    limpiarParaElSiguiente(event.type)
+                    onSavedSinCerrar()
+                } else {
+                    onSaved()
+                }
             }
                 .onFailure { error = it.toUserMessage() }
         }
@@ -927,18 +1004,22 @@ fun QuickAddScreen(
      */
     fun alTeclear(evento: KeyEvent): Boolean {
         if (pickers.typeIndex >= TIPO_TRASPASO || pickers.hayPicker || saving) return false
-        val conModificador = evento.isCtrlPressed || evento.isMetaPressed || evento.isAltPressed || evento.isShiftPressed
-        return when (val accion = accionDeTecla(evento.key, evento.type, conModificador)) {
+        val conModificador = evento.isCtrlPressed || evento.isMetaPressed || evento.isAltPressed
+        return when (val accion = accionDeTecla(evento.key, evento.type, conModificador, conShift = evento.isShiftPressed)) {
             null -> false
             is AccionDeTecla.Digito -> { onKey(accion.digito); true }
             AccionDeTecla.Borrar -> { onKey("⌫"); true }
             AccionDeTecla.Guardar -> { pedidosDeGuardar++; true }
+            AccionDeTecla.GuardarYOtro -> { pedidosDeGuardarYOtro++; true }
             AccionDeTecla.Consumir -> true
         }
     }
     LaunchedEffect(pedidosDeGuardar) {
         // `save()` ya se niega solo si el botón está deshabilitado: Enter no puede más que el dedo.
         if (pedidosDeGuardar > 0) save()
+    }
+    LaunchedEffect(pedidosDeGuardarYOtro) {
+        if (pedidosDeGuardarYOtro > 0) save(yAnotarOtro = true)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1327,7 +1408,9 @@ fun QuickAddScreen(
                                 avisoParecido = null
                             }
                         },
-                        onSave = ::save,
+                        onSave = { save() },
+                        onSaveYOtro = { save(yAnotarOtro = true) },
+                        ultimoAnotado = ultimoAnotado,
                                 hasNoAccounts = accountsLoaded && accounts.isEmpty(),
                                 onCreateAccount = { showCreateSheet = true },
                                 onSubirPapel = elegirPapel,
@@ -1403,6 +1486,10 @@ private fun EditorBody(
     onEsEsteAviso: () -> Unit = {},
     onNoEsEsteAviso: () -> Unit = {},
     onSave: () -> Unit,
+    /** «Guardar y anotar otro»: guarda y deja la hoja abierta. Ver `limpiarParaElSiguiente`. */
+    onSaveYOtro: () -> Unit = {},
+    /** «Anotado: $45.000 · Comida» tras un «Guardar y anotar otro», o `null`. */
+    ultimoAnotado: String? = null,
     hasNoAccounts: Boolean = false,
     onCreateAccount: () -> Unit = {},
     /**
@@ -1614,6 +1701,24 @@ private fun EditorBody(
     Box(modifier = Modifier.fillMaxWidth().height(32.dp), contentAlignment = Alignment.CenterStart) {
         if (error != null) {
             Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.align(Alignment.TopStart))
+        } else if (ultimoAnotado != null) {
+            // La confirmación de «Guardar y anotar otro», en el mismo renglón reservado: aparece y
+            // se va sin mover el teclado.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.minimo),
+                modifier = Modifier.testTag(TAG_CONFIRMACION_DE_LO_ANOTADO),
+            ) {
+                Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(14.dp))
+                Text(
+                    ultimoAnotado,
+                    style = Movi.textos.apoyo,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.texto,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         } else if (avisoPendiente != null) {
             // El aviso del banco con este mismo monto, en el mismo lugar reservado: el teclado no se
             // mueve cuando aparece. Ver `FilaDelAvisoPendiente`.
@@ -1761,6 +1866,26 @@ private fun EditorBody(
                     color = Movi.colores.textoMedio,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
+                )
+            } else if (canSave) {
+                // «Guardar y anotar otro», en el renglón que ya estaba reservado debajo del botón:
+                // cuando se puede guardar, «Falta el monto» no tiene nada que decir y el renglón
+                // queda libre. Así el enlace aparece sin cambiar el alto de la hoja —la disciplina
+                // de la Ola 8: el teclado no se mueve bajo el dedo—. En el teléfono el toque se
+                // agranda solo hasta el mínimo táctil (Compose extiende el área de un nodo chico);
+                // con teclado físico se dice el atajo.
+                Text(
+                    text = if (LocalHayTecladoFisico.current) "$GUARDAR_Y_ANOTAR_OTRO  ·  $ATAJO_GUARDAR_Y_ANOTAR_OTRO" else GUARDAR_Y_ANOTAR_OTRO,
+                    style = Movi.textos.apoyo,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.marca,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Movi.formas.pleno))
+                        .clickable(role = Role.Button, onClickLabel = GUARDAR_Y_ANOTAR_OTRO, onClick = onSaveYOtro)
+                        .padding(horizontal = Movi.espacios.corto)
+                        .testTag(TAG_GUARDAR_Y_ANOTAR_OTRO),
                 )
             }
         }

@@ -98,3 +98,7 @@ DELETE FROM void_event
 WHERE syncedAt IS NOT NULL
   AND (userId = :userId OR userId IS NULL)
   AND originalEventId NOT IN (SELECT id FROM financial_event WHERE syncedAt IS NULL);
+
+-- Al borrar la cuenta: TODO lo del usuario, también lo que no subió (ver `olvidarTodoLoDe`).
+deleteAllForUser:
+DELETE FROM void_event WHERE userId = :userId;

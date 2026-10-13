@@ -47,7 +47,7 @@ import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.RelevoDeScroll
 import com.jvillada.movi.ui.components.TAG_PANEL_DE_HOJA
 import com.jvillada.movi.ui.components.WindowWidthClass
-import com.jvillada.movi.ui.components.destinosPrincipales
+import com.jvillada.movi.ui.components.destinosDelRail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -133,7 +133,7 @@ class EsqueletoResponsivoTest {
 
         assertEquals(WindowWidthClass.Medium, clase)
         // Cada ítem se lee con el nombre entero (el rótulo corto no llega a la accesibilidad).
-        destinosPrincipales.forEach {
+        destinosDelRail.forEach {
             composeRule.onNodeWithContentDescription(it.label, useUnmergedTree = true).assertIsDisplayed()
         }
         composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).assertIsDisplayed()
@@ -156,7 +156,7 @@ class EsqueletoResponsivoTest {
         composeRule.setContent {
             ConClaseDeAncho(escala = 1.12f * letraDelSistema) {
                 Column {
-                    destinosPrincipales.forEach { dest ->
+                    destinosDelRail.forEach { dest ->
                         Box(Modifier.width(ANCHO_DEL_RAIL_COMPACTO - RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO * 2)) {
                             RotuloDelRailCompacto(dest.rotuloCorto, activo = dest.tab == NavTab.PATRIMONIO)
                         }
@@ -166,7 +166,7 @@ class EsqueletoResponsivoTest {
         }
         composeRule.waitForIdle()
         val ancho = ANCHO_DEL_RAIL_COMPACTO - RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO * 2
-        destinosPrincipales.forEach { dest ->
+        destinosDelRail.forEach { dest ->
             val nodo = composeRule.onNodeWithText(dest.rotuloCorto, useUnmergedTree = true).fetchSemanticsNode()
             val resultados = mutableListOf<TextLayoutResult>()
             nodo.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(resultados)

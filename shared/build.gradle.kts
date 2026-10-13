@@ -159,4 +159,9 @@ compose.resources {
 tasks.withType<Test>().configureEach {
     inputs.file(rootProject.file("webApp/src/wasmJsMain/resources/index.html"))
         .withPropertyName("indexDelWebApp")
+    // Y `ElWidgetHablaLosTokensTest`, los colores de la vista previa del widget de Android.
+    inputs.file(rootProject.file("androidApp/src/main/res/values/colors.xml"))
+        .withPropertyName("coloresDelWidget")
+    inputs.file(rootProject.file("androidApp/src/main/res/layout/widget_te_quedan.xml"))
+        .withPropertyName("layoutDelWidget")
 }

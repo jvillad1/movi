@@ -251,3 +251,7 @@ UPDATE financial_event SET category = :newCategory WHERE category = :oldCategory
 -- sube cuando su dueño vuelva a entrar: nunca se borra plata que solo existe acá.
 deleteSyncedForUser:
 DELETE FROM financial_event WHERE userId = :userId AND syncedAt IS NOT NULL;
+
+-- Al borrar la cuenta: TODO lo del usuario, también lo que no subió (ver `olvidarTodoLoDe`).
+deleteAllForUser:
+DELETE FROM financial_event WHERE userId = :userId;
