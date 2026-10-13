@@ -65,6 +65,9 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     var guardandoAviso by remember { mutableStateOf(false) }
     var errorAviso by remember { mutableStateOf<String?>(null) }
     var guardandoPeriodo by remember { mutableStateOf(false) }
+    // «Resumen del período por correo»: guardándose y el error de la última vez.
+    var guardandoCierre by remember { mutableStateOf(false) }
+    var errorCierre by remember { mutableStateOf<String?>(null) }
     var errorPeriodo by remember { mutableStateOf<String?>(null) }
     var profileReloadKey by remember { mutableStateOf(0) }
     // «Cerrar sesión en todos los aparatos»: pide confirmación y, si sale bien, cierra también la
@@ -418,8 +421,58 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                                 }
                             },
                             showChevron = diasDeAviso != null,
-                            isLast = true,
+                            isLast = false,
                             onClick = abrirAviso,
+                        )
+                        // «Cerró tu período» por correo. Es de la cuenta (el correo sale del server),
+                        // no del teléfono: por eso vive acá y no en «Captura en este teléfono». Sin el
+                        // perfil no se afirma si está encendido, y el interruptor no se mueve.
+                        val cierrePorCorreo = profile?.cierrePorCorreo
+                        val alternarCierre: () -> Unit = alternarCierre@{
+                            val actual = cierrePorCorreo ?: return@alternarCierre
+                            if (guardandoCierre) return@alternarCierre
+                            guardandoCierre = true
+                            errorCierre = null
+                            alcanceCierre.launch {
+                                runCatching { Repositories.wallets.updateUserProfile(UpdateProfileRequest(cierrePorCorreo = !actual)) }
+                                    .onSuccess { profile = it; guardandoCierre = false }
+                                    .onFailure {
+                                        guardandoCierre = false
+                                        errorCierre = "No pudimos guardar el cambio. Revisa tu conexión e inténtalo de nuevo."
+                                    }
+                            }
+                        }
+                        CardRow(
+                            left = {
+                                Column {
+                                    Text("Resumen del período por correo", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                                    Text(
+                                        text = errorCierre ?: when (cierrePorCorreo) {
+                                            null -> if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO
+                                            true -> "El día siguiente al corte te llega cómo te fue en el período"
+                                            false -> "Apagado: el resumen sigue en Hoy y en «Tus períodos»"
+                                        },
+                                        style = Movi.textos.apoyo,
+                                        color = if (errorCierre != null) Movi.colores.sale else Movi.colores.textoMedio,
+                                    )
+                                }
+                            },
+                            right = {
+                                Switch(
+                                    checked = cierrePorCorreo == true,
+                                    enabled = cierrePorCorreo != null && !guardandoCierre,
+                                    onCheckedChange = { alternarCierre() },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Movi.colores.sobreMarca,
+                                        checkedTrackColor = Movi.colores.marca,
+                                        uncheckedThumbColor = Movi.colores.textoApagado,
+                                        uncheckedTrackColor = Movi.colores.tarjeta,
+                                        uncheckedBorderColor = Movi.colores.borde,
+                                    ),
+                                )
+                            },
+                            isLast = true,
+                            onClick = alternarCierre,
                         )
                     }
                 }

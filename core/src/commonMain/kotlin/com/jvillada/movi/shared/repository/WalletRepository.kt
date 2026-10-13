@@ -236,6 +236,13 @@ interface WalletRepository {
     /** `POST /api/anomalias/descartar` (Ola 4): «Está bien», no volver a avisar esa huella. */
     suspend fun descartarAnomalia(huella: String) {}
     /**
+     * `GET /api/cierre-del-periodo`: el resumen del período que acaba de cerrar, mientras la tarjeta de
+     * Hoy se muestra; `null` (204) fuera de eso. Default `null` para los dobles de prueba.
+     */
+    suspend fun getCierreDelPeriodo(): com.jvillada.movi.shared.model.CierreDelPeriodo? = null
+    /** `POST /api/cierre-del-periodo/descartar`: la tarjeta de [periodo] no vuelve a salir en Hoy. */
+    suspend fun descartarCierre(periodo: String) {}
+    /**
      * **«Tus períodos»** (`GET /api/periodos`): un [ResumenDePeriodo] por período, del en curso al
      * más viejo. Siempre trae al menos el en curso, con `enCurso = true`.
      */

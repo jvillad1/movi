@@ -234,6 +234,22 @@ class UserRoutesTest {
         assertEquals(false, dbSmsAlertMuted())
     }
 
+    /** El resumen de cierre por correo: encendido por defecto, y se apaga (y se prende) desde la app. */
+    @Test
+    fun `PUT apaga el resumen de cierre por correo, y lo puede volver a encender`() = testApplication {
+        wireApp()
+        // Encendido por defecto: el Json del server no manda los valores por defecto, así que falta = true.
+        assertEquals(true, Json.parseToJsonElement(getProfile().bodyAsText()).jsonObject["cierrePorCorreo"]?.jsonPrimitive?.content?.toBoolean() ?: true)
+
+        val apagar = putProfile("""{"cierrePorCorreo":false}""")
+        assertEquals(HttpStatusCode.OK, apagar.status)
+        assertEquals(false, Json.parseToJsonElement(apagar.bodyAsText()).jsonObject["cierrePorCorreo"]!!.jsonPrimitive.content.toBoolean())
+        assertEquals(false, transaction { Users.selectAll().where { Users.id eq userId }.single()[Users.cierrePorCorreo] })
+
+        assertEquals(HttpStatusCode.OK, putProfile("""{"cierrePorCorreo":true}""").status)
+        assertEquals(true, transaction { Users.selectAll().where { Users.id eq userId }.single()[Users.cierrePorCorreo] })
+    }
+
     private fun dbSmsAlertMuted(): Boolean? = transaction {
         Users.selectAll().where { Users.id eq userId }.single()[Users.smsAlertMuted]
     }

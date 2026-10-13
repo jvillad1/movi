@@ -82,6 +82,15 @@ object Users : Table("users") {
      * único DDL que `createMissingTablesAndColumns` puede agregar sin riesgo sobre una tabla con filas.
      */
     val diasParaBancoMudo = integer("dias_para_banco_mudo").nullable()
+    /**
+     * **¿Le llega por correo el resumen de cierre del período?** («Cerró tu período», ver
+     * `CierreDelPeriodo` en :core). Se apaga desde la app (Perfil → Avisos): regla del dueño, nada
+     * que solo se cambie tocando código.
+     *
+     * Nullable y se lee como `true`, por lo mismo que sus vecinas: es el único DDL que
+     * `createMissingTablesAndColumns` puede agregar sin riesgo sobre una tabla con filas.
+     */
+    val cierrePorCorreo = bool("cierre_por_correo").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -395,6 +404,32 @@ object CardPaymentDismissals : Table("card_payment_dismissals") {
  * fila acá la saca para siempre; una situación nueva (otro cobro, otro período) trae otra huella y
  * vuelve a avisar. Tabla nueva: entra solo al `SchemaUtils.create` del arranque.
  */
+/**
+ * **Los resúmenes de cierre que ya salieron por correo**, uno por usuario y período («Cerró tu
+ * período», ver `CierreDelPeriodo` en :core). El barrido corre cada pocas horas y los primeros días del
+ * período nuevo vuelve a mirar: esta fila es lo que hace que el correo salga UNA vez. Se escribe
+ * ANTES de mandar (la clave primaria es el candado) y se borra si el envío falla, para reintentar en
+ * el barrido siguiente. Tabla nueva: entra solo al `SchemaUtils.create` del arranque.
+ */
+object CierresEnviados : Table("cierres_enviados") {
+    val userId    = varchar("user_id", 50)
+    val periodo   = varchar("periodo", 7)
+    val enviadoEn = long("enviado_en")
+    override val primaryKey = PrimaryKey(userId, periodo)
+}
+
+/**
+ * **Las tarjetas «Cerró tu período» que el dueño cerró en Hoy**, por período. En el server y no en el
+ * aparato: cerrarla en el teléfono la cierra también en la web. Tabla nueva: entra solo al
+ * `SchemaUtils.create` del arranque.
+ */
+object CierresDescartados : Table("cierres_descartados") {
+    val userId       = varchar("user_id", 50)
+    val periodo      = varchar("periodo", 7)
+    val descartadoEn = long("descartado_en")
+    override val primaryKey = PrimaryKey(userId, periodo)
+}
+
 object AnomaliasDescartadas : Table("anomalias_descartadas") {
     val userId       = varchar("user_id", 50)
     val huella       = varchar("huella", 300)

@@ -2059,6 +2059,9 @@ class LocalRepository(
     // Ola 4: los avisos los calcula el server sobre toda la historia; sin red no hay avisos nuevos.
     override suspend fun getAnomalias(): List<com.jvillada.movi.shared.model.Anomalia> = remote.getAnomalias()
     override suspend fun descartarAnomalia(huella: String) = remote.descartarAnomalia(huella)
+    // El resumen de cierre lo arma el server con toda la historia; sin red no hay tarjeta.
+    override suspend fun getCierreDelPeriodo(): com.jvillada.movi.shared.model.CierreDelPeriodo? = remote.getCierreDelPeriodo()
+    override suspend fun descartarCierre(periodo: String) = remote.descartarCierre(periodo)
     // Igual que getFinanceSummary/getDashboardSummary: la ventana de cada período (el corte, los
     // inicios propios) y sus cifras salen de TODO lo que el server sabe, no solo de este
     // dispositivo — sin red falla y «Tus períodos» lo dice con «Reintentar», no con una cuenta

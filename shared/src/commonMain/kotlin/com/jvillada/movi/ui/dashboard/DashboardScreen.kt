@@ -427,6 +427,12 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getDebitosAutomaticos() }
                     .onSuccess { d -> data = data.copy(debitosPorConfirmar = d); llegado = llegado.copy(debitosPorConfirmar = d) }
             }
+            // «Cerró tu período»: la tarjeta de los primeros días. Secundaria, como las anomalías, y
+            // solo en `data`: no va a la instantánea (ver `DashboardData.cierre`).
+            launch {
+                runCatching { Repositories.wallets.getCierreDelPeriodo() }
+                    .onSuccess { c -> data = data.copy(cierre = c) }
+            }
             // 4-oct-2026: las cuentas a las que les envía plata sin nombre. Secundario, como las
             // anomalías: si falla, «Para revisar» sigue sin este aviso.
             launch {
@@ -563,6 +569,10 @@ fun DashboardScreen(
             // solo en Android 13+ sin el permiso (ver [AvisosEnHoy]). Va donde va la guía, y solo
             // cuando la guía no está: una cuenta recién creada tiene cosas más urgentes que hacer.
             val ofertaDeAvisos = AvisosEnHoy.oferta()
+            // «Cerró tu período»: arriba de todo los primeros días del período nuevo, encima de la
+            // oferta de avisos. Como la guía, solo cuando la guía no está.
+            val cierre = cierreParaHoy(data)
+            val alcanceDelCierre = rememberCoroutineScope()
             // SDUI: la definición del server si la hay; si no, la misma lista que el server
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
             // `LocalCargandoElInicio`: el hero y «Pregúntale a Movi» solo reciben `data`, no
@@ -581,8 +591,27 @@ fun DashboardScreen(
                                 onShowCreateSheet = { showCreateSheet = true },
                             )
                         }
-                    } else if (ofertaDeAvisos != null) {
-                        { TarjetaDeAvisos(ofertaDeAvisos) }
+                    } else if (cierre != null || ofertaDeAvisos != null) {
+                        {
+                            Column {
+                                if (cierre != null) {
+                                    TarjetaDeCierre(
+                                        cierre = cierre,
+                                        onNavigate = onNavigate,
+                                        onDescartar = {
+                                            // Se va en el mismo toque; si el server no lo guarda,
+                                            // vuelve en la próxima carga, que es lo honesto.
+                                            data = data.copy(cierre = null)
+                                            DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = null)
+                                            alcanceDelCierre.launch {
+                                                runCatching { Repositories.wallets.descartarCierre(cierre.periodo) }
+                                            }
+                                        },
+                                    )
+                                }
+                                if (ofertaDeAvisos != null) TarjetaDeAvisos(ofertaDeAvisos)
+                            }
+                        }
                     } else null,
                     // El hero vacío abre la MISMA hoja que «Primeros pasos» —
                     // mismo estado, un solo `CreateAccountSheet` en esta pantalla.

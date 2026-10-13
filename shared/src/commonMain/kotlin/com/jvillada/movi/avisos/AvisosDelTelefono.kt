@@ -253,5 +253,6 @@ fun destinoDeAviso(valor: String?): Screen? = when (valor) {
     ABRIR_POR_REVISAR -> Screen.PorRevisar
     ABRIR_PLAN -> Screen.Plan()
     ABRIR_CAPTURA -> Screen.CapturaDelBanco
-    else -> null
+    // «Cerró tu período»: el detalle del período que cerró (ver `abrirElPeriodo`).
+    else -> valor?.let(::detalleDelAviso)
 }

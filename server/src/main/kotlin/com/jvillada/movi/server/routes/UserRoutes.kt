@@ -142,7 +142,7 @@ fun Route.userRoutes() {
             }
             if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null &&
                 req.reminderLeadDays == null && req.smsAlertMuted == null && req.periodStarts == null &&
-                req.diasParaBancoMudo == null
+                req.diasParaBancoMudo == null && req.cierrePorCorreo == null
             ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
             }
@@ -162,6 +162,7 @@ fun Route.userRoutes() {
                     // mandar `true` — así se vuelve a mostrar el aviso del Inicio.
                     req.smsAlertMuted?.let { stmt[Users.smsAlertMuted] = it }
                     req.diasParaBancoMudo?.let { stmt[Users.diasParaBancoMudo] = it }
+                    req.cierrePorCorreo?.let { stmt[Users.cierrePorCorreo] = it }
                 }
                 Users.selectAll().where { Users.id eq uid }.firstOrNull()
             } ?: return@put call.respond(HttpStatusCode.NotFound)
@@ -281,6 +282,8 @@ private fun ResultRow.toProfile() = UserProfile(
     smsAlertMuted = this[Users.smsAlertMuted] ?: false,
     // Sin elegir = el default de :core. 0 = el dueño lo apagó.
     diasParaBancoMudo = this[Users.diasParaBancoMudo] ?: DIAS_PARA_BANCO_MUDO_POR_DEFECTO,
+    // Sin tocar = encendido: el resumen de cierre llega hasta que alguien lo apague.
+    cierrePorCorreo = this[Users.cierrePorCorreo] ?: true,
 )
 
 /** Un período se escribe «AAAA-MM». */

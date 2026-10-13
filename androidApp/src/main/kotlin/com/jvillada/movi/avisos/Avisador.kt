@@ -29,12 +29,14 @@ object Avisador {
     const val CANAL_VENCIMIENTOS = "vencimientos"
     const val CANAL_CAPTURA = "captura"
     const val CANAL_DEBITOS = "debitos"
+    const val CANAL_CIERRE = "cierre"
 
     /** Un id fijo por tipo: la notificación de «Por revisar» se reemplaza, no se apila. */
     private const val ID_MOVIMIENTOS = 7101
     private const val ID_VENCIMIENTOS = 7102
     private const val ID_BANCO_MUDO = 7103
     private const val ID_DEBITOS = 7104
+    private const val ID_CIERRE = 7105
 
     /** Idempotente: Android ignora crear un canal que ya existe (solo actualiza su nombre). */
     fun crearCanales(context: Context) {
@@ -58,6 +60,11 @@ object Avisador {
         gestor.createNotificationChannel(
             NotificationChannel(CANAL_DEBITOS, "Débitos automáticos", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "El día que el banco debió cobrar solo una cuota o un pago, para confirmar si se cobró."
+            },
+        )
+        gestor.createNotificationChannel(
+            NotificationChannel(CANAL_CIERRE, "Cierre del período", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "El día siguiente al corte, cómo te fue en el período que terminó."
             },
         )
     }
@@ -93,6 +100,11 @@ object Avisador {
     /** Avisa lo que el banco debió cobrar solo (ver `textoDeDebitosAutomaticos`). Tocarla abre «Por revisar». */
     fun avisarDebitosAutomaticos(context: Context, texto: TextoDeAviso) {
         publicar(context, ID_DEBITOS, CANAL_DEBITOS, texto, ABRIR_POR_REVISAR, cuantos = maxOf(1, texto.lineas.size))
+    }
+
+    /** «Cerró tu período de septiembre»: tocarlo abre el detalle de ese período. */
+    fun avisarCierre(context: Context, periodo: String, texto: TextoDeAviso) {
+        publicar(context, ID_CIERRE, CANAL_CIERRE, texto, abrirElPeriodo(periodo), cuantos = 1)
     }
 
     /**

@@ -184,6 +184,13 @@ data class DashboardData(
      */
     val gastoDelAnterior: Map<String, Long>? = null,
     val diasComparados: Int? = null,
+    /**
+     * **«Cerró tu período»** (`GET /api/cierre-del-periodo`): el resumen del período que acaba de
+     * cerrar, los primeros días del nuevo. `null` = no hay tarjeta (o no llegó). Se pide aparte, como
+     * las anomalías, y **no viaja en la instantánea del aparato**: dice qué día del período nuevo es y
+     * si se descartó, y pintarla de ayer podría mostrar una tarjeta que ya se cerró en otro aparato.
+     */
+    val cierre: com.jvillada.movi.shared.model.CierreDelPeriodo? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
