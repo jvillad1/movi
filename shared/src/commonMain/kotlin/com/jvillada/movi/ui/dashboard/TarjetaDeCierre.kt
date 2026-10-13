@@ -66,7 +66,7 @@ internal fun TarjetaDeCierre(
             onClickLabel = "Ver el período ${cierre.nombre}",
         ) {
             Text(
-                text = "Resumen de ${cierre.nombre}",
+                text = "Resumen de ${cierre.nombre.replaceFirstChar { it.lowercase() }}",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
