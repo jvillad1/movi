@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -220,6 +222,9 @@ internal fun FilaDeCategoria(categoria: CategoriaDelPeriodo, entrada: Float) {
     }
 }
 
+/** Lo que mide como mínimo la flecha: «↑ $160.000» a la escala de letra de la app. */
+private val ANCHO_DE_LA_FLECHA = 84.dp
+
 /** El tag de la flecha «vs. período pasado» de una fila, para las pruebas. */
 const val TAG_FLECHA_CONTRA_EL_ANTERIOR: String = "flecha-contra-el-anterior"
 
@@ -246,7 +251,12 @@ private fun FlechaContraElAnterior(flecha: ContraElAnterior) {
         style = Movi.textos.apoyo,
         color = color,
         maxLines = 1,
+        textAlign = TextAlign.End,
         modifier = Modifier
+            // Un ancho mínimo, alineado a la derecha: sin él cada barra terminaba donde su flecha la
+            // dejaba («= igual» es más corta que «↑ $160.000») y la columna se leía despareja (visto
+            // en la web a 390).
+            .widthIn(min = ANCHO_DE_LA_FLECHA)
             .testTag(TAG_FLECHA_CONTRA_EL_ANTERIOR)
             .semantics { contentDescription = descripcion },
     )
