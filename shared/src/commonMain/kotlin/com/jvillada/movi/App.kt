@@ -409,6 +409,9 @@ fun App() {
                             // Ola 9 · B: el movimiento ya se guardó; recién ahora se evalúa si
                             // vale la pena ofrecer el recurrente.
                             onSavedEvent = { movimientoRecienGuardado = it },
+                            // «Guardar y anotar otro»: guardó y la hoja sigue abierta. La pantalla de
+                            // atrás vuelve a leer igual que con el «Guardar» de siempre.
+                            onSavedSinCerrar = { refreshTick++ },
                         )
                     }
                 }
