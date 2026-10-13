@@ -92,6 +92,7 @@ fun Application.configureRouting() {
             dashboardRoutes()
             cajaRoutes()
             anomaliasRoutes()
+            cuadrePorAvisoRoutes()
             debitosAutomaticosRoutes()
             periodosRoutes()
             creditRoutes()

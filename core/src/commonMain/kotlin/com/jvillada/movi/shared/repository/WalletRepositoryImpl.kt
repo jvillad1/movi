@@ -439,6 +439,21 @@ class WalletRepositoryImpl(
         }.exigirExito()
     }
 
+    override suspend fun getCuadresPorAviso(): List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso> =
+        client.get("$baseUrl/api/cuadres-por-aviso").exigirExito().body()
+
+    override suspend fun ajustarPorElAviso(avisoId: String): FinancialEvent? {
+        val respuesta = client.post("$baseUrl/api/cuadres-por-aviso/$avisoId/ajustar")
+        // 404 = ya no había nada que ajustar: un segundo toque, o la propuesta se resolvió en otro
+        // lado. No es un error que haya que mostrarle a nadie.
+        if (respuesta.status == HttpStatusCode.NotFound) return null
+        return respuesta.exigirExito().body()
+    }
+
+    override suspend fun descartarCuadrePorAviso(avisoId: String) {
+        client.post("$baseUrl/api/cuadres-por-aviso/$avisoId/descartar").exigirExito()
+    }
+
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary =
         client.get("$baseUrl/api/dashboard/summary?scope=${scope.name}").body()
 

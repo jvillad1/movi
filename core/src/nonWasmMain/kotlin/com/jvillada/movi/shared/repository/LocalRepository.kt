@@ -2059,6 +2059,19 @@ class LocalRepository(
     // Ola 4: los avisos los calcula el server sobre toda la historia; sin red no hay avisos nuevos.
     override suspend fun getAnomalias(): List<com.jvillada.movi.shared.model.Anomalia> = remote.getAnomalias()
     override suspend fun descartarAnomalia(huella: String) = remote.descartarAnomalia(huella)
+    // El saldo del aviso contra el de Movi: se deriva en el server en cada lectura, sin nada que
+    // espejar. «Ajustar» sí escribe un movimiento, y ese se espeja como el de cualquier cuadre.
+    override suspend fun getCuadresPorAviso(): List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso> =
+        remote.getCuadresPorAviso()
+    override suspend fun ajustarPorElAviso(avisoId: String): FinancialEvent? = enDisco {
+        val ajuste = remote.ajustarPorElAviso(avisoId)
+        if (ajuste != null) {
+            val uid = userId()
+            db.transaction { mirrorEventLocally(ajuste, uid) }
+        }
+        return@enDisco ajuste
+    }
+    override suspend fun descartarCuadrePorAviso(avisoId: String) = remote.descartarCuadrePorAviso(avisoId)
     // Igual que getFinanceSummary/getDashboardSummary: la ventana de cada período (el corte, los
     // inicios propios) y sus cifras salen de TODO lo que el server sabe, no solo de este
     // dispositivo — sin red falla y «Tus períodos» lo dice con «Reintentar», no con una cuenta

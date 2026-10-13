@@ -236,6 +236,19 @@ interface WalletRepository {
     /** `POST /api/anomalias/descartar` (Ola 4): «Está bien», no volver a avisar esa huella. */
     suspend fun descartarAnomalia(huella: String) {}
     /**
+     * `GET /api/cuadres-por-aviso`: el saldo que dijo un aviso confirmado contra el que dice Movi en
+     * ese instante, cuando no coinciden. Una propuesta por cuenta como mucho. Default vacío para los
+     * dobles de prueba.
+     */
+    suspend fun getCuadresPorAviso(): List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso> = emptyList()
+    /**
+     * `POST /api/cuadres-por-aviso/{avisoId}/ajustar`: «Ajustar». Devuelve el ajuste que escribió el
+     * server, o `null` si ya no había nada que ajustar (otro toque lo hizo antes).
+     */
+    suspend fun ajustarPorElAviso(avisoId: String): FinancialEvent? = null
+    /** `POST /api/cuadres-por-aviso/{avisoId}/descartar`: «No ajustar». No toca ningún saldo. */
+    suspend fun descartarCuadrePorAviso(avisoId: String) {}
+    /**
      * **«Tus períodos»** (`GET /api/periodos`): un [ResumenDePeriodo] por período, del en curso al
      * más viejo. Siempre trae al menos el en curso, con `enCurso = true`.
      */
