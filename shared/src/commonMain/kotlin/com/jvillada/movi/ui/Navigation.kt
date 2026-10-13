@@ -176,6 +176,11 @@ sealed class Screen {
      */
     data object LoQueMoviSabe : Screen()
     /**
+     * **Borrar mi cuenta**: la descarga de los datos primero, qué se borra, y la contraseña con la
+     * palabra BORRAR. Se abre desde Ajustes, abajo de todo.
+     */
+    data object BorrarLaCuenta : Screen()
+    /**
      * **«Cuadre de saldos»** — comparar de una sentada lo que Movi cree con lo que dice el banco,
      * y anotar la diferencia de cada cuenta como un ajuste.
      *
@@ -284,7 +289,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
     Screen.Mas, Screen.Profile, Screen.Goals, Screen.Extractos, is Screen.AIChat,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos,
-    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe -> true
+    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.BorrarLaCuenta -> true
     else -> false
 }
 

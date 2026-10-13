@@ -145,6 +145,7 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = noUsado("updateUserProfile")
     override suspend fun changePassword(request: ChangePasswordRequest): String? = noUsado("changePassword")
     override suspend fun cerrarSesionesEnTodosLosAparatos() = noUsado("cerrarSesionesEnTodosLosAparatos")
+    override suspend fun borrarLaCuenta(request: BorrarLaCuentaRequest): Unit = noUsado("borrarLaCuenta")
     override suspend fun getExportLink(): EnlaceDeDescarga = noUsado("getExportLink")
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = noUsado("requestPasswordReset")
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult = noUsado("uploadStatement")

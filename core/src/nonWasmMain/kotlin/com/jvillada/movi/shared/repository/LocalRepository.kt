@@ -2317,6 +2317,9 @@ class LocalRepository(
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = remote.updateUserProfile(request)
     override suspend fun changePassword(request: ChangePasswordRequest): String? = remote.changePassword(request)
     override suspend fun cerrarSesionesEnTodosLosAparatos() = remote.cerrarSesionesEnTodosLosAparatos()
+    // Server-first: lo local se borra DESPUÉS, y solo si el server dijo que sí (ver [olvidarTodoLoDe]).
+    override suspend fun borrarLaCuenta(request: com.jvillada.movi.shared.model.BorrarLaCuentaRequest) =
+        remote.borrarLaCuenta(request)
     // Sin espejo: la exportación la arma el server con lo que tiene él, que es la copia completa.
     override suspend fun getExportLink(): EnlaceDeDescarga = remote.getExportLink()
 
@@ -2340,6 +2343,20 @@ class LocalRepository(
             db.voidEventQueries.deleteSyncedForUser(userId)
             db.financialEventQueries.deleteSyncedForUser(userId)
             db.accountQueries.deleteSyncedForUser(userId)
+            db.remoteCacheQueries.deleteForUser(userId)
+        }
+    }
+
+    /**
+     * Ver [WalletRepository.olvidarTodoLoDe]: lo mismo que [olvidarDatosLocales] pero **también lo que
+     * no subió**. Solo se llama después de que el server borró la cuenta: ya no hay a dónde subirlo.
+     */
+    override fun olvidarTodoLoDe(userId: String) {
+        if (userId.isBlank()) return
+        db.transaction {
+            db.voidEventQueries.deleteAllForUser(userId)
+            db.financialEventQueries.deleteAllForUser(userId)
+            db.accountQueries.deleteAllForUser(userId)
             db.remoteCacheQueries.deleteForUser(userId)
         }
     }

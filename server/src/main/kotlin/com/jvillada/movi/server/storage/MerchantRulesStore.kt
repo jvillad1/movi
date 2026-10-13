@@ -8,10 +8,12 @@ class MerchantRulesStore {
 
     private val stores = ConcurrentHashMap<String, JsonListStore<MerchantRule>>()
 
+    private fun archivoDe(userId: String) = File("movi-data", "merchant-rules-$userId.json")
+
     private fun storeFor(userId: String): JsonListStore<MerchantRule> =
         stores.computeIfAbsent(userId) {
             JsonListStore(
-                file = File("movi-data", "merchant-rules-$userId.json"),
+                file = archivoDe(userId),
                 elementSerializer = MerchantRule.serializer(),
                 seed = emptyList(),
             )
@@ -25,5 +27,11 @@ class MerchantRulesStore {
             val i = list.indexOfFirst { it.merchantPattern == rule.merchantPattern }
             if (i >= 0) list[i] = rule else list.add(rule)
         }
+    }
+
+    /** Al borrar la cuenta (`DELETE /api/me`): las reglas de [userId], en memoria y en disco. */
+    fun borrar(userId: String) {
+        stores.remove(userId)
+        archivoDe(userId).delete()
     }
 }

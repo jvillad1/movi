@@ -1165,4 +1165,12 @@ class WalletRepositoryImpl(
     override suspend fun cerrarSesionesEnTodosLosAparatos() {
         client.post("$baseUrl/api/users/me/cerrar-sesiones").exigirExito()
     }
+
+    // La contraseña va en el CUERPO del DELETE, nunca en la URL: ver `BorrarLaCuentaRequest`.
+    override suspend fun borrarLaCuenta(request: com.jvillada.movi.shared.model.BorrarLaCuentaRequest) {
+        client.delete("$baseUrl/api/me") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.exigirExito()
+    }
 }

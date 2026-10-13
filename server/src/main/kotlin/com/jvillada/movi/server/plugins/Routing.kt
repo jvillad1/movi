@@ -111,6 +111,7 @@ fun Application.configureRouting() {
             papelesRoutes()
             enlaceCompartidoRoutes()
             exportRoutes()
+            borrarLaCuentaRoutes()
         }
 
         // /api/** que nadie registró → 404 JSON, nunca el index.html de la SPA.
