@@ -14,6 +14,30 @@ import kotlin.test.assertNull
  */
 class SaldoDelAvisoTest {
 
+    /**
+     * **Los textos reales**, copiados de los avisos que llegaron a producción (13-oct-2026). El
+     * único aviso de Bancolombia que trae el saldo es el de una compra rechazada, y dice «Tu saldo
+     * actual es»; los de Glim dicen «saldo» sin cifra o con la de una recarga, que no es un saldo.
+     */
+    @Test
+    fun `los avisos reales que dicen saldo`() {
+        assertEquals(
+            78_508.0,
+            saldoDelAviso(
+                "Bancolombia: Ups! Tu compra con Tarjeta Debito *4057 de \$ 116,600 fue rechazada por saldo insuficiente. Tu saldo actual es \$ 78,508.",
+            )?.monto,
+        )
+        assertEquals(
+            138_408.0,
+            saldoDelAviso(
+                "Bancolombia: Ups! El pago en ACTION BLACK VNP por \$ 180,000 fue rechazada por saldo insuficiente. Tu saldo actual es \$ 138,408.",
+            )?.monto,
+        )
+        assertNull(saldoDelAviso("Fondos insuficientes ⛔: Se rechazó tu pago por \$581.800,00 COP. Revisa tus saldos actualizados en la sección de beneficios de tu app."))
+        assertNull(saldoDelAviso("Tu compra no se pudo completar: Tu pago de \$581.800,00 COP en RAPPI fue rechazado. Motivo: Saldo insuficiente."))
+        assertNull(saldoDelAviso("Aleluya: ¡tienes nuevo saldo! 💳: Mercado Libre Colombia Ltda recargó 55.500,00 COP en tu tarjeta de beneficios."))
+    }
+
     @Test
     fun `saldo disponible con signo pesos y miles con punto`() {
         val s = assertNotNull(saldoDelAviso("Bancolombia: Compraste \$46.000 en TIENDA. Saldo disponible \$138.407"))
