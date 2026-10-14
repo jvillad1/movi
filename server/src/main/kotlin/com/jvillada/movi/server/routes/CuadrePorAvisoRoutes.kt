@@ -13,7 +13,10 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.insertEventRow
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.sms.parseSmsTime
 import com.jvillada.movi.server.sms.saldoDelAviso
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.shared.model.cuentaPropiaConEseNumero
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
@@ -94,7 +97,9 @@ private const val MENOS_DE_UN_PESO = 1.0
  * trae saldo, porque el saldo de después borra al de antes. Y ninguna en estos casos:
  *
  * - el aviso no está confirmado, o se confirmó sin saber con qué movimiento (`evento_id`): sin el
- *   movimiento no se sabe ni la cuenta ni el instante;
+ *   movimiento no se sabe ni la cuenta ni el instante. **Salvo un rechazo** («…fue rechazada por
+ *   saldo insuficiente. Tu saldo actual es $ 78,508.», el único aviso en que Bancolombia manda el
+ *   saldo): no es un movimiento, la cuenta sale del número que nombra y el instante de su hora;
  * - ese movimiento está anulado o ya no existe;
  * - la cuenta es una deuda o un bien (ver `sePuedeCuadrar`), o está en otra moneda que el saldo;
  * - **la cuenta se cuadró después** (un ajuste posterior al aviso): el dueño ya la puso contra el
@@ -107,42 +112,78 @@ private const val MENOS_DE_UN_PESO = 1.0
  * lo que había entonces.
  */
 internal fun Transaction.cuadresPorAvisoDe(uid: String): List<PropuestaDeCuadrePorAviso> {
-    data class Candidato(val avisoId: String, val origen: String, val eventoId: String, val saldo: Double, val moneda: String)
+    /** Un saldo que dijo el banco, de qué cuenta y en qué instante. */
+    data class Candidato(val avisoId: String, val origen: String, val cuentaId: String, val momento: Long, val saldo: Double, val moneda: String, val texto: String)
 
-    val candidatos = SmsMessages.selectAll()
-        .where {
-            (SmsMessages.userId eq uid) and (SmsMessages.state eq SMS_STATE_CONFIRMED) and SmsMessages.eventoId.isNotNull()
-        }
-        .mapNotNull { fila ->
-            val saldo = saldoDelAviso(fila[SmsMessages.text]) ?: return@mapNotNull null
-            Candidato(fila[SmsMessages.id], fila[SmsMessages.bank], fila[SmsMessages.eventoId]!!, saldo.monto, saldo.moneda)
-        }
-    if (candidatos.isEmpty()) return emptyList()
+    val filas = SmsMessages.selectAll()
+        .where { SmsMessages.userId eq uid }
+        .mapNotNull { fila -> saldoDelAviso(fila[SmsMessages.text])?.let { fila to it } }
+    if (filas.isEmpty()) return emptyList()
 
     val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }.map { it[VoidEvents.originalEventId] }.toSet()
-    val eventos = Events.selectAll()
-        .where { (Events.userId eq uid) and (Events.id inList candidatos.map { it.eventoId }.distinct()) }
+    val idsDeEventos = filas.mapNotNull { (fila, _) -> fila[SmsMessages.eventoId] }.distinct()
+    val eventos = if (idsDeEventos.isEmpty()) emptyMap() else Events.selectAll()
+        .where { (Events.userId eq uid) and (Events.id inList idsDeEventos) }
         .map { it.toFinancialEvent() }
         .filter { it.id !in anulados }
         .associateBy { it.id }
-    val cuentas = Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() }.associateBy { it.id }
+    val cuentas = Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() }
+    val porId = cuentas.associateBy { it.id }
     val descartadas = AnomaliasDescartadas.selectAll()
         .where { AnomaliasDescartadas.userId eq uid }
         .map { it[AnomaliasDescartadas.huella] }
         .toSet()
 
+    val candidatos = filas.mapNotNull { (fila, saldo) ->
+        val id = fila[SmsMessages.id]
+        val origen = fila[SmsMessages.bank]
+        val eventoId = fila[SmsMessages.eventoId]
+        if (fila[SmsMessages.state] == SMS_STATE_CONFIRMED && eventoId != null) {
+            // Confirmado con su movimiento: la cuenta y el instante son los del movimiento.
+            val ev = eventos[eventoId] ?: return@mapNotNull null
+            Candidato(id, origen, ev.accountId, ev.timestamp, saldo.monto, saldo.moneda, fila[SmsMessages.text])
+        } else if (eventoId == null && RECHAZADO.containsMatchIn(fila[SmsMessages.text])) {
+            // **El saldo de un aviso que no es un movimiento.** Bancolombia solo manda el saldo en
+            // el SMS de una compra RECHAZADA («…fue rechazada por saldo insuficiente. Tu saldo
+            // actual es $ 78,508.»): ese aviso se aparta y nunca se confirma, pero el saldo que trae
+            // es tan del banco como cualquiera. Sin movimiento, la cuenta sale del número que nombra
+            // («Tarjeta Debito *4057» → «Bancolombia Ahorros 8133 · 4057», la misma regla de las
+            // cuentas por número) y el instante, de la hora del aviso. Sin número no se adivina.
+            // **Solo un rechazo**: el saldo de una compra que SÍ pasó y todavía no se anotó
+            // propondría un ajuste por la compra misma, que después se anotaría otra vez.
+            val numero = NUMERO_DEL_AVISO.find(fila[SmsMessages.text])?.groupValues?.get(1) ?: return@mapNotNull null
+            val cuenta = cuentaPropiaConEseNumero(numero, cuentas) ?: return@mapNotNull null
+            val momento = parseSmsTime(fila[SmsMessages.time])?.atZone(AppClock.zone)?.toInstant()?.toEpochMilli()
+                ?: return@mapNotNull null
+            Candidato(id, origen, cuenta.id, momento, saldo.monto, saldo.moneda, fila[SmsMessages.text])
+        } else {
+            null
+        }
+    }
+
     return candidatos
-        .mapNotNull { c -> eventos[c.eventoId]?.let { ev -> Triple(c, ev, cuentas[ev.accountId]) } }
-        .filter { (c, _, cuenta) -> cuenta != null && seCuadraContraElAviso(cuenta, c.moneda) }
-        // La más reciente de cada cuenta. Dos avisos del mismo instante: el que llegó último.
-        .groupBy { (_, ev, _) -> ev.accountId }
-        .mapNotNull { (_, deLaCuenta) -> deLaCuenta.maxWithOrNull(compareBy({ it.second.timestamp }, { it.first.avisoId })) }
-        .mapNotNull { (c, ev, cuenta) ->
+        // **El mismo aviso subido dos veces con la hora corrida** (el barrido del teléfono en otra
+        // zona horaria, 4-oct: el rechazo de las 13:32 volvió a entrar a las 15:32). Un rechazo no
+        // trae su propia hora, así que el dedupe no lo junta; vale la copia más temprana, la que
+        // llegó en el momento.
+        .groupBy { it.cuentaId to it.texto }
+        .map { (_, copias) -> copias.minWith(compareBy({ it.momento }, { it.avisoId })) }
+        .filter { c -> porId[c.cuentaId]?.let { seCuadraContraElAviso(it, c.moneda) } == true }
+        // El más reciente de cada cuenta. Dos avisos del mismo instante: el de id mayor, fijo.
+        .groupBy { it.cuentaId }
+        .mapNotNull { (_, deLaCuenta) -> deLaCuenta.maxWithOrNull(compareBy({ it.momento }, { it.avisoId })) }
+        .mapNotNull { c ->
             if (huellaDelCuadrePorAviso(c.avisoId) in descartadas) return@mapNotNull null
-            propuestaDe(uid, c.avisoId, c.origen, c.saldo, c.moneda, ev, cuenta!!)
+            propuestaDe(uid, c.avisoId, c.origen, c.saldo, c.moneda, c.momento, porId.getValue(c.cuentaId))
         }
         .sortedByDescending { it.momento }
 }
+
+/** «fue rechazada», «rechazado»: el aviso de algo que no pasó, y por eso no es un movimiento. */
+private val RECHAZADO = Regex("""\brechazad[ao]s?\b""", RegexOption.IGNORE_CASE)
+
+/** «*4057», «*8133»: el número de cuenta o tarjeta que nombra un aviso del banco. */
+private val NUMERO_DEL_AVISO = Regex("""\*\s?(\d{4,})""")
 
 /** Solo Dinero e Inversión, en la moneda del aviso. La misma regla que el cuadre a mano. */
 private fun seCuadraContraElAviso(cuenta: Account, moneda: String): Boolean =
@@ -154,13 +195,13 @@ private fun Transaction.propuestaDe(
     origen: String,
     saldo: Double,
     moneda: String,
-    evento: FinancialEvent,
+    momento: Long,
     cuenta: Account,
 ): PropuestaDeCuadrePorAviso? {
     val movimientos = loadNonVoidedEventsIn(uid, cuenta.id)
     // Un cuadre posterior —a mano o con otra propuesta— ya dijo la última palabra.
-    if (movimientos.any { it.category == ADJUSTMENT_CATEGORY && it.timestamp > evento.timestamp }) return null
-    val enMovi = computeBalances(cuenta.type, movimientos.filter { it.timestamp <= evento.timestamp })[moneda] ?: 0L
+    if (movimientos.any { it.category == ADJUSTMENT_CATEGORY && it.timestamp > momento }) return null
+    val enMovi = computeBalances(cuenta.type, movimientos.filter { it.timestamp <= momento })[moneda] ?: 0L
     if (abs(saldo - enMovi) < MENOS_DE_UN_PESO) return null
     val delBanco = saldo.roundToLong()
     if (delBanco == enMovi) return null
@@ -172,7 +213,7 @@ private fun Transaction.propuestaDe(
         saldoDelBanco = delBanco,
         saldoEnMovi = enMovi,
         moneda = moneda,
-        momento = evento.timestamp,
+        momento = momento,
     )
 }
 

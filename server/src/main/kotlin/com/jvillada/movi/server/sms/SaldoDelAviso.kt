@@ -24,7 +24,7 @@ data class SaldoDelAviso(val monto: Double, val moneda: String)
  * «Revisa tus saldos actualizados».
  */
 private val saldoRegex = Regex(
-    """(?:\bsaldo\s+disponible(?:\s+es)?(?:\s+de)?|\btu\s+saldo(?:\s+disponible)?\s+es(?:\s+de)?|\bsaldo(?=\s*:))""" +
+    """(?:\bsaldo\s+disponible(?:\s+es)?(?:\s+de)?|\btu\s+saldo(?:\s+(?:disponible|actual))?\s+es(?:\s+de)?|\bsaldo(?=\s*:))""" +
         """\s*:?\s*(\$|\bCOP(?![a-z])|\bUSD(?![a-z]))?\s*""" +
         """([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]{1,2})?|[0-9]+(?:[.,][0-9]{1,2})?)""" +
         """(?:\s*(COP|USD)\b)?""",

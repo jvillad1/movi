@@ -33,6 +33,8 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Date
@@ -101,13 +103,19 @@ class CuadrePorAvisoRoutesTest {
         return id
     }
 
-    private fun aviso(texto: String, eventoId: String?, estado: String = SMS_STATE_CONFIRMED, uid: String = duenoId): String {
+    private fun aviso(
+        texto: String,
+        eventoId: String?,
+        estado: String = SMS_STATE_CONFIRMED,
+        uid: String = duenoId,
+        cuando: String = "2026-10-12 10:00",
+    ): String {
         val id = "sms_${n++}"
         transaction {
             SmsMessages.insert {
                 it[SmsMessages.id] = id
                 it[userId] = uid
-                it[time] = "2026-10-12 10:00"
+                it[time] = cuando
                 it[bank] = "85540"
                 it[text] = texto
                 it[state] = estado
@@ -272,6 +280,42 @@ class CuadrePorAvisoRoutesTest {
         // En una tarjeta, «disponible» es el cupo, no la deuda.
         val enLaTarjeta = anotar("acc_tarjeta", "EXPENSE", 50_000L, dia)
         aviso("Compraste \$50.000 con tu T.Cred *3684. Saldo disponible \$2.950.000", enLaTarjeta)
+        assertEquals(emptyList(), propuestas())
+    }
+
+    /**
+     * El SMS real de Bancolombia (13-oct): el único que trae el saldo es el de una compra rechazada.
+     * No tiene movimiento —se aparta—, así que la cuenta sale del número que nombra y el instante de
+     * su hora. Una compra que sí pasó y sigue pendiente NO se usa: su saldo ya descuenta una compra
+     * que Movi todavía no tiene, y el ajuste la contaría dos veces.
+     */
+    @Test
+    fun `el saldo de una compra rechazada se propone en la cuenta de su numero`() = testApplication {
+        application { testModule() }
+        transaction { Accounts.update({ Accounts.id eq ahorros }) { it[name] = "Bancolombia Ahorros 8133 · 4057" } }
+        anotar(ahorros, "INCOME", 200_000L, dia - 86_400_000L, categoria = "Saldo inicial")
+        val texto = "Bancolombia: Ups! Tu compra con Tarjeta Debito *4057 de \$ 116,600 fue rechazada por saldo insuficiente. Tu saldo actual es \$ 78,508."
+        val rechazo = aviso(texto, eventoId = null, estado = "ignored", cuando = "2026-10-04 13:32")
+        // La misma copia subida otra vez con dos horas de más (el barrido desde Argentina).
+        aviso(texto, eventoId = null, estado = "ignored", cuando = "2026-10-04 15:32")
+        val p = propuestas().single()
+        assertEquals(rechazo, p.avisoId)
+        assertEquals(ahorros, p.cuentaId)
+        assertEquals(78_508L, p.saldoDelBanco)
+        assertEquals(200_000L, p.saldoEnMovi)
+    }
+
+    @Test
+    fun `sin numero, o una compra que si paso, no se propone sin su movimiento`() = testApplication {
+        application { testModule() }
+        transaction { Accounts.update({ Accounts.id eq ahorros }) { it[name] = "Bancolombia Ahorros 8133 · 4057" } }
+        anotar(ahorros, "INCOME", 200_000L, dia - 86_400_000L, categoria = "Saldo inicial")
+        aviso(
+            "Bancolombia: Ups! El pago en ACTION BLACK VNP por \$ 180,000 fue rechazada por saldo insuficiente. Tu saldo actual es \$ 138,408.",
+            eventoId = null,
+            estado = "ignored",
+        )
+        aviso("Bancolombia: Compraste \$46.000 con tu T.Deb *4057. Saldo disponible \$154.000", eventoId = null, estado = SMS_STATE_PENDING)
         assertEquals(emptyList(), propuestas())
     }
 
