@@ -16,7 +16,7 @@ import kotlin.test.assertFalse
  * # Safari en un iPhone dice qué falta para avisar
  *
  * Desde una pestaña de Safari no hay `PushManager`, y el interruptor de avisos desaparecía sin
- * explicar nada. La tarjeta dice los dos toques que faltan (Compartir → «Agregar a inicio»). En el
+ * explicar nada. La tarjeta dice los dos toques que faltan (Compartir → «Agregar a Inicio»). En el
  * teléfono Android —donde corre esta prueba— no se pide instalar nada, y Perfil no la muestra.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -29,7 +29,7 @@ class AvisosEnElIphoneTest {
     fun `la tarjeta dice el paso que falta`() {
         composeRule.setContent { MoviTheme { AvisosEnElIphone() } }
         composeRule.onNodeWithText("Avisos en tu iPhone").assertIsDisplayed()
-        composeRule.onNodeWithText("Agregar a inicio", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Agregar a Inicio", substring = true).assertIsDisplayed()
     }
 
     @Test
