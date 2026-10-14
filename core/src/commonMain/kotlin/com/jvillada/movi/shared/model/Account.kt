@@ -93,7 +93,7 @@ data class Account(
      * que **todo lo que mueve plata sin emitir un movimiento se desvía para siempre**. Sus
      * rendimientos de Nu habían crecido $745.856 y los de la Fiducuenta $1.637 sin un solo SMS
      * que capturar. El ajuste ya existía; lo que no existía era saber **cuáles cuentas hace rato
-     * que nadie mira** (ver `cuentasSinCuadrar` en `:shared`).
+     * que nadie mira** (ver `cuentasSinCuadrar` en `CuadreDeSaldos.kt`).
      */
     val lastAdjustmentAt: Long? = null,
 

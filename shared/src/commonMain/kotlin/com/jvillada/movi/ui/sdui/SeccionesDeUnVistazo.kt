@@ -44,7 +44,7 @@ import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.ai.CUANTAS_PREGUNTAS_SUGERIDAS
-import com.jvillada.movi.ui.ai.preguntasSugeridas
+import com.jvillada.movi.ui.ai.preguntasParaTocar
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.Cifra
@@ -691,7 +691,7 @@ internal fun PreguntaleAMoviSection(
 ) {
     // Las reglas son baratas, pero se recalculan solo cuando cambian los datos, no en cada frame de
     // la entrada animada del hero.
-    val preguntas = remember(data) { preguntasSugeridas(data) }
+    val preguntas = remember(data) { preguntasParaTocar(data) }
     // Mismo criterio que el hero: sin cuentas ni resumen, `preguntasSugeridas` no tiene ninguna
     // señal propia y cae en `PREGUNTAS_DE_RESPALDO` — tres preguntas genéricas que no son «lo que
     // viene» sino un relleno. Task 7: en la primera carga se ve el esqueleto de esas tres filas, no
@@ -723,7 +723,9 @@ internal fun PreguntaleAMoviSection(
                 }
             } else {
                 preguntas.forEachIndexed { i, pregunta ->
-                    FilaDePregunta(pregunta) { onNavigate(Screen.AIChat(preguntaInicial = pregunta)) }
+                    FilaDePregunta(pregunta.texto) {
+                        onNavigate(Screen.AIChat(preguntaInicial = pregunta.texto, sugerida = pregunta.sugerida?.id))
+                    }
                     if (i < preguntas.lastIndex) Hairline()
                 }
             }

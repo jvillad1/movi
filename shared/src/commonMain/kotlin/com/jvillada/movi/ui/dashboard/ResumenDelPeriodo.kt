@@ -2,7 +2,6 @@ package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.OrigenMudo
-import com.jvillada.movi.shared.model.loQueSeCobra
 import com.jvillada.movi.shared.model.textoDeOrigenMudo
 
 import com.jvillada.movi.shared.model.Budget
@@ -170,14 +169,13 @@ fun pendientesDePeriodosAnteriores(
  * no una cuota) y todo INGRESO. Lo segundo hacía que el «Falta $X» del Inicio incluyera el sueldo
  * del dueño mientras no lo marcara — la cifra afirmaba que le faltaba pagar su propio salario.
  */
-fun faltaPorPagar(checklist: List<PagoDelPeriodo>): Long =
-    checklist.filter { !it.pagado && !it.montoEsSaldo && !it.esIngreso }.sumOf { it.monto }
+fun faltaPorPagar(checklist: List<PagoDelPeriodo>): Long = com.jvillada.movi.shared.model.faltaPorPagar(checklist)
 
 // ── Cómo se agrupa y qué dice la tarjeta ─────────────────────────────────────
 
 /** Lo que falta pagar, en el orden en que sale del checklist. Un ingreso no se paga: no va acá. */
 fun pagosPendientes(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
-    checklist.filter { !it.pagado && !it.esIngreso }
+    com.jvillada.movi.shared.model.pagosPendientes(checklist)
 
 /** Lo que falta que LLEGUE: el sueldo, un arriendo que cobra. Se tilda igual, pero no se «paga». */
 fun ingresosPendientes(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
@@ -466,11 +464,8 @@ fun cosasParaRevisar(
  * «¿Se cobró la cuota de Libre inversión 9695?», o «2 débitos automáticos por confirmar». `null` sin
  * ninguno: no hay fila.
  */
-fun textoDeDebitosEnHoy(debitos: List<DebitoAutomaticoPorConfirmar>): String? = when (debitos.size) {
-    0 -> null
-    1 -> "¿Se cobró ${loQueSeCobra(debitos.single())}?"
-    else -> "${debitos.size} débitos automáticos por confirmar"
-}
+fun textoDeDebitosEnHoy(debitos: List<DebitoAutomaticoPorConfirmar>): String? =
+    com.jvillada.movi.shared.model.textoDeDebitosEnHoy(debitos)
 
 /** «3 cuentas a las que les envías plata no tienen nombre». */
 fun textoDeCuentasSinNombre(n: Int): String =

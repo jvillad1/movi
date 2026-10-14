@@ -65,6 +65,10 @@ class MoviAiSinCreditoTest {
         // Un código que la app no conoce no esconde el texto.
         assertEquals("hola", textoDeLaRespuesta(AiChatResponse(text = "hola", codigo = "OTRA_COSA"), null))
         assertEquals("No pude conectarme con el AI. sin red", textoDeLaRespuesta(null, RuntimeException("sin red")))
-        assertEquals("Movi AI no está disponible ahora. Inténtalo de nuevo más tarde.", MOVI_AI_NO_DISPONIBLE)
+        assertEquals(
+            "Movi AI no está disponible ahora para preguntas libres. Inténtalo de nuevo más tarde. " +
+                "Mientras tanto, estas tres preguntas sí funcionan:",
+            MOVI_AI_NO_DISPONIBLE,
+        )
     }
 }

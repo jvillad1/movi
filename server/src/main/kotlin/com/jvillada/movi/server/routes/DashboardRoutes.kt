@@ -657,7 +657,7 @@ private const val UN_DIA_MS = 24L * 60 * 60 * 1000
  * de activo, no anulado, no descartado, `looksLikeCardPayment`), pero el SQL ya acota a los
  * egresos de cuentas de activo y solo se leen descripción y categoría.
  */
-private fun Transaction.cardPaymentCandidateCount(
+internal fun Transaction.cardPaymentCandidateCount(
     uid: String,
     voidedIds: Set<String>,
     accountTypeById: Map<String, AccountType>,

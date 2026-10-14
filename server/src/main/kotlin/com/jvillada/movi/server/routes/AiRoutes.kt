@@ -68,6 +68,13 @@ import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.ResolverPropuestaRequest
 import com.jvillada.movi.server.ai.empezarConversacionNueva
 import com.jvillada.movi.server.ai.tramoParaElModelo
+import com.jvillada.movi.server.ai.CONSULTA_DE_LA_PREGUNTA_SUGERIDA
+import com.jvillada.movi.server.ai.ConsultaHecha
+import com.jvillada.movi.server.ai.MODELO_SIN_IA
+import com.jvillada.movi.server.ai.datosDeLasSugeridas
+import com.jvillada.movi.server.ai.respuestaSinModelo
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.shared.model.PreguntaSugerida
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -321,6 +328,17 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
             return@post
         }
 
+        // **Las tres preguntas sugeridas se contestan sin el modelo**, haya crédito o no, y antes de
+        // mirar si hay clave: ver `LasPreguntasSugeridas.kt`. Se reconocen por el id que manda el
+        // chip, nunca por el texto. Con una foto adjunta no: la foto es para el modelo.
+        val sugerida = body.messages.lastOrNull()
+            ?.takeIf { it.role == ChatRole.USER && it.imageBase64 == null }
+            ?.let { PreguntaSugerida.deId(it.preguntaSugerida) }
+        if (sugerida != null) {
+            contestarSinModelo(call, sugerida, body.messages.last().content.ifBlank { sugerida.texto })
+            return@post
+        }
+
         val fabrica = fabricaDePrueba ?: fabricaDeAnthropic()
         if (fabrica == null) {
             call.respond(
@@ -461,6 +479,40 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
                 )
             }
     }
+}
+
+/**
+ * **Contesta [sugerida] con los números de Movi, sin llamar a ningún modelo**, y deja el turno
+ * guardado como cualquier otro —en `ai_turns` y en la conversación— con `modelo` = [MODELO_SIN_IA] y
+ * la pregunta que contestó en `consultas`, para poder contar cuántas se contestaron así.
+ */
+private suspend fun contestarSinModelo(call: io.ktor.server.application.ApplicationCall, sugerida: PreguntaSugerida, pregunta: String) {
+    val uid = call.userId()
+    val texto = runCatching {
+        respuestaSinModelo(sugerida, datosDeLasSugeridas(uid, sugerida, AppClock.today()))
+    }.getOrElse {
+        call.application.log.error("movi-ai sin modelo: no pude contestar ${sugerida.id} de $uid", it)
+        call.respond(
+            HttpStatusCode.InternalServerError,
+            AiChatResponse(text = "No pude leer tus datos para contestar. Intenta otra vez en un momento."),
+        )
+        return
+    }
+    call.application.log.info("movi-ai uid=$uid sin-modelo=${sugerida.id}")
+    val guardado = guardarLaConversacion(
+        uid = uid,
+        pregunta = pregunta,
+        respuesta = texto,
+        consultas = listOf(ConsultaHecha(CONSULTA_DE_LA_PREGUNTA_SUGERIDA, mapOf("id" to sugerida.id), "")),
+        modelo = MODELO_SIN_IA,
+        criterio = false,
+        fichasEntrada = 0,
+        fichasCache = 0,
+        fichasSalida = 0,
+        hayImagen = false,
+    )
+    if (!guardado) call.application.log.warn("movi-ai: no pude guardar la conversación de $uid")
+    call.respond(AiChatResponse(text = texto))
 }
 
 /**

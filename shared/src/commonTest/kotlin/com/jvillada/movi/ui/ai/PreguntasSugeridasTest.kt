@@ -8,6 +8,7 @@ import com.jvillada.movi.shared.model.CLASE_DE_BIEN_INMUEBLE
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.FinanceSummary
+import com.jvillada.movi.shared.model.PreguntaSugerida
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -229,5 +230,25 @@ class PreguntasSugeridasTest {
     @Test
     fun `un Inicio que todavia no cargo no afirma nada`() {
         assertEquals(PREGUNTAS_DE_RESPALDO, preguntasSugeridas(DashboardData()))
+    }
+
+    @Test
+    fun `solo las tres de respaldo llevan su id, y es el de la pregunta`() {
+        val sinDatos = preguntasParaTocar(SenalesParaPreguntar())
+        assertEquals(PreguntaSugerida.entries.toList(), sinDatos.map { it.sugerida })
+        sinDatos.forEach { assertEquals(it.sugerida?.texto, it.texto) }
+
+        val conReglas = preguntasParaTocar(SenalesParaPreguntar(ingresosDelPeriodo = 22_200_000L, gastosDelPeriodo = 33_900_000L))
+        assertEquals(null, conReglas.first().sugerida, "las que arman las reglas van al modelo: sin id")
+        assertEquals(listOf(PreguntaSugerida.COMO_VOY, PreguntaSugerida.EN_QUE_SE_VA), conReglas.drop(1).map { it.sugerida })
+        assertEquals(preguntasSugeridas(SenalesParaPreguntar(ingresosDelPeriodo = 22_200_000L, gastosDelPeriodo = 33_900_000L)), conReglas.map { it.texto })
+    }
+
+    @Test
+    fun `el id es estable y se lee de vuelta`() {
+        assertEquals(listOf("como-voy", "en-que-se-va", "que-revisar"), PreguntaSugerida.entries.map { it.id })
+        PreguntaSugerida.entries.forEach { assertEquals(it, PreguntaSugerida.deId(it.id)) }
+        assertEquals(null, PreguntaSugerida.deId(null))
+        assertEquals(null, PreguntaSugerida.deId("¿Cómo voy este período?"), "el texto no es un id")
     }
 }
