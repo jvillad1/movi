@@ -44,6 +44,8 @@ internal class AndamioDelAsistente(nombreDeLaBase: String) {
         PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs,
         Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos,
         LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente,
+        // Las que leen las tres preguntas que Movi contesta sin el modelo (`LasPreguntasSugeridas.kt`).
+        AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio,
     )
 
     init {

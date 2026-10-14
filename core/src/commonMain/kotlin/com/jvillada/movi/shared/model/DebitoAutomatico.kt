@@ -162,6 +162,17 @@ fun loQueSeCobra(debito: DebitoAutomaticoPorConfirmar): String = when (debito.or
     OrigenDelDebito.RECURRENTE -> debito.nombre.trim()
 }
 
+/**
+ * «¿Se cobró la cuota de Libre inversión 9695?», o «2 débitos automáticos por confirmar». `null` sin
+ * ninguno. La fila de «Para revisar» en Hoy y la respuesta de «¿Qué me recomiendas revisar primero?»
+ * en Movi AI dicen lo mismo con estas mismas palabras.
+ */
+fun textoDeDebitosEnHoy(debitos: List<DebitoAutomaticoPorConfirmar>): String? = when (debitos.size) {
+    0 -> null
+    1 -> "¿Se cobró ${loQueSeCobra(debitos.single())}?"
+    else -> "${debitos.size} débitos automáticos por confirmar"
+}
+
 /** El monto con su símbolo: pesos con «$», cualquier otra moneda con su código adelante. */
 fun montoDelDebito(monto: Long, moneda: String): String =
     if (moneda == "COP") "$${conPuntosDeMiles(monto)}" else "$moneda ${conPuntosDeMiles(monto)}"

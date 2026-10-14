@@ -141,16 +141,37 @@ fun disponibleAlCerrar(
     desde: String,
     hasta: String,
     plata: PlataDelDisponible?,
+): DisponibleDelPeriodo? = disponibleAlDia(ingresosRecibidos, pagos, gastoVariablePorDia, desde, hasta, hoy = hasta, plata = plata)
+
+/**
+ * **La tarjeta Disponible de [hoy]**, con fechas ISO (el server no ve `kotlinx-datetime`): la MISMA
+ * [disponibleDelPeriodo] que pinta Hoy. La usan el resumen de cierre (con [hoy] = el último día) y
+ * Movi AI al contestar «¿Cómo voy este período?» sin el modelo (con [hoy] = hoy). `null` si no hay
+ * nada honesto que decir o si las fechas no se entienden.
+ *
+ * @param desde el primer día del período, ISO.
+ * @param hasta el último día INCLUIDO, ISO.
+ * @param hoy el día que se mira, ISO; tiene que caer dentro del período.
+ */
+fun disponibleAlDia(
+    ingresosRecibidos: Long,
+    pagos: List<PagoDelPeriodo>,
+    gastoVariablePorDia: Map<String, Long>,
+    desde: String,
+    hasta: String,
+    hoy: String,
+    plata: PlataDelDisponible?,
 ): DisponibleDelPeriodo? {
     val inicio = runCatching { kotlinx.datetime.LocalDate.parse(desde) }.getOrNull() ?: return null
     val ultimo = runCatching { kotlinx.datetime.LocalDate.parse(hasta) }.getOrNull() ?: return null
+    val dia = runCatching { kotlinx.datetime.LocalDate.parse(hoy) }.getOrNull() ?: return null
     return disponibleDelPeriodo(
         ingresosRecibidos = ingresosRecibidos,
         checklist = pagos,
         gastoVariablePorDia = gastoVariablePorDia,
         inicio = inicio,
         finExclusivo = ultimo.plus(1, kotlinx.datetime.DateTimeUnit.DAY),
-        hoy = ultimo,
+        hoy = dia,
         plata = plata,
     )
 }

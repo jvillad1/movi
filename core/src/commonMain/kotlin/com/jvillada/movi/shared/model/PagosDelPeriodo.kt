@@ -385,3 +385,20 @@ fun epochDeFecha(iso: String): Long {
         .toInstant(AppTimeZone.zone)
         .toEpochMilliseconds()
 }
+
+/**
+ * **Cuánto falta por pagar de este período**: la cifra «Falta» de Plan y de Hoy. Vive en `:core`
+ * desde que Movi AI contesta «¿Cómo voy este período?» sin el modelo (`LasPreguntasSugeridas.kt`
+ * en el server): el chat y la pantalla tienen que decir la misma cifra, así que la cuentan con la
+ * misma función. `:shared` la sigue nombrando igual (`ui/dashboard/ResumenDelPeriodo.kt`).
+ *
+ * Fuera quedan dos cosas que no son plata que vaya a salir: el SALDO de una tarjeta (es una deuda,
+ * no una cuota) y todo INGRESO. Lo segundo hacía que el «Falta $X» del Inicio incluyera el sueldo
+ * del dueño mientras no lo marcara — la cifra afirmaba que le faltaba pagar su propio salario.
+ */
+fun faltaPorPagar(checklist: List<PagoDelPeriodo>): Long =
+    checklist.filter { !it.pagado && !it.montoEsSaldo && !it.esIngreso }.sumOf { it.monto }
+
+/** Lo que falta pagar, en el orden en que sale del checklist. Un ingreso no se paga: no va acá. */
+fun pagosPendientes(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
+    checklist.filter { !it.pagado && !it.esIngreso }

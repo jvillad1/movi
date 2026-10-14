@@ -640,7 +640,7 @@ private val MESES = listOf(
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 )
 
-private fun rangoLegible(inicio: Long, finExclusivo: Long): String {
+internal fun rangoLegible(inicio: Long, finExclusivo: Long): String {
     val zona: ZoneId = AppClock.zone
     val d1 = Instant.ofEpochMilli(inicio).atZone(zona).toLocalDate()
     val d2 = Instant.ofEpochMilli(finExclusivo - 1).atZone(zona).toLocalDate()

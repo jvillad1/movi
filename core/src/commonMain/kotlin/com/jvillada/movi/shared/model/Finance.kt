@@ -1037,6 +1037,12 @@ data class ChatMessage(
      * en mensajes del asistente; el cliente no lo vuelve a mandar (ver `mensajesParaEnviar`).
      */
     val propuestas: List<AccionPropuesta> = emptyList(),
+    /**
+     * El [PreguntaSugerida.id] del chip que se tocó, o `null` si el dueño la escribió. Solo en un
+     * mensaje del dueño; el server lo mira en el ÚLTIMO y, si es una de las tres, contesta sin el
+     * modelo. Un APK viejo no lo manda; un server viejo lo ignora.
+     */
+    val preguntaSugerida: String? = null,
 )
 
 @Serializable

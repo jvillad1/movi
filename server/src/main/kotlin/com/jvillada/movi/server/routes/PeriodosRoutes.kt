@@ -195,7 +195,7 @@ internal fun Transaction.detalleDePeriodo(
  * MISMOS gastos que suman «Salió» ([movimientos], la regla de «Gastos») — se leen completos para
  * tener el comercio, pero solo pasan los que esa regla ya dejó pasar.
  */
-private fun Transaction.pequenosDelPeriodo(
+internal fun Transaction.pequenosDelPeriodo(
     uid: String,
     desde: Long,
     hasta: Long,

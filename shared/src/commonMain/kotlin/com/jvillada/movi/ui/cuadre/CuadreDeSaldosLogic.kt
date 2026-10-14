@@ -1,9 +1,6 @@
 package com.jvillada.movi.ui.cuadre
 
-import com.jvillada.movi.shared.model.esBien
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountGroup
-import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.saldoEnSuMoneda
 import com.jvillada.movi.ui.components.signedMoney
@@ -13,6 +10,10 @@ import kotlinx.datetime.LocalDate
 
 /**
  * # Cuadrar saldos: las reglas, sin Compose
+ *
+ * Las de cuándo una cuenta lleva demasiado sin cuadrarse viven en `:core` (`CuadreDeSaldos.kt`)
+ * desde que Movi AI contesta «¿Qué me recomiendas revisar primero?» sin el modelo; acá quedan con los
+ * mismos nombres, y con el porqué de cada una.
  *
  * **El agujero que esto tapa.** Movi deriva cada saldo de los movimientos, así que todo lo que
  * mueve plata **sin emitir un movimiento** se desvía para siempre, y la diferencia se compone.
@@ -24,9 +25,6 @@ import kotlinx.datetime.LocalDate
  * vez, escondido, y nada avisaba. Esto es lo que faltaba: la cuenta de la diferencia, quién puede
  * cuadrarse, y desde cuándo nadie mira una cuenta.
  */
-
-/** Un día en milisegundos. */
-private const val UN_DIA_MS = 24L * 60L * 60L * 1000L
 
 /**
  * **Cuántos días puede pasar una cuenta sin cuadrarse antes de que Movi lo mencione.**
@@ -40,7 +38,7 @@ private const val UN_DIA_MS = 24L * 60L * 60L * 1000L
  * nunca, y aparece recién cuando se saltó un corte completo. Que es exactamente cuando vale la
  * pena mirar, porque a esa altura la diferencia ya lleva dos meses de rendimientos encima.
  */
-const val DIAS_PARA_VOLVER_A_CUADRAR = 45
+const val DIAS_PARA_VOLVER_A_CUADRAR = com.jvillada.movi.shared.model.DIAS_PARA_VOLVER_A_CUADRAR
 
 /**
  * **¿Esta cuenta se puede cuadrar contra el banco?** Solo Dinero e Inversión.
@@ -53,7 +51,7 @@ const val DIAS_PARA_VOLVER_A_CUADRAR = 45
  * la captura de mensajes. Un préstamo se cuadra en Créditos, donde al lado se ven la cuota, la
  * tasa y los intereses que explican la diferencia.
  */
-fun sePuedeCuadrar(cuenta: Account): Boolean = cuenta.type.group != AccountGroup.DEUDA && !cuenta.esBien
+fun sePuedeCuadrar(cuenta: Account): Boolean = com.jvillada.movi.shared.model.sePuedeCuadrar(cuenta)
 // ↑ Un bien tampoco: no tiene saldo que comparar contra un banco, tiene un avalúo, y se actualiza
 // en su propia hoja. El server lo rechaza igual (422), así que ofrecerlo acá sería un control muerto.
 
@@ -113,21 +111,17 @@ fun textoDelCuadre(saldoEnMovi: Long, saldoDelBanco: Long?, moneda: String): Str
  * creada aparecería como atrasada el mismo día en que nació. Una cuenta sin ningún movimiento no
  * tiene contra qué medirse y devuelve `null` — no hay nada que cuadrar ahí.
  */
-fun diasSinCuadrar(cuenta: Account, ahora: Long): Long? {
-    val desde = cuenta.lastAdjustmentAt ?: cuenta.firstEventAt ?: return null
-    return ((ahora - desde) / UN_DIA_MS).coerceAtLeast(0L)
-}
+fun diasSinCuadrar(cuenta: Account, ahora: Long): Long? = com.jvillada.movi.shared.model.diasSinCuadrar(cuenta, ahora)
 
 /** Ver [DIAS_PARA_VOLVER_A_CUADRAR]. Una cuenta que no se puede cuadrar nunca está atrasada. */
-fun estaSinCuadrar(cuenta: Account, ahora: Long): Boolean =
-    sePuedeCuadrar(cuenta) && (diasSinCuadrar(cuenta, ahora) ?: 0L) >= DIAS_PARA_VOLVER_A_CUADRAR
+fun estaSinCuadrar(cuenta: Account, ahora: Long): Boolean = com.jvillada.movi.shared.model.estaSinCuadrar(cuenta, ahora)
 
 /**
  * Las cuentas que el aviso del Inicio menciona. Vacío = no se dice nada, que es lo que tiene que
  * pasar el día después de cuadrarlas: **nunca se le reclama una cuenta que acaba de cuadrar.**
  */
 fun cuentasSinCuadrar(cuentas: List<Account>, ahora: Long): List<Account> =
-    cuentas.filter { estaSinCuadrar(it, ahora) }
+    com.jvillada.movi.shared.model.cuentasSinCuadrar(cuentas, ahora)
 
 /**
  * **El aviso, en una línea**, o `null` cuando no hay nada que decir.
@@ -140,11 +134,7 @@ fun cuentasSinCuadrar(cuentas: List<Account>, ahora: Long): List<Account> =
  * Lo usan el Inicio (sección «Para revisar») y la pantalla de Cuentas. La misma frase en los dos
  * lados: dos avisos sobre el mismo hecho, escritos distinto, se leen como dos problemas.
  */
-fun textoDelAvisoDeCuadre(atrasadas: List<Account>): String? = when {
-    atrasadas.isEmpty() -> null
-    atrasadas.size == 1 -> "Hace más de un mes que no cuadras ${atrasadas.first().name}"
-    else -> "${atrasadas.size} cuentas llevan más de un mes sin cuadrar"
-}
+fun textoDelAvisoDeCuadre(atrasadas: List<Account>): String? = com.jvillada.movi.shared.model.textoDelAvisoDeCuadre(atrasadas)
 
 /**
  * **Desde cuándo nadie mira esta cuenta**, para el renglón de cada fila: «Cuadrada hoy»,
@@ -184,8 +174,5 @@ fun textoDelMomentoDelAviso(momento: Long, hoy: LocalDate): String =
  * La fila de «Para revisar» del Inicio cuando hay propuestas, o `null` sin ninguna. Con una sola
  * se nombra la cuenta, como el aviso de cuadre de siempre ([textoDelAvisoDeCuadre]).
  */
-fun textoDeLasPropuestasPorAviso(propuestas: List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso>): String? = when {
-    propuestas.isEmpty() -> null
-    propuestas.size == 1 -> "El saldo de ${propuestas.first().cuentaNombre} no coincide con el del banco"
-    else -> "${propuestas.size} cuentas no coinciden con el saldo del banco"
-}
+fun textoDeLasPropuestasPorAviso(propuestas: List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso>): String? =
+    com.jvillada.movi.shared.model.textoDeLasPropuestasPorAviso(propuestas)
