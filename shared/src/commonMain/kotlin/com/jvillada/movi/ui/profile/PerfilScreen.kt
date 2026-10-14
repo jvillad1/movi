@@ -803,7 +803,7 @@ internal fun AvisosEnElIphone() {
             Text("Avisos en tu iPhone", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Text(
                 "Safari solo deja avisar a Movi si está en tu pantalla de inicio. Toca Compartir, " +
-                    "luego «Agregar a inicio», y abre Movi desde ese ícono: ahí aparece «Activar».",
+                    "luego «Agregar a Inicio», y abre Movi desde ese ícono: ahí aparece «Activar».",
                 style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
             )
         }

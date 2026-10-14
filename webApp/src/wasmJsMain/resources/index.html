@@ -128,15 +128,16 @@
         /* Aviso de que la app se cayó. Una excepción que nadie atrapa en Compose/wasm no cierra
            nada: deja el canvas congelado en su último cuadro y deja de contestar a los clics, sin
            un solo mensaje. Esto va encima del canvas y dice lo único que sirve: recargar. */
-        #crash-overlay {
+        #crash-overlay, #viejo-overlay {
             position: fixed; inset: 0; z-index: 20;
             background: var(--fondo);
             display: flex; align-items: center; justify-content: center;
             padding: 20px;
         }
-        #crash-overlay.hidden { display: none; }
-        #crash-overlay .lg-box { text-align: center; }
-        #crash-overlay .lg-sub { margin: 6px 0 22px; }
+        #crash-overlay.hidden, #viejo-overlay.hidden { display: none; }
+        #crash-overlay .lg-box, #viejo-overlay .lg-box { text-align: center; }
+        #crash-overlay .lg-sub, #viejo-overlay .lg-sub { margin: 6px 0 22px; }
+        /* El navegador sin WasmGC (ver el cargador al final): mismo aspecto que el de arriba. */
     </style>
 </head>
 <body>
@@ -238,6 +239,16 @@
                     </form>
                     <button class="lg-alt" id="register-back" type="button">¿Ya tienes cuenta? Entra</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aviso de navegador sin WasmGC (oculto; ver el cargador al final) -->
+    <div id="viejo-overlay" class="hidden" role="alertdialog" aria-labelledby="viejo-title">
+        <div class="lg-card">
+            <div class="lg-box">
+                <div class="lg-title" id="viejo-title">Este navegador no puede abrir Movi.</div>
+                <div class="lg-sub">En un iPhone o iPad, actualiza a iOS 18.2 o más nuevo (Configuración → General → Actualización de software). En un computador, usa la última versión de Chrome, Safari, Edge o Firefox.</div>
             </div>
         </div>
     </div>
@@ -669,6 +680,30 @@
         })();
     </script>
     <script src="push.js"></script>
-    <script src="composeApp.js"></script>
+    <script>
+        // ── Un navegador sin WasmGC no puede correr Movi: decirlo ─────────────────────────────
+        // Kotlin/Wasm necesita el recolector de basura de WebAssembly (WasmGC). Safari lo trae
+        // desde la 18.2: en un iPhone con iOS 18.0 o 18.1 (probado en el simulador, 13-oct-2026)
+        // el bundle no arranca y la pantalla se queda NEGRA, sin un error que nadie vea. El
+        // módulo de abajo es el mínimo que declara un tipo `struct` (lo que usa
+        // wasm-feature-detect para «gc»): si el navegador no lo valida, no se carga el bundle
+        // y se dice qué hacer. Si la detección misma falla, se intenta cargar igual.
+        (function () {
+            var conGC = true;
+            try {
+                conGC = WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 95, 1, 120, 0]));
+            } catch (e) { conGC = typeof WebAssembly !== 'undefined'; }
+            if (!conGC) {
+                var l = document.getElementById('login-overlay');
+                if (l) l.classList.add('hidden');
+                var v = document.getElementById('viejo-overlay');
+                if (v) v.classList.remove('hidden');
+                return;
+            }
+            var s = document.createElement('script');
+            s.src = 'composeApp.js';
+            document.body.appendChild(s);
+        })();
+    </script>
 </body>
 </html>
