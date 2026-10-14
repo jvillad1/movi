@@ -35,6 +35,8 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.EstadoDePropuesta
+import com.jvillada.movi.shared.model.PreguntaSugerida
+import com.jvillada.movi.shared.model.esCodigoDeIaNoDisponible
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -58,6 +60,11 @@ fun AIChatScreen(
      * `null` abre el chat vacío, con el arranque de [ArranqueDelChat].
      */
     preguntaInicial: String? = null,
+    /**
+     * El [PreguntaSugerida.id] de [preguntaInicial] si es una de las tres que Movi contesta sin el
+     * modelo (el chip de Hoy lo trae). `null` = pregunta libre.
+     */
+    sugeridaInicial: String? = null,
 ) {
     val coroutine = rememberCoroutineScope()
     // **Arranca vacía.** El saludo ya no es un mensaje del asistente sembrado en la lista: es el
@@ -73,7 +80,10 @@ fun AIChatScreen(
     // Las sugerencias salen de lo que el Inicio dejó en su caché: el chat no pide nada nuevo para
     // armarlas (ver [preguntasSugeridas], que tampoco llama al modelo). Sin caché —se abrió el chat
     // antes que el Inicio— salen las de respaldo, que valen para cualquiera.
-    val sugeridas = remember { preguntasSugeridas(DashboardDataCache.data ?: DashboardData()) }
+    val sugeridas = remember { preguntasParaTocar(DashboardDataCache.data ?: DashboardData()) }
+    // La última respuesta dijo que la IA no está disponible: debajo van las tres que Movi contesta
+    // sin ella, para que «sí funcionan» se pueda tocar (ver [MOVI_AI_NO_DISPONIBLE]).
+    var ofrecerLasQueFuncionan by remember { mutableStateOf(false) }
     // **La conversación sobrevive** (Ola 3): al abrir se pide la conversación en curso al server.
     // Mientras no llega no se pinta el arranque, para que no parpadee un chat vacío antes de que
     // aparezca lo que ya se habló. Si falla (sin señal) el chat arranca vacío, como antes.
@@ -106,9 +116,11 @@ fun AIChatScreen(
      * las tres pasan por el mismo recorte de [mensajesParaEnviar] y la misma guarda de «ya hay
      * una pregunta en camino».
      */
-    fun enviar(texto: String) {
+    fun enviar(texto: String, sugerida: PreguntaSugerida? = null) {
         val text = texto.trim()
-        val image = pendingImage
+        // Una de las tres sugeridas viaja sin la foto pendiente: la contesta Movi con sus números, y
+        // la foto se queda esperando la pregunta para la que se adjuntó.
+        val image = if (sugerida != null) null else pendingImage
         if ((text.isEmpty() && image == null) || loading) return
         messages.add(
             ChatMessage(
@@ -116,10 +128,12 @@ fun AIChatScreen(
                 content = text,
                 imageBase64 = image?.let { Base64.encode(it.bytes) },
                 imageMime = image?.mimeType,
+                preguntaSugerida = sugerida?.id,
             ),
         )
         input = ""
-        pendingImage = null
+        if (image != null) pendingImage = null
+        ofrecerLasQueFuncionan = false
         loading = true
         coroutine.launch {
             // Lo que viaja NO es la lista de la pantalla: sin las imágenes de turnos anteriores
@@ -128,6 +142,7 @@ fun AIChatScreen(
             val reply = runCatching { Repositories.wallets.chatAi(AiChatRequest(history)) }
             val replyText = textoDeLaRespuesta(reply.getOrNull(), reply.exceptionOrNull())
             messages.add(ChatMessage(ChatRole.ASSISTANT, replyText, propuestas = reply.getOrNull()?.propuestas.orEmpty()))
+            ofrecerLasQueFuncionan = esCodigoDeIaNoDisponible(reply.getOrNull()?.codigo)
             loading = false
         }
     }
@@ -147,7 +162,7 @@ fun AIChatScreen(
         historialCargado = true
         if (!yaSeMandoLaInicial && !preguntaInicial.isNullOrBlank()) {
             yaSeMandoLaInicial = true
-            enviar(preguntaInicial)
+            enviar(preguntaInicial, PreguntaSugerida.deId(sugeridaInicial))
         }
     }
 
@@ -217,7 +232,7 @@ fun AIChatScreen(
                     ArranqueDelChat(
                         nombre = nombre,
                         preguntas = sugeridas,
-                        onPregunta = { enviar(it) },
+                        onPregunta = { enviar(it.texto, it.sugerida) },
                     )
                 }
             }
@@ -237,6 +252,11 @@ fun AIChatScreen(
             }
             if (loading) {
                 item { AIMsgAI("…") }
+            }
+            if (ofrecerLasQueFuncionan && !loading) {
+                item {
+                    LasQueFuncionanSinLaIa { enviar(it.texto, it.sugerida) }
+                }
             }
         }
 
@@ -424,8 +444,8 @@ private fun AIMsgAI(text: String) {
 @Composable
 internal fun ArranqueDelChat(
     nombre: String?,
-    preguntas: List<String>,
-    onPregunta: (String) -> Unit,
+    preguntas: List<PreguntaParaTocar>,
+    onPregunta: (PreguntaParaTocar) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(bottom = Movi.espacios.amplio),
@@ -447,37 +467,56 @@ internal fun ArranqueDelChat(
             style = Movi.textos.rotulo,
             color = Movi.colores.textoMedio,
         )
-        preguntas.forEach { pregunta ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Movi.formas.amplia))
-                    .background(Movi.colores.tarjeta)
-                    .clickable { onPregunta(pregunta) }
-                    .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
-            ) {
-                Icon(
-                    Icons.Rounded.AutoAwesome,
-                    contentDescription = null,
-                    tint = Movi.colores.marca,
-                    modifier = Modifier.size(Movi.espacios.amplio),
-                )
-                Text(
-                    text = pregunta,
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.texto,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
+        preguntas.forEach { pregunta -> ChipDePregunta(pregunta.texto) { onPregunta(pregunta) } }
         Spacer(Modifier.height(Movi.espacios.corto))
         Text(
             text = NO_REEMPLAZA_A_UN_ASESOR,
             style = Movi.textos.apoyo,
             color = Movi.colores.textoApagado,
         )
+    }
+}
+
+/** Un chip de pregunta: tocarlo la manda. Lo usan el arranque y [LasQueFuncionanSinLaIa]. */
+@Composable
+private fun ChipDePregunta(texto: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Movi.formas.amplia))
+            .background(Movi.colores.tarjeta)
+            .clickable(onClick = onClick)
+            .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+    ) {
+        Icon(
+            Icons.Rounded.AutoAwesome,
+            contentDescription = null,
+            tint = Movi.colores.marca,
+            modifier = Modifier.size(Movi.espacios.amplio),
+        )
+        Text(
+            text = texto,
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.texto,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/**
+ * **Las tres que Movi contesta sin la IA**, debajo de una respuesta que dijo que la IA no está
+ * disponible: la frase dice que sí funcionan, y acá se tocan. Siempre las tres de respaldo —las que
+ * llevan su id—, no las que arman las reglas: esas van al modelo.
+ */
+@Composable
+internal fun LasQueFuncionanSinLaIa(onPregunta: (PreguntaParaTocar) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(start = 36.dp, bottom = Movi.espacios.amplio),
+        verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+    ) {
+        PREGUNTAS_PARA_TOCAR_DE_RESPALDO.forEach { pregunta -> ChipDePregunta(pregunta.texto) { onPregunta(pregunta) } }
     }
 }
 

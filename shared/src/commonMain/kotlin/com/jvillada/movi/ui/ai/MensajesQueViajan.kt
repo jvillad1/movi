@@ -69,8 +69,17 @@ internal fun mensajesParaEnviar(historial: List<ChatMessage>): List<ChatMessage>
     }
 }
 
-/** Lo que dice la burbuja cuando el server contestó que la IA no está disponible (503 con código). */
-const val MOVI_AI_NO_DISPONIBLE: String = "Movi AI no está disponible ahora. Inténtalo de nuevo más tarde."
+/**
+ * Lo que dice la burbuja cuando el server contestó que la IA no está disponible (503 con código).
+ *
+ * La segunda frase es verdad desde que las tres preguntas sugeridas se contestan sin el modelo (ver
+ * `PreguntaSugerida` en `:core`): el chat las pinta debajo para tocarlas ([LasQueFuncionanSinLaIa]).
+ * El server no la dice en su propio texto: ese solo lo ve un APK que no conoce el código, y ese APK
+ * tampoco manda el id de la pregunta, así que para él no sería cierto.
+ */
+const val MOVI_AI_NO_DISPONIBLE: String =
+    "Movi AI no está disponible ahora para preguntas libres. Inténtalo de nuevo más tarde. " +
+        "Mientras tanto, estas tres preguntas sí funcionan:"
 
 /**
  * **Qué se le muestra al dueño de una respuesta del chat.** Si el server dijo que la API de

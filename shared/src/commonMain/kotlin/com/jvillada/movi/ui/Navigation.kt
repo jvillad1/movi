@@ -94,7 +94,14 @@ sealed class Screen {
      * valor viaja en la pila, así que dos entradas con preguntas distintas son pantallas distintas
      * para [NavStack.shouldPush] y para el `SaveableStateProvider` de App.kt.
      */
-    data class AIChat(val preguntaInicial: String? = null) : Screen()
+    data class AIChat(
+        val preguntaInicial: String? = null,
+        /**
+         * El `PreguntaSugerida.id` de [preguntaInicial] cuando el chip que se tocó es una de las tres
+         * que Movi contesta sin el modelo. `null` = pregunta libre (o una de las que arman las reglas).
+         */
+        val sugerida: String? = null,
+    ) : Screen()
     data object Credits : Screen()
     /**
      * **«Cómo salir de tus deudas»** (Ola 4): el orden para un abono extra y el simulador. Se abre

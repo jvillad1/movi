@@ -36,6 +36,7 @@ import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.RelevoDeScroll
 import androidx.compose.runtime.remember
 import com.jvillada.movi.ui.ai.preguntasSugeridas
+import com.jvillada.movi.ui.ai.preguntasParaTocar
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import org.junit.Rule
 import org.junit.Test
@@ -251,6 +252,20 @@ class InicioDeUnVistazoEnPantallaTest {
 
         composeRule.onNodeWithText("Escribe tu pregunta…", useUnmergedTree = true).performClick()
         assertEquals(Screen.AIChat(), navegoA)
+    }
+
+    /**
+     * Una de las tres de respaldo lleva su id al chat: con él el server la contesta con los números
+     * de Movi, sin la IA. Lo que pasa al llegar al chat lo prueba `LasPreguntasSugeridasEnElChatTest`.
+     */
+    @Test
+    @Config(qualifiers = "w390dp-h2400dp-xhdpi")
+    fun `una de las tres de respaldo abre el chat con su id`() {
+        montar()
+        val deRespaldo = preguntasParaTocar(datos).first { it.sugerida != null }
+        composeRule.onNodeWithText(deRespaldo.texto, useUnmergedTree = true).performClick()
+        assertEquals(Screen.AIChat(preguntaInicial = deRespaldo.texto, sugerida = deRespaldo.sugerida?.id), navegoA)
+        assertTrue(deRespaldo.sugerida?.id != null)
     }
 
     @Test

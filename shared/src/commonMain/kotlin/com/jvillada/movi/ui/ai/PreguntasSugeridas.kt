@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.ai
 
 import com.jvillada.movi.shared.model.ComoVaLaDeuda
+import com.jvillada.movi.shared.model.PreguntaSugerida
 import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.planDelCredito
@@ -60,6 +61,30 @@ const val CUANTAS_PREGUNTAS_SUGERIDAS: Int = 3
 fun preguntasSugeridas(data: DashboardData): List<String> = preguntasSugeridas(senalesDe(data))
 
 /**
+ * **Una pregunta que se puede tocar**: su texto y, si es una de las tres de respaldo, cuál es
+ * ([PreguntaSugerida]). Con [sugerida] el chip manda su id y el server la contesta con los números
+ * de Movi, sin llamar al modelo (ver `LasPreguntasSugeridas.kt` en el server); sin ella —las que
+ * arman las reglas con cifras del dueño— va al modelo como siempre.
+ *
+ * El id sale de la definición de la pregunta, no de comparar el texto: lo que el dueño escribe a
+ * mano nunca lo lleva.
+ */
+data class PreguntaParaTocar(val texto: String, val sugerida: PreguntaSugerida? = null)
+
+/** Las mismas [preguntasSugeridas], con el id de las de respaldo. Es lo que pintan los chips. */
+fun preguntasParaTocar(data: DashboardData): List<PreguntaParaTocar> = preguntasParaTocar(senalesDe(data))
+
+/** Ver [preguntasParaTocar]. */
+fun preguntasParaTocar(senales: SenalesParaPreguntar): List<PreguntaParaTocar> =
+    (candidatasDe(senales).sortedByDescending { it.peso }.map { PreguntaParaTocar(it.texto) } + PREGUNTAS_PARA_TOCAR_DE_RESPALDO)
+        .distinctBy { it.texto }
+        .take(CUANTAS_PREGUNTAS_SUGERIDAS)
+
+/** Las tres de respaldo, cada una con su id: las que Movi contesta sin el modelo. */
+val PREGUNTAS_PARA_TOCAR_DE_RESPALDO: List<PreguntaParaTocar> =
+    PreguntaSugerida.entries.map { PreguntaParaTocar(it.texto, it) }
+
+/**
  * Lo que las reglas miran, ya destilado del [DashboardData]. Existe aparte para que cada regla se
  * pueda probar con dos números y no con un Inicio entero armado a mano.
  *
@@ -117,8 +142,11 @@ private const val PARTE_DE_LOS_INGRESOS_EN_INTERESES: Long = 10L
  * La misma regla que [preguntasSugeridas], sobre las señales ya destiladas. Es la que prueban las
  * pruebas de cada regla; la de [DashboardData] solo destila y llama a esta.
  */
-fun preguntasSugeridas(senales: SenalesParaPreguntar): List<String> {
-    val candidatas = buildList {
+fun preguntasSugeridas(senales: SenalesParaPreguntar): List<String> = preguntasParaTocar(senales).map { it.texto }
+
+/** Las preguntas que arman las reglas con los datos del dueño, sin ordenar ni completar. */
+private fun candidatasDe(senales: SenalesParaPreguntar): List<Candidata> =
+    buildList {
         // Una deuda que no baja aunque se pague la cuota es lo más urgente que Movi puede ver: es
         // plata que se va todos los meses sin comprar nada. La pantalla de Créditos ya lo dice; la
         // pregunta lleva al por qué y al qué hacer.
@@ -156,20 +184,15 @@ fun preguntasSugeridas(senales: SenalesParaPreguntar): List<String> {
             add(Candidata("¿Cómo está mi patrimonio si cuento mis bienes y mis deudas?", 30))
         }
     }
-    return (candidatas.sortedByDescending { it.peso }.map { it.texto } + PREGUNTAS_DE_RESPALDO)
-        .distinct()
-        .take(CUANTAS_PREGUNTAS_SUGERIDAS)
-}
 
 /**
  * Las que valen para cualquiera, en orden. Son tres —tantas como [CUANTAS_PREGUNTAS_SUGERIDAS]—
  * para que un dueño recién llegado, sin un solo dato, igual vea tres cosas que puede preguntar.
+ *
+ * Su texto vive en `:core` ([PreguntaSugerida]) desde que el server las contesta sin el modelo: el
+ * chip y la respuesta hablan de la misma pregunta.
  */
-val PREGUNTAS_DE_RESPALDO: List<String> = listOf(
-    "¿Cómo voy este período?",
-    "¿En qué se me está yendo más la plata?",
-    "¿Qué me recomiendas revisar primero?",
-)
+val PREGUNTAS_DE_RESPALDO: List<String> = PreguntaSugerida.entries.map { it.texto }
 
 /** Destila lo que las reglas miran. Ver [SenalesParaPreguntar]. */
 internal fun senalesDe(data: DashboardData): SenalesParaPreguntar {
