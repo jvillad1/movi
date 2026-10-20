@@ -74,9 +74,11 @@ data class PlataDelDisponible(
      * período. Ver `pagosDeDeudaFueraDelChecklist` en `:core`. Cero con un server que no lo manda.
      */
     val otrosPagosDeDeuda: Long = 0L,
+    /** Plata de Tu plata que ya tiene dueño (ver [Apartado]): no está para gastar. Cero si no hay. */
+    val apartado: Long = 0L,
 ) {
     /** Lo que hubo para el período antes de los fijos y de lo que falta por recibir. */
-    val neto: Long get() = saldoAlInicio + entradas - guardado - otrosPagosDeDeuda
+    val neto: Long get() = saldoAlInicio + entradas - guardado - otrosPagosDeDeuda - apartado
 }
 
 /** [PlataDelDisponible] de la respuesta del server, o `null` si el server es anterior a los campos. */
@@ -88,6 +90,7 @@ fun plataDelDisponibleDe(summary: DashboardSummary): PlataDelDisponible? {
         entradas = entradas,
         guardado = summary.guardadoDelPeriodo ?: 0L,
         otrosPagosDeDeuda = summary.pagosDeDeudaFueraDelChecklist ?: 0L,
+        apartado = summary.apartado ?: 0L,
     )
 }
 
