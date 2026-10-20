@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Documents
@@ -60,11 +61,11 @@ class ContextoDelPeriodoTest {
             // arranca borrando: si no, el segundo test choca contra el usuario que insertó el
             // primero. Solo las tablas de esta clase, en su propia base.
             SchemaUtils.drop(
-                Documents, VoidEvents, Events, Budgets, Goals, Subscriptions, SmsMessages,
+                Apartados, Documents, VoidEvents, Events, Budgets, Goals, Subscriptions, SmsMessages,
                 RecurringOccurrences, OccurrenceRejections, RecurringRules, Credits, Accounts, Users,
             )
             SchemaUtils.create(
-                Users, Accounts, Events, VoidEvents, Budgets, Documents, RecurringRules,
+                Apartados, Users, Accounts, Events, VoidEvents, Budgets, Documents, RecurringRules,
                 RecurringOccurrences, OccurrenceRejections, Credits, Subscriptions, Goals, SmsMessages,
             )
             Users.insert {

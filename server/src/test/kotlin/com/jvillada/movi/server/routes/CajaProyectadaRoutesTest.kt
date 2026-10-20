@@ -4,6 +4,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.ai.textoDeLaCaja
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
@@ -76,11 +77,11 @@ class CajaProyectadaRoutesTest {
         )
         transaction {
             SchemaUtils.drop(
-                KnownDestinations, OccurrenceRejections, RecurringOccurrences, RecurringRules, Cards, Credits,
+                Apartados, KnownDestinations, OccurrenceRejections, RecurringOccurrences, RecurringRules, Cards, Credits,
                 VoidEvents, Events, Accounts, Users,
             )
             SchemaUtils.create(
-                Users, Accounts, Events, VoidEvents, Credits, Cards, RecurringRules, RecurringOccurrences,
+                Apartados, Users, Accounts, Events, VoidEvents, Credits, Cards, RecurringRules, RecurringOccurrences,
                 OccurrenceRejections, KnownDestinations,
             )
             listOf(duenoId, otroId).forEach { uid ->

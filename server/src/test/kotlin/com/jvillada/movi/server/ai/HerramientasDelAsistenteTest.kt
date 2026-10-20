@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.KnownDestinations
@@ -49,11 +50,11 @@ class HerramientasDelAsistenteTest {
         transaction {
             // Las de la caja proyectada (Ola 4) también: `proyectar_caja` lee la lista del período.
             SchemaUtils.drop(
-                SmsMessages, KnownDestinations, OccurrenceRejections, RecurringOccurrences, RecurringRules, Cards, Credits,
+                Apartados, SmsMessages, KnownDestinations, OccurrenceRejections, RecurringOccurrences, RecurringRules, Cards, Credits,
                 Documents, VoidEvents, Events, Accounts, Users,
             )
             SchemaUtils.create(
-                Users, Accounts, Events, VoidEvents, Documents, Credits, Cards, RecurringRules, RecurringOccurrences,
+                Apartados, Users, Accounts, Events, VoidEvents, Documents, Credits, Cards, RecurringRules, RecurringOccurrences,
                 OccurrenceRejections, KnownDestinations, SmsMessages,
             )
             Users.insert {

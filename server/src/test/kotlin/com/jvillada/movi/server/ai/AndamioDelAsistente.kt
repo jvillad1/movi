@@ -39,7 +39,7 @@ internal class AndamioDelAsistente(nombreDeLaBase: String) {
 
     /** Todas las tablas que tocan el chat y las rutas que confirman. */
     private val tablas: Array<Table> = arrayOf(
-        Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
+        Apartados, Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
         RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions,
         PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs,
         Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos,

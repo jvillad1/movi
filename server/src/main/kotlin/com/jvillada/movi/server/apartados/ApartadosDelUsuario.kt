@@ -1,8 +1,11 @@
 package com.jvillada.movi.server.apartados
 
+import com.jvillada.movi.server.balance.cuentasConSaldo
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.shared.model.Apartado
+import com.jvillada.movi.shared.model.Patrimonio
+import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.restanteDelApartado
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
@@ -50,3 +53,11 @@ fun Transaction.apartadosDelUsuario(uid: String, voidedIds: Set<String>): List<A
             )
         }
 }
+
+/**
+ * **El patrimonio del usuario con sus apartados**: `patrimonioDe` (la regla única de :core) sobre
+ * las cuentas con su saldo derivado y los apartados con su restante. Quien necesite «Tu plata» o lo
+ * apartado en el server lo pide acá, para que todos hablen de la misma cifra.
+ */
+fun Transaction.patrimonioDelUsuario(uid: String, voidedIds: Set<String>, usdToCop: Double): Patrimonio =
+    patrimonioDe(cuentasConSaldo(uid, voidedIds, usdToCop), apartadosDelUsuario(uid, voidedIds))

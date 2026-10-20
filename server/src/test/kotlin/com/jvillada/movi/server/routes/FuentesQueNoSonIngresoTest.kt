@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.OccurrenceRejections
@@ -59,7 +60,7 @@ class FuentesQueNoSonIngresoTest {
         )
         transaction {
             val tablas = arrayOf(
-                Users, Accounts, Events, VoidEvents, RecurringRules, RecurringOccurrences,
+                Apartados, Users, Accounts, Events, VoidEvents, RecurringRules, RecurringOccurrences,
                 OccurrenceRejections, Budgets,
             )
             SchemaUtils.create(tables = tablas)

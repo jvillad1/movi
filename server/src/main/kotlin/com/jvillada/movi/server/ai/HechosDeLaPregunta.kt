@@ -2,6 +2,7 @@ package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.ComoVaLaDeuda
 import com.jvillada.movi.shared.model.Patrimonio
 import com.jvillada.movi.shared.model.claseDeBien
@@ -49,6 +50,7 @@ internal data class DatosParaLosHechos(
     val periodo: ContextoDelPeriodo,
     /** Categoría → límite mensual, como en la tabla `budgets`. */
     val presupuestos: List<Pair<String, Long>>,
+    val apartados: List<Apartado> = emptyList(),
 )
 
 /**
@@ -251,6 +253,7 @@ private fun hechosDeLaCuenta(cuenta: Account, datos: DatosParaLosHechos): String
     cuenta.balancesByCurrency.filter { (moneda, saldo) -> moneda != "COP" && saldo != 0L }.forEach { (moneda, saldo) ->
         appendLine("- Además tiene $moneda ${numero(saldo)} (incluidos arriba a la TRM de hoy)")
     }
+    lineaDelApartadoDeLaCuenta(cuenta, datos.apartados, ::pesos)?.let { appendLine("- Tiene $it") }
     cuenta.condicionadaA?.let { appendLine("- NO es plata disponible: solo se puede usar para $it") }
     val cuotasQuePaga = datos.periodo.creditos.filter { it.loPagaCuentaPropia == cuenta.name }
     if (cuotasQuePaga.isNotEmpty()) {
@@ -325,6 +328,10 @@ private fun hechosDelPeriodo(p: ContextoDelPeriodo): String = buildString {
 private fun hechosDelPatrimonio(pat: Patrimonio): String = buildString {
     appendLine("Patrimonio (la misma cuenta que el Inicio):")
     appendLine("- Tu plata (disponible): ${pesos(pat.tuPlata)}")
+    if (pat.apartado != 0L) {
+        val para = pat.apartadoPara?.let { "para $it" } ?: "con distintos propósitos"
+        appendLine("- Plata apartada ($para; sigue en sus cuentas pero ya tiene dueño, NO disponible): ${pesos(pat.apartado)}")
+    }
     if (pat.condicionado != 0L) appendLine("- Plata con destino (suya, NO disponible): ${pesos(pat.condicionado)}")
     if (pat.bienes != 0L) appendLine("- Bienes (no son plata): ${pesos(pat.bienes)}")
     appendLine("- Deudas: ${pesos(pat.deudas)}")

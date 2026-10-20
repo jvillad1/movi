@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.AnomaliasDescartadas
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Cards
@@ -88,7 +89,7 @@ class CierreDelPeriodoTest {
         )
         transaction {
             val tablas = arrayOf(
-                Users, Accounts, Events, VoidEvents, Credits, Cards, RecurringRules, RecurringOccurrences,
+                Apartados, Users, Accounts, Events, VoidEvents, Credits, Cards, RecurringRules, RecurringOccurrences,
                 OccurrenceRejections, KnownDestinations, Budgets, Subscriptions, AnomaliasDescartadas,
                 CierresEnviados, CierresDescartados,
             )

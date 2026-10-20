@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
@@ -110,7 +111,7 @@ class DashboardRoutesTest {
                 // Ola 10: el resumen ahora lee las preferencias de categoría (esconder / tipo fijado).
                 CategoryPrefs,
                 // «Disponible»: el gasto variable descarta los movimientos atados a un sello.
-                RecurringOccurrences, OccurrenceRejections,
+                RecurringOccurrences, OccurrenceRejections, Apartados,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
@@ -118,7 +119,7 @@ class DashboardRoutesTest {
                 // Ola 10: el resumen ahora lee las preferencias de categoría (esconder / tipo fijado).
                 CategoryPrefs,
                 // «Disponible»: el gasto variable descarta los movimientos atados a un sello.
-                RecurringOccurrences, OccurrenceRejections,
+                RecurringOccurrences, OccurrenceRejections, Apartados,
             )
             listOf(userId to "a@dashboard.test", otherUserId to "b@dashboard.test").forEach { (id, mail) ->
                 Users.insert {
@@ -831,7 +832,7 @@ class DashboardRoutesTest {
         // viejo no lo pide y no le cambia nada de lo que ya leía.
         val nuevas = setOf(
             "saldoTuPlataAlInicio", "entradasDelPeriodo", "guardadoDelPeriodo", "pagosDeDeudaFueraDelChecklist",
-            "patrimonio", "cuentaMasUsada",
+            "patrimonio", "cuentaMasUsada", "apartado",
         )
         assertEquals(emptySet(), body.keys - conocidas - nuevas)
         assertEquals(3_000_000L, body.long("monthIncome"))
@@ -902,6 +903,37 @@ class DashboardRoutesTest {
         assertEquals(3_000_000L + 10_000_000L + 1_222_041L, body.long("monthIncome"))
         // Y una sola vez en las entradas del Disponible (los 10M ya se afirmaron arriba, dentro de
         // 3M + 10M + 3M): la pata del crédito no suma otra vez, ni como plata de afuera.
+    }
+
+    /**
+     * Lo apartado sale de «Tu plata» pero no del neto: $8M de $8.217.464 en Nu dejan $217.464 para
+     * usar, el resumen dice cuánto hay apartado (lo que «Te quedan» resta) y el patrimonio no cambia.
+     */
+    @Test
+    fun `lo apartado sale de Tu plata y no del patrimonio neto`() = testApplication {
+        event("nu-apertura", savings, "INCOME", 8_217_464L, category = OPENING_CATEGORY, timestamp = System.currentTimeMillis() - 5L * 24 * 60 * 60 * 1000)
+        wireApp()
+        val sin = summary()["patrimonio"]!!.jsonObject
+        assertEquals(8_217_464L, sin.long("tuPlata"))
+        assertEquals(0L, sin.long("apartado"))
+
+        transaction {
+            Apartados.insert {
+                it[Apartados.id] = "apt-1"
+                it[Apartados.userId] = this@DashboardRoutesTest.userId
+                it[accountId] = savings
+                it[proposito] = "Colegio"
+                it[monto] = 8_000_000L
+                it[desde] = 0L
+                it[createdAt] = System.currentTimeMillis()
+            }
+        }
+        val body = summary()
+        val con = body["patrimonio"]!!.jsonObject
+        assertEquals(217_464L, con.long("tuPlata"))
+        assertEquals(8_000_000L, con.long("apartado"))
+        assertEquals(8_000_000L, body.long("apartado"))
+        assertEquals(sin.long("neto"), con.long("neto"))
     }
 
     /** Un desembolso guardado antes de la regla (categoría «Traspaso») sigue entrando como plata de afuera. */

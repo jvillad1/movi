@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Goals
@@ -48,9 +49,9 @@ class DocumentosEnElContextoDeMoviAiTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.drop(Documents, VoidEvents, Events, Budgets, Accounts, Users)
+            SchemaUtils.drop(Apartados, Documents, VoidEvents, Events, Budgets, Accounts, Users)
             SchemaUtils.create(
-                Users, Accounts, Events, VoidEvents, Budgets, Documents,
+                Apartados, Users, Accounts, Events, VoidEvents, Budgets, Documents,
                 // Desde que el contexto del asistente incluye el período (recurrentes, créditos,
                 // suscripciones, metas y lo que espera confirmación), `buildUserContext` las lee.
                 RecurringRules, RecurringOccurrences, OccurrenceRejections, Credits, Subscriptions, Goals, SmsMessages,

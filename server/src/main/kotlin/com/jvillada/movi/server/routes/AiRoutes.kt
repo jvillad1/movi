@@ -31,6 +31,8 @@ import com.jvillada.movi.shared.model.deudaDelBien
 import com.jvillada.movi.shared.model.esCuentaDeDeuda
 import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.patrimonioDe
+import com.jvillada.movi.shared.model.Apartado
+import com.jvillada.movi.server.apartados.apartadosDelUsuario
 import com.jvillada.movi.shared.model.valorEnPesosDe
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
@@ -41,6 +43,7 @@ import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.server.ai.ContextoDelPeriodo
 import com.jvillada.movi.server.ai.DatosParaLosHechos
+import com.jvillada.movi.server.ai.lineaDelApartadoDeLaCuenta
 import com.jvillada.movi.server.ai.ElModeloDeAnthropic
 import com.jvillada.movi.server.ai.cifrasTrampa
 import com.jvillada.movi.server.ai.hechosParaLaPregunta
@@ -616,8 +619,9 @@ internal data class DatosDelUsuario(
     val periodo: ContextoDelPeriodo,
     val presupuestos: List<Pair<String, Long>>,
     val cuantosDocumentos: Int,
+    val apartados: List<Apartado> = emptyList(),
 ) {
-    fun paraLosHechos() = DatosParaLosHechos(cuentas, patrimonio, periodo, presupuestos)
+    fun paraLosHechos() = DatosParaLosHechos(cuentas, patrimonio, periodo, presupuestos, apartados)
 }
 
 internal suspend fun cargarDatosDelUsuario(uid: String): DatosDelUsuario {
@@ -627,14 +631,14 @@ internal suspend fun cargarDatosDelUsuario(uid: String): DatosDelUsuario {
     // Cuentas— y el patrimonio partido con `patrimonioDe`, la regla única de :core. Antes el
     // asistente recibía los saldos sueltos y sumaba él: sin bienes y sin la regla, contestaba
     // «¿cuánto tengo?» con la media foto (−$2.074M) que el Inicio tenía hasta esta entrega.
-    val cuentas = dbQuery {
+    val (cuentas, apartados) = dbQuery {
         val anulados = VoidEvents.selectAll()
             .where { VoidEvents.userId eq uid }
             .map { it[VoidEvents.originalEventId] }
             .toSet()
-        cuentasConSaldo(uid, anulados, rate)
+        cuentasConSaldo(uid, anulados, rate) to apartadosDelUsuario(uid, anulados)
     }
-    val patrimonio = patrimonioDe(cuentas)
+    val patrimonio = patrimonioDe(cuentas, apartados)
 
     // Ventana del PERÍODO del usuario (ver PeriodSettings en :core), la misma que usa
     // finance-summary. Con corte 1 —el default— es el mes de calendario de siempre.
@@ -691,7 +695,7 @@ internal suspend fun cargarDatosDelUsuario(uid: String): DatosDelUsuario {
             .map { it[Budgets.category] to it[Budgets.monthlyLimit] }
     }
 
-    return DatosDelUsuario(cuentas, patrimonio, ingresos, egresos, delPeriodo, budgets, cuantosDocumentos)
+    return DatosDelUsuario(cuentas, patrimonio, ingresos, egresos, delPeriodo, budgets, cuantosDocumentos, apartados)
 }
 
 /** El texto del contexto general: lo que viaja cacheado en el sistema en cada pregunta. */
@@ -728,7 +732,9 @@ internal fun DatosDelUsuario.comoContexto(): String {
                 val condicion = cuenta.condicionadaA
                     ?.let { " — NO disponible: solo se puede usar para $it (cuenta en el patrimonio, no en la plata disponible)" }
                     .orEmpty()
-                appendLine("- ${cuenta.name} (${cuenta.type}): $kind \$$value$condicion")
+                val apartado = lineaDelApartadoDeLaCuenta(cuenta, apartados) { "\$$it" }
+                    ?.let { " — $it" }.orEmpty()
+                appendLine("- ${cuenta.name} (${cuenta.type}): $kind \$$value$condicion$apartado")
             }
         }
         appendLine()
@@ -804,6 +810,10 @@ internal fun lineaDelBien(cuenta: Account, bien: Bien, cuentas: List<Account>): 
 internal fun renderizarPatrimonio(p: Patrimonio): String = buildString {
     appendLine("== Patrimonio ==")
     appendLine("- Tu plata (disponible para usar): \$${p.tuPlata}")
+    if (p.apartado != 0L) {
+        val para = p.apartadoPara?.let { "para $it" } ?: "con distintos propósitos"
+        appendLine("- Plata apartada ($para; sigue en sus cuentas pero ya tiene dueño, NO disponible): \$${p.apartado}")
+    }
     if (p.condicionado != 0L) {
         val para = p.condicionadoA?.let { "solo para $it" } ?: "de uso condicionado"
         appendLine("- Plata con destino ($para; suya, pero NO disponible): \$${p.condicionado}")
@@ -811,4 +821,5 @@ internal fun renderizarPatrimonio(p: Patrimonio): String = buildString {
     if (p.bienes != 0L) appendLine("- Bienes (inmuebles, vehículos; no es plata): \$${p.bienes}")
     appendLine("- Deudas: \$${p.deudas}")
     appendLine("- Patrimonio neto (tu plata + plata con destino + bienes − deudas): \$${p.neto}")
+    if (p.apartado != 0L) appendLine("  (el neto incluye la plata apartada: apartarla no cambia lo que tienes)")
 }

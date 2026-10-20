@@ -1,6 +1,8 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.server.apartados.patrimonioDelUsuario
 import com.jvillada.movi.server.balance.accountTypesFor
+import com.jvillada.movi.server.balance.hayMovimientosEnOtraMoneda
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
@@ -8,6 +10,7 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.routes.bandejaConLosPagos
 import com.jvillada.movi.server.routes.cardPaymentCandidateCount
@@ -183,6 +186,9 @@ internal suspend fun datosDeLasSugeridas(
     val reglasDeCredito = if (conPagos) loadCreditRulePairs(uid).map { it.first } else emptyList()
     val debitos = if (revisar) debitosPorConfirmar(uid, hoy, ahora) else emptyList()
 
+    // La tasa solo si hace falta, para el saldo de lo apartado (ver el resumen del Inicio).
+    val usdToCop = if (conPagos && dbQuery { hayMovimientosEnOtraMoneda(uid) }) FxRateService.usdToCop() else 0.0
+
     return dbQuery {
         val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }
             .map { it[VoidEvents.originalEventId] }.toSet()
@@ -194,7 +200,10 @@ internal suspend fun datosDeLasSugeridas(
         val disponible = if (!conPagos) {
             null
         } else {
-            val servidor = disponibleDelServidor(uid, hoy, ajustes, desde, hasta, anulados, reglasDeCredito)
+            val servidor = disponibleDelServidor(
+                uid, hoy, ajustes, desde, hasta, anulados, reglasDeCredito,
+                apartado = patrimonioDelUsuario(uid, anulados, usdToCop).apartado,
+            )
             disponibleAlDia(
                 ingresosRecibidos = entro,
                 pagos = pagos,
@@ -207,6 +216,7 @@ internal suspend fun datosDeLasSugeridas(
                     entradas = servidor.plata.entradas,
                     guardado = servidor.plata.guardado,
                     otrosPagosDeDeuda = servidor.pagosDeDeudaFueraDelChecklist,
+                    apartado = servidor.apartado,
                 ),
             )
         }

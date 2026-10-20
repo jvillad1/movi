@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Credits
@@ -76,11 +77,11 @@ class FinanceRoutesTest {
 
         transaction {
             SchemaUtils.drop(
-                Credits, SmsMessages, RecurringRules, VoidEvents, Events,
+                Apartados, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users, CardPaymentDismissals,
             )
             SchemaUtils.create(
-                Users, Accounts, StatementImports, Events, VoidEvents,
+                Apartados, Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals,
             )
 
