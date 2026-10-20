@@ -10,6 +10,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.insertEventRow
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
@@ -587,6 +588,8 @@ fun Route.accountRoutes() {
                 // DELETE): una meta cuyo «ahorrado» sale del saldo de una cuenta borrada no
                 // significa nada — se va con ella.
                 Goals.deleteWhere { (Goals.accountId eq id) and (Goals.userId eq uid) }
+                // Y los apartados: la plata que apartaban estaba en esta cuenta.
+                Apartados.deleteWhere { (Apartados.accountId eq id) and (Apartados.userId eq uid) }
                 // Ola 9 · D — las reglas recurrentes que apuntaban acá NO se borran: se sueltan.
                 // Mismo criterio que la pata hermana de un traspaso ([desenlazarPatasHermanas]):
                 // se suelta la referencia, no se destruye el hecho. «Arriendo, día 5, $1.800.000»

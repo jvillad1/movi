@@ -2,6 +2,7 @@ package com.jvillada.movi.server.exportar
 
 import com.jvillada.movi.server.db.MemoriaDelAsistente
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.CategoryPrefs
@@ -76,6 +77,7 @@ internal val TABLAS_EXPORTADAS: List<TablaExportada> = listOf(
     TablaExportada("presupuestos", Budgets, Budgets.userId),
     TablaExportada("categorias", CategoryPrefs, CategoryPrefs.userId),
     TablaExportada("metas", Goals, Goals.userId),
+    TablaExportada("apartados", Apartados, Apartados.userId),
     TablaExportada("destinos_conocidos", KnownDestinations, KnownDestinations.userId),
     TablaExportada("documentos", Documents, Documents.userId, setOf(Documents.content)),
     TablaExportada("mensajes_del_banco", SmsMessages, SmsMessages.userId),

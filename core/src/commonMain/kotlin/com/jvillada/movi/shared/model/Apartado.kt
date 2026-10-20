@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /** Largo máximo del propósito de un [Apartado] («Colegio», «Impuesto predial»). */
@@ -15,14 +17,17 @@ const val MAX_PROPOSITO_APARTADO = 60
  * @param desde desde cuándo cuentan los gastos que lo consumen (epoch millis; 0 = sin límite).
  * @param restante lo que queda por gastar: [monto] menos lo consumido ([restanteDelApartado]).
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class Apartado(
     val id: String = "",
     val accountId: String,
     val proposito: String,
     val monto: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val categoria: String? = null,
     val desde: Long = 0L,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val restante: Long = monto,
 )
 

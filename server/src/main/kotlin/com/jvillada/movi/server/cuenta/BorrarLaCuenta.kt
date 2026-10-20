@@ -2,6 +2,7 @@ package com.jvillada.movi.server.cuenta
 
 import com.jvillada.movi.server.db.AccionesPropuestas
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.AiTurns
 import com.jvillada.movi.server.db.AnomaliasDescartadas
 import com.jvillada.movi.server.db.Budgets
@@ -94,6 +95,7 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(Subscriptions, Subscriptions.userId),
     TablaDelUsuario(Budgets, Budgets.userId),
     TablaDelUsuario(Goals, Goals.userId),
+    TablaDelUsuario(Apartados, Apartados.userId),
     TablaDelUsuario(CategoryPrefs, CategoryPrefs.userId),
     TablaDelUsuario(AnomaliasDescartadas, AnomaliasDescartadas.userId),
     TablaDelUsuario(DebitosDescartados, DebitosDescartados.userId),

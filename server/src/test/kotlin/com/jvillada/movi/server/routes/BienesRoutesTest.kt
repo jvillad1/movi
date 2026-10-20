@@ -10,6 +10,7 @@ import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.PushSubscriptions
@@ -84,7 +85,7 @@ class BienesRoutesTest {
 
     private val tablas = arrayOf(
         Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, SmsMessages,
-        Credits, CardPaymentDismissals, Cards, Goals, Documents, RecurringOccurrences,
+        Credits, CardPaymentDismissals, Cards, Goals, Apartados, Documents, RecurringOccurrences,
         OccurrenceRejections, Subscriptions, CategoryPrefs, PushSubscriptions,
     )
 

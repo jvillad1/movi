@@ -9,6 +9,7 @@ import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
@@ -104,13 +105,13 @@ class TransferRoutesTest {
 
         transaction {
             SchemaUtils.drop(
-                Goals, Subscriptions, CardPaymentDismissals, Cards, Credits, SmsMessages,
+                Apartados, Goals, Subscriptions, CardPaymentDismissals, Cards, Credits, SmsMessages,
                 RecurringRules, VoidEvents, Events, StatementImports, Budgets, Accounts, Users, CategoryPrefs,
                 RecurringOccurrences, OccurrenceRejections,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
-                SmsMessages, Credits, Cards, CardPaymentDismissals, Subscriptions, Goals,
+                SmsMessages, Credits, Cards, CardPaymentDismissals, Subscriptions, Goals, Apartados,
                 // Ola 10: el resumen del Inicio lee las preferencias de categoría.
                 CategoryPrefs,
                 // El resumen del Inicio lee los sellos para el gasto variable («Disponible»).
