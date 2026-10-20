@@ -380,7 +380,7 @@ fun pareceDe(nombres: List<String>, destinos: List<DestinoConocido>): DestinoCon
  * la palabra que le toca del otro, en orden, y la primera tiene al menos tres letras. Así «Caro»
  * pega con «Carolina …» pero «Ana» no pega con «Mariana …» (no es el comienzo) ni «Jo» con nadie.
  */
-private fun elNombreEmpiezaIgual(guardado: String, otro: String): Boolean {
+internal fun elNombreEmpiezaIgual(guardado: String, otro: String): Boolean {
     val suyas = guardado.split(' ').filter { it.isNotEmpty() }
     val otras = otro.split(' ').filter { it.isNotEmpty() }
     if (suyas.isEmpty() || suyas.size > otras.size) return false

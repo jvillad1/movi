@@ -125,6 +125,7 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun quitarIdentificador(id: String, identificador: com.jvillada.movi.shared.model.IdentificadorDelDestino) =
         trasEscribir { delegado.quitarIdentificador(id, identificador) }
     override suspend fun unirDestinos(id: String, con: String) = trasEscribir { delegado.unirDestinos(id, con) }
+    override suspend fun noSonLaMisma(id: String, otro: String) = trasEscribir { delegado.noSonLaMisma(id, otro) }
     override suspend fun descartarSugerido(pedido: com.jvillada.movi.shared.model.DescartarSugerido) =
         trasEscribir { delegado.descartarSugerido(pedido) }
     override suspend fun renombrarMovimientosDelDestino(id: String, ids: List<String>) =

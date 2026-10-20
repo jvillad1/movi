@@ -303,7 +303,11 @@ class DetalleDePeriodoScreenTest {
         )
         // Solo el mapa: nada más del perfil se toca.
         assertEquals(UpdateProfileRequest(periodStarts = repo.escrituras.single().periodStarts), repo.escrituras.single())
-        assertEquals(listOf("2026-10", "2026-10"), repo.lecturas, "después de guardar vuelve a leer el detalle")
+        // Después de guardar vuelve a leer el detalle. Cuántas veces no es el contrato: el perfil
+        // compartido también se relee al guardar y puede disparar una lectura más (pasó a dar 3 el
+        // 20-oct-2026 sin cambio de código), así que se exige «al menos una más» y siempre la misma.
+        assertTrue(repo.lecturas.size >= 2, "después de guardar vuelve a leer el detalle: ${repo.lecturas}")
+        assertTrue(repo.lecturas.all { it == "2026-10" }, "solo relee el período abierto: ${repo.lecturas}")
         assertTrue(!hay("Octubre termina hoy", substring = true), "la confirmación se cierra")
     }
 

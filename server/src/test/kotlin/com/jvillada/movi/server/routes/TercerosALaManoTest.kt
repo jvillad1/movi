@@ -72,6 +72,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Base64
 import java.util.Date
@@ -203,14 +204,27 @@ class TercerosALaManoTest {
             }
         }
 
-    private fun insertarMovimiento(id: String, descripcion: String, monto: Long, raw: String?, uid: String = userA, cuando: Long = 1_790_000_000_000L) =
+    private fun insertarMovimiento(
+        id: String,
+        descripcion: String,
+        monto: Long,
+        raw: String?,
+        uid: String = userA,
+        cuando: Long = 1_790_000_000_000L,
+        tipo: String = "EXPENSE",
+        transferId: String? = null,
+    ) =
         transaction {
             Events.insert {
-                it[Events.id] = id; it[userId] = uid; it[accountId] = ahorrosDeA; it[type] = "EXPENSE"
+                it[Events.id] = id; it[userId] = uid; it[accountId] = ahorrosDeA; it[type] = tipo
                 it[amount] = monto; it[category] = "Otros"; it[description] = descripcion; it[merchant] = descripcion
                 it[timestamp] = cuando; it[eventSource] = "SMS"; it[rawPayload] = raw
+                it[Events.transferId] = transferId
             }
         }
+
+    private fun descripcion(id: String) = transaction { Events.selectAll().where { Events.id eq id }.single()[Events.description] }
+    private fun merchantDe(id: String) = transaction { Events.selectAll().where { Events.id eq id }.single()[Events.merchant] }
 
     // ── Migración ───────────────────────────────────────────────────────────────
 
@@ -505,8 +519,13 @@ class TercerosALaManoTest {
 
     // ── Renombrar hacia atrás ───────────────────────────────────────────────────
 
+    /**
+     * 20-oct-2026: crear el tercero ya renombra lo que tenía un nombre de Movi, en la misma
+     * transacción. «Renombrables» queda como respaldo (lo anotado después) con la misma regla, y
+     * `/renombrar` sigue revalidando cada id: un nombre que escribió el dueño nunca se pisa.
+     */
     @Test
-    fun `renombrar hacia atras solo con confirmacion, y nunca un nombre que escribio el dueño`() = testApplication {
+    fun `crear renombra de inmediato, y renombrar sigue sin pisar lo que escribio el dueño`() = testApplication {
         val c = tipado()
         val texto1 = transferencia("66600005555", 1)
         val texto2 = transferencia("66600005555", 2)
@@ -514,28 +533,146 @@ class TercerosALaManoTest {
         insertarMovimiento("suyo", "Arriendo de septiembre", 100_000, raw = texto2)
         insertarMovimiento("de-b", "Transferencia a la cuenta *66600005555", 100_000, raw = texto1, uid = userB)
         val vecino = c.crear(DestinoConocido(nombre = "Vecino", numero = "66600005555"))
+        assertEquals(1, vecino.renombrados, "la respuesta dice cuántos renombró")
+        assertEquals("Transferencia a Vecino", descripcion("ilegible"))
+        assertEquals("Transferencia a la cuenta *66600005555", merchantDe("ilegible"), "el número del banco se queda en merchant")
+        assertEquals("Arriendo de septiembre", descripcion("suyo"))
+        assertEquals("Transferencia a la cuenta *66600005555", descripcion("de-b"), "lo de otro usuario no se toca")
+        assertNotNull(transaction { Events.selectAll().where { Events.id eq "ilegible" }.single()[Events.lastEditedAt] })
 
+        // Lo anotado DESPUÉS de crearlo: el respaldo lo ofrece y lo renombra con confirmación.
+        insertarMovimiento("tarde", "Transferencia a la cuenta *66600005555", 50_000, raw = transferencia("66600005555", 3))
         val ofrecidos = c.get("/api/destinos/${vecino.id}/renombrables") {
             header(HttpHeaders.Authorization, "Bearer ${token(userA)}")
         }.body<MovimientosParaRenombrar>()
-        assertEquals(listOf("ilegible"), ofrecidos.movimientos.map { it.id })
+        assertEquals(listOf("tarde"), ofrecidos.movimientos.map { it.id })
         assertEquals("Transferencia a Vecino", ofrecidos.nombreNuevoDelGasto)
-        fun descripcion(id: String) = transaction { Events.selectAll().where { Events.id eq id }.single()[Events.description] }
-        assertEquals("Transferencia a la cuenta *66600005555", descripcion("ilegible"), "mirar no cambia nada")
-
-        // Aunque la app pida los tres, el server solo renombra el ilegible y suyo.
+        assertEquals("Transferencia a la cuenta *66600005555", descripcion("tarde"), "mirar no cambia nada")
         val r = c.post("/api/destinos/${vecino.id}/renombrar") {
             header(HttpHeaders.Authorization, "Bearer ${token(userA)}")
             contentType(ContentType.Application.Json)
-            setBody(RenombrarMovimientos(listOf("ilegible", "suyo", "de-b")))
+            setBody(RenombrarMovimientos(listOf("tarde", "suyo", "de-b")))
         }.body<RenombradosDelDestino>()
         assertEquals(RenombradosDelDestino(renombrados = 1, omitidos = 2), r)
-        assertEquals("Transferencia a Vecino", descripcion("ilegible"))
+        assertEquals("Transferencia a Vecino", descripcion("tarde"))
         assertEquals("Arriendo de septiembre", descripcion("suyo"))
         assertEquals("Transferencia a la cuenta *66600005555", descripcion("de-b"))
-        assertNotNull(transaction { Events.selectAll().where { Events.id eq "ilegible" }.single()[Events.lastEditedAt] })
         // Y el que el dueño nombró cuenta igual en la ficha: el texto del banco lo nombra.
-        assertEquals(2, c.destinos().single().cuantos)
+        assertEquals(3, c.destinos().single().cuantos)
+    }
+
+    @Test
+    fun `renombrar el tercero reescribe sus nombres viejos y el del banco, y conserva la nota`() = testApplication {
+        val c = tipado()
+        insertarMovimiento("viejo", "Transferencia a Caro", 10_000, raw = null)
+        insertarMovimiento("con-nota", "Transferencia a la cuenta *55500001111 · arreglos", 20_000, raw = null)
+        insertarMovimiento("suyo", "Abono de Caro a la AMEX · Wompi-PSE", 30_000, raw = null)
+        insertarMovimiento("pata", "Transferencia a la cuenta *55500001111", 40_000, raw = null, transferId = "tr-1")
+        insertarMovimiento("anulado", "Transferencia a la cuenta *55500001111", 50_000, raw = null)
+        transaction { VoidEvents.insert { it[id] = "void-1"; it[userId] = userA; it[originalEventId] = "anulado"; it[reason] = "prueba"; it[timestamp] = 1L } }
+        val caro = c.crear(caro())
+        assertEquals("Transferencia a Caro · arreglos", descripcion("con-nota"), "crear ya la nombró")
+
+        val r = c.put("/api/destinos/${caro.id}") {
+            header(HttpHeaders.Authorization, "Bearer ${token(userA)}")
+            contentType(ContentType.Application.Json)
+            setBody(caro.copy(nombre = "Carolina"))
+        }
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        val editada = r.body<DestinoConocido>()
+        assertEquals(2, editada.renombrados)
+        assertEquals(listOf("Caro"), editada.nombresAnteriores)
+        assertEquals("Transferencia a Carolina", descripcion("viejo"))
+        assertEquals("Transferencia a Carolina · arreglos", descripcion("con-nota"))
+        assertEquals("Abono de Caro a la AMEX · Wompi-PSE", descripcion("suyo"))
+        assertEquals("Transferencia a la cuenta *55500001111", descripcion("pata"), "una pata de traspaso no se toca")
+        assertEquals("Transferencia a la cuenta *55500001111", descripcion("anulado"), "un anulado no se toca")
+        assertEquals(listOf("Caro"), c.destinos().single().nombresAnteriores, "se guardó")
+    }
+
+    @Test
+    fun `sumar un identificador desde el movimiento lo renombra en la misma respuesta`() = testApplication {
+        val c = tipado()
+        val caro = c.crear(caro())
+        insertarMovimiento(
+            "llego", "CAROLINA PRUEBA SALAZAR", 300_000, tipo = "INCOME",
+            raw = "Recibiste 300.000,00 en tu cuenta: Te llegó dinero de CAROLINA PRUEBA SALAZAR con tu llave.",
+        )
+        assertEquals("CAROLINA PRUEBA SALAZAR", descripcion("llego"), "todavía no es de nadie")
+        val r = c.agregar(caro.id, llave("carolina prueba salazar"))
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        assertEquals(1, r.body<DestinoConocido>().renombrados)
+        assertEquals("Transferencia de Caro", descripcion("llego"))
+        assertEquals("Transferencia de Caro", merchantDe("llego"), "un nombre (no un número) también pasa en merchant")
+    }
+
+    @Test
+    fun `una escritura rechazada no renombra nada`() = testApplication {
+        val c = tipado()
+        val caro = c.crear(caro())
+        c.crear(DestinoConocido(nombre = "Papá", numero = "77700003333"))
+        insertarMovimiento("ilegible", "Transferencia a la cuenta *77700003333", 10_000, raw = null)
+        // Papá ya lo nombró al crearse; se devuelve a ilegible para ver que un 409 no lo toca.
+        transaction { Events.update({ Events.id eq "ilegible" }) { it[description] = "Transferencia a la cuenta *77700003333" } }
+        assertEquals(HttpStatusCode.Conflict, c.agregar(caro.id, numero("77700003333")).status)
+        assertEquals("Transferencia a la cuenta *77700003333", descripcion("ilegible"))
+    }
+
+    @Test
+    fun `unir deja el id mas antiguo, mueve sus referencias, renombra y no son la misma se recuerda`() = testApplication {
+        val c = tipado()
+        val vieja = c.crear(caro())
+        val nueva = c.crear(DestinoConocido(nombre = "Carolina Prueba Salazar", numero = "", llave = "carolina prueba salazar"))
+        transaction {
+            KnownDestinations.update({ KnownDestinations.id eq vieja.id }) { it[createdAt] = 1L }
+            KnownDestinations.update({ KnownDestinations.id eq nueva.id }) { it[createdAt] = 2L }
+            RecurringRules.insert {
+                it[id] = "regla-1"; it[userId] = userA; it[name] = "Mesada"; it[amount] = 1L; it[category] = "Otros"
+                it[type] = "EXPENSE"; it[dayOfMonth] = 1
+                it[destinoConocidoId] = nueva.id
+            }
+        }
+        insertarMovimiento("llego", "Transferencia de Carolina Prueba Salazar", 300_000, tipo = "INCOME", raw = null)
+
+        // Aislamiento: otro usuario no puede unir ni descartar estas fichas.
+        val ajena = c.post("/api/destinos/${nueva.id}/unir/${vieja.id}") { header(HttpHeaders.Authorization, "Bearer ${token(userB)}") }
+        assertEquals(HttpStatusCode.NotFound, ajena.status)
+        val noEsAjeno = c.post("/api/destinos/${nueva.id}/no-es/${vieja.id}") { header(HttpHeaders.Authorization, "Bearer ${token(userB)}") }
+        assertEquals(HttpStatusCode.NotFound, noEsAjeno.status)
+
+        // El dueño eligió conservar la NUEVA: queda su nombre, pero con el id de la vieja.
+        val r = c.post("/api/destinos/${vieja.id}/unir/${nueva.id}") { header(HttpHeaders.Authorization, "Bearer ${token(userA)}") }
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        val unida = r.body<DestinoConocido>()
+        assertEquals(vieja.id, unida.id, "el id más antiguo gana")
+        assertEquals("Carolina Prueba Salazar", unida.nombre)
+        assertEquals(listOf(vieja.id), c.destinos().map { it.id })
+        assertEquals(vieja.id, transaction { RecurringRules.selectAll().where { RecurringRules.id eq "regla-1" }.single()[RecurringRules.destinoConocidoId] })
+
+        // Y «No son la misma» se guarda con la clave del par.
+        val otra = c.crear(DestinoConocido(nombre = "Caro Panadería", numero = "", llave = "0011223344"))
+        val no = c.post("/api/destinos/${otra.id}/no-es/${vieja.id}") { header(HttpHeaders.Authorization, "Bearer ${token(userA)}") }
+        assertEquals(HttpStatusCode.NoContent, no.status)
+        val claves = c.get("/api/destinos/descartados") { header(HttpHeaders.Authorization, "Bearer ${token(userA)}") }.body<Descartados>().claves
+        assertTrue(com.jvillada.movi.shared.model.claveDeNoSonLaMisma(vieja.id, otra.id) in claves)
+    }
+
+    @Test
+    fun `un APK viejo sigue editando, y sin los campos nuevos no pierde los nombres anteriores`() = testApplication {
+        val c = tipado()
+        val caro = c.crear(caro())
+        c.put("/api/destinos/${caro.id}") {
+            header(HttpHeaders.Authorization, "Bearer ${token(userA)}")
+            contentType(ContentType.Application.Json)
+            setBody(caro.copy(nombre = "Carolina"))
+        }
+        val crudo = c.put("/api/destinos/${caro.id}") {
+            header(HttpHeaders.Authorization, "Bearer ${token(userA)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"nombre":"Carolina","numero":"55500001111","deQuien":"esposa"}""")
+        }
+        assertEquals(HttpStatusCode.OK, crudo.status, crudo.bodyAsText())
+        assertEquals(listOf("Caro"), c.destinos().single().nombresAnteriores)
     }
 
     // ── Aislamiento ─────────────────────────────────────────────────────────────

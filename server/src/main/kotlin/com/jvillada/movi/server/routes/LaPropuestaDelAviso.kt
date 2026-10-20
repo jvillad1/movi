@@ -24,7 +24,6 @@ import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.conElDestinoConocido
 import com.jvillada.movi.shared.model.conElMotivoDelEnvio
 import com.jvillada.movi.shared.model.destinoQueNombra
 import com.jvillada.movi.shared.model.esUnComprobante
@@ -107,7 +106,7 @@ internal fun Transaction.leerElAviso(uid: String, sms: SmsMessage, sabe: LoQueMo
     // dueño a ese número ya lo llamó «Mercado», sigue diciendo «Mercado» — el nombre que él puso es
     // suyo. El destino solo habla donde no hablaba nadie. Ver `conElDestinoConocido`.
     // Y al final, una cuenta del dueño no se le ofrece como «de otro» (ver [sinLaCuentaPropia]).
-    val conDestino = conElDestinoConocido(conLoQueMoviRecuerda(parsed, sabe.memoria), sms.text, sabe.destinos)
+    val conDestino = conLaMemoriaYLosTerceros(parsed, sms.text, sabe.memoria, sabe.destinos)
     // **El motivo de un envío a alguien guardado** (ver `MotivoDelEnvio.kt`): si ya le mandó este
     // mismo monto, la categoría de esa vez —a Caro, $1.300.000 es la cuota; $2.000.000, el mercado—.
     // Se lee en todos los avisos del pago: el correo de PSE no dice la cuenta, el SMS sí.
