@@ -60,6 +60,8 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.AvisoSinLeer
+import com.jvillada.movi.shared.model.comoLectura
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
@@ -675,6 +677,13 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
      * todavía estuviera trabajando.
      */
     var noSePudoLeer by remember { mutableStateOf<String?>(null) }
+    /**
+     * «Anotarlo igual»: lo que trae un aviso que Movi no entendió (el monto, la moneda, la fecha), si
+     * el server lo ofrece. Ver `AnotarloIgualEnReconciliar.kt`.
+     */
+    var sinLeer by remember { mutableStateOf<AvisoSinLeer?>(null) }
+    /** El dueño tocó «Anotarlo igual»: [parsed] es la lectura armada con [sinLeer], y se edita. */
+    var anotandoIgual by remember { mutableStateOf(false) }
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     // La cuenta que el dueño eligió con el dedo, si la eligió. Manda sobre lo que resuelva Movi
@@ -807,8 +816,19 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         if (pago == null) {
             sms?.parecidoA?.let { id -> intentar { Repositories.wallets.getSms(id) }.onSuccess { otroAviso = it } }
         }
-        intentar { Repositories.wallets.parseSms(pago?.takeIf { it.miembros.size > 1 }?.propuestaDe ?: smsId) }
-            .onSuccess { parsed = it; if (selectedCategory == null) selectedCategory = it.category }
+        intentar { Repositories.wallets.leerParaReconciliar(pago?.takeIf { it.miembros.size > 1 }?.propuestaDe ?: smsId) }
+            .onSuccess { lectura ->
+                val leido = lectura.leido
+                if (leido != null) {
+                    parsed = leido
+                    if (selectedCategory == null) selectedCategory = leido.category
+                } else {
+                    // No se entendió: el motivo, y si trae un monto, «Anotarlo igual».
+                    noSePudoLeer = lectura.noSePudoLeer
+                    // Solo mientras el aviso espera una decisión: lo apartado, ignorado o confirmado no.
+                    sinLeer = lectura.sinLeer?.takeIf { sms?.state == SMS_STATE_PENDING }
+                }
+            }
             // El server explica por qué (un aviso que no es un movimiento, por ejemplo), y se
             // dice donde se estaba esperando la sugerencia.
             .onFailure { noSePudoLeer = it.toUserMessage() }
@@ -981,9 +1001,11 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 return
             }
         }
-        val cat = selectedCategory ?: parsed?.category ?: return
+        val cat = (selectedCategory ?: parsed?.category)?.takeIf { it.isNotBlank() } ?: return
         val acct = resolvedAccount ?: return
         val p = parsed ?: return
+        // Un aviso que se anota igual: sin monto no hay nada que anotar.
+        if (p.amount <= 0.0) return
         // Se lee ACÁ, antes del `coroutine.launch`: si el dueño toca dos veces rápido, la segunda
         // pasada no puede ver un estado que la primera ya limpió a mitad de camino.
         val dosPatas = lasDosPatas
@@ -1340,7 +1362,14 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     variant = MinCardVariant.Elevated,
                     padding = PaddingValues(20.dp),
                 ) {
-                    if (parsed == null) {
+                    val loQueTrae = sinLeer
+                    if (parsed == null && loQueTrae != null) {
+                        Text(
+                            text = textoDeAnotarloIgual(loQueTrae),
+                            style = Movi.textos.cuerpo,
+                            color = Movi.colores.texto,
+                        )
+                    } else if (parsed == null) {
                         Text(
                             text = noSePudoLeer ?: "Leyendo el mensaje…",
                             style = Movi.textos.cuerpo,
@@ -1356,7 +1385,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(comercio ?: p.merchant, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.2).sp)
                                 Text(
-                                    "${selectedCategory ?: p.category} · ${resolvedAccount?.name ?: "Elige la cuenta"}",
+                                    "${(selectedCategory ?: p.category).ifBlank { "Elige la categoría" }} · ${resolvedAccount?.name ?: "Elige la cuenta"}",
                                     style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                     modifier = Modifier.padding(top = 3.dp),
@@ -1424,6 +1453,34 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     }
                 }
 
+                // «Anotarlo igual»: el monto y gasto o ingreso. Lo demás son las filas de siempre.
+                val leidaIgual = parsed
+                val trae = sinLeer
+                if (anotandoIgual && leidaIgual != null && trae != null) {
+                    Spacer(Modifier.height(14.dp))
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Default,
+                        padding = PaddingValues(18.dp),
+                    ) {
+                        FormularioDeAnotarloIgual(
+                            monto = leidaIgual.amount.roundToLong().takeIf { it > 0 },
+                            moneda = leidaIgual.currency,
+                            tipo = leidaIgual.type,
+                            habilitado = !working && (currentSms == null || currentSms.state == SMS_STATE_PENDING),
+                            onMonto = { nuevo -> parsed = leidaIgual.copy(amount = (nuevo ?: 0L).toDouble()) },
+                            onTipo = { nuevo ->
+                                if (nuevo != leidaIgual.type) {
+                                    parsed = leidaIgual.copy(type = nuevo)
+                                    // La categoría de un gasto no es la de un ingreso: vuelve la propuesta
+                                    // si es de ese lado, y si no, a elegir.
+                                    selectedCategory = trae.categoria?.takeIf { nuevo == trae.tipo }
+                                }
+                            },
+                        )
+                    }
+                }
+
                 Spacer(Modifier.height(14.dp))
                 MinSectionHeader(title = "Confirma o ajusta")
                 MinCard(
@@ -1457,6 +1514,11 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         onClick = { eligiendoCuenta = !eligiendoCuenta },
                     )
                     Hairline()
+                    if (anotandoIgual && currentSms != null) {
+                        // La fecha del aviso: es la del movimiento, como en cualquier confirmación.
+                        Detail(ok = true, label = "Fecha", value = fechaLegibleDeSms(currentSms.time))
+                        Hairline()
+                    }
                     Detail(
                         ok = selectedCategory != null,
                         label = "Categoría",
@@ -1690,21 +1752,40 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             val revisionContesto = coincidencias != null || noSePudoRevisar
             // Ya anotado con otro aviso del pago: lo único que falta es cerrar los demás.
             val soloCerrar = yaAnotadoCon != null
-            val canConfirm = !working && !alreadyResolved &&
-                (soloCerrar || (parsed != null && resolvedAccount != null && revisionContesto && !faltaElDestino))
+            // Movi no entendió el aviso pero trae un monto: el botón principal abre el formulario.
+            val ofreceAnotarloIgual = !soloCerrar && !alreadyResolved && parsed == null && sinLeer != null && !anotandoIgual
+            // Con el formulario abierto, además, hace falta un monto y una categoría elegida.
+            val categoriaParaAnotar = (selectedCategory ?: parsed?.category)?.takeIf { it.isNotBlank() }
+            val canConfirm = !working && !alreadyResolved && (
+                ofreceAnotarloIgual || soloCerrar || (
+                    parsed != null && resolvedAccount != null && revisionContesto && !faltaElDestino &&
+                        categoriaParaAnotar != null && (parsed?.amount ?: 0.0) > 0.0
+                    )
+                )
             Box(
                 modifier = Modifier
                     .weight(1.7f)
                     .height(50.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (canConfirm) Movi.colores.texto else Movi.colores.tarjeta)
-                    .clickable(enabled = canConfirm) { if (soloCerrar) cerrarElPago() else confirm() },
+                    .clickable(enabled = canConfirm) {
+                        when {
+                            ofreceAnotarloIgual -> sinLeer?.let { trae ->
+                                parsed = trae.comoLectura()
+                                selectedCategory = trae.categoria
+                                anotandoIgual = true
+                            }
+                            soloCerrar -> cerrarElPago()
+                            else -> confirm()
+                        }
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     when {
                         working -> "Guardando…"
                         soloCerrar -> "Cerrar los avisos"
+                        ofreceAnotarloIgual -> ANOTARLO_IGUAL
                         anotarSinRevisar -> "Anotar de todas formas"
                         else -> "Confirmar"
                     },
