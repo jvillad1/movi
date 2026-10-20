@@ -87,7 +87,7 @@ internal fun cajaDelPeriodoDe(
 ): CajaProyectada? {
     val periodo = data.periodoActual ?: return null
     if (data.upcoming == null || data.ocurrencias == null) return null
-    val tuPlata = (data.accounts?.let { patrimonioDe(it) } ?: data.patrimonio)?.tuPlata ?: return null
+    val tuPlata = (data.accounts?.let { patrimonioDe(it, data.apartados.orEmpty()) } ?: data.patrimonio)?.tuPlata ?: return null
     val ultimoDia = inicioDelPeriodo(periodoSiguiente(periodo), data.ajustesDePeriodo).minus(1, DateTimeUnit.DAY)
     return cajaProyectada(
         tuPlataHoy = tuPlata,

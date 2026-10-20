@@ -387,7 +387,7 @@ data class PatrimonioDelInicio(
  * `null` si todavía no se sabe nada, o si no hay nada que mostrar (ni tienes ni debes).
  */
 fun patrimonioDelInicio(data: DashboardData): PatrimonioDelInicio? {
-    val p = data.accounts?.let { patrimonioDe(it) } ?: data.patrimonio ?: return null
+    val p = data.accounts?.let { patrimonioDe(it, data.apartados.orEmpty()) } ?: data.patrimonio ?: return null
     return patrimonioDelInicio(p)
 }
 
@@ -399,6 +399,10 @@ fun patrimonioDelInicio(p: Patrimonio): PatrimonioDelInicio? {
     if (tienes == 0L && debes == 0L) return null
     val tramos = listOfNotNull(
         p.tuPlata.takeIf { it != 0L }?.let { TramoDelPatrimonio("Tu plata", it, esDeuda = false) },
+        // Lo apartado (el colegio de nov-dic) es tuyo pero ya tiene dueño: va aparte, al lado de Tu plata.
+        p.apartado.takeIf { it > 0L }?.let {
+            TramoDelPatrimonio(p.apartadoPara?.let { a -> "Apartado · $a" } ?: "Apartado", it, esDeuda = false)
+        },
         p.condicionado.takeIf { it > 0L }?.let {
             TramoDelPatrimonio(
                 p.condicionadoA?.let { a -> "Uso condicionado · $a" } ?: "Uso condicionado",
