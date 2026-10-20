@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.db.AiTurns
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.routes.FabricaDeModelos
@@ -242,6 +243,53 @@ class LasPreguntasSugeridasTest {
         // El período pasado está cubierto (el saldo inicial es de antes): hay comparación.
         assertTrue("período pasado" in texto, texto)
         if (disponible.diasQueQuedan > 1) assertTrue("Tu meta diaria es ${pesosDelCierre(disponible.metaPorDia)}" in texto, texto)
+        assertEquals(0, llamadasAlModelo)
+    }
+
+    /** Lo apartado no se puede gastar: «Te quedan» baja exactamente lo apartado, y el chat lo dice igual que Hoy. */
+    @Test
+    fun `como voy descuenta lo apartado de lo que te queda`() = testApplication {
+        with(a) { application { modulo { aiRoutes(fabricaQueCuenta); dashboardRoutes(); reminderRoutes() } } }
+        val hoy = AppClock.today()
+        periodoDeA(hoy)
+
+        suspend fun teQuedan(): Long {
+            val resumen = json.decodeFromString(DashboardSummary.serializer(), get(a.duenoA, "/api/dashboard/summary"))
+            val upcoming = json.decodeFromString(ListSerializer(UpcomingPayment.serializer()), get(a.duenoA, "/api/payments/upcoming"))
+            val ocurrencias = json.decodeFromString(ListSerializer(OccurrenceState.serializer()), get(a.duenoA, "/api/payments/occurrences"))
+            val ajustes = PeriodSettings()
+            val periodo = periodoDe(appDateToEpochMillis(hoy) + 12 * 3_600_000L, ajustes)
+            val ventana = ventanaDe(periodo, ajustes)
+            return assertNotNull(
+                disponibleAlDia(
+                    ingresosRecibidos = resumen.monthIncome,
+                    pagos = checklistDelPeriodo(upcoming, ocurrencias, periodo, ajustes),
+                    gastoVariablePorDia = resumen.gastoVariablePorDia.orEmpty(),
+                    desde = epochMillisToAppDate(ventana.first).toString(),
+                    hasta = epochMillisToAppDate(ventana.last).toString(),
+                    hoy = hoy.toString(),
+                    plata = plataDelDisponibleDe(resumen),
+                ),
+            ).periodo.teQuedan
+        }
+
+        val antes = teQuedan()
+        transaction {
+            Apartados.insert {
+                it[Apartados.id] = "apt-sugeridas"
+                it[Apartados.userId] = a.duenoA
+                it[accountId] = a.cuentaDeA
+                it[proposito] = "Colegio"
+                it[monto] = 5_000_000L
+                it[desde] = 0L
+                it[createdAt] = System.currentTimeMillis()
+            }
+        }
+        val despues = teQuedan()
+        assertEquals(antes - 5_000_000L, despues)
+
+        val texto = respuesta(a.duenoA, PreguntaSugerida.COMO_VOY)
+        assertTrue(pesosDelCierre(despues) in texto, "te quedan $despues:\n$texto")
         assertEquals(0, llamadasAlModelo)
     }
 

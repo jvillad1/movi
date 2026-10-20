@@ -204,6 +204,27 @@ class CierreDelPeriodoTest {
         assertNotNull(c.quedoDelDisponible)
     }
 
+    /** El cierre es historia: un apartado de hoy no cambia lo que quedó en un período que ya cerró. */
+    @Test
+    fun `un apartado de hoy no cambia el cierre de un periodo pasado`() = runBlocking<Unit> {
+        octubreDelDueno()
+        val sin = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        transaction {
+            Apartados.insert {
+                it[Apartados.id] = "apt-cierre"
+                it[Apartados.userId] = uid
+                it[accountId] = "acc_$uid"
+                it[proposito] = "Colegio"
+                it[monto] = 1_000_000L
+                it[desde] = 0L
+                it[createdAt] = System.currentTimeMillis()
+            }
+        }
+        val con = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        assertEquals(sin.quedoDelDisponible, con.quedoDelDisponible)
+        assertEquals(sin, con)
+    }
+
     @Test
     fun `sin periodo anterior entero no hay comparacion`() = runBlocking<Unit> {
         // El primer movimiento es de octubre: septiembre no lo vio Movi.

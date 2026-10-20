@@ -1,9 +1,6 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.apartados.patrimonioDelUsuario
-import com.jvillada.movi.server.balance.hayMovimientosEnOtraMoneda
 import com.jvillada.movi.server.db.CierresDescartados
-import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
@@ -123,18 +120,13 @@ internal suspend fun cierreDelPeriodoDe(uid: String, hoy: LocalDate, soloSiSeMue
     if (detalle.resumen.movimientos == 0 && pagos.isEmpty()) return null
 
     val reglasDeCredito = loadCreditRulePairs(uid).map { it.first }
-    // La tasa solo si hace falta (ver el resumen del Inicio): sirve para el saldo de lo apartado.
-    val usdToCop = if (dbQuery { hayMovimientosEnOtraMoneda(uid) }) FxRateService.usdToCop() else 0.0
     val (anterior, anomalias, servidor) = dbQuery {
         val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }
             .map { it[VoidEvents.originalEventId] }.toSet()
         Triple(
             anteriorCubierto(uid, cerrado, ahora, ajustes),
             loQueSeSaleDeLoNormalDe(uid, ultimoDia, ajustes),
-            disponibleDelServidor(
-                uid, ultimoDia, ajustes, ventana.first, ventana.last + 1, anulados, reglasDeCredito,
-                apartado = patrimonioDelUsuario(uid, anulados, usdToCop).apartado,
-            ),
+            disponibleDelServidor(uid, ultimoDia, ajustes, ventana.first, ventana.last + 1, anulados, reglasDeCredito),
         )
     }
     val disponible = disponibleAlCerrar(
@@ -148,7 +140,8 @@ internal suspend fun cierreDelPeriodoDe(uid: String, hoy: LocalDate, soloSiSeMue
             entradas = servidor.plata.entradas,
             guardado = servidor.plata.guardado,
             otrosPagosDeDeuda = servidor.pagosDeDeudaFueraDelChecklist,
-            apartado = servidor.apartado,
+            // Sin `apartado`: el cierre es historia. Un apartado de hoy no cambia lo que quedó en un
+            // período que ya cerró.
         ),
     )
     return cierreDelPeriodo(
