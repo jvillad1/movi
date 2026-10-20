@@ -66,6 +66,7 @@ import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.motivoDeApartado
 import com.jvillada.movi.shared.model.GrupoDeAvisos
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.TransactionType
@@ -1700,7 +1701,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 // este detalle ya resuelto (confirmado o ignorado), no se puede reconfirmar.
                 if (currentSms != null && currentSms.state != SMS_STATE_PENDING) {
                     Spacer(Modifier.height(10.dp))
-                    Text("Este mensaje ya se confirmó", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    Text(textoDelAvisoYaResuelto(currentSms), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
             }
         }
@@ -2012,3 +2013,16 @@ internal fun movimientoConfirmadoDelSms(
     reconciliationStatus = ReconciliationStatus.RECONCILED,
     timestamp = momento,
 )
+
+/**
+ * **Qué pasó con un aviso que ya no está pendiente**, dicho como fue. Antes decía siempre «Este
+ * mensaje ya se confirmó», también para lo que Movi apartó solo (una promoción, un recordatorio de
+ * pago) y para lo que el dueño ignoró: le decía que se había anotado algo que no se anotó.
+ */
+internal fun textoDelAvisoYaResuelto(sms: SmsMessage): String = when {
+    sms.state == SMS_STATE_CONFIRMED -> "Este mensaje ya se confirmó"
+    sms.state == SMS_STATE_IGNORED -> motivoDeApartado(sms.apartadoPor)
+        ?.let { "Movi lo apartó: ${it.texto}" }
+        ?: "Ignoraste este mensaje"
+    else -> "Este mensaje ya se resolvió"
+}
