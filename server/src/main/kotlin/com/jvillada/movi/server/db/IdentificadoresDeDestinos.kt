@@ -8,6 +8,7 @@ import com.jvillada.movi.shared.model.conIdentificadores
 import com.jvillada.movi.shared.model.normalizarLlave
 import com.jvillada.movi.shared.model.soloLosDigitos
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.ResultRow
 
@@ -27,6 +28,16 @@ fun identificadoresDeSiempre(numero: String, llave: String?): List<Identificador
 
 fun identificadoresComoJson(lista: List<IdentificadorDelDestino>): String =
     jsonDeIdentificadores.encodeToString(serializadorDeLaLista, lista)
+
+private val serializadorDeNombres = ListSerializer(String.serializer())
+
+/** La columna `known_destinations.nombres_anteriores` (20-oct-2026): `null` si no tuvo otro nombre. */
+fun nombresAnterioresComoJson(lista: List<String>): String? =
+    lista.takeIf { it.isNotEmpty() }?.let { jsonDeIdentificadores.encodeToString(serializadorDeNombres, it) }
+
+/** Lo guardado en `nombres_anteriores`; vacío si está en NULL o ilegible. Nunca falla. */
+fun nombresAnterioresDeLaFila(json: String?): List<String> =
+    json?.let { runCatching { jsonDeIdentificadores.decodeFromString(serializadorDeNombres, it) }.getOrNull() }.orEmpty()
 
 /**
  * La lista guardada, o la del número y la llave si la columna está en NULL (una fila que la
@@ -49,6 +60,8 @@ fun ResultRow.aDestino(): DestinoConocido {
         deQuien = this[KnownDestinations.deQuien],
         llave = llave,
         tipo = this[KnownDestinations.tipo]?.let { t -> TipoDeTercero.entries.firstOrNull { it.name == t } },
+        nombresAnteriores = nombresAnterioresDeLaFila(this[KnownDestinations.nombresAnteriores]),
+        creadoEn = this[KnownDestinations.createdAt],
     ).conIdentificadores(lista + identificadoresDeSiempre(numero, llave)).copy(
         // `conIdentificadores` pone número y llave en el primero de cada clase; las columnas son
         // la verdad de lo que lee el APK instalado, y se respetan tal cual.

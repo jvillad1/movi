@@ -545,7 +545,9 @@ class DestinoRoutesTest {
         guardarSms("sms-qr", "Bancolombia: pagaste \$18,500.00 por codigo QR desde tu cuenta *8133 a la llave 0092184713 el 09/09/2026")
         val parse = client.get("/api/sms/sms-qr/parse") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
         val leido = Json.parseToJsonElement(parse.bodyAsText()).jsonObject
-        assertEquals("Transferencia a Panadería", leido["merchant"]!!.jsonPrimitive.content)
+        // 20-oct-2026: sin tipo elegido, un pago por QR es a un comercio, y un comercio va a secas
+        // (ver `nombreCanonicoDelMovimiento`).
+        assertEquals("Panadería", leido["merchant"]!!.jsonPrimitive.content)
         assertEquals("0092184713", leido["identificadorDelDestino"]!!.jsonPrimitive.content)
         assertEquals(true, leido["identificadorEsLlave"]!!.jsonPrimitive.content.toBoolean())
     }
@@ -563,8 +565,8 @@ class DestinoRoutesTest {
     @Test
     fun `con una llave arroba o un correo el aviso se propone con el nombre del destino`() = testApplication {
         wireApp()
-        assertEquals(HttpStatusCode.Created, postDestino("""{"nombre":"Caro","numero":"","llave":"@caro"}""").status)
-        assertEquals(HttpStatusCode.Created, postDestino("""{"nombre":"Papá","numero":"","llave":"papa@correo.com"}""").status)
+        assertEquals(HttpStatusCode.Created, postDestino("""{"nombre":"Caro","numero":"","llave":"@caro","tipo":"PERSONA"}""").status)
+        assertEquals(HttpStatusCode.Created, postDestino("""{"nombre":"Papá","numero":"","llave":"papa@correo.com","tipo":"PERSONA"}""").status)
 
         guardarSms("sms-arroba", "Bancolombia: pagaste \$50,000.00 por codigo QR desde tu cuenta *8133 a la llave @caro el 29/09/2026 a las 10:02.")
         val arroba = leer("sms-arroba")

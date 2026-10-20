@@ -44,6 +44,11 @@ import com.jvillada.movi.shared.model.DestinoSugerido
 import com.jvillada.movi.shared.model.MotivoDeDescarte
 import com.jvillada.movi.shared.model.TipoDeTercero
 import com.jvillada.movi.shared.model.clave
+import com.jvillada.movi.shared.model.PosibleDuplicado
+import com.jvillada.movi.shared.model.claveDeNoSonLaMisma
+import com.jvillada.movi.shared.model.porQueSePregunta
+import com.jvillada.movi.shared.model.posiblesDuplicados
+import com.jvillada.movi.shared.model.preguntaDelDuplicado
 import com.jvillada.movi.shared.model.comoSeDice
 import com.jvillada.movi.shared.model.comoSeLeeEnLaFicha
 import com.jvillada.movi.shared.model.conIdentificadores
@@ -114,6 +119,9 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
     var leidos by remember { mutableStateOf(false) }
     var loadKey by remember { mutableStateOf(0) }
     var errorDeSugerido by remember { mutableStateOf<String?>(null) }
+    // 20-oct-2026: lo que el dueño ya dijo que no (entre otras, «No son la misma» como `MISMA:a|b`).
+    var descartados by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var errorDeDuplicado by remember { mutableStateOf<String?>(null) }
     val alcance = rememberCoroutineScope()
 
     // Qué hoja está abierta. La ficha (leer), la hoja de guardar/editar, y un movimiento abierto
@@ -135,6 +143,7 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
         runCatching { Repositories.wallets.getUserProfile() }
             .onSuccess { ajustes = PeriodSettings(it.periodCutoffDay, it.periodStarts) }
         runCatching { Repositories.wallets.getDestinosSugeridos() }.onSuccess { sugeridos = it }
+        runCatching { Repositories.wallets.getDestinosDescartados() }.onSuccess { descartados = it.claves.toSet() }
         cargando = false
     }
     // «Ver su ficha» desde un movimiento: la ficha pedida se abre sola, una vez.
@@ -188,6 +197,26 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
         }
     }
 
+    /** «Unir»: [par].seVa pasa a [par].queda, la más antigua. El server renombra sus movimientos. */
+    fun unirDuplicado(par: PosibleDuplicado) {
+        errorDeDuplicado = null
+        alcance.launch {
+            runCatching { Repositories.wallets.unirDestinos(par.seVa.id, par.queda.id) }
+                .onSuccess { loadKey++ }
+                .onFailure { errorDeDuplicado = it.toUserMessage() }
+        }
+    }
+
+    /** «No son la misma»: se recuerda en el server y se va de la vista ya. */
+    fun noSonLaMisma(par: PosibleDuplicado) {
+        errorDeDuplicado = null
+        alcance.launch {
+            runCatching { Repositories.wallets.noSonLaMisma(par.queda.id, par.seVa.id) }
+                .onSuccess { descartados = descartados + claveDeNoSonLaMisma(par.queda.id, par.seVa.id) }
+                .onFailure { errorDeDuplicado = it.toUserMessage() }
+        }
+    }
+
     fun descartar(s: DestinoSugerido, motivo: MotivoDeDescarte) {
         errorDeSugerido = null
         alcance.launch {
@@ -198,6 +227,7 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
     }
 
     val visibles = remember(destinos, busqueda) { filtrarTerceros(destinos, busqueda) }
+    val duplicados = remember(destinos, descartados) { posiblesDuplicados(destinos, descartados) }
     val personas = visibles.filter { it.tipoOPersona() == TipoDeTercero.PERSONA }
     val comercios = visibles.filter { it.tipoOPersona() == TipoDeTercero.COMERCIO }
     // Sin nada guardado, lo que Movi encontró es lo único que hay para hacer: se ve abierto.
@@ -241,6 +271,21 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
                 contentPadding = PaddingValues(horizontal = 16.dp),
             ) {
                 item { Spacer(Modifier.height(6.dp)) }
+
+                // ── «¿Es la misma persona?»: arriba de todo, porque parte las cifras en dos ──
+                if (duplicados.isNotEmpty()) {
+                    items(duplicados.take(DUPLICADOS_A_LA_VISTA), key = { "dup-" + claveDeNoSonLaMisma(it.queda.id, it.seVa.id) }) { par ->
+                        Column {
+                            TarjetaDeDuplicado(par, errorDeDuplicado, onUnir = { unirDuplicado(par) }, onNoSonLaMisma = { noSonLaMisma(par) })
+                            Spacer(Modifier.height(10.dp))
+                        }
+                    }
+                    errorDeDuplicado?.let { e ->
+                        item {
+                            Text(e, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
+                        }
+                    }
+                }
 
                 // ── Lo que Movi encontró solo: una línea que se abre ─────────────────
                 if (sugeridos.isNotEmpty()) {
@@ -536,6 +581,55 @@ private fun TarjetaDeSugerido(
             )
             Pastilla(ES_MIA, { ocupado = true; onDescartar(MotivoDeDescarte.ES_MIA) }, enabled = !ocupado)
             Pastilla("Ignorar", { ocupado = true; onDescartar(MotivoDeDescarte.IGNORADO) }, enabled = !ocupado)
+        }
+    }
+}
+
+/** Cuántas tarjetas «¿Es la misma persona?» se muestran a la vez: la próxima aparece al resolver una. */
+internal const val DUPLICADOS_A_LA_VISTA: Int = 2
+
+/** El tag de una tarjeta «¿Es la misma persona?»: `TAG:<clave del par>`. */
+const val TAG_DUPLICADO: String = "duplicado"
+
+/** «Unir», en la tarjeta de dos fichas que parecen la misma. */
+const val UNIR: String = "Unir"
+
+/** «No son la misma»: la tarjeta no vuelve. */
+const val NO_SON_LA_MISMA: String = "No son la misma"
+
+/**
+ * **«¿Es la misma persona?»** (20-oct-2026): dos fichas que parecen la misma ([posiblesDuplicados]).
+ * Dice cuáles, por qué se pregunta y qué pasa al unir —queda la más antigua, con todo lo de las dos,
+ * y sus movimientos llevan su nombre—. **Nunca se une sola**: «Unir» o «No son la misma», y lo
+ * segundo se recuerda.
+ */
+@Composable
+private fun TarjetaDeDuplicado(par: PosibleDuplicado, error: String?, onUnir: () -> Unit, onNoSonLaMisma: () -> Unit) {
+    var ocupado by remember(par.queda.id, par.seVa.id) { mutableStateOf(false) }
+    // Si falló, los botones vuelven: el error ya se dice debajo de las tarjetas.
+    LaunchedEffect(error) { if (error != null) ocupado = false }
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_DUPLICADO + ":" + claveDeNoSonLaMisma(par.queda.id, par.seVa.id)),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(16.dp),
+    ) {
+        Text(preguntaDelDuplicado(par), style = Movi.textos.titulo, color = Movi.colores.texto)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "«${par.queda.nombre}» y «${par.seVa.nombre}». ${porQueSePregunta(par)}",
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.textoMedio,
+        )
+        Text(
+            "Si las unes, queda «${par.queda.nombre}» con los números, llaves y movimientos de las dos.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoApagado,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Pastilla(UNIR, { ocupado = true; onUnir() }, principal = true, enabled = !ocupado)
+            Pastilla(NO_SON_LA_MISMA, { ocupado = true; onNoSonLaMisma() }, enabled = !ocupado)
         }
     }
 }

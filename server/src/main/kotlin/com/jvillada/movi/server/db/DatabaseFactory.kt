@@ -111,6 +111,8 @@ object DatabaseFactory {
             // KnownDestinations: `identificadores` y `tipo` (4-oct-2026, un tercero con varios
             // identificadores) — las dos NULLABLE, mismo motivo que `llave`. La migración
             // `pasarLosIdentificadoresALaLista` llena la primera desde `numero`/`llave`.
+            // KnownDestinations: `nombres_anteriores` (20-oct-2026, los nombres que tuvo antes un
+            // tercero) — NULLABLE, mismo motivo: un ADD COLUMN y nada más.
             // SmsMessages: `motivo_apartado` (3-oct-2026, los mensajes que no son movimientos) —
             // NULLABLE, y la tabla existe en producción con los mensajes del dueño, así que entra a
             // esta lista por lo mismo que KnownDestinations. Su único índice (`user_id`) ya existe:

@@ -1112,6 +1112,13 @@ object KnownDestinations : Table("known_destinations") {
     val identificadores = text("identificadores").nullable()
     /** `PERSONA` o `COMERCIO` (4-oct-2026). NULLABLE: los destinos viejos no lo dijeron. */
     val tipo      = varchar("tipo", 16).nullable()
+    /**
+     * **Los nombres que tuvo antes** (20-oct-2026), como JSON de `List<String>`: los llena el
+     * server al renombrarlo o al unirle otra ficha. Sirven para reconocer «Transferencia a
+     * NombreViejo» como un nombre de Movi (ver `NombreDelTercero.kt`). NULLABLE, mismo motivo que
+     * `identificadores`: la tabla existe en producción y el `ADD COLUMN` no puede fallar.
+     */
+    val nombresAnteriores = text("nombres_anteriores").nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_known_destinations_user_id", false, userId) }
 }

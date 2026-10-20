@@ -322,6 +322,17 @@ fun ChangeCategorySheet(
 internal enum class LugarDelMovimiento { Hoja, Panel }
 
 /**
+ * [event] con el nombre que le pone su tercero (la regla de `NombreDelTercero.kt`, la misma que
+ * acaba de aplicar el server), o `null` si no cambia.
+ */
+internal fun elMovimientoConElNombreDe(event: FinancialEvent, tercero: DestinoConocido): FinancialEvent? {
+    val descripcion = com.jvillada.movi.shared.model.nombreDelMovimientoParaElDestino(event, tercero)
+    val merchant = com.jvillada.movi.shared.model.merchantDelMovimientoParaElDestino(event, tercero)
+    if (descripcion == null && merchant == null) return null
+    return event.copy(description = descripcion ?: event.description, merchant = merchant ?: event.merchant)
+}
+
+/**
  * **El cuerpo de [ChangeCategorySheet]**, sacado de la hoja para poder dibujarse también en el
  * panel de al lado de la lista (Ola W4) — el mismo criterio con el que la Ola W2 sacó
  * `ContenidoDelDetalleDePeriodo`. Las cuatro ramas (traspaso, saldo inicial, la pregunta de los
@@ -701,9 +712,13 @@ internal fun ContenidoDelMovimiento(
         return
     }
 
-    MarcoDelMovimiento(lugar, onDismiss = onDismiss, dismissEnabled = !saving) {
+    // El nombre que el server le acaba de poner al guardar su tercero desde esta hoja (misma regla
+    // que el server, `NombreDelTercero.kt`). Al cerrar, quien la abrió relee la lista.
+    val renombradoAca = destinoGuardadoAca?.let { elMovimientoConElNombreDe(event, it) }
+    val alCerrar: () -> Unit = { if (renombradoAca != null) onEventChanged(renombradoAca) else onDismiss() }
+    MarcoDelMovimiento(lugar, onDismiss = alCerrar, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            NombreQueSeEdita(event.description) { edicionAbierta = true }
+            NombreQueSeEdita(renombradoAca?.description ?: event.description) { edicionAbierta = true }
             Spacer(Modifier.height(12.dp))
             PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
             Spacer(Modifier.height(18.dp))
@@ -763,6 +778,12 @@ internal fun ContenidoDelMovimiento(
                     onGuardado = { guardado ->
                         destinosParaGuardar.alGuardar(guardado)
                         destinoGuardadoAca = guardado
+                        // 20-oct-2026: el server ya le puso su nombre a este movimiento. En el panel
+                        // se relee ya; en la hoja se muestra acá (ver [renombradoAca]) y se relee al
+                        // cerrarla, para no cerrarla sin que el dueño vea que quedó guardado.
+                        if (lugar == LugarDelMovimiento.Panel) {
+                            elMovimientoConElNombreDe(event, guardado)?.let(onEventChanged)
+                        }
                     },
                 )
             }

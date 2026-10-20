@@ -461,6 +461,30 @@ internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategoria
 }
 
 /**
+ * **La memoria y después los terceros** — el orden de siempre (lo que el dueño ya decidió le gana al
+ * nombre del tercero) — y, si la memoria no reconoció el texto del banco pero el tercero sí le puso
+ * su nombre, **la memoria otra vez con ese nombre** (20-oct-2026).
+ *
+ * Hace falta desde que los movimientos de un tercero llevan su nombre canónico también en `merchant`
+ * (ver `NombreDelTercero.kt`): lo anotado queda bajo la huella `nombre:caro`, y el próximo SMS llega
+ * con «Transferencia a la cuenta *0756» (`cuenta:…`). Con esta segunda pasada, lo que él anotó para
+ * Caro se le propone igual. Solo si hay un recuerdo: sin él, la categoría que ya se dedujo del texto
+ * del banco se queda.
+ */
+internal fun conLaMemoriaYLosTerceros(
+    parsed: ParsedSms,
+    textoDelMensaje: String,
+    memoria: MemoriaDeCategorias,
+    destinos: List<DestinoConocido>,
+): ParsedSms {
+    val recordado = conLoQueMoviRecuerda(parsed, memoria)
+    val conDestino = conElDestinoConocido(recordado, textoDelMensaje, destinos)
+    if (recordado.aprendidoDe != null || conDestino.merchant == recordado.merchant) return conDestino
+    if (conDestino.category in CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA) return conDestino
+    return if (memoria.recuerdoDe(conDestino.merchant) != null) conLoQueMoviRecuerda(conDestino, memoria) else conDestino
+}
+
+/**
  * Las categorías que dice el aviso y no la costumbre: el pago de tarjeta (ver arriba), y el avance
  * de tarjeta, que nombra la tarjeta por su número —«Avance de la tarjeta *9208»— y con eso la
  * memoria lo confundiría con cualquier otro movimiento de esa tarjeta, cambiándole hasta el nombre.

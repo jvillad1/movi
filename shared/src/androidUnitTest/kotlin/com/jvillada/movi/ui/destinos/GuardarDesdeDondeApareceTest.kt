@@ -47,6 +47,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import com.jvillada.movi.shared.model.TipoDeTercero
+import com.jvillada.movi.shared.model.numeros
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -347,6 +349,32 @@ class GuardarDesdeDondeApareceTest {
         assertEquals("55500000756", creados.single().numero)
         assertTrue(hay("«Caro» quedó en Personas y comercios"))
         assertFalse(hayLaFila())
+    }
+
+    /**
+     * **Asociarlo a alguien que ya existe, desde el movimiento** (20-oct-2026): «Ya lo tengo» abre la
+     * lista sin pasar por «Otro…», elegir a Papá le suma el número y la hoja ya muestra el nombre que
+     * el server le puso al movimiento con la misma regla.
+     */
+    @Test
+    fun `desde el movimiento se elige un tercero que ya existe y el nombre cambia en el acto`() {
+        val papa = DestinoConocido(id = "dst_papa", nombre = "Papá", numero = "77700001234", tipo = TipoDeTercero.PERSONA)
+        hoja(Repo(guardados = listOf(papa)), yaAnotado.copy(description = "Transferencia a la cuenta *55500000756"))
+
+        esperar("¿De quién es la cuenta ·0756?")
+        assertFalse(hay("Papá"), "la lista no se abre sola")
+        composeRule.onNodeWithTag(TAG_ES_DE_ALGUIEN_GUARDADO, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        esperar(ELIGE_A_QUIEN)
+        tocar("Papá")
+        composeRule.waitUntil(timeoutMillis = 5_000) { actualizados.isNotEmpty() }
+        composeRule.waitForIdle()
+
+        assertEquals("dst_papa", actualizados.single().id)
+        assertTrue(actualizados.single().numeros().contains("55500000756"), "se le sumó el número del aviso")
+        assertTrue(creados.isEmpty(), "no se creó otro tercero")
+        esperar("Transferencia a Papá")
+        assertTrue(hay("«Papá» quedó en Personas y comercios"))
     }
 
     /**

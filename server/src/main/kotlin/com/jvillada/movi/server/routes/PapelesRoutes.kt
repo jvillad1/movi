@@ -29,7 +29,6 @@ import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.TipoDeIdentificador
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.categoriaProbablePorElNombre
-import com.jvillada.movi.shared.model.conElDestinoConocido
 import com.jvillada.movi.shared.model.documentoDelComprobante
 import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.idDeComprobante
@@ -375,7 +374,7 @@ private suspend fun propuestaDelComprobante(
  * guardada (ver el orden en `/api/sms/{id}/parse`).
  */
 internal fun Transaction.leidoConLoQueMoviSabe(uid: String, leido: ComprobanteLeido, texto: String): ParsedSms =
-    conElDestinoConocido(conLoQueMoviRecuerda(parsedDelComprobante(leido, texto), memoriaDe(uid)), texto, destinosDelDueno(uid))
+    conLaMemoriaYLosTerceros(parsedDelComprobante(leido, texto), texto, memoriaDe(uid), destinosDelDueno(uid))
 
 /**
  * La propuesta de la bandeja para el comprobante [smsId], leída de la lectura guardada. `null` si no

@@ -12,6 +12,7 @@ import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.aDestino
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.identificadoresComoJson
+import com.jvillada.movi.server.db.nombresAnterioresComoJson
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.sms.parseSmsTime
 import com.jvillada.movi.server.time.AppClock
@@ -44,13 +45,15 @@ import com.jvillada.movi.shared.model.conLoQueSeLeMando
 import com.jvillada.movi.shared.model.conTipoInferido
 import com.jvillada.movi.shared.model.unirTerceros
 import com.jvillada.movi.shared.model.destinosSugeridos
-import com.jvillada.movi.shared.model.esUnNombreIlegible
 import com.jvillada.movi.shared.model.mismoIdentificador
 import com.jvillada.movi.shared.model.movimientosDesdeElDestino
 import com.jvillada.movi.shared.model.movimientosHaciaElDestino
 import com.jvillada.movi.shared.model.nombreDeLaCuentaPropiaConEseNumero
-import com.jvillada.movi.shared.model.nombreDesdeElDestino
-import com.jvillada.movi.shared.model.nombreHaciaElDestino
+import com.jvillada.movi.shared.model.NombreNuevoDelMovimiento
+import com.jvillada.movi.shared.model.claveDeNoSonLaMisma
+import com.jvillada.movi.shared.model.movimientosParaElNombreDelTercero
+import com.jvillada.movi.shared.model.nombreCanonicoDelMovimiento
+import com.jvillada.movi.shared.model.nombresAnterioresCon
 import com.jvillada.movi.shared.model.nombresPropiosEn
 import com.jvillada.movi.shared.model.mensajeDeNumeroPropio
 import com.jvillada.movi.shared.model.mensajeDeLlaveRepetida
@@ -62,8 +65,6 @@ import com.jvillada.movi.shared.model.rastroDeUnMovimiento
 import com.jvillada.movi.shared.model.rechazoDelDestino
 import com.jvillada.movi.shared.model.soloLosDigitos
 import com.jvillada.movi.shared.model.todosLosIdentificadores
-import com.jvillada.movi.shared.model.vaHaciaElDestino
-import com.jvillada.movi.shared.model.vieneDelDestino
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -157,7 +158,7 @@ fun Route.destinoRoutes() {
                 deQuien = deQuien,
                 tipo = body.tipo,
             ).conIdentificadores(pedidos)
-            dbQuery {
+            val renombrados = dbQuery {
                 KnownDestinations.insert {
                     it[id]        = destino.id
                     it[userId]    = uid
@@ -169,10 +170,12 @@ fun Route.destinoRoutes() {
                     it[tipo] = destino.tipo?.name
                     it[createdAt] = System.currentTimeMillis()
                 }
+                // Recién creado ya puede tener movimientos: el dueño lo registra DESPUÉS de haberle
+                // transferido, que es literalmente el caso que trajo esta feature. Desde el 20-oct
+                // esos movimientos llevan su nombre en la misma transacción (ver [ponerleSuNombre]).
+                ponerleSuNombre(uid, destino.id)
             }
-            // Recién creado ya puede tener movimientos: el dueño lo registra DESPUÉS de haberle
-            // transferido, que es literalmente el caso que trajo esta feature.
-            call.respond(HttpStatusCode.Created, paraCompletar(uid).completar(destino))
+            call.respond(HttpStatusCode.Created, paraCompletar(uid).completar(destino).copy(renombrados = renombrados))
         }
 
         put("/{id}") {
@@ -201,10 +204,15 @@ fun Route.destinoRoutes() {
                 deQuien = deQuien,
                 // `null` = el cliente no sabe de tipos (el APK instalado): se queda el que había.
                 tipo = body.tipo ?: guardado.tipo,
+                // 20-oct: el nombre de antes se recuerda, para reconocer «Transferencia a NombreViejo».
+                // Lo maneja el server: lo que mande el cliente en este campo se ignora.
+                nombresAnteriores = nombresAnterioresCon(guardado.nombresAnteriores, listOf(guardado.nombre), nombreDeHoy = nombre),
             ).conIdentificadores(pedidos)
-            val actualizadas = dbQuery { guardarDestino(uid, destino) }
-            if (actualizadas == 0) return@put call.respond(HttpStatusCode.NotFound)
-            call.respond(paraCompletar(uid).completar(destino))
+            val renombrados = dbQuery {
+                if (guardarDestino(uid, destino) == 0) return@dbQuery null
+                ponerleSuNombre(uid, destino.id)
+            } ?: return@put call.respond(HttpStatusCode.NotFound)
+            call.respond(paraCompletar(uid).completar(destino).copy(renombrados = renombrados))
         }
 
         delete("/{id}") {
@@ -282,17 +290,20 @@ fun Route.destinoRoutes() {
                     guardarDestino(uid, otro.conIdentificadores(leQueda))
                 }
                 if (destino.todosLosIdentificadores().any { mismoIdentificador(it, nuevo) }) {
-                    return@dbQuery HttpStatusCode.OK to destino
+                    // Ya lo tenía: nada que guardar, pero los movimientos se ponen al día igual (la
+                    // misma regla, idempotente) — así sumarlo dos veces nunca deja uno sin nombre.
+                    return@dbQuery HttpStatusCode.OK to destino.copy(renombrados = ponerleSuNombre(uid, destino.id))
                 }
                 val actualizado = destino.conIdentificadores(destino.todosLosIdentificadores() + nuevo)
                 guardarDestino(uid, actualizado)
                 // Lo que se sumó deja de ser un sugerido descartado: ahora es de alguien.
                 DestinosDescartados.deleteWhere { (DestinosDescartados.userId eq uid) and (DestinosDescartados.clave eq nuevo.clave) }
-                HttpStatusCode.OK to actualizado
+                // 20-oct: los movimientos que ahora son suyos llevan su nombre, en esta transacción.
+                HttpStatusCode.OK to actualizado.copy(renombrados = ponerleSuNombre(uid, actualizado.id))
             }
             val (status, cuerpo) = resultado
             if (cuerpo is DestinoConocido) {
-                call.respond(status, paraCompletar(uid).completar(cuerpo))
+                call.respond(status, paraCompletar(uid).completar(cuerpo).copy(renombrados = cuerpo.renombrados))
             } else {
                 call.respond(status, cuerpo as String)
             }
@@ -321,10 +332,15 @@ fun Route.destinoRoutes() {
 
         /**
          * **Unir dos fichas de la misma persona o comercio** (4-oct-2026): todo lo de `{id}` pasa a
-         * `{con}` (sus números, llaves y nombres; la nota y el tipo si `{con}` no los tiene), las
-         * reglas recurrentes que apuntaban a `{id}` pasan a `{con}`, y `{id}` se borra. **Ningún
-         * movimiento se toca**: se reconocen por el texto del banco, y ahora todos esos datos son
-         * de `{con}`.
+         * `{con}` (sus números, llaves y nombres; la nota y el tipo si `{con}` no los tiene; el
+         * nombre de `{id}` queda entre los anteriores), las reglas recurrentes y los créditos que
+         * apuntaban a la ficha que se borra pasan a la que queda, y los movimientos con un nombre
+         * de Movi pasan al de `{con}` en la misma transacción (20-oct, ver [ponerleSuNombre]).
+         *
+         * **El id que sobrevive es el de la ficha más antigua** (20-oct-2026), aunque el dueño haya
+         * elegido conservar la más nueva: `credit_terms` y `recurring_rules` apuntan a los ids de
+         * siempre (`dest_caro`, `dest_papa`), y el contenido —el nombre que él eligió— va igual al
+         * de `{con}`. Las referencias se mueven en los dos casos.
          *
          * Las dos tienen que ser del dueño: si una no existe o es de otro, 404 y nada cambia.
          */
@@ -336,16 +352,41 @@ fun Route.destinoRoutes() {
             val unido = dbQuery {
                 val seVa = destinoDe(uid, id) ?: return@dbQuery null
                 val queda = destinoDe(uid, con) ?: return@dbQuery null
-                val resultado = unirTerceros(seVa, queda)
-                guardarDestino(uid, resultado)
+                val (sobrevive, seBorra) = if (laMasAntigua(seVa, queda) == seVa) seVa.id to queda.id else queda.id to seVa.id
+                val resultado = unirTerceros(seVa, queda).copy(id = sobrevive, creadoEn = if (sobrevive == seVa.id) seVa.creadoEn else queda.creadoEn)
                 RecurringRules.update({
-                    (RecurringRules.userId eq uid) and (RecurringRules.destinoConocidoId eq id)
-                }) { it[RecurringRules.destinoConocidoId] = con }
-                Credits.update({ (Credits.userId eq uid) and (Credits.destinoConocidoId eq id) }) { it[Credits.destinoConocidoId] = con }
-                KnownDestinations.deleteWhere { (KnownDestinations.id eq id) and (KnownDestinations.userId eq uid) }
-                resultado
+                    (RecurringRules.userId eq uid) and (RecurringRules.destinoConocidoId eq seBorra)
+                }) { it[RecurringRules.destinoConocidoId] = sobrevive }
+                Credits.update({ (Credits.userId eq uid) and (Credits.destinoConocidoId eq seBorra) }) { it[Credits.destinoConocidoId] = sobrevive }
+                KnownDestinations.deleteWhere { (KnownDestinations.id eq seBorra) and (KnownDestinations.userId eq uid) }
+                guardarDestino(uid, resultado)
+                resultado.copy(renombrados = ponerleSuNombre(uid, sobrevive))
             } ?: return@post call.respond(HttpStatusCode.NotFound)
-            call.respond(paraCompletar(uid).completar(unido))
+            call.respond(paraCompletar(uid).completar(unido).copy(renombrados = unido.renombrados))
+        }
+
+        /**
+         * **«No son la misma»** (20-oct-2026): la tarjeta «¿Es la misma persona?» no vuelve a
+         * proponer este par. Se guarda en `destinos_descartados` con la clave de
+         * `claveDeNoSonLaMisma`, que la app lee por `/descartados`. Idempotente; 404 si alguna de las
+         * dos no es del dueño.
+         */
+        post("/{id}/no-es/{otro}") {
+            val uid = call.userId()
+            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta el id")
+            val otro = call.parameters["otro"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta la otra ficha")
+            if (id == otro) return@post call.respond(HttpStatusCode.BadRequest, "Es la misma ficha")
+            val hecho = dbQuery {
+                if (destinoDe(uid, id) == null || destinoDe(uid, otro) == null) return@dbQuery false
+                DestinosDescartados.insertIgnore {
+                    it[userId] = uid
+                    it[clave] = claveDeNoSonLaMisma(id, otro).take(120)
+                    it[motivo] = MOTIVO_NO_SON_LA_MISMA
+                    it[creadoEn] = System.currentTimeMillis()
+                }
+                true
+            }
+            if (hecho) call.respond(HttpStatusCode.NoContent) else call.respond(HttpStatusCode.NotFound)
         }
 
         // ── Lo que Movi encontró solo ───────────────────────────────────────────
@@ -394,28 +435,34 @@ fun Route.destinoRoutes() {
         // ── Ponerle el nombre a lo que ya estaba anotado ────────────────────────
 
         /**
-         * **Los movimientos que se pueden renombrar**: los que nombran a este tercero por el texto
-         * del banco y tienen un nombre ilegible («Transferencia a la cuenta *41279033068», «Pago QR ·
-         * llave 0047142708» — ver `esUnNombreIlegible`). La app los muestra con la cantidad a la
-         * vista y pide confirmación; esto no cambia nada.
+         * **Los movimientos que cambiarían de nombre**, sin cambiar nada: la misma regla que corre
+         * sola al crear, editar, sumar un identificador o unir (`movimientosParaElNombreDelTercero`).
+         * Desde el 20-oct-2026 casi siempre está vacía —esas escrituras ya los renombran—; queda
+         * como respaldo para lo anotado DESPUÉS (a mano, por un extracto, por un teléfono que subió
+         * tarde) y para que la normalización de datos viejos se pueda mirar antes de aplicarla.
+         * Cada movimiento viene con el nombre que tiene HOY.
          */
         get("/{id}/renombrables") {
             val uid = call.userId()
             val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Falta el id")
-            val destino = dbQuery { destinoDe(uid, id) } ?: return@get call.respond(HttpStatusCode.NotFound)
-            call.respond(
+            val respuesta = dbQuery {
+                val destino = destinoDe(uid, id) ?: return@dbQuery null
+                val (conTipo, cambios) = loQueCambiaDe(uid, destino)
+                val porId = cambios.associateBy { it.id }
                 MovimientosParaRenombrar(
-                    nombreNuevoDelGasto = nombreHaciaElDestino(destino),
-                    nombreNuevoDelIngreso = nombreDesdeElDestino(destino),
-                    movimientos = renombrablesDe(destino, loadNonVoidedEvents(uid)),
-                ),
-            )
+                    nombreNuevoDelGasto = nombreCanonicoDelMovimiento(conTipo, TransactionType.EXPENSE),
+                    nombreNuevoDelIngreso = nombreCanonicoDelMovimiento(conTipo, TransactionType.INCOME),
+                    movimientos = loadNonVoidedEventsIn(uid).filter { it.id in porId }.sortedByDescending { it.timestamp },
+                )
+            } ?: return@get call.respond(HttpStatusCode.NotFound)
+            call.respond(respuesta)
         }
 
         /**
-         * **Renombrar los que el dueño confirmó.** Cada id se vuelve a validar: tiene que ser suyo,
-         * no anulado, nombrar a este tercero y tener un nombre ilegible. Lo que no cumple se omite y
-         * se cuenta — un nombre que el dueño escribió **nunca** se pisa, aunque venga en la lista.
+         * **Renombrar los que el dueño confirmó.** Cada id se vuelve a validar con la misma regla:
+         * tiene que ser suyo, no anulado, de este tercero y con un nombre de Movi. Lo que no cumple
+         * se omite y se cuenta — un nombre que el dueño escribió **nunca** se pisa, aunque venga en
+         * la lista.
          */
         post("/{id}/renombrar") {
             val uid = call.userId()
@@ -425,17 +472,8 @@ fun Route.destinoRoutes() {
             if (ids.isEmpty()) return@post call.respond(HttpStatusCode.BadRequest, "No hay movimientos para renombrar")
             val resultado = dbQuery {
                 val destino = destinoDe(uid, id) ?: return@dbQuery null
-                val validos = renombrablesDe(destino, loadNonVoidedEventsIn(uid)).filter { it.id in ids }
-                val ahora = System.currentTimeMillis()
-                validos.forEach { ev ->
-                    Events.update({ (Events.userId eq uid) and (Events.id eq ev.id) }) {
-                        it[description] = if (ev.type == TransactionType.INCOME) nombreDesdeElDestino(destino)
-                        else nombreHaciaElDestino(destino)
-                        // Como toda corrección de concepto: la edad de la edición, para que un
-                        // reenvío del teléfono no le devuelva el nombre viejo.
-                        it[lastEditedAt] = ahora
-                    }
-                }
+                val validos = loQueCambiaDe(uid, destino).second.filter { it.id in ids }
+                escribirLosNombres(uid, validos)
                 RenombradosDelDestino(renombrados = validos.size, omitidos = ids.size - validos.size)
             } ?: return@post call.respond(HttpStatusCode.NotFound)
             call.respond(resultado)
@@ -487,16 +525,59 @@ internal suspend fun sugeridosDe(uid: String, ahora: Long = System.currentTimeMi
     }
 }
 
-/** Los movimientos de [destino] (de ida o de vuelta) con un nombre ilegible. */
-private fun renombrablesDe(destino: DestinoConocido, eventos: List<com.jvillada.movi.shared.model.FinancialEvent>) =
-    eventos.filter { ev ->
-        ev.transferId == null &&
-            (vaHaciaElDestino(ev, destino) || vieneDelDestino(ev, destino)) &&
-            esUnNombreIlegible(ev.description) &&
-            // Que lo nombre el TEXTO DEL BANCO y no solo el concepto: un concepto ilegible no dice
-            // el nombre del tercero, así que esto ya lo garantiza — se deja explícito igual.
-            ev.description != nombreHaciaElDestino(destino) && ev.description != nombreDesdeElDestino(destino)
-    }.sortedByDescending { it.timestamp }
+/** Lo que se guarda en `destinos_descartados.motivo` para «No son la misma». */
+internal const val MOTIVO_NO_SON_LA_MISMA: String = "NO_ES_LA_MISMA"
+
+/**
+ * **Ponerle a los movimientos de este tercero su nombre** (20-oct-2026), dentro de la transacción de
+ * quien llama: la escritura del tercero y la de sus movimientos se confirman o se deshacen juntas.
+ * Lee el tercero como quedó ([id]), con su tipo deducido si el dueño no lo eligió, y aplica
+ * `movimientosParaElNombreDelTercero` — la regla única de `NombreDelTercero.kt`: solo nombres de
+ * Movi o del banco, nunca lo que escribió el dueño (la nota después de « · » se conserva), nunca una
+ * pata de traspaso o de cuota, nunca un anulado (`loadNonVoidedEventsIn`). Devuelve cuántos cambió.
+ */
+internal fun Transaction.ponerleSuNombre(uid: String, id: String): Int {
+    val destino = destinoDe(uid, id) ?: return 0
+    val cambios = loQueCambiaDe(uid, destino).second
+    escribirLosNombres(uid, cambios)
+    return cambios.size
+}
+
+/** El tercero con su tipo (el elegido o el deducido) y los movimientos que cambiarían de nombre. */
+private fun Transaction.loQueCambiaDe(uid: String, destino: DestinoConocido): Pair<DestinoConocido, List<NombreNuevoDelMovimiento>> {
+    val eventos = loadNonVoidedEventsIn(uid)
+    val textos = SmsMessages.selectAll().where { SmsMessages.userId eq uid }
+        .filter { it[SmsMessages.motivoApartado] == null }
+        .map { it[SmsMessages.text] } + eventos.mapNotNull { it.rawPayload }
+    // El tipo deducido decide el formato («Transferencia a X» o «X» a secas) igual que al leerlo.
+    val conTipo = conTipoInferido(destino, textos)
+    return conTipo to movimientosParaElNombreDelTercero(conTipo, eventos, destinosDe(uid))
+}
+
+/** Escribe los nombres nuevos, sellando `lastEditedAt` como toda corrección de concepto. */
+private fun Transaction.escribirLosNombres(uid: String, cambios: List<NombreNuevoDelMovimiento>) {
+    if (cambios.isEmpty()) return
+    val ahora = System.currentTimeMillis()
+    cambios.forEach { c ->
+        Events.update({ (Events.userId eq uid) and (Events.id eq c.id) }) {
+            it[description] = c.descripcion
+            it[merchant] = c.merchant
+            // La edad de la edición, para que un reenvío del teléfono no le devuelva el nombre viejo.
+            it[lastEditedAt] = ahora
+        }
+    }
+}
+
+/** De dos fichas, la que se guardó primero; sin fecha, la de id menor (estable). */
+private fun laMasAntigua(a: DestinoConocido, b: DestinoConocido): DestinoConocido {
+    val ca = a.creadoEn ?: Long.MAX_VALUE
+    val cb = b.creadoEn ?: Long.MAX_VALUE
+    return when {
+        ca < cb -> a
+        cb < ca -> b
+        else -> if (a.id <= b.id) a else b
+    }
+}
 
 /**
  * Lo que cambió un cliente que no conoce la lista (el APK instalado): mandó `numero` y quizás
@@ -575,6 +656,7 @@ private fun Transaction.guardarDestino(uid: String, destino: DestinoConocido): I
         it[llave] = destino.llave
         it[identificadores] = identificadoresComoJson(destino.identificadores)
         it[tipo] = destino.tipo?.name
+        it[nombresAnteriores] = nombresAnterioresComoJson(destino.nombresAnteriores)
     }
 
 /**

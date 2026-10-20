@@ -367,6 +367,10 @@ class WalletRepositoryImpl(
     override suspend fun unirDestinos(id: String, con: String): DestinoConocido =
         conElTextoDelRechazo(client.post("$baseUrl/api/destinos/$id/unir/$con")).body()
 
+    override suspend fun noSonLaMisma(id: String, otro: String) {
+        conElTextoDelRechazo(client.post("$baseUrl/api/destinos/$id/no-es/$otro"))
+    }
+
     override suspend fun quitarIdentificador(id: String, identificador: IdentificadorDelDestino): DestinoConocido =
         conElTextoDelRechazo(
             client.post("$baseUrl/api/destinos/$id/identificadores/quitar") {

@@ -180,10 +180,17 @@ interface WalletRepository {
         noLoTiene("agregarIdentificador")
 
     /**
-     * **Une dos fichas de la misma persona o comercio** (4-oct-2026): todo lo de [id] pasa a [con] y
-     * [id] se borra. Devuelve [con] ya unida. Ningún movimiento se toca.
+     * **Une dos fichas de la misma persona o comercio** (4-oct-2026): todo lo de [id] pasa a [con].
+     * Devuelve la ficha unida, con el nombre de [con] y el id de la más antigua de las dos; los
+     * movimientos con un nombre de Movi pasan a ese nombre ([DestinoConocido.renombrados]).
      */
     suspend fun unirDestinos(id: String, con: String): DestinoConocido = noLoTiene("unirDestinos")
+
+    /**
+     * **«No son la misma»** (20-oct-2026): la tarjeta «¿Es la misma persona?» no vuelve a proponer
+     * el par [id]/[otro] (ver `posiblesDuplicados`). Idempotente.
+     */
+    suspend fun noSonLaMisma(id: String, otro: String): Unit = noLoTiene("noSonLaMisma")
 
     /** Le quita un identificador. 400 si es el último. */
     suspend fun quitarIdentificador(id: String, identificador: IdentificadorDelDestino): DestinoConocido =
