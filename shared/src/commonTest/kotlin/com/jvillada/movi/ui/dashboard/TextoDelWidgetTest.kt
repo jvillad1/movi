@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.PaymentStatus
@@ -136,6 +137,19 @@ class TextoDelWidgetTest {
         assertEquals(formatCOP(4_750_000), texto.cifra, "Tu plata: lo que no depende del período se queda")
         assertEquals("el 21 de septiembre a las 9:40", texto.pie)
         assertFalse(texto.enRojo)
+    }
+
+    /** Cuando cae a «Tu plata», lo apartado no cuenta: la misma cifra que el hero de Hoy. */
+    @Test
+    fun `cuando dice Tu plata descuenta lo apartado, como el heroe`() {
+        val conColegio = instantanea.copy(
+            apartados = listOf(Apartado(accountId = "a1", proposito = "Colegio nov-dic", monto = 4_000_000)),
+        )
+        val tresDeOctubre = en(LocalDate(2026, 10, 3), 8, 0)
+        val texto = textoDelWidget(conColegio, selladaEn = en(hoy, 9, 40), haySesion = true, ahora = tresDeOctubre)
+
+        assertEquals(HERO_BALANCE_TITLE, texto.rotulo)
+        assertEquals(formatCOP(750_000), texto.cifra)
     }
 
     @Test

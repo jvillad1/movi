@@ -114,6 +114,12 @@ data class DashboardSummary(
      */
     val pagosDeDeudaFueraDelChecklist: Long? = null,
     /**
+     * Lo apartado que el Disponible resta: lo que sale de Tu plata (ver [Apartado],
+     * [Patrimonio.apartado]) menos lo que un pago pendiente del período ya resta como fijo (ver
+     * [apartadoFueraDeLosFijos]). `null` = server anterior al campo: se toma como cero. Solo se AGREGA.
+     */
+    val apartado: Long? = null,
+    /**
      * **El patrimonio honesto**: tu plata, lo condicionado, los bienes y las deudas, ya partidos
      * con [patrimonioDe] — la MISMA función que usa el cliente sobre la lista de cuentas.
      *

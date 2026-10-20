@@ -43,6 +43,8 @@ sealed interface ClaveDeLectura<T : Any> {
     data object Creditos : ClaveDeLectura<List<CreditSummary>>
     data object Tarjetas : ClaveDeLectura<List<CardSummary>>
     data object Destinos : ClaveDeLectura<List<DestinoConocido>>
+    /** La plata apartada de cada cuenta, con lo que le queda (ver `Apartado` en `:core`). */
+    data object Apartados : ClaveDeLectura<List<com.jvillada.movi.shared.model.Apartado>>
     /** Ola 4: el supuesto del gasto del día a día de la caja proyectada (sale de períodos cerrados). */
     data object GastoDelDiaADia : ClaveDeLectura<com.jvillada.movi.shared.model.GastoDelDiaADia>
 

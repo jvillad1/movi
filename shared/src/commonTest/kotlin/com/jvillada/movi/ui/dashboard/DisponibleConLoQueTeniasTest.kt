@@ -468,4 +468,51 @@ class DisponibleConLoQueTeniasTest {
             sinMargen(d),
         )
     }
+
+    // ── Lo apartado ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `el desglose dice lo que apartaste, para que la cuenta sume`() {
+        val d = assertNotNull(
+            disponibleDelPeriodo(
+                0, checklist.take(2), emptyMap(), inicio, finExclusivo, hoy,
+                plata = PlataDelDisponible(saldoAlInicio = 10_000_000, entradas = 0, guardado = 0, apartado = 4_000_000),
+            ),
+        )
+        assertEquals(10_000_000 - 4_000_000 - d.fijos, d.disponible)
+        assertEquals(listOf("Tenías \$10M el 25 · entraron \$0", "Apartaste \$4M · fijos \$2,6M"), desgloseDelDisponible(d))
+    }
+
+    @Test
+    fun `sin margen nombra lo apartado cuando es lo que se lleva lo ultimo`() {
+        val apartado = assertNotNull(
+            disponibleDelPeriodo(
+                0, checklist.take(2), emptyMap(), inicio, finExclusivo, hoy,
+                plata = PlataDelDisponible(saldoAlInicio = 3_000_000, entradas = 0, guardado = 0, apartado = 1_000_000),
+            ),
+        )
+        assertEquals(
+            "Los fijos y lo que apartaste superan lo que tenías y lo que entró por \$620.000",
+            sinMargen(apartado),
+        )
+        // Si los fijos solos ya se llevan todo, lo apartado no es el porqué: no se nombra.
+        val fijos = assertNotNull(
+            disponibleDelPeriodo(
+                0, checklist.take(2), emptyMap(), inicio, finExclusivo, hoy,
+                plata = PlataDelDisponible(saldoAlInicio = 2_000_000, entradas = 0, guardado = 0, apartado = 1_000_000),
+            ),
+        )
+        assertEquals("Los fijos del período superan lo que tenías y lo que entró por \$1,6M", sinMargen(fijos))
+        // Con los otros pagos de deuda, se nombran los tres.
+        val tres = assertNotNull(
+            disponibleDelPeriodo(
+                0, checklist.take(2), emptyMap(), inicio, finExclusivo, hoy,
+                plata = PlataDelDisponible(saldoAlInicio = 4_000_000, entradas = 0, guardado = 0, otrosPagosDeDeuda = 500_000, apartado = 1_000_000),
+            ),
+        )
+        assertEquals(
+            "Los fijos, los otros pagos de deuda y lo que apartaste superan lo que tenías y lo que entró por \$120.000",
+            sinMargen(tres),
+        )
+    }
 }

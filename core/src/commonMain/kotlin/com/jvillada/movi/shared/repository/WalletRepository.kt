@@ -52,6 +52,7 @@ import com.jvillada.movi.shared.model.RenombradosDelDestino
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
@@ -125,6 +126,12 @@ interface WalletRepository {
     suspend fun createGoal(goal: Goal): Goal
     suspend fun updateGoal(id: String, goal: Goal): Goal
     suspend fun deleteGoal(id: String)
+
+    /** Apartados: plata separada con un propósito. Un server viejo (404) cuenta como «ninguno». */
+    suspend fun getApartados(): List<Apartado>
+    /** Siempre POST (upsert por id): sin id, el cliente genera `apt_<uuid>` para que reintentar no duplique. */
+    suspend fun guardarApartado(a: Apartado): Apartado
+    suspend fun quitarApartado(id: String)
 
     // ── Cuentas de otros (destinos conocidos) ─────────────────────────────────
 

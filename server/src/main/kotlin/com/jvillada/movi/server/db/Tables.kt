@@ -1052,6 +1052,26 @@ object Goals : Table("goals") {
 }
 
 /**
+ * **Apartados** — plata que sigue en una cuenta propia pero ya tiene dueño («estos $8M son del
+ * colegio»). `restante` NO vive acá: se deriva en cada lectura de `monto` menos lo gastado en
+ * `categoria` desde `desde` (ver `apartadosDelUsuario`), por lo mismo que `goals` no guarda su
+ * «ahorrado» — un número guardado aparte se desincroniza del que está bien.
+ */
+object Apartados : Table("apartados") {
+    val id           = varchar("id", 50)
+    val userId       = varchar("user_id", 50)
+    val accountId    = varchar("account_id", 50)
+    val proposito    = varchar("proposito", 60)
+    val monto        = long("monto")
+    val categoria    = varchar("categoria", 100).nullable()
+    val desde        = long("desde")
+    val createdAt    = long("created_at")
+    val lastEditedAt = long("last_edited_at").nullable()
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_apartados_user_id", false, userId) }
+}
+
+/**
  * **Las cuentas de otros** — el registro de números de cuenta ajenos, con nombre y de quién son.
  * Ver `DestinoConocido` en `:core` para el porqué de que esto NO sea una `Account`.
  *

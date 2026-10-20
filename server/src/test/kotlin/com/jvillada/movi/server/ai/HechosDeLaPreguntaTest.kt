@@ -5,6 +5,7 @@ import com.jvillada.movi.server.routes.comoContexto
 import com.jvillada.movi.server.routes.toMessageParam
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.Bien
 import com.jvillada.movi.shared.model.CLASE_DE_BIEN_INMUEBLE
 import com.jvillada.movi.shared.model.ChatMessage
@@ -226,6 +227,28 @@ class HechosDeLaPreguntaTest {
 
         val intereses = assertNotNull(hechos("¿cuánto pago de intereses?"))
         assertTrue(intereses.indexOf("«Hipoteca 1254»") < intereses.indexOf("«Vehículo 8761»"), "del más caro al más barato:\n$intereses")
+    }
+
+    /** Lo apartado se dice con su propósito y su monto, y «Tu plata» ya no lo cuenta. */
+    @Test
+    fun `lo apartado se dice con su proposito y su monto y no cuenta en Tu plata`() {
+        val apartados = listOf(Apartado(id = "a1", accountId = "bc", proposito = "Colegio", monto = 3_000_000L))
+        val conApartado = datos.copy(patrimonio = patrimonioDe(cuentas, apartados), apartados = apartados)
+        assertEquals(datos.patrimonio.tuPlata - 3_000_000L, conApartado.patrimonio.tuPlata)
+
+        val cuenta = assertNotNull(hechosParaLaPregunta("¿cuánto tengo en Bancolombia Ahorros?", conApartado.paraLosHechos()))
+        assertTrue("apartado «Colegio» \$3.000.000" in cuenta, cuenta)
+        assertTrue("libre en esta cuenta: \$200.000" in cuenta, cuenta)
+
+        val patrimonio = assertNotNull(hechosParaLaPregunta("¿cuál es mi patrimonio?", conApartado.paraLosHechos()))
+        assertTrue("Plata apartada (para Colegio; sigue en sus cuentas pero ya tiene dueño, NO disponible): \$3.000.000" in patrimonio, patrimonio)
+        assertTrue("- Tu plata (disponible): ${pesos(conApartado.patrimonio.tuPlata)}" in patrimonio, patrimonio)
+        assertTrue("- Patrimonio neto: ${pesos(datos.patrimonio.neto)}" in patrimonio, patrimonio)
+
+        val contexto = conApartado.comoContexto()
+        assertTrue("apartado «Colegio» \$3000000" in contexto, contexto)
+        assertTrue("- Tu plata (disponible para usar): \$${conApartado.patrimonio.tuPlata}" in contexto, contexto)
+        assertTrue("Plata apartada (para Colegio" in contexto, contexto)
     }
 
     /**

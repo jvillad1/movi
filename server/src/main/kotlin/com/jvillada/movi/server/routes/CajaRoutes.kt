@@ -1,6 +1,6 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.balance.cuentasConSaldo
+import com.jvillada.movi.server.apartados.tuPlataConApartados
 import com.jvillada.movi.server.balance.hayMovimientosEnOtraMoneda
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
@@ -23,7 +23,6 @@ import com.jvillada.movi.shared.model.cajaProyectada
 import com.jvillada.movi.shared.model.checklistDelPeriodo
 import com.jvillada.movi.shared.model.gastoDelDiaADia
 import com.jvillada.movi.shared.model.gastoVariablePorDia
-import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.periodoAnterior
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.ventanaDe
@@ -128,7 +127,10 @@ internal suspend fun cajaProyectadaDe(uid: String, hoy: LocalDate = AppClock.tod
     val tuPlata = dbQuery {
         val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }
             .map { it[VoidEvents.originalEventId] }.toSet()
-        patrimonioDe(cuentasConSaldo(uid, anulados, usdToCop)).tuPlata
+        // Tu plata ya resta todo lo apartado; lo que un pago pendiente de [pagos] cubre se devuelve,
+        // porque ese pago lo resta el día que vence (ver `apartadoCubiertoPorLosFijos`).
+        val conApartados = tuPlataConApartados(uid, anulados, usdToCop)
+        conApartados.patrimonio.tuPlata + conApartados.apartadoCubierto(pagos)
     }
     val gasto = gastoDelDiaADiaDe(uid, hoy)
     val ultimoDia = epochMillisToAppDate(ventanaDe(periodo, ajustes).last)

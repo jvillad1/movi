@@ -8,6 +8,8 @@ import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.esDeTuPlata
 import com.jvillada.movi.shared.model.esBien
 import com.jvillada.movi.shared.model.patrimonioDe
+import com.jvillada.movi.shared.model.Apartado
+import com.jvillada.movi.shared.model.apartadoEfectivoPorCuenta
 import com.jvillada.movi.shared.model.Patrimonio
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
@@ -196,6 +198,12 @@ data class DashboardData(
      * pide aparte, como los débitos automáticos. `null` = no llegó, y no se dice nada.
      */
     val cuadresPorAviso: List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso>? = null,
+    /**
+     * **Lo apartado** (`GET /api/apartados`): plata de una cuenta que ya tiene dueño («Colegio
+     * nov-dic»). Sale de «Tu plata» y tiene su tramo en el patrimonio (ver [heroBalance],
+     * `patrimonioDelInicio`). `null` = no llegó (o falló): se toma como ninguno.
+     */
+    val apartados: List<Apartado>? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -300,6 +308,13 @@ data class HeroBalance(
      */
     val bienes: Long = 0L,
     /**
+     * Plata de tus cuentas que **ya tiene dueño** (ver `Apartado` en `:core`): fuera de [tuPlata],
+     * dentro de [patrimonio]. Default en 0, como [bienes].
+     */
+    val apartado: Long = 0L,
+    /** Para qué, con un solo propósito; con varios, `null` (mismo criterio que [condicionadoA]). */
+    val apartadoPara: String? = null,
+    /**
      * Activos **completos** (la plata condicionada y los bienes incluidos) − [deudas]. Puede ser
      * negativo, y con cinco créditos hipotecarios lo será.
      *
@@ -325,7 +340,7 @@ data class HeroBalance(
      * escondía justo cuando la línea dejaba de ser redundante. (Ver [patrimonioExplicacion],
      * que cambia «menos … en deudas» por «más … a favor en créditos» en ese caso.)
      */
-    val muestraPatrimonio: Boolean get() = deudas != 0L || condicionado > 0L || bienes > 0L
+    val muestraPatrimonio: Boolean get() = deudas != 0L || condicionado > 0L || bienes > 0L || apartado > 0L
     /** Sin nada invertido no hay nada que desglosar: el hero no pinta la línea del desglose. */
     val hasInvestments: Boolean get() = invertido != 0L
 }
@@ -431,19 +446,25 @@ fun heroBalanceTitle(@Suppress("UNUSED_PARAMETER") section: ScreenSection): Stri
  * condicionada se nombra con su condición cuando hay una sola, igual que el renglón del hero.
  */
 fun patrimonioExplicacion(balance: HeroBalance): String {
+    // Lo apartado también es tuyo: sin su parte la resta no cerraba con un colegio apartado.
+    val apartado = when {
+        balance.apartado <= 0L -> null
+        balance.apartadoPara != null ->
+            "más ${formatMoneyCompact(balance.apartado)} apartados para ${balance.apartadoPara}"
+        else -> "más ${formatMoneyCompact(balance.apartado)} apartados"
+    }
     val condicionado = when {
-        balance.condicionado <= 0L -> ""
+        balance.condicionado <= 0L -> null
         balance.condicionadoA != null ->
-            " más ${formatMoneyCompact(balance.condicionado)} solo para ${balance.condicionadoA}"
-        else -> " más ${formatMoneyCompact(balance.condicionado)} de uso condicionado"
+            "más ${formatMoneyCompact(balance.condicionado)} solo para ${balance.condicionadoA}"
+        else -> "más ${formatMoneyCompact(balance.condicionado)} de uso condicionado"
     }
     // **Los bienes, con nombre.** Sin esta parte, con la casa cargada la línea decía «Tu plata
     // más $116,2M…, menos $2.191,0M en deudas» debajo de un patrimonio de −$662M: faltaban
     // $1.411,9M para que la resta cerrara, que es el único trabajo de esta línea.
-    val bienes = if (balance.bienes > 0L) {
-        (if (condicionado.isEmpty()) " " else ", ") + "más ${formatMoneyCompact(balance.bienes)} en bienes"
-    } else ""
-    val sumandos = condicionado + bienes
+    val bienes = if (balance.bienes > 0L) "más ${formatMoneyCompact(balance.bienes)} en bienes" else null
+    val partes = listOfNotNull(apartado, condicionado, bienes)
+    val sumandos = if (partes.isEmpty()) "" else partes.joinToString(", ", prefix = " ")
     // Con una parte condicionada (o bienes) ya dicha, la coma separa los sumandos: sin ella
     // («…solo para Vivienda menos $1.505,1M en deudas») las dos frases se leen como una sola.
     val separador = if (sumandos.isEmpty()) " " else ", "
@@ -479,8 +500,8 @@ private fun cuentasLibres(accounts: List<Account>): List<Account> =
  * contexto de Movi AI. Así el hero, la fila «Cuentas» del Inicio, el «Patrimonio neto» de la
  * pantalla de Cuentas y lo que contesta el asistente no pueden dar cuatro números distintos.
  */
-fun heroBalance(accounts: List<Account>): HeroBalance {
-    val p = patrimonioDe(accounts)
+fun heroBalance(accounts: List<Account>, apartados: List<Apartado> = emptyList()): HeroBalance {
+    val p = patrimonioDe(accounts, apartados)
     return HeroBalance(
         tuPlata = p.tuPlata,
         disponible = p.disponible,
@@ -488,10 +509,16 @@ fun heroBalance(accounts: List<Account>): HeroBalance {
         condicionado = p.condicionado,
         condicionadoA = p.condicionadoA,
         bienes = p.bienes,
+        apartado = p.apartado,
+        apartadoPara = p.apartadoPara,
         deudas = p.deudas,
         patrimonio = p.neto,
     )
 }
+
+/** Cuánto de [account] está apartado **de verdad**: [apartadoEfectivoPorCuenta] (`:core`) para esa cuenta. */
+fun apartadoEfectivoDe(account: Account, apartados: List<Apartado>): Long =
+    apartadoEfectivoPorCuenta(listOf(account), apartados)[account.id] ?: 0L
 
 /** Una fila del desglose por cuenta del hero: el nombre y su saldo, ya formateado con signo y moneda. */
 data class CuentaHero(val nombre: String, val monto: String)
@@ -510,16 +537,19 @@ data class CuentaHero(val nombre: String, val monto: String)
  * `null` = todavía no contestó — igual que [DashboardData.accounts], para no afirmar una lista
  * vacía cuando en realidad no se sabe todavía.
  */
-fun cuentasDelHero(accounts: List<Account>?): List<CuentaHero>? {
+fun cuentasDelHero(accounts: List<Account>?, apartados: List<Apartado> = emptyList()): List<CuentaHero>? {
     if (accounts == null) return null
     val libres = cuentasLibres(accounts)
     val disponibles = libres.filter { it.type.group != AccountGroup.INVERSION }
     val invertidas = libres.filter { it.type.group == AccountGroup.INVERSION }
     // Cada cuenta en SU moneda (una cuenta en dólares decía «US$0»: era su parte en pesos con el
     // rótulo de dólares). Ver [saldoEnSuMoneda].
+    // Lo apartado no es disponible: la fila dice lo libre, para que las filas sumen «Tu plata».
+    // Los apartados son en pesos, así que solo se descuentan de un saldo en pesos.
     return (disponibles + invertidas).map {
         val (monto, moneda) = saldoEnSuMoneda(it)
-        CuentaHero(it.name, signedMoney(monto, moneda))
+        val libre = if (moneda == "COP") monto - apartadoEfectivoDe(it, apartados) else monto
+        CuentaHero(it.name, signedMoney(libre, moneda))
     }
 }
 
@@ -635,7 +665,7 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         // (Créditos vs. Inicio en la Ola 4, los presupuestos en la Ola 16), así que no se copia
         // el filtro: las dos consumen la MISMA función.
         val cuentas = data.accounts
-        val hero = heroBalance(cuentas.orEmpty())
+        val hero = heroBalance(cuentas.orEmpty(), data.apartados.orEmpty())
         // Sin los bienes: la casa no es una cuenta que «Tu plata» sume, y Cuentas la lista aparte.
         val propias = cuentas.orEmpty().count { !isDebtAccount(it.type) && !it.esBien }
         // Solo deudas cargadas (el estado de quien arranca por sus créditos) es «sin cuentas»,
@@ -649,11 +679,12 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
             // El conteo dice cuántas cuentas lista la pantalla de destino; cuando alguna está
             // condicionada, la cifra ya no es la suma de todas ellas, y la línea lo dice en vez
             // de dejar la diferencia sin explicar.
-            if (hero.condicionado > 0L) {
-                "${plural(propias, "cuenta", "cuentas")} · ${formatMoneyCompact(hero.condicionado)} condicionados"
-            } else {
-                plural(propias, "cuenta", "cuentas")
-            },
+            // Lo apartado, igual: la cifra ya no es la suma de las cuentas y la línea dice por qué.
+            listOfNotNull(
+                plural(propias, "cuenta", "cuentas"),
+                hero.apartado.takeIf { it > 0L }?.let { "${formatMoneyCompact(it)} apartados" },
+                hero.condicionado.takeIf { it > 0L }?.let { "${formatMoneyCompact(it)} condicionados" },
+            ).joinToString(" · "),
         )
     }
     "credits" -> {

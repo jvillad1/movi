@@ -101,6 +101,7 @@ fun Application.configureRouting() {
             cardRoutes()
             subscriptionRoutes()
             goalRoutes()
+            apartadoRoutes()
             destinoRoutes()
             screenRoutes()
             pushRoutes()

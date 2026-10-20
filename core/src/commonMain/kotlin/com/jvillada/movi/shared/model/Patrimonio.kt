@@ -28,8 +28,15 @@ import kotlinx.serialization.Serializable
  * 3. **¿Está condicionada?** → [Patrimonio.condicionado]: suya, pero con un solo uso.
  * 4. **Lo demás** → [Patrimonio.tuPlata], partido en disponible e invertido.
  *
- * Y `neto = tuPlata + condicionado + bienes − deudas`. Sin bienes da exactamente lo que daba
+ * Y `neto = tuPlata + apartado + condicionado + bienes − deudas`. Sin bienes da exactamente lo que daba
  * `assetsDebtsNet` (activos no-deuda − deudas): tuPlata + condicionado SON los activos de antes.
+ *
+ * ## Lo apartado
+ *
+ * Un [Apartado] no es un quinto balde: es una parte de «Tu plata» que ya tiene dueño. Se resta de
+ * [Patrimonio.tuPlata] (y de su grupo, disponible o invertido) pero queda en [Patrimonio.apartado],
+ * así que el neto es el mismo con o sin apartados. Lo que se aparta nunca pasa del saldo de la
+ * cuenta: el sobrante no resta nada.
  */
 @Serializable
 data class Patrimonio(
@@ -53,9 +60,16 @@ data class Patrimonio(
      * Puede ser negativo: una tarjeta sobrepagada queda a favor.
      */
     val deudas: Long = 0L,
+    /**
+     * Plata que sigue en tus cuentas pero ya tiene dueño (ver [Apartado]). **Ya está restada de
+     * [tuPlata]**, pero sigue siendo tuya: suma a [loQueTienes], así que [neto] no se mueve.
+     */
+    val apartado: Long = 0L,
+    /** Para qué, con un solo propósito distinto; con varios, `null` (mismo criterio que [condicionadoA]). */
+    val apartadoPara: String? = null,
 ) {
-    /** Todo lo que tienes: la plata, la plata con destino y los bienes. */
-    val loQueTienes: Long get() = tuPlata + condicionado + bienes
+    /** Todo lo que tienes: la plata, lo apartado, la plata con destino y los bienes. */
+    val loQueTienes: Long get() = tuPlata + apartado + condicionado + bienes
 
     /** Lo que tienes menos lo que debes. Con hipotecas puede ser negativo, y es la verdad. */
     val neto: Long get() = loQueTienes - deudas
@@ -81,7 +95,7 @@ fun valorEnPesosDe(account: Account): Long =
  * Parte [accounts] en los cuatro baldes de [Patrimonio]. **La regla del patrimonio**, y el único
  * sitio donde está escrita: ver el KDoc de arriba.
  */
-fun patrimonioDe(accounts: List<Account>): Patrimonio {
+fun patrimonioDe(accounts: List<Account>, apartados: List<Apartado> = emptyList()): Patrimonio {
     val bienes = accounts.filter { it.esBien }
     val resto = accounts.filterNot { it.esBien }
     val deudas = resto.filter { esCuentaDeDeuda(it.type) }
@@ -89,8 +103,14 @@ fun patrimonioDe(accounts: List<Account>): Patrimonio {
     // `esDeTuPlata` y no un tercer filtro escrito a mano: es el mismo predicado con el que el
     // server suma «lo que tenías al empezar el período» (ver `PlataDelPeriodo.kt`).
     val libres = accounts.filter { it.esDeTuPlata() }
-    val invertido = libres.filter { it.type.group == AccountGroup.INVERSION }.sumOf { valorEnPesosDe(it) }
-    val disponible = libres.filter { it.type.group != AccountGroup.INVERSION }.sumOf { valorEnPesosDe(it) }
+    val efectivoPorCuenta = apartadoEfectivoPorCuenta(accounts, apartados)
+    val invertido = libres.filter { it.type.group == AccountGroup.INVERSION }
+        .sumOf { valorEnPesosDe(it) - (efectivoPorCuenta[it.id] ?: 0L) }
+    val disponible = libres.filter { it.type.group != AccountGroup.INVERSION }
+        .sumOf { valorEnPesosDe(it) - (efectivoPorCuenta[it.id] ?: 0L) }
+    val conEfecto = apartados.filter { a ->
+        a.proposito.isNotBlank() && a.restante > 0L && (efectivoPorCuenta[a.accountId] ?: 0L) > 0L
+    }
     return Patrimonio(
         tuPlata = disponible + invertido,
         disponible = disponible,
@@ -103,5 +123,18 @@ fun patrimonioDe(accounts: List<Account>): Patrimonio {
             .singleOrNull(),
         bienes = bienes.sumOf { valorEnPesosDe(it) },
         deudas = deudas.sumOf { valorEnPesosDe(it) },
+        apartado = efectivoPorCuenta.values.sum(),
+        apartadoPara = conEfecto.map { it.proposito.trim() }.distinct().singleOrNull(),
     )
+}
+
+/**
+ * **Lo apartado que de verdad pesa en cada cuenta**: la suma de lo que queda de sus apartados, con
+ * tope en su saldo (una cuenta vaciada no queda debiendo). Solo cuentas de tu plata ([esDeTuPlata]);
+ * las demás no aparecen. La usan [patrimonioDe] y el detalle de la cuenta («Libre»): una sola regla.
+ */
+fun apartadoEfectivoPorCuenta(accounts: List<Account>, apartados: List<Apartado>): Map<String, Long> {
+    val porCuenta = apartadoPorCuenta(apartados)
+    return accounts.filter { it.esDeTuPlata() }
+        .associate { it.id to (porCuenta[it.id] ?: 0L).coerceAtMost(valorEnPesosDe(it).coerceAtLeast(0L)) }
 }

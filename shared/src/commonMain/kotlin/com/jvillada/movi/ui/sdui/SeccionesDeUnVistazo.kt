@@ -189,11 +189,11 @@ internal fun HeroDeUnVistazo(
         return
     }
 
-    val balance = heroBalance(data.accounts.orEmpty())
+    val balance = heroBalance(data.accounts.orEmpty(), data.apartados.orEmpty())
     // La MISMA lista que ya arma «Tu patrimonio» (ver [PatrimonioSection]) — no una copia de la
     // query de saldos por cuenta. `null` mientras `accounts` no contesta; con una sola cuenta no
     // hay nada que desglosar (ver el KDoc de esta función).
-    val cuentasHero = cuentasDelHero(data.accounts)
+    val cuentasHero = cuentasDelHero(data.accounts, data.apartados.orEmpty())
     var desgloseAbierto by remember { mutableStateOf(false) }
     // Ola 1 · Movi avisa: la cifra grande es «Te quedan $X», la MISMA columna «Período» de la
     // tarjeta Disponible de Plan (ver [teQuedanDelInicio]). `null` = no se puede afirmar todavía, o
@@ -838,7 +838,7 @@ internal fun PatrimonioSection(
 ) {
     val patrimonio = patrimonioDelInicio(data) ?: return
     val entrada = rememberProgresoDeEntrada("patrimonio")
-    val cuentas = cuentasDelHero(data.accounts).orEmpty()
+    val cuentas = cuentasDelHero(data.accounts, data.apartados.orEmpty()).orEmpty()
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         MinSectionHeader(title = section.title ?: "Tu patrimonio")

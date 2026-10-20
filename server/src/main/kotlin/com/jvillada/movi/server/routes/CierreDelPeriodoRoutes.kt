@@ -140,6 +140,8 @@ internal suspend fun cierreDelPeriodoDe(uid: String, hoy: LocalDate, soloSiSeMue
             entradas = servidor.plata.entradas,
             guardado = servidor.plata.guardado,
             otrosPagosDeDeuda = servidor.pagosDeDeudaFueraDelChecklist,
+            // Sin `apartado`: el cierre es historia. Un apartado de hoy no cambia lo que quedó en un
+            // período que ya cerró.
         ),
     )
     return cierreDelPeriodo(

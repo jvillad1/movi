@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
@@ -96,11 +97,11 @@ class EditarMovimientoRoutesTest {
         )
         transaction {
             SchemaUtils.drop(
-                Goals, Subscriptions, CardPaymentDismissals, Cards, Credits, SmsMessages,
+                Apartados, Goals, Subscriptions, CardPaymentDismissals, Cards, Credits, SmsMessages,
                 RecurringRules, VoidEvents, Events, StatementImports, Budgets, Accounts, Users, CategoryPrefs,
             )
             SchemaUtils.create(
-                Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
+                Apartados, Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
                 SmsMessages, Credits, Cards, CardPaymentDismissals, Subscriptions, Goals, CategoryPrefs,
             )
             listOf(duenoId to "dueno@edicion.test", otroId to "otro@edicion.test").forEach { (uid, mail) ->

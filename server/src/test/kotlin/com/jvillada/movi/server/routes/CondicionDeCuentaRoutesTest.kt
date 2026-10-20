@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
@@ -88,11 +89,11 @@ class CondicionDeCuentaRoutesTest {
             // `DatabaseFactory.init()` las crea todas al arrancar—, así que su ausencia era un
             // agujero de este fixture y no del producto.
             SchemaUtils.drop(
-                Cards, Goals, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
+                Apartados, Cards, Goals, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Documents, Accounts, Users, CardPaymentDismissals,
             )
             SchemaUtils.create(
-                Users, Accounts, StatementImports, Events, VoidEvents,
+                Apartados, Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, Cards, Goals,
                 Documents,
                 // Las lee `buildUserContext` desde que el contexto del asistente incluye el

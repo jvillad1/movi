@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.Apartado
+import com.jvillada.movi.shared.model.esDeTuPlata
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -107,6 +109,15 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     }
     var showDeleteAccount by remember { mutableStateOf(false) }
     var showCondicion by remember { mutableStateOf(false) }
+    /**
+     * Los apartados de ESTA cuenta, con lo que le queda a cada uno (el server lo calcula). Solo se
+     * leen en una cuenta de tu plata en pesos; si la lectura falla, ninguno: la sección sigue
+     * ofreciendo «Apartar plata» y el resto de la pantalla no se entera.
+     */
+    var apartados by remember { mutableStateOf<List<Apartado>>(emptyList()) }
+    var apartadosKey by remember { mutableStateOf(0) }
+    /** La hoja de apartar abierta, con el apartado que se edita (o ninguno, si es nuevo). */
+    var hojaDeApartado by remember { mutableStateOf<HojaDeApartado?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
@@ -170,6 +181,15 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             error = e.toUserMessage()
         }
         loading = false
+    }
+
+    // Los apartados, aparte de la lectura de arriba: guardar uno no relee los movimientos.
+    val sePuedeApartar = account?.let { it.esDeTuPlata() && it.currency == "COP" } == true
+    LaunchedEffect(sePuedeApartar, apartadosKey, refreshKey, refreshTick) {
+        if (!sePuedeApartar) return@LaunchedEffect
+        apartados = runCatching { Repositories.wallets.getApartados() }
+            .getOrDefault(emptyList())
+            .filter { it.accountId == accountId }
     }
 
     // La lista de cuentas, recién cuando el dueño toca una fila (ver [cuentas]). Un fallo acá no
@@ -342,6 +362,20 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             }
                             Spacer(Modifier.height(20.dp))
                         }
+                    }
+                }
+
+                // **Lo apartado** de esta cuenta: cada propósito con lo que le queda, y lo libre.
+                // Solo en una cuenta de tu plata en pesos (el server no aparta en otra).
+                account?.takeIf { sePuedeApartar }?.let { acc ->
+                    item(key = "apartado") {
+                        SeccionDeApartados(
+                            account = acc,
+                            apartados = apartados,
+                            onEditar = { hojaDeApartado = HojaDeApartado(it) },
+                            onApartar = { hojaDeApartado = HojaDeApartado(null) },
+                        )
+                        Spacer(Modifier.height(20.dp))
                     }
                 }
 
@@ -582,6 +616,22 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             }
         }
 
+        hojaDeApartado?.let { hoja ->
+            // `key`: cada apertura es una hoja nueva, con su propio id para uno nuevo.
+            account?.let { acc ->
+                key(hoja) {
+                    ApartadoSheet(
+                        account = acc,
+                        existente = hoja.existente,
+                        onDismiss = { hojaDeApartado = null },
+                        // Se relee la lista: lo que le queda a cada uno lo calcula el server.
+                        onGuardado = { hojaDeApartado = null; apartadosKey++ },
+                        onQuitado = { hojaDeApartado = null; apartadosKey++ },
+                    )
+                }
+            }
+        }
+
         if (showDeleteAccount) {
             account?.let { acc ->
                 DeleteAccountSheet(
@@ -632,4 +682,59 @@ private fun accountTypeIcon(type: AccountType): Pair<ImageVector, String> = when
     AccountType.INVESTMENT  -> Icons.AutoMirrored.Filled.TrendingUp to "Inversión"
     AccountType.CREDIT_CARD -> Icons.Filled.CreditCard to "Crédito"
     AccountType.LOAN        -> Icons.Filled.RequestQuote to "Préstamo"
+}
+
+/** Qué hoja de apartar está abierta: [existente] `null` = uno nuevo. */
+private class HojaDeApartado(val existente: Apartado?)
+
+/**
+ * La sección «Apartado» del detalle de una cuenta: cada apartado con lo que le queda (tocarlo lo
+ * edita), lo libre de la cuenta y «Apartar plata». Sin apartados, solo la invitación.
+ */
+@Composable
+private fun SeccionDeApartados(
+    account: Account,
+    apartados: List<Apartado>,
+    onEditar: (Apartado) -> Unit,
+    onApartar: () -> Unit,
+) {
+    if (apartados.isNotEmpty()) MinSectionHeader(title = "Apartado")
+    MinCard(
+        modifier = Modifier.fillMaxWidth(),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+    ) {
+        apartados.forEach { apartado ->
+            CardRow(
+                left = {
+                    Text(
+                        "${apartado.proposito} · ${formatCOP(apartado.restante)}",
+                        style = Movi.textos.cuerpo,
+                        color = Movi.colores.texto,
+                    )
+                },
+                sub = apartado.categoria?.let { "Se descuenta con los gastos de $it" },
+                showChevron = true,
+                onClick = { onEditar(apartado) },
+            )
+        }
+        if (apartados.isNotEmpty()) {
+            CardRow(
+                left = {
+                    Text(
+                        "Libre · ${formatCOP(libreDeLaCuenta(account, apartados))}",
+                        style = Movi.textos.cuerpo,
+                        color = Movi.colores.textoMedio,
+                    )
+                },
+            )
+        }
+        CardRow(
+            left = { Text("Apartar plata", style = Movi.textos.cuerpo, color = Movi.colores.marca) },
+            sub = if (apartados.isEmpty()) "Separa plata de esta cuenta para algo puntual" else null,
+            isLast = true,
+            showChevron = true,
+            onClick = onApartar,
+        )
+    }
 }

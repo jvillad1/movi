@@ -66,7 +66,8 @@ fun textoDelWidget(
         return TextoDelWidget(t.rotulo, formatCOP(t.monto), pie, enRojo = t.enRojo)
     }
     val cuentas = data.accounts ?: return abreMovi
-    val tuPlata = heroBalance(cuentas).tuPlata
+    // Con lo apartado, como el hero de Hoy: si no, el widget diría el colegio como plata libre.
+    val tuPlata = heroBalance(cuentas, data.apartados.orEmpty()).tuPlata
     return TextoDelWidget(HERO_BALANCE_TITLE, formatCOP(tuPlata), pie, enRojo = tuPlata < 0)
 }
 

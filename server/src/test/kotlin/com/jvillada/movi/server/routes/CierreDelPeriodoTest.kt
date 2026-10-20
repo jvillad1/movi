@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.AnomaliasDescartadas
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Cards
@@ -88,7 +89,7 @@ class CierreDelPeriodoTest {
         )
         transaction {
             val tablas = arrayOf(
-                Users, Accounts, Events, VoidEvents, Credits, Cards, RecurringRules, RecurringOccurrences,
+                Apartados, Users, Accounts, Events, VoidEvents, Credits, Cards, RecurringRules, RecurringOccurrences,
                 OccurrenceRejections, KnownDestinations, Budgets, Subscriptions, AnomaliasDescartadas,
                 CierresEnviados, CierresDescartados,
             )
@@ -201,6 +202,27 @@ class CierreDelPeriodoTest {
         // El Rappi repetido.
         assertTrue(c.fueraDeLoNormal.any { it.contains("duplicado", ignoreCase = true) }, "avisos: ${c.fueraDeLoNormal}")
         assertNotNull(c.quedoDelDisponible)
+    }
+
+    /** El cierre es historia: un apartado de hoy no cambia lo que quedó en un período que ya cerró. */
+    @Test
+    fun `un apartado de hoy no cambia el cierre de un periodo pasado`() = runBlocking<Unit> {
+        octubreDelDueno()
+        val sin = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        transaction {
+            Apartados.insert {
+                it[Apartados.id] = "apt-cierre"
+                it[Apartados.userId] = uid
+                it[accountId] = "acc_$uid"
+                it[proposito] = "Colegio"
+                it[monto] = 1_000_000L
+                it[desde] = 0L
+                it[createdAt] = System.currentTimeMillis()
+            }
+        }
+        val con = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        assertEquals(sin.quedoDelDisponible, con.quedoDelDisponible)
+        assertEquals(sin, con)
     }
 
     @Test

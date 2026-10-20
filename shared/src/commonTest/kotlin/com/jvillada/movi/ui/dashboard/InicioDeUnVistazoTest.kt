@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.dashboard
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.OccurrenceState
@@ -342,6 +343,65 @@ class InicioDeUnVistazoTest {
         assertEquals(700_000, patrimonioDelInicio(data)?.tienes)
         // Sin cuentas todavía, el del resumen.
         assertEquals(1, patrimonioDelInicio(DashboardData(patrimonio = Patrimonio(tuPlata = 1)))?.tienes)
+    }
+
+    // ── Lo apartado ──────────────────────────────────────────────────────────
+
+    /**
+     * El caso del dueño al cerrar octubre: en Nu hay $8.217.464 y $8.000.000 son del colegio de
+     * nov-dic. «Tu plata» dice lo libre, el colegio tiene su tramo y el patrimonio no se mueve.
+     */
+    @Test
+    fun `el colegio apartado sale de Tu plata y tiene su tramo`() {
+        val nu = Account(id = "acc-nu", name = "Nu", type = AccountType.SAVINGS, balance = 8_217_464)
+        val colegio = Apartado(id = "apt_1", accountId = "acc-nu", proposito = "Colegio nov-dic", monto = 8_000_000)
+        val data = DashboardData(accounts = listOf(nu), apartados = listOf(colegio))
+
+        val p = assertNotNull(patrimonioDelInicio(data))
+        assertEquals(
+            listOf(
+                TramoDelPatrimonio("Tu plata", 217_464, esDeuda = false),
+                TramoDelPatrimonio("Apartado · Colegio nov-dic", 8_000_000, esDeuda = false),
+            ),
+            p.tramos,
+        )
+        assertEquals(8_217_464, p.neto, "apartar no cambia el patrimonio")
+
+        val hero = heroBalance(data.accounts!!, data.apartados!!)
+        assertEquals(217_464, hero.tuPlata)
+        assertEquals(8_000_000, hero.apartado)
+        assertEquals(8_217_464, hero.patrimonio)
+        assertTrue(hero.muestraPatrimonio)
+        assertEquals("Tu plata más \$8M apartados para Colegio nov-dic", patrimonioExplicacion(hero))
+        // La fila de la cuenta dice lo libre: las filas suman «Tu plata».
+        assertEquals(listOf(CuentaHero("Nu", "\$217.464")), cuentasDelHero(data.accounts, data.apartados!!))
+    }
+
+    @Test
+    fun `con varios propositos el tramo dice Apartado a secas`() {
+        val nu = Account(id = "acc-nu", name = "Nu", type = AccountType.SAVINGS, balance = 10_000_000)
+        val p = assertNotNull(
+            patrimonioDelInicio(
+                DashboardData(
+                    accounts = listOf(nu),
+                    apartados = listOf(
+                        Apartado(accountId = "acc-nu", proposito = "Colegio", monto = 4_000_000),
+                        Apartado(accountId = "acc-nu", proposito = "Predial", monto = 1_000_000),
+                    ),
+                ),
+            ),
+        )
+        assertEquals(TramoDelPatrimonio("Apartado", 5_000_000, esDeuda = false), p.tramos[1])
+    }
+
+    @Test
+    fun `sin apartados el hero y los tramos son los de siempre`() {
+        val nu = Account(id = "acc-nu", name = "Nu", type = AccountType.SAVINGS, balance = 8_217_464)
+        val sin = DashboardData(accounts = listOf(nu))
+        assertEquals(patrimonioDelInicio(DashboardData(accounts = listOf(nu), apartados = emptyList())), patrimonioDelInicio(sin))
+        assertEquals(listOf(TramoDelPatrimonio("Tu plata", 8_217_464, esDeuda = false)), patrimonioDelInicio(sin)?.tramos)
+        assertEquals(heroBalance(listOf(nu)), heroBalance(listOf(nu), emptyList()))
+        assertFalse(heroBalance(listOf(nu)).muestraPatrimonio)
     }
 
     // ── Qué se pinta ─────────────────────────────────────────────────────────

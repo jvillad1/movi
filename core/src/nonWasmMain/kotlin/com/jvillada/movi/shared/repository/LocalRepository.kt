@@ -75,6 +75,7 @@ import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
 import com.jvillada.movi.shared.model.EventOccurrenceMark
+import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
@@ -1996,6 +1997,13 @@ class LocalRepository(
     override suspend fun createGoal(goal: Goal): Goal = remote.createGoal(goal)
     override suspend fun updateGoal(id: String, goal: Goal): Goal = remote.updateGoal(id, goal)
     override suspend fun deleteGoal(id: String) = remote.deleteGoal(id)
+
+    // Apartados: la lectura guarda su última respuesta buena (se pisa en cada lectura con señal);
+    // las escrituras van al server y exigen señal, como las metas.
+    override suspend fun getApartados(): List<Apartado> =
+        leerConCache("apartados") { remote.getApartados() }
+    override suspend fun guardarApartado(a: Apartado): Apartado = remote.guardarApartado(a)
+    override suspend fun quitarApartado(id: String) = remote.quitarApartado(id)
 
     /**
      * **Las cuentas de otros van siempre al server, y sin caché.**

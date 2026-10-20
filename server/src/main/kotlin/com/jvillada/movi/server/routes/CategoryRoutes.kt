@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
@@ -363,6 +364,7 @@ internal fun Transaction.categoryExists(uid: String, name: String): Boolean {
  *   el aviso de la suma delante, y rechazarlo lo dejaría sin ninguna forma de completar lo que
  *   pidió. La regla es la misma en las dos: no fundir presupuestos sin que lo haya pedido.
  * - **`recurring_rules`** — lo que se repite cada mes también lleva el nombre copiado.
+ * - **`apartados`** — la categoría que consume cada apartado (ver `apartadosDelUsuario`).
  * - **`category_prefs`** — la preferencia viaja con el nombre (si no, esconder + renombrar
  *   dejaría escondida una categoría que ya no existe y visible la nueva). Viajan las dos cosas
  *   que guarda esa tabla: el tipo fijado y el "escondida" — este último solo al renombrar, ver
@@ -420,6 +422,12 @@ internal fun Transaction.rewriteCategory(
         (RecurringRules.userId eq uid) and (RecurringRules.category eq from)
     }) {
         it[category] = to
+    }
+
+    // Los apartados que esa categoría consume: si se quedaran con el nombre viejo, lo ya gastado
+    // dejaría de restarles y el colegio «volvería» a estar entero.
+    Apartados.update({ (Apartados.userId eq uid) and (Apartados.categoria eq from) }) {
+        it[Apartados.categoria] = to
     }
 
     // Preferencias: la del destino manda; si no tenía, hereda las del origen. La fila del origen

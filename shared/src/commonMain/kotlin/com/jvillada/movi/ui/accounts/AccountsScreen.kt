@@ -130,6 +130,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     val destinosGuardados = destinosLeidos.valor.takeUnless { destinosLeidos.fallo && it.isNullOrEmpty() }
     val cargandoCuentasDeOtros = destinosLeidos.actualizando
 
+    // ── Lo apartado: sale de «Tu plata» y tiene su renglón. Secundario, fuera de `lecturas`: si
+    // falla, la tarjeta se pinta como si no hubiera ninguno, sin avisar ni romper la pantalla.
+    val apartadosLeidos = rememberLectura(ClaveDeLectura.Apartados, reintento = refreshKey) { Repositories.wallets.getApartados() }
+    val apartados = apartadosLeidos.valor.orEmpty()
+
     val lecturas = listOf(cuentasLeidas, creditosLeidos, tarjetasLeidas, destinosLeidos)
     // Se está pintando algo que esta visita todavía no confirmó (lo recordado, o lo de antes de un
     // «Reintentar»): lo dice «Actualizando…» en la cabecera, como el Inicio.
@@ -237,7 +242,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         // ya cometió dos veces (Créditos vs. Inicio en la Ola 4, los presupuestos
                         // en la Ola 16). El desglose de abajo ahora escribe la cuenta completa:
                         // tu plata + lo condicionado − las deudas = el patrimonio de arriba.
-                        val balance = heroBalance(cuentas)
+                        val balance = heroBalance(cuentas, apartados)
                         MinCard(
                             modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_PATRIMONIO),
                             variant = MinCardVariant.Elevated,
@@ -277,6 +282,21 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 // que hace obvio que son la misma cosa vista dos veces.
                                 Text("Tu plata", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                 Cifra(formatCOP(balance.tuPlata), Movi.textos.apoyo, color = Movi.colores.entra)
+                            }
+                            // Lo apartado: suyo, fuera de «Tu plata». Sin el renglón la resta no cierra.
+                            if (balance.apartado > 0L) {
+                                Spacer(Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = balance.apartadoPara?.let { "Apartado · $it" } ?: "Apartado",
+                                        style = Movi.textos.apoyo,
+                                        color = Movi.colores.textoMedio,
+                                    )
+                                    Cifra(formatCOP(balance.apartado), Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                                }
                             }
                             // El renglón que faltaba: sin él, tu plata − deudas no daba el
                             // patrimonio de arriba y el lector no tenía forma de cerrar la resta.

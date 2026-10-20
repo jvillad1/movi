@@ -204,6 +204,9 @@ open class NoOpRepository(
         destino.copy(id = destino.id.ifBlank { "dst-stub" })
     override suspend fun updateDestino(id: String, destino: DestinoConocido) = destino.copy(id = id)
     override suspend fun deleteDestino(id: String) {}
+    override suspend fun getApartados() = emptyList<Apartado>()
+    override suspend fun guardarApartado(a: Apartado) = a
+    override suspend fun quitarApartado(id: String) {}
     override suspend fun getMovimientosDelDestino(id: String) =
         MovimientosDelDestino(destino = DestinoConocido(id = id, nombre = "stub", numero = "0000"), movimientos = emptyList())
     override suspend fun getSmsMessages() = emptyList<SmsMessage>()

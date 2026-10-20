@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.plan
 
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.CajaProyectada
 import com.jvillada.movi.shared.model.DiaDeLaCaja
 import com.jvillada.movi.shared.model.GastoDelDiaADia
@@ -123,5 +124,31 @@ class CajaDelPeriodoTest {
         assertEquals("2026-10-24", caja.alCierre.fecha)
         assertEquals(3_000_000L, caja.alCierre.saldo)
         assertNull(cajaDelPeriodoDe(data.copy(ocurrencias = null), GastoDelDiaADia(), hoy), "sin la lista no se proyecta")
+    }
+
+    /**
+     * El colegio apartado que además es un pago pendiente: la caja lo resta una vez, el día que vence.
+     * Tu plata ya resta los $8M apartados; los $4M que el pago cubre se devuelven al arrancar.
+     */
+    @Test
+    fun `el apartado que cubre un pago pendiente no se resta dos veces`() {
+        val colegio = RecurringRule(
+            id = "rr_colegio", name = "Colegio Hija", category = "Hija",
+            amount = 4_000_000L, dayOfMonth = 20, type = TransactionType.EXPENSE, accountId = "nu",
+        )
+        val data = DashboardData(
+            accounts = listOf(Account("nu", "Nu", AccountType.SAVINGS, 8_217_464L, "COP")),
+            apartados = listOf(
+                Apartado(id = "ap", accountId = "nu", proposito = "Colegio", monto = 8_000_000L, categoria = "Hija"),
+            ),
+            upcoming = listOf(UpcomingPayment(colegio, "2026-10-20", 18, PaymentStatus.UPCOMING)),
+            ocurrencias = emptyList(),
+            ajustesDePeriodo = PeriodSettings(cutoffDay = 25),
+            periodoActual = PeriodoFinanciero(2026, 10),
+        )
+        val caja = assertNotNull(cajaDelPeriodoDe(data, GastoDelDiaADia(), hoy))
+
+        assertEquals(4_217_464L, caja.tuPlataHoy)
+        assertEquals(217_464L, caja.alCierre.saldo, "lo libre de Nu, no $4M menos")
     }
 }

@@ -338,6 +338,11 @@ fun DashboardScreen(
                     .onSuccess { a -> data = data.copy(accounts = a); llegado = llegado.copy(accounts = a) }
                     .onFailure { e -> if (error == null) error = e.toUserMessage() }
             }
+            // Lo apartado sale de «Tu plata». Secundario: si falla, se toma como ninguno.
+            launch {
+                runCatching { Repositories.wallets.getApartados() }
+                    .onSuccess { a -> data = data.copy(apartados = a); llegado = llegado.copy(apartados = a) }
+            }
             launch {
                 runCatching { Repositories.wallets.getCredits() }
                     .onSuccess { c -> data = data.copy(credits = c); llegado = llegado.copy(credits = c) }

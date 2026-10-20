@@ -1,10 +1,10 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.balance.accountTypesFor
-import com.jvillada.movi.server.balance.cuentasConSaldo
 import com.jvillada.movi.server.balance.hayMovimientosEnOtraMoneda
+import com.jvillada.movi.server.apartados.pagosQuePuedenCruzarApartados
+import com.jvillada.movi.server.apartados.tuPlataConApartados
 import com.jvillada.movi.server.fx.FxRateService
-import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
 import com.jvillada.movi.server.balance.looksLikeCardPayment
 import com.jvillada.movi.server.db.Events
@@ -137,6 +137,10 @@ fun Route.dashboardRoutes() {
         // dependía de ningún servicio de afuera. Sin un solo movimiento en otra moneda la tasa no
         // se usa (ver `estimatedTotalCop`), así que no se pide.
         val usdToCop = if (dbQuery { hayMovimientosEnOtraMoneda(uid) }) FxRateService.usdToCop() else 0.0
+        // Los pagos del período, solo si algún apartado puede cruzarse con uno (ver
+        // `apartadoFueraDeLosFijos`): el colegio apartado que además es un pago pendiente se resta
+        // una vez, como fijo. Fuera del `dbQuery` porque abre los suyos.
+        val pagosDelPeriodo = pagosQuePuedenCruzarApartados(uid, epochMillisToAppDate(ahora), periodo)
 
         val summary = dbQuery {
             val accountTypeById = accountTypesFor(uid)
@@ -169,7 +173,12 @@ fun Route.dashboardRoutes() {
             // La captura mide lo que llegó SOLO: un comprobante que el dueño compartió no prueba que
             // el teléfono siga capturando (Ola 2, ver `soloLoQueLlegoSolo` en :core).
             val captura = capturaDeSms(filasDeSms.filterNot { esIdDeComprobante(it.first) }.map { it.second })
+            // El patrimonio una sola vez: «Tu plata» y lo apartado salen de la misma cuenta. «Te
+            // quedan» resta lo apartado menos lo que los fijos pendientes ya restan.
+            val tuPlata = tuPlataConApartados(uid, voidedIds, usdToCop)
+            val patrimonio = tuPlata.patrimonio
             val disponible = disponibleDelServidor(
+                apartado = tuPlata.apartadoParaElDisponible(pagosDelPeriodo),
                 uid = uid,
                 hoy = epochMillisToAppDate(ahora),
                 periodo = periodo,
@@ -210,7 +219,8 @@ fun Route.dashboardRoutes() {
                 // **El patrimonio honesto**, con la casa y el carro adentro: la MISMA regla que usa
                 // el cliente sobre la lista de cuentas (`patrimonioDe`, en :core), sobre los mismos
                 // saldos que esa lista (ver `cuentasConSaldo`). No hay una segunda cuenta acá.
-                patrimonio = patrimonioDe(cuentasConSaldo(uid, voidedIds, usdToCop)),
+                patrimonio = patrimonio,
+                apartado = disponible.apartado,
                 // La cuenta que «Agregar» debería sugerir primero, en vez de la primera por orden
                 // alfabético. Ver `cuentaMasUsada` acá abajo.
                 cuentaMasUsada = cuentaMasUsada(uid, ahora, voidedIds),
@@ -244,6 +254,11 @@ internal class DisponibleDelServidor(
      * recurrente reclamó y la cuota de un crédito del checklist.
      */
     val pagosDeDeudaFueraDelChecklist: Long,
+    /**
+     * Lo apartado que «Te quedan» no puede gastar, sin lo que un pago pendiente del período ya resta
+     * como fijo (ver `apartadoFueraDeLosFijos`). Ver `PlataDelDisponible.apartado`.
+     */
+    val apartado: Long = 0L,
 )
 
 /** Arma [DisponibleDelServidor] para el período `[monthStart, monthEnd)` que contiene [hoy]. */
@@ -255,6 +270,7 @@ internal fun Transaction.disponibleDelServidor(
     monthEnd: Long,
     voidedIds: Set<String>,
     reglasDeCredito: List<RecurringRule>,
+    apartado: Long = 0L,
 ): DisponibleDelServidor {
     val eventosDelPeriodo = loadEventsBetween(uid, monthStart, monthEnd)
     val cuentas = cuentasDelDisponible(uid)
@@ -265,6 +281,7 @@ internal fun Transaction.disponibleDelServidor(
     )
     val parteFija = parteFijaDelDisponible(uid, hoy, periodo, eventosDelPeriodo)
     return DisponibleDelServidor(
+        apartado = apartado,
         plata = plata,
         gastoVariablePorDia = gastoVariablePorDia(
             eventos = eventosDelPeriodo,

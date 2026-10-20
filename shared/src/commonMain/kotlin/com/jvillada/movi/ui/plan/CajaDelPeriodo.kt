@@ -35,6 +35,7 @@ import com.jvillada.movi.shared.model.CajaProyectada
 import com.jvillada.movi.shared.model.GastoDelDiaADia
 import com.jvillada.movi.shared.model.cajaProyectada
 import com.jvillada.movi.shared.model.inicioDelPeriodo
+import com.jvillada.movi.shared.model.apartadoCubiertoPorLosFijos
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.periodoSiguiente
@@ -87,11 +88,19 @@ internal fun cajaDelPeriodoDe(
 ): CajaProyectada? {
     val periodo = data.periodoActual ?: return null
     if (data.upcoming == null || data.ocurrencias == null) return null
-    val tuPlata = (data.accounts?.let { patrimonioDe(it) } ?: data.patrimonio)?.tuPlata ?: return null
+    val pagos = checklistDelPeriodoDe(data)
+    // Tu plata ya resta todo lo apartado; lo que un pago pendiente cubre se devuelve, porque la caja
+    // resta ese pago el día que vence (ver `apartadoCubiertoPorLosFijos` en `:core`). Sin cuentas,
+    // lo cubierto es lo que el server dejó fuera de lo que «Te quedan» resta.
+    val tuPlata = data.accounts?.let { cuentas ->
+        val apartados = data.apartados.orEmpty()
+        patrimonioDe(cuentas, apartados).tuPlata + apartadoCubiertoPorLosFijos(cuentas, apartados, pagos)
+    } ?: data.patrimonio?.let { p -> p.tuPlata + p.apartado - (data.plataDelDisponible?.apartado ?: p.apartado) }
+    ?: return null
     val ultimoDia = inicioDelPeriodo(periodoSiguiente(periodo), data.ajustesDePeriodo).minus(1, DateTimeUnit.DAY)
     return cajaProyectada(
         tuPlataHoy = tuPlata,
-        pagos = checklistDelPeriodoDe(data),
+        pagos = pagos,
         gastoDiario = gasto.porDia,
         hoy = hoy.toString(),
         ultimoDia = ultimoDia.toString(),

@@ -6,6 +6,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
+import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
@@ -87,13 +88,13 @@ class AccountRoutesTest {
         )
 
         transaction {
-            SchemaUtils.drop(Cards, Goals, 
+            SchemaUtils.drop(Apartados, Cards, Goals, 
                 Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users, CardPaymentDismissals,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, Cards, Goals,
+                Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, Cards, Goals, Apartados,
             )
 
             Users.insert {
