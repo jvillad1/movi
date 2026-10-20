@@ -35,6 +35,8 @@ import com.jvillada.movi.shared.model.categoriaProbablePorElNombre
 import com.jvillada.movi.shared.model.huellaDeUnMovimiento
 import com.jvillada.movi.shared.model.laHuellaEsUnNumero
 import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.NoSePudoLeerElAviso
+import com.jvillada.movi.shared.model.PARAMETRO_ANOTARLO_IGUAL
 import com.jvillada.movi.shared.model.AvisoPorRevisar
 import com.jvillada.movi.shared.model.AvisosDelMismoPago
 import com.jvillada.movi.shared.model.DestinoConocido
@@ -151,7 +153,7 @@ private val facturaProgramadaRegex = Regex("""\bfactura\s+programada\s+(.+?)\s+r
  * uno falso. La ampliación de plazo es el caso caro («por USD 1,202.49»): no salió ni entró un peso,
  * se refinanció una deuda.
  */
-private val NO_SON_MOVIMIENTOS = listOf("ampliacion de plazo", "ampliación de plazo", "bienvenido", "inscribiste")
+internal val NO_SON_MOVIMIENTOS = listOf("ampliacion de plazo", "ampliación de plazo", "bienvenido", "inscribiste")
 
 /**
  * **Lo que el banco intentó y no pasó**, de cualquier banco: una compra rechazada trae el monto y el
@@ -181,7 +183,7 @@ private val origenNu = Regex("""\bnu(?:bank)?\b""", RegexOption.IGNORE_CASE)
  * mínimo, lo que rindió la Cajita. Van ANTES de la lista de lo que sí es movimiento porque «tu pago
  * mínimo» dice «pago».
  */
-private val NU_NO_SON_MOVIMIENTOS = listOf(
+internal val NU_NO_SON_MOVIMIENTOS = listOf(
     "pago mínimo", "pago minimo", "fecha límite", "fecha limite", "rendimiento", "cajita",
 )
 
@@ -333,6 +335,26 @@ internal fun montoDelSms(raw: String): Double? {
 }
 
 /**
+ * **El monto de un texto y su moneda**, con las regex de siempre en su orden ([amountRegex] con sus
+ * tres prefijos, «por», «recibiste» y la moneda detrás) y [montoDelSms] para los separadores. Es lo
+ * que lee [parseSms], y lo mismo que se ofrece para anotar igual un aviso que no se entendió (ver
+ * `AnotarloIgual.kt`): las dos cifras no pueden salir de dos lecturas distintas. `null` si el texto
+ * no trae un monto legible.
+ */
+internal fun montoYMonedaDelTexto(text: String): Pair<Double, String>? {
+    val conPrefijo = amountRegex.find(text)
+    val rawAmount = conPrefijo?.groupValues?.get(2)
+        ?: amountPorRegex.find(text)?.groupValues?.get(1)
+        ?: amountRecibisteRegex.find(text)?.groupValues?.get(1)
+        ?: amountSufijoRegex.find(text)?.groupValues?.get(1)
+        ?: return null
+    val amount = montoDelSms(rawAmount) ?: return null
+    val monedaDelSms = conPrefijo?.groupValues?.get(1) ?: amountSufijoRegex.find(text)?.groupValues?.get(2)
+    val currency = if (monedaDelSms?.equals("USD", ignoreCase = true) == true) "USD" else "COP"
+    return amount to currency
+}
+
+/**
  * @param origen el rótulo `bank` de la fila («85540», «Notificación · Nu», «Correo · Bancolombia»).
  *   Solo decide si aplica la regla de Nu ([loDeNuEsUnMovimiento]); sin él se lee como siempre.
  */
@@ -343,15 +365,7 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     // El correo de PSE tiene su propia forma (Valor/Empresa/Descripción/CUS): ver `ElCorreoDePse.kt`.
     if (esUnCorreoDePse(text)) return leerElCorreoDePse(text)
     if (origen != null && origenNu.containsMatchIn(origen) && !loDeNuEsUnMovimiento(minusculas)) return null
-    val conPrefijo = amountRegex.find(text)
-    val rawAmount = conPrefijo?.groupValues?.get(2)
-        ?: amountPorRegex.find(text)?.groupValues?.get(1)
-        ?: amountRecibisteRegex.find(text)?.groupValues?.get(1)
-        ?: amountSufijoRegex.find(text)?.groupValues?.get(1)
-        ?: return null
-    val amount = montoDelSms(rawAmount) ?: return null
-    val monedaDelSms = conPrefijo?.groupValues?.get(1) ?: amountSufijoRegex.find(text)?.groupValues?.get(2)
-    val currency = if (monedaDelSms?.equals("USD", ignoreCase = true) == true) "USD" else "COP"
+    val (amount, currency) = montoYMonedaDelTexto(text) ?: return null
     val recargaDeBeneficios = if ("tarjeta de beneficios" in minusculas) recargaDeBeneficiosRegex.find(text) else null
 
     val esAbonoALaTarjeta = abonoALaTarjeta.containsMatchIn(text)
@@ -688,12 +702,20 @@ fun Route.smsRoutes() {
         } ?: return@get call.respond(HttpStatusCode.NotFound)
         // El cuerpo vive en `LaPropuestaDelAviso.kt`: la bandeja lee lo mismo para cada pago pendiente
         // (`GET /api/sms/propuestas`), y las dos propuestas no pueden salir de dos copias.
-        val lectura = dbQuery { leerElAviso(uid, sms, loQueMoviSabeDelDueno(uid, ahora = System.currentTimeMillis())) }
+        val ahora = System.currentTimeMillis()
+        val lectura = dbQuery { leerElAviso(uid, sms, loQueMoviSabeDelDueno(uid, ahora = ahora), ahora) }
         when (lectura) {
             is LecturaDelAviso.Leido -> call.respond(lectura.parsed)
             // No es un error de la app: el mensaje no trae un movimiento. Se dice así, porque la
-            // pantalla muestra este texto.
-            is LecturaDelAviso.NoTraeMovimiento -> call.respond(HttpStatusCode.UnprocessableEntity, lectura.motivo)
+            // pantalla muestra este texto. Con `?anotarloIgual=1` (la app nueva) va en JSON con lo
+            // que trae el aviso para anotarlo igual; sin él, el texto de siempre: el APK instalado lo
+            // muestra tal cual. Ver `AnotarloIgual.kt`.
+            is LecturaDelAviso.NoTraeMovimiento ->
+                if (call.request.queryParameters[PARAMETRO_ANOTARLO_IGUAL] == "1") {
+                    call.respond(HttpStatusCode.UnprocessableEntity, NoSePudoLeerElAviso(lectura.motivo, lectura.sinLeer))
+                } else {
+                    call.respond(HttpStatusCode.UnprocessableEntity, lectura.motivo)
+                }
         }
     }
 

@@ -14,6 +14,7 @@ import com.jvillada.movi.server.sms.loQueMoviSabeDelPagoDe
 import com.jvillada.movi.server.sms.memoriaDe
 import com.jvillada.movi.server.sms.numerosPropiosDe
 import com.jvillada.movi.server.sms.sinLaCuentaPropia
+import com.jvillada.movi.shared.model.AvisoSinLeer
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MemoriaDeCategorias
@@ -54,7 +55,8 @@ internal const val NO_TRAE_UN_MOVIMIENTO = "Este mensaje no trae un movimiento p
 /** La lectura de un aviso: lo que Movi propone, o por qué no propone nada. */
 internal sealed interface LecturaDelAviso {
     data class Leido(val parsed: ParsedSms) : LecturaDelAviso
-    data class NoTraeMovimiento(val motivo: String) : LecturaDelAviso
+    /** [sinLeer]: lo que trae para anotarlo igual, si se ofrece (ver `AnotarloIgual.kt`). */
+    data class NoTraeMovimiento(val motivo: String, val sinLeer: AvisoSinLeer? = null) : LecturaDelAviso
 }
 
 /**
@@ -81,14 +83,21 @@ internal fun Transaction.loQueMoviSabeDelDueno(uid: String, ahora: Long): LoQueM
  * mismo pago le pone el nombre; la memoria del dueño, después sus terceros y al final sus propias
  * cuentas; lo que Movi sabe de los pagos de PSE; y el traspaso que entra.
  */
-internal fun Transaction.leerElAviso(uid: String, sms: SmsMessage, sabe: LoQueMoviSabeDelDueno): LecturaDelAviso {
+internal fun Transaction.leerElAviso(
+    uid: String,
+    sms: SmsMessage,
+    sabe: LoQueMoviSabeDelDueno,
+    ahora: Long = System.currentTimeMillis(),
+): LecturaDelAviso {
     // Ola 2: la propuesta de un comprobante no se lee con el parser de SMS sino con lo que leyó
     // Claude del papel, ya pasado por la memoria y las cuentas de otros (ver `PapelesRoutes`).
     if (esUnComprobante(sms)) {
         parsedDeUnComprobante(uid, sms.id, sms.text)?.let { return LecturaDelAviso.Leido(it) }
     }
     // No es un error de la app: el mensaje no trae un movimiento (un aviso, una ampliación de plazo).
-    val leido = parseSms(sms.text, sms.bank) ?: return LecturaDelAviso.NoTraeMovimiento(NO_TRAE_UN_MOVIMIENTO)
+    // Si igual trae un monto, se ofrece anotarlo igual (ver `AnotarloIgual.kt`).
+    val leido = parseSms(sms.text, sms.bank)
+        ?: return LecturaDelAviso.NoTraeMovimiento(NO_TRAE_UN_MOVIMIENTO, avisoSinLeerDe(sms, sabe, ahora))
     // El correo de PSE del mismo pago, si este aviso no lo es: ver [conLoQueDiceElCorreoDePse].
     val otrosDelPago = if (sms.state != SMS_STATE_PENDING) emptyList() else {
         val miembros = sabe.bandeja.firstOrNull { it.id == sms.id }?.miembrosDelGrupo.orEmpty()
@@ -139,6 +148,9 @@ private fun Transaction.enviosRecientesDe(uid: String): List<FinancialEvent> {
 internal fun Transaction.coincidenciasDelAviso(uid: String, sms: SmsMessage, ahora: Long): List<FinancialEvent> {
     val parsed = (if (esUnComprobante(sms)) parsedDeUnComprobante(uid, sms.id, sms.text) else null)
         ?: parseSms(sms.text, sms.bank)
+        // Un aviso sin leer que se puede anotar igual también pregunta si ya está anotado: con el
+        // monto que trae y el tipo que se propone.
+        ?: lecturaParaCoincidencias(sms)
         ?: return emptyList()
     val momento = momentoDelSms(sms.time, ahora = ahora)
     val margen = DIAS_PARA_COINCIDIR * 86_400_000L
@@ -161,9 +173,13 @@ internal fun Transaction.propuestasDeLaBandeja(uid: String, ahora: Long): Propue
         val miembros = cabeza.grupoId?.let { grupo -> bandeja.filter { it.grupoId == grupo } }?.ifEmpty { null } ?: listOf(cabeza)
         if (miembros.any { it.state == SMS_STATE_CONFIRMED }) return@mapNotNull null
         val propuesta = if (miembros.size > 1) propuestaDelGrupo(miembros) else cabeza
-        when (val lectura = leerElAviso(uid, propuesta, sabe)) {
-            is LecturaDelAviso.NoTraeMovimiento ->
-                PropuestaDelAviso(avisoId = propuesta.id, grupoId = cabeza.grupoId, noSePudoLeer = lectura.motivo)
+        when (val lectura = leerElAviso(uid, propuesta, sabe, ahora)) {
+            is LecturaDelAviso.NoTraeMovimiento -> PropuestaDelAviso(
+                avisoId = propuesta.id,
+                grupoId = cabeza.grupoId,
+                noSePudoLeer = lectura.motivo,
+                sinLeer = lectura.sinLeer,
+            )
             is LecturaDelAviso.Leido -> PropuestaDelAviso(
                 avisoId = propuesta.id,
                 grupoId = cabeza.grupoId,

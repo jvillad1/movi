@@ -2063,6 +2063,8 @@ class LocalRepository(
     override suspend fun getSmsMessages(): List<SmsMessage> = remote.getSmsMessages()
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)
     override suspend fun parseSms(id: String): ParsedSms = remote.parseSms(id)
+    override suspend fun leerParaReconciliar(id: String): com.jvillada.movi.shared.model.LecturaParaReconciliar =
+        remote.leerParaReconciliar(id)
     override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = remote.getSmsCoincidencias(id)
     override suspend fun getPropuestasDeLaBandeja() = remote.getPropuestasDeLaBandeja()
     override suspend fun getRepartoDelAviso(id: String) = remote.getRepartoDelAviso(id)

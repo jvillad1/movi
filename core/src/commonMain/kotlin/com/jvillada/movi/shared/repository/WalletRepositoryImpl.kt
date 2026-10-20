@@ -415,6 +415,24 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
+    override suspend fun leerParaReconciliar(id: String): com.jvillada.movi.shared.model.LecturaParaReconciliar {
+        val response = client.get("$baseUrl/api/sms/$id/parse") {
+            parameter(com.jvillada.movi.shared.model.PARAMETRO_ANOTARLO_IGUAL, "1")
+        }
+        if (response.status.isSuccess()) return com.jvillada.movi.shared.model.LecturaParaReconciliar(leido = response.body())
+        // Con el parámetro, un aviso que no se pudo leer contesta 422 con JSON: el motivo y lo que
+        // trae. Un server viejo contesta el texto de siempre, y eso sigue saliendo como error.
+        if (response.status == HttpStatusCode.UnprocessableEntity &&
+            response.contentType()?.match(ContentType.Application.Json) == true
+        ) {
+            val noLeido = runCatching { response.body<com.jvillada.movi.shared.model.NoSePudoLeerElAviso>() }.getOrNull()
+            if (noLeido != null) {
+                return com.jvillada.movi.shared.model.LecturaParaReconciliar(noSePudoLeer = noLeido.motivo, sinLeer = noLeido.sinLeer)
+            }
+        }
+        throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+    }
+
     override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> =
         client.get("$baseUrl/api/sms/$id/coincidencias").body()
 
