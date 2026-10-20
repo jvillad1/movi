@@ -63,7 +63,9 @@ import com.jvillada.movi.shared.model.DeleteBudgetRequest
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.Goal
+import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
@@ -272,6 +274,34 @@ class WalletRepositoryImpl(
 
     override suspend fun deleteGoal(id: String) {
         client.delete("$baseUrl/api/goals/$id")
+    }
+
+    override suspend fun getApartados(): List<Apartado> {
+        val response = client.get("$baseUrl/api/apartados")
+        // Un server anterior a los apartados no tiene la ruta: para el cliente, no hay ninguno.
+        if (response.status == HttpStatusCode.NotFound) return emptyList()
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun guardarApartado(a: Apartado): Apartado {
+        val response = client.post("$baseUrl/api/apartados") {
+            contentType(ContentType.Application.Json)
+            setBody(if (a.id.isBlank()) a.copy(id = newId("apt")) else a)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun quitarApartado(id: String) {
+        val response = client.delete("$baseUrl/api/apartados/$id")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
     }
 
     override suspend fun getDestinos(): List<DestinoConocido> =

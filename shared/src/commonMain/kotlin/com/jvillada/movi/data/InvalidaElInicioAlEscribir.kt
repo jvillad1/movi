@@ -119,6 +119,8 @@ internal class InvalidaElInicioAlEscribir(
     // vaciar lo recordado igual que cualquier otra escritura. Faltaban acá.
     override suspend fun createDestino(destino: DestinoConocido): DestinoConocido = trasEscribir { delegado.createDestino(destino) }
     override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido = trasEscribir { delegado.updateDestino(id, destino) }
+    override suspend fun guardarApartado(a: Apartado): Apartado = trasEscribir { delegado.guardarApartado(a) }
+    override suspend fun quitarApartado(id: String): Unit = trasEscribir { delegado.quitarApartado(id) }
     override suspend fun deleteDestino(id: String): Unit = trasEscribir { delegado.deleteDestino(id) }
     override suspend fun agregarIdentificador(id: String, pedido: com.jvillada.movi.shared.model.AgregarIdentificador) =
         trasEscribir { delegado.agregarIdentificador(id, pedido) }
