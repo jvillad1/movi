@@ -208,6 +208,23 @@ private val plataQueLlegaANu = Regex("""te lleg[oó] dinero|\brecibiste\s+\$?\s*
 private val pagoDesdeLaCuentaDeNu = Regex("""\bpago\s+aprobado\b|\bpagaste\s+en\s""", RegexOption.IGNORE_CASE)
 
 /**
+ * **La plata que se envía desde la cuenta de Nu a otra persona** (20-oct-2026). Nu lo escribe de
+ * dos formas, y ninguna tenía «la forma de un movimiento»: Reconciliar decía «Este mensaje no trae
+ * un movimiento para anotar» y el botón Confirmar quedaba apagado. Los dos envíos del 17 y el 18 de
+ * octubre se terminaron anotando a mano en la conciliación.
+ *
+ * - «Enviaste $1.200.000,00: Le enviaste a HEN**** JOS*** ROJ**** ART****** en su cuenta de
+ *   Bancolombia.»
+ * - «Nu: Acabas de enviar $1.000,00 💰 Se los enviaste a Carolina R. Si no reconoces este envío, no
+ *   dudes en contactarte con nosotros.»
+ */
+private val envioDesdeNu = Regex("""\benviaste\s+\$|\bacabas\s+de\s+enviar\b|\b(?:le|se\s+los)\s+enviaste\s+a\s""", RegexOption.IGNORE_CASE)
+
+/** A quién se le envió desde Nu: «Le enviaste a X en su cuenta…» o «Se los enviaste a X. Si…». */
+private val destinatarioDeNuRegex =
+    Regex("""\b(?:le|se\s+los)\s+enviaste\s+a\s+(.+?)(?:\s+en\s+su\s+cuenta\b|\.\s|\.?\s*$)""", RegexOption.IGNORE_CASE)
+
+/**
  * **El abono que llega A la tarjeta** (4-oct-2026): «Bancolombia: Recibimos pago por $9,000,000.00 a
  * tu tarjeta de credito **9208 desde Wompi-PSE». Es plata que ENTRA a la tarjeta —le baja la
  * deuda—, y se leía como gasto: confirmado así, le **sumaba** $9 M de deuda a la AMEX. Pasó dos
@@ -259,7 +276,7 @@ private fun loDeNuEsUnMovimiento(minusculas: String): Boolean {
     if (NU_NO_SON_MOVIMIENTOS.any { it in minusculas }) return false
     val esCompra = "compra" in minusculas && ("aprobada" in minusculas || "aprobado" in minusculas)
     return esCompra || pagoDeNu.containsMatchIn(minusculas) || plataQueLlegaANu.containsMatchIn(minusculas) ||
-        pagoDesdeLaCuentaDeNu.containsMatchIn(minusculas)
+        pagoDesdeLaCuentaDeNu.containsMatchIn(minusculas) || envioDesdeNu.containsMatchIn(minusculas)
 }
 
 /**
@@ -375,6 +392,7 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
             // Prepagada S.A.» dejaba «Coomeva Medicina Prepagada S».
             // Y sin [limpio]: el punto final de «S.A.» es parte del nombre, no del mensaje.
             ?: pagasteEnRegex.find(text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: destinatarioDeNuRegex.find(text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
             ?: limpio(compraEnPorRegex.find(text)?.groupValues?.get(1))
             ?: limpio(destinatarioDesdeRegex.find(text)?.groupValues?.get(1))
             ?: limpio(destinatarioElRegex.find(text)?.groupValues?.get(1))
