@@ -933,7 +933,10 @@ class DashboardRoutesTest {
         assertEquals(217_464L, con.long("tuPlata"))
         assertEquals(8_000_000L, con.long("apartado"))
         assertEquals(8_000_000L, body.long("apartado"))
-        assertEquals(sin.long("neto"), con.long("neto"))
+        // `neto` no viaja (es un getter): se arma con lo que sí viaja, como lo arma `Patrimonio`.
+        fun neto(p: JsonObject) = p.long("tuPlata") + p.long("apartado") + p.long("condicionado") + p.long("bienes") - p.long("deudas")
+        assertEquals(8_217_464L, neto(sin))
+        assertEquals(neto(sin), neto(con))
     }
 
     /** Un desembolso guardado antes de la regla (categoría «Traspaso») sigue entrando como plata de afuera. */

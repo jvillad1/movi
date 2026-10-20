@@ -37,3 +37,51 @@ fun restanteDelApartado(monto: Long, consumido: Long): Long = (monto - consumido
 /** Cuánto hay apartado en cada cuenta: la suma de [Apartado.restante] por `accountId`. */
 fun apartadoPorCuenta(apartados: List<Apartado>): Map<String, Long> =
     apartados.groupBy { it.accountId }.mapValues { (_, v) -> v.sumOf { it.restante } }
+
+/**
+ * **Lo apartado que un pago pendiente del período ya resta como fijo.** El colegio es a la vez un
+ * apartado («estos $8M son del colegio») y una fila del checklist («Colegio Hija, $4M el 25»): los
+ * fijos ya restan los $4M que faltan pagar ([fijosDelPeriodo]), así que «Te quedan» y la caja
+ * proyectada no pueden restarlos otra vez como apartado.
+ *
+ * Se cruzan una fila **pendiente** (gasto en pesos, no un saldo de tarjeta) y un apartado con la
+ * misma cuenta ([PagoDelPeriodo.cuentaId] = [Apartado.accountId]) y la misma categoría. Por cada par
+ * (cuenta, categoría) cuenta lo menor entre lo que queda de sus apartados y lo que piden sus filas;
+ * por cuenta, nunca más que lo apartado que de verdad pesa ([apartadoEfectivoPorCuenta]). Una fila
+ * ya pagada no se cruza: su gasto ya bajó el `restante`. Sin cuenta o sin categoría, tampoco.
+ *
+ * «Tu plata» (el patrimonio) sigue restando el apartado entero: este cruce es solo para lo que mira
+ * hacia adelante en el período. Ver [apartadoFueraDeLosFijos].
+ */
+fun apartadoCubiertoPorLosFijos(
+    accounts: List<Account>,
+    apartados: List<Apartado>,
+    checklist: List<PagoDelPeriodo>,
+): Long {
+    val pendientes = checklist
+        .filter { !it.pagado && !it.esIngreso && !it.montoEsSaldo && it.moneda == "COP" }
+        .filter { it.cuentaId != null && it.categoria.isNotBlank() }
+        .groupBy { it.cuentaId!! to it.categoria }
+        .mapValues { (_, filas) -> filas.sumOf { it.monto } }
+    if (pendientes.isEmpty()) return 0L
+    val efectivo = apartadoEfectivoPorCuenta(accounts, apartados)
+    return apartados
+        .filter { !it.categoria.isNullOrBlank() }
+        .groupBy { it.accountId to it.categoria!! }
+        .map { (clave, delPar) -> clave.first to minOf(delPar.sumOf { it.restante }, pendientes[clave] ?: 0L) }
+        .groupBy({ it.first }, { it.second })
+        .entries.sumOf { (cuenta, cubiertos) -> minOf(cubiertos.sum(), efectivo[cuenta] ?: 0L) }
+}
+
+/**
+ * **Lo apartado que «Te quedan» resta**: lo que pesa en Tu plata ([apartadoEfectivoPorCuenta]) menos
+ * lo que los fijos del período ya restan ([apartadoCubiertoPorLosFijos]). La caja proyectada hace lo
+ * mismo al revés: arranca de Tu plata y le devuelve lo cubierto, porque el pago pendiente lo resta
+ * el día que vence.
+ */
+fun apartadoFueraDeLosFijos(
+    accounts: List<Account>,
+    apartados: List<Apartado>,
+    checklist: List<PagoDelPeriodo>,
+): Long = apartadoEfectivoPorCuenta(accounts, apartados).values.sum() -
+    apartadoCubiertoPorLosFijos(accounts, apartados, checklist)

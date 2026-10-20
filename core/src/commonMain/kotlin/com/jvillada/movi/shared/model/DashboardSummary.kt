@@ -114,8 +114,9 @@ data class DashboardSummary(
      */
     val pagosDeDeudaFueraDelChecklist: Long? = null,
     /**
-     * Lo apartado que sale de Tu plata (ver [Apartado], [Patrimonio.apartado]); el Disponible lo
-     * resta. `null` = server anterior al campo: se toma como cero. Solo se AGREGA.
+     * Lo apartado que el Disponible resta: lo que sale de Tu plata (ver [Apartado],
+     * [Patrimonio.apartado]) menos lo que un pago pendiente del período ya resta como fijo (ver
+     * [apartadoFueraDeLosFijos]). `null` = server anterior al campo: se toma como cero. Solo se AGREGA.
      */
     val apartado: Long? = null,
     /**

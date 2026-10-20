@@ -6,6 +6,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
+import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Apartados
@@ -82,12 +83,12 @@ class ApartadoRoutesTest {
 
         transaction {
             SchemaUtils.drop(
-                Apartados, Goals, CardPaymentDismissals, Cards, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
+                CategoryPrefs, Apartados, Goals, CardPaymentDismissals, Cards, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, Cards, Goals, Apartados,
+                Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, Cards, Goals, Apartados, CategoryPrefs,
             )
 
             Users.insert {
@@ -344,6 +345,41 @@ class ApartadoRoutesTest {
         crear(json(id = "apt-1"))
         val res = client.delete("/api/accounts/$cashAccountId") { header(HttpHeaders.Authorization, auth) }
         assertTrue(res.status.value in 200..299, "borrar la cuenta: ${res.status}")
+        assertTrue(listar().isEmpty())
+    }
+
+    @Test
+    fun `renombrar la categoria se lleva el apartado y lo gastado le sigue restando`() = testApplication {
+        wireApp()
+        crear(json(id = "apt-1", desde = 1_000L))
+        gasto("g-1", 3_000_000L, "Hija")
+        assertEquals(5_000_000L, listar()[0].jsonObject["restante"]!!.jsonPrimitive.long)
+
+        val res = client.post("/api/categories/rename") {
+            header(HttpHeaders.Authorization, auth)
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"from":"Hija","to":"Colegio de la niña"}""")
+        }
+        assertEquals(HttpStatusCode.OK, res.status)
+
+        val apartado = listar()[0].jsonObject
+        assertEquals("Colegio de la niña", apartado["categoria"]!!.jsonPrimitive.content)
+        assertEquals(5_000_000L, apartado["restante"]!!.jsonPrimitive.long)
+    }
+
+    @Test
+    fun `una cuenta en dolares o de un tipo desconocido no se aparta, con 400`() = testApplication {
+        wireApp()
+        transaction {
+            Accounts.insert {
+                it[id] = "acc-usd"; it[userId] = userAId; it[name] = "Dólares"; it[type] = "SAVINGS"; it[currency] = "USD"
+            }
+            Accounts.insert {
+                it[id] = "acc-rara"; it[userId] = userAId; it[name] = "Rara"; it[type] = "NO_EXISTE"; it[currency] = "COP"
+            }
+        }
+        assertEquals(HttpStatusCode.BadRequest, crear(json(accountId = "acc-usd")).status)
+        assertEquals(HttpStatusCode.BadRequest, crear(json(accountId = "acc-rara")).status)
         assertTrue(listar().isEmpty())
     }
 }

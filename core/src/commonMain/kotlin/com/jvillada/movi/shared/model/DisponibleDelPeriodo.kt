@@ -74,7 +74,10 @@ data class PlataDelDisponible(
      * período. Ver `pagosDeDeudaFueraDelChecklist` en `:core`. Cero con un server que no lo manda.
      */
     val otrosPagosDeDeuda: Long = 0L,
-    /** Plata de Tu plata que ya tiene dueño (ver [Apartado]): no está para gastar. Cero si no hay. */
+    /**
+     * Plata de Tu plata que ya tiene dueño (ver [Apartado]): no está para gastar. Sin lo que un pago
+     * pendiente del checklist ya resta como fijo ([apartadoFueraDeLosFijos]). Cero si no hay.
+     */
     val apartado: Long = 0L,
 ) {
     /** Lo que hubo para el período antes de los fijos y de lo que falta por recibir. */

@@ -89,4 +89,76 @@ class ApartadoTest {
         assertEquals(mapOf("acc-nu" to 8_000_000L, "acc-x" to 1_000_000L), efectivo)
         assertEquals(efectivo.values.sum(), patrimonioDe(listOf(nu, casiVacia, tarjeta), listOf(colegio(), colegio(cuenta = "acc-x"))).apartado)
     }
+
+    // ── El apartado que ya es un fijo del período ────────────────────────────
+
+    /** «Colegio Hija»: $4M el 25 desde Nu, categoría «Hija». */
+    private fun colegioHija(pagado: Boolean = false, cuenta: String? = "acc-nu", categoria: String = "Hija", monto: Long = 4_000_000L) =
+        PagoDelPeriodo(
+            ruleId = "r-colegio", nombre = "Colegio Hija", monto = monto, pagado = pagado, diasParaVencer = 5,
+            montoPagado = if (pagado) monto else null, categoria = categoria, cuentaId = cuenta,
+        )
+
+    private fun apartadoHija(restante: Long = 8_000_000L) =
+        Apartado(id = "ap-1", accountId = "acc-nu", proposito = "Colegio", monto = 8_000_000L, categoria = "Hija", restante = restante)
+
+    private fun teQuedan(apartado: Long, checklist: List<PagoDelPeriodo>): Long =
+        disponibleDelPeriodo(
+            ingresosRecibidos = 0L,
+            checklist = checklist,
+            gastoVariablePorDia = emptyMap(),
+            inicio = kotlinx.datetime.LocalDate(2026, 9, 25),
+            finExclusivo = kotlinx.datetime.LocalDate(2026, 10, 25),
+            hoy = kotlinx.datetime.LocalDate(2026, 10, 20),
+            plata = PlataDelDisponible(saldoAlInicio = 20_000_000L, entradas = 0L, guardado = 0L, apartado = apartado),
+        )!!.disponible
+
+    @Test
+    fun el_pago_pendiente_del_colegio_no_se_resta_dos_veces() {
+        val pendiente = listOf(colegioHija())
+        val fuera = apartadoFueraDeLosFijos(listOf(nu), listOf(apartadoHija()), pendiente)
+
+        assertEquals(4_000_000L, apartadoCubiertoPorLosFijos(listOf(nu), listOf(apartadoHija()), pendiente))
+        assertEquals(4_000_000L, fuera)
+        // «Te quedan» baja exactamente lo que el apartado no tiene ya en los fijos: $4M, no $8M.
+        assertEquals(4_000_000L, teQuedan(0L, pendiente) - teQuedan(fuera, pendiente))
+    }
+
+    @Test
+    fun pagar_el_colegio_no_mueve_Te_quedan() {
+        val antes = listOf(colegioHija())
+        val fueraAntes = apartadoFueraDeLosFijos(listOf(nu), listOf(apartadoHija()), antes)
+        // El gasto de «Hija» por $4M desde Nu: baja el saldo y el restante, y la fila queda pagada.
+        val nuDespues = nu.copy(balance = 4_217_464L)
+        val despues = listOf(colegioHija(pagado = true))
+        val fueraDespues = apartadoFueraDeLosFijos(listOf(nuDespues), listOf(apartadoHija(restante = 4_000_000L)), despues)
+
+        assertEquals(4_000_000L, fueraDespues)
+        assertEquals(teQuedan(fueraAntes, antes), teQuedan(fueraDespues, despues))
+    }
+
+    @Test
+    fun solo_se_cruza_un_pendiente_de_la_misma_cuenta_y_la_misma_categoria() {
+        val apartados = listOf(apartadoHija())
+        fun cubierto(fila: PagoDelPeriodo) = apartadoCubiertoPorLosFijos(listOf(nu), apartados, listOf(fila))
+
+        assertEquals(0L, cubierto(colegioHija(cuenta = "otra")))
+        assertEquals(0L, cubierto(colegioHija(cuenta = null)))
+        assertEquals(0L, cubierto(colegioHija(categoria = "Comida")))
+        assertEquals(0L, cubierto(colegioHija(categoria = "")))
+        assertEquals(0L, cubierto(colegioHija(pagado = true)))
+        assertEquals(0L, cubierto(colegioHija().copy(moneda = "USD")))
+        // Nunca más que lo que queda del apartado.
+        assertEquals(8_000_000L, cubierto(colegioHija(monto = 10_000_000L)))
+        // Un apartado sin categoría no lo consume ningún pago.
+        assertEquals(0L, apartadoCubiertoPorLosFijos(listOf(nu), listOf(colegio()), listOf(colegioHija())))
+    }
+
+    @Test
+    fun lo_cubierto_tiene_tope_en_lo_que_pesa_en_la_cuenta() {
+        val pobre = nu.copy(balance = 3_000_000L)
+
+        assertEquals(3_000_000L, apartadoCubiertoPorLosFijos(listOf(pobre), listOf(apartadoHija()), listOf(colegioHija())))
+        assertEquals(0L, apartadoFueraDeLosFijos(listOf(pobre), listOf(apartadoHija()), listOf(colegioHija())))
+    }
 }

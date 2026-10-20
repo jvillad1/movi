@@ -1,6 +1,6 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.apartados.patrimonioDelUsuario
+import com.jvillada.movi.server.apartados.tuPlataConApartados
 import com.jvillada.movi.server.balance.hayMovimientosEnOtraMoneda
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
@@ -127,7 +127,10 @@ internal suspend fun cajaProyectadaDe(uid: String, hoy: LocalDate = AppClock.tod
     val tuPlata = dbQuery {
         val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }
             .map { it[VoidEvents.originalEventId] }.toSet()
-        patrimonioDelUsuario(uid, anulados, usdToCop).tuPlata
+        // Tu plata ya resta todo lo apartado; lo que un pago pendiente de [pagos] cubre se devuelve,
+        // porque ese pago lo resta el día que vence (ver `apartadoCubiertoPorLosFijos`).
+        val conApartados = tuPlataConApartados(uid, anulados, usdToCop)
+        conApartados.patrimonio.tuPlata + conApartados.apartadoCubierto(pagos)
     }
     val gasto = gastoDelDiaADiaDe(uid, hoy)
     val ultimoDia = epochMillisToAppDate(ventanaDe(periodo, ajustes).last)

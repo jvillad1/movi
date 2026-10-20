@@ -6,7 +6,6 @@ import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.enrichWith
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.shared.model.patrimonioDe
-import com.jvillada.movi.server.apartados.apartadosDelUsuario
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
@@ -211,17 +210,16 @@ fun Route.financeRoutes() {
         // campo habría seguido diciendo −$2.074M mientras el Inicio decía la verdad. Nadie lo
         // renderiza hoy, pero quien lo use primero tiene que encontrarse la misma cifra que el
         // Inicio, no una parecida.
-        val (voidedIds, apartados) = dbQuery {
-            val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }
-                .map { it[VoidEvents.originalEventId] }.toSet()
-            anulados to apartadosDelUsuario(uid, anulados)
-        }
         val derivedBalance = patrimonioDe(
             cuentas.map { enrichWith(it, eventsByAccount[it.id].orEmpty(), rate) },
-            apartados,
         ).neto
 
         val summary = dbQuery {
+            val voidedIds = VoidEvents.selectAll()
+                .where { VoidEvents.userId eq uid }
+                .map { it[VoidEvents.originalEventId] }
+                .toSet()
+
             val monthEvents = Events.selectAll().where {
                 (Events.userId eq uid) and
                 (Events.timestamp greaterEq monthStart) and

@@ -1,6 +1,6 @@
 package com.jvillada.movi.server.ai
 
-import com.jvillada.movi.server.apartados.patrimonioDelUsuario
+import com.jvillada.movi.server.apartados.tuPlataConApartados
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.hayMovimientosEnOtraMoneda
 import com.jvillada.movi.server.balance.toAccount
@@ -202,7 +202,8 @@ internal suspend fun datosDeLasSugeridas(
         } else {
             val servidor = disponibleDelServidor(
                 uid, hoy, ajustes, desde, hasta, anulados, reglasDeCredito,
-                apartado = patrimonioDelUsuario(uid, anulados, usdToCop).apartado,
+                // Lo mismo que el Inicio: sin lo que un pago pendiente de [pagos] ya resta como fijo.
+                apartado = tuPlataConApartados(uid, anulados, usdToCop).apartadoParaElDisponible(pagos),
             )
             disponibleAlDia(
                 ingresosRecibidos = entro,

@@ -3,17 +3,30 @@ package com.jvillada.movi.server.apartados
 import com.jvillada.movi.server.balance.cuentasConSaldo
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.routes.ocurrenciasDelPeriodo
+import com.jvillada.movi.server.routes.proximosPagos
+import com.jvillada.movi.server.time.appDateToEpochMillis
+import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Apartado
+import com.jvillada.movi.shared.model.PagoDelPeriodo
+import com.jvillada.movi.shared.model.apartadoCubiertoPorLosFijos
+import com.jvillada.movi.shared.model.apartadoFueraDeLosFijos
 import com.jvillada.movi.shared.model.Patrimonio
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.checklistDelPeriodo
+import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.restanteDelApartado
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.sum
+import java.time.LocalDate
 
 /**
  * **Los apartados del usuario con su `restante` derivado**: `monto` menos lo gastado (EXPENSE, COP, sin
@@ -60,4 +73,45 @@ fun Transaction.apartadosDelUsuario(uid: String, voidedIds: Set<String>): List<A
  * apartado en el server lo pide acá, para que todos hablen de la misma cifra.
  */
 fun Transaction.patrimonioDelUsuario(uid: String, voidedIds: Set<String>, usdToCop: Double): Patrimonio =
-    patrimonioDe(cuentasConSaldo(uid, voidedIds, usdToCop), apartadosDelUsuario(uid, voidedIds))
+    tuPlataConApartados(uid, voidedIds, usdToCop).patrimonio
+
+/**
+ * Las cuentas y los apartados que arman el patrimonio, para quien además tenga que cruzar lo apartado
+ * con los pagos del período (ver [apartadoFueraDeLosFijos]): «Te quedan» y la caja proyectada.
+ */
+class TuPlataConApartados(val cuentas: List<Account>, val apartados: List<Apartado>) {
+    val patrimonio: Patrimonio = patrimonioDe(cuentas, apartados)
+
+    /** Lo apartado que «Te quedan» resta: sin lo que los pagos pendientes de [checklist] ya restan. */
+    fun apartadoParaElDisponible(checklist: List<PagoDelPeriodo>): Long =
+        apartadoFueraDeLosFijos(cuentas, apartados, checklist)
+
+    /** Lo apartado que el pago pendiente ya resta el día que vence: la caja proyectada lo devuelve. */
+    fun apartadoCubierto(checklist: List<PagoDelPeriodo>): Long =
+        apartadoCubiertoPorLosFijos(cuentas, apartados, checklist)
+}
+
+fun Transaction.tuPlataConApartados(uid: String, voidedIds: Set<String>, usdToCop: Double): TuPlataConApartados =
+    TuPlataConApartados(cuentasConSaldo(uid, voidedIds, usdToCop), apartadosDelUsuario(uid, voidedIds))
+
+/** ¿Algún apartado del usuario lo consume una categoría? Solo esos pueden cruzarse con un pago. */
+fun Transaction.hayApartadosConCategoria(uid: String): Boolean =
+    !Apartados.selectAll().where { (Apartados.userId eq uid) and Apartados.categoria.isNotNull() }.empty()
+
+/**
+ * **La lista «Pagos del período» de [hoy]**, para cruzarla con los apartados — o vacía si ningún
+ * apartado tiene categoría, porque entonces no hay cruce posible y armarla cuesta dos lecturas en la
+ * ruta más caliente (el resumen del Inicio). Es la misma lista que lee Plan y la caja proyectada.
+ */
+suspend fun pagosQuePuedenCruzarApartados(uid: String, hoy: LocalDate, ajustes: PeriodSettings): List<PagoDelPeriodo> {
+    if (!dbQuery { hayApartadosConCategoria(uid) }) return emptyList()
+    return checklistDelPeriodo(
+        upcoming = proximosPagos(uid, hoy),
+        ocurrencias = ocurrenciasDelPeriodo(uid, hoy),
+        periodo = periodoDe(appDateToEpochMillis(hoy) + MEDIO_DIA, ajustes),
+        settings = ajustes,
+    )
+}
+
+/** Mediodía: un instante del día que no cae en el borde de una ventana. */
+private const val MEDIO_DIA = 12L * 60 * 60 * 1000

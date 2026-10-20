@@ -96,7 +96,7 @@ private class ApartadoValidado(
     val error: Pair<HttpStatusCode, String>? = null,
 )
 
-/** Valida el cuerpo y que la cuenta sea del dueño y «de su plata» (no deuda, bien ni condicionada). */
+/** Valida el cuerpo y que la cuenta sea del dueño, en pesos y «de su plata» (no deuda, bien ni condicionada). */
 private suspend fun validar(uid: String, body: Apartado): ApartadoValidado {
     val proposito = body.proposito.trim()
     val categoria = body.categoria?.trim()?.ifBlank { null }
@@ -109,11 +109,13 @@ private suspend fun validar(uid: String, body: Apartado): ApartadoValidado {
     val cuenta = dbQuery {
         Accounts.selectAll().where { (Accounts.id eq body.accountId) and (Accounts.userId eq uid) }.firstOrNull()
     } ?: return falla(HttpStatusCode.NotFound, "Cuenta no encontrada")
-    val sirve = esDeTuPlata(
-        AccountType.valueOf(cuenta[Accounts.type]),
-        cuenta[Accounts.conditionedTo],
-        esBien = cuenta[Accounts.assetKind] != null,
-    )
+    val tipo = runCatching { AccountType.valueOf(cuenta[Accounts.type]) }.getOrNull()
+        ?: return falla(HttpStatusCode.BadRequest, "Esa cuenta no se puede apartar")
+    // Lo apartado es en pesos (lo consume un gasto en pesos y resta de un saldo en pesos).
+    if (cuenta[Accounts.currency] != "COP") {
+        return falla(HttpStatusCode.BadRequest, "Elige una cuenta en pesos: lo apartado se cuenta en pesos")
+    }
+    val sirve = esDeTuPlata(tipo, cuenta[Accounts.conditionedTo], esBien = cuenta[Accounts.assetKind] != null)
     if (!sirve) return falla(HttpStatusCode.BadRequest, "Elige una cuenta de tu plata: una deuda, un bien o una cuenta condicionada no se aparta")
     return ApartadoValidado(proposito, categoria)
 }

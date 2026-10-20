@@ -5,6 +5,7 @@ import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.routes.FabricaDeModelos
+import com.jvillada.movi.server.routes.cajaProyectadaDe
 import com.jvillada.movi.server.routes.aiRoutes
 import com.jvillada.movi.server.routes.dashboardRoutes
 import com.jvillada.movi.server.routes.reminderRoutes
@@ -291,6 +292,65 @@ class LasPreguntasSugeridasTest {
         val texto = respuesta(a.duenoA, PreguntaSugerida.COMO_VOY)
         assertTrue(pesosDelCierre(despues) in texto, "te quedan $despues:\n$texto")
         assertEquals(0, llamadasAlModelo)
+    }
+
+    /**
+     * El apartado que además es un pago pendiente (el arriendo de hoy, «Vivienda», desde la misma
+     * cuenta): los fijos ya restan el $1M que falta pagar, así que «Te quedan» baja solo los otros
+     * $4M — en Hoy y en el chat igual — y la caja proyectada arranca con ese $1M devuelto.
+     */
+    @Test
+    fun `el apartado que cubre un pago pendiente no se resta dos veces`() = testApplication {
+        with(a) { application { modulo { aiRoutes(fabricaQueCuenta); dashboardRoutes(); reminderRoutes() } } }
+        val hoy = AppClock.today()
+        periodoDeA(hoy)
+
+        suspend fun resumen() = json.decodeFromString(DashboardSummary.serializer(), get(a.duenoA, "/api/dashboard/summary"))
+        suspend fun teQuedan(): Long {
+            val resumen = resumen()
+            val upcoming = json.decodeFromString(ListSerializer(UpcomingPayment.serializer()), get(a.duenoA, "/api/payments/upcoming"))
+            val ocurrencias = json.decodeFromString(ListSerializer(OccurrenceState.serializer()), get(a.duenoA, "/api/payments/occurrences"))
+            val ajustes = PeriodSettings()
+            val periodo = periodoDe(appDateToEpochMillis(hoy) + 12 * 3_600_000L, ajustes)
+            val ventana = ventanaDe(periodo, ajustes)
+            return assertNotNull(
+                disponibleAlDia(
+                    ingresosRecibidos = resumen.monthIncome,
+                    pagos = checklistDelPeriodo(upcoming, ocurrencias, periodo, ajustes),
+                    gastoVariablePorDia = resumen.gastoVariablePorDia.orEmpty(),
+                    desde = epochMillisToAppDate(ventana.first).toString(),
+                    hasta = epochMillisToAppDate(ventana.last).toString(),
+                    hoy = hoy.toString(),
+                    plata = plataDelDisponibleDe(resumen),
+                ),
+            ).periodo.teQuedan
+        }
+
+        val antes = teQuedan()
+        transaction {
+            Apartados.insert {
+                it[Apartados.id] = "apt-arriendo"
+                it[Apartados.userId] = a.duenoA
+                it[accountId] = a.cuentaDeA
+                it[proposito] = "Arriendo y más"
+                it[monto] = 5_000_000L
+                it[categoria] = "Vivienda"
+                it[desde] = appDateToEpochMillis(hoy)
+                it[createdAt] = System.currentTimeMillis()
+            }
+        }
+        val con = resumen()
+        assertEquals(5_000_000L, con.patrimonio!!.apartado, "Tu plata sigue restando lo apartado entero")
+        assertEquals(4_000_000L, con.apartado, "«Te quedan» resta solo lo que el arriendo pendiente no cubre")
+        val despues = teQuedan()
+        assertEquals(antes - 4_000_000L, despues)
+
+        val texto = respuesta(a.duenoA, PreguntaSugerida.COMO_VOY)
+        assertTrue(pesosDelCierre(despues) in texto, "te quedan $despues:\n$texto")
+        assertEquals(0, llamadasAlModelo)
+
+        val caja = assertNotNull(cajaProyectadaDe(a.duenoA, hoy).caja)
+        assertEquals(con.patrimonio!!.tuPlata + 1_000_000L, caja.tuPlataHoy)
     }
 
     @Test
