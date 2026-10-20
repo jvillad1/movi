@@ -102,6 +102,14 @@ class TercerosALaManoEnPantallaTest {
     private val agregados = mutableListOf<Pair<String, AgregarIdentificador>>()
     private val descartados = mutableListOf<DescartarSugerido>()
     private val renombrados = mutableListOf<List<String>>()
+    private val unidos = mutableListOf<Pair<String, String>>()
+    private val noSonLaMismaPedidos = mutableListOf<Pair<String, String>>()
+
+    /** La misma persona guardada dos veces: la que guardó primero con el número, la otra con el nombre del banco. */
+    private val caroVieja = caro.copy(creadoEn = 1L)
+    private val carolinaNueva = DestinoConocido(
+        id = "dst_carolina", nombre = "Carolina Prueba Salazar", numero = "", llave = "carolina otra salazar", creadoEn = 2L,
+    ).conIdentificadores(listOf(IdentificadorDelDestino(TipoDeIdentificador.LLAVE, "carolina otra salazar")))
 
     private open inner class Repo(
         private val guardados: List<DestinoConocido> = listOf(caro),
@@ -124,6 +132,11 @@ class TercerosALaManoEnPantallaTest {
             MovimientosDelDestino(destino = guardados.first { it.id == id }, movimientos = emptyList())
         override suspend fun getRenombrablesDelDestino(id: String): MovimientosParaRenombrar =
             MovimientosParaRenombrar("Transferencia a Caro", "Transferencia de Caro", listOf(ilegible))
+        override suspend fun unirDestinos(id: String, con: String): DestinoConocido {
+            unidos += id to con
+            return guardados.first { it.id == con }
+        }
+        override suspend fun noSonLaMisma(id: String, otro: String) { noSonLaMismaPedidos += id to otro }
         override suspend fun renombrarMovimientosDelDestino(id: String, ids: List<String>): RenombradosDelDestino {
             renombrados += ids
             return RenombradosDelDestino(ids.size, 0)
@@ -269,6 +282,43 @@ class TercerosALaManoEnPantallaTest {
         assertTrue(creados.isEmpty())
         composeRule.waitForIdle()
         assertTrue(hay("Transferencia a Caro"), "la propuesta ya dice el nombre del tercero")
+    }
+
+    // ── «¿Es la misma persona?» (20-oct-2026) ───────────────────────────────────
+
+    @Test
+    fun `dos fichas de la misma persona se proponen para unir, y queda la mas antigua`() {
+        montar(Repo(guardados = listOf(carolinaNueva, caroVieja), sugeridos = emptyList()))
+        esperar("¿Es la misma persona?")
+        assertTrue(hay("«Caro» y «Carolina Prueba Salazar»"), "dice cuáles, la que queda primero")
+        assertTrue(unidos.isEmpty(), "nada se une sin que el dueño lo pida")
+        tocar(UNIR)
+        composeRule.waitUntil(timeoutMillis = 5_000) { unidos.isNotEmpty() }
+        assertEquals("dst_carolina" to "dst_caro", unidos.single(), "la nueva se une a la más antigua")
+    }
+
+    @Test
+    fun `no son la misma se recuerda y la tarjeta se va`() {
+        montar(Repo(guardados = listOf(carolinaNueva, caroVieja), sugeridos = emptyList()))
+        esperar("¿Es la misma persona?")
+        tocar(NO_SON_LA_MISMA)
+        composeRule.waitUntil(timeoutMillis = 5_000) { noSonLaMismaPedidos.isNotEmpty() }
+        composeRule.waitForIdle()
+        assertEquals("dst_caro" to "dst_carolina", noSonLaMismaPedidos.single())
+        assertFalse(hay("¿Es la misma persona?"))
+        assertTrue(unidos.isEmpty())
+    }
+
+    @Test
+    fun `lo que ya se dijo que no son la misma no aparece al volver`() {
+        montar(
+            object : Repo(guardados = listOf(carolinaNueva, caroVieja), sugeridos = emptyList()) {
+                override suspend fun getDestinosDescartados(): DestinosDescartados =
+                    DestinosDescartados(listOf(com.jvillada.movi.shared.model.claveDeNoSonLaMisma("dst_caro", "dst_carolina")))
+            },
+        )
+        esperar("Carolina Prueba Salazar")
+        assertFalse(hay("¿Es la misma persona?"))
     }
 
     // ── Andamio ─────────────────────────────────────────────────────────────────

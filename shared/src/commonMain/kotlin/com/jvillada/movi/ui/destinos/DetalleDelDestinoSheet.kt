@@ -359,10 +359,15 @@ private fun CifraDeLaTabla(totales: Map<String, Long>, modifier: Modifier, entra
 }
 
 /**
- * **«Ponerle el nombre a 3 movimientos anteriores»** (4-oct-2026): los anotados con un nombre que
- * nadie lee («Transferencia a la cuenta *41279033068»). Primero la cantidad y cuáles; después una
- * confirmación que dice el nombre nuevo. **Nunca se renombra solo**, y el server vuelve a validar que
- * cada uno siga siendo ilegible: lo que escribió el dueño no se toca.
+ * **«Ponerle el nombre a 3 movimientos anteriores»** (4-oct-2026): los anotados con un nombre de
+ * Movi o del banco («Transferencia a la cuenta *41279033068»). Primero la cantidad y cuáles; después
+ * una confirmación que dice el nombre nuevo, y el server vuelve a validar cada uno con la regla de
+ * `NombreDelTercero.kt`: lo que escribió el dueño no se toca.
+ *
+ * **Desde el 20-oct-2026 es un respaldo**: crear, editar, sumar un identificador o unir ya renombran
+ * en el server, así que casi siempre no aparece. Queda para lo que se anotó DESPUÉS de la última de
+ * esas escrituras (a mano, por un extracto, por un teléfono que subió tarde): sin él, eso se quedaría
+ * con el nombre del banco hasta la próxima edición del tercero.
  */
 @Composable
 private fun PonerleElNombre(
