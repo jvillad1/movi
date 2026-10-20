@@ -43,6 +43,12 @@ data class PropuestaDelAviso(
      * `RepartirUnEnvio.kt`): Reconciliar propone repartirlo, así que la fila no lo anota como uno.
      */
     val seReparte: Boolean = false,
+    /**
+     * El aviso no se pudo leer pero trae un monto que se puede anotar igual ([AvisoSinLeer], ver
+     * `AnotarloIgual.kt`). La fila **no** lo confirma: sin [leido], [dudasDelAviso] dice
+     * [DudaDelAviso.NO_SE_LEYO] y lo manda a Reconciliar, que es donde se anota igual.
+     */
+    val sinLeer: AvisoSinLeer? = null,
 )
 
 /**

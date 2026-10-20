@@ -208,6 +208,15 @@ interface WalletRepository {
     suspend fun parseSms(id: String): ParsedSms
 
     /**
+     * **Lo que lee Reconciliar**: lo mismo que [parseSms] y, si el aviso no se pudo leer, por qué y
+     * lo que trae para anotarlo igual (`GET /api/sms/{id}/parse?anotarloIgual=1`, ver
+     * `AnotarloIgual.kt`). Por defecto es [parseSms] y nada más: un error sale como error, igual que
+     * antes.
+     */
+    suspend fun leerParaReconciliar(id: String): com.jvillada.movi.shared.model.LecturaParaReconciliar =
+        com.jvillada.movi.shared.model.LecturaParaReconciliar(leido = parseSms(id))
+
+    /**
      * **Los movimientos que ya están anotados y parecen ser este SMS** (`GET /api/sms/{id}/coincidencias`):
      * mismo monto, misma moneda, mismo tipo y a pocos días del mensaje. Vacía si no hay ninguno.
      *
