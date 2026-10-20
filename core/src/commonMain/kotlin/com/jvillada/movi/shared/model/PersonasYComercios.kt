@@ -148,8 +148,9 @@ fun rechazoDelIdentificador(identificador: IdentificadorDelDestino): String? = w
 /**
  * **[queda] con todo lo de [seVa]**: sus identificadores se suman, y la nota y el tipo que [queda]
  * no tenga los toma de [seVa]. El nombre es el de [queda] — es la ficha que el dueño eligió
- * conservar. Los movimientos no se tocan: se reconocen por el texto del banco, y ahora todos esos
- * datos son de [queda].
+ * conservar — y el de [seVa] queda entre sus [DestinoConocido.nombresAnteriores]. Los movimientos
+ * se reconocen por el texto del banco, y ahora todos esos datos son de [queda]; el server además
+ * les pone el nombre de [queda] a los que tenían un nombre de Movi (`POST /unir`).
  */
 fun unirTerceros(seVa: DestinoConocido, queda: DestinoConocido): DestinoConocido =
     queda.conIdentificadores(queda.todosLosIdentificadores() + seVa.todosLosIdentificadores())
@@ -157,6 +158,14 @@ fun unirTerceros(seVa: DestinoConocido, queda: DestinoConocido): DestinoConocido
             deQuien = queda.deQuien ?: seVa.deQuien,
             // Un tipo deducido no se hereda como si alguien lo hubiera elegido.
             tipo = queda.tipo.takeUnless { queda.tipoInferido } ?: seVa.tipo.takeUnless { seVa.tipoInferido },
+            // 20-oct-2026: el nombre de la que se va (y los que ella tuvo) pasan a ser nombres
+            // anteriores de la que queda: «Transferencia de Carolina Restrepo Salazar» se reconoce
+            // como de Movi y pasa a «Transferencia de Caro» (ver [nombreDelMovimientoParaElDestino]).
+            nombresAnteriores = nombresAnterioresCon(
+                queda.nombresAnteriores,
+                seVa.nombresAnteriores + seVa.nombre,
+                nombreDeHoy = queda.nombre,
+            ),
         )
 
 // ── Lo enviado y lo recibido, período por período ───────────────────────────────

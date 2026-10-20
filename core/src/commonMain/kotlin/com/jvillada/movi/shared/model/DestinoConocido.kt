@@ -118,6 +118,26 @@ data class DestinoConocido(
      * poder cambiarlo. La app manda `tipo = null` al guardar si esto es `true` y no lo tocó.
      */
     val tipoInferido: Boolean = false,
+    /**
+     * **Los nombres que tuvo antes** (20-oct-2026), del más viejo al más nuevo: los llena el server
+     * al renombrarlo (`PUT`) o al unirle otra ficha (el nombre de la que se va). Sirven para que
+     * «Transferencia a NombreViejo» se reconozca como un nombre que puso Movi y pase al nombre de
+     * hoy (ver [nombreDelMovimientoParaElDestino]). **Lo maneja el server**: lo que mande un cliente
+     * acá se ignora. Vacío en todo destino anterior y en lo que mande un server viejo.
+     */
+    val nombresAnteriores: List<String> = emptyList(),
+    /**
+     * Cuándo se guardó (`known_destinations.created_at`) — derivado, solo de lectura. Decide qué
+     * ficha queda al unir dos que son la misma persona: **la más antigua** (ver
+     * [posiblesDuplicados]). `null` en lo que mande un server viejo.
+     */
+    val creadoEn: Long? = null,
+    /**
+     * **Cuántos movimientos se renombraron con esta escritura** (20-oct-2026) — solo en la respuesta
+     * de crear, editar, sumar un identificador o unir. Lo lee la app para releer sus movimientos.
+     * Cero (y ausente en el JSON) en cualquier lectura.
+     */
+    val renombrados: Int = 0,
 )
 
 /**
@@ -357,7 +377,8 @@ fun nombreDesdeElDestino(destino: DestinoConocido): String = "Transferencia de $
 fun nombreHaciaElDestino(destino: DestinoConocido): String = "Transferencia a ${destino.nombre}"
 
 /**
- * **¿Este nombre se puede reemplazar por el del destino?**
+ * **¿Este nombre se puede reemplazar por el del destino?** Solo mira si es un número o nada; la
+ * regla entera de qué nombre es de Movi y cuál del dueño es [esUnNombreGenerado].
  *
  * Solo cuando lo que hay es un número o nada. Es la misma regla que usa la memoria de categorías
  * (ver `conLoQueMoviRecuerda`) y por el mismo motivo: si el banco mandó un nombre de verdad
@@ -373,75 +394,63 @@ fun sePuedeRenombrar(nombreActual: String): Boolean {
 }
 
 /**
- * **El SMS leído, con el nombre del destino puesto** si el mensaje nombra un número registrado.
+ * **El SMS leído, con el nombre del destino puesto** si el mensaje nombra a un tercero guardado.
  *
  * Va DESPUÉS de `conLoQueMoviRecuerda` en la cadena del server, y eso es una decisión: la memoria
  * es lo que el dueño ya decidió sobre ese mismo destinatario, así que si él a ese número lo llamó
- * «Mercado», sigue diciendo «Mercado». Este paso solo habla donde no hablaba nadie.
+ * «Mercado», sigue diciendo «Mercado». Este paso solo cambia un nombre que puso Movi o el banco.
  *
  * [textoDelMensaje] es el SMS completo, no [ParsedSms.merchant]: el número puede no estar en el
  * nombre —justamente porque un paso anterior ya lo reemplazó— y este es el único lugar donde el
  * dato crudo todavía existe.
  *
- * Un gasto se propone «Transferencia a Caro»; un ingreso, «Transferencia de Caro» (4-oct-2026).
- *
- * **El nombre que escribe el banco para la persona** («a DANIEL LEONETT», «Te llegó dinero de …») se
- * reemplaza por el del tercero guardado (4-oct-2026; antes ganaba el del banco): el dueño ya le dio
- * un nombre y es el que pidió leer en cuanto llega el aviso. Un nombre de comercio que no es el de
- * la persona («Zelo Group») o el que puso la memoria, no.
+ * **Una sola regla** (20-oct-2026): la misma que reescribe los movimientos ya anotados,
+ * [textoConElNombreDelTercero]. Reemplaza un nombre ilegible, el nombre con que el banco nombra a la
+ * persona en este mismo aviso («a DANIEL LEONETT»), uno de sus identificadores-nombre, un nombre
+ * anterior del tercero o su propio nombre escrito de otra forma; nunca uno que escribió el dueño
+ * (o que puso la memoria con lo que él escribió). El formato es el canónico
+ * ([nombreCanonicoDelMovimiento]): «Transferencia a Caro» / «Transferencia de Caro» para una
+ * persona, el nombre a secas para un comercio. Si el tercero no tiene tipo elegido, se deduce de
+ * este mismo aviso (un pago por QR es a un comercio, ver [tipoInferido]).
  */
 fun conElDestinoConocido(
     parsed: ParsedSms,
     textoDelMensaje: String,
     destinos: List<DestinoConocido>,
 ): ParsedSms {
-    if (parsed.type == TransactionType.INCOME) return conElRemitenteConocido(parsed, textoDelMensaje, destinos)
-    if (parsed.type != TransactionType.EXPENSE) return parsed
+    if (parsed.type != TransactionType.INCOME && parsed.type != TransactionType.EXPENSE) return parsed
+    // 4-oct: cualquier forma en que el banco nombre a quien mandó o recibió, y cualquiera de sus
+    // identificadores.
     val destino = destinoQueNombra(textoDelMensaje, destinos) ?: return parsed
-    // 4-oct: el nombre que escribió el BANCO para esa persona («a DANIEL LEONETT») también se
-    // reemplaza — el dueño ya le dio uno —; el que puso la memoria (lo que él decidió) no.
-    if (!sePuedeRenombrar(parsed.merchant) && claveDeLlave(parsed.merchant) !in nombresDelBancoEn(textoDelMensaje)) return parsed
-    return parsed.copy(merchant = nombreHaciaElDestino(destino))
+    val conTipo = conElTipoDelAviso(destino, textoDelMensaje)
+    val nuevo = textoConElNombreDelTercero(parsed.merchant, conTipo, parsed.type, nombresCrudosDelBancoEn(textoDelMensaje))
+        ?: return parsed
+    return parsed.copy(merchant = nuevo)
 }
 
-/**
- * **La plata que LLEGÓ de alguien guardado** (29-sep): «Te llegó dinero de CAROLINA RESTREPO
- * SALAZAR con tu llave» se propone como «Transferencia de Caro» si él guardó ese nombre en Caro.
- *
- * Solo reemplaza el nombre que mandó el banco (o uno ilegible): si la memoria ya le puso otro, ese
- * es suyo. Y no suma en «lo que le mandaste» — eso sigue siendo solo gastos ([vaHaciaElDestino]).
- */
-private fun conElRemitenteConocido(
-    parsed: ParsedSms,
-    textoDelMensaje: String,
-    destinos: List<DestinoConocido>,
-): ParsedSms {
-    // 4-oct: cualquier forma en que el banco nombre a quien mandó («Te llegó dinero de X con tu
-    // llave», «recibiste una transferencia de X por …») y cualquiera de sus identificadores.
-    val destino = destinoQueNombra(textoDelMensaje, destinos) ?: return parsed
-    val remitentes = nombresDelBancoEn(textoDelMensaje)
-    if (claveDeLlave(parsed.merchant) !in remitentes && !sePuedeRenombrar(parsed.merchant)) return parsed
-    return parsed.copy(merchant = nombreDesdeElDestino(destino))
-}
+/** El tercero con su tipo: el elegido, o el que dice este aviso ([tipoInferido] sobre ese texto solo). */
+private fun conElTipoDelAviso(destino: DestinoConocido, texto: String): DestinoConocido =
+    if (destino.tipo != null) destino else destino.copy(tipo = tipoInferido(destino, listOf(texto)))
 
 /**
- * Lo mismo, para una fila de extracto. Mismas reglas: solo gastos, solo si el nombre que trae es un
- * número o nada, y leyendo el número del texto CRUDO de la fila.
+ * Lo mismo, para una fila de extracto. Misma regla ([textoConElNombreDelTercero]), leyendo el número
+ * del texto CRUDO de la fila.
  *
- * El concepto se mueve junto con el nombre solo si venían iguales — que es el caso normal. Cuando el
- * extracto trajo un concepto propio, ese concepto es un dato del papel y no se pisa.
+ * El nombre y el concepto pasan por la regla cada uno: un concepto propio del papel («Cuota de
+ * Cotrafa · septiembre») no es un nombre generado y no se pisa.
  */
 fun conElDestinoConocido(
     tx: ParsedTransaction,
     destinos: List<DestinoConocido>,
 ): ParsedTransaction {
-    if (tx.type != TransactionType.EXPENSE) return tx
-    val destino = destinoQueNombra(tx.rawText.ifBlank { tx.merchant }, destinos) ?: return tx
-    if (!sePuedeRenombrar(tx.merchant)) return tx
-    val nuevo = nombreHaciaElDestino(destino)
+    if (tx.type != TransactionType.EXPENSE && tx.type != TransactionType.INCOME) return tx
+    val crudo = tx.rawText.ifBlank { tx.merchant }
+    val destino = destinoQueNombra(crudo, destinos) ?: return tx
+    val conTipo = conElTipoDelAviso(destino, crudo)
+    val otros = nombresCrudosDelBancoEn(crudo)
     return tx.copy(
-        merchant = nuevo,
-        description = if (tx.description == tx.merchant) nuevo else tx.description,
+        merchant = textoConElNombreDelTercero(tx.merchant, conTipo, tx.type, otros) ?: tx.merchant,
+        description = textoConElNombreDelTercero(tx.description, conTipo, tx.type, otros) ?: tx.description,
     )
 }
 
@@ -463,6 +472,14 @@ fun nombraElNumeroDelDestino(evento: FinancialEvent, destino: DestinoConocido): 
     if (evento.type != TransactionType.EXPENSE) return false
     return elTextoNombraUnNumero(evento, destino)
 }
+
+/**
+ * **El texto del banco nombra a [destino]** por un número o una llave (o el nombre con que lo nombra
+ * el banco), sin mirar si entró o salió: la señal fuerte con que se decide a qué tercero queda
+ * ligado un movimiento al renombrarlo (ver [terceroDelMovimiento]).
+ */
+internal fun elBancoLoNombra(evento: FinancialEvent, destino: DestinoConocido): Boolean =
+    elTextoNombraUnNumero(evento, destino) || elTextoNombraUnaLlave(evento, destino)
 
 /** La señal del número sin mirar el tipo: la usan lo enviado y lo recibido. */
 private fun elTextoNombraUnNumero(evento: FinancialEvent, destino: DestinoConocido): Boolean {
@@ -1055,6 +1072,6 @@ fun sumarIdentificador(destino: DestinoConocido, identificador: IdentificadorDel
 fun quitarIdentificador(destino: DestinoConocido, identificador: IdentificadorDelDestino): DestinoConocido =
     destino.conIdentificadores(destino.todosLosIdentificadores().filterNot { it.clave == identificador.normalizado().clave })
 
-/** El nombre que se propone para el movimiento una vez guardado el destino. */
+/** El nombre que se propone para el movimiento una vez guardado el destino: el canónico. */
 fun nombreDelMovimientoConElDestino(destino: DestinoConocido, tipo: TransactionType): String =
-    if (tipo == TransactionType.INCOME) nombreDesdeElDestino(destino) else nombreHaciaElDestino(destino)
+    nombreCanonicoDelMovimiento(destino, tipo)

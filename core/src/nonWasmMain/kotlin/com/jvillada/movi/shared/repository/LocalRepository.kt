@@ -2007,9 +2007,31 @@ class LocalRepository(
      * cuenta ajena no cambia. Mismo criterio que `getFinanceSummary`.
      */
     override suspend fun getDestinos(): List<DestinoConocido> = remote.getDestinos()
-    override suspend fun createDestino(destino: DestinoConocido): DestinoConocido = remote.createDestino(destino)
+    override suspend fun createDestino(destino: DestinoConocido): DestinoConocido =
+        remote.createDestino(destino).also { releerSiRenombro(it.renombrados) }
     override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido =
-        remote.updateDestino(id, destino)
+        remote.updateDestino(id, destino).also { releerSiRenombro(it.renombrados) }
+
+    /**
+     * **Los nombres que el server acaba de poner, también en el espejo** (20-oct-2026). Crear,
+     * editar, sumar un identificador o unir terceros renombra movimientos en el server (ver
+     * `NombreDelTercero.kt`), y el `SyncEngine` solo empuja: sin esto el teléfono seguiría
+     * mostrando «Transferencia a la cuenta *0756» hasta la próxima lectura con red. Se relee la
+     * lista con [getEvents], que espeja lo que cambió —las filas selladas toman la descripción y el
+     * `merchant` del server— y deja intactas las que este teléfono todavía no subió (esas mandan
+     * acá, ver su KDoc). Si la relectura falla, la escritura ya está hecha: la próxima lectura con
+     * red pone el espejo al día.
+     */
+    private suspend fun releerSiRenombro(renombrados: Int) {
+        if (renombrados <= 0) return
+        try {
+            getEvents(null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Ver el KDoc: la próxima lectura con red lo corrige.
+        }
+    }
     override suspend fun deleteDestino(id: String) = remote.deleteDestino(id)
     override suspend fun getMovimientosDelDestino(id: String): MovimientosDelDestino =
         remote.getMovimientosDelDestino(id)
@@ -2019,15 +2041,17 @@ class LocalRepository(
         remote.descartarSugerido(pedido)
     override suspend fun getDestinosDescartados() = remote.getDestinosDescartados()
     override suspend fun agregarIdentificador(id: String, pedido: com.jvillada.movi.shared.model.AgregarIdentificador) =
-        remote.agregarIdentificador(id, pedido)
+        remote.agregarIdentificador(id, pedido).also { releerSiRenombro(it.renombrados) }
     override suspend fun quitarIdentificador(id: String, identificador: com.jvillada.movi.shared.model.IdentificadorDelDestino) =
         remote.quitarIdentificador(id, identificador)
-    override suspend fun unirDestinos(id: String, con: String) = remote.unirDestinos(id, con)
+    override suspend fun unirDestinos(id: String, con: String) =
+        remote.unirDestinos(id, con).also { releerSiRenombro(it.renombrados) }
+    override suspend fun noSonLaMisma(id: String, otro: String) = remote.noSonLaMisma(id, otro)
     override suspend fun getRenombrablesDelDestino(id: String) = remote.getRenombrablesDelDestino(id)
-    // Renombrar es una escritura sobre movimientos: el espejo local se pone al día en la próxima
-    // lectura de eventos (llevan `lastEditedAt`, igual que una corrección de concepto en la web).
+    // Renombrar es una escritura sobre movimientos: el espejo se pone al día enseguida (ver
+    // [releerSiRenombro]; llevan `lastEditedAt`, igual que una corrección de concepto en la web).
     override suspend fun renombrarMovimientosDelDestino(id: String, ids: List<String>) =
-        remote.renombrarMovimientosDelDestino(id, ids)
+        remote.renombrarMovimientosDelDestino(id, ids).also { releerSiRenombro(it.renombrados) }
     override suspend fun getSmsMessages(): List<SmsMessage> = remote.getSmsMessages()
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)
     override suspend fun parseSms(id: String): ParsedSms = remote.parseSms(id)
