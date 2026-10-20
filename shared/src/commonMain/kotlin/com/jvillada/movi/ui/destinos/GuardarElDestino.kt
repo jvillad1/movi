@@ -61,6 +61,8 @@ import com.jvillada.movi.shared.model.normalizado
 import com.jvillada.movi.shared.model.normalizarLlave
 import com.jvillada.movi.shared.model.nombresCrudosDelBancoEn
 import com.jvillada.movi.shared.model.todosLosIdentificadores
+import com.jvillada.movi.shared.model.pareceDe
+import com.jvillada.movi.shared.model.sumarIdentificador
 import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.launch
 
@@ -77,6 +79,12 @@ const val AGREGAR_UNA_NOTA: String = "Agregar una nota (ej. esposa)"
 
 /** El enlace que suma el dato a alguien que ya está guardado (4-oct-2026). */
 const val YA_LO_TENGO_GUARDADO: String = "Ya lo tengo guardado"
+
+/**
+ * **La pastilla de la fila cerrada que abre la lista de los ya guardados** (20-oct-2026): asociar el
+ * número a alguien que ya existe es un toque para abrir y uno para elegir, sin pasar por «Otro…».
+ */
+const val ES_DE_ALGUIEN_GUARDADO: String = "Ya lo tengo"
 
 /** El enlace que dice que la cuenta es del dueño: la fila no vuelve a preguntar. */
 const val ES_MIA: String = "Es mía"
@@ -210,7 +218,13 @@ internal fun FilaGuardarElDestino(
         listOfNotNull(delAviso?.let { IdentificadorDelDestino(TipoDeIdentificador.LLAVE, normalizarLlave(it)) })
             .filter { it.clave != identificador.normalizado().clave && destinos.none { d -> elDestinoConoce(d, it) } }
     }
-    val aGuardar = destinoParaGuardar(identificador, nombre, null, destinos).let { d ->
+    // 20-oct-2026: si el nombre que dijo el banco es el de alguien guardado con otro nombre
+    // («Carolina Restrepo Salazar» y «Caro»), la fila cerrada pregunta «¿Es de «Caro»?» y suma ahí
+    // con un toque (ver `pareceDe`). Abierta, manda lo que él escriba.
+    val parecido = remember(propuesto, destinos, abierta) {
+        if (abierta || propuesto.isBlank()) null else pareceDe(listOf(propuesto), destinos)
+    }
+    val aGuardar = (parecido?.let { sumarIdentificador(it, identificador) } ?: destinoParaGuardar(identificador, nombre, null, destinos)).let { d ->
         if (d.id.isEmpty()) d.conIdentificadores(d.todosLosIdentificadores() + otros) else d
     }
     val loQueFalta = rechazoDelDestino(aGuardar.nombre, aGuardar.numero, aGuardar.deQuien, aGuardar.llave)
@@ -292,14 +306,34 @@ internal fun FilaGuardarElDestino(
                     )
                     Pastilla(OTRO, { abierta = true }, enabled = !guardando)
                 }
-                else -> Pastilla(PONERLE_NOMBRE, { abierta = true }, principal = true, enabled = !guardando)
+                else -> {
+                    Pastilla(PONERLE_NOMBRE, { abierta = true; eligiendoTercero = false }, principal = true, enabled = !guardando)
+                    if (destinos.isNotEmpty()) {
+                        Pastilla(
+                            ES_DE_ALGUIEN_GUARDADO,
+                            { eligiendoTercero = !eligiendoTercero },
+                            enabled = !guardando,
+                            modifier = Modifier.testTag(TAG_ES_DE_ALGUIEN_GUARDADO),
+                        )
+                    }
+                }
             }
         }
         if (error != null && !abierta) {
             Spacer(Modifier.height(6.dp))
             Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
-        if (!abierta) return@Column
+        if (!abierta) {
+            // La lista de los ya guardados, abierta desde la fila cerrada: elegir uno le suma este
+            // dato y el server le pone su nombre a los movimientos en el mismo paso.
+            if (eligiendoTercero) {
+                Spacer(Modifier.height(8.dp))
+                Text(ELIGE_A_QUIEN, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(6.dp))
+                ListaDeTerceros(destinos, enabled = !guardando, modifier = Modifier.testTag(TAG_TERCEROS_QUE_YA_TENGO)) { sumarA(it) }
+            }
+            return@Column
+        }
 
         Spacer(Modifier.height(10.dp))
         FieldBox("Nombre. Ej: Ana", nombre, { nombre = it })
@@ -341,6 +375,12 @@ internal fun FilaGuardarElDestino(
         }
     }
 }
+
+/** El tag de la pastilla [ES_DE_ALGUIEN_GUARDADO]. */
+const val TAG_ES_DE_ALGUIEN_GUARDADO: String = "es-de-alguien-guardado"
+
+/** Lo que dice la lista de los ya guardados, abierta desde la fila cerrada. */
+const val ELIGE_A_QUIEN: String = "Elige de quién es. Sus movimientos van a llevar su nombre."
 
 /** La pastilla que guarda de un toque. */
 const val TAG_GUARDAR_DE_UN_TOQUE: String = "guardar-de-un-toque"

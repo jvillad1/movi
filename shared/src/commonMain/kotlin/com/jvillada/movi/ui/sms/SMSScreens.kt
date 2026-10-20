@@ -78,7 +78,7 @@ import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.ofreceVincularDeuda
 import com.jvillada.movi.shared.model.identificador
-import com.jvillada.movi.shared.model.nombreDelMovimientoConElDestino
+import com.jvillada.movi.shared.model.textoConElNombreDelTercero
 import com.jvillada.movi.ui.destinos.FilaGuardarElDestino
 import com.jvillada.movi.ui.destinos.nombreParaLaFila
 import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
@@ -1412,10 +1412,12 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             onGuardado = { guardado ->
                                 destinosParaGuardar.alGuardar(guardado)
                                 // El movimiento se propone con ese nombre: «Transferencia a Caro»
-                                // (o «de Caro», si la plata llegó). Lo que él ya haya escrito en
-                                // «Comercio» es suyo y no se pisa.
+                                // (o «de Caro», si la plata llegó; un comercio, a secas). Lo que él
+                                // ya haya escrito en «Comercio» es suyo y no se pisa, y lo que propuso
+                                // la memoria con un nombre suyo tampoco (la regla de `NombreDelTercero.kt`).
                                 if (comercioEditado.isNullOrBlank()) {
-                                    comercioEditado = nombreDelMovimientoConElDestino(guardado, leidoParaGuardar.type)
+                                    textoConElNombreDelTercero(leidoParaGuardar.merchant, guardado, leidoParaGuardar.type)
+                                        ?.let { comercioEditado = it }
                                 }
                             },
                         )
