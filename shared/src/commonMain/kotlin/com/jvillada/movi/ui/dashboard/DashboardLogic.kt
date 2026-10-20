@@ -9,8 +9,7 @@ import com.jvillada.movi.shared.model.esDeTuPlata
 import com.jvillada.movi.shared.model.esBien
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.Apartado
-import com.jvillada.movi.shared.model.apartadoPorCuenta
-import com.jvillada.movi.shared.model.valorEnPesosDe
+import com.jvillada.movi.shared.model.apartadoEfectivoPorCuenta
 import com.jvillada.movi.shared.model.Patrimonio
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
@@ -517,16 +516,9 @@ fun heroBalance(accounts: List<Account>, apartados: List<Apartado> = emptyList()
     )
 }
 
-/**
- * Cuánto de [account] está apartado **de verdad**: la suma de lo que queda de sus apartados, con
- * tope en su saldo (una cuenta vaciada no queda debiendo). Es la misma cuenta que hace
- * [patrimonioDe] por cuenta; solo cuentas de tu plata, las demás no se apartan.
- */
-fun apartadoEfectivoDe(account: Account, apartados: List<Apartado>): Long {
-    if (!account.esDeTuPlata()) return 0L
-    val apartado = apartadoPorCuenta(apartados)[account.id] ?: return 0L
-    return apartado.coerceAtMost(valorEnPesosDe(account).coerceAtLeast(0L))
-}
+/** Cuánto de [account] está apartado **de verdad**: [apartadoEfectivoPorCuenta] (`:core`) para esa cuenta. */
+fun apartadoEfectivoDe(account: Account, apartados: List<Apartado>): Long =
+    apartadoEfectivoPorCuenta(listOf(account), apartados)[account.id] ?: 0L
 
 /** Una fila del desglose por cuenta del hero: el nombre y su saldo, ya formateado con signo y moneda. */
 data class CuentaHero(val nombre: String, val monto: String)

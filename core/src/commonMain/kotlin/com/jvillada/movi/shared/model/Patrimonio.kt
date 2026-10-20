@@ -103,9 +103,7 @@ fun patrimonioDe(accounts: List<Account>, apartados: List<Apartado> = emptyList(
     // `esDeTuPlata` y no un tercer filtro escrito a mano: es el mismo predicado con el que el
     // server suma «lo que tenías al empezar el período» (ver `PlataDelPeriodo.kt`).
     val libres = accounts.filter { it.esDeTuPlata() }
-    // Lo apartado de cada cuenta libre, tope su saldo: una cuenta vaciada no queda en negativo.
-    val porCuenta = apartadoPorCuenta(apartados)
-    val efectivoPorCuenta = libres.associate { it.id to (porCuenta[it.id] ?: 0L).coerceAtMost(valorEnPesosDe(it).coerceAtLeast(0L)) }
+    val efectivoPorCuenta = apartadoEfectivoPorCuenta(accounts, apartados)
     val invertido = libres.filter { it.type.group == AccountGroup.INVERSION }
         .sumOf { valorEnPesosDe(it) - (efectivoPorCuenta[it.id] ?: 0L) }
     val disponible = libres.filter { it.type.group != AccountGroup.INVERSION }
@@ -128,4 +126,15 @@ fun patrimonioDe(accounts: List<Account>, apartados: List<Apartado> = emptyList(
         apartado = efectivoPorCuenta.values.sum(),
         apartadoPara = conEfecto.map { it.proposito.trim() }.distinct().singleOrNull(),
     )
+}
+
+/**
+ * **Lo apartado que de verdad pesa en cada cuenta**: la suma de lo que queda de sus apartados, con
+ * tope en su saldo (una cuenta vaciada no queda debiendo). Solo cuentas de tu plata ([esDeTuPlata]);
+ * las demás no aparecen. La usan [patrimonioDe] y el detalle de la cuenta («Libre»): una sola regla.
+ */
+fun apartadoEfectivoPorCuenta(accounts: List<Account>, apartados: List<Apartado>): Map<String, Long> {
+    val porCuenta = apartadoPorCuenta(apartados)
+    return accounts.filter { it.esDeTuPlata() }
+        .associate { it.id to (porCuenta[it.id] ?: 0L).coerceAtMost(valorEnPesosDe(it).coerceAtLeast(0L)) }
 }

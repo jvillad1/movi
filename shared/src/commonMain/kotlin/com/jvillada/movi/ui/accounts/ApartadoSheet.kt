@@ -40,6 +40,7 @@ import com.jvillada.movi.shared.model.MAX_PROPOSITO_APARTADO
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.valorEnPesosDe
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.CategoryField
 import com.jvillada.movi.ui.components.MarcoDeHoja
@@ -61,16 +62,13 @@ fun libreDeLaCuenta(account: Account, apartados: List<Apartado>): Long =
     (valorEnPesosDe(account) - apartadoEfectivoDe(account, apartados)).coerceAtLeast(0L)
 
 /**
- * El error de guardar o quitar un apartado, dicho para esta hoja: sin red, la frase propia (los
- * apartados no se guardan en el aparato, ver el diseño); con un rechazo del server, su motivo.
+ * El error de guardar o quitar un apartado, dicho para esta hoja. Se decide por el TIPO, no por el
+ * texto: un [ApiException] es que el server contestó (su motivo, o el de siempre para su código);
+ * cualquier otra cosa es que el pedido no llegó —sin red, el server caído, un tiempo agotado—, y los
+ * apartados no se guardan en el aparato (ver el diseño), así que se dice que hace falta conexión.
  */
-fun mensajeAlApartar(e: Throwable): String {
-    val mensaje = e.toUserMessage()
-    val esDeRed = mensaje.startsWith("Sin conexión") ||
-        mensaje.startsWith("No se pudo conectar") ||
-        mensaje.startsWith("La conexión tardó")
-    return if (esDeRed) APARTAR_SIN_CONEXION else mensaje
-}
+fun mensajeAlApartar(e: Throwable): String =
+    if (e is ApiException) e.toUserMessage() else APARTAR_SIN_CONEXION
 
 /**
  * **Apartar plata** de [account]: crear un apartado, o editar / quitar [existente].

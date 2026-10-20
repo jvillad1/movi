@@ -76,4 +76,17 @@ class ApartadoTest {
 
         assertEquals(500_000L, plataDelDisponibleDe(sin)!!.neto - plataDelDisponibleDe(con)!!.neto)
     }
+
+    @Test
+    fun el_efectivo_por_cuenta_tiene_tope_en_el_saldo_y_solo_cuenta_tu_plata() {
+        val casiVacia = Account("acc-x", "X", AccountType.SAVINGS, 1_000_000L)
+        val tarjeta = Account("acc-tc", "Tarjeta", AccountType.CREDIT_CARD, 500_000L)
+        val efectivo = apartadoEfectivoPorCuenta(
+            listOf(nu, casiVacia, tarjeta),
+            listOf(colegio(), colegio(cuenta = "acc-x"), colegio(cuenta = "acc-tc")),
+        )
+
+        assertEquals(mapOf("acc-nu" to 8_000_000L, "acc-x" to 1_000_000L), efectivo)
+        assertEquals(efectivo.values.sum(), patrimonioDe(listOf(nu, casiVacia, tarjeta), listOf(colegio(), colegio(cuenta = "acc-x"))).apartado)
+    }
 }
