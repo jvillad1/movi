@@ -64,6 +64,15 @@ data class StatementParseResult(
      * vacía, así que a él se le sigue contestando el 422 de siempre («resumen de crédito»).
      */
     val extractoDeCredito: PropuestaDelExtractoDeCredito? = null,
+    /**
+     * **El extracto solo decía cuánto hay** (el fondo voluntario de Skandia, la AFC de Davibank):
+     * la propuesta de poner ese saldo en la cuenta (ver [PropuestaDelExtractoDeSaldo]). La revisión
+     * lo muestra en vez de la lista de movimientos, que viene vacía.
+     *
+     * Solo lo manda el server a quien lo pide (`?conSaldos=1`), igual que [extractoDeCredito]: un
+     * APK viejo abriría una revisión vacía, que se lee como «este mes ya estaba conciliado».
+     */
+    val extractoDeSaldo: PropuestaDelExtractoDeSaldo? = null,
 )
 
 @Serializable
