@@ -30,6 +30,7 @@ import com.jvillada.movi.server.parsing.LectorDePapeles
 import com.jvillada.movi.server.parsing.FamiriosParser
 import com.jvillada.movi.server.parsing.StatementDocumentType
 import com.jvillada.movi.server.parsing.StatementParser
+import com.jvillada.movi.server.parsing.leerUnExtractoDeSaldo
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import java.io.ByteArrayInputStream
 import com.jvillada.movi.server.plugins.userId
@@ -237,8 +238,13 @@ internal suspend fun procesarExtracto(
     mimeConfiable: Boolean = false,
     /** Ver [leerElExtracto]: el cliente sabe mostrar la propuesta de un extracto de crédito. */
     conCreditos: Boolean = false,
+    /** Ver [leerElExtracto]: el cliente sabe mostrar la propuesta del saldo de un extracto. */
+    conSaldos: Boolean = false,
 ): StatementParseResult =
-    conciliarYArchivar(uid, fileName, mimeType, bytes, leerElExtracto(uid, fileName, mimeType, bytes, mimeConfiable, conCreditos), log)
+    conciliarYArchivar(
+        uid, fileName, mimeType, bytes,
+        leerElExtracto(uid, fileName, mimeType, bytes, mimeConfiable, conCreditos, conSaldos), log,
+    )
 
 /**
  * **Lo que dijo el papel, antes de mirar lo que ya existe.** Es la mitad cara de
@@ -260,6 +266,11 @@ internal data class ExtractoLeido(
      * default para que las lecturas ya guardadas (`lecturas_de_papeles`) se sigan leyendo.
      */
     val resumenDeCredito: ResumenDelExtractoDeCredito? = null,
+    /**
+     * El extracto solo decía cuánto hay (Skandia, la AFC de Davibank) y esto es lo que dijo (ver
+     * `ResumenDelExtractoDeSaldo`). Con default, como [resumenDeCredito].
+     */
+    val resumenDeSaldo: ResumenDelExtractoDeSaldo? = null,
 )
 
 /**
@@ -282,6 +293,12 @@ internal suspend fun leerElExtracto(
      * abriría una revisión vacía, que se lee como «este mes ya estaba conciliado».
      */
     conCreditos: Boolean = false,
+    /**
+     * **El cliente sabe mostrar la propuesta del saldo de un extracto** (`?conSaldos=1`): el fondo
+     * voluntario de Skandia y la AFC de Davibank se leen sin IA y se propone su saldo. Sin esto,
+     * esos extractos siguen el camino de siempre, por la misma razón que [conCreditos].
+     */
+    conSaldos: Boolean = false,
 ): ExtractoLeido {
     if (bytes.isEmpty()) throw FallaAlProcesarExtracto(HttpStatusCode.BadRequest, "No file received")
     // Desde que esta ruta ARCHIVA el archivo (y no solo lo parsea), le aplica el mismo tope
@@ -327,6 +344,23 @@ internal suspend fun leerElExtracto(
             throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, LECTURA_FALLO)
         }
         textoDelExtracto = text
+        // El extracto que solo dice cuánto hay (Skandia, la AFC de Davibank): se lee sin IA y se
+        // propone el saldo. Antes de `detectDocumentType`, que a un fondo lo rechazaría como
+        // «estado de fondo de inversión», y antes de cualquier llamada a Claude.
+        if (conSaldos) {
+            leerUnExtractoDeSaldo(text)?.let { resumen ->
+                return ExtractoLeido(
+                    bankName = when (resumen.de) {
+                        ExtractoDeSaldoDe.SKANDIA_FONDO_VOLUNTARIO -> "Skandia"
+                        ExtractoDeSaldoDe.DAVIBANK_AHORROS -> "Davibank"
+                    },
+                    filas = emptyList(),
+                    esFamirios = false,
+                    numerosDeCuenta = (listOfNotNull(resumen.numero) + StatementParser.numerosDeCuenta(fileName, text)).distinct(),
+                    resumenDeSaldo = resumen,
+                )
+            }
+        }
         val docType = StatementParser.detectDocumentType(text)
         // El extracto de un crédito no trae movimientos sino cómo va la deuda: se lee eso (sin IA,
         // ver `leerElExtractoDeCreditoDeBancolombia`) y se propone actualizar Movi. Si no se pudo
@@ -419,6 +453,21 @@ internal suspend fun conciliarYArchivar(
             numerosDeCuenta = leido.numerosDeCuenta,
             documentoId = archivarElExtracto(uid, fileName, mimeType, bytes, periodo, bankName, log),
             extractoDeCredito = dbQuery { propuestaDelExtractoDeCredito(uid, resumen, leido.numerosDeCuenta) },
+        )
+    }
+
+    leido.resumenDeSaldo?.let { resumen ->
+        val periodo = runCatching { LocalDate.parse(resumen.fechaDeCorte) }.getOrNull()
+            ?.let { "${monthName(it.monthValue)} ${it.year}" }.orEmpty()
+        return StatementParseResult(
+            statementId = UUID.randomUUID().toString(),
+            bankName = bankName,
+            period = periodo,
+            newTransactions = emptyList(),
+            matches = emptyList(),
+            numerosDeCuenta = leido.numerosDeCuenta,
+            documentoId = archivarElExtracto(uid, fileName, mimeType, bytes, periodo, bankName, log),
+            extractoDeSaldo = dbQuery { propuestaDelExtractoDeSaldo(uid, resumen) },
         )
     }
 
@@ -617,6 +666,7 @@ fun Route.statementRoutes() {
                 uid, fileName, mimeType, bytes,
                 log = { msg, t -> call.application.log.warn(msg, t) },
                 conCreditos = call.request.queryParameters["conCreditos"] == "1",
+                conSaldos = call.request.queryParameters["conSaldos"] == "1",
             )
             call.respond(resultado)
         } catch (e: FallaAlProcesarExtracto) {

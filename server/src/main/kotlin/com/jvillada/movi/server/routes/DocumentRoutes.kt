@@ -340,6 +340,7 @@ fun Route.documentRoutes() {
                 // nombre es texto libre que el dueño edita después (ver `nombreParaExtraerTexto`).
                 mimeConfiable = true,
                 conCreditos = call.request.queryParameters["conCreditos"] == "1",
+                conSaldos = call.request.queryParameters["conSaldos"] == "1",
             )
             call.respond(resultado)
         } catch (e: FallaAlProcesarExtracto) {

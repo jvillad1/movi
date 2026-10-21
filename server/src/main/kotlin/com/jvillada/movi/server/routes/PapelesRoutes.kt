@@ -14,6 +14,7 @@ import com.jvillada.movi.server.parsing.ContenidoDelPapel
 import com.jvillada.movi.server.parsing.LectorDePapeles
 import com.jvillada.movi.server.parsing.QueDiceElPapel
 import com.jvillada.movi.server.parsing.StatementParser
+import com.jvillada.movi.server.parsing.leerUnExtractoDeSaldo
 import com.jvillada.movi.server.parsing.pareceUnExtracto
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.reminders.loadEventsBetween
@@ -121,6 +122,9 @@ fun Route.papelesRoutes() {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta el id")
         val anotarAunque = call.request.queryParameters["anotarAunque"] == "true"
+        // La app sabe mostrar la propuesta del saldo de un extracto (Skandia, la AFC): ver
+        // `leerElExtracto`. Un APK viejo no lo pide y su camino no cambia.
+        val conSaldos = call.request.queryParameters["conSaldos"] == "1"
         val fila = dbQuery {
             Documents.selectAll()
                 .where { (Documents.id eq id) and (Documents.userId eq uid) }
@@ -129,7 +133,7 @@ fun Route.papelesRoutes() {
         val papel = PapelGuardado(fila[Documents.id], fila[Documents.name], fila[Documents.mimeType], fila[Documents.content])
         try {
             call.respond(
-                leerElPapel(uid, papel, anotarAunque, ahora = System.currentTimeMillis()) { msg, t ->
+                leerElPapel(uid, papel, anotarAunque, ahora = System.currentTimeMillis(), conSaldos = conSaldos) { msg, t ->
                     call.application.log.warn(msg, t)
                 },
             )
@@ -153,6 +157,8 @@ internal suspend fun leerElPapel(
     papel: PapelGuardado,
     anotarAunque: Boolean,
     ahora: Long,
+    /** La app sabe mostrar la propuesta del saldo de un extracto (ver `leerElExtracto`). */
+    conSaldos: Boolean = false,
     log: (String, Throwable) -> Unit,
 ): LecturaDelPapel {
     val huella = huellaDelPapel(papel.bytes)
@@ -170,25 +176,30 @@ internal suspend fun leerElPapel(
                 uid, guardada.documentoId, papel.nombre,
                 json.decodeFromString(ComprobanteLeido.serializer(), guardada.datos), anotarAunque, ahora,
             )
-            else -> LecturaDelPapel(
-                documentoId = papel.id,
-                que = QueEsElPapel.EXTRACTO,
-                extracto = conciliarYArchivar(
-                    uid, papel.nombre, papel.mime, papel.bytes,
-                    json.decodeFromString(ExtractoLeido.serializer(), guardada.datos), log,
-                ),
-            )
+            else -> {
+                val leido = json.decodeFromString(ExtractoLeido.serializer(), guardada.datos)
+                // La lectura guardada es de un saldo y quien pregunta no lo sabe mostrar: lo de
+                // antes, un papel sin movimientos (y no una revisión vacía).
+                if (leido.resumenDeSaldo != null && !conSaldos) {
+                    throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_MOVIMIENTO)
+                }
+                LecturaDelPapel(
+                    documentoId = papel.id,
+                    que = QueEsElPapel.EXTRACTO,
+                    extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log),
+                )
+            }
         }
     }
 
-    return when (val clasificado = clasificar(papel)) {
+    return when (val clasificado = clasificar(papel, conSaldos)) {
         is Clasificado.Comprobante -> {
             dbQuery { guardarLectura(uid, huella, papel.id, QueEsElPapel.COMPROBANTE, json.encodeToString(ComprobanteLeido.serializer(), clasificado.leido), MODELO_DE_TODOS_LOS_DIAS) }
             propuestaDelComprobante(uid, papel.id, papel.nombre, clasificado.leido, anotarAunque, ahora)
         }
         Clasificado.Extracto -> {
             val leido = try {
-                leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true)
+                leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true, conSaldos = conSaldos)
             } catch (e: FallaAlProcesarExtracto) {
                 // «Extracto sin movimientos» está escrito para quien SUBIÓ un extracto («revisa que
                 // sea el del detalle»). Acá el dueño compartió un papel y fue Movi quien decidió que
@@ -204,13 +215,18 @@ internal suspend fun leerElPapel(
             // `detectDocumentType` ni el clasificador reconocían. `leerElExtracto` ya lo frena hoy
             // (ver `fallaDeLaLectura`); esto es la red por si ese camino cambia, y además no deja
             // guardada una lectura vacía que tape un reintento.
-            if (leido.filas.isEmpty() && !leido.esFamirios) {
+            if (leido.filas.isEmpty() && !leido.esFamirios && leido.resumenDeSaldo == null) {
                 throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_MOVIMIENTO)
             }
             dbQuery {
                 guardarLectura(
                     uid, huella, papel.id, QueEsElPapel.EXTRACTO, json.encodeToString(ExtractoLeido.serializer(), leido),
-                    if (leido.esFamirios) "famirios" else MODELO_DE_EXTRACTOS,
+                    when {
+                        leido.esFamirios -> "famirios"
+                        // Leído con reglas: ningún modelo lo vio.
+                        leido.resumenDeSaldo != null -> "sin-ia"
+                        else -> MODELO_DE_EXTRACTOS
+                    },
                 )
             }
             LecturaDelPapel(
@@ -251,9 +267,11 @@ private sealed interface Clasificado {
  * - un PDF se lee primero con PDFBox: si ya tiene la forma de una lista de movimientos
  *   ([pareceUnExtracto]) va derecho al importador sin preguntarle a nadie; si no, su TEXTO va a
  *   Haiku — nunca el PDF entero;
- * - una hoja de cálculo o un CSV es un extracto (o un Famirios), sin preguntar.
+ * - una hoja de cálculo o un CSV es un extracto (o un Famirios), sin preguntar;
+ * - el extracto de Skandia o de la AFC de Davibank (si la app sabe mostrarlo) es un extracto, sin
+ *   preguntar: se lee sin IA (ver `leerUnExtractoDeSaldo`).
  */
-private suspend fun clasificar(papel: PapelGuardado): Clasificado {
+private suspend fun clasificar(papel: PapelGuardado, conSaldos: Boolean = false): Clasificado {
     if (esImagenParaExtraer(papel.nombre, papel.mime, mimeEsConfiable = true)) {
         val mime = ClaudeStatementParser.supportedImageMime(papel.mime, papel.nombre)
             ?: throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_IMAGEN_NO_SOPORTADA)
@@ -276,6 +294,9 @@ private suspend fun clasificar(papel: PapelGuardado): Clasificado {
         )
     }
     if (texto.isBlank()) throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_TEXTO)
+    // El extracto de Skandia o de la AFC se reconoce por su texto, sin preguntarle a nadie: no
+    // muestra movimientos, y Haiku diría «nada» de un papel que sí dice cuánto hay.
+    if (conSaldos && leerUnExtractoDeSaldo(texto) != null) return Clasificado.Extracto
     if (pareceUnExtracto(texto)) return Clasificado.Extracto
     return deLoQueDijo(preguntarQueEs(ContenidoDelPapel.Texto(texto)))
 }
