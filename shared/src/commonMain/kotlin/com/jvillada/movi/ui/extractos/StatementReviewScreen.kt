@@ -43,6 +43,11 @@ fun StatementReviewScreen(
         RevisionDelExtractoDeCredito(propuesta, titulo = listOf(result.bankName, result.period).filter { it.isNotBlank() }.joinToString(" · "))
         return
     }
+    // El extracto que solo dice cuánto hay (Skandia, la AFC): la propuesta de poner ese saldo.
+    result.extractoDeSaldo?.let { propuesta ->
+        RevisionDelExtractoDeSaldo(propuesta, titulo = listOf(result.bankName, result.period).filter { it.isNotBlank() }.joinToString(" · "))
+        return
+    }
     val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     var accounts by remember { mutableStateOf(emptyList<Account>()) }

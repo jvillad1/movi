@@ -1043,8 +1043,9 @@ class WalletRepositoryImpl(
     // camino por el que viaja lo tira.
     // `conCreditos=1`: esta app sabe mostrar la propuesta del extracto de un crédito (ver
     // `StatementParseResult.extractoDeCredito`); sin el parámetro el server lo rechaza como siempre.
+    // `conSaldos=1`: y la del saldo de un extracto de Skandia o de la AFC (`extractoDeSaldo`).
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
-        client.post("$baseUrl/api/statements/upload?conCreditos=1") {
+        client.post("$baseUrl/api/statements/upload?conCreditos=1&conSaldos=1") {
             setBody(MultiPartFormDataContent(formData {
                 append("file", bytes, Headers.build {
                     append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
@@ -1057,13 +1058,22 @@ class WalletRepositoryImpl(
     // el cuerpo («no encontramos movimientos», «falta la clave»), y sin esto se pierde adentro de
     // la excepción de deserialización.
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
-        client.post("$baseUrl/api/documents/$id/leer-extracto?conCreditos=1").exigirExito().body()
+        client.post("$baseUrl/api/documents/$id/leer-extracto?conCreditos=1&conSaldos=1").exigirExito().body()
 
     override suspend fun aceptarElExtractoDelCredito(
         accountId: String,
         resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeCredito,
     ): CreditSummary =
         client.post("$baseUrl/api/credits/$accountId/extracto") {
+            contentType(ContentType.Application.Json)
+            setBody(resumen)
+        }.exigirExito().body()
+
+    override suspend fun actualizarElSaldoConElExtracto(
+        accountId: String,
+        resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeSaldo,
+    ): AdjustAccountBalanceResponse =
+        client.post("$baseUrl/api/accounts/$accountId/saldo-del-extracto") {
             contentType(ContentType.Application.Json)
             setBody(resumen)
         }.exigirExito().body()
@@ -1146,7 +1156,9 @@ class WalletRepositoryImpl(
     // `exigirExito()` por lo mismo que los extractos: el motivo («el PDF tiene contraseña», «falta
     // la clave») viaja en el cuerpo y es lo único que el dueño puede usar.
     override suspend fun leerPapel(documentoId: String, anotarAunqueEsteAnotado: Boolean): LecturaDelPapel =
-        client.post("$baseUrl/api/documents/$documentoId/leer" + if (anotarAunqueEsteAnotado) "?anotarAunque=true" else "")
+        // `conSaldos=1`: esta app sabe mostrar la propuesta del saldo de un extracto de Skandia o de
+        // la AFC; un APK viejo no lo pide y el server le contesta como siempre.
+        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1" + if (anotarAunqueEsteAnotado) "&anotarAunque=true" else "")
             .exigirExito().body()
 
     override suspend fun confirmarComprobante(smsId: String, eventoId: String) {

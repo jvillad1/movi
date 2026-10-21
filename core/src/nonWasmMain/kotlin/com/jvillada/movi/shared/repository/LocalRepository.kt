@@ -2300,6 +2300,19 @@ class LocalRepository(
         }
         return@enDisco summary
     }
+    // Como [adjustAccountBalance]: el server escribe el ajuste al corte y acá se espeja lo que contestó.
+    override suspend fun actualizarElSaldoConElExtracto(
+        accountId: String,
+        resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeSaldo,
+    ): AdjustAccountBalanceResponse = enDisco {
+        val respuesta = remote.actualizarElSaldoConElExtracto(accountId, resumen)
+        val uid = userId()
+        db.transaction {
+            respuesta.adjustmentEvent?.let { mirrorEventLocally(it, uid) }
+            mirrorAccountLocally(respuesta.account)
+        }
+        return@enDisco respuesta
+    }
     // Igual que uploadStatement: sin espejo local, siempre a la red.
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
         remote.readStatementFromDocument(id)

@@ -104,6 +104,16 @@ interface WalletRepository {
         accountId: String,
         resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeCredito,
     ): CreditSummary = throw UnsupportedOperationException("aceptarElExtractoDelCredito")
+    /**
+     * `POST /api/accounts/{id}/saldo-del-extracto`: «Actualizar el saldo» con lo que dijo el
+     * extracto de Skandia o de la AFC —un ajuste de saldo al corte—. Ver
+     * `PropuestaDelExtractoDeSaldo`. Default que falla para los dobles de prueba que no lo usan.
+     */
+    suspend fun actualizarElSaldoConElExtracto(
+        accountId: String,
+        resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeSaldo,
+    ): com.jvillada.movi.shared.model.AdjustAccountBalanceResponse =
+        throw UnsupportedOperationException("actualizarElSaldoConElExtracto")
     // F20 — tarjetas de crédito: mismas reglas que los créditos (se leen siempre del server).
     suspend fun getCards(): List<CardSummary>
     suspend fun createCard(request: CreateCardRequest): CardSummary

@@ -9,6 +9,8 @@ import com.jvillada.movi.shared.model.NO_SE_PUDO_LEER_EL_PAPEL
 import com.jvillada.movi.shared.model.QueEsElPapel
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
+import com.jvillada.movi.shared.model.corteLegible
+import com.jvillada.movi.shared.model.nombreDelExtractoDeSaldo
 import com.jvillada.movi.shared.repository.WalletRepository
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.esIaNoDisponible
@@ -163,7 +165,10 @@ fun tituloDelResultado(resultado: ResultadoDelPapel): String = when (resultado) 
         else -> "Ya estaba en Por revisar"
     }
     is ResultadoDelPapel.YaAnotado -> "Ya lo tienes anotado"
-    is ResultadoDelPapel.Extracto -> {
+    is ResultadoDelPapel.Extracto -> resultado.lectura.extracto?.extractoDeSaldo?.let { saldo ->
+        // El extracto de Skandia o de la AFC no trae movimientos: dice cuánto hay al corte.
+        "${nombreDelExtractoDeSaldo(saldo.resumen)}: el saldo al ${corteLegible(saldo.resumen)}"
+    } ?: run {
         val nuevos = resultado.lectura.extracto?.newTransactions?.size ?: 0
         val iguales = resultado.lectura.extracto?.matches?.size ?: 0
         "Es un extracto: $nuevos ${if (nuevos == 1) "movimiento nuevo" else "movimientos nuevos"}" +
