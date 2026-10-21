@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.plugins
 
+import com.jvillada.movi.server.documentos.PAPEL_CIFRADO_ILEGIBLE
+import com.jvillada.movi.server.documentos.PapelIlegible
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -24,6 +26,10 @@ const val PEDIDO_ILEGIBLE: String = "No se pudo leer el pedido. Revisa los datos
  * - [SerializationException] — lo que tira un `decodeFromJsonElement` hecho a mano (tarjetas,
  *   créditos, suscripciones leen el `JsonObject` crudo para distinguir claves ausentes).
  *
+ * Y una más que no es del pedido pero tampoco es un bug: [PapelIlegible], un documento guardado
+ * cifrado con una clave que el server ya no tiene. Las rutas de Documentos la atrapan solas; esto es
+ * la red por si un camino nuevo la deja escapar, para que se diga el motivo y no «Algo salió mal».
+ *
  * Todo lo demás sigue siendo 500 a propósito: un error de base o un bug nuestro no es culpa del
  * pedido, y disfrazarlo de 400 escondería justo lo que hay que arreglar.
  */
@@ -31,5 +37,6 @@ fun Application.configureStatusPages() {
     install(StatusPages) {
         exception<BadRequestException> { call, _ -> call.respond(HttpStatusCode.BadRequest, PEDIDO_ILEGIBLE) }
         exception<SerializationException> { call, _ -> call.respond(HttpStatusCode.BadRequest, PEDIDO_ILEGIBLE) }
+        exception<PapelIlegible> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, PAPEL_CIFRADO_ILEGIBLE) }
     }
 }

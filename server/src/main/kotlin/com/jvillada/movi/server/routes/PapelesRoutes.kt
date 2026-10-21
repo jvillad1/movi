@@ -8,6 +8,9 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.LecturasDePapeles
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.documentos.Cifrado
+import com.jvillada.movi.server.documentos.PAPEL_CIFRADO_ILEGIBLE
+import com.jvillada.movi.server.documentos.PapelIlegible
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.parsing.ComprobanteLeido
 import com.jvillada.movi.server.parsing.ContenidoDelPapel
@@ -130,8 +133,12 @@ fun Route.papelesRoutes() {
                 .where { (Documents.id eq id) and (Documents.userId eq uid) }
                 .firstOrNull()
         } ?: return@post call.respond(HttpStatusCode.NotFound)
-        val papel = PapelGuardado(fila[Documents.id], fila[Documents.name], fila[Documents.mimeType], fila[Documents.content])
         try {
+            // En claro: la huella (y con ella «el mismo archivo no va dos veces a Claude») se
+            // calcula sobre esto, nunca sobre los bytes cifrados, que cambian con cada IV.
+            val papel = PapelGuardado(
+                fila[Documents.id], fila[Documents.name], fila[Documents.mimeType], Cifrado.descifrarBytes(fila[Documents.content]),
+            )
             call.respond(
                 leerElPapel(uid, papel, anotarAunque, ahora = System.currentTimeMillis(), conSaldos = conSaldos) { msg, t ->
                     call.application.log.warn(msg, t)
@@ -139,13 +146,21 @@ fun Route.papelesRoutes() {
             )
         } catch (e: FallaAlLeerElPapel) {
             call.respond(e.status, e.mensaje)
+        } catch (e: PapelIlegible) {
+            call.application.log.error("[papeles] no se pudo abrir $id: ${e.message}")
+            call.respond(HttpStatusCode.ServiceUnavailable, PAPEL_CIFRADO_ILEGIBLE)
         }
     }
 }
 
 private val json = Json { ignoreUnknownKeys = true }
 
-/** La huella de los bytes: SHA-256 en hex. Es lo que identifica «el mismo archivo». */
+private val papelesLog = org.slf4j.LoggerFactory.getLogger("Papeles")
+
+/**
+ * La huella de los bytes: SHA-256 en hex. Es lo que identifica «el mismo archivo». Siempre sobre
+ * los bytes **en claro** (ver `Cifrado`): sobre los cifrados, cada copia daría otra huella.
+ */
 internal fun huellaDelPapel(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
@@ -166,7 +181,9 @@ internal suspend fun leerElPapel(
         LecturasDePapeles.selectAll()
             .where { (LecturasDePapeles.userId eq uid) and (LecturasDePapeles.huella eq huella) }
             .firstOrNull()
-            ?.let { LecturaGuardada(it[LecturasDePapeles.documentoId], it[LecturasDePapeles.tipo], it[LecturasDePapeles.datos]) }
+            ?.let {
+                LecturaGuardada(it[LecturasDePapeles.documentoId], it[LecturasDePapeles.tipo], Cifrado.descifrarTexto(it[LecturasDePapeles.datos]))
+            }
     }
 
     if (guardada != null) {
@@ -249,7 +266,8 @@ private fun Transaction.guardarLectura(uid: String, huella: String, documentoId:
         it[LecturasDePapeles.huella] = huella
         it[LecturasDePapeles.documentoId] = documentoId
         it[LecturasDePapeles.tipo] = tipo.name
-        it[LecturasDePapeles.datos] = datos
+        // La única puerta de escritura de `lecturas_de_papeles.datos`: cifrado si hay clave.
+        it[LecturasDePapeles.datos] = Cifrado.cifrarTexto(datos)
         it[LecturasDePapeles.modelo] = modelo
         it[leidoEn] = System.currentTimeMillis()
     }
@@ -406,7 +424,15 @@ internal fun Transaction.parsedDeUnComprobante(uid: String, smsId: String, texto
     val datos = LecturasDePapeles.select(LecturasDePapeles.datos)
         .where { (LecturasDePapeles.userId eq uid) and (LecturasDePapeles.porRevisarId eq smsId) }
         .firstOrNull()?.get(LecturasDePapeles.datos) ?: return null
-    val leido = runCatching { json.decodeFromString(ComprobanteLeido.serializer(), datos) }.getOrNull() ?: return null
+    // Una lectura que no se puede abrir (cifrada con otra clave) cae al parser de SMS sobre el
+    // texto, igual que una lectura que no está: la bandeja sigue funcionando.
+    val claro = try {
+        Cifrado.descifrarTexto(datos)
+    } catch (e: PapelIlegible) {
+        papelesLog.error("[papeles] no se pudo abrir la lectura de $smsId: ${e.message}")
+        return null
+    }
+    val leido = runCatching { json.decodeFromString(ComprobanteLeido.serializer(), claro) }.getOrNull() ?: return null
     return leidoConLoQueMoviSabe(uid, leido, texto)
 }
 

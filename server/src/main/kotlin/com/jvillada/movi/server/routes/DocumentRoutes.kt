@@ -4,6 +4,9 @@ import com.jvillada.movi.server.auth.JwtConfig
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.documentos.Cifrado
+import com.jvillada.movi.server.documentos.PAPEL_CIFRADO_ILEGIBLE
+import com.jvillada.movi.server.documentos.PapelIlegible
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
@@ -181,6 +184,10 @@ fun Route.documentRoutes() {
         // extractos— y se confirma comparando los bytes: el mismo nombre con otro contenido es
         // otro papel. Solo con `reusar`, que manda la hoja de compartir: «Subir archivo» en
         // Documentos sigue guardando lo que se le pida.
+        //
+        // La comparación es sobre los bytes EN CLARO: guardado cifrado, el mismo archivo nunca da
+        // los mismos bytes dos veces (el IV es aleatorio). Una fila que no se puede abrir (cifrada
+        // con otra clave) cuenta como distinta: la subida no falla por un papel viejo.
         if (reusar) {
             val nombreGuardado = nombre.take(255)
             val existente = dbQuery {
@@ -189,7 +196,9 @@ fun Route.documentRoutes() {
                         (Documents.userId eq uid) and (Documents.name eq nombreGuardado) and
                             (Documents.sizeBytes eq bytes.size.toLong())
                     }
-                    .firstOrNull { it[Documents.content].contentEquals(bytes) }
+                    .firstOrNull { fila ->
+                        runCatching { Cifrado.descifrarBytes(fila[Documents.content]) }.getOrNull()?.contentEquals(bytes) == true
+                    }
                     ?.toDocumento()
             }
             if (existente != null) return@post call.respond(HttpStatusCode.OK, existente)
@@ -329,12 +338,18 @@ fun Route.documentRoutes() {
                 .firstOrNull()
         } ?: return@post call.respond(HttpStatusCode.NotFound)
 
+        val bytes = try {
+            Cifrado.descifrarBytes(fila[Documents.content])
+        } catch (e: PapelIlegible) {
+            call.application.log.error("[documentos] no se pudo abrir $id: ${e.message}")
+            return@post call.respond(HttpStatusCode.ServiceUnavailable, PAPEL_CIFRADO_ILEGIBLE)
+        }
         try {
             val resultado = procesarExtracto(
                 uid = uid,
                 fileName = fila[Documents.name],
                 mimeType = fila[Documents.mimeType],
-                bytes = fila[Documents.content],
+                bytes = bytes,
                 log = { msg, t -> call.application.log.warn(msg, t) },
                 // Fix round 3, hallazgo 2: acá el mimeType lo puso el server al subir; el
                 // nombre es texto libre que el dueño edita después (ver `nombreParaExtraerTexto`).
@@ -372,6 +387,15 @@ fun Route.documentContentRoutes() {
                 .firstOrNull()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
 
+        // Se abre ANTES de escribir un solo header: una fila cifrada con otra clave contesta 503
+        // con su motivo, no un PDF de bytes basura.
+        val contenido = try {
+            Cifrado.descifrarBytes(fila[Documents.content])
+        } catch (e: PapelIlegible) {
+            call.application.log.error("[documentos] no se pudo abrir $id: ${e.message}")
+            return@get call.respond(HttpStatusCode.ServiceUnavailable, PAPEL_CIFRADO_ILEGIBLE)
+        }
+
         // El mime GUARDADO no manda: se compara contra la lista blanca y lo que no está en ella
         // se sirve como binario opaco. Ver [MIMES_QUE_SE_MUESTRAN] — esto era una toma de cuenta.
         val declarado = fila[Documents.mimeType].substringBefore(';').trim().lowercase()
@@ -402,7 +426,7 @@ fun Route.documentContentRoutes() {
             HttpHeaders.ContentDisposition,
             disposicion.withParameter(ContentDisposition.Parameters.FileName, nombreSeguro).toString(),
         )
-        call.respondBytes(fila[Documents.content], mime)
+        call.respondBytes(contenido, mime)
     }
 }
 
@@ -419,7 +443,12 @@ internal fun esSuCuenta(uid: String, accountId: String): Boolean =
         .where { (Accounts.id eq accountId) and (Accounts.userId eq uid) }
         .any()
 
-/** Guarda la fila con su contenido. Fuera de las rutas para que el importador también la use. */
+/**
+ * Guarda la fila con su contenido. Fuera de las rutas para que el importador también la use.
+ *
+ * **La única puerta de escritura de `documents.content`**: el contenido pasa por
+ * [Cifrado.cifrarBytes] (cifrado si hay clave). `size_bytes` sigue siendo el tamaño en claro.
+ */
 fun guardarDocumento(uid: String, doc: Documento, bytes: ByteArray) {
     Documents.insert {
         it[id] = doc.id
@@ -432,7 +461,7 @@ fun guardarDocumento(uid: String, doc: Documento, bytes: ByteArray) {
         it[accountId] = doc.accountId
         it[period] = doc.periodo
         it[notes] = doc.notas
-        it[content] = bytes
+        it[content] = Cifrado.cifrarBytes(bytes)
     }
 }
 

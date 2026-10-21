@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.db
 
+import com.jvillada.movi.server.documentos.Cifrado
 import com.jvillada.movi.server.sms.motivoParaApartar
 import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
@@ -7,6 +8,12 @@ import com.jvillada.movi.shared.model.esIdDeComprobante
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.rem
+import org.jetbrains.exposed.sql.CustomFunction
+import org.jetbrains.exposed.sql.LongColumnType
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.notLike
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import org.jetbrains.exposed.sql.and
@@ -54,6 +61,73 @@ object Migrations {
         apartarLosPendientesQueNoSonMovimientos()
         pasarLosIdentificadoresALaLista()
         pasarLasReglasDeComercioALaBase()
+        cifrarLosPapelesEnClaro()
+    }
+
+    /** Cuántas filas cifró una corrida de [cifrarLosPapelesEnClaro]. */
+    data class PapelesCifrados(val documentos: Int, val lecturas: Int)
+
+    /**
+     * **Los papeles que quedaron en claro se cifran** (`documents.content` y
+     * `lecturas_de_papeles.datos`, ver `Cifrado`). Sin `DOCUMENTS_ENCRYPTION_KEY` no hace nada.
+     *
+     * Idempotente: una fila con la cabecera `MOVI1` ya está cifrada y no se toca —tampoco se vuelve
+     * a cifrar con la clave de hoy una fila cifrada con otra—, así que la segunda corrida no cambia
+     * nada.
+     *
+     * Por lotes y sin traer de más: los documentos llegan hasta 10 MB cada uno, así que no se leen
+     * todos los contenidos en cada arranque. Uno cifrado mide exactamente `size_bytes` +
+     * [Cifrado.BYTES_DE_MAS]; la consulta solo trae los ids de los que NO miden eso (los en claro),
+     * en orden de id y de a [lote], y el contenido se lee y se reescribe de a uno. La cabecera se
+     * comprueba igual antes de cifrar, porque el largo es el filtro barato, no la prueba.
+     */
+    fun Transaction.cifrarLosPapelesEnClaro(lote: Int = 50): PapelesCifrados {
+        if (!Cifrado.hayClave()) return PapelesCifrados(0, 0)
+
+        val largo = CustomFunction("OCTET_LENGTH", LongColumnType(), Documents.content)
+        val largoCifrado = Documents.sizeBytes + Cifrado.BYTES_DE_MAS.toLong()
+        var documentos = 0
+        var desde = ""
+        while (true) {
+            val ids = Documents.select(listOf(Documents.id))
+                .where { (Documents.id greater desde) and (largo neq largoCifrado) }
+                .orderBy(Documents.id, SortOrder.ASC)
+                .limit(lote)
+                .map { it[Documents.id] }
+            if (ids.isEmpty()) break
+            for (id in ids) {
+                val contenido = Documents.select(listOf(Documents.content))
+                    .where { Documents.id eq id }
+                    .single()[Documents.content]
+                if (Cifrado.estaCifrado(contenido)) continue
+                Documents.update({ Documents.id eq id }) { it[Documents.content] = Cifrado.cifrarBytes(contenido) }
+                documentos++
+            }
+            desde = ids.last()
+        }
+
+        // Las lecturas son JSON chicos: el filtro por la cabecera va directo en la consulta, y cada
+        // lote cifrado deja de aparecer en el siguiente.
+        var lecturas = 0
+        while (true) {
+            val filas = LecturasDePapeles
+                .select(listOf(LecturasDePapeles.userId, LecturasDePapeles.huella, LecturasDePapeles.datos))
+                .where { LecturasDePapeles.datos notLike "MOVI1:%" }
+                .limit(lote)
+                .map { Triple(it[LecturasDePapeles.userId], it[LecturasDePapeles.huella], it[LecturasDePapeles.datos]) }
+            if (filas.isEmpty()) break
+            for ((uid, huella, datos) in filas) {
+                LecturasDePapeles.update({ (LecturasDePapeles.userId eq uid) and (LecturasDePapeles.huella eq huella) }) {
+                    it[LecturasDePapeles.datos] = Cifrado.cifrarTexto(datos)
+                }
+                lecturas++
+            }
+        }
+
+        if (documentos > 0 || lecturas > 0) {
+            migrationsLog.info("papeles: $documentos documentos y $lecturas lecturas cifrados con DOCUMENTS_ENCRYPTION_KEY")
+        }
+        return PapelesCifrados(documentos, lecturas)
     }
 
     /**

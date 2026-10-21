@@ -2,6 +2,7 @@ package com.jvillada.movi.server
 
 import com.jvillada.movi.server.auth.JwtConfig
 import com.jvillada.movi.server.db.DatabaseFactory
+import com.jvillada.movi.server.documentos.Cifrado
 import com.jvillada.movi.server.plugins.configureAuth
 import com.jvillada.movi.server.plugins.configureAutoHead
 import com.jvillada.movi.server.plugins.configureCORS
@@ -30,6 +31,9 @@ fun Application.module() {
     // la haya rotado, todas las sesiones abiertas se caen — y desde el teléfono eso se ve como
     // «tu sesión venció». Ver JwtConfig.huellaDelSecreto.
     log.info("JWT secreto huella=${JwtConfig.huellaDelSecreto} (si cambia entre arranques, las sesiones se caen)")
+    // Antes de la base: la migración del arranque cifra los papeles viejos si hay clave, y una
+    // clave mal formada tiene que frenar el arranque acá, con su motivo (ver Cifrado).
+    Cifrado.avisarAlArrancar(log)
     DatabaseFactory.init()
     configureCORS()
     configureSerialization()
