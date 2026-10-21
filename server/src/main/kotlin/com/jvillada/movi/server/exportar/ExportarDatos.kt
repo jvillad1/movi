@@ -11,6 +11,8 @@ import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.KnownDestinations
+import com.jvillada.movi.server.db.LecturasDePapeles
+import com.jvillada.movi.server.documentos.Cifrado
 import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
@@ -96,7 +98,7 @@ internal data class FilasExportadas(val nombre: String, val columnas: List<Strin
  * foto coherente: un movimiento anotado a la mitad de la lectura no puede quedar en `movimientos`
  * sin su cuenta, ni al revés.
  */
-internal fun leerDatosDe(uid: String): List<FilasExportadas> = TABLAS_EXPORTADAS.map { t ->
+internal fun leerDatosDe(uid: String, tablas: List<TablaExportada> = TABLAS_EXPORTADAS): List<FilasExportadas> = tablas.map { t ->
     val columnas = t.tabla.columns.filter { it !in t.sinColumnas }
     val filas = t.tabla.select(columnas)
         .where { t.usuario eq uid }
@@ -104,8 +106,18 @@ internal fun leerDatosDe(uid: String): List<FilasExportadas> = TABLAS_EXPORTADAS
     FilasExportadas(t.nombre, columnas.map { it.name }, filas)
 }
 
+/**
+ * El valor crudo de la columna, salvo las dos que se guardan cifradas (ver `Cifrado`): esas salen
+ * **en claro**. Hoy ninguna de las dos se exporta —el binario queda afuera y las lecturas son
+ * memoria interna—, pero el día que alguien las agregue a [TABLAS_EXPORTADAS] el ZIP no puede
+ * traer bytes cifrados que el dueño no tiene cómo abrir.
+ */
 @Suppress("UNCHECKED_CAST")
-private fun valorDe(fila: ResultRow, columna: Column<*>): Any? = fila[columna as Column<Any?>]
+private fun valorDe(fila: ResultRow, columna: Column<*>): Any? = when (columna) {
+    Documents.content -> Cifrado.descifrarBytes(fila[Documents.content])
+    LecturasDePapeles.datos -> Cifrado.descifrarTexto(fila[LecturasDePapeles.datos])
+    else -> fila[columna as Column<Any?>]
+}
 
 /** El ZIP entero: un CSV por tabla y `movi.json`. [exportadoEn] es un instante ISO, para el JSON. */
 internal fun zipDeLosDatos(uid: String, datos: List<FilasExportadas>, exportadoEn: String): ByteArray {
