@@ -151,4 +151,41 @@ class CajaDelPeriodoTest {
         assertEquals(4_217_464L, caja.tuPlataHoy)
         assertEquals(217_464L, caja.alCierre.saldo, "lo libre de Nu, no $4M menos")
     }
+
+    // ── Ola 4 · Ver la plata: la caja con forma ─────────────────────────────
+
+    @Test
+    fun `la escala se ajusta al rango de los datos y no arranca en cero`() {
+        val (piso, tope) = escalaDeLaCaja(listOf(8_000_000L, 7_400_000L, 6_200_000L, 6_800_000L))
+        // Un sexto del rango (1,8M) de aire a cada lado: ni cero abajo ni la línea aplastada.
+        assertEquals(5_900_000L, piso)
+        assertEquals(8_300_000L, tope)
+    }
+
+    @Test
+    fun `con datos que cruzan el cero la escala lo incluye, y una linea plana no queda sin rango`() {
+        val (piso, tope) = escalaDeLaCaja(listOf(600_000L, -300_000L))
+        assertTrue(piso < -300_000L && tope > 600_000L)
+        val (pisoPlano, topePlano) = escalaDeLaCaja(listOf(2_000_000L, 2_000_000L))
+        assertTrue(pisoPlano < 2_000_000L && topePlano > 2_000_000L)
+        val (pisoCero, topeCero) = escalaDeLaCaja(listOf(0L, 0L))
+        assertTrue(pisoCero < 0L && topeCero > 0L)
+    }
+
+    @Test
+    fun `los marcadores van en los dias con un pago pendiente y la leyenda los nombra`() {
+        val caja = CajaProyectada(
+            tuPlataHoy = 12_900_000L,
+            gastoDiario = null,
+            dias = listOf(
+                dia("2026-10-02", 12_900_000L),
+                dia("2026-10-17", 8_798_877L, "Cuota Vehiculo 8761" to -4_101_123L, "Netflix" to -45_000L),
+                dia("2026-10-20", 17_798_877L, "Sueldo" to 9_000_000L),
+            ),
+        )
+        // El sueldo no es un pago: solo el 17 lleva marcador.
+        assertEquals(listOf(1), diasConPago(caja))
+        assertEquals("17 oct: \$8,8M · Cuota Vehiculo 8761, Netflix", leyendaDelDiaDeLaCaja(caja.dias[1]))
+        assertEquals("2 oct: \$12,9M", leyendaDelDiaDeLaCaja(caja.dias[0]))
+    }
 }

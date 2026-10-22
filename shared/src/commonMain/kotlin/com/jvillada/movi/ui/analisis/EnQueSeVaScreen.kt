@@ -116,6 +116,7 @@ import kotlinx.datetime.LocalDate
 const val TITULO_EN_QUE_SE_VA = "En qué se va"
 const val TAG_GRAFICA_DEL_ANALISIS = "grafica-del-analisis"
 const val TAG_FILA_DEL_ANALISIS = "fila-del-analisis"
+const val TAG_NOMBRE_DE_LA_FILA = "nombre-de-la-fila-del-analisis"
 const val TAG_LEYENDA_DEL_ANALISIS = "leyenda-del-analisis"
 const val TAG_TOTAL_DEL_ANALISIS = "total-del-analisis"
 
@@ -550,6 +551,7 @@ private fun FilaDeLaLista(
                 color = Movi.colores.texto,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag(TAG_NOMBRE_DE_LA_FILA),
             )
             Text(
                 text = "${(fila.fraccion * 100).toInt()} % · ${if (fila.veces == 1) "1 movimiento" else "${fila.veces} movimientos"}",
