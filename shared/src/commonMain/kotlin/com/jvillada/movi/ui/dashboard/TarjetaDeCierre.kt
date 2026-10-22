@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.ui.components.conCifrasOcultas
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -72,14 +74,14 @@ internal fun TarjetaDeCierre(
             )
             Spacer(Modifier.height(Movi.espacios.minimo))
             Text(
-                text = fraseDelCierre(cierre),
+                text = conCifrasOcultas(fraseDelCierre(cierre)),
                 style = Movi.textos.cuerpo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
             )
             renglonesDeLaTarjetaDeCierre(cierre).forEach { renglon ->
                 Spacer(Modifier.height(Movi.espacios.minimo))
-                Text(text = renglon, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Text(text = conCifrasOcultas(renglon), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
             Spacer(Modifier.height(Movi.espacios.corto))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

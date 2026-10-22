@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.extractos
 
+import com.jvillada.movi.ui.components.conCifrasOcultas
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -94,7 +96,7 @@ internal fun RevisionDelExtractoDeCredito(propuesta: PropuestaDelExtractoDeCredi
                 Spacer(Modifier.height(6.dp))
                 renglonesDelExtractoDeCredito(propuesta).forEach { renglon ->
                     Text(
-                        "· $renglon",
+                        conCifrasOcultas("· $renglon"),
                         style = Movi.textos.cuerpo,
                         color = Movi.colores.texto,
                         lineHeight = 20.sp,

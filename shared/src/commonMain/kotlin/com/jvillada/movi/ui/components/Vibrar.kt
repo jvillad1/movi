@@ -16,7 +16,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
  * - confirmar un aviso del banco, en Reconciliar, desde «Por revisar» o deslizando su fila en
  *   Movimientos ([confirmar]);
  * - tildar un pago del checklist del período ([confirmar]);
- * - cada tecla del teclado numérico de «Agregar» ([tecla], el toque liviano de un teclado).
+ * - cada tecla del teclado numérico de «Agregar» ([tecla], el toque liviano de un teclado);
+ * - el ojo de «Ocultar los saldos», en el héroe de Hoy ([alternar]).
  *
  * Nada más, a propósito: una app que vibra en cada toque deja de decir algo con la vibración.
  * Agregar un lugar nuevo es agregarlo a esta lista.
@@ -31,6 +32,10 @@ class Vibrador(private val haptica: HapticFeedback) {
 
     /** Una tecla del teclado numérico: el toque más liviano que hay. */
     fun tecla() = vibrar(HapticFeedbackType.VirtualKey)
+
+    /** Un interruptor que se prende o se apaga: el ojo de los saldos. */
+    fun alternar(prendido: Boolean) =
+        vibrar(if (prendido) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
 
     private fun vibrar(tipo: HapticFeedbackType) {
         runCatching { haptica.performHapticFeedback(tipo) }

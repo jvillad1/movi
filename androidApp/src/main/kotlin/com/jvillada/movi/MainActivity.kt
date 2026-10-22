@@ -2,6 +2,7 @@ package com.jvillada.movi
 
 import android.content.Intent
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -44,6 +45,13 @@ class MainActivity : FragmentActivity() {
         // El repositorio offline-first de :core (LocalRepository + SQLDelight) necesita el
         // contexto antes del primer createRepository() — igual que hace la web/iOS con sus
         // propios drivers.
+        // **Apps recientes sin cifras.** La miniatura de «recientes» es una captura de la última
+        // pantalla: con Movi abierta en Hoy, la plata quedaba a la vista de cualquiera que pasara
+        // por ahí. Desde Android 13 se puede apagar SOLO esa miniatura (sale el ícono y el
+        // nombre), sin tocar las capturas de pantalla que el dueño sí manda. `FLAG_SECURE` las
+        // bloquearía también, por eso no se usa. En Android 12 o menos la miniatura sigue
+        // saliendo como antes.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setRecentsScreenshotEnabled(false)
         DatabaseDriverFactory.init(applicationContext)
         // Refresco diario de la config del filtro sin depender de que el usuario abra la
         // app ni de que haya habido una captura exitosa (ver SmsFilterRefreshWorker).

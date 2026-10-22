@@ -13,6 +13,7 @@ import com.jvillada.movi.data.LastAccountStore
 import com.jvillada.movi.data.MemoriaDeCategoriasCache
 import com.jvillada.movi.data.PropuestasDescartadasStore
 import com.jvillada.movi.data.RecurringOfferGate
+import com.jvillada.movi.data.SaldosOcultosStore
 import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -124,6 +125,9 @@ class ElForkLlegaLimpioTest {
         PapelesCompartidos.recibir(listOf(ArchivoCompartido("recibo.png", byteArrayOf(1), "image/png")))
         // Ola 4: un «Está bien» de otra prueba.
         com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.descartar("duplicado:a,b")
+        // «Ocultar los saldos» prendido en otra prueba: la siguiente vería «$•••••» donde espera cifras.
+        SaldosOcultosStore.almacenDePrueba = mutableMapOf()
+        SaldosOcultosStore.poner(true)
         AvisosEnHoy.sustitutoDePrueba = object : OfertaDeAvisos {
             override fun pedir() = Unit
             override fun descartar() = Unit
@@ -219,6 +223,9 @@ class ElForkLlegaLimpioTest {
             emptySet<String>(),
             PropuestasDescartadasStore.descartadas(),
         )
+        assertFalse("«Ocultar los saldos» trae la resaca de otra prueba", SaldosOcultosStore.ocultos)
+        assertFalse("«Ocultar los saldos» de otra prueba sigue guardado en el aparato", SaldosOcultosStore.leerGuardado())
+        assertNull("El almacén de mentira de «Ocultar los saldos» sigue enchufado", SaldosOcultosStore.almacenDePrueba)
         assertFalse("La sesión de otra prueba sigue abierta", SessionManager.loggedIn)
         assertNull("El token de otra prueba sigue puesto", SessionManager.token)
         assertNull("El repositorio de prueba de otra clase sigue enchufado", Repositories.sustitutoDePrueba)

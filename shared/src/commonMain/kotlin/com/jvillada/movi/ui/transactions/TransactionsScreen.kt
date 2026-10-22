@@ -2096,7 +2096,7 @@ internal fun MovementSingleRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = tx.description,
+                    text = conCifrasOcultas(tx.description),
                     style = Movi.textos.titulo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,

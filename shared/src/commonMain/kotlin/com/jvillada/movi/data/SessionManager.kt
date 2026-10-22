@@ -360,6 +360,9 @@ object SessionManager {
         com.jvillada.movi.ui.papeles.PapelesCompartidos.olvidar()
         // Ola 4: y los «Está bien» de esta sesión — son avisos sobre SU plata.
         com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.olvidar()
+        // Y «Ocultar los saldos»: era la preferencia de quien se fue; el siguiente arranca viendo
+        // sus cifras, como en una instalación nueva.
+        SaldosOcultosStore.clear()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
         // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres

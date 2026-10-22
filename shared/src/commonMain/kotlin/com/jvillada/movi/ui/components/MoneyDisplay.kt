@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.data.SaldosOcultosStore
+
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.valorEnPesosDe
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +24,11 @@ import com.jvillada.movi.theme.Movi
  * ya trae su propio signo, y este helper necesita quedarse sin signo para que [signedMoney]
  * (el único llamador que le importa el signo) pueda ponerlo una sola vez sin duplicarlo.
  */
-fun formatMoney(amount: Long, currency: String): String = when (currency) {
+fun formatMoney(amount: Long, currency: String): String =
+    if (SaldosOcultosStore.ocultos) PLATA_OCULTA else formatMoneySinOcultar(amount, currency)
+
+/** [formatMoney] sin mirar «Ocultar los saldos». Ver [formatCOPSinOcultar]. */
+fun formatMoneySinOcultar(amount: Long, currency: String): String = when (currency) {
     "COP" -> "$" + groupThousands(amount)
     "USD" -> "US$" + groupThousands(amount)
     else  -> "$currency " + groupThousands(amount)
@@ -30,7 +36,11 @@ fun formatMoney(amount: Long, currency: String): String = when (currency) {
 
 /** Sign-aware money text: -181 USD -> "−US$181". [formatMoney] strips signs; this preserves them. */
 fun signedMoney(amount: Long, currency: String): String =
-    (if (amount < 0) "−" else "") + formatMoney(amount, currency)
+    if (SaldosOcultosStore.ocultos) PLATA_OCULTA else signedMoneySinOcultar(amount, currency)
+
+/** [signedMoney] sin mirar «Ocultar los saldos». Ver [formatCOPSinOcultar]. */
+fun signedMoneySinOcultar(amount: Long, currency: String): String =
+    (if (amount < 0) "−" else "") + formatMoneySinOcultar(amount, currency)
 
 /** True for account types whose balance represents debt (positive = owed). */
 fun isDebtAccount(type: AccountType): Boolean = esCuentaDeDeuda(type)

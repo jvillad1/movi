@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.porrevisar
 
+import com.jvillada.movi.ui.components.conCifrasOcultas
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -111,7 +113,7 @@ internal fun TarjetaDelDebitoAutomatico(
             Text("Vence el ${fechaLegibleDelChecklist(debito.vence).ifEmpty { debito.vence }}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
         }
         Spacer(Modifier.height(8.dp))
-        Text(textoDelDebitoAutomatico(debito), style = Movi.textos.cuerpo, color = Movi.colores.texto, lineHeight = 20.sp)
+        Text(conCifrasOcultas(textoDelDebitoAutomatico(debito)), style = Movi.textos.cuerpo, color = Movi.colores.texto, lineHeight = 20.sp)
         Spacer(Modifier.height(4.dp))
         Text(
             "El banco no avisa cuando la cobra. Movi no la anota hasta que confirmes.",

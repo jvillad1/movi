@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.data.SaldosOcultosStore
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -292,7 +294,14 @@ private const val MINUS_SIGN = "−"
  * SÍ necesitan un signo propio (p.ej. mostrar deuda con la convención invertida) deben pasar
  * `kotlin.math.abs(x)` para no terminar con dos signos.
  */
-fun formatCOP(amount: Long): String = (if (amount < 0) MINUS_SIGN else "") + "$" + groupThousands(amount)
+fun formatCOP(amount: Long): String = if (SaldosOcultosStore.ocultos) PLATA_OCULTA else formatCOPSinOcultar(amount)
+
+/**
+ * [formatCOP] sin mirar «Ocultar los saldos»: para lo que **no se pinta** (un texto que viaja al
+ * server, la pregunta que se le manda a Movi AI, una notificación) y para armar otros formatos.
+ * Es la función de siempre; [formatCOP] solo le pone el velo encima.
+ */
+fun formatCOPSinOcultar(amount: Long): String = (if (amount < 0) MINUS_SIGN else "") + "$" + groupThousands(amount)
 
 /**
  * Plata en poco espacio, **sin dejar de leerse como plata**.
@@ -314,9 +323,13 @@ fun formatCOP(amount: Long): String = (if (amount < 0) MINUS_SIGN else "") + "$"
  *
  * El signo lo trae el formato, como en [formatCOP] — no lo dupliques afuera (F36).
  */
-fun formatMoneyCompact(amount: Long): String {
+fun formatMoneyCompact(amount: Long): String =
+    if (SaldosOcultosStore.ocultos) PLATA_OCULTA else formatMoneyCompactSinOcultar(amount)
+
+/** [formatMoneyCompact] sin mirar «Ocultar los saldos». Ver [formatCOPSinOcultar]. */
+fun formatMoneyCompactSinOcultar(amount: Long): String {
     val abs = kotlin.math.abs(amount)
-    if (abs < 1_000_000L) return formatCOP(amount)
+    if (abs < 1_000_000L) return formatCOPSinOcultar(amount)
     val sign = if (amount < 0) MINUS_SIGN else ""
     // Décimas de millón, redondeadas sin pasar por coma flotante.
     val tenths = (abs + 50_000L) / 100_000L

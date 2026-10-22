@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -56,6 +57,8 @@ import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
+import com.jvillada.movi.ui.components.OjoDeLosSaldos
+import com.jvillada.movi.ui.components.conCifrasOcultas
 import com.jvillada.movi.ui.components.StatusDot
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.formatCOP
@@ -262,7 +265,9 @@ internal fun HeroDeUnVistazo(
             )
         } else {
             // El rótulo viaja en el binario, no en la fila: ver [HERO_BALANCE_TITLE].
-            Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+            RotuloConElOjo {
+                Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+            }
             val rangoDelPeriodo = encabezadoDelPeriodo(data)
             if (rangoDelPeriodo != null) {
                 Text(
@@ -425,10 +430,12 @@ private fun CabeceraTeQuedan(
     onAlternarDesglose: () -> Unit,
     onNavigate: (Screen) -> Unit,
 ) {
-    if (teQuedan != null) {
-        Text(text = teQuedan.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-    } else {
-        LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.cuerpo)
+    RotuloConElOjo {
+        if (teQuedan != null) {
+            Text(text = teQuedan.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+        } else {
+            LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.cuerpo)
+        }
     }
     // Sin «· quedan N días»: los días los dice la línea de abajo, contados como los cuenta el
     // Disponible (hoy incluido). Dos conteos distintos a dos renglones serían otra contradicción.
@@ -479,6 +486,35 @@ private fun CabeceraTeQuedan(
             cuentasHero.forEach { cuenta ->
                 FilaDeCuentaDelHero(cuenta, modifier = Modifier.padding(bottom = Movi.espacios.minimo))
             }
+        }
+    }
+}
+
+/**
+ * **El rótulo del héroe con el ojo de «Ocultar los saldos» al final de su línea** (junto a «Te
+ * quedan» o «Tu plata»). El ojo va siempre, también mientras el rótulo es un esqueleto: aparecer
+ * después movería la línea.
+ *
+ * **La línea mide lo que mide el rótulo**, no el ojo: el ojo (24 dp) se centra sobre ella y puede
+ * sobresalir un poco arriba y abajo. Con una `Row` la línea crecía al alto del ojo, más con el
+ * esqueleto que con el texto, y el héroe cargando dejaba de medir lo que mide cargado
+ * (`EsqueletosDelInicioTest`).
+ */
+@Composable
+private fun RotuloConElOjo(rotulo: @Composable () -> Unit) {
+    Layout(
+        content = {
+            Box { rotulo() }
+            OjoDeLosSaldos()
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) { medibles, limites ->
+        val ojo = medibles[1].measure(limites.copy(minWidth = 0, minHeight = 0))
+        val anchoDelRotulo = (limites.maxWidth - ojo.width).coerceAtLeast(0)
+        val texto = medibles[0].measure(limites.copy(minWidth = anchoDelRotulo, maxWidth = anchoDelRotulo, minHeight = 0))
+        layout(limites.maxWidth, texto.height) {
+            texto.place(0, 0)
+            ojo.place(limites.maxWidth - ojo.width, (texto.height - ojo.height) / 2)
         }
     }
 }
@@ -731,7 +767,9 @@ internal fun PreguntaleAMoviSection(
                 }
             } else {
                 preguntas.forEachIndexed { i, pregunta ->
-                    FilaDePregunta(pregunta.texto) {
+                    // Se pinta con las cifras tapadas si los saldos están ocultos, pero viaja
+                    // entera: Movi AI tiene que saber de qué cifra se le pregunta.
+                    FilaDePregunta(conCifrasOcultas(pregunta.texto)) {
                         onNavigate(Screen.AIChat(preguntaInicial = pregunta.texto, sugerida = pregunta.sugerida?.id))
                     }
                     if (i < preguntas.lastIndex) Hairline()
