@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
@@ -40,6 +41,7 @@ import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import com.jvillada.movi.ui.transactions.AccionDelMovimiento
 import com.jvillada.movi.ui.transactions.tagDeAccionDelMovimiento
+import com.jvillada.movi.ui.transactions.TAG_PREGUNTA_DEL_TERCERO
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -339,9 +341,17 @@ class GuardarDesdeDondeApareceTest {
     @Test
     fun `el detalle de un movimiento con un numero desconocido ofrece la misma fila`() {
         hoja(Repo(), yaAnotado)
-        abrirTercero()
 
+        // Ola 2b: la pregunta está a la vista al abrir, en una línea —es una pregunta pendiente,
+        // como «Por confirmar»—, y tocarla abre la sección «Tercero» con la fila de siempre.
         esperar("¿De quién es la cuenta ·0756?")
+        composeRule.onNodeWithTag(TAG_PREGUNTA_DEL_TERCERO, useUnmergedTree = true).assertIsDisplayed()
+        assertFalse(hayLaFila(), "la fila completa se abre desde la pregunta, no sola")
+        composeRule.onNodeWithTag(TAG_PREGUNTA_DEL_TERCERO, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertTrue(hayLaFila(), "tocar la pregunta no abrió la sección del tercero")
+        assertFalse(hayTag(TAG_PREGUNTA_DEL_TERCERO), "con la sección abierta, la pregunta no se repite")
         tocar(PONERLE_NOMBRE)
         composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[0].performTextReplacement("Caro")
         composeRule.waitForIdle()
@@ -411,6 +421,12 @@ class GuardarDesdeDondeApareceTest {
         esperar("Mercado")
         composeRule.waitForIdle()
         assertFalse(hayLaFila())
+        // Ola 2b: con el tercero ya conocido no hay pregunta al abrir; «Tercero» sigue en la fila
+        // de acciones y lleva a «Es de «Caro»».
+        assertFalse(hayTag(TAG_PREGUNTA_DEL_TERCERO), "preguntó de quién es una cuenta ya guardada")
+        assertFalse(hay("¿De quién es"))
+        abrirTercero()
+        esperar("Es de «Caro»")
     }
 
     @Test
@@ -463,6 +479,9 @@ class GuardarDesdeDondeApareceTest {
         composeRule.onNodeWithTag(accion, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
+
+    private fun hayTag(tag: String): Boolean =
+        composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     private fun hay(texto: String): Boolean =
         composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true)

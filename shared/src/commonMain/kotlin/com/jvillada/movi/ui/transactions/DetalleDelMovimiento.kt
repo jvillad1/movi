@@ -211,6 +211,42 @@ internal fun LineaEnEsteComercio(resumen: EnEsteComercio, onVer: (() -> Unit)?) 
     }
 }
 
+/** El `testTag` de la pregunta «¿De quién es la cuenta ·0756?» que se ve al abrir. */
+const val TAG_PREGUNTA_DEL_TERCERO: String = "pregunta-del-tercero"
+
+/**
+ * **«¿De quién es la cuenta ·0756?», a la vista al abrir.** Es una pregunta pendiente, como «Por
+ * confirmar»: no se esconde detrás de la acción «Tercero». Una sola línea compacta; tocarla abre la
+ * sección «Tercero», donde está la fila de siempre para guardarla.
+ */
+@Composable
+internal fun PreguntaDelTercero(pregunta: String, onAbrir: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(TAG_PREGUNTA_DEL_TERCERO)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Movi.colores.aviso.copy(alpha = 0.10f))
+            .border(1.dp, Movi.colores.aviso.copy(alpha = 0.28f), RoundedCornerShape(12.dp))
+            .clickable(role = Role.Button, onClick = onAbrir)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(Icons.Rounded.Person, contentDescription = null, tint = Movi.colores.aviso, modifier = Modifier.size(18.dp))
+        Text(
+            pregunta,
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.texto,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text("Responder", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
+        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))
+    }
+}
+
 /**
  * La fila de acciones: un ícono en un círculo y un rótulo corto. La abierta se marca (y lo declara
  * con `selected`); tocarla otra vez la cierra.

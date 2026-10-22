@@ -57,6 +57,7 @@ import com.jvillada.movi.shared.model.identificadorDelDestinoEn
 import com.jvillada.movi.ui.destinos.FilaDelTercero
 import com.jvillada.movi.ui.destinos.FilaGuardarElDestino
 import com.jvillada.movi.ui.destinos.nombreParaLaFila
+import com.jvillada.movi.ui.destinos.preguntaDelDestino
 import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
 import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.theme.*
@@ -794,6 +795,17 @@ internal fun ContenidoDelMovimiento(
             if (event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
                 Spacer(Modifier.height(16.dp))
                 PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
+            }
+            // «¿De quién es la cuenta ·0756?» también es una pregunta pendiente: se ve al abrir, en
+            // una línea, con la misma condición de siempre (nombra una cuenta o llave que nadie
+            // tiene guardada). Tocarla abre «Tercero». Con el tercero ya conocido no se ve nada acá.
+            // Con «Tercero» abierto se calla: la fila completa ya está debajo.
+            if (ofreceGuardarElTercero && aQuienFue != null && accion != AccionDelMovimiento.Tercero) {
+                Spacer(Modifier.height(12.dp))
+                PreguntaDelTercero(
+                    pregunta = preguntaDelDestino(aQuienFue),
+                    onAbrir = { accion = AccionDelMovimiento.Tercero },
+                )
             }
             // Ola 15 · la pata huérfana se explica sola, acá y no en la fila: la fila no tiene
             // lugar, y esta hoja es donde el dueño llega justo cuando se pregunta qué es.
