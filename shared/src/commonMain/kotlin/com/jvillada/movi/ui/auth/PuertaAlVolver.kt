@@ -29,7 +29,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -122,8 +121,8 @@ internal fun PuertaAlVolver(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            // Como en el login: el logotipo, con tamaño suelto a propósito.
-            Text("Movi", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Movi.colores.texto)
+            // El nombre, con la escala de títulos (sin tamaño suelto: ver LosTamanosSueltosSoloBajanTest).
+            Text("Movi", style = Movi.textos.titular, fontWeight = FontWeight.Bold, color = Movi.colores.texto)
             Spacer(Modifier.height(8.dp))
             Text(
                 "Pon tu huella para seguir donde estabas.",
