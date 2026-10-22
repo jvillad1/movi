@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -493,12 +494,28 @@ private fun CabeceraTeQuedan(
  * **El rótulo del héroe con el ojo de «Ocultar los saldos» al final de su línea** (junto a «Te
  * quedan» o «Tu plata»). El ojo va siempre, también mientras el rótulo es un esqueleto: aparecer
  * después movería la línea.
+ *
+ * **La línea mide lo que mide el rótulo**, no el ojo: el ojo (24 dp) se centra sobre ella y puede
+ * sobresalir un poco arriba y abajo. Con una `Row` la línea crecía al alto del ojo, más con el
+ * esqueleto que con el texto, y el héroe cargando dejaba de medir lo que mide cargado
+ * (`EsqueletosDelInicioTest`).
  */
 @Composable
 private fun RotuloConElOjo(rotulo: @Composable () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.weight(1f)) { rotulo() }
-        OjoDeLosSaldos()
+    Layout(
+        content = {
+            Box { rotulo() }
+            OjoDeLosSaldos()
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) { medibles, limites ->
+        val ojo = medibles[1].measure(limites.copy(minWidth = 0, minHeight = 0))
+        val anchoDelRotulo = (limites.maxWidth - ojo.width).coerceAtLeast(0)
+        val texto = medibles[0].measure(limites.copy(minWidth = anchoDelRotulo, maxWidth = anchoDelRotulo, minHeight = 0))
+        layout(limites.maxWidth, texto.height) {
+            texto.place(0, 0)
+            ojo.place(limites.maxWidth - ojo.width, (texto.height - ojo.height) / 2)
+        }
     }
 }
 
