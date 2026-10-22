@@ -43,6 +43,13 @@ import com.jvillada.movi.ui.recurrentes.RecurringPrefill
  * tres se dibujan como hermanas. El orden importa: las dos de abajo se dibujan **después** de la
  * de categoría para quedar encima.
  *
+ * ## Lo que se ve al abrir (Ola 2b)
+ *
+ * El detalle se **lee primero**: el avatar, el título, el monto grande, «Hoy, 12:40 · Nu» y la
+ * categoría como chip; debajo, una fila de acciones (Categoría, Nota, Fecha, Repetir, Tercero, Más).
+ * Cada sección de edición de siempre se abre desde su acción y guarda igual que antes. Ver
+ * `DetalleDelMovimiento.kt`.
+ *
  * ## El contrato con quien llama
  *
  * [onCambiado] significa «este movimiento ya no es el que estabas mostrando» — cambió de
@@ -72,6 +79,15 @@ fun HojaDelMovimiento(
      * lleva esa cuenta lo ignora. Se llama antes que [onCambiado].
      */
     onResuelto: (FinancialEvent) -> Unit = {},
+    /**
+     * Ola 2b · la sección que se abre de entrada. `null` (lo normal): el detalle se lee primero.
+     * Deslizar una fila de Movimientos a la izquierda la abre en [AccionDelMovimiento.Categoria].
+     */
+    accionInicial: AccionDelMovimiento? = null,
+    /** «4 veces este período · $142.800» (ver [EnEsteComercio]). Solo Movimientos lo tiene a mano. */
+    enEsteComercio: EnEsteComercio? = null,
+    /** Abrir Movimientos con esta búsqueda. `null`: la línea no lleva a ningún lado. */
+    onVerElComercio: ((String) -> Unit)? = null,
 ) {
     JuegoDelMovimiento(
         event = event,
@@ -82,6 +98,9 @@ fun HojaDelMovimiento(
         onVerCuenta = onVerCuenta,
         onResuelto = onResuelto,
         onAnulado = {},
+        accionInicial = accionInicial,
+        enEsteComercio = enEsteComercio,
+        onVerElComercio = onVerElComercio,
     )
 }
 
@@ -107,6 +126,9 @@ internal fun PanelDelMovimiento(
     onCambiado: () -> Unit,
     onAnulado: () -> Unit,
     onVerCuenta: (() -> Unit)? = null,
+    accionInicial: AccionDelMovimiento? = null,
+    enEsteComercio: EnEsteComercio? = null,
+    onVerElComercio: ((String) -> Unit)? = null,
 ) {
     JuegoDelMovimiento(
         event = event,
@@ -117,6 +139,9 @@ internal fun PanelDelMovimiento(
         onVerCuenta = onVerCuenta,
         onResuelto = {},
         onAnulado = onAnulado,
+        accionInicial = accionInicial,
+        enEsteComercio = enEsteComercio,
+        onVerElComercio = onVerElComercio,
     )
 }
 
@@ -130,6 +155,9 @@ private fun JuegoDelMovimiento(
     onVerCuenta: (() -> Unit)?,
     onResuelto: (FinancialEvent) -> Unit,
     onAnulado: () -> Unit,
+    accionInicial: AccionDelMovimiento?,
+    enEsteComercio: EnEsteComercio?,
+    onVerElComercio: ((String) -> Unit)?,
 ) {
     var pidioAnular by remember(event.id) { mutableStateOf(false) }
     var prefillRecurrente by remember(event.id) { mutableStateOf<RecurringPrefill?>(null) }
@@ -157,6 +185,9 @@ private fun JuegoDelMovimiento(
         onAnular = { pidioAnular = true },
         onMarcarComoRecurrente = { prefill -> prefillRecurrente = prefill },
         onEditarRecurrente = { regla -> reglaAEditar = regla },
+        accionInicial = accionInicial,
+        enEsteComercio = enEsteComercio,
+        onVerElComercio = onVerElComercio,
     )
 
     // Guardar el recurrente cierra las dos y recarga: el movimiento no cambió, pero Recurrentes sí

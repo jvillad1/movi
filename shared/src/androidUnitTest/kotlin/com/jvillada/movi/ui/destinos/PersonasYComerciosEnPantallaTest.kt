@@ -194,7 +194,11 @@ class PersonasYComerciosEnPantallaTest {
         composeRule.onNodeWithTag(TAG_MOVIMIENTO_DEL_TERCERO + ":" + enviadoAntes.id, useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
-        esperar("MONTO, CUENTA Y CONCEPTO")
+        // Ola 2b: el detalle del movimiento, que abre con su monto grande.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(com.jvillada.movi.ui.transactions.TAG_MONTO_DEL_MOVIMIENTO, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     // ── Editar, unir, eliminar ──────────────────────────────────────────────────

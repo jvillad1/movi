@@ -20,6 +20,16 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithTag
+import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.shared.model.VoidEvent
+import com.jvillada.movi.ui.components.TAG_BUSCAR_CATEGORIA
+import com.jvillada.movi.ui.components.tagDeCeldaDeCategoria
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
@@ -84,6 +94,13 @@ class HojaDelMovimientoTest {
         timestamp = 1_754_406_000_000L,
     )
 
+    /** Ola 2b: las secciones de edición se abren desde su acción. Por semántica, como los demás toques. */
+    private fun tocarAccion(accion: AccionDelMovimiento) {
+        composeRule.onNodeWithTag(tagDeAccionDelMovimiento(accion), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
     private fun montar(event: FinancialEvent = gasto, cuentas: List<Account> = listOf(bancolombia, nu)) {
         composeRule.setContent {
             MoviTheme {
@@ -101,23 +118,145 @@ class HojaDelMovimientoTest {
     }
 
     /**
-     * **La sección de corregir está, y está ARRIBA**: se ve sin ningún gesto. Es lo que el dueño
-     * vino a arreglar cuando abre esta hoja frente a un saldo que no cuadra, y todo lo que quede
-     * debajo de veinte renglones de categorías es, en la práctica, invisible.
+     * **Ola 2b · el detalle se lee primero.** Al abrir se ven, sin ningún gesto, el monto grande y el
+     * chip de la categoría; la pregunta de «¿se repite?» ya no está a la vista (vive en «Repetir»).
+     */
+    @Test
+    fun alAbrirSeVenElMontoGrandeYLaCategoriaYNoLaPreguntaDeSiSeRepite() {
+        montar()
+        composeRule.onNodeWithTag(TAG_MONTO_DEL_MOVIMIENTO, useUnmergedTree = true)
+            .assertIsDisplayed()
+            .assertTextEquals("−$4.000.000")
+        composeRule.onNodeWithTag(TAG_CHIP_DE_CATEGORIA, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNode(hasAnyAncestor(hasTestTag(TAG_CHIP_DE_CATEGORIA)) and hasText("Otros"), useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeRule.onAllNodesWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Sí, se repite todos los meses", useUnmergedTree = true).assertCountEquals(0)
+        // Y el selector de categorías tampoco: se abre desde el chip o desde «Categoría».
+        composeRule.onAllNodesWithTag(TAG_BUSCAR_CATEGORIA, useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    /**
+     * **Corregir el monto y la cuenta sigue a un toque**: el monto y la cuenta actuales se leen en
+     * el encabezado sin desplazar, y la acción «Nota» abre la sección de siempre.
      */
     @Test
     fun corregirElMontoYLaCuentaSeVeSinDesplazar() {
         montar()
-        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).assertIsDisplayed()
-        // Y con el monto y la cuenta actuales a la vista, no un id ni un campo en blanco.
-        composeRule.onNodeWithText("Bancolombia", useUnmergedTree = true).assertIsDisplayed()
+        // El monto y la cuenta actuales a la vista, no un id ni un campo en blanco.
+        composeRule.onNodeWithTag(TAG_MONTO_DEL_MOVIMIENTO, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Bancolombia", substring = true, useUnmergedTree = true).assertIsDisplayed()
+        tocarAccion(AccionDelMovimiento.Nota)
+        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
-    /** Anular sigue estando — al final, que es donde se decidió que viva. */
+    /** Anular sigue estando — en «Más», separado de lo que solo reclasifica. */
     @Test
     fun anularSigueOfreciendoseAlFinal() {
         montar()
+        composeRule.onAllNodesWithText("Anular este movimiento", useUnmergedTree = true).assertCountEquals(0)
+        tocarAccion(AccionDelMovimiento.Mas)
         composeRule.onNodeWithText("Anular este movimiento", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+    }
+
+    /** Y anular llama a lo mismo de siempre: la hoja de anular, y `voidEvent` con este id. */
+    @Test
+    fun anularLlamaALoMismoDeSiempre() {
+        var anulado: String? = null
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun voidEvent(id: String, reason: String?): VoidEvent {
+                anulado = id
+                return VoidEvent(id = "void-1", originalEventId = id, reason = reason, timestamp = 0L)
+            }
+        }
+        montar()
+        tocarAccion(AccionDelMovimiento.Mas)
+        composeRule.onAllNodes(hasClickAction() and hasText("Anular este movimiento"), useUnmergedTree = true)
+            .onLast().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        // Se abrió la hoja de anular de siempre, y su botón es el que anula.
+        composeRule.onNodeWithText("Anular movimiento", useUnmergedTree = true).assertExists()
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Anular movimiento")), useUnmergedTree = true)
+            .onLast().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { anulado != null }
+        assertEquals("ev-hija", anulado)
+    }
+
+    /** Cambiar la fecha llama a lo mismo de siempre: `updateEventTimestamp` con el día elegido. */
+    @Test
+    fun cambiarLaFechaLlamaALoMismoDeSiempre() {
+        var movido: Pair<String, Long>? = null
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent {
+                movido = id to timestamp
+                return gasto.copy(timestamp = timestamp)
+            }
+            override suspend fun getEventOccurrenceMark(id: String): EventOccurrenceMark? = null
+            override suspend fun getUserProfile(): com.jvillada.movi.shared.model.UserProfile =
+                com.jvillada.movi.shared.model.UserProfile(id = "u", email = "u@movi.test", name = "U", avatarColor = "#4F7CFF")
+        }
+        montar()
+        tocarAccion(AccionDelMovimiento.Fecha)
+        // El selector ya viene abierto: tocar «Fecha» ES pedirlo.
+        composeRule.onAllNodes(hasClickAction() and (hasText("Ayer") or hasAnyChild(hasText("Ayer"))), useUnmergedTree = true)
+            .onFirst().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Mover a", substring = true)), useUnmergedTree = true)
+            .onLast().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { movido != null }
+        assertEquals("ev-hija", movido?.first)
+    }
+
+    /** Marcar que NO se repite llama a lo mismo de siempre: `updateEventRepeats(id, false)`. */
+    @Test
+    fun marcarQueNoSeRepiteLlamaALoMismoDeSiempre() {
+        var marcado: Pair<String, Boolean>? = null
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent {
+                marcado = id to repeats
+                return gasto.copy(noSeRepite = !repeats)
+            }
+        }
+        montar()
+        tocarAccion(AccionDelMovimiento.Repetir)
+        composeRule.onNodeWithText("No, este no se repite", useUnmergedTree = true)
+            .performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { marcado != null }
+        assertEquals("ev-hija" to false, marcado)
+    }
+
+    /**
+     * **Las acciones: tocar «Categoría» abre el selector, y elegir llama al mismo método de
+     * siempre** (`updateEventCategory`).
+     */
+    @Test
+    fun tocarCategoriaAbreElSelectorYElegirLlamaALoDeSiempre() {
+        var pedida: Pair<String, String>? = null
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
+                pedida = id to category
+                return gasto.copy(category = category)
+            }
+        }
+        UsedCategoriesCache.recordFromServer(
+            listOf(com.jvillada.movi.shared.model.UsedCategory("Comida", listOf(TransactionType.EXPENSE), usosRecientes = 3)),
+        )
+        montar()
+        tocarAccion(AccionDelMovimiento.Categoria)
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Comida"), useUnmergedTree = true)
+            .performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { pedida != null }
+        assertEquals("ev-hija" to "Comida", pedida)
+    }
+
+    /** Tocar el chip de la categoría también abre el selector. */
+    @Test
+    fun tocarElChipAbreElSelector() {
+        montar()
+        composeRule.onNodeWithTag(TAG_CHIP_DE_CATEGORIA, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA, useUnmergedTree = true).assertIsDisplayed()
     }
 
     /**
@@ -127,6 +266,7 @@ class HojaDelMovimientoTest {
     @Test
     fun laHojaOfreceMarcarloComoRecurrente() {
         montar()
+        tocarAccion(AccionDelMovimiento.Repetir)
         composeRule.onNodeWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
@@ -141,6 +281,7 @@ class HojaDelMovimientoTest {
     @Test
     fun laHojaTambienOfreceDecirQueNoSeRepite() {
         montar()
+        tocarAccion(AccionDelMovimiento.Repetir)
         composeRule.onNodeWithText("No, este no se repite", useUnmergedTree = true)
             .performScrollTo().assertIsDisplayed()
     }
@@ -155,6 +296,7 @@ class HojaDelMovimientoTest {
     @Test
     fun unMovimientoYaMarcadoLoDiceYOfreceVolverAtras() {
         montar(event = gasto.copy(noSeRepite = true))
+        tocarAccion(AccionDelMovimiento.Repetir)
 
         composeRule.onNodeWithText("Sí se repite, después de todo", useUnmergedTree = true)
             .performScrollTo().assertIsDisplayed()
@@ -170,7 +312,10 @@ class HojaDelMovimientoTest {
     @Test
     fun sinLaListaDeCuentasLaHojaSigueSirviendo() {
         montar(cuentas = emptyList())
-        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_MONTO_DEL_MOVIMIENTO, useUnmergedTree = true).assertIsDisplayed()
+        tocarAccion(AccionDelMovimiento.Nota)
+        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        tocarAccion(AccionDelMovimiento.Mas)
         composeRule.onNodeWithText("Anular este movimiento", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
@@ -231,14 +376,9 @@ class HojaDelMovimientoTest {
         }
         montar()
 
-        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).assertIsDisplayed()
-        // Se invoca el OnClick de la fila por semántica, no por un toque inyectado: en Robolectric el
-        // toque sobre «Cambiar» (8 px de ancho) y sobre el monto no llegaba al clickable de la fila.
-        // La fila se identifica por lo que contiene —el monto—, que solo está en esta sección.
-        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("$4.000.000")), useUnmergedTree = true)
-            .onLast() // el fondo de la hoja y la hoja también son clickables y contienen el monto: el más profundo es la fila
-            .performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
+        // Ola 2b: la sección se abre desde su acción, «Nota».
+        tocarAccion(AccionDelMovimiento.Nota)
+        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("CONCEPTO", useUnmergedTree = true).assertExists("la sección no se abrió")
 
         // El campo editable, no el título de la hoja: los dos dicen «Hija».
@@ -283,6 +423,7 @@ class HojaDelMovimientoTest {
             override suspend fun getSubscriptions(): SubscriptionsResult = SubscriptionsResult(emptyList(), 0)
         }
         montar()
+        tocarAccion(AccionDelMovimiento.Repetir)
 
         composeRule.onNodeWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).performScrollTo()
         composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Sí, se repite todos los meses")), useUnmergedTree = true)
@@ -319,6 +460,7 @@ class HojaDelMovimientoTest {
                 SubscriptionsResult(listOf(suscripcionHija), 0)
         }
         montar()
+        tocarAccion(AccionDelMovimiento.Repetir)
 
         composeRule.onNodeWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).performScrollTo()
         composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Sí, se repite todos los meses")), useUnmergedTree = true)

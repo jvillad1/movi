@@ -1009,6 +1009,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     var elegidoEnElPanel by remember { mutableStateOf(false) }
     /** A dónde va el foco al cambiar de movimiento en el panel (ver `elegir`). */
     val focoDelPanel = remember { FocusRequester() }
+    /**
+     * Ola 2b · con qué sección se abre la hoja de [selectedEvent]: `null` al tocar la fila (el
+     * detalle se lee primero), [AccionDelMovimiento.Categoria] al deslizarla a la izquierda.
+     */
+    var accionAlAbrir by remember { mutableStateOf<AccionDelMovimiento?>(null) }
+    /** Ola 2b · la vibración de confirmar un aviso deslizando su fila (ver `Vibrar.kt`). */
+    val vibrador = rememberVibrador()
 
     // Los avisos de una lectura caída, con el «Reintentar» de siempre — solo cuando NO hay nada a
     // la vista. Con la lista pintada (de esta visita o recordada) lo dice [NoSePudoActualizar]
@@ -1134,6 +1141,20 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
         else diasDelPeriodo(filtrados, periodoVisible, ajustesDelPeriodo)
     }
 
+    /**
+     * Ola 2b · «4 veces este período · $142.800» del movimiento abierto: con los movimientos del
+     * período de ESE movimiento que esta pantalla ya leyó (ver [enEsteComercio]). Sin lectura nueva.
+     */
+    fun enEsteComercioDe(evento: FinancialEvent): EnEsteComercio? {
+        val suPeriodo = periodoActual(evento.timestamp, ajustesDelPeriodo)
+        return enEsteComercio(evento, diasDelPeriodo(allDays, suPeriodo, ajustesDelPeriodo).flatMap { it.items })
+    }
+    /** Ola 2b · tocar «En este comercio»: la búsqueda de siempre, con ese comercio escrito. */
+    fun buscarElComercio(busqueda: String) {
+        searchActive = true
+        searchQuery = busqueda
+    }
+
     // Ola W4: en pantalla ancha, la lista a la izquierda y el movimiento elegido a la derecha. Ver
     // `MovimientosListaYDetalle` para la cuenta del ancho; en el teléfono, todo como siempre.
     MedirPanelDeMovimientos { conPanel ->
@@ -1152,8 +1173,23 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
         if (conPanel) {
             if (runCatching { focoDelPanel.requestFocus() }.isFailure) focusManager.clearFocus()
         }
+        accionAlAbrir = null
         selectedEvent = evento
         elegidoEnElPanel = conPanel
+    }
+    /**
+     * Ola 2b · confirmar un aviso deslizando su fila a la derecha: el mismo `confirmEvent` que el
+     * botón «Confirmar» del detalle, la vibración de confirmar, y la lista se relee.
+     */
+    val confirmarDesdeLaFila: (FinancialEvent) -> Unit = { evento ->
+        alcanceDeLaPantalla.launch {
+            intentar { Repositories.wallets.confirmEvent(evento.id) }
+                .onSuccess {
+                    vibrador.confirmar()
+                    refreshKey++
+                }
+                .onFailure { error = it.toUserMessage() }
+        }
     }
     // Revisión final de la W4, M-3: lo elegido en el panel es del panel. Si la ventana se achica
     // (o una tablet rota) hasta quedar sin lugar al lado, no se abre una hoja modal que nadie
@@ -1640,17 +1676,31 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                                             elegido = conPanel && selectedEvent?.id == row.out.id,
                                             onClick = { elegir(row.out) },
                                         )
-                                        is MovementRow.Single -> MovementSingleRow(
-                                            tx = row.event,
-                                            accountNames = accountNames,
-                                            esRecurrente = nombreRecurrenteDe(
-                                                row.event,
-                                                reglasRecurrentes,
-                                                nombresDeSuscripcionesActivas,
-                                            ) != null,
-                                            elegido = conPanel && selectedEvent?.id == row.event.id,
-                                            onClick = { elegir(row.event) },
-                                        )
+                                        // Ola 2b: la fila se desliza — a la izquierda abre la
+                                        // categoría, a la derecha confirma un aviso pendiente. En
+                                        // pantalla ancha no: ahí se usa con mouse y el panel de al
+                                        // lado ya es el detalle (ver [FilaDeslizable]).
+                                        is MovementRow.Single -> FilaDeslizable(
+                                            habilitada = !conPanel,
+                                            puedeConfirmar = row.event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED,
+                                            onCategoria = {
+                                                elegir(row.event)
+                                                accionAlAbrir = AccionDelMovimiento.Categoria
+                                            },
+                                            onConfirmar = { confirmarDesdeLaFila(row.event) },
+                                        ) {
+                                            MovementSingleRow(
+                                                tx = row.event,
+                                                accountNames = accountNames,
+                                                esRecurrente = nombreRecurrenteDe(
+                                                    row.event,
+                                                    reglasRecurrentes,
+                                                    nombresDeSuscripcionesActivas,
+                                                ) != null,
+                                                elegido = conPanel && selectedEvent?.id == row.event.id,
+                                                onClick = { elegir(row.event) },
+                                            )
+                                        }
                                         is MovementRow.Ajustes -> {
                                             val abierto = row.key in ajustesAbiertos
                                             RenglonDeAjustes(
@@ -1705,6 +1755,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                         onVerCuenta = accountTypes[enElPanel.accountId]?.let { tipo ->
                             { onNavigate(Screen.AccountDetail(enElPanel.accountId, tipo.group)) }
                         },
+                        enEsteComercio = remember(enElPanel, allDays, ajustesDelPeriodo) { enEsteComercioDe(enElPanel) },
+                        // En el panel el movimiento sigue a la vista: solo cambia la lista de al lado.
+                        onVerElComercio = ::buscarElComercio,
                     )
                 }
             }
@@ -1726,8 +1779,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
             // Para poder mover el movimiento de cuenta. Es la MISMA lista que ya alimenta
             // `accountNames`/`accountTypes` de esta pantalla — no una lectura nueva.
             cuentas = accounts,
-            onDismiss = { selectedEvent = null },
-            onCambiado = { selectedEvent = null; refreshKey++ },
+            onDismiss = { selectedEvent = null; accionAlAbrir = null },
+            onCambiado = { selectedEvent = null; accionAlAbrir = null; refreshKey++ },
             // Ola 16: el saldo inicial ya no se lista acá, pero la búsqueda lo sigue
             // encontrando — y quien lo busca es justamente el que se pregunta «¿de dónde
             // salieron estos $41 millones?». La hoja lo explica y esto lo lleva a donde de
@@ -1737,6 +1790,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
             // que ningún botón.
             onVerCuenta = accountTypes[event.accountId]?.let { tipo ->
                 { onNavigate(Screen.AccountDetail(event.accountId, tipo.group)) }
+            },
+            accionInicial = accionAlAbrir,
+            enEsteComercio = remember(event, allDays, ajustesDelPeriodo) { enEsteComercioDe(event) },
+            // La hoja se cierra y la lista queda filtrada por ese comercio.
+            onVerElComercio = { busqueda ->
+                selectedEvent = null
+                accionAlAbrir = null
+                buscarElComercio(busqueda)
             },
         )
     }
@@ -2082,17 +2143,10 @@ internal fun MovementSingleRow(
             }
         }
         Text(
-            text = when (tono) {
-                // En la moneda del movimiento, como la hoja de anular y el detalle de la cuenta:
-                // un cargo de US$20 en la tarjeta en dólares se leía «−$20».
-                TonoDelMonto.INGRESO -> "+${formatMoney(tx.amount, tx.currency)}"
-                TonoDelMonto.GASTO -> "−${formatMoney(tx.amount, tx.currency)}"
-                // `tonoDelEvento` (lo único que alimenta `tono` acá) nunca devuelve
-                // ENTRE_CUENTAS — ese tono es solo de [tonoDelRenglon], para el par de
-                // [MovementRow.Transfer] que se pinta en TransferRow, no acá. Rama exhaustiva
-                // igual, con el mismo criterio de NEUTRO: sin signo.
-                TonoDelMonto.NEUTRO, TonoDelMonto.ENTRE_CUENTAS -> formatMoney(tx.amount, tx.currency)
-            },
+            // En la moneda del movimiento, como la hoja de anular y el detalle de la cuenta: un
+            // cargo de US$20 en la tarjeta en dólares se leía «−$20». La misma regla que el monto
+            // grande del detalle (ver [textoDelMontoConSigno]).
+            text = textoDelMontoConSigno(tx, tono),
             style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
             color = colorDelTono(tono, Movi.colores),
