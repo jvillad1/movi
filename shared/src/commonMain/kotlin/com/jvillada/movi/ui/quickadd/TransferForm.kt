@@ -64,6 +64,7 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.toUserMessage
+import com.jvillada.movi.ui.components.rememberVibrador
 import com.jvillada.movi.ui.credits.FieldBox
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
@@ -552,6 +553,8 @@ internal fun TransferBody(
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
+    // Guardar un traspaso o una cuota vibra, igual que un gasto (ver [Vibrador]).
+    val vibrador = rememberVibrador()
     val esPago = modo == ModoDeTraspaso.PAGO_DE_CUOTA
     // En un pago, los dos lados ofrecen cosas distintas: de dónde sale la plata son cuentas de
     // dinero, y lo que se paga son deudas. En un traspaso, la misma lista para los dos.
@@ -855,6 +858,7 @@ internal fun TransferBody(
                     // Sin diferencia, el camino de siempre: se cierra la hoja y listo. Con
                     // diferencia, se muestra y él la cierra con el dedo — un cartel que se va solo
                     // no es un aviso sobre plata.
+                    vibrador.confirmar()
                     if (aviso != null) avisoDelDesglose = aviso else onSaved()
                 }
                 .onFailure { fallo ->

@@ -4,8 +4,10 @@
         Tema de arranque de Movi.
 
         Se elige el tema oscuro como predeterminado aunque existe un tema claro, porque:
-        - TemaStore.oscuro arranca en true; el default oscuro evita un destello blanco
-          en el arranque de ~0.6s, que es muy chocante en una app oscura.
+        - El default oscuro evita un destello blanco en el arranque de ~0.6s, que es muy
+          chocante en una app oscura. (Desde la Ola 1 · «Que Movi se sienta viva» el tema
+          arranca en «Igual que el teléfono», TemaStore.preferencia; con el teléfono en claro
+          se ve ese instante de oscuro, igual que con el claro elegido a mano.)
         - La preferencia de tema vive en Settings y no se puede leer antes de que el
           sistema pinte la ventana. Con el tema claro elegido, se vería un instante de
           oscuro, que es menos jarring que un destello blanco.

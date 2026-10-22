@@ -422,9 +422,42 @@ object NavStack {
                 stack.clear()
                 stack.add(screen)
             }
+            esRaizDePestana(screen) -> {
+                val pila = pilaDeLaPestana(screen)
+                if (stack != pila) {
+                    stack.clear()
+                    stack.addAll(pila)
+                }
+            }
             shouldPush(stack, screen) -> stack.add(screen)
         }
     }
+
+    /**
+     * Las cuatro pantallas raíz de la barra (y del rail): Hoy, Movimientos, Plan y Patrimonio, tal
+     * como las abre su pestaña ([screenForTab]). Movimientos con un chip puesto o Plan en
+     * Presupuestos no son raíz: son otra pantalla de la misma pestaña, y se apilan.
+     */
+    fun esRaizDePestana(screen: Screen): Boolean = screen in RAICES_DE_PESTANA
+
+    private val RAICES_DE_PESTANA: List<Screen> =
+        listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.PATRIMONIO).map(::screenForTab)
+
+    /**
+     * **Saltar entre pestañas no apila historial** (Ola 1 · «Que Movi se sienta viva»).
+     *
+     * Antes cada toque en la barra apilaba: Hoy → Movimientos → Hoy → Plan dejaba cuatro pantallas
+     * en la pila, y el «atrás» del teléfono recorría ese zigzag entero antes de salir. Ahora ir a una
+     * raíz **reemplaza** la pila: queda Hoy abajo y la pestaña encima — `[Hoy]` para Hoy,
+     * `[Hoy, Movimientos]` para Movimientos—, que es lo que hace Android con su barra de abajo: el
+     * «atrás» desde otra pestaña vuelve a Hoy, y desde Hoy sale.
+     *
+     * Lo que se había apilado dentro de la pestaña de antes (un detalle, «Por revisar») se suelta:
+     * tocar otra pestaña es irse de ahí. Sus estados guardados (el scroll, lo tipeado) siguen en el
+     * `SaveableStateProvider` de App.kt, igual que antes.
+     */
+    fun pilaDeLaPestana(raiz: Screen): List<Screen> =
+        if (raiz == Screen.Dashboard) listOf(Screen.Dashboard) else listOf(Screen.Dashboard, raiz)
 
     /**
      * Resultado de pedir "volver": si hay historial, se saca el tope (Pop); si la

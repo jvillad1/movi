@@ -674,6 +674,8 @@ const val TAG_AVISOS_DEL_PAGO_EN_RECONCILIAR: String = "avisos-del-pago-en-recon
 @Composable
 fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     val goBack = LocalGoBack.current
+    // Confirmar el aviso vibra (ver [Vibrador]): quedó anotado. Ignorarlo no.
+    val vibrador = rememberVibrador()
     val coroutine = rememberCoroutineScope()
     var sms by remember { mutableStateOf<SmsMessage?>(null) }
     var parsed by remember { mutableStateOf<ParsedSms?>(null) }
@@ -807,6 +809,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 .onSuccess {
                     working = false
                     sms = sms?.copy(state = SMS_STATE_CONFIRMED)
+                    vibrador.confirmar()
                     goBack(Screen.PorRevisar)
                 }
                 .onFailure { working = false; error = it.toUserMessage() }
@@ -1055,6 +1058,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             }.onSuccess {
                 working = false
                 sms = sms?.copy(state = SMS_STATE_CONFIRMED)
+                vibrador.confirmar()
                 // Ola 2 #1: pop, no push — un segundo tap en ‹ desde la bandeja no debe volver
                 // a este detalle ya confirmado (evita duplicar el movimiento).
                 goBack(Screen.PorRevisar)
@@ -1112,6 +1116,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             }.onSuccess {
                 working = false
                 sms = sms?.copy(state = SMS_STATE_CONFIRMED)
+                vibrador.confirmar()
                 goBack(Screen.PorRevisar)
             }.onFailure {
                 working = false
@@ -1159,6 +1164,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 .onSuccess {
                     working = false
                     sms = sms?.copy(state = SMS_STATE_CONFIRMED)
+                    vibrador.confirmar()
                     goBack(Screen.PorRevisar)
                 }
                 .onFailure { working = false; error = it.toUserMessage() }

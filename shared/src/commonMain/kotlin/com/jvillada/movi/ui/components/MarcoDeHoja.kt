@@ -1,5 +1,37 @@
 package com.jvillada.movi.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Velocity
+import com.jvillada.movi.theme.LocalMovimientoReducido
+import com.jvillada.movi.theme.Movimiento
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -82,9 +114,12 @@ const val TAG_PANEL_DE_HOJA = "marco-de-hoja-panel"
  *   afuera ([dismissEnabled]) — salvo que la hoja pase [onEscape] (ver abajo).
  *
  * Nada de `Dialog` ni `Popup`: la hoja se sigue dibujando dentro del árbol, así que
- * [com.jvillada.movi.ui.PilaDeHojas] y las pruebas de geometría la siguen viendo. En el teléfono se
- * dibuja en la columna de la pantalla, como siempre; la centrada, en la cáscara, encima del rail, y
- * su velo cubre la ventana entera (ver [AnfitrionDeHojas]).
+ * [com.jvillada.movi.ui.PilaDeHojas] y las pruebas de geometría la siguen viendo. Las dos se dibujan
+ * en la cáscara, encima de todo, y su velo cubre la ventana entera (ver [AnfitrionDeHojas]): la del
+ * teléfono también desde la Ola 1 · «Que Movi se sienta viva», que es cuando **dejó de verse la barra
+ * de pestañas debajo de una hoja abierta** (y de poder tocarse).
+ *
+ * Entran, salen y —la del teléfono— se cierran arrastrando hacia abajo: ver [EstadoDeLaHoja].
  *
  * [fraccionDeAltoMaximo] acota el alto también en el teléfono (la hoja de recurrentes necesita un
  * alto acotado para su propio `BoxWithConstraints`); sin él, en el teléfono la hoja mide lo que su
@@ -139,31 +174,167 @@ fun MarcoDeHoja(
     onTecla: ((KeyEvent) -> Boolean)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    if (LocalWindowWidthClass.current == WindowWidthClass.Compact) {
-        HojaDesdeAbajo(onDismiss, dismissEnabled, fraccionDeAltoMaximo, conCierre, relleno, onTecla, content)
-    } else {
-        val alEscape = onEscape ?: { if (dismissEnabled) onDismiss() }
-        val hoja: @Composable () -> Unit = {
-            HojaCentrada(onDismiss, dismissEnabled, anchoMaximo, fraccionDeAltoMaximo, conCierre, relleno, alEscape, onTecla, content)
+    val anfitrion = LocalAnfitrionDeHojas.current
+    val compacta = LocalWindowWidthClass.current == WindowWidthClass.Compact
+    val hoja: @Composable () -> Unit = if (compacta) {
+        {
+            HojaDesdeAbajo(
+                onDismiss, dismissEnabled, fraccionDeAltoMaximo, conCierre, relleno, onTecla,
+                enLaCascara = anfitrion != null, content = content,
+            )
         }
-        val anfitrion = LocalAnfitrionDeHojas.current
-        if (anfitrion == null) {
-            hoja()
+    } else {
+        { HojaCentrada(onDismiss, dismissEnabled, anchoMaximo, fraccionDeAltoMaximo, conCierre, relleno, onEscape, onTecla, content) }
+    }
+    if (anfitrion == null) {
+        hoja()
+    } else {
+        // La hoja se dibuja en la cáscara, encima de la barra de pestañas (o del rail) y de toda la
+        // ventana, y no acá adentro de la columna de la pantalla (ver [AnfitrionDeHojas]). Se lleva
+        // los `CompositionLocal` de este punto para que su contenido vea lo mismo que vería acá
+        // (LocalNavigate, el cargando del Inicio, etc.).
+        val contexto = currentCompositionLocalContext
+        val conContexto: @Composable () -> Unit = { CompositionLocalProvider(contexto) { hoja() } }
+        val entrada = remember(anfitrion) { AnfitrionDeHojas.Entrada(conContexto) }
+        SideEffect { entrada.contenido = conContexto }
+        DisposableEffect(anfitrion, entrada) {
+            anfitrion.abrir(entrada)
+            onDispose { anfitrion.cerrar(entrada) }
+        }
+    }
+}
+
+/**
+ * # Cómo entra, cómo sale y cómo se arrastra una hoja (Ola 1 · «Que Movi se sienta viva»)
+ *
+ * Hasta acá las hojas aparecían de golpe y se iban de golpe. Ahora:
+ *
+ * - **entran**: desde abajo (la del teléfono) o fundiéndose (la centrada), con el velo
+ *   oscureciéndose al mismo tiempo. Duraciones y curvas de [Movimiento];
+ * - **salen animadas** cuando las cierra el marco —el velo, la X, Escape o arrastrarlas—: primero se
+ *   van y **después** se llama al `onDismiss`, una sola vez aunque se toque el velo dos veces
+ *   mientras sale ([cerrar] ignora lo que llegue con la salida en curso). Si quien la abrió decide
+ *   no cerrarla (su `onDismiss` no la saca de la composición), la hoja vuelve a su lugar;
+ * - lo que la cierra **desde adentro** (un «Guardar», un «Cancelar», el «atrás» del sistema) la saca
+ *   en el acto, como antes: el contenido es de cada hoja y el marco no puede retrasarlo sin arriesgar
+ *   que algo de adentro se dibuje con un estado que su dueño ya soltó.
+ *
+ * Con el sistema pidiendo menos movimiento ([LocalMovimientoReducido]), todo esto pasa en el acto.
+ */
+@Stable
+private class EstadoDeLaHoja(
+    private val alcance: CoroutineScope,
+    reducido: Boolean,
+) {
+    /** 0 = afuera (abajo, o transparente), 1 = en su lugar. */
+    val presencia = Animatable(if (reducido) 1f else 0f)
+
+    /** Cuánto la bajó el dedo, en píxeles. Solo la del teléfono. */
+    var arrastre by mutableFloatStateOf(0f)
+
+    /** El alto del panel, para saber cuándo un arrastre pasó el umbral. */
+    var altoDelPanel by mutableIntStateOf(0)
+
+    /** Con la salida en curso: el velo ya no responde y el `onDismiss` ya está en camino. */
+    var cerrando by mutableStateOf(false)
+        private set
+
+    var onDismiss: () -> Unit = {}
+    var dismissEnabled: Boolean = true
+    var reducido: Boolean = reducido
+
+    /** ¿Hay un dedo sobre el panel? Ver el `pointerInput` de la hoja desde abajo. */
+    var dedoAbajo: Boolean = false
+
+    private var asentando: Job? = null
+
+    /**
+     * El dedo se levantó. Si la hoja quedó corrida y nadie la soltó con una velocidad (ni la lista de
+     * adentro ni el arrastre del panel, que llegan después del «arriba»), se suelta quieta.
+     */
+    fun dedoSoltado(umbralDeVelocidad: Float) {
+        alcance.launch {
+            withFrameNanos { }
+            withFrameNanos { }
+            if (!dedoAbajo && arrastre > 0f && asentando?.isActive != true) soltar(0f, umbralDeVelocidad)
+        }
+    }
+
+    fun entrar() {
+        alcance.launch { presencia.animateTo(1f, Movimiento.alEntrar(reducido)) }
+    }
+
+    /** Sale animada y después llama a `onDismiss`, una sola vez. Respeta [dismissEnabled]. */
+    fun cerrar() {
+        if (cerrando || !dismissEnabled) return
+        cerrando = true
+        asentando?.cancel()
+        alcance.launch {
+            presencia.animateTo(0f, Movimiento.alSalir(reducido))
+            onDismiss()
+            // Si la hoja sigue en la composición dos cuadros después, quien la abrió decidió no
+            // cerrarla (preguntó antes, por ejemplo): vuelve a su lugar en vez de quedar invisible
+            // tapando la pantalla. Si se fue, este alcance ya se canceló y nada de esto corre.
+            withFrameNanos { }
+            withFrameNanos { }
+            arrastre = 0f
+            cerrando = false
+            presencia.animateTo(1f, Movimiento.alEntrar(reducido))
+        }
+    }
+
+    /** El dedo la mueve [delta] píxeles (positivo = hacia abajo); nunca sube más allá de su lugar. */
+    fun arrastrar(delta: Float): Float {
+        if (cerrando || !dismissEnabled) return 0f
+        val antes = arrastre
+        arrastre = (arrastre + delta).coerceAtLeast(0f)
+        return arrastre - antes
+    }
+
+    /**
+     * El dedo la soltó con [velocidad] (px/s, positivo = hacia abajo): pasó el umbral → se cierra;
+     * si no, vuelve a su lugar.
+     */
+    fun soltar(velocidad: Float, umbralDeVelocidad: Float) {
+        if (cerrando || arrastre <= 0f) return
+        val pasoElUmbral = arrastre > altoDelPanel * FRACCION_PARA_CERRAR_ARRASTRANDO || velocidad > umbralDeVelocidad
+        if (pasoElUmbral && dismissEnabled) {
+            cerrar()
         } else {
-            // La hoja se dibuja en la cáscara, encima del rail y de toda la ventana, y no acá adentro
-            // de la columna de la pantalla (ver [AnfitrionDeHojas]). Se lleva los `CompositionLocal`
-            // de este punto para que su contenido vea lo mismo que vería acá (LocalNavigate, el
-            // cargando del Inicio, etc.).
-            val contexto = currentCompositionLocalContext
-            val conContexto: @Composable () -> Unit = { CompositionLocalProvider(contexto) { hoja() } }
-            val entrada = remember(anfitrion) { AnfitrionDeHojas.Entrada(conContexto) }
-            SideEffect { entrada.contenido = conContexto }
-            DisposableEffect(anfitrion, entrada) {
-                anfitrion.abrir(entrada)
-                onDispose { anfitrion.cerrar(entrada) }
+            asentando?.cancel()
+            asentando = alcance.launch {
+                animate(arrastre, 0f, animationSpec = Movimiento.alVolver(reducido)) { valor, _ -> arrastre = valor }
             }
         }
     }
+
+    /** Lo que ya se ve de la hoja (para el velo): 1 en su lugar, menos mientras entra, sale o se arrastra. */
+    fun fraccionVisible(): Float {
+        val porElArrastre = if (altoDelPanel > 0) 1f - (arrastre / altoDelPanel).coerceIn(0f, 1f) else 1f
+        return presencia.value * porElArrastre
+    }
+}
+
+/**
+ * Qué parte de su alto hay que bajar una hoja para que, al soltarla, se cierre. Un tercio: menos
+ * cerraba hojas que solo se querían mirar más abajo; más obligaba a arrastrar casi hasta el borde.
+ */
+const val FRACCION_PARA_CERRAR_ARRASTRANDO = 1f / 3f
+
+/** Soltarla bajando más rápido que esto la cierra aunque no haya llegado al umbral. */
+private val VELOCIDAD_PARA_CERRAR_ARRASTRANDO = 1_200.dp
+
+@Composable
+private fun rememberEstadoDeLaHoja(onDismiss: () -> Unit, dismissEnabled: Boolean): EstadoDeLaHoja {
+    val reducido = LocalMovimientoReducido.current
+    val alcance = rememberCoroutineScope()
+    val estado = remember { EstadoDeLaHoja(alcance, reducido) }
+    // Siempre el último: quien la abrió puede pasar una lambda nueva en cada recomposición.
+    estado.onDismiss = onDismiss
+    estado.dismissEnabled = dismissEnabled
+    estado.reducido = reducido
+    LaunchedEffect(estado) { estado.entrar() }
+    return estado
 }
 
 /**
@@ -175,9 +346,12 @@ fun MarcoDeHoja(
  *
  * El anfitrión lo pone `EsqueletoDeLaCascara` (App.kt) **encima de todo**: rail, márgenes y columna.
  * [MarcoDeHoja], en mediano y expandido, se anota acá en vez de dibujarse en su lugar; la hoja sigue
- * siendo parte del árbol (nada de `Dialog`/`Popup`), solo que de un punto más arriba. En el teléfono
- * no cambia nada: la hoja desde abajo se dibuja donde siempre. Sin anfitrión (una prueba que monta
- * una pantalla suelta) la hoja se dibuja en su lugar.
+ * siendo parte del árbol (nada de `Dialog`/`Popup`), solo que de un punto más arriba.
+ *
+ * Ola 1 · «Que Movi se sienta viva»: **la hoja del teléfono también**. Dibujada en la columna de la
+ * pantalla, la barra de pestañas quedaba visible —y tocable— debajo de cada hoja abierta. Ahora el
+ * velo y la hoja tapan la barra, y la hoja descuenta sola la barra de estado, la de navegación y el
+ * teclado. Sin anfitrión (una prueba que monta una pantalla suelta) la hoja se dibuja en su lugar.
  */
 class AnfitrionDeHojas {
     /** Una hoja anotada; [contenido] se actualiza en cada recomposición de quien la abrió. */
@@ -253,8 +427,32 @@ private fun HojaDesdeAbajo(
     conCierre: Boolean,
     relleno: PaddingValues,
     onTecla: ((KeyEvent) -> Boolean)?,
+    enLaCascara: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val estado = rememberEstadoDeLaHoja(onDismiss, dismissEnabled)
+    val densidad = LocalDensity.current
+    val umbralDeVelocidad = with(densidad) { VELOCIDAD_PARA_CERRAR_ARRASTRANDO.toPx() }
+    // **Arrastrarla hacia abajo la cierra**, desde la manija o desde el cuerpo, sin romper el scroll
+    // de adentro: una lista que todavía puede subir se queda con el gesto (y solo lo que le SOBRA
+    // —ya arriba de todo, el dedo sigue bajando— mueve la hoja), y con la hoja ya corrida, subir el
+    // dedo la devuelve antes de que la lista se mueva.
+    val conexion = remember(estado) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
+                if (estado.arrastre > 0f && available.y < 0f) Offset(0f, estado.arrastrar(available.y)) else Offset.Zero
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
+                if (estado.dedoAbajo && available.y > 0f) Offset(0f, estado.arrastrar(available.y)) else Offset.Zero
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (estado.arrastre <= 0f) return Velocity.Zero
+                estado.soltar(available.y, umbralDeVelocidad)
+                return available
+            }
+        }
+    }
+    val arrastrable = rememberDraggableState { delta -> estado.arrastrar(delta) }
     // El teclado físico en la hoja desde abajo (ver «Otras teclas» en [MarcoDeHoja]). Solo con
     // [onTecla] y teclado físico: si no, el panel no es destino de foco, como siempre.
     val onTecla = onTecla.takeIf { LocalHayTecladoFisico.current }
@@ -281,13 +479,8 @@ private fun HojaDesdeAbajo(
     if (onTecla != null) LaunchedEffect(Unit) { reclamarFoco() }
 
     @Composable
-    fun Velo(altoMaximo: Dp?) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
-                .clickable(enabled = dismissEnabled, onClick = onDismiss),
-        ) {
+    fun Columna(altoMaximo: Dp?) {
+        Column(modifier = Modifier.fillMaxSize()) {
             // El hueco de arriba empuja la hoja contra el borde de abajo. Un `Box(weight(1f))` y no
             // un `align`: la hoja se mide primero, con todo el alto, y el hueco se lleva lo que sobra.
             Box(modifier = Modifier.weight(1f))
@@ -295,26 +488,91 @@ private fun HojaDesdeAbajo(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (altoMaximo != null) Modifier.heightIn(max = altoMaximo) else Modifier)
+                    .onSizeChanged { estado.altoDelPanel = it.height }
+                    // Entra desde abajo y baja con el dedo. En la capa de dibujo: no mueve el layout
+                    // (las pruebas de geometría miden la hoja ya en su lugar).
+                    .graphicsLayer { translationY = (1f - estado.presencia.value) * size.height + estado.arrastre }
+                    .pointerInput(estado) {
+                        // Solo para saber si hay un dedo puesto: así lo que le sobra a una lista
+                        // de adentro mueve la hoja con el dedo, pero no con la rueda del mouse.
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            estado.dedoAbajo = true
+                            do {
+                                val evento = awaitPointerEvent(PointerEventPass.Initial)
+                            } while (evento.changes.any { it.pressed })
+                            estado.dedoAbajo = false
+                            estado.dedoSoltado(umbralDeVelocidad)
+                        }
+                    }
+                    .nestedScroll(conexion)
+                    .draggable(
+                        state = arrastrable,
+                        orientation = Orientation.Vertical,
+                        enabled = dismissEnabled,
+                        onDragStopped = { velocidad -> estado.soltar(velocidad, umbralDeVelocidad) },
+                    )
                     .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                     .background(Movi.colores.tarjeta)
                     .clickable(enabled = false) {}
                     .then(conTeclado)
+                    // En la cáscara la hoja llega hasta el borde de la ventana: su fondo pasa por
+                    // detrás de la barra de navegación del sistema y lo de adentro queda arriba de
+                    // ella. Con el teclado abierto esto da cero (el velo ya descontó el teclado).
+                    .then(if (enLaCascara) Modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)) else Modifier)
                     .padding(relleno)
                     .testTag(TAG_PANEL_DE_HOJA),
             ) {
-                if (conCierre) SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled)
+                if (conCierre) SheetHandleWithClose(onClose = estado::cerrar, enabled = dismissEnabled)
                 content()
             }
         }
     }
-    if (fraccionDeAltoMaximo == null) {
-        Velo(altoMaximo = null)
-    } else {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            Velo(altoMaximo = maxHeight * fraccionDeAltoMaximo)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            // El velo se oscurece a la par de la hoja: entra, sale y se aclara mientras se arrastra.
+            .drawBehind { drawRect(Color.Black.copy(alpha = OPACIDAD_DEL_VELO * estado.fraccionVisible())) }
+            .clickable(enabled = dismissEnabled && !estado.cerrando, onClick = estado::cerrar)
+            // Con el velo apagado (guardando) los toques tampoco pasan a la barra de abajo.
+            .tapaLoDeAbajo()
+            // En la cáscara (encima de la barra de pestañas, de borde a borde) la hoja descuenta sola
+            // la barra de estado y el teclado; antes se lo daba la columna de la pantalla
+            // (`statusBarsPadding` e `imePadding`). Montada suelta, como siempre.
+            .then(
+                if (enLaCascara) {
+                    Modifier.windowInsetsPadding(
+                        WindowInsets.statusBars.only(WindowInsetsSides.Top)
+                            .union(WindowInsets.ime.only(WindowInsetsSides.Bottom))
+                            .union(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
+                    )
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        if (fraccionDeAltoMaximo == null) {
+            Columna(altoMaximo = null)
+        } else {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                Columna(altoMaximo = maxHeight * fraccionDeAltoMaximo)
+            }
         }
     }
 }
+
+/**
+ * El velo es un destino de toques aunque no cierre nada (una hoja guardando): sin esto, con el
+ * `clickable` apagado un toque podía caer en la barra de pestañas o el rail de debajo.
+ */
+private fun Modifier.tapaLoDeAbajo(): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) awaitPointerEvent()
+    }
+}
+
+/** Qué tanto oscurece el velo con la hoja en su lugar. */
+private const val OPACIDAD_DEL_VELO = 0.6f
 
 @Composable
 private fun HojaCentrada(
@@ -324,10 +582,13 @@ private fun HojaCentrada(
     fraccionDeAltoMaximo: Float?,
     conCierre: Boolean,
     relleno: PaddingValues,
-    alEscape: () -> Unit,
+    onEscape: (() -> Unit)?,
     onTecla: ((KeyEvent) -> Boolean)?,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val hoja = rememberEstadoDeLaHoja(onDismiss, dismissEnabled)
+    // Sin [onEscape] propio, Escape es el toque afuera: sale animada (y respeta `dismissEnabled`).
+    val alEscape = onEscape ?: hoja::cerrar
     val foco = remember { FocusRequester() }
     val alcance = rememberCoroutineScope()
     // Ver el mismo reflejo en [HojaDesdeAbajo]: siempre el manejador de la última composición.
@@ -364,8 +625,10 @@ private fun HojaCentrada(
             // foco adentro, Escape no le llegaría a nadie mientras no se toque un campo.
             .focusRequester(foco)
             .focusable()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = dismissEnabled, onClick = onDismiss)
+            // El velo se oscurece a la par de la hoja (ver [EstadoDeLaHoja]).
+            .drawBehind { drawRect(Color.Black.copy(alpha = OPACIDAD_DEL_VELO * hoja.fraccionVisible())) }
+            .clickable(enabled = dismissEnabled && !hoja.cerrando, onClick = hoja::cerrar)
+            .tapaLoDeAbajo()
             .testTag(TAG_VELO_DE_HOJA)
             // El velo va de borde a borde; el panel, dentro de lo que dejan las barras del sistema
             // y el teclado (antes se lo daban la columna de la pantalla: `statusBarsPadding` e
@@ -383,13 +646,22 @@ private fun HojaCentrada(
                 .widthIn(max = anchoMaximo)
                 .fillMaxWidth()
                 .heightIn(max = maxHeight * fraccion)
+                // Entra fundiéndose y creciendo apenas (de 96 % a 100 %), sale al revés. Sin
+                // deslizar: una ventana en el centro no viene de ningún borde.
+                .graphicsLayer {
+                    val presencia = hoja.presencia.value
+                    alpha = presencia
+                    val escala = 0.96f + 0.04f * presencia
+                    scaleX = escala
+                    scaleY = escala
+                }
                 .clip(RoundedCornerShape(28.dp))
                 .background(Movi.colores.tarjeta)
                 .clickable(enabled = false) {}
                 .padding(relleno)
                 .testTag(TAG_PANEL_DE_HOJA),
         ) {
-            if (conCierre) SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled, conManija = false)
+            if (conCierre) SheetHandleWithClose(onClose = hoja::cerrar, enabled = dismissEnabled, conManija = false)
             content()
         }
     }

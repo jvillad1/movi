@@ -895,6 +895,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
     // Pantalla ancha: la rueda del mouse sobre los márgenes, a los lados de la columna, también
     // tiene que mover esta lista. Ver [ScrollDesdeLosMargenes].
     ScrollDesdeLosMargenes(listState)
+    // Re-tocar «Movimientos» estando acá vuelve arriba (ver [SubirAlRetocarLaPestana]).
+    SubirAlRetocarLaPestana(listState)
 
     var refreshKey by remember { mutableStateOf(0) }
     // **Lo último que se vio, al primer cuadro.** El perfil, la historia y las cuentas arrancan con
@@ -1444,9 +1446,15 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
             )
         }
 
+        // Tirar hacia abajo pide lo mismo que «Reintentar»: `refreshKey` (ver [TirarParaActualizar]).
+        TirarParaActualizar(
+            cargando = loading,
+            onActualizar = { refreshKey++ },
+            modifier = Modifier.weight(1f),
+        ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 60.dp),
         ) {
             // Task 7 puso una tarjeta de 6 filas sueltas; la Task 9 (ola B) la cambia por la forma
@@ -1675,6 +1683,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
                 }
             }
         }
+        } // TirarParaActualizar
 
     }
         },

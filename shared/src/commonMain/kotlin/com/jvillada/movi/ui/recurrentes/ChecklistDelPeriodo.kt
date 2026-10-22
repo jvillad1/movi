@@ -26,6 +26,11 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +46,10 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.Celebracion
 import com.jvillada.movi.ui.components.Cifra
+import com.jvillada.movi.ui.components.MomentoDeCelebracion
+import com.jvillada.movi.ui.components.rememberVibrador
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
@@ -112,6 +120,9 @@ import com.jvillada.movi.ui.dashboard.yaRecibidoEnElPeriodo
 /** El rótulo de la sección. Constante para que la pantalla y sus pruebas nombren lo mismo. */
 const val TITULO_CHECKLIST_DEL_PERIODO = "Pagos del período"
 
+/** Lo que dice la celebración cuando el dueño completa los pagos del período. */
+const val FRASE_DEL_CHECKLIST_COMPLETO = "¡Todo pagado! Ya salieron los pagos de este período."
+
 /** Los títulos de los grupos: los comparten Plan y el detalle de un período. */
 const val TITULO_FALTA_POR_PAGAR = "Falta por pagar"
 const val TITULO_YA_PAGASTE = "Ya pagaste"
@@ -165,7 +176,42 @@ fun SeccionChecklistDelPeriodo(
     planesDeCuotas: Map<String, PlanDelCredito> = emptyMap(),
     descartadas: Set<String> = emptySet(),
 ) {
-    val acciones = AccionesDelChecklist(onConfirmar, onNoFueEste, onAnotarMovimiento, onQuitarLaMarca)
+    // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
+    // Cuando el dueño completa la lista —pasa de «falta 1» a «todo pagado» por algo que hizo acá:
+    // tildar con «Sí, fue este» o anotar el pago—, una vez y en la transición (ver [Celebracion]).
+    // Abrir Plan con todo ya pagado no celebra. `rememberSaveable` porque la sección es un ítem de
+    // una lista perezosa: salir de la vista y volver no puede olvidar lo último que se supo.
+    var ultimoEstadoDeLaLista by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var huboAccion by rememberSaveable { mutableStateOf(false) }
+    var celebrar by rememberSaveable { mutableStateOf(false) }
+    val listaCompleta: Boolean? = when {
+        cargando || !pudoLeer || checklist.none { !it.esIngreso } -> null
+        else -> pagosPendientes(checklist).isEmpty()
+    }
+    LaunchedEffect(listaCompleta) {
+        val celebracion = Celebracion(ultimoEstadoDeLaLista)
+        if (celebracion.observar(listaCompleta, huboAccion)) {
+            celebrar = true
+            huboAccion = false
+        }
+        if (listaCompleta == false) celebrar = false
+        ultimoEstadoDeLaLista = celebracion.ultimoConocido
+    }
+    // Tildar vibra (ver [Vibrador]); anotar vibra al guardar, en «Agregar».
+    val vibrador = rememberVibrador()
+    val acciones = AccionesDelChecklist(
+        onConfirmar = { pago, eventId ->
+            huboAccion = true
+            vibrador.confirmar()
+            onConfirmar(pago, eventId)
+        },
+        onNoFueEste = onNoFueEste,
+        onAnotarMovimiento = { pago ->
+            huboAccion = true
+            onAnotarMovimiento(pago)
+        },
+        onQuitarLaMarca = onQuitarLaMarca,
+    )
 
     Column(modifier = modifier) {
         MinSectionHeader(
@@ -196,6 +242,10 @@ fun SeccionChecklistDelPeriodo(
                 padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
             ) {
                 val filas = FilasDelChecklist(marcando, descartadas, acciones, planesDeCuotas, onAbrir)
+                if (celebrar) {
+                    MomentoDeCelebracion(FRASE_DEL_CHECKLIST_COMPLETO)
+                    Spacer(Modifier.height(Movi.espacios.corto))
+                }
                 if (checklist.isNotEmpty()) {
                     ResumenDeLaLista(
                         izquierda = TITULO_FALTA_POR_PAGAR to faltaPorPagar(checklist),

@@ -147,6 +147,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     val estadoDeLaLista = rememberLazyListState()
     val estadoDelResumen = rememberLazyListState()
     ScrollDesdeLosMargenes(estadoDeLaLista)
+    // Re-tocar «Patrimonio» estando acá vuelve arriba, las dos columnas (ver [SubirAlRetocarLaPestana]).
+    SubirAlRetocarLaPestana(estadoDeLaLista, estadoDelResumen)
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // Ola W3: en pantalla ancha, el resumen a la izquierda y las cuentas a la derecha. El ancho

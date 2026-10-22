@@ -587,11 +587,18 @@ fun DashboardScreen(
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
             // `LocalCargandoElInicio`: el hero y «Pregúntale a Movi» solo reciben `data`, no
             // `loading` — ver su KDoc para el porqué (Task 7, fix round 1).
+            // Tirar hacia abajo pide lo mismo que el «Reintentar» del aviso de error: `refreshKey`
+            // (ver [TirarParaActualizar]). No es otra recarga.
             CompositionLocalProvider(LocalCargandoElInicio provides loading) {
+                TirarParaActualizar(
+                    cargando = loading,
+                    onActualizar = { refreshKey++ },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                ) {
                 SduiRenderer(
                     definition = screenDef ?: defaultDashboardDefinition(),
                     data = data,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier = Modifier.fillMaxSize(),
                     onNavigate = onNavigate,
                     header = if (showGuide) {
                         {
@@ -627,6 +634,7 @@ fun DashboardScreen(
                     // mismo estado, un solo `CreateAccountSheet` en esta pantalla.
                     onShowCreateSheet = { showCreateSheet = true },
                 )
+                } // TirarParaActualizar
             }
         }
 

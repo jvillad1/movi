@@ -25,6 +25,7 @@ import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
+import com.jvillada.movi.ui.components.SubirAlRetocarLaPestana
 import com.jvillada.movi.ui.components.ANCHO_DE_UNA_COLUMNA
 import com.jvillada.movi.ui.dashboard.columnasDelInicio
 import com.jvillada.movi.theme.*
@@ -97,6 +98,8 @@ fun SduiRenderer(
     val scroll = rememberScrollState()
     // La rueda del mouse sobre los márgenes mueve esta pantalla (ver [ScrollDesdeLosMargenes]).
     ScrollDesdeLosMargenes(scroll)
+    // Re-tocar «Hoy» estando en Hoy vuelve arriba (ver [SubirAlRetocarLaPestana]).
+    SubirAlRetocarLaPestana(scroll)
 
     BoxWithConstraints(modifier = modifier) {
         val columnas = columnasDelInicio(sections, maxWidth)
