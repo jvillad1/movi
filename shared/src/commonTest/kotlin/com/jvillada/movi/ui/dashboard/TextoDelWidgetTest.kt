@@ -13,6 +13,7 @@ import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.time.AppTimeZone
+import com.jvillada.movi.ui.components.PLATA_OCULTA
 import com.jvillada.movi.ui.components.formatCOP
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -99,6 +100,20 @@ class TextoDelWidgetTest {
 
         assertEquals(HERO_BALANCE_TITLE, texto.rotulo)
         assertEquals(formatCOP(0), texto.cifra)
+    }
+
+    @Test
+    fun `con los saldos ocultos la cifra sale tapada y el resto igual`() {
+        val aLaVista = textoDelWidget(instantanea, selladaEn = en(hoy, 9, 40), haySesion = true, ahora = ahora, saldosOcultos = false)
+        val ocultos = textoDelWidget(instantanea, selladaEn = en(hoy, 9, 40), haySesion = true, ahora = ahora, saldosOcultos = true)
+
+        assertEquals(PLATA_OCULTA, ocultos.cifra)
+        assertEquals(aLaVista.copy(cifra = PLATA_OCULTA), ocultos, "el rótulo, el pie y el color no cambian")
+        assertEquals(formatCOP(assertNotNull(teQuedanDelInicio(instantanea, hoy)).monto), aLaVista.cifra)
+
+        val sinIngresos = instantanea.copy(summary = instantanea.summary!!.copy(ingresos = 0))
+        assertEquals(PLATA_OCULTA, textoDelWidget(sinIngresos, en(hoy, 9, 40), haySesion = true, ahora = ahora, saldosOcultos = true).cifra)
+        assertNull(textoDelWidget(null, null, haySesion = true, ahora = ahora, saldosOcultos = true).cifra, "«Abre Movi» sigue igual")
     }
 
     @Test

@@ -56,6 +56,8 @@ import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
+import com.jvillada.movi.ui.components.OjoDeLosSaldos
+import com.jvillada.movi.ui.components.conCifrasOcultas
 import com.jvillada.movi.ui.components.StatusDot
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.formatCOP
@@ -262,7 +264,9 @@ internal fun HeroDeUnVistazo(
             )
         } else {
             // El rótulo viaja en el binario, no en la fila: ver [HERO_BALANCE_TITLE].
-            Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+            RotuloConElOjo {
+                Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+            }
             val rangoDelPeriodo = encabezadoDelPeriodo(data)
             if (rangoDelPeriodo != null) {
                 Text(
@@ -425,10 +429,12 @@ private fun CabeceraTeQuedan(
     onAlternarDesglose: () -> Unit,
     onNavigate: (Screen) -> Unit,
 ) {
-    if (teQuedan != null) {
-        Text(text = teQuedan.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-    } else {
-        LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.cuerpo)
+    RotuloConElOjo {
+        if (teQuedan != null) {
+            Text(text = teQuedan.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+        } else {
+            LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.cuerpo)
+        }
     }
     // Sin «· quedan N días»: los días los dice la línea de abajo, contados como los cuenta el
     // Disponible (hoy incluido). Dos conteos distintos a dos renglones serían otra contradicción.
@@ -480,6 +486,19 @@ private fun CabeceraTeQuedan(
                 FilaDeCuentaDelHero(cuenta, modifier = Modifier.padding(bottom = Movi.espacios.minimo))
             }
         }
+    }
+}
+
+/**
+ * **El rótulo del héroe con el ojo de «Ocultar los saldos» al final de su línea** (junto a «Te
+ * quedan» o «Tu plata»). El ojo va siempre, también mientras el rótulo es un esqueleto: aparecer
+ * después movería la línea.
+ */
+@Composable
+private fun RotuloConElOjo(rotulo: @Composable () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.weight(1f)) { rotulo() }
+        OjoDeLosSaldos()
     }
 }
 
@@ -731,7 +750,9 @@ internal fun PreguntaleAMoviSection(
                 }
             } else {
                 preguntas.forEachIndexed { i, pregunta ->
-                    FilaDePregunta(pregunta.texto) {
+                    // Se pinta con las cifras tapadas si los saldos están ocultos, pero viaja
+                    // entera: Movi AI tiene que saber de qué cifra se le pregunta.
+                    FilaDePregunta(conCifrasOcultas(pregunta.texto)) {
                         onNavigate(Screen.AIChat(preguntaInicial = pregunta.texto, sugerida = pregunta.sugerida?.id))
                     }
                     if (i < preguntas.lastIndex) Hairline()

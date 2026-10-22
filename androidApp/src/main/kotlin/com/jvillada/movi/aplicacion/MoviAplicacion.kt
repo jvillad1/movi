@@ -1,6 +1,7 @@
 package com.jvillada.movi.aplicacion
 
 import android.app.Application
+import com.jvillada.movi.data.SaldosOcultosStore
 import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
 import com.jvillada.movi.widget.WidgetTeQuedan
 
@@ -17,5 +18,8 @@ class MoviAplicacion : Application() {
         super.onCreate()
         val contexto = applicationContext
         InstantaneaDelInicio.alCambiar = { WidgetTeQuedan.pintarTodos(contexto) }
+        // «Ocultar los saldos»: el widget pinta la misma cifra que el héroe, así que también se
+        // tapa (o se destapa) en el acto.
+        SaldosOcultosStore.alCambiar = { WidgetTeQuedan.pintarTodos(contexto) }
     }
 }

@@ -2,7 +2,9 @@ package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.shared.time.epochMillisToAppDate
-import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.data.SaldosOcultosStore
+import com.jvillada.movi.ui.components.PLATA_OCULTA
+import com.jvillada.movi.ui.components.formatCOPSinOcultar
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import kotlinx.datetime.Instant
 import kotlinx.datetime.toLocalDateTime
@@ -50,25 +52,30 @@ const val WIDGET_PARA_VER_CUANTO_TE_QUEDA: String = "para ver cuánto te queda"
  * @param selladaEn cuándo se guardó (epoch ms), o `null` si la guardó una versión que no lo anotaba.
  * @param haySesion sin sesión no se muestra nada aunque quede algo guardado.
  * @param ahora el reloj, para el período vigente y para el «ayer».
+ * @param saldosOcultos «Ocultar los saldos» ([SaldosOcultosStore]): la cifra sale como
+ *   [PLATA_OCULTA], igual que en el héroe. El rótulo y el pie no cambian; el rojo de «Te pasaste
+ *   por» tampoco, porque el rótulo ya lo dice.
  */
 fun textoDelWidget(
     instantanea: DashboardData?,
     selladaEn: Long?,
     haySesion: Boolean,
     ahora: Long,
+    saldosOcultos: Boolean = SaldosOcultosStore.ocultos,
 ): TextoDelWidget {
+    fun cifra(monto: Long) = if (saldosOcultos) PLATA_OCULTA else formatCOPSinOcultar(monto)
     val abreMovi = TextoDelWidget(WIDGET_ABRE_MOVI, null, WIDGET_PARA_VER_CUANTO_TE_QUEDA)
     if (!haySesion || instantanea == null) return abreMovi
     val hoy = epochMillisToAppDate(ahora)
     val data = instantanea.conElPeriodoDe(ahora)
     val pie = selladaEn?.let { deCuandoEs(it, ahora) } ?: "Toca para actualizar"
     teQuedanDelInicio(data, hoy)?.let { t ->
-        return TextoDelWidget(t.rotulo, formatCOP(t.monto), pie, enRojo = t.enRojo)
+        return TextoDelWidget(t.rotulo, cifra(t.monto), pie, enRojo = t.enRojo)
     }
     val cuentas = data.accounts ?: return abreMovi
     // Con lo apartado, como el hero de Hoy: si no, el widget diría el colegio como plata libre.
     val tuPlata = heroBalance(cuentas, data.apartados.orEmpty()).tuPlata
-    return TextoDelWidget(HERO_BALANCE_TITLE, formatCOP(tuPlata), pie, enRojo = tuPlata < 0)
+    return TextoDelWidget(HERO_BALANCE_TITLE, cifra(tuPlata), pie, enRojo = tuPlata < 0)
 }
 
 /**

@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.PreferenciaDeTema
 import com.jvillada.movi.data.TemaStore
+import com.jvillada.movi.data.SaldosOcultosStore
 import com.jvillada.movi.data.Repositories
 import kotlinx.coroutines.launch
 import com.jvillada.movi.data.SessionManager
@@ -292,6 +293,48 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                                 modifier = Modifier.semantics { selected = elegida },
                             )
                         }
+                    }
+                    // «Ocultar los saldos»: lo mismo que el ojo del héroe de Hoy, para quien lo
+                    // busque acá. También es de este aparato, como el tema.
+                    Spacer(Modifier.height(10.dp))
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                    ) {
+                        val ocultos = LocalSaldosOcultos.current
+                        CardRow(
+                            left = {
+                                Column {
+                                    Text(
+                                        ROTULO_OCULTAR_LOS_SALDOS,
+                                        style = Movi.textos.titulo,
+                                        color = Movi.colores.texto,
+                                    )
+                                    Text(
+                                        text = "Tus cifras se ven como $PLATA_OCULTA en este aparato. " +
+                                            "También con el ojo de Hoy.",
+                                        style = Movi.textos.apoyo,
+                                        color = Movi.colores.textoMedio,
+                                    )
+                                }
+                            },
+                            right = {
+                                Switch(
+                                    checked = ocultos,
+                                    onCheckedChange = { SaldosOcultosStore.poner(it) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Movi.colores.sobreMarca,
+                                        checkedTrackColor = Movi.colores.marca,
+                                        uncheckedThumbColor = Movi.colores.textoApagado,
+                                        uncheckedTrackColor = Movi.colores.tarjeta,
+                                        uncheckedBorderColor = Movi.colores.borde,
+                                    ),
+                                )
+                            },
+                            isLast = true,
+                            onClick = { SaldosOcultosStore.alternar() },
+                        )
                     }
                 }
             }

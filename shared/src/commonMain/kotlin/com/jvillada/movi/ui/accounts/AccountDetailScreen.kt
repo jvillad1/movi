@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.accounts
 
+import com.jvillada.movi.data.SaldosOcultosStore
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -100,7 +102,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
      * explicación de más, no un dato sin el cual la pantalla mienta.
      */
     var condiciones by remember { mutableStateOf<CreditTerms?>(null) }
-    val lineasDeLaCuota = remember(days, condiciones) {
+    // Con «Ocultar los saldos» en la llave: son textos con plata adentro, y guardados con la cifra
+    // a la vista no se taparían al tocar el ojo.
+    val lineasDeLaCuota = remember(days, condiciones, SaldosOcultosStore.ocultos) {
         val terms = condiciones
         if (terms == null) {
             emptyMap()

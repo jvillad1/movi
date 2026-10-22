@@ -6,7 +6,7 @@ import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.planDelCredito
 import com.jvillada.movi.shared.model.resumirDeudas
-import com.jvillada.movi.ui.components.formatMoneyCompact
+import com.jvillada.movi.ui.components.formatMoneyCompactSinOcultar
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe
 import com.jvillada.movi.ui.dashboard.faltaPorPagar
@@ -158,7 +158,7 @@ private fun candidatasDe(senales: SenalesParaPreguntar): List<Candidata> =
         val plata = senales.tuPlata
         if (falta != null && falta > 0L && plata != null) {
             val peso = if (falta > plata) 95 else 40
-            add(Candidata("¿Me alcanza para los ${formatMoneyCompact(falta)} que me faltan por pagar este período?", peso))
+            add(Candidata("¿Me alcanza para los ${formatMoneyCompactSinOcultar(falta)} que me faltan por pagar este período?", peso))
         }
         senales.presupuestoMasPasado?.let {
             add(Candidata("¿Qué hago para no pasarme en ${it.categoria} el próximo período?", 90))
@@ -166,14 +166,14 @@ private fun candidatasDe(senales: SenalesParaPreguntar): List<Candidata> =
         val entro = senales.ingresosDelPeriodo
         val salio = senales.gastosDelPeriodo
         if (entro != null && salio != null && salio > entro) {
-            add(Candidata("¿Por qué este período salieron ${formatMoneyCompact(salio - entro)} más de los que entraron?", 85))
+            add(Candidata("¿Por qué este período salieron ${formatMoneyCompactSinOcultar(salio - entro)} más de los que entraron?", 85))
         }
         val intereses = senales.interesesPropiosAlMes
         val umbral = entro?.takeIf { it > 0L }
             ?.let { minOf(INTERESES_QUE_YA_PESAN, it / PARTE_DE_LOS_INGRESOS_EN_INTERESES) }
             ?: INTERESES_QUE_YA_PESAN
         if (intereses > 0L && intereses >= umbral) {
-            add(Candidata("Pago ${formatMoneyCompact(intereses)} de intereses al mes, ¿qué hago para bajarlo?", 70))
+            add(Candidata("Pago ${formatMoneyCompactSinOcultar(intereses)} de intereses al mes, ¿qué hago para bajarlo?", 70))
         }
         // Con una sola tasa no hay nada que elegir; con dos distintas, cuál abonar primero es LA
         // pregunta de quien tiene varias deudas.

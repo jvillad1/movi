@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.extractos
 
+import com.jvillada.movi.ui.components.conCifrasOcultas
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -108,14 +110,14 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
                 Text("EL EXTRACTO DICE", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    fraseDelExtractoDeSaldo(resumen, elegida),
+                    conCifrasOcultas(fraseDelExtractoDeSaldo(resumen, elegida)),
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.texto,
                     lineHeight = 20.sp,
                 )
                 renglonesDeLosContratos(resumen).forEach { renglon ->
                     Text(
-                        "· $renglon",
+                        conCifrasOcultas("· $renglon"),
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.padding(top = 4.dp),
@@ -218,7 +220,7 @@ private fun OpcionDeCuenta(opcion: CuentaParaElSaldo, elegida: Boolean, habilita
         Column(Modifier.weight(1f)) {
             Text(opcion.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1)
             Text(
-                "Movi tiene $" + conPuntosDeMiles(opcion.saldoEnMovi),
+                conCifrasOcultas("Movi tiene $" + conPuntosDeMiles(opcion.saldoEnMovi)),
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )

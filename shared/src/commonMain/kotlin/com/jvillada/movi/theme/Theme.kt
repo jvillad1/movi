@@ -1,5 +1,8 @@
 package com.jvillada.movi.theme
 
+import com.jvillada.movi.data.SaldosOcultosStore
+import com.jvillada.movi.ui.components.LocalSaldosOcultos
+
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -67,6 +70,9 @@ fun MoviTheme(oscuro: Boolean = true, content: @Composable () -> Unit) {
         LocalEspacios provides EspaciosDeMovi(),
         LocalFormas provides FormasDeMovi(),
         LocalTextos provides TextosDeMovi().conFamilias(interfaz, cifras),
+        // «Ocultar los saldos»: acá y no en App() para que toda pantalla montada con el tema —la
+        // app, y cada prueba— lo vea. Es `mutableStateOf`: alternarlo recompone lo que lo lee.
+        LocalSaldosOcultos provides SaldosOcultosStore.ocultos,
     ) {
         MaterialTheme(
             colorScheme = esquemaDe(colores, oscuro),

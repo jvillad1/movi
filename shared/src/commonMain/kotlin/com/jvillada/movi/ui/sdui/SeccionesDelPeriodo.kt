@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.sdui
 
+import com.jvillada.movi.ui.components.conCifrasOcultas
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -493,8 +495,8 @@ private fun FilaDeAnomalia(anomalia: Anomalia, onDescartar: () -> Unit) {
                 .background(Movi.colores.aviso),
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = anomalia.titulo, style = Movi.textos.cuerpo, color = Movi.colores.texto)
-            Text(text = anomalia.detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            Text(text = conCifrasOcultas(anomalia.titulo), style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            Text(text = conCifrasOcultas(anomalia.detalle), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             if (verEvidencia) {
                 Spacer(Modifier.height(Movi.espacios.corto))
                 anomalia.evidencia.forEach { e ->
@@ -544,11 +546,11 @@ private fun FilaParaRevisar(cosa: CosaParaRevisar, onClick: () -> Unit) {
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = cosa.texto,
+                text = conCifrasOcultas(cosa.texto),
                 style = Movi.textos.cuerpo,
                 color = if (cosa.urgente) Movi.colores.aviso else Movi.colores.texto,
             )
-            Text(text = cosa.detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            Text(text = conCifrasOcultas(cosa.detalle), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
     }
 }

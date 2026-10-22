@@ -6,7 +6,7 @@ import com.jvillada.movi.shared.model.nombreDelOrigenDeCaptura
 import com.jvillada.movi.shared.model.OrigenMudo
 import com.jvillada.movi.shared.model.queNoLlega
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.formatCOPSinOcultar
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.shared.time.epochMillisToAppDate
@@ -59,12 +59,12 @@ fun origenParaElAviso(origen: String): String? = nombreDelOrigenDeCaptura(origen
 fun montoParaElAviso(monto: Double, moneda: String): String = when (moneda) {
     "USD" -> {
         val centavos = (abs(monto) * 100).roundToLong()
-        val enteros = formatCOP(centavos / 100).removePrefix("$")
+        val enteros = formatCOPSinOcultar(centavos / 100).removePrefix("$")
         val resto = centavos % 100
         "US$" + enteros + if (resto == 0L) "" else "," + resto.toString().padStart(2, '0')
     }
-    "COP" -> formatCOP(abs(monto).roundToLong())
-    else -> "$moneda ${formatCOP(abs(monto).roundToLong()).removePrefix("$")}"
+    "COP" -> formatCOPSinOcultar(abs(monto).roundToLong())
+    else -> "$moneda ${formatCOPSinOcultar(abs(monto).roundToLong()).removePrefix("$")}"
 }
 
 private fun lineaDe(aviso: AvisoPorRevisar): String =
