@@ -126,6 +126,35 @@ fun ofrecerHuellaTrasEntrar(
 // Los textos viven acá y no en la pantalla para que las pruebas afirmen lo que el dueño lee,
 // y no una constante que podría decir otra cosa. Los tres nombran las DOS salidas: el dedo otra
 // vez, o la contraseña. Ninguna pantalla puede quedar sin camino.
+/**
+ * **Cuánto tiempo puede pasar Movi en segundo plano sin volver a pedir la huella**: más de 5
+ * minutos afuera, y al volver se pide otra vez (si la puerta está activa). Menos que eso es
+ * contestar un mensaje o copiar un número: pedir el dedo ahí sería un castigo.
+ */
+const val MS_EN_SEGUNDO_PLANO_PARA_PEDIR_LA_HUELLA: Long = 5 * 60 * 1000L
+
+/**
+ * **¿Hay que volver a pedir la huella al volver del segundo plano?**
+ *
+ * La puerta de arranque ([decidirArranque]) solo corre al abrir la app en frío. Sin esto, Movi
+ * dejada abierta en segundo plano volvía con la plata a la vista horas después. Ahora: con sesión,
+ * con la puerta activa y **más de** [umbralMs] afuera, sí. Un reloj que fue para atrás (el dueño
+ * cambió la hora) no cuenta como tiempo afuera.
+ *
+ * Qué se pide al volver (el dedo, o la contraseña si el teléfono ya no tiene huellas) lo decide
+ * después [decidirArranque], igual que al abrir.
+ *
+ * @param fueraDesde cuándo pasó a segundo plano (epoch ms), o `null` si no se sabe.
+ * @param ahora cuándo volvió.
+ */
+fun pedirLaHuellaAlVolver(
+    fueraDesde: Long?,
+    ahora: Long,
+    haySesion: Boolean,
+    huellaActivada: Boolean,
+    umbralMs: Long = MS_EN_SEGUNDO_PLANO_PARA_PEDIR_LA_HUELLA,
+): Boolean = haySesion && huellaActivada && fueraDesde != null && ahora - fueraDesde > umbralMs
+
 const val MENSAJE_CANCELADA =
     "Cancelaste la huella. Puedes ponerla otra vez o entrar con tu contraseña."
 const val MENSAJE_SIN_REGISTRAR =

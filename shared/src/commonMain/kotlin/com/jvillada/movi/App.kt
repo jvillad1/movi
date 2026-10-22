@@ -63,6 +63,9 @@ import com.jvillada.movi.ui.opensAsOverlay
 import com.jvillada.movi.ui.screenForTab
 import com.jvillada.movi.ui.destinoVigente
 import com.jvillada.movi.ui.auth.LoginScreen
+import com.jvillada.movi.ui.auth.AlVolverDelSegundoPlano
+import com.jvillada.movi.ui.auth.PuertaAlVolver
+import com.jvillada.movi.data.pedirLaHuellaAlVolver
 import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.ai.AIChatScreen
 import com.jvillada.movi.ui.plan.PlanScreen
@@ -299,6 +302,40 @@ fun App() {
                 }
             }
 
+            // **La puerta al volver** (Android, con «Entrar con huella»): la de arriba solo corre al
+            // abrir en frío. Si Movi estuvo más de 5 minutos en segundo plano, se pide el dedo otra
+            // vez —o la contraseña, si el teléfono ya no tiene huellas— al volver. Ver
+            // [pedirLaHuellaAlVolver] y [PuertaAlVolver]: tapa todo sin mover la pila, así que con
+            // el dedo el dueño sigue donde estaba.
+            var puertaAlVolver by remember { mutableStateOf(false) }
+            val alLoginConLaSesion: () -> Unit = {
+                puertaAlVolver = false
+                quickAdd = null
+                hojaRecurrentePrellenada = null
+                ofrecimientoRecurrente = null
+                papelesALeer = null
+                backStack.clear()
+                backStack.add(Screen.Login)
+            }
+            if (huella != null) {
+                AlVolverDelSegundoPlano { fueraDesde, ahora ->
+                    val enLaPuerta = backStack.lastOrNull()?.let { NavStack.esDeAutenticacion(it) } ?: true
+                    if (!enLaPuerta && pedirLaHuellaAlVolver(
+                            fueraDesde = fueraDesde,
+                            ahora = ahora,
+                            haySesion = SessionManager.isLoggedIn,
+                            huellaActivada = SessionManager.huellaActivada,
+                        )
+                    ) {
+                        when (decidirArranque(SessionManager.isLoggedIn, SessionManager.huellaActivada, huella.estado())) {
+                            ArranqueDeSesion.PEDIR_HUELLA -> puertaAlVolver = true
+                            ArranqueDeSesion.PEDIR_CONTRASENA -> alLoginConLaSesion()
+                            ArranqueDeSesion.SIN_PUERTA -> Unit
+                        }
+                    }
+                }
+            }
+
             val saveableStateHolder = rememberSaveableStateHolder()
             // El fondo va de borde a borde en toda ventana. La clase de ancho se decide UNA vez,
             // acá ([CascaraDeAncho]), y le llega a toda la app por `LocalWindowWidthClass`; el
@@ -517,6 +554,14 @@ fun App() {
                 }
                 } // EsqueletoDeLaCascara (el hueco de la pantalla)
                 } // CompositionLocalProvider
+                // Encima de todo, la puerta al volver (ver arriba).
+                if (puertaAlVolver && huella != null && SessionManager.loggedIn) {
+                    PuertaAlVolver(
+                        huella = huella,
+                        onAbierta = { puertaAlVolver = false },
+                        onConContrasena = alLoginConLaSesion,
+                    )
+                }
             }
         }
     }
