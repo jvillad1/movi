@@ -114,36 +114,36 @@ internal fun GastoPorCategoriaSection(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
 ) {
-    var todas by rememberSaveable { mutableStateOf(false) }
     val gasto = data.spentByCategory.orEmpty()
     val presupuestos = data.budgets.orEmpty()
     val categorias = categoriasDelPeriodo(
         gastoPorCategoria = gasto,
         presupuestos = presupuestos,
-        cuantas = if (todas) Int.MAX_VALUE else CATEGORIAS_EN_EL_INICIO,
+        cuantas = CATEGORIAS_EN_EL_INICIO,
         // «vs. período pasado»: contra los mismos días del anterior (ver `anteriorAMismaAltura`).
         gastoDelAnterior = data.gastoDelAnterior,
     )
     // Sin gasto no se pinta nada: una sección vacía que dice «$0» ocupa el mismo lugar que una con
     // información y no dice nada. Mismo criterio que ALERTS.
     if (categorias.isEmpty()) return
-    val hayMas = gasto.count { it.value > 0 } > CATEGORIAS_EN_EL_INICIO + 1
     val entrada = rememberProgresoDeEntrada("categorias")
+    // Ola 4 · Ver la plata: «Ver todas» y la tarjeta entera abren «En qué se va», con el gráfico del
+    // período y la lista entera por categoría, comercio o cuenta (antes «Ver todas» desplegaba acá
+    // mismo las categorías que faltaban).
+    val abrirElAnalisis = { onNavigate(Screen.EnQueSeVa()) }
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         MinSectionHeader(
             title = section.title ?: "En qué se va",
-            action = when {
-                !hayMas -> "Ver movimientos"
-                todas -> "Ver menos"
-                else -> "Ver todas"
-            },
-            onAction = { if (hayMas) todas = !todas else onNavigate(Screen.Transactions()) },
+            action = "Ver todas",
+            onAction = abrirElAnalisis,
         )
         MinCard(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_EN_QUE_SE_VA),
             variant = MinCardVariant.Elevated,
             padding = PaddingValues(Movi.espacios.margen),
+            onClick = abrirElAnalisis,
+            onClickLabel = "Ver en qué se va",
         ) {
             categorias.forEachIndexed { i, categoria ->
                 FilaDeCategoria(categoria, entrada)
@@ -157,6 +157,9 @@ internal fun GastoPorCategoriaSection(
         }
     }
 }
+
+/** El tag de la tarjeta de «En qué se va» en Hoy, que abre el análisis del período. */
+const val TAG_TARJETA_EN_QUE_SE_VA: String = "tarjeta-en-que-se-va"
 
 /** Una categoría con su barra. `internal` porque el detalle de un período la reusa tal cual. */
 @Composable
