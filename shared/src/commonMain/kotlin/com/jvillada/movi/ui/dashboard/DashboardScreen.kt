@@ -641,6 +641,9 @@ fun DashboardScreen(
                     // El hero vacío abre la MISMA hoja que «Primeros pasos» —
                     // mismo estado, un solo `CreateAccountSheet` en esta pantalla.
                     onShowCreateSheet = { showCreateSheet = true },
+                    // Ola 3: qué secciones se ven y en qué orden lo elige el dueño (ver
+                    // [EditarInicioScreen]). Al final, siempre, para no competir con lo que Hoy dice.
+                    footer = { BotonEditarInicio { onNavigate(Screen.EditarInicio) } },
                 )
                 } // TirarParaActualizar
             }

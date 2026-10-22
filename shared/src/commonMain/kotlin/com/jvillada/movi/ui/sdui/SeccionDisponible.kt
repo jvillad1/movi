@@ -80,7 +80,11 @@ internal fun DisponibleDelPeriodoSection(
 ) {
     val disponible = disponibleDelInicio(data, hoy) ?: return
     Column {
-        TarjetaDelDisponible(titulo = section.title ?: "Disponible", disponible = disponible)
+        // Ola 3 · Hoy en una mirada: sin la frase. «Te quedan $X para N días · meta diaria $Y» (o
+        // la que mande: te pasaste, sin margen…) ya la dice el héroe de arriba con la MISMA cuenta
+        // (`teQuedanDeHoy` sobre el mismo `disponibleDelInicio`), y la sección solo se pinta cuando
+        // el héroe la tiene. En Hoy quedan la cifra y las tres columnas; en Plan, la frase sigue.
+        TarjetaDelDisponible(titulo = section.title ?: "Disponible", disponible = disponible, conFrase = false)
         // Después de cuánto puedes gastar, cómo llegas al cierre: el día más justo de la caja
         // proyectada de Plan, con la MISMA cuenta (ver `CajaEnHoy`).
         Spacer(Modifier.height(Movi.espacios.medio))
@@ -114,6 +118,8 @@ internal fun TarjetaDelDisponible(
     titulo: String,
     disponible: DisponibleDelPeriodo?,
     modifier: Modifier = Modifier,
+    // La frase de [fraseDelDisponible]. Hoy la saca: la dice su héroe (ver [DisponibleDelPeriodoSection]).
+    conFrase: Boolean = true,
 ) {
     val entrada = rememberProgresoDeEntrada("disponible", listo = disponible != null)
     var verDeDondeSale by rememberSaveable { mutableStateOf(false) }
@@ -136,14 +142,14 @@ internal fun TarjetaDelDisponible(
             if (disponible == null) {
                 CuerpoDelDisponibleEsqueleto()
             } else {
-                CuerpoDelDisponible(disponible, verDeDondeSale, entrada)
+                CuerpoDelDisponible(disponible, verDeDondeSale, entrada, conFrase)
             }
         }
     }
 }
 
 @Composable
-private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale: Boolean, entrada: Float) {
+private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale: Boolean, entrada: Float, conFrase: Boolean) {
     val frase = fraseDelDisponible(disponible)
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -158,8 +164,10 @@ private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale
             color = if (disponible.hayMargen) Movi.colores.texto else Movi.colores.sale,
         )
     }
-    Spacer(Modifier.height(Movi.espacios.minimo))
-    Text(text = frase.texto, style = Movi.textos.apoyo, color = colorDeLaFrase(frase.nivel))
+    if (conFrase) {
+        Spacer(Modifier.height(Movi.espacios.minimo))
+        Text(text = frase.texto, style = Movi.textos.apoyo, color = colorDeLaFrase(frase.nivel))
+    }
     if (verDeDondeSale) {
         Spacer(Modifier.height(Movi.espacios.minimo))
         // «Tenías $X el 25 · entraron $Y» y abajo los fijos: dos líneas cortas y no una

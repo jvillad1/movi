@@ -157,6 +157,7 @@ class NavStackTest {
         Screen.Documentos to null,
         Screen.Compartir to null,
         Screen.LoQueMoviSabe to null,
+        Screen.EditarInicio to null,
         Screen.BorrarLaCuenta to null,
         Screen.AIChat() to null,
         Screen.CapturaDelBanco to null,
@@ -194,7 +195,7 @@ class NavStackTest {
     fun `Ajustes no marca pestana pero sigue con la barra abajo`() {
         listOf(Screen.Mas, Screen.Profile, Screen.Categorias, Screen.Documentos, Screen.Compartir,
             Screen.AIChat(), Screen.CapturaDelBanco, Screen.PrimerosPasos, Screen.LoQueMoviSabe,
-            Screen.BorrarLaCuenta)
+            Screen.BorrarLaCuenta, Screen.EditarInicio)
             .forEach {
                 assertNull(navTabFor(it), "$it")
                 assertTrue(esDeAjustes(it), "$it")

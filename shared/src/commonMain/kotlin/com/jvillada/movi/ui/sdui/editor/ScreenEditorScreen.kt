@@ -164,7 +164,8 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
         loading = true
         error = null
         try {
-            val def = Repositories.wallets.getScreen(SLUG)
+            // Sin la preferencia del dueño («Editar inicio»): esto edita el Hoy de todos.
+            val def = Repositories.wallets.getScreenParaEditar(SLUG)
             sections = def?.sections ?: emptyList()
         } catch (e: Throwable) {
             error = e.toScreenSaveMessage()

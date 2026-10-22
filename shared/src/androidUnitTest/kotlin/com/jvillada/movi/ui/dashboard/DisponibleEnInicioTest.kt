@@ -144,9 +144,10 @@ class DisponibleEnInicioTest {
 
         composeRule.onNodeWithText("DISPONIBLE", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("\$6,9M", useUnmergedTree = true).assertIsDisplayed()
-        // Quedan $6,8M para 4 días, hoy incluido. Una frase para la tarjeta, sin «vas bien», y la
-        // cifra diaria es la meta de la columna «Hoy» ($222.580), no lo que queda repartido.
-        composeRule.onNodeWithText("Te quedan \$6,8M para 4 días · meta diaria \$222.580", useUnmergedTree = true).assertIsDisplayed()
+        // Ola 3 · Hoy en una mirada: la frase «Te quedan $6,8M para 4 días · meta diaria $222.580»
+        // ya no va en la sección de Hoy: la dice el héroe, con la misma cuenta
+        // (`TeQuedanEnHoyEnPantallaTest`). La frase sigue en Plan; la regla, en `fraseDelDisponible`.
+        composeRule.onNodeWithText("Te quedan \$6,8M para 4 días · meta diaria \$222.580", useUnmergedTree = true).assertDoesNotExist()
         // Las tres columnas: el período, la semana (cortada a 4 días por el fin del período) y hoy.
         // Cada una dice lo que te queda en grande: $6,9M − $150.000, $890.320 − $150.000 y
         // $222.580 − $150.000. Y lo gastado chico, que en las tres es lo de hoy.
@@ -178,8 +179,9 @@ class DisponibleEnInicioTest {
     fun `con el periodo pasado dice una sola cosa y no vas bien`() {
         montar(datos(ingresos = 10_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-01" to 8_000_000L)))
 
+        // La frase la dice el héroe (Ola 3); acá quedan las columnas.
         composeRule.onNodeWithText("Te pasaste del disponible del período por \$1,1M", useUnmergedTree = true)
-            .assertIsDisplayed()
+            .assertDoesNotExist()
         // Te pasaste: al período le queda $6,9M − $8M, en rojo — la misma cifra que la frase.
         assertCifras("−\$1,1M", 1, rojo)
         assertGastaste("\$8M", 1)
@@ -203,10 +205,11 @@ class DisponibleEnInicioTest {
         assertCifras("\$590.320", 1, normal)
         assertCifras("\$6,6M", 1, normal)
         assertGastaste("\$300.000", 3)
+        // La frase la dice el héroe (Ola 3); acá quedan las columnas.
         composeRule.onNodeWithText(
             "Hoy te pasaste de la meta por \$77.420 · a la semana le quedan \$590.320",
             useUnmergedTree = true,
-        ).assertIsDisplayed()
+        ).assertDoesNotExist()
         assertEquals(3, barras())
     }
 
@@ -234,10 +237,11 @@ class DisponibleEnInicioTest {
     fun `sin margen lo dice y no promete un disponible`() {
         montar(datos(ingresos = 2_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-21" to 90_000L)))
 
+        // «Los fijos del período superan tus ingresos por $1,1M» la dice el héroe (Ola 3).
         composeRule.onNodeWithText(
             "Los fijos del período superan tus ingresos por \$1,1M",
             useUnmergedTree = true,
-        ).assertIsDisplayed()
+        ).assertDoesNotExist()
         // Sin margen la meta de cada ventana es cero, y lo que queda es menos lo gastado: las tres
         // columnas lo siguen diciendo —en rojo, porque ya gastaste algo sin tener de dónde— con lo
         // gastado abajo. Lo que se va es la barra: contra cero no hay nada que medir.
@@ -254,7 +258,7 @@ class DisponibleEnInicioTest {
         montar(datos(ingresos = 2_000_000, arriendo = 3_100_000, gasto = emptyMap()))
 
         composeRule.onNodeWithText("Los fijos del período superan tus ingresos por \$1,1M", useUnmergedTree = true)
-            .assertIsDisplayed()
+            .assertDoesNotExist()
         assertCifras("\$0", 3, normal)
         assertGastaste("\$0", 3)
         assertEquals(0, barras())

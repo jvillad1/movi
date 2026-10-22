@@ -59,6 +59,14 @@ object ScreenTaxonomy {
         // la generación 8 conserva el BANNER de Movi AI al final (ver `DASHBOARD_LAYOUT_VERSION`).
         "PREGUNTALE_A_MOVI", "PATRIMONIO",
     )
+
+    /**
+     * Tipos **personales**: los produce el server al aplicar la preferencia del dueño («Editar
+     * inicio», ver `inicioConPreferencias`) y nunca van en la definición global. Por eso no están en
+     * [SECTION_TYPES] —el Editor de pantallas no los ofrece y `validateDefinition` los rechaza— pero
+     * `renderableSections` sí los deja pasar. Un APK anterior no los conoce y los descarta.
+     */
+    val TIPOS_PERSONALES = listOf(PARA_REVISAR_COMPACTO)
     val ACTION_TYPES = listOf("NAVIGATE", "OPEN_URL")
     // "analisis" salió en la Ola 4 (F40): la pantalla Análisis se fundió en el Inicio.
     // "investments" se queda (F61): ya no hay pantalla Inversiones, pero una definición guardada
@@ -98,7 +106,7 @@ object ScreenTaxonomy {
  */
 fun renderableSections(def: ScreenDefinition): List<ScreenSection> =
     def.sections
-        .filter { it.type in ScreenTaxonomy.SECTION_TYPES }
+        .filter { it.type in ScreenTaxonomy.SECTION_TYPES || it.type in ScreenTaxonomy.TIPOS_PERSONALES }
         .map { section ->
             val cards = if (section.type == "QUICK_LINKS_WITH_TOTALS") {
                 section.cards.filterNot { it.action?.target == "goals" }

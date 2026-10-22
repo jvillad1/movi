@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.dashboard
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
 import com.jvillada.movi.shared.model.SubStatus
+import com.jvillada.movi.shared.model.PARA_REVISAR_COMPACTO
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.esDeTuPlata
@@ -875,6 +876,9 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             // checklist sabe de vencidos. Ver `cosasParaRevisar`: sin nada que sugerir, no ocupa
             // lugar.
             "ALERTS" -> cosasParaRevisarDe(data).isNotEmpty() || anomaliasVisiblesDe(data).isNotEmpty()
+            // Ola 3 · «Editar inicio»: «Para revisar» escondida deja esta línea en su lugar, y solo
+            // ocupa lugar con algo urgente — lo urgente nunca desaparece del todo de Hoy.
+            PARA_REVISAR_COMPACTO -> cosasParaRevisarDe(data).any { it.urgente }
             "CHECKLIST_DEL_PERIODO" -> checklistDelPeriodoDe(data).isNotEmpty()
             "GASTO_POR_CATEGORIA" -> data.spentByCategory.orEmpty().any { it.value > 0 }
             // Solo con todo lo que la cuenta necesita ya leído, y con ingresos que medir. Ver

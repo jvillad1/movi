@@ -8,6 +8,7 @@ import com.jvillada.movi.server.screens.SCREEN_SEED
 import com.jvillada.movi.server.screens.validateDefinition
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
+import com.jvillada.movi.shared.model.inicioConPreferencias
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.log
@@ -32,6 +33,8 @@ private val json = Json { ignoreUnknownKeys = true }
  * GET /api/screens/{slug} -- ver docs/superpowers/specs/2026-07-26-sdui-movi-design.md.
  * 200 con la definición | 304 si If-None-Match == version | 404 si el slug no existe,
  * está inactivo, o su sections_json no deserializa (nunca 500 -- lección NeoVita).
+ * La de `dashboard` sale con la preferencia del dueño puesta («Editar inicio», ver
+ * `InicioRoutes.kt`); `?crudo=1` la da sin ella, para el Editor de pantallas.
  */
 fun Route.screenRoutes() {
     route("/api/screens") {
@@ -58,12 +61,24 @@ fun Route.screenRoutes() {
                 return@get call.respond(HttpStatusCode.NotFound)
             }
 
+            // «Editar inicio» (Ola 3): Hoy sale con el orden y las ocultas que eligió el dueño, ya
+            // puestos, para que un APK viejo —que no sabe nada de preferencias— también los vea. La
+            // versión cambia con la preferencia (ver `versionConPreferencias`), así el 304 de abajo
+            // no deja al cliente con el Inicio de antes de editarlo. `?crudo=1` es el Editor de
+            // pantallas: edita la definición de TODOS y no puede guardar la de una persona.
+            val crudo = call.request.queryParameters["crudo"] == "1"
+            val servida = if (slug == "dashboard" && !crudo) {
+                preferenciasDelInicioDe(call.userId())?.let { inicioConPreferencias(def, it) } ?: def
+            } else {
+                def
+            }
+
             val ifNoneMatch = call.request.headers[HttpHeaders.IfNoneMatch]
-            if (ifNoneMatch == version.toString()) {
+            if (ifNoneMatch == servida.version.toString()) {
                 return@get call.respond(HttpStatusCode.NotModified)
             }
 
-            call.respond(def)
+            call.respond(servida)
         }
 
         get("/admin/status") {

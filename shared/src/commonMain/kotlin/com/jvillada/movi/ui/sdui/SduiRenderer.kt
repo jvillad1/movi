@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.PARA_REVISAR_COMPACTO
 import com.jvillada.movi.shared.model.ScreenAction
 import com.jvillada.movi.shared.model.ScreenCard
 import com.jvillada.movi.shared.model.ScreenDefinition
@@ -89,6 +90,9 @@ fun SduiRenderer(
     // callback. Default sin operación: el resto de las pantallas que montan `SduiRenderer` en las
     // pruebas no necesitan wirearlo.
     onShowCreateSheet: () -> Unit = {},
+    // Lo que va al final del scroll, debajo de la última sección: «Editar inicio» (Ola 3). Chrome
+    // nativo como [header], fuera del schema a propósito: así existe en cualquier definición.
+    footer: (@Composable () -> Unit)? = null,
 ) {
     val uriHandler = LocalUriHandler.current
     val sections = visibleSections(definition, data)
@@ -134,6 +138,10 @@ fun SduiRenderer(
                     Modifier.fillMaxWidth().widthIn(max = ANCHO_DE_UNA_COLUMNA),
                 )
             }
+            if (footer != null) {
+                Spacer(Modifier.height(Movi.espacios.seccion))
+                Box(Modifier.fillMaxWidth().widthIn(max = ANCHO_DE_UNA_COLUMNA)) { footer() }
+            }
         }
     }
 }
@@ -176,6 +184,7 @@ private fun SduiSection(
         // El tipo sigue llamándose ALERTS para que un APK viejo pinte algo, pero lo que muestra es
         // «Para revisar»: además de lo que está mal, dice qué hacer y lleva a donde se hace.
         "ALERTS" -> ParaRevisarSection(section, data, onNavigate)
+        PARA_REVISAR_COMPACTO -> ParaRevisarCompactoSection(section, data, onNavigate)
         "CHECKLIST_DEL_PERIODO" -> ChecklistDelPeriodoSection(section, data, onNavigate)
         "DISPONIBLE_DEL_PERIODO" -> DisponibleDelPeriodoSection(section, data, onNavigate = onNavigate)
         "GASTO_POR_CATEGORIA" -> GastoPorCategoriaSection(section, data, onNavigate)

@@ -47,6 +47,7 @@ import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.AtrasCierraEstaHoja
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.dashboard.TITULO_EDITAR_INICIO
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.recurrentes.reminderLeadHint
 
@@ -334,6 +335,22 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                             },
                             isLast = true,
                             onClick = { SaldosOcultosStore.alternar() },
+                        )
+                    }
+                    // Ola 3 · «Editar inicio»: lo mismo que el botón del final de Hoy. A diferencia
+                    // del tema y del ojo, esto es del dueño y no del aparato: se guarda en el server.
+                    Spacer(Modifier.height(10.dp))
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                    ) {
+                        CardRow(
+                            left = { Text(TITULO_EDITAR_INICIO, style = Movi.textos.titulo, color = Movi.colores.texto) },
+                            sub = "Qué secciones ves en Hoy y en qué orden",
+                            showChevron = true,
+                            isLast = true,
+                            onClick = { onNavigate(Screen.EditarInicio) },
                         )
                     }
                 }

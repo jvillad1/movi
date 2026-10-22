@@ -1232,6 +1232,20 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
+    override suspend fun getScreenParaEditar(slug: String): ScreenDefinition? =
+        client.get("$baseUrl/api/screens/$slug") { parameter("crudo", "1") }.exigirExito().body()
+
+    override suspend fun getPreferenciasDelInicio(): com.jvillada.movi.shared.model.PreferenciasDelInicio =
+        client.get("$baseUrl/api/inicio/preferencias").exigirExito().body()
+
+    override suspend fun guardarPreferenciasDelInicio(
+        preferencias: com.jvillada.movi.shared.model.PreferenciasDelInicio,
+    ): com.jvillada.movi.shared.model.PreferenciasDelInicio =
+        client.put("$baseUrl/api/inicio/preferencias") {
+            contentType(ContentType.Application.Json)
+            setBody(preferencias)
+        }.exigirExito().body()
+
     override suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition =
         client.put("$baseUrl/api/screens/$slug") {
             contentType(ContentType.Application.Json)

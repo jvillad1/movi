@@ -8,6 +8,7 @@ import com.jvillada.movi.server.db.AnomaliasDescartadas
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CierresDescartados
 import com.jvillada.movi.server.db.CierresEnviados
+import com.jvillada.movi.server.db.InicioPersonalizado
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.CategoryPrefs
@@ -101,6 +102,7 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(DebitosDescartados, DebitosDescartados.userId),
     TablaDelUsuario(CierresEnviados, CierresEnviados.userId),
     TablaDelUsuario(CierresDescartados, CierresDescartados.userId),
+    TablaDelUsuario(InicioPersonalizado, InicioPersonalizado.userId),
     // Personas y comercios
     TablaDelUsuario(KnownDestinations, KnownDestinations.userId),
     TablaDelUsuario(DestinosDescartados, DestinosDescartados.userId),

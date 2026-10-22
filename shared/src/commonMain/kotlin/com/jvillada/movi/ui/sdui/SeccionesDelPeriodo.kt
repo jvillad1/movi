@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MinCard
@@ -468,6 +469,65 @@ internal fun ParaRevisarSection(
                     }
                 }
                 if (i < anomalias.lastIndex) Hairline()
+            }
+        }
+    }
+}
+
+/** La línea compacta de «Para revisar» escondida. */
+const val TAG_PARA_REVISAR_COMPACTO: String = "para-revisar-compacto"
+
+/** «1 cosa para revisar» / «3 cosas para revisar». */
+internal fun textoDeParaRevisarCompacto(cuantas: Int): String =
+    if (cuantas == 1) "1 cosa para revisar" else "$cuantas cosas para revisar"
+
+/**
+ * **«Para revisar» escondida, con algo urgente: una sola línea** (Ola 3 · «Editar inicio»).
+ *
+ * El dueño puede esconder «Para revisar», pero lo urgente nunca desaparece del todo: el server deja
+ * en su lugar una sección [com.jvillada.movi.shared.model.PARA_REVISAR_COMPACTO], y acá se pinta
+ * «2 cosas para revisar ›» **solo si alguna es urgente** (`visibleSections` la descarta si no).
+ * Cuenta lo mismo que contaría la sección entera —lo sugerido y lo que se sale de lo normal—, y
+ * tocarla la abre ahí mismo, sin salir de Hoy: cada cosa lleva a un lugar distinto, y la línea no
+ * puede adivinar cuál.
+ */
+@Composable
+internal fun ParaRevisarCompactoSection(
+    section: ScreenSection,
+    data: DashboardData,
+    onNavigate: (Screen) -> Unit,
+) {
+    val cosas = cosasParaRevisarDe(data)
+    if (cosas.none { it.urgente }) return
+    var abierta by rememberSaveable { mutableStateOf(false) }
+    if (abierta) {
+        ParaRevisarSection(section.copy(type = "ALERTS"), data, onNavigate)
+        return
+    }
+    val cuantas = cosas.size + anomaliasVisiblesDe(data).size
+    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
+        MinCard(
+            modifier = Modifier.fillMaxWidth().testTag(TAG_PARA_REVISAR_COMPACTO),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+            onClick = { abierta = true },
+            onClickLabel = "Ver lo que hay para revisar",
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+            ) {
+                Box(Modifier.size(7.dp).clip(CircleShape).background(Movi.colores.aviso))
+                Text(
+                    text = textoDeParaRevisarCompacto(cuantas),
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.aviso,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                ChevronRight()
             }
         }
     }
