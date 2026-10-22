@@ -199,6 +199,12 @@ class MovimientosListaYDetalleEnPantallaTest {
         esperar { hayEnElPanel(descripcion) }
     }
 
+    /** Ola 2b: las secciones del detalle se abren desde su acción (ver [AccionDelMovimiento]). */
+    private fun tocarAccion(accion: AccionDelMovimiento) {
+        composeRule.onNode(hasTestTag(tagDeAccionDelMovimiento(accion)) and enElPanel, useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+    }
+
     // ── Escritorio ──────────────────────────────────────────────────────────────
 
     @Test
@@ -230,7 +236,11 @@ class MovimientosListaYDetalleEnPantallaTest {
 
         assertTrue(!hayTag(TAG_PANEL_DE_HOJA), "con panel no se abre la hoja modal")
         assertTrue(!hayEnElPanel(TITULO_DE_LA_INVITACION_A_ELEGIR))
-        assertTrue(hayEnElPanel("MONTO, CUENTA Y CONCEPTO"), "el mismo contenido de la hoja")
+        assertTrue(
+            composeRule.onAllNodes(hasTestTag(TAG_MONTO_DEL_MOVIMIENTO) and enElPanel, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty(),
+            "el mismo detalle de la hoja",
+        )
         // La fila elegida lo dice.
         val marcada = fila("Las Doce").fetchSemanticsNode().config.getOrElse(SemanticsProperties.Selected) { false }
         assertTrue(marcada, "la fila elegida está marcada")
@@ -258,6 +268,7 @@ class MovimientosListaYDetalleEnPantallaTest {
         assertTrue(filaConSubtitulo("Señor Gol", "Comida · Bancolombia"))
 
         // «Mercado» ya es una categoría usada (la tiene el supermercado): el selector la ofrece.
+        tocarAccion(AccionDelMovimiento.Categoria)
         val celda = composeRule.onAllNodes(hasText("Mercado") and enElPanel, useUnmergedTree = true)
             .onFirst()
         celda.performScrollTo()
@@ -282,6 +293,7 @@ class MovimientosListaYDetalleEnPantallaTest {
     fun `anular desde el panel abre un dialogo encima y al confirmar el panel vuelve a la invitacion`() {
         val repo = montar()
         elegir("Las Doce")
+        tocarAccion(AccionDelMovimiento.Mas)
 
         val anular = composeRule.onNode(hasText("Anular este movimiento") and enElPanel, useUnmergedTree = true)
         anular.performScrollTo()
@@ -316,6 +328,8 @@ class MovimientosListaYDetalleEnPantallaTest {
     fun `con un campo del panel enfocado, elegir otro movimiento suelta el foco`() {
         montar()
         elegir("Las Doce")
+        // La búsqueda de categorías, que es el campo del bug original.
+        tocarAccion(AccionDelMovimiento.Categoria)
         val campo = composeRule.onAllNodes(hasSetTextAction() and enElPanel, useUnmergedTree = true).onFirst()
         campo.performScrollTo()
         campo.requestFocus()
@@ -363,7 +377,7 @@ class MovimientosListaYDetalleEnPantallaTest {
         montar()
         assertEquals(803f, limites(TAG_PANEL_DEL_MOVIMIENTO).width, 0.5f)
         elegir("Las Doce")
-        val monto = composeRule.onNode(hasText("MONTO, CUENTA Y CONCEPTO") and enElPanel, useUnmergedTree = true)
+        val monto = composeRule.onNode(hasTestTag(TAG_MONTO_DEL_MOVIMIENTO) and enElPanel, useUnmergedTree = true)
             .fetchSemanticsNode().boundsInRoot
         val panel = limites(TAG_PANEL_DEL_MOVIMIENTO)
         // Centrado en 720: (803 − 720) / 2 = 41.5 de aire, más los 20 de relleno del panel.
@@ -393,11 +407,14 @@ class MovimientosListaYDetalleEnPantallaTest {
     }
 
     @Test
-    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    @Config(qualifiers = "w1280dp-h600dp-mdpi")
     fun `la rueda sobre el panel sigue moviendo su propio contenido`() {
         montar()
         elegir("Las Doce")
-        fun etiqueta() = composeRule.onNode(hasText("MONTO, CUENTA Y CONCEPTO") and enElPanel, useUnmergedTree = true)
+        // Ola 2b: el detalle abre corto (se lee primero). Con el selector de categorías abierto, y
+        // en una ventana de 600 de alto, es más alto que el panel y se desplaza.
+        tocarAccion(AccionDelMovimiento.Categoria)
+        fun etiqueta() = composeRule.onNode(hasTestTag(TAG_MONTO_DEL_MOVIMIENTO) and enElPanel, useUnmergedTree = true)
             .fetchSemanticsNode().boundsInRoot.top
         val antes = etiqueta()
         val lista = fila("Señor Gol").fetchSemanticsNode().boundsInRoot.top
@@ -441,6 +458,7 @@ class MovimientosListaYDetalleEnPantallaTest {
             it.parecidos = mapOf("e1" to listOf(gasto("p1", "Señor Gol Centro", 30_000L, "Comida")))
         }
         elegir("Señor Gol")
+        tocarAccion(AccionDelMovimiento.Categoria)
         val celda = composeRule.onAllNodes(hasText("Mercado") and enElPanel, useUnmergedTree = true).onFirst()
         celda.performScrollTo()
         celda.performClick()
@@ -460,10 +478,8 @@ class MovimientosListaYDetalleEnPantallaTest {
     fun `guardar una fecha en el panel cierra el selector`() {
         montar()
         elegir("Las Doce")
-        // La fila de FECHA: su «Cambiar» es el segundo del panel (el primero es el del monto).
-        val cambiarFecha = composeRule.onAllNodes(hasText("Cambiar") and enElPanel, useUnmergedTree = true)[1]
-        cambiarFecha.performScrollTo()
-        cambiarFecha.performClick()
+        // Ola 2b: la acción «Fecha» abre la sección con el selector ya abierto.
+        tocarAccion(AccionDelMovimiento.Fecha)
         val ayer = composeRule.onNode(hasText("Ayer") and enElPanel, useUnmergedTree = true)
         ayer.performScrollTo()
         ayer.performClick()

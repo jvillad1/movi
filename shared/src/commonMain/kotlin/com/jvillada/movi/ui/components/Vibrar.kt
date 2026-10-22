@@ -13,7 +13,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
  * que el dueño cierra algo con plata de por medio, y en el teclado del monto:
  *
  * - guardar un movimiento en «Agregar» ([confirmar]);
- * - confirmar un aviso del banco, en Reconciliar o desde «Por revisar» ([confirmar]);
+ * - confirmar un aviso del banco, en Reconciliar, desde «Por revisar» o deslizando su fila en
+ *   Movimientos ([confirmar]);
  * - tildar un pago del checklist del período ([confirmar]);
  * - cada tecla del teclado numérico de «Agregar» ([tecla], el toque liviano de un teclado);
  * - el ojo de «Ocultar los saldos», en el héroe de Hoy ([alternar]).
