@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.view.View
 import android.widget.RemoteViews
 import androidx.compose.ui.graphics.toArgb
@@ -66,7 +67,12 @@ class WidgetTeQuedan : AppWidgetProvider() {
                     ahora = System.currentTimeMillis(),
                 )
             }.getOrElse { textoDelWidget(null, null, haySesion = false, ahora = 0L) }
-            val oscuro = runCatching { TemaStore.oscuro }.getOrDefault(true)
+            // El tema elegido en Ajustes; «Igual que el teléfono» se resuelve con la configuración
+            // del sistema, que es lo único que un widget puede mirar (no hay composición acá).
+            val oscuro = runCatching {
+                val modoNoche = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                TemaStore.oscuroCon(sistemaOscuro = modoNoche == Configuration.UI_MODE_NIGHT_YES)
+            }.getOrDefault(true)
             manager.updateAppWidget(ids, vistas(context, texto, oscuro))
         }
 

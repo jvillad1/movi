@@ -12,11 +12,19 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Movi">
     <script>
-        // El tema que el dueño eligió en Perfil. Lo guarda `TemaStore` en esta misma clave de
-        // localStorage; se lee acá, antes del primer cuadro, para que el ingreso no aparezca
-        // oscuro medio segundo y después salte a claro. Sin clave, oscuro: el default de la app.
+        // El tema que el dueño eligió en Ajustes. Lo guarda `TemaStore` en esta misma clave de
+        // localStorage («sistema», «claro» u «oscuro»); se lee acá, antes del primer cuadro, para
+        // que el ingreso no aparezca oscuro medio segundo y después salte a claro. Sin clave nueva
+        // se migra el interruptor viejo (`tema_oscuro`), y sin nada es «Igual que el teléfono»:
+        // claro salvo que el navegador pida oscuro, igual que `isSystemInDarkTheme`.
         try {
-            if (localStorage.getItem("tema_oscuro") === "false") {
+            var tema = localStorage.getItem("tema");
+            if (tema !== "sistema" && tema !== "claro" && tema !== "oscuro") {
+                var viejo = localStorage.getItem("tema_oscuro");
+                tema = viejo === "true" ? "oscuro" : viejo === "false" ? "claro" : "sistema";
+            }
+            var sistemaOscuro = !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+            if (tema === "claro" || (tema === "sistema" && !sistemaOscuro)) {
                 document.documentElement.setAttribute("data-tema", "claro");
                 document.querySelector('meta[name="theme-color"]').setAttribute("content", "#E9ECF1");
             }

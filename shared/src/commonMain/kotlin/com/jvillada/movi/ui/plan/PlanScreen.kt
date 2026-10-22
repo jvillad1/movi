@@ -50,6 +50,7 @@ import com.jvillada.movi.ui.components.NewItemButton
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.PanelDeTablero
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
+import com.jvillada.movi.ui.components.SubirAlRetocarLaPestana
 import com.jvillada.movi.ui.dashboard.alcanzaParaElDisponible
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
 import com.jvillada.movi.ui.components.SelectorSegmentado
@@ -137,6 +138,8 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     // Pantalla ancha: la rueda del mouse sobre los márgenes también mueve esta lista (en dos columnas,
     // la de los pagos: es la larga).
     ScrollDesdeLosMargenes(listState)
+    // Re-tocar «Plan» estando acá vuelve arriba, las dos columnas (ver [SubirAlRetocarLaPestana]).
+    SubirAlRetocarLaPestana(listState, scrollDelDisponible)
 
     // Las piezas de Plan, una sola vez: en una columna van todas en la misma lista; en dos, las tres
     // primeras a la izquierda y el selector con su segmento a la derecha.

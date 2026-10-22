@@ -18,6 +18,8 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +58,9 @@ import com.jvillada.movi.ui.components.NoSePudoActualizar
 import com.jvillada.movi.ui.components.ActualizandoEnLaCabecera
 import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
 import com.jvillada.movi.ui.components.VacioQueEnsena
+import com.jvillada.movi.ui.components.Celebracion
+import com.jvillada.movi.ui.components.MomentoDeCelebracion
+import com.jvillada.movi.ui.components.rememberVibrador
 import com.jvillada.movi.ui.sms.TarjetaDeMensajeDelBanco
 import com.jvillada.movi.ui.sms.TarjetaDelMismoPago
 import com.jvillada.movi.ui.sms.avisosDelPago
@@ -176,6 +181,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     var pagoEnCurso by remember { mutableStateOf<String?>(null) }
     var errorDeUnPago by remember { mutableStateOf<String?>(null) }
     val alcance = rememberCoroutineScope()
+    // Confirmar un aviso desde la fila (o el lote) vibra, como en Reconciliar (ver [Vibrador]).
+    val vibrador = rememberVibrador()
     fun sobreElPago(grupoId: String, accion: suspend () -> Unit, alFallar: () -> Unit = {}, alTerminar: () -> Unit) {
         if (pagoEnCurso != null) return
         pagoEnCurso = grupoId
@@ -205,6 +212,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             { confirmarLoEntendido(anotacion, ahora = Clock.System.now().toEpochMilliseconds()) },
             alFallar = { fallaronAca = fallaronAca + anotacion.cabezaId },
         ) {
+            vibrador.confirmar()
             avisosResueltos = avisosResueltos + anotacion.avisos.associateWith { SMS_STATE_CONFIRMED }
         }
     }
@@ -253,6 +261,32 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     // Con todo pintado, alguna lectura sigue en vuelo: lo pintado es lo de antes.
     val actualizandoConAlgoALaVista = !cargando &&
         (lecturas.leyendoMensajes || leyendoDias || lecturas.leyendoCandidatos || lecturas.leyendoDebitos)
+
+    // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
+    // Cuando la bandeja queda vacía **por algo que el dueño hizo** —acá o en Reconciliar—, una vez,
+    // en la transición (ver [Celebracion]). Lo último que se supo y la ida a Reconciliar sobreviven
+    // a irse y volver (`rememberSaveable`: la pantalla queda guardada mientras está en la pila), así
+    // que confirmar el último aviso allá y volver acá también celebra. Abrir la bandeja ya vacía, no.
+    var ultimoEstadoDeLaBandeja by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var fueAReconciliar by rememberSaveable { mutableStateOf(false) }
+    var celebrar by remember { mutableStateOf(false) }
+    val huboAccion = fueAReconciliar || avisosResueltos.isNotEmpty() || avisosSeparados.isNotEmpty() ||
+        candidatosResueltos.isNotEmpty() || movimientosResueltos.isNotEmpty() || debitosResueltos.isNotEmpty() ||
+        lote !is EstadoDelLote.Cerrado
+    val bandejaVacia: Boolean? = if (cargando || noSePudoActualizar) null else bandejaAlDia(mensajes, dias, candidatos, debitos)
+    LaunchedEffect(bandejaVacia) {
+        val celebracion = Celebracion(ultimoEstadoDeLaBandeja)
+        if (celebracion.observar(bandejaVacia, huboAccion)) {
+            celebrar = true
+            fueAReconciliar = false
+        }
+        if (bandejaVacia == false) celebrar = false
+        ultimoEstadoDeLaBandeja = celebracion.ultimoConocido
+    }
+    val revisarEnReconciliar: (String) -> Unit = { id ->
+        fueAReconciliar = true
+        onNavigate(Screen.SMSReconcile(id))
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         MinScreenHeader(
@@ -327,6 +361,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                 val resultado = confirmarElLote(estos, alAvanzar = { lote = EstadoDelLote.Anotando(it, estos.size) }) {
                                     confirmarLoEntendido(it, ahora = Clock.System.now().toEpochMilliseconds())
                                 }
+                                if (resultado.anotados.isNotEmpty()) vibrador.confirmar()
                                 avisosResueltos = avisosResueltos +
                                     resultado.anotados.flatMap { it.avisos }.associateWith { SMS_STATE_CONFIRMED }
                                 fallaronAca = fallaronAca + resultado.quedaron.map { it.first.cabezaId }
@@ -342,6 +377,11 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             // «Todo al día» es un vacío: se afirma solo con lecturas que contestaron en esta visita.
             if (bandejaAlDia(mensajes, dias, candidatos, debitos) && noSePudoActualizar) return@LazyColumn
             if (bandejaAlDia(mensajes, dias, candidatos, debitos)) {
+                if (celebrar) {
+                    item(key = "celebracion") {
+                        MomentoDeCelebracion(FRASE_DE_LA_BANDEJA_AL_DIA, Modifier.padding(bottom = 8.dp))
+                    }
+                }
                 item { TodoAlDia() }
                 // `mensajes` no es `null` acá —[bandejaAlDia] lo exige— y contestó
                 // vacía de verdad: nunca llegó un mensaje del banco a esta cuenta. Es la misma
@@ -396,7 +436,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                 TarjetaDelMismoPago(
                                     avisos = avisos,
                                     trabajando = pagoEnCurso == grupoId,
-                                    onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) },
+                                    onRevisar = { revisarEnReconciliar(sms.id) },
                                     onIgnorar = {
                                         sobreElPago(grupoId, { Repositories.wallets.ignorarElMismoPago(grupoId, ids) }) {
                                             avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_IGNORED }
@@ -421,7 +461,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                         item(key = "sms-${sms.id}") {
                             TarjetaDeMensajeDelBanco(
                                 sms,
-                                onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) },
+                                onRevisar = { revisarEnReconciliar(sms.id) },
                                 entendido = entendidos[sms.id]?.linea,
                                 onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
                                 onIgnorar = {
@@ -604,6 +644,9 @@ private fun FilaQueLleva(
 private fun SeccionQueNoSeLeyo(texto: String, onReintentar: () -> Unit) {
     NoSePudoLeer(texto, onReintentar = onReintentar, modifier = Modifier.padding(bottom = 16.dp))
 }
+
+/** Lo que dice la celebración cuando el dueño deja la bandeja vacía. */
+const val FRASE_DE_LA_BANDEJA_AL_DIA = "¡Listo! Revisaste todo lo que había."
 
 /**
  * El vacío de verdad: las tres fuentes contestaron y no hay nada. No ofrece ninguna acción —no hay
