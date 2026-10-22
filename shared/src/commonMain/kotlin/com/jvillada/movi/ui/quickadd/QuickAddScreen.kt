@@ -273,6 +273,8 @@ fun QuickAddScreen(
     onSavedSinCerrar: () -> Unit = {},
 ) {
     val coroutine = rememberCoroutineScope()
+    // Guardar vibra (ver [Vibrador]): el movimiento quedó anotado.
+    val vibrador = rememberVibrador()
     // El monto viaja como cadena de dígitos, que es lo que teclea el teclado numérico: un preset
     // se escribe igual que si lo hubiera tecleado él. Un cero o un negativo no se pone —«0» dejaría
     // el botón deshabilitado con un campo que parece lleno— y se cae al vacío de siempre.
@@ -971,6 +973,7 @@ fun QuickAddScreen(
                 // cancelaba a mitad de camino y ninguna sugerencia posterior alcanzaba a llegar en
                 // toda la sesión. Ver el KDoc de `MemoriaDeCategoriasCache` para la historia entera.
                 MemoriaDeCategoriasCache.invalidar()
+                vibrador.confirmar()
                 // Ola 9 · B: el movimiento YA está guardado; recién ahora se ofrece el
                 // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
                 // paso, así que un ofrecimiento suyo se iría con ella).
@@ -1733,6 +1736,8 @@ private fun EditorBody(
 
     Spacer(Modifier.height(14.dp))
 
+    // Cada tecla vibra apenas, como un teclado de verdad (ver [Vibrador.tecla]).
+    val vibrador = rememberVibrador()
     Column {
         listOf(
             listOf("1", "2", "3"),
@@ -1748,7 +1753,10 @@ private fun EditorBody(
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp)
-                            .clickable { onKey(key) },
+                            .clickable {
+                                vibrador.tecla()
+                                onKey(key)
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
                         if (key == "⌫") {
