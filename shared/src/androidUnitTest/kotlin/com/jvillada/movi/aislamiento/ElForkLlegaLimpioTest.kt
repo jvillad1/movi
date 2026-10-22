@@ -128,6 +128,9 @@ class ElForkLlegaLimpioTest {
         // «Ocultar los saldos» prendido en otra prueba: la siguiente vería «$•••••» donde espera cifras.
         SaldosOcultosStore.almacenDePrueba = mutableMapOf()
         SaldosOcultosStore.poner(true)
+        // Ola 5: una búsqueda reciente de otra prueba («Caro» es de la plata de quien buscó).
+        com.jvillada.movi.data.BusquedasRecientesStore.almacenDePrueba = mutableMapOf()
+        com.jvillada.movi.data.BusquedasRecientesStore.anotar("caro")
         AvisosEnHoy.sustitutoDePrueba = object : OfertaDeAvisos {
             override fun pedir() = Unit
             override fun descartar() = Unit
@@ -193,6 +196,7 @@ class ElForkLlegaLimpioTest {
         assertNotNull("La forma de Créditos no quedó guardada", FormaRecordada.delAparato.creditos("u1"))
         assertNotNull("La forma de Categorías no quedó guardada", FormaRecordada.delAparato.categorias("u1"))
         assertNotNull("La forma de Cuentas no quedó guardada", FormaRecordada.delAparato.cuentas("u1"))
+        assertTrue("La búsqueda reciente no quedó anotada", com.jvillada.movi.data.BusquedasRecientesStore.recientes.isNotEmpty())
     }
 
     @Test
@@ -224,6 +228,8 @@ class ElForkLlegaLimpioTest {
             PropuestasDescartadasStore.descartadas(),
         )
         assertFalse("«Ocultar los saldos» trae la resaca de otra prueba", SaldosOcultosStore.ocultos)
+        assertTrue("Las búsquedas recientes traen la resaca de otra prueba", com.jvillada.movi.data.BusquedasRecientesStore.recientes.isEmpty())
+        assertNull("El almacén de mentira de las búsquedas recientes sigue enchufado", com.jvillada.movi.data.BusquedasRecientesStore.almacenDePrueba)
         assertFalse("«Ocultar los saldos» de otra prueba sigue guardado en el aparato", SaldosOcultosStore.leerGuardado())
         assertNull("El almacén de mentira de «Ocultar los saldos» sigue enchufado", SaldosOcultosStore.almacenDePrueba)
         assertFalse("La sesión de otra prueba sigue abierta", SessionManager.loggedIn)

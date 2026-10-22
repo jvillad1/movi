@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Ola 5 · los atajos del ícono de la app (mantener presionado el ícono de Movi): Gasto, Traspaso y
+    Por revisar. Entran por el MISMO camino que tocar un aviso: el extra `movi.abrir`
+    (`EXTRA_ABRIR`), que `MainActivity` deja en `DestinoDesdeAfuera` y `App()` cumple después de la
+    puerta de «Entrar con huella». Los valores tienen que ser los de `AvisosDelTelefono.kt`
+    (`ABRIR_AGREGAR_GASTO`, `ABRIR_AGREGAR_TRASPASO`, `ABRIR_POR_REVISAR`): un valor que no conoce
+    abre la app sin navegar. Android 7.1+ los muestra; antes, se ignoran.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="gasto"
+        android:enabled="true"
+        android:icon="@drawable/ic_atajo_gasto"
+        android:shortcutShortLabel="@string/atajo_gasto"
+        android:shortcutLongLabel="@string/atajo_gasto_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.jvillada.movi"
+            android:targetClass="com.jvillada.movi.MainActivity">
+            <extra android:name="movi.abrir" android:value="agregar:gasto" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="traspaso"
+        android:enabled="true"
+        android:icon="@drawable/ic_atajo_traspaso"
+        android:shortcutShortLabel="@string/atajo_traspaso"
+        android:shortcutLongLabel="@string/atajo_traspaso_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.jvillada.movi"
+            android:targetClass="com.jvillada.movi.MainActivity">
+            <extra android:name="movi.abrir" android:value="agregar:traspaso" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="por_revisar"
+        android:enabled="true"
+        android:icon="@drawable/ic_atajo_por_revisar"
+        android:shortcutShortLabel="@string/atajo_por_revisar"
+        android:shortcutLongLabel="@string/atajo_por_revisar_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.jvillada.movi"
+            android:targetClass="com.jvillada.movi.MainActivity">
+            <extra android:name="movi.abrir" android:value="por_revisar" />
+        </intent>
+    </shortcut>
+</shortcuts>

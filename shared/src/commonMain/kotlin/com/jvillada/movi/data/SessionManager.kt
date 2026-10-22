@@ -363,6 +363,8 @@ object SessionManager {
         // Y «Ocultar los saldos»: era la preferencia de quien se fue; el siguiente arranca viendo
         // sus cifras, como en una instalación nueva.
         SaldosOcultosStore.clear()
+        // Ola 5: y las búsquedas recientes de «Buscar» — «Caro», «colegio», «$27.500» son de quien se va.
+        BusquedasRecientesStore.clear()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
         // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres

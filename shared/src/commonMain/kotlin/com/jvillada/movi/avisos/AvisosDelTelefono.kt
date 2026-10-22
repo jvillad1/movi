@@ -67,8 +67,8 @@ fun montoParaElAviso(monto: Double, moneda: String): String = when (moneda) {
     else -> "$moneda ${formatCOPSinOcultar(abs(monto).roundToLong()).removePrefix("$")}"
 }
 
-private fun lineaDe(aviso: AvisoPorRevisar): String =
-    "${montoParaElAviso(aviso.monto, aviso.moneda)} · ${aviso.descripcion}"
+private fun lineaDe(aviso: AvisoPorRevisar, ocultos: Boolean = false): String =
+    "${montoVisibleEnElAviso(aviso.monto, aviso.moneda, ocultos)} · ${aviso.descripcion}"
 
 /** El cierre que dice qué pasa al tocar: la bandeja de «Por revisar». */
 const val TOCA_PARA_REVISAR: String = "toca para revisar"
@@ -81,13 +81,14 @@ const val TOCA_PARA_REVISAR: String = "toca para revisar"
  * - Varios: «3 movimientos por revisar», los dos primeros en el texto («y 1 más») y todos, hasta
  *   cinco, en las líneas que se ven al desplegar.
  *
- * `null` con la lista vacía: no hay notificación sin nada que decir.
+ * `null` con la lista vacía: no hay notificación sin nada que decir. Con [ocultos] («Ocultar los
+ * saldos», Ola 5) ningún monto sale en claro.
  */
-fun textoDeMovimientos(avisos: List<AvisoPorRevisar>): TextoDeAviso? {
+fun textoDeMovimientos(avisos: List<AvisoPorRevisar>, ocultos: Boolean = false): TextoDeAviso? {
     if (avisos.isEmpty()) return null
     if (avisos.size == 1) {
         val aviso = avisos.single()
-        val monto = montoParaElAviso(aviso.monto, aviso.moneda)
+        val monto = montoVisibleEnElAviso(aviso.monto, aviso.moneda, ocultos)
         val titulo = if (aviso.tipo == TransactionType.INCOME) "Te llegaron $monto" else "Movi anotó $monto"
         val quien = listOfNotNull(aviso.descripcion.trim().ifBlank { null }, origenParaElAviso(aviso.origen))
             .joinToString(" · ")
@@ -95,12 +96,12 @@ fun textoDeMovimientos(avisos: List<AvisoPorRevisar>): TextoDeAviso? {
         else "$quien — $TOCA_PARA_REVISAR"
         return TextoDeAviso(titulo = titulo, texto = texto)
     }
-    val primeros = avisos.take(2).joinToString(" · ") { lineaDe(it) }
+    val primeros = avisos.take(2).joinToString(" · ") { lineaDe(it, ocultos) }
     val mas = if (avisos.size > 2) " y ${avisos.size - 2} más" else ""
     return TextoDeAviso(
         titulo = "${avisos.size} movimientos por revisar",
         texto = "$primeros$mas — $TOCA_PARA_REVISAR",
-        lineas = avisos.take(5).map(::lineaDe) + if (avisos.size > 5) listOf("y ${avisos.size - 5} más") else emptyList(),
+        lineas = avisos.take(5).map { lineaDe(it, ocultos) } + if (avisos.size > 5) listOf("y ${avisos.size - 5} más") else emptyList(),
     )
 }
 
@@ -245,6 +246,15 @@ const val ABRIR_PLAN: String = "plan"
 const val ABRIR_CAPTURA: String = "captura"
 
 /**
+ * Ola 5 · los atajos del ícono de la app en Android (`res/xml/shortcuts.xml`, mantener presionado el
+ * ícono): entran por el MISMO camino que tocar un aviso —el extra [EXTRA_ABRIR] y
+ * [DestinoDesdeAfuera]—, así que también esperan la puerta de la huella. Los valores están escritos
+ * tal cual en ese XML: cambiarlos acá sin cambiarlos allá deja el atajo sin destino.
+ */
+const val ABRIR_AGREGAR_GASTO: String = "agregar:gasto"
+const val ABRIR_AGREGAR_TRASPASO: String = "agregar:traspaso"
+
+/**
  * La pantalla que abre tocar un aviso: «Por revisar» para los movimientos, Plan (en «Pagos del
  * período», su segmento por defecto) para los vencimientos. `null` para cualquier otra cosa: un
  * `Intent` ajeno no navega a ningún lado.
@@ -253,6 +263,19 @@ fun destinoDeAviso(valor: String?): Screen? = when (valor) {
     ABRIR_POR_REVISAR -> Screen.PorRevisar
     ABRIR_PLAN -> Screen.Plan()
     ABRIR_CAPTURA -> Screen.CapturaDelBanco
-    // «Cerró tu período»: el detalle del período que cerró (ver `abrirElPeriodo`).
-    else -> valor?.let(::detalleDelAviso)
+    ABRIR_AGREGAR_GASTO -> com.jvillada.movi.ui.quickadd.pantallaDelAtajo(com.jvillada.movi.ui.quickadd.AtajoDeAgregar.GASTO)
+    ABRIR_AGREGAR_TRASPASO -> com.jvillada.movi.ui.quickadd.pantallaDelAtajo(com.jvillada.movi.ui.quickadd.AtajoDeAgregar.TRASPASO)
+    // «Cerró tu período»: el detalle del período que cerró (ver `abrirElPeriodo`). Ola 5: «Revisar»
+    // y «Otra categoría» de la notificación de un aviso abren Reconciliar de ese aviso.
+    else -> valor?.let { detalleDelAviso(it) ?: reconciliarDelAviso(it) }
+}
+
+/** Reconciliar de un `"aviso:<id>"` o `"aviso-categoria:<id>"` (Ola 5), o `null` si no es eso. */
+internal fun reconciliarDelAviso(valor: String): Screen? = when {
+    valor.startsWith(PREFIJO_ABRIR_AVISO_CATEGORIA) ->
+        valor.removePrefix(PREFIJO_ABRIR_AVISO_CATEGORIA).takeIf { it.isNotBlank() }
+            ?.let { Screen.SMSReconcile(it, abrirCategoria = true) }
+    valor.startsWith(PREFIJO_ABRIR_AVISO) ->
+        valor.removePrefix(PREFIJO_ABRIR_AVISO).takeIf { it.isNotBlank() }?.let { Screen.SMSReconcile(it) }
+    else -> null
 }

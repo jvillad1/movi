@@ -10,6 +10,7 @@ import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.momentoDelSms
 import com.jvillada.movi.shared.model.newId
+import com.jvillada.movi.shared.repository.WalletRepository
 
 /*
  * # Anotar el movimiento de un aviso: un solo camino
@@ -80,20 +81,25 @@ internal suspend fun anotarElMovimientoDelAviso(
     evento: FinancialEvent,
     esComprobante: Boolean,
     alCrearElMovimiento: () -> Unit = {},
+    /**
+     * El repositorio de la app, salvo desde la notificación (Ola 5): ahí corre un Worker que puede
+     * no tener la base local abierta, y confirma contra el server directo con los MISMOS métodos.
+     */
+    repo: WalletRepository = Repositories.wallets,
 ) {
     if (pago != null) {
         // Un solo movimiento para todos los avisos, en una transacción del server.
-        Repositories.wallets.confirmarElMismoPago(
+        repo.confirmarElMismoPago(
             pago.grupoId, ConfirmarElMismoPago(pago.miembros.map { it.id }, evento = evento),
         )
         UsedCategoriesCache.record(evento.category, evento.type)
         return
     }
-    Repositories.wallets.postEvent(evento)
+    repo.postEvent(evento)
     alCrearElMovimiento()
     // Una categoría creada acá tiene que ser conocida en el siguiente aviso: sin esto la bandeja no
     // recarga el caché y «Colegio» se volvía a ofrecer como «Crear».
     UsedCategoriesCache.record(evento.category, evento.type)
-    if (esComprobante) Repositories.wallets.confirmarComprobante(smsId, evento.id)
-    else Repositories.wallets.confirmSmsCon(smsId, evento.id)
+    if (esComprobante) repo.confirmarComprobante(smsId, evento.id)
+    else repo.confirmSmsCon(smsId, evento.id)
 }

@@ -1,6 +1,9 @@
 package com.jvillada.movi.ui.porrevisar
 
+import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
+import com.jvillada.movi.shared.model.newId
+import com.jvillada.movi.shared.repository.WalletRepository
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DudaDelAviso
 import com.jvillada.movi.shared.model.GrupoDeAvisos
@@ -151,7 +154,19 @@ fun loQueMoviEntendio(
  * ([movimientoDelAviso], con el comercio que leyó Movi) y la misma confirmación
  * ([anotarElMovimientoDelAviso]: el pago entero en una transacción, o el movimiento y el aviso).
  */
-suspend fun confirmarLoEntendido(anotacion: AnotacionEntendida, ahora: Long, alCrearElMovimiento: () -> Unit = {}) {
+suspend fun confirmarLoEntendido(
+    anotacion: AnotacionEntendida,
+    ahora: Long,
+    alCrearElMovimiento: () -> Unit = {},
+    /** Ola 5 · la notificación confirma contra el server directo, con los mismos métodos. */
+    repo: WalletRepository = Repositories.wallets,
+    /**
+     * El id del movimiento. La fila y el lote estrenan uno; la notificación (Ola 5) lo deriva del
+     * aviso, así un segundo toque —o un reintento— reescribe el MISMO movimiento (`POST
+     * /api/events` es idempotente por id) en vez de anotar otro.
+     */
+    idDelMovimiento: String = newId("ev"),
+) {
     val evento = movimientoDelAviso(
         leido = anotacion.leido,
         cuentaId = anotacion.cuenta.id,
@@ -160,8 +175,9 @@ suspend fun confirmarLoEntendido(anotacion: AnotacionEntendida, ahora: Long, alC
         momento = momentoDelMovimientoDelAviso(anotacion.sms, anotacion.pago, anotacion.leido, ahora),
         textoDelAviso = anotacion.sms.text,
         esComprobante = esIdDeComprobante(anotacion.sms.id),
+        id = idDelMovimiento,
     )
-    anotarElMovimientoDelAviso(anotacion.sms.id, anotacion.pago, evento, esIdDeComprobante(anotacion.sms.id), alCrearElMovimiento)
+    anotarElMovimientoDelAviso(anotacion.sms.id, anotacion.pago, evento, esIdDeComprobante(anotacion.sms.id), alCrearElMovimiento, repo)
 }
 
 /** Cómo terminó el lote: lo que se anotó y lo que quedó en la bandeja, con por qué. */

@@ -92,6 +92,7 @@ class AppDePrueba : Application(), TestLifecycleApplication {
         // «Ocultar los saldos»: el logout de arriba ya lo apagó (y vació su almacén de mentira);
         // acá se suelta la costura, igual que la de la forma recordada.
         SaldosOcultosStore.almacenDePrueba = null
+        com.jvillada.movi.data.BusquedasRecientesStore.almacenDePrueba = null
         // Ola 1 · Movi avisa: la tarjeta de Hoy que ofrece los avisos. Robolectric corre en SDK 34
         // sin el permiso concedido, así que sin esto TODO montaje del Inicio la pintaría arriba y
         // movería lo que las pruebas miden. Se da por contestada; la prueba que la quiere ver

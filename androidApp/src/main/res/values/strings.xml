@@ -4,4 +4,11 @@
     <!-- El widget «Te quedan hoy» (com.jvillada.movi.widget.WidgetTeQuedan). -->
     <string name="widget_te_quedan">Te quedan hoy</string>
     <string name="widget_te_quedan_descripcion">Cuánto te queda en el período, sin abrir la app</string>
+    <!-- Ola 5: los atajos del ícono de la app (res/xml/shortcuts.xml). -->
+    <string name="atajo_gasto">Gasto</string>
+    <string name="atajo_gasto_largo">Anotar un gasto</string>
+    <string name="atajo_traspaso">Traspaso</string>
+    <string name="atajo_traspaso_largo">Anotar un traspaso</string>
+    <string name="atajo_por_revisar">Por revisar</string>
+    <string name="atajo_por_revisar_largo">Ver lo que está por revisar</string>
 </resources>

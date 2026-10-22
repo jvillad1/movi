@@ -53,7 +53,17 @@
                 <data android:mimeType="image/*" />
                 <data android:mimeType="application/pdf" />
             </intent-filter>
+            <!-- Ola 5: los atajos del ícono (Gasto · Traspaso · Por revisar). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- Ola 5: «Confirmar» en la notificación de un aviso. Solo la propia notificación de Movi
+             lo dispara (un PendingIntent explícito): no se exporta. -->
+        <receiver
+            android:name="com.jvillada.movi.avisos.ReceptorDeLaNotificacion"
+            android:exported="false" />
 
         <!--
             Captura de los movimientos que las apps del banco publican como notificación
