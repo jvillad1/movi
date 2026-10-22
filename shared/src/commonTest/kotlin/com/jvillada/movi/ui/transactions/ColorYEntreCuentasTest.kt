@@ -139,6 +139,9 @@ class ColorYEntreCuentasTest {
             val neutroColor = colorDelTono(TonoDelMonto.NEUTRO, colores)
 
             assertTrue(gastoColor != ingresoColor, "$tema: gasto e ingreso no pueden ser el mismo color")
+            // Ola 2a: el gasto va en el color del texto; el rojo quedó para lo que pide atención.
+            assertEquals(colores.texto, gastoColor, "$tema: un gasto no es una alerta")
+            assertTrue(gastoColor != colores.sale, "$tema: un gasto no va en rojo")
             assertTrue(gastoColor != entreCuentasColor, "$tema: gasto y entre-cuentas no pueden ser el mismo color")
             assertTrue(ingresoColor != entreCuentasColor, "$tema: ingreso y entre-cuentas no pueden ser el mismo color")
             // Y de paso, que «entre cuentas» dejó de reusar el gris de un NEUTRO real — que es

@@ -520,8 +520,11 @@ fun heroBalance(accounts: List<Account>, apartados: List<Apartado> = emptyList()
 fun apartadoEfectivoDe(account: Account, apartados: List<Apartado>): Long =
     apartadoEfectivoPorCuenta(listOf(account), apartados)[account.id] ?: 0L
 
-/** Una fila del desglose por cuenta del hero: el nombre y su saldo, ya formateado con signo y moneda. */
-data class CuentaHero(val nombre: String, val monto: String)
+/**
+ * Una fila del desglose por cuenta del hero: el nombre y su saldo, ya formateado con signo y moneda,
+ * y el tipo de la cuenta para su avatar cuando Movi no reconoce el banco (Ola 2a).
+ */
+data class CuentaHero(val nombre: String, val monto: String, val tipo: AccountType = AccountType.SAVINGS)
 
 /**
  * Las cuentas que componen [HeroBalance.tuPlata], una por una — lo que pidió el dueño viendo
@@ -549,7 +552,7 @@ fun cuentasDelHero(accounts: List<Account>?, apartados: List<Apartado> = emptyLi
     return (disponibles + invertidas).map {
         val (monto, moneda) = saldoEnSuMoneda(it)
         val libre = if (moneda == "COP") monto - apartadoEfectivoDe(it, apartados) else monto
-        CuentaHero(it.name, signedMoney(libre, moneda))
+        CuentaHero(it.name, signedMoney(libre, moneda), it.type)
     }
 }
 

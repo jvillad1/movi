@@ -235,7 +235,8 @@ private fun ImportEventRow(event: FinancialEvent) {
             text = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}",
             style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
-            color = if (isIncome) Movi.colores.entra else Movi.colores.sale,
+            // Ola 2a: el gasto en el color del texto; el signo «−» ya lo dice.
+            color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
         )
     }
 }

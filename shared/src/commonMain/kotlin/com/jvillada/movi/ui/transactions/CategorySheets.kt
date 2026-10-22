@@ -718,7 +718,7 @@ internal fun ContenidoDelMovimiento(
     val alCerrar: () -> Unit = { if (renombradoAca != null) onEventChanged(renombradoAca) else onDismiss() }
     MarcoDelMovimiento(lugar, onDismiss = alCerrar, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            NombreQueSeEdita(renombradoAca?.description ?: event.description) { edicionAbierta = true }
+            NombreQueSeEdita(renombradoAca?.description ?: event.description, evento = renombradoAca ?: event) { edicionAbierta = true }
             Spacer(Modifier.height(12.dp))
             PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
             Spacer(Modifier.height(18.dp))
@@ -1142,11 +1142,17 @@ fun CardPaymentCandidatesSheet(
  */
 /** El nombre del movimiento, tocable: abre el editor del concepto. */
 @Composable
-private fun NombreQueSeEdita(nombre: String, onEditar: () -> Unit) {
+private fun NombreQueSeEdita(nombre: String, evento: FinancialEvent? = null, onEditar: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onEditar),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Ola 2a: el avatar del comercio junto al título (la marca, o el ícono de la categoría). Solo
+        // eso: el rediseño de esta hoja viene después.
+        if (evento != null) {
+            AvatarDelComercio(evento, tamano = TamanoDeAvatar.Encabezado)
+            Spacer(Modifier.width(12.dp))
+        }
         Text(
             nombre,
             style = Movi.textos.titulo,

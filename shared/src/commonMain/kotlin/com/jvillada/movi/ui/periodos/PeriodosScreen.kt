@@ -385,7 +385,8 @@ internal fun CifrasDelPeriodo(resumen: ResumenDePeriodo) {
         Spacer(Modifier.height(14.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             ParDeCifraDePeriodo("Entró", formatMoneyCompact(resumen.entradas), Movi.colores.entra)
-            ParDeCifraDePeriodo("Salió", formatMoneyCompact(resumen.salidas), Movi.colores.sale)
+            // Ola 2a: lo que salió en neutro; el rojo queda para «Te quedó» en negativo.
+            ParDeCifraDePeriodo("Salió", formatMoneyCompact(resumen.salidas), Movi.colores.texto)
             val teQuedo = teQuedoDe(resumen)
             ParDeCifraDePeriodo("Te quedó", textoDeTeQuedo(teQuedo), colorDeTeQuedo(teQuedo), alFinal = true)
         }
@@ -393,7 +394,7 @@ internal fun CifrasDelPeriodo(resumen: ResumenDePeriodo) {
         BarraDeDosTramos(
             fraccionIzquierda = fraccion,
             colorIzquierda = Movi.colores.entra,
-            colorDerecha = Movi.colores.sale,
+            colorDerecha = Movi.colores.neutro,
             entrada = 1f,
         )
     }

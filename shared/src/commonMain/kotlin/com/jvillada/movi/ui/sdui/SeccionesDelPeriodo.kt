@@ -240,7 +240,9 @@ const val TAG_FLECHA_CONTRA_EL_ANTERIOR: String = "flecha-contra-el-anterior"
 @Composable
 private fun FlechaContraElAnterior(flecha: ContraElAnterior) {
     val color = when (flecha.tendencia) {
-        Tendencia.SUBE -> Movi.colores.sale
+        // Ola 2a: gastar más que el período pasado no es una alerta (no hay presupuesto pasado ni
+        // nada vencido): la flecha y la frase lo dicen, en el color del texto.
+        Tendencia.SUBE -> Movi.colores.texto
         Tendencia.BAJA -> Movi.colores.entra
         Tendencia.IGUAL -> Movi.colores.textoApagado
     }
