@@ -413,7 +413,11 @@ class DetalleDePeriodoScreenTest {
         esperarTexto("Éxito Laureles")
 
         composeRule.onAllNodesWithTag(TAG_GASTO_GRANDE, useUnmergedTree = true).onFirst().performScrollTo().performClick()
-        esperarTexto("MONTO, CUENTA Y CONCEPTO")
+        // Ola 2b: el detalle del movimiento, que abre con su monto grande.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(com.jvillada.movi.ui.transactions.TAG_MONTO_DEL_MOVIMIENTO, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test

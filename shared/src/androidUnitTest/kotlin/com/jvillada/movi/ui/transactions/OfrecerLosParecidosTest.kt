@@ -99,6 +99,9 @@ class OfrecerLosParecidosTest {
             }
         }
         composeRule.waitForIdle()
+        // Ola 2b: el selector se abre desde el chip de la categoría, como lo abre el dueño.
+        composeRule.onNodeWithTag(TAG_CHIP_DE_CATEGORIA, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
     }
 
     private fun elegir(categoria: String) {
@@ -195,8 +198,8 @@ class OfrecerLosParecidosTest {
         var cambiado: FinancialEvent? = null
         montar { cambiado = it }
 
-        // Ola L: la hoja ya no esconde el selector tras un campo plegado: la cuadrícula está a la
-        // vista, y una celda toca y guarda.
+        // Ola L: la hoja ya no esconde el selector tras un campo plegado; desde la Ola 2b se abre
+        // con el chip (ver `montar`), y una celda toca y guarda.
         composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Comida"), useUnmergedTree = true).performScrollTo()
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()

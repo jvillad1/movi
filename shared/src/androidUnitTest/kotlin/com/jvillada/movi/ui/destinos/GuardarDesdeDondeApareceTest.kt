@@ -38,6 +38,8 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.porrevisar.PorRevisarScreen
 import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
+import com.jvillada.movi.ui.transactions.AccionDelMovimiento
+import com.jvillada.movi.ui.transactions.tagDeAccionDelMovimiento
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -337,6 +339,7 @@ class GuardarDesdeDondeApareceTest {
     @Test
     fun `el detalle de un movimiento con un numero desconocido ofrece la misma fila`() {
         hoja(Repo(), yaAnotado)
+        abrirTercero()
 
         esperar("¿De quién es la cuenta ·0756?")
         tocar(PONERLE_NOMBRE)
@@ -360,6 +363,7 @@ class GuardarDesdeDondeApareceTest {
     fun `desde el movimiento se elige un tercero que ya existe y el nombre cambia en el acto`() {
         val papa = DestinoConocido(id = "dst_papa", nombre = "Papá", numero = "77700001234", tipo = TipoDeTercero.PERSONA)
         hoja(Repo(guardados = listOf(papa)), yaAnotado.copy(description = "Transferencia a la cuenta *55500000756"))
+        abrirTercero()
 
         esperar("¿De quién es la cuenta ·0756?")
         assertFalse(hay("Papá"), "la lista no se abre sola")
@@ -394,6 +398,7 @@ class GuardarDesdeDondeApareceTest {
                 }
             }
         }
+        abrirTercero()
         esperar("Es de «Caro»")
         tocar(VER_SU_FICHA)
         assertEquals(Screen.Destinos(abrir = "dst_caro"), navegoA)
@@ -443,6 +448,19 @@ class GuardarDesdeDondeApareceTest {
                 }
             }
         }
+        composeRule.waitForIdle()
+    }
+
+    /**
+     * Ola 2b: en el detalle de un movimiento, lo del tercero se abre desde su acción («Tercero»),
+     * que aparece cuando el movimiento nombra una cuenta y ya se leyeron las guardadas.
+     */
+    private fun abrirTercero() {
+        val accion = tagDeAccionDelMovimiento(AccionDelMovimiento.Tercero)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(accion, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag(accion, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 

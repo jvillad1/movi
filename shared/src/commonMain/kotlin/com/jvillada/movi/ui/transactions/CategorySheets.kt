@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -301,6 +302,8 @@ fun ChangeCategorySheet(
      * caer es peor que no tenerla.
      */
     onEditarRecurrente: ((RecurringRule) -> Unit)? = null,
+    /** Ola 2b: la sección que se abre de entrada (ver [AccionDelMovimiento]); `null`, ninguna. */
+    accionInicial: AccionDelMovimiento? = null,
 ) {
     ContenidoDelMovimiento(
         event = event,
@@ -312,6 +315,7 @@ fun ChangeCategorySheet(
         onAnular = onAnular,
         onMarcarComoRecurrente = onMarcarComoRecurrente,
         onEditarRecurrente = onEditarRecurrente,
+        accionInicial = accionInicial,
     )
 }
 
@@ -355,9 +359,23 @@ internal fun ContenidoDelMovimiento(
     onAnular: (() -> Unit)?,
     onMarcarComoRecurrente: ((RecurringPrefill) -> Unit)?,
     onEditarRecurrente: ((RecurringRule) -> Unit)?,
+    /**
+     * Ola 2b · la sección que se abre de entrada. `null` (lo normal): el detalle se lee primero y
+     * nada está abierto. Deslizar una fila de Movimientos a la izquierda abre con [AccionDelMovimiento.Categoria].
+     */
+    accionInicial: AccionDelMovimiento? = null,
+    /** «4 veces este período · $142.800». Solo lo pasa quien tiene los movimientos del período a mano. */
+    enEsteComercio: EnEsteComercio? = null,
+    /** Abrir Movimientos con esta búsqueda. `null`: la línea se muestra sin acción. */
+    onVerElComercio: ((String) -> Unit)? = null,
 ) {
     val coroutine = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
+    /**
+     * Ola 2b · la sección abierta del detalle ([AccionDelMovimiento]), o ninguna. Una sola a la vez:
+     * el detalle se lee primero, y cada sección de edición se abre desde su acción.
+     */
+    var accion by remember(event.id) { mutableStateOf(accionInicial) }
     var error by remember { mutableStateOf<String?>(null) }
     /**
      * El error de guardar el monto / la cuenta / el concepto, **izado hasta acá a propósito**.
@@ -421,6 +439,14 @@ internal fun ContenidoDelMovimiento(
                     // movimientos que el dueño no está mirando, y cambiarlos solos sería mover
                     // cifras suyas a sus espaldas.
                     val otros = parecidosQueCambiarian(parecidos, category)
+                    // Elegida, el selector se cierra: el chip ya dice la nueva. Si la nueva es de
+                    // deuda (Ola Y), se abre «Más», donde está vincularla. En la hoja no se nota —se
+                    // cierra entera—; en el panel el movimiento sigue a la vista.
+                    accion = if (ofreceVincularDeuda(actualizado.type, actualizado.category, actualizado.transferId)) {
+                        AccionDelMovimiento.Mas
+                    } else {
+                        null
+                    }
                     if (otros.isEmpty()) onEventChanged(actualizado)
                     else oferta = OfertaDeLote(categoria = category, movimiento = actualizado, otros = otros)
                 }
@@ -717,194 +743,227 @@ internal fun ContenidoDelMovimiento(
     // que el server, `NombreDelTercero.kt`). Al cerrar, quien la abrió relee la lista.
     val renombradoAca = destinoGuardadoAca?.let { elMovimientoConElNombreDe(event, it) }
     val alCerrar: () -> Unit = { if (renombradoAca != null) onEventChanged(renombradoAca) else onDismiss() }
+
+    // 4-oct-2026: si ya es de un tercero guardado, su nombre lleva a su ficha («Ver todo lo de
+    // Caro»): lo que le enviaste, lo que te envió y sus movimientos, sin salir de acá.
+    val tercero = destinoGuardadoAca ?: destinosParaGuardar.deQuienEs(aQuienFue)
+        ?.takeIf { !isTransferLeg(event) && !isOpeningBalance(event) }
+    // «¿De quién es la cuenta ·0756? Guardar como…» — la misma fila de «Reconciliar movimiento».
+    val ofreceGuardarElTercero = tercero == null && aQuienFue != null && destinosParaGuardar.ofrece(aQuienFue, cuentas)
+    // «¿Se repite?» solo si quien abrió la hoja tiene dónde poner el formulario, y solo sobre un
+    // movimiento al que la pregunta le aplica (ver [puedeOfrecerseComoRecurrenteDesdeElDetalle]).
+    val ofreceRepetir = onMarcarComoRecurrente != null && puedeOfrecerseComoRecurrenteDesdeElDetalle(event)
+    val ofreceVincular = ofreceVincularDeuda(event.type, event.category, event.transferId)
+    // Ola 2b · **las acciones son las secciones que ya existían, reubicadas.** Solo aparece la que
+    // tiene algo que abrir: sin tercero no hay «Tercero», sin dónde poner el formulario no hay
+    // «Repetir».
+    val acciones = buildList {
+        add(AccionDelMovimiento.Categoria)
+        add(AccionDelMovimiento.Nota)
+        add(AccionDelMovimiento.Fecha)
+        if (ofreceRepetir) add(AccionDelMovimiento.Repetir)
+        if (tercero != null || ofreceGuardarElTercero) add(AccionDelMovimiento.Tercero)
+        if (onAnular != null || ofreceVincular) add(AccionDelMovimiento.Mas)
+    }
+    val reducido = LocalMovimientoReducido.current
+    fun alternar(a: AccionDelMovimiento) {
+        accion = if (accion == a) null else a
+    }
+
     MarcoDelMovimiento(lugar, onDismiss = alCerrar, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            NombreQueSeEdita(renombradoAca?.description ?: event.description, evento = renombradoAca ?: event) { edicionAbierta = true }
-            Spacer(Modifier.height(12.dp))
-            PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
-            Spacer(Modifier.height(18.dp))
-            // Ola 15 · la pata huérfana se explica sola, acá y no en la fila.
-            //
-            // La fila de Movimientos no tiene lugar: su subtítulo es «categoría · cuenta» con una
-            // línea y ellipsis (verificado en el navegador cuando se descartó partir esta
-            // categoría en dos por dirección). Y esta hoja es donde el dueño llega justo cuando se
-            // pregunta qué es esa fila — la abre para tocarle la categoría.
-            //
-            // Va ARRIBA de la fecha y de la lista, no al final, por lo mismo que la fecha: lo que
-            // queda debajo de veinte renglones de categorías, en la práctica, no existe.
+            // ── Lo que se lee primero: quién, cuánto, cuándo y en qué categoría. ──
+            EncabezadoDelMovimiento(
+                evento = renombradoAca ?: event,
+                cuentas = cuentas,
+                onEditar = { accion = AccionDelMovimiento.Nota },
+            )
+            Spacer(Modifier.height(14.dp))
+            ChipDeCategoria(
+                nombre = event.category,
+                abierto = accion == AccionDelMovimiento.Categoria,
+                habilitado = !saving,
+                onClick = { alternar(AccionDelMovimiento.Categoria) },
+            )
+            if (enEsteComercio != null) {
+                Spacer(Modifier.height(8.dp))
+                LineaEnEsteComercio(enEsteComercio, onVer = onVerElComercio?.let { ver -> { ver(enEsteComercio.busqueda) } })
+            }
+            // Lo que espera una decisión no se esconde detrás de una acción: confirmarlo es lo que
+            // el dueño vino a hacer cuando abre un aviso pendiente.
+            if (event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
+                Spacer(Modifier.height(16.dp))
+                PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
+            }
+            // Ola 15 · la pata huérfana se explica sola, acá y no en la fila: la fila no tiene
+            // lugar, y esta hoja es donde el dueño llega justo cuando se pregunta qué es.
             if (isOrphanedTransferLeg(event)) {
+                Spacer(Modifier.height(16.dp))
                 SheetLabel("ERA UN TRASPASO")
                 Spacer(Modifier.height(8.dp))
                 Text(ORPHANED_LEG_EXPLAINER, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                Spacer(Modifier.height(20.dp))
-                Hairline()
-                Spacer(Modifier.height(16.dp))
             }
-            // El monto, la cuenta y el concepto van PRIMERO, arriba de la fecha y de la lista de
-            // categorías: es lo que el dueño vino a arreglar cuando abre esta hoja para corregir
-            // una cifra, y todo lo que quede debajo de veinte renglones de categorías es, en la
-            // práctica, invisible (el mismo argumento que ya subió la fecha hasta acá).
-            SeccionDelMovimiento(
-                event = event,
-                cuentas = cuentas,
-                onError = { errorDeEdicion = it },
-                onGuardado = { edicionAbierta = false; onEventChanged(it) },
-                abierto = edicionAbierta,
-                onAbiertoChange = { edicionAbierta = it },
-            )
-            // «¿De quién es la cuenta ·0756? Guardar como…» — la misma fila de «Reconciliar
-            // movimiento», para un movimiento ya anotado cuyo texto del banco (o su nombre) trae
-            // un número o una llave que ninguna cuenta guardada conoce. Guardarla no toca este
-            // movimiento: desde ahí «Cuentas de otros» lo cuenta, porque el texto del banco no se
-            // reescribe nunca (ver `nombraAlDestino` en `:core`).
-            // 4-oct-2026: si ya es de un tercero guardado, su nombre lleva a su ficha («Ver todo lo de
-            // Caro»): lo que le enviaste, lo que te envió y sus movimientos, sin salir de acá.
-            val tercero = destinoGuardadoAca ?: destinosParaGuardar.deQuienEs(aQuienFue)
-                ?.takeIf { !isTransferLeg(event) && !isOpeningBalance(event) }
-            if (tercero != null) {
-                Spacer(Modifier.height(16.dp))
-                FilaDelTercero(
-                    tercero = tercero,
-                    recienGuardado = destinoGuardadoAca != null,
-                )
-            } else if (aQuienFue != null && destinosParaGuardar.ofrece(aQuienFue, cuentas)) {
-                Spacer(Modifier.height(20.dp))
-                Hairline()
-                Spacer(Modifier.height(16.dp))
-                FilaGuardarElDestino(
-                    identificador = aQuienFue,
-                    nombreSugerido = nombreParaLaFila(aQuienFue, event.merchant),
-                    textoDelAviso = event.rawPayload,
-                    destinos = destinosParaGuardar.guardados.orEmpty(),
-                    onGuardado = { guardado ->
-                        destinosParaGuardar.alGuardar(guardado)
-                        destinoGuardadoAca = guardado
-                        // 20-oct-2026: el server ya le puso su nombre a este movimiento. En el panel
-                        // se relee ya; en la hoja se muestra acá (ver [renombradoAca]) y se relee al
-                        // cerrarla, para no cerrarla sin que el dueño vea que quedó guardado.
-                        if (lugar == LugarDelMovimiento.Panel) {
-                            elMovimientoConElNombreDe(event, guardado)?.let(onEventChanged)
-                        }
-                    },
-                )
-            }
-            // «Esto se repite todos los meses» — solo si quien abrió la hoja tiene dónde poner el
-            // formulario, y solo sobre un movimiento al que la pregunta le aplica (ver
-            // [puedeOfrecerseComoRecurrenteDesdeElDetalle]).
-            if (onMarcarComoRecurrente != null && puedeOfrecerseComoRecurrenteDesdeElDetalle(event)) {
-                Spacer(Modifier.height(20.dp))
-                Hairline()
-                Spacer(Modifier.height(16.dp))
-                SeccionEstoSeRepite(
-                    event = event,
-                    onError = { errorDeEdicion = it },
-                    onAbrirFormulario = onMarcarComoRecurrente,
-                    onEditarRecurrente = onEditarRecurrente,
-                    onGuardado = onEventChanged,
-                )
-            }
-            Spacer(Modifier.height(20.dp))
-            Hairline()
             Spacer(Modifier.height(16.dp))
-            // La fecha va ARRIBA de la lista de categorías, no al final: la lista mide veinte
-            // renglones y todo lo que quede debajo de ella es, en la práctica, invisible.
-            SeccionDeFecha(event = event, onFechaCambiada = onEventChanged)
-            Spacer(Modifier.height(20.dp))
-            Hairline()
-            Spacer(Modifier.height(16.dp))
-            // Ola N (fix round): con «Pago de tarjeta» arriba, lo primero bajo el título ya no es
-            // la categoría actual — y si no es de las frecuentes, su celda marcada puede quedar
-            // bajo el pliegue de la cuadrícula (orden alfabético, veinte y pico celdas). El rótulo
-            // dice cuál es sin que haga falta encontrar la celda, y TalkBack lo anuncia apenas
-            // entra a la sección (antes anunciaba «Pago de tarjeta», que no es la actual).
-            SheetLabel("CATEGORÍA · ${event.category}")
-            Spacer(Modifier.height(4.dp))
-            // Ola N: la fila de texto con la categoría actual se sacó de acá para el caso común —
-            // quedaba dos veces (esta fila Y la celda marcada de la cuadrícula, justo debajo) y la
-            // celda ya comunica cuál es, con sus semantics de `selected` (Ola L). Se queda SOLO
-            // cuando la cuadrícula no tiene ninguna celda para marcar: una categoría escondida, o
-            // importada de un extracto y fuera de cualquier catálogo, con la búsqueda vacía no
-            // aparece entre las celdas — sin esta fila esos dos casos se quedarían sin ninguna
-            // marca, ni visual ni de TalkBack (el rótulo de arriba ya dice el nombre, pero no
-            // marca ninguna celda).
-            //
-            // `remember`: es el mismo cálculo que hace [SelectorDeCategoria] por dentro (misma
-            // búsqueda vacía, mismo tipo, `used`, `prefs` y `usos`) — sin esto corría dos veces en
-            // cada recomposición de la hoja entera.
-            val laActualTieneCeldaPropia = remember(event.category, event.type, categoryPrefs) {
-                contenidoDelSelectorDeCategoria(
-                    busqueda = "",
-                    tipo = event.type,
-                    usadas = UsedCategoriesCache.used,
-                    prefs = categoryPrefs,
-                    usos = UsedCategoriesCache.usosRecientes,
-                ).celdas.any { esLaCeldaElegida(it, event.category) }
-            }
-            if (!laActualTieneCeldaPropia) {
-                CategoryRow(name = event.category, selected = true, enabled = false, onClick = {}, compacto = true)
-                Spacer(Modifier.height(8.dp))
-            }
-            // Ola N: «Pago de tarjeta» sube ARRIBA de la cuadrícula — antes quedaba debajo de las
-            // ~20 categorías del selector, y en una cuenta con muchas categorías el dueño tenía que
-            // scrollear para encontrarla. Mismas condiciones de siempre
-            // ([puedeMarcarsePagoDeTarjeta]): esto solo cambia la posición, no la lógica. Sigue sin
-            // caber en el selector (es reservada: nada reservado se ofrece ahí), así que es su
-            // propia fila. `compacto`: ver el KDoc de [CategoryRow] — libera el espacio que le
-            // hacía falta a la búsqueda para seguir a la vista sin scrollear en 731 dp.
-            if (event.category != CARD_PAYMENT_CATEGORY && puedeMarcarsePagoDeTarjeta(event.type, categoryPrefs)) {
-                CategoryRow(
-                    name = CARD_PAYMENT_CATEGORY,
-                    selected = false,
-                    enabled = !saving,
-                    onClick = { choose(CARD_PAYMENT_CATEGORY) },
-                    subtitle = "Deja de contar en tus gastos del mes: la compra ya se contó al usar la tarjeta",
-                    compacto = true,
-                )
-                Spacer(Modifier.height(6.dp))
-                Hairline()
-                Spacer(Modifier.height(6.dp))
-            }
-            // Ola L · **Una sola forma de elegir categoría.** Acá había una lista de filas armada
-            // con `PREDEFINED_CATEGORIES` (sin «Fútbol», «Hija», «Gardenera»: las del dueño) y, bajo
-            // ella, un campo plegado para buscar o crear que nadie veía. Ahora es la cuadrícula de
-            // siempre, con la búsqueda arriba y las frecuentes primero; una celda toca y guarda
-            // (elegir ES la acción completa) y «Crear "…"» crea una nueva.
-            //
-            // La guarda de reservadas se queda: el selector ya no ofrece ninguna, pero esta hoja es
-            // la puerta del `PUT` y no confía en eso.
-            SelectorDeCategoria(
-                elegida = event.category,
-                onElegir = { elegida ->
-                    if (!saving && ofreceCategoriaEscritaAMano(elegida, event.category)) choose(elegida.trim())
-                },
-                tipo = event.type,
-                usadas = UsedCategoriesCache.used,
-                prefs = categoryPrefs,
-                usos = UsedCategoriesCache.usosRecientes,
-            )
-            Spacer(Modifier.height(4.dp))
-            EnlaceAdministrarCategorias()
+            FilaDeAcciones(acciones = acciones, abierta = accion, onElegir = ::alternar)
 
-            // Ola Y: opcional, y solo con las dos categorías de deuda sobre un gasto que todavía
-            // no es la mitad de un traspaso — ver `ofreceVincularDeuda`. Debajo de la categoría
-            // porque depende de cuál quedó guardada: aparece apenas `choose()` la deja en
-            // «Cuota de crédito» o «Pago de tarjeta», sin que el dueño tenga que reabrir la hoja.
-            if (ofreceVincularDeuda(event.type, event.category, event.transferId)) {
-                Spacer(Modifier.height(20.dp))
-                Hairline()
-                Spacer(Modifier.height(16.dp))
-                SelectorDeCuentaDeDeuda(
-                    cuentas = cuentas,
-                    seleccionada = null,
-                    onSeleccionar = { it?.let(::vincular) },
-                )
-                if (vinculando) {
-                    Spacer(Modifier.height(6.dp))
-                    Text("Vinculando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
-                errorDeVinculo?.let {
-                    Spacer(Modifier.height(6.dp))
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            // ── La sección abierta, debajo de la fila. Cada una guarda como siempre. ──
+            Column(modifier = Modifier.fillMaxWidth().animateContentSize(Movimiento.alEntrar(reducido))) {
+                when (accion) {
+                    AccionDelMovimiento.Categoria -> {
+                        Spacer(Modifier.height(12.dp))
+                        Hairline()
+                        Spacer(Modifier.height(12.dp))
+                        SheetLabel("CATEGORÍA · ${event.category}")
+                        Spacer(Modifier.height(4.dp))
+                        // Ola N: la fila de texto con la categoría actual queda SOLO cuando la
+                        // cuadrícula no tiene ninguna celda para marcar: una categoría escondida, o
+                        // importada de un extracto y fuera de cualquier catálogo. Sin esta fila esos
+                        // dos casos se quedarían sin ninguna marca, ni visual ni de TalkBack.
+                        //
+                        // `remember`: es el mismo cálculo que hace [SelectorDeCategoria] por dentro.
+                        val laActualTieneCeldaPropia = remember(event.category, event.type, categoryPrefs) {
+                            contenidoDelSelectorDeCategoria(
+                                busqueda = "",
+                                tipo = event.type,
+                                usadas = UsedCategoriesCache.used,
+                                prefs = categoryPrefs,
+                                usos = UsedCategoriesCache.usosRecientes,
+                            ).celdas.any { esLaCeldaElegida(it, event.category) }
+                        }
+                        if (!laActualTieneCeldaPropia) {
+                            CategoryRow(name = event.category, selected = true, enabled = false, onClick = {}, compacto = true)
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        // Ola L · **Una sola forma de elegir categoría**: la cuadrícula de siempre,
+                        // con la búsqueda arriba y las frecuentes primero, solo las del tipo del
+                        // movimiento. Una celda toca y guarda; «Crear "…"» crea una nueva.
+                        //
+                        // La guarda de reservadas se queda: el selector no ofrece ninguna, pero esta
+                        // hoja es la puerta del `PUT` y no confía en eso.
+                        SelectorDeCategoria(
+                            elegida = event.category,
+                            onElegir = { elegida ->
+                                if (!saving && ofreceCategoriaEscritaAMano(elegida, event.category)) choose(elegida.trim())
+                            },
+                            tipo = event.type,
+                            usadas = UsedCategoriesCache.used,
+                            prefs = categoryPrefs,
+                            usos = UsedCategoriesCache.usosRecientes,
+                        )
+                        // Ola 2b · «Pago de tarjeta» va AL FINAL, después de las del tipo del
+                        // movimiento: es una especial, y encabezar el selector de un almuerzo con
+                        // ella era ofrecer primero lo que casi nunca se busca. Mismas condiciones de
+                        // siempre ([puedeMarcarsePagoDeTarjeta]); sigue fuera de la cuadrícula
+                        // porque es reservada (nada reservado se ofrece ahí).
+                        if (event.category != CARD_PAYMENT_CATEGORY && puedeMarcarsePagoDeTarjeta(event.type, categoryPrefs)) {
+                            Spacer(Modifier.height(6.dp))
+                            Hairline()
+                            Spacer(Modifier.height(6.dp))
+                            CategoryRow(
+                                name = CARD_PAYMENT_CATEGORY,
+                                selected = false,
+                                enabled = !saving,
+                                onClick = { choose(CARD_PAYMENT_CATEGORY) },
+                                subtitle = "Deja de contar en tus gastos del mes: la compra ya se contó al usar la tarjeta",
+                                compacto = true,
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        EnlaceAdministrarCategorias()
+                    }
+                    AccionDelMovimiento.Nota -> {
+                        Spacer(Modifier.height(12.dp))
+                        Hairline()
+                        Spacer(Modifier.height(12.dp))
+                        // El monto, la cuenta y el concepto: la misma sección, ya abierta (tocar la
+                        // acción ES pedir el editor). «Cerrar» la vuelve a plegar.
+                        SeccionDelMovimiento(
+                            event = event,
+                            cuentas = cuentas,
+                            onError = { errorDeEdicion = it },
+                            onGuardado = { accion = null; onEventChanged(it) },
+                            abierto = true,
+                            onAbiertoChange = { abierto -> if (!abierto) accion = null },
+                        )
+                    }
+                    AccionDelMovimiento.Fecha -> {
+                        Spacer(Modifier.height(12.dp))
+                        Hairline()
+                        Spacer(Modifier.height(12.dp))
+                        SeccionDeFecha(
+                            event = event,
+                            onFechaCambiada = { accion = null; onEventChanged(it) },
+                            abiertaDeEntrada = true,
+                        )
+                    }
+                    AccionDelMovimiento.Repetir -> if (ofreceRepetir && onMarcarComoRecurrente != null) {
+                        Spacer(Modifier.height(12.dp))
+                        Hairline()
+                        Spacer(Modifier.height(12.dp))
+                        SeccionEstoSeRepite(
+                            event = event,
+                            onError = { errorDeEdicion = it },
+                            onAbrirFormulario = onMarcarComoRecurrente,
+                            onEditarRecurrente = onEditarRecurrente,
+                            onGuardado = onEventChanged,
+                        )
+                    }
+                    AccionDelMovimiento.Tercero -> {
+                        if (tercero != null) {
+                            Spacer(Modifier.height(12.dp))
+                            FilaDelTercero(
+                                tercero = tercero,
+                                recienGuardado = destinoGuardadoAca != null,
+                            )
+                        } else if (aQuienFue != null && ofreceGuardarElTercero) {
+                            Spacer(Modifier.height(12.dp))
+                            Hairline()
+                            Spacer(Modifier.height(12.dp))
+                            // Guardarla no toca este movimiento: desde ahí «Cuentas de otros» lo
+                            // cuenta, porque el texto del banco no se reescribe nunca.
+                            FilaGuardarElDestino(
+                                identificador = aQuienFue,
+                                nombreSugerido = nombreParaLaFila(aQuienFue, event.merchant),
+                                textoDelAviso = event.rawPayload,
+                                destinos = destinosParaGuardar.guardados.orEmpty(),
+                                onGuardado = { guardado ->
+                                    destinosParaGuardar.alGuardar(guardado)
+                                    destinoGuardadoAca = guardado
+                                    // 20-oct-2026: el server ya le puso su nombre a este movimiento. En
+                                    // el panel se relee ya; en la hoja se muestra acá (ver
+                                    // [renombradoAca]) y se relee al cerrarla.
+                                    if (lugar == LugarDelMovimiento.Panel) {
+                                        elMovimientoConElNombreDe(event, guardado)?.let(onEventChanged)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    AccionDelMovimiento.Mas -> {
+                        // Ola Y: «¿A cuál crédito o tarjeta corresponde?», solo con las dos
+                        // categorías de deuda sobre un gasto que todavía no es la mitad de un
+                        // traspaso — ver `ofreceVincularDeuda`.
+                        if (ofreceVincular) {
+                            Spacer(Modifier.height(12.dp))
+                            Hairline()
+                            Spacer(Modifier.height(12.dp))
+                            SelectorDeCuentaDeDeuda(
+                                cuentas = cuentas,
+                                seleccionada = null,
+                                onSeleccionar = { it?.let(::vincular) },
+                            )
+                            if (vinculando) {
+                                Spacer(Modifier.height(6.dp))
+                                Text("Vinculando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                            }
+                            errorDeVinculo?.let {
+                                Spacer(Modifier.height(6.dp))
+                                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+                            }
+                        }
+                        SeccionDeAnular(onAnular, habilitado = !saving)
+                    }
+                    null -> Unit
                 }
             }
 
@@ -916,8 +975,6 @@ internal fun ContenidoDelMovimiento(
                 Spacer(Modifier.height(10.dp))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
-
-            SeccionDeAnular(onAnular, habilitado = !saving)
             Spacer(Modifier.height(20.dp))
         }
         BarraDeError(errorDeEdicion)
@@ -1148,11 +1205,10 @@ private fun NombreQueSeEdita(nombre: String, evento: FinancialEvent? = null, onE
         modifier = Modifier.fillMaxWidth().clickable(onClick = onEditar),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Ola 2a: la marca del comercio junto al título, si Movi la reconoce. Solo eso: el rediseño de
-        // esta hoja viene después. Del alto del renglón (20 dp) y no los 48 de un encabezado: con 48,
-        // y aun con 36, la búsqueda de categorías se salía de la vista en un teléfono de 731 dp
-        // (`la_busqueda_esta_a_la_vista_sin_buscarla_debajo_de_una_lista_larga`). Sin marca no se
-        // pone nada: la categoría ya tiene su ícono más abajo, en su fila.
+        // Ola 2a: la marca del comercio junto al título, si Movi la reconoce. Desde la Ola 2b solo la
+        // usa la rama de un traspaso: el movimiento común lleva `EncabezadoDelMovimiento`, con la
+        // marca a 48 dp (el selector ya no está a la vista al abrir, así que no empuja su búsqueda).
+        // Sin marca no se pone nada.
         val marca = remember(evento?.merchant, evento?.description) { evento?.let(::marcaDe) }
         if (marca != null) {
             CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea)
@@ -1752,11 +1808,13 @@ private fun SelectorDeCuentaDelMovimiento(
 private fun SeccionDeFecha(
     event: FinancialEvent,
     onFechaCambiada: (FinancialEvent) -> Unit,
+    /** Ola 2b: desde la acción «Fecha» el selector ya viene abierto — tocarla ES pedirlo. */
+    abiertaDeEntrada: Boolean = false,
 ) {
     val coroutine = rememberCoroutineScope()
     val hoy = remember { hoyEnAppZone() }
     val actual = remember(event.timestamp) { fechaDeEpoch(event.timestamp) }
-    var abierto by remember { mutableStateOf(false) }
+    var abierto by remember { mutableStateOf(abiertaDeEntrada) }
     var elegida by remember(event.timestamp) { mutableStateOf(actual) }
     var guardando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }

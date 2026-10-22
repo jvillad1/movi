@@ -8,7 +8,11 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import com.jvillada.movi.ui.components.TAG_AVATAR_DE_MARCA
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
@@ -100,7 +104,15 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
         )
     }
 
-    private fun montar(event: FinancialEvent = gasto(), onCambiado: (FinancialEvent) -> Unit = {}) {
+    /**
+     * Ola 2b: el selector ya no está a la vista al abrir — se abre tocando el chip de la categoría,
+     * que es como llega el dueño. [abrirElSelector] en `false` deja la hoja como abre.
+     */
+    private fun montar(
+        event: FinancialEvent = gasto(),
+        abrirElSelector: Boolean = true,
+        onCambiado: (FinancialEvent) -> Unit = {},
+    ) {
         repo = Repo()
         Repositories.sustitutoDePrueba = repo
         composeRule.setContent {
@@ -118,6 +130,12 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
                 }
             }
         }
+        composeRule.waitForIdle()
+        if (abrirElSelector) tocarElChip()
+    }
+
+    private fun tocarElChip() {
+        composeRule.onNodeWithTag(TAG_CHIP_DE_CATEGORIA, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 
@@ -143,7 +161,7 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
     fun elegir_una_propia_guarda_esa_categoria() {
         suyas()
         var cambiado: FinancialEvent? = null
-        montar { cambiado = it }
+        montar(onCambiado = { cambiado = it })
 
         tocarCelda(tagDeCeldaDeCategoria("Hija"))
 
@@ -155,7 +173,7 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
     fun se_puede_crear_una_categoria_nueva_desde_la_hoja() {
         suyas()
         var cambiado: FinancialEvent? = null
-        montar { cambiado = it }
+        montar(onCambiado = { cambiado = it })
 
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performScrollTo().performTextInput("Colegio de Hija")
         composeRule.waitForIdle()
@@ -165,13 +183,37 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
         assertEquals("Colegio de Hija", cambiado?.category)
     }
 
+    /**
+     * **La búsqueda queda a la vista al abrir el selector**, sin buscarla debajo de una lista larga.
+     *
+     * Ola 2b: antes medía la hoja tal como abría, con la cuadrícula siempre montada, y por eso la
+     * Ola 2a dejó la marca del comercio en 20 dp (con 48 la búsqueda se salía en 731 dp). Ahora el
+     * selector no está a la vista al abrir: lo que importa es que, al **abrirlo** desde el chip, su
+     * búsqueda se vea sin desplazar — con el encabezado entero arriba (la marca a 48 dp, el monto
+     * grande, la fila de acciones).
+     */
     @Test
     fun la_busqueda_esta_a_la_vista_sin_buscarla_debajo_de_una_lista_larga() {
         suyas()
-        montar()
+        montar(abrirElSelector = false)
+        composeRule.onAllNodesWithTag(TAG_BUSCAR_CATEGORIA).assertCountEquals(0)
 
-        // Sin `performScrollTo`: si estuviera bajo veinte filas, en 731 dp no se vería. Y con la
-        // sección «¿Se repite?» montada, que es como la ve el dueño.
+        tocarElChip()
+
+        // Sin `performScrollTo`: si estuviera bajo veinte filas, en 731 dp no se vería.
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed()
+    }
+
+    /** Lo mismo con la marca del comercio en el encabezado, a 48 dp: la búsqueda sigue a la vista. */
+    @Test
+    fun con_la_marca_a_48_dp_la_busqueda_sigue_a_la_vista() {
+        suyas()
+        montar(gasto().copy(description = "Rappi", merchant = "RAPPI*LAS DOCE"), abrirElSelector = false)
+        val marca = composeRule.onNodeWithTag(TAG_AVATAR_DE_MARCA, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals(48f, (marca.right - marca.left).value, 0.5f)
+
+        tocarElChip()
+
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed()
     }
 
@@ -197,16 +239,19 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
 
     /**
      * Ola N, fix round (M3): con una categoría CONOCIDA (tiene celda propia) no puede volver a
-     * aparecer la fila de texto redundante — «Hija» tiene que verse una sola vez: la celda de la
-     * cuadrícula (y el rótulo de la sección, que la nombra aparte y no cuenta acá porque no es
-     * "Hija" a secas sino «CATEGORÍA · Hija»).
+     * aparecer la fila de texto redundante — «Hija» tiene que verse una sola vez en el selector: la
+     * celda de la cuadrícula (el rótulo de la sección no cuenta, porque no es "Hija" a secas sino
+     * «CATEGORÍA · Hija»; y el chip de arriba, Ola 2b, tampoco: es el que abrió el selector).
      */
     @Test
     fun la_categoria_actual_conocida_no_aparece_dos_veces() {
         suyas()
         montar(gasto("Hija"))
 
-        composeRule.onAllNodesWithText("Hija", useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onAllNodes(
+            hasText("Hija") and !hasAnyAncestor(hasTestTag(TAG_CHIP_DE_CATEGORIA)),
+            useUnmergedTree = true,
+        ).assertCountEquals(1)
     }
 
     /**
@@ -227,20 +272,25 @@ class LaHojaDelMovimientoOfreceTusCategoriasTest {
     }
 
     /**
-     * Ola N, fix round (M3): «Pago de tarjeta» tiene que quedar ARRIBA de la búsqueda y de la
-     * primera celda de la cuadrícula — es el punto 3 del brief, y nada lo medía todavía.
+     * Ola 2b: «Pago de tarjeta» va AL FINAL, debajo de la búsqueda y de las categorías del tipo del
+     * movimiento. Encabezar el selector de un gasto común con una especial (la Ola N la había subido
+     * arriba de todo) era ofrecer primero lo que casi nunca se busca.
      */
     @Test
-    fun pago_de_tarjeta_queda_arriba_de_la_busqueda_y_de_la_cuadricula() {
+    fun pago_de_tarjeta_va_al_final_debajo_de_la_busqueda_y_de_la_cuadricula() {
         suyas()
         montar()
 
         val pago = composeRule.onNodeWithText(CARD_PAYMENT_CATEGORY, useUnmergedTree = true).getUnclippedBoundsInRoot()
         val busqueda = composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).getUnclippedBoundsInRoot()
-        val primeraCelda = composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Hija")).getUnclippedBoundsInRoot()
+        val celdas = listOf("Hija", "Fútbol", "Gimnasio").map {
+            composeRule.onNodeWithTag(tagDeCeldaDeCategoria(it)).getUnclippedBoundsInRoot()
+        }
 
-        assertTrue(pago.top < busqueda.top, "«Pago de tarjeta» (${pago.top}) no está arriba de la búsqueda (${busqueda.top})")
-        assertTrue(pago.top < primeraCelda.top, "«Pago de tarjeta» (${pago.top}) no está arriba de la cuadrícula (${primeraCelda.top})")
+        assertTrue(pago.top > busqueda.top, "«Pago de tarjeta» (${pago.top}) no está debajo de la búsqueda (${busqueda.top})")
+        celdas.forEach { celda ->
+            assertTrue(pago.top > celda.top, "«Pago de tarjeta» (${pago.top}) no está debajo de la cuadrícula (${celda.top})")
+        }
     }
 
     @Test
