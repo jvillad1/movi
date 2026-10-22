@@ -2,6 +2,7 @@ package com.jvillada.movi
 
 import com.jvillada.movi.ui.ai.LoQueMoviSabeScreen
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -104,11 +105,13 @@ import kotlinx.serialization.json.Json
 
 @Composable
 fun App() {
-    // El único lugar de la app que lee el tema elegido. Es `mutableStateOf`, así que tocar el
-    // interruptor de Perfil recompone desde acá para abajo — o sea, todo.
-    MoviTheme(oscuro = TemaStore.oscuro) {
+    // El único lugar de la app que lee el tema elegido. Es `mutableStateOf`, así que elegir otro
+    // en Ajustes recompone desde acá para abajo — o sea, todo. «Igual que el teléfono» le pregunta
+    // al sistema, y cambiar el tema del teléfono con Movi abierta también se ve en el acto.
+    val oscuro = TemaStore.preferencia.esOscuro(sistemaOscuro = isSystemInDarkTheme())
+    MoviTheme(oscuro = oscuro) {
         // La barra de estado la pinta el sistema, no Movi: hay que decirle de qué color va.
-        AjustarBarrasDelSistema(TemaStore.oscuro)
+        AjustarBarrasDelSistema(oscuro)
         val baseDensity = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(baseDensity.density, baseDensity.fontScale * 1.12f)

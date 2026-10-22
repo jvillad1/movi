@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -23,9 +24,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.PreferenciaDeTema
 import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.data.Repositories
 import kotlinx.coroutines.launch
@@ -248,43 +252,46 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                     ) {
-                        CardRow(
-                            left = {
-                                Column {
-                                    Text(
-                                        "Tema oscuro",
-                                        style = Movi.textos.titulo,
-                                        color = Movi.colores.texto,
-                                    )
-                                    Text(
-                                        text = if (TemaStore.oscuro) {
-                                            "Como lo tuviste siempre"
-                                        } else {
-                                            "Estás en el tema claro"
-                                        },
-                                        style = Movi.textos.apoyo,
-                                        color = Movi.colores.textoMedio,
-                                    )
-                                }
-                            },
-                            right = {
-                                Switch(
-                                    checked = TemaStore.oscuro,
-                                    onCheckedChange = { TemaStore.poner(it) },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Movi.colores.sobreMarca,
-                                        checkedTrackColor = Movi.colores.marca,
-                                        uncheckedThumbColor = Movi.colores.textoApagado,
-                                        uncheckedTrackColor = Movi.colores.tarjeta,
-                                        uncheckedBorderColor = Movi.colores.borde,
-                                    ),
-                                )
-                            },
-                            isLast = true,
-                            // Toda la fila alterna, no solo el interruptor: un blanco de 44 dp
-                            // de alto es más fácil de acertar que uno de 32 de ancho.
-                            onClick = { TemaStore.alternar() },
-                        )
+                        // Ola 1 · «Que Movi se sienta viva»: tres opciones en vez del interruptor
+                        // claro/oscuro. La primera sigue al teléfono; ver [PreferenciaDeTema].
+                        PreferenciaDeTema.entries.forEachIndexed { i, opcion ->
+                            val elegida = TemaStore.preferencia == opcion
+                            CardRow(
+                                left = {
+                                    Column {
+                                        Text(
+                                            opcion.titulo,
+                                            style = Movi.textos.titulo,
+                                            color = Movi.colores.texto,
+                                        )
+                                        if (opcion == PreferenciaDeTema.SISTEMA) {
+                                            Text(
+                                                text = "Claro u oscuro, según cómo tengas el teléfono",
+                                                style = Movi.textos.apoyo,
+                                                color = Movi.colores.textoMedio,
+                                            )
+                                        }
+                                    }
+                                },
+                                right = {
+                                    // El mismo lenguaje que un ítem elegido en el resto de Movi: el
+                                    // check en el color de la marca, y nada en los otros.
+                                    Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                                        if (elegida) {
+                                            Icon(
+                                                Icons.Rounded.Check,
+                                                contentDescription = "Elegido",
+                                                tint = Movi.colores.marca,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                        }
+                                    }
+                                },
+                                isLast = i == PreferenciaDeTema.entries.lastIndex,
+                                onClick = { TemaStore.poner(opcion) },
+                                modifier = Modifier.semantics { selected = elegida },
+                            )
+                        }
                     }
                 }
             }
