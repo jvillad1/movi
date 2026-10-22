@@ -44,6 +44,11 @@ sealed class Screen {
     data class Transactions(
         val chipInicial: Int? = null,
         val periodoInicial: String? = null,
+        /**
+         * Ola 5 · la búsqueda de toda la app: tocar un comercio abre Movimientos con la búsqueda ya
+         * escrita (la misma que deja «Ver el comercio» de la hoja de un movimiento). `null`, lo normal.
+         */
+        val consultaInicial: String? = null,
         val filtro: com.jvillada.movi.shared.model.FiltroDeMovimientos? = null,
     ) : Screen()
     /**
@@ -85,6 +90,11 @@ sealed class Screen {
         val presetFecha: String? = null,
         val presetEsIngreso: Boolean = false,
         val presetDeudaId: String? = null,
+        /**
+         * Ola 5 · los atajos del «+» (mantenerlo presionado, o los del ícono de la app en Android):
+         * con qué pestaña abre la hoja. `null` = la de siempre (la que deciden los otros presets).
+         */
+        val presetPestana: com.jvillada.movi.ui.quickadd.PestanaDeAgregar? = null,
     ) : Screen()
     data object Profile : Screen()
     /**
@@ -230,7 +240,14 @@ sealed class Screen {
      * Un mensaje del banco por confirmar. Se abre desde [PorRevisar] (y desde el historial de
      * [CapturaDelBanco]), así que marca Movimientos y su flecha, sin historial, cae en la bandeja.
      */
-    data class SMSReconcile(val smsId: String) : Screen()
+    data class SMSReconcile(
+        val smsId: String,
+        /**
+         * Ola 5 · «Otra categoría» en la notificación del aviso: abre con el selector de categoría
+         * ya desplegado, porque a eso se vino.
+         */
+        val abrirCategoria: Boolean = false,
+    ) : Screen()
     data object Mas : Screen()
     data object Extractos : Screen()
     data object Accounts : Screen()
@@ -265,6 +282,12 @@ sealed class Screen {
     data class DetalleDePeriodo(val id: String) : Screen()
 
     /**
+     * **Buscar en toda la app** (Ola 5): movimientos, comercios, personas, categorías, cuentas y
+     * pantallas. Se abre con la lupa del encabezado de Hoy, así que marca Hoy.
+     */
+    data object Buscar : Screen()
+
+    /**
      * **«En qué se va»** (Ola 4 · Ver la plata): el gasto de un período día por día contra el
      * anterior, y la lista por categoría, comercio o cuenta. Se abre desde la sección del mismo
      * nombre en Hoy. [periodo] es el prefijo («2026-10») con el que arranca; `null` es el de hoy.
@@ -289,8 +312,8 @@ sealed class Screen {
  * no es lo mismo que sin navegación.
  */
 fun navTabFor(screen: Screen): NavTab? = when (screen) {
-    // «En qué se va» se abre desde Hoy y contesta la pregunta de Hoy: ¿cómo voy?
-    Screen.Dashboard, is Screen.EnQueSeVa -> NavTab.HOY
+    // «En qué se va» se abre desde Hoy y contesta la pregunta de Hoy: ¿cómo voy? Buscar también.
+    Screen.Dashboard, Screen.Buscar, is Screen.EnQueSeVa -> NavTab.HOY
     // «Por revisar» y el detalle de un mensaje se abren desde Movimientos (su renglón «N por
     // revisar»): marcan esa pestaña, no Ajustes.
     is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile, is Screen.Destinos -> NavTab.MOVIMIENTOS

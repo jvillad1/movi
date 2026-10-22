@@ -40,9 +40,11 @@ fun MinNavRail(
     active: NavTab?,
     onTabSelected: (NavTab) -> Unit,
     compacto: Boolean = false,
+    /** Ola 5: mantener presionado el «+» abre sus atajos (ver [BotonDeAgregarConAtajos]). */
+    onAtajo: ((com.jvillada.movi.ui.quickadd.AtajoDeAgregar) -> Unit)? = null,
 ) {
     if (compacto) {
-        RailCompacto(active, onTabSelected)
+        RailCompacto(active, onTabSelected, onAtajo)
         return
     }
     Column(
@@ -70,15 +72,20 @@ fun MinNavRail(
 
         Spacer(Modifier.height(12.dp))
 
-        // Primary action — mirrors the bottom-nav center FAB
+        // Primary action — mirrors the bottom-nav center FAB (y sus atajos, Ola 5).
+        BotonDeAgregarConAtajos(
+            alTocar = { onTabSelected(NavTab.ADD) },
+            alElegirAtajo = onAtajo,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(999.dp))
+                .background(Movi.colores.marca),
+        ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(999.dp))
-                .background(Movi.colores.marca)
-                .clickable { onTabSelected(NavTab.ADD) }
                 .padding(horizontal = Movi.espacios.amplio, vertical = 10.dp),
         ) {
             // El mismo `Color(0xFF1A1040)` a mano que estaba en la barra del teléfono, repetido
@@ -95,6 +102,7 @@ fun MinNavRail(
                 fontWeight = FontWeight.SemiBold,
                 color = Movi.colores.sobreMarca,
             )
+        }
         }
     }
 }
@@ -120,7 +128,11 @@ val ANCHO_DEL_RAIL_ANCHO = 216.dp
  * del pulgar y del mouse.
  */
 @Composable
-private fun RailCompacto(active: NavTab?, onTabSelected: (NavTab) -> Unit) {
+private fun RailCompacto(
+    active: NavTab?,
+    onTabSelected: (NavTab) -> Unit,
+    onAtajo: ((com.jvillada.movi.ui.quickadd.AtajoDeAgregar) -> Unit)?,
+) {
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -133,13 +145,13 @@ private fun RailCompacto(active: NavTab?, onTabSelected: (NavTab) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
+        BotonDeAgregarConAtajos(
+            alTocar = { onTabSelected(NavTab.ADD) },
+            alElegirAtajo = onAtajo,
             modifier = Modifier
                 .size(52.dp)
                 .clip(CircleShape)
-                .background(Movi.colores.marca)
-                .clickable { onTabSelected(NavTab.ADD) },
+                .background(Movi.colores.marca),
         ) {
             Icon(
                 imageVector = Icons.Rounded.Add,

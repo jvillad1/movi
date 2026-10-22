@@ -872,6 +872,8 @@ fun TransactionsScreen(
     onNavigate: (Screen) -> Unit,
     chipInicial: Int? = null,
     periodoInicial: String? = null,
+    /** Ola 5: la búsqueda con que arranca (un comercio tocado en «Buscar»). Ver [Screen.Transactions]. */
+    consultaInicial: String? = null,
     filtroInicial: FiltroDeMovimientos? = null,
 ) {
     // Ola 4 · Ver la plata: lo que pidió «En qué se va» al tocar una barra o una fila (ver
@@ -884,8 +886,8 @@ fun TransactionsScreen(
     var activeFilter by remember(chipInicial) { mutableStateOf(chipInicialDeMovimientos(chipInicial)) }
     // F13: la lupa era un dibujo sin acción — ahora despliega un campo que filtra en memoria
     // mientras se escribe (no hay ida al servidor: la lista ya está en pantalla).
-    var searchActive by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    var searchActive by remember(consultaInicial) { mutableStateOf(!consultaInicial.isNullOrBlank()) }
+    var searchQuery by remember(consultaInicial) { mutableStateOf(consultaInicial.orEmpty()) }
     val searchFocusRequester = remember { FocusRequester() }
     // F12: "Pendientes" no decía qué es — son los movimientos que entraron solos (SMS, OCR,
     // extracto) y esperan que confirmes monto y categoría. "Por confirmar" sí lo dice.

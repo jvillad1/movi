@@ -88,6 +88,8 @@ val destinosDelRail: List<DestinoPrincipal> = destinosPrincipales + destinoMoviA
 fun MinBottomNav(
     active: NavTab?,
     onTabSelected: (NavTab) -> Unit,
+    /** Ola 5: mantener presionado el «+» abre sus atajos (ver [BotonDeAgregarConAtajos]). */
+    onAtajo: ((com.jvillada.movi.ui.quickadd.AtajoDeAgregar) -> Unit)? = null,
 ) {
     // Desde 600 dp el rail de la raíz (MinNavRail, compacto en una ventana mediana) toma el lugar
     // de la barra: la barra es solo del teléfono (Ola W1).
@@ -113,15 +115,15 @@ fun MinBottomNav(
         ) {
             antes.forEach { NavItem(it.tab, it.label, it.icon, active, onTabSelected) }
 
-            // Center FAB
-            Box(
-                contentAlignment = Alignment.Center,
+            // Center FAB. Tocarlo abre «Agregar»; mantenerlo presionado, sus atajos (Ola 5).
+            BotonDeAgregarConAtajos(
+                alTocar = { onTabSelected(NavTab.ADD) },
+                alElegirAtajo = onAtajo,
                 modifier = Modifier
                     .size(52.dp)
                     .shadow(6.dp, CircleShape)
                     .clip(CircleShape)
-                    .background(Movi.colores.marca)
-                    .clickable { onTabSelected(NavTab.ADD) },
+                    .background(Movi.colores.marca),
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Add,

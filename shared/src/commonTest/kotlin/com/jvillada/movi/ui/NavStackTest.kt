@@ -130,6 +130,8 @@ class NavStackTest {
     /** La tabla entera, pantalla por pantalla: cada `Screen` que existe, con la pestaña que marca. */
     private val pestanaEsperada: List<Pair<Screen, NavTab?>> = listOf(
         Screen.Dashboard to NavTab.HOY,
+        // Ola 5: «Buscar» se abre con la lupa de Hoy.
+        Screen.Buscar to NavTab.HOY,
         Screen.Transactions() to NavTab.MOVIMIENTOS,
         Screen.Transactions(CHIP_POR_CONFIRMAR) to NavTab.MOVIMIENTOS,
         // Ola C, tarea 5: la bandeja y el detalle de un mensaje se abren desde Movimientos.

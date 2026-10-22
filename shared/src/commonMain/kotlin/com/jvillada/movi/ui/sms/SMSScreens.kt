@@ -672,7 +672,12 @@ internal fun TarjetaDeMensajeDelBanco(
 const val TAG_AVISOS_DEL_PAGO_EN_RECONCILIAR: String = "avisos-del-pago-en-reconciliar"
 
 @Composable
-fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
+fun SMSReconcileScreen(
+    onNavigate: (Screen) -> Unit,
+    smsId: String,
+    /** Ola 5 · «Otra categoría» desde la notificación: el selector se abre solo cuando llega la lectura. */
+    abrirCategoria: Boolean = false,
+) {
     val goBack = LocalGoBack.current
     // Confirmar el aviso vibra (ver [Vibrador]): quedó anotado. Ignorarlo no.
     val vibrador = rememberVibrador()
@@ -703,6 +708,14 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     // escribir un nombre y lo abre con el cursor en la búsqueda (y cada toque suma uno, así que un
     // segundo toque vuelve a enfocar aunque el teclado ya esté abajo); «Cambiar», a mirar.
     var eligiendoCategoria by remember { mutableStateOf(false) }
+    // Ola 5: se abre una sola vez, cuando la lectura llegó (antes la fila «Categoría» no tiene con qué).
+    var yaSeAbrioLaCategoria by remember { mutableStateOf(false) }
+    LaunchedEffect(parsed != null) {
+        if (abrirCategoria && parsed != null && !yaSeAbrioLaCategoria) {
+            yaSeAbrioLaCategoria = true
+            eligiendoCategoria = true
+        }
+    }
     var pedidosDeFoco by remember { mutableStateOf(0) }
     // Ola Q: el dueño tocaba «Cambiar» y el selector se abría debajo de la fila, empujando
     // «Ignorar»/«Confirmar» fuera de lo visible sin que nada le avisara que había más abajo.

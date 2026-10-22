@@ -256,6 +256,8 @@ fun QuickAddScreen(
      * como monto. Ver [Screen.QuickAdd.presetDeudaId].
      */
     presetDeudaId: String? = null,
+    /** Ola 5 · los atajos del «+»: con qué pestaña abre. Ver [Screen.QuickAdd.presetPestana]. */
+    presetPestana: PestanaDeAgregar? = null,
     /**
      * Ola 9 · B: el movimiento que se acaba de guardar, para que quien sobreviva a esta hoja
      * (App.kt) pueda ofrecer convertirlo en recurrente. Se llama **después** de que el POST
@@ -384,11 +386,7 @@ fun QuickAddScreen(
         // baja la deuda (y tilda la fila del checklist).
         mutableStateOf(
             PickersDeLaHoja(
-                typeIndex = when {
-                    presetDeudaId != null -> TIPO_PAGO_CUOTA
-                    presetEsIngreso -> 1
-                    else -> 0
-                },
+                typeIndex = pestanaInicialDeAgregar(presetPestana, presetDeudaId, presetEsIngreso),
             ),
         )
     }

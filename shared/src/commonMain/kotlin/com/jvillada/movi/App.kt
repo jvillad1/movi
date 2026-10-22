@@ -32,6 +32,11 @@ import com.jvillada.movi.ui.components.RetoqueDePestana
 import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.avisos.DestinoDesdeAfuera
 import com.jvillada.movi.ui.papeles.ArchivoCompartido
+import com.jvillada.movi.ui.buscar.BuscarScreen
+import com.jvillada.movi.ui.extractos.TiposDeArchivo
+import com.jvillada.movi.ui.extractos.rememberFilePicker
+import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
+import com.jvillada.movi.ui.quickadd.pantallaDelAtajo
 import com.jvillada.movi.ui.papeles.EscucharArchivosSoltados
 import com.jvillada.movi.ui.papeles.HojaLeyendoElPapel
 import com.jvillada.movi.ui.papeles.PapelesCompartidos
@@ -362,6 +367,17 @@ fun App() {
                     }
                 }
 
+                // Ola 5 · los atajos del «+» (mantenerlo presionado): cada uno abre «Agregar» en su
+                // pestaña; «Subir comprobante» elige el archivo y lo deja en [PapelesCompartidos],
+                // la misma puerta que Por revisar y Agregar (la hoja «Movi está leyendo…» lo toma).
+                val elegirComprobante = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
+                    PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
+                }
+                val onAtajo: (AtajoDeAgregar) -> Unit = { atajo ->
+                    val hoja = pantallaDelAtajo(atajo)
+                    if (hoja != null) navigate(hoja) else elegirComprobante()
+                }
+
                 // Los márgenes a los lados de la columna reenvían la rueda del mouse a la lista de
                 // la pantalla activa. Ver [RelevoDeScroll] para el bug y el porqué.
                 val relevoDeScroll = remember { RelevoDeScroll() }
@@ -378,6 +394,7 @@ fun App() {
                     conNavegacion = conNavegacion,
                     onTabSelected = onTabSelected,
                     relevoDeScroll = relevoDeScroll,
+                    onAtajo = onAtajo,
                 ) {
                 // Ola 1 · «Que Movi se sienta viva»: el cambio de pantalla se anima. Lo que se anima es
                 // la PILA entera (no solo la de arriba): así la transición sabe si se apiló, se volvió
@@ -407,8 +424,10 @@ fun App() {
                     navigate,
                     chipInicial = pantalla.chipInicial,
                     periodoInicial = pantalla.periodoInicial,
+                    consultaInicial = pantalla.consultaInicial,
                     filtroInicial = pantalla.filtro,
                 )
+                Screen.Buscar            -> BuscarScreen(navigate)
                 is Screen.EnQueSeVa      -> EnQueSeVaScreen(navigate, periodoInicial = pantalla.periodo)
                 // Inalcanzable: `navigate` desvía QuickAdd al overlay de más abajo antes de que
                 // llegue a la pila (ver [opensAsOverlay]). La rama existe para que el `when` siga
@@ -438,7 +457,7 @@ fun App() {
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
-                is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, pantalla.smsId)
+                is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, pantalla.smsId, abrirCategoria = pantalla.abrirCategoria)
                 Screen.Mas               -> MasScreen(navigate)
                 Screen.Extractos         -> ExtractosScreen(navigate)
                 Screen.Accounts         -> AccountsScreen(navigate)
@@ -493,6 +512,7 @@ fun App() {
                             presetFecha = request.presetFecha,
                             presetEsIngreso = request.presetEsIngreso,
                             presetDeudaId = request.presetDeudaId,
+                            presetPestana = request.presetPestana,
                             // Ola 9 · B: el movimiento ya se guardó; recién ahora se evalúa si
                             // vale la pena ofrecer el recurrente.
                             onSavedEvent = { movimientoRecienGuardado = it },
@@ -592,6 +612,8 @@ internal fun EsqueletoDeLaCascara(
     conNavegacion: Boolean,
     onTabSelected: (NavTab) -> Unit,
     relevoDeScroll: RelevoDeScroll,
+    /** Ola 5: los atajos del «+» (mantenerlo presionado). `null` = el «+» solo se toca. */
+    onAtajo: ((AtajoDeAgregar) -> Unit)? = null,
     contenido: @Composable BoxScope.() -> Unit,
 ) {
     val widthClass = LocalWindowWidthClass.current
@@ -609,6 +631,7 @@ internal fun EsqueletoDeLaCascara(
                 active = activeTab,
                 onTabSelected = onTabSelected,
                 compacto = widthClass == WindowWidthClass.Medium,
+                onAtajo = onAtajo,
             )
         }
         Box(
@@ -640,7 +663,7 @@ internal fun EsqueletoDeLaCascara(
                 // escribe, y son 60 dp de los pocos que quedan — con ella puesta, en un teléfono
                 // chico el campo de texto queda a un renglón del borde.
                 if (showBottomNav && !tecladoALaVista) {
-                    MinBottomNav(active = activeTab, onTabSelected = onTabSelected)
+                    MinBottomNav(active = activeTab, onTabSelected = onTabSelected, onAtajo = onAtajo)
                 }
             }
         }
