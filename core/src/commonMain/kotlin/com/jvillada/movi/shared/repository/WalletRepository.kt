@@ -288,6 +288,13 @@ interface WalletRepository {
     suspend fun getGastoDelDiaADia(): com.jvillada.movi.shared.model.GastoDelDiaADia =
         com.jvillada.movi.shared.model.GastoDelDiaADia()
     /**
+     * `GET /api/patrimonio/historia` (Ola 4 · Ver la plata): el patrimonio neto al cierre de cada
+     * mes y el de hoy, para la curva de Patrimonio. Default vacío (sin curva) para los dobles de
+     * prueba que no la necesitan.
+     */
+    suspend fun getHistoriaDelPatrimonio(): com.jvillada.movi.shared.model.HistoriaDelPatrimonio =
+        com.jvillada.movi.shared.model.HistoriaDelPatrimonio()
+    /**
      * `GET /api/anomalias` (Ola 4): lo que se sale de lo normal en el período, con su evidencia y
      * sin lo ya descartado. Default vacío para los dobles de prueba.
      */
