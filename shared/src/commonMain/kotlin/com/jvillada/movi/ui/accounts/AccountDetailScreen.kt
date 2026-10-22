@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.draw.clip
@@ -277,7 +278,19 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 Spacer(Modifier.height(4.dp))
             }
 
+            // **Abrir arriba.** Mientras la cuenta no llega, el primer ítem de la lista es
+            // «section-header»; cuando llega, el encabezado del saldo se inserta ANTES, y la
+            // LazyColumn ancla la posición por clave: se queda mirando «section-header» y el saldo
+            // queda escondido arriba (en la web, con la red de por medio, abría así siempre). La
+            // primera vez que la cuenta llega, la lista vuelve al principio.
+            val lista = rememberLazyListState()
+            val cuentaLlego = account != null
+            LaunchedEffect(cuentaLlego) {
+                if (cuentaLlego) lista.scrollToItem(0)
+            }
+
             LazyColumn(
+                state = lista,
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(
                     start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp,
