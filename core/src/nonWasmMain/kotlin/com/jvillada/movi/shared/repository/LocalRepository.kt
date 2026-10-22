@@ -2389,6 +2389,13 @@ class LocalRepository(
         remote.restoreScreen(slug)
     override suspend fun isScreenAdmin(): Boolean =
         remote.isScreenAdmin()
+    override suspend fun getScreenParaEditar(slug: String): ScreenDefinition? =
+        remote.getScreenParaEditar(slug)
+    override suspend fun getPreferenciasDelInicio(): com.jvillada.movi.shared.model.PreferenciasDelInicio =
+        remote.getPreferenciasDelInicio()
+    override suspend fun guardarPreferenciasDelInicio(
+        preferencias: com.jvillada.movi.shared.model.PreferenciasDelInicio,
+    ): com.jvillada.movi.shared.model.PreferenciasDelInicio = remote.guardarPreferenciasDelInicio(preferencias)
 
     // F42 · F46: sin espejo, a propósito — el perfil se lee siempre del server, igual que
     // register/login arriba. No hay tabla local de usuario ni razón para tenerla: es una fila

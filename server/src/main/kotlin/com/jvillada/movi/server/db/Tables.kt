@@ -425,6 +425,21 @@ object CierresDescartados : Table("cierres_descartados") {
 }
 
 /**
+ * **«Editar inicio»: qué secciones de Hoy ve el dueño y en qué orden** (ver `PreferenciasDelInicio`
+ * en `:core` y `routes/InicioRoutes.kt`). Una fila por usuario, solo si eligió algo: «Volver al
+ * orden de Movi» la borra. Las dos listas van como JSON de tipos de sección. En el server y no en
+ * el aparato: lo que esconde en el teléfono tampoco lo ve en la web. Tabla nueva: entra solo al
+ * `SchemaUtils.create` del arranque, con la clave primaria dentro del CREATE.
+ */
+object InicioPersonalizado : Table("inicio_personalizado") {
+    val userId        = varchar("user_id", 50)
+    val orden         = text("orden")
+    val ocultas       = text("ocultas")
+    val actualizadoEn = long("actualizado_en")
+    override val primaryKey = PrimaryKey(userId)
+}
+
+/**
  * **Las reglas de comercio que el importador de extractos aprende** («RAPPI» → «Comida»): cuando el
  * dueño cambia la categoría de una fila al importar, se guarda acá y viaja en el prompt de la
  * próxima lectura (ver `MerchantRulesStore`).

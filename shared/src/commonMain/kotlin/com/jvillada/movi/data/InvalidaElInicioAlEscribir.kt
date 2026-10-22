@@ -187,4 +187,6 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun deleteStatementImport(id: String): Unit = trasEscribir { delegado.deleteStatementImport(id) }
     override suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition = trasEscribir { delegado.putScreen(slug, sections) }
     override suspend fun restoreScreen(slug: String): ScreenDefinition = trasEscribir { delegado.restoreScreen(slug) }
+    override suspend fun guardarPreferenciasDelInicio(preferencias: PreferenciasDelInicio): PreferenciasDelInicio =
+        trasEscribir { delegado.guardarPreferenciasDelInicio(preferencias) }
 }

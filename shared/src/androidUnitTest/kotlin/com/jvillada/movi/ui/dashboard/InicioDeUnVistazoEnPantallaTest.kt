@@ -11,6 +11,11 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.ui.sdui.TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA
+import com.jvillada.movi.ui.sdui.TAG_VEREDICTO_DEL_HERO
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -107,8 +112,12 @@ class InicioDeUnVistazoEnPantallaTest {
     private fun cuantas(texto: String): Int =
         composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes().size
 
-    /** El veredicto es único en la pantalla: sirve para ubicar el hero. */
-    private val veredicto =
+    /**
+     * El veredicto es único en la pantalla: sirve para ubicar el hero. Ola 3: en pantalla va la línea
+     * corta; la frase larga es su `contentDescription` (ver la prueba del veredicto corto, abajo).
+     */
+    private val veredicto = "−\$11,7M este período · Cuotas \$12,9M"
+    private val veredictoLargo =
         "Este período salieron \$11,7M más de los que entraron — las cuotas de crédito fueron \$12,9M"
 
     private fun izquierda(texto: String): Dp =
@@ -246,9 +255,13 @@ class InicioDeUnVistazoEnPantallaTest {
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
     fun `las preguntas y el campo abren el chat`() {
         montar()
-        val primera = preguntasSugeridas(datos).first()
-        composeRule.onNodeWithText(primera, useUnmergedTree = true).performClick()
-        assertEquals(Screen.AIChat(preguntaInicial = primera), navegoA)
+        // Ola 3: el chip dice la versión corta, y lo que se manda es la pregunta completa.
+        val primera = preguntasParaTocar(datos).first()
+        assertEquals(preguntasSugeridas(datos).first(), primera.texto)
+        assertTrue(primera.corta != primera.texto, "la de las reglas tiene su versión corta")
+        composeRule.onNodeWithText(primera.texto, useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText(primera.corta, useUnmergedTree = true).performClick()
+        assertEquals(Screen.AIChat(preguntaInicial = primera.texto), navegoA)
 
         composeRule.onNodeWithText("Escribe tu pregunta…", useUnmergedTree = true).performClick()
         assertEquals(Screen.AIChat(), navegoA)
@@ -263,9 +276,27 @@ class InicioDeUnVistazoEnPantallaTest {
     fun `una de las tres de respaldo abre el chat con su id`() {
         montar()
         val deRespaldo = preguntasParaTocar(datos).first { it.sugerida != null }
-        composeRule.onNodeWithText(deRespaldo.texto, useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText(deRespaldo.corta, useUnmergedTree = true).performClick()
         assertEquals(Screen.AIChat(preguntaInicial = deRespaldo.texto, sugerida = deRespaldo.sugerida?.id), navegoA)
         assertTrue(deRespaldo.sugerida?.id != null)
+    }
+
+    /**
+     * **Ola 3 · Hoy en una mirada**: el héroe dice el veredicto en una línea corta con cifras, y la
+     * frase larga de siempre queda como `contentDescription` para el lector de pantalla.
+     */
+    @Test
+    @Config(qualifiers = "w390dp-h2400dp-xhdpi")
+    fun `el heroe muestra el veredicto corto y su descripcion larga`() {
+        montar()
+        val linea = composeRule.onNodeWithTag(TAG_VEREDICTO_DEL_HERO, useUnmergedTree = true)
+        linea.assertTextEquals(veredicto)
+        linea.assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf(veredictoLargo)))
+        // La larga ya no se pinta como texto.
+        composeRule.onNodeWithText(veredictoLargo, useUnmergedTree = true).assertDoesNotExist()
+        // Tocarla abre el detalle del período.
+        linea.performClick()
+        assertEquals(Screen.Periodos, navegoA)
     }
 
     @Test

@@ -149,6 +149,7 @@ internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
     PantallaBuscable("Compartir", TITULO_DE_AJUSTES, Screen.Compartir, listOf("enlace")),
     PantallaBuscable("Movi AI", TITULO_DE_AJUSTES, Screen.AIChat(), listOf("asistente", "preguntar")),
     PantallaBuscable("Lo que Movi sabe de ti", TITULO_DE_AJUSTES, Screen.LoQueMoviSabe, listOf("memoria")),
+    PantallaBuscable("Editar inicio", TITULO_DE_AJUSTES, Screen.EditarInicio, listOf("hoy", "secciones", "orden", "ocultar")),
     PantallaBuscable(tituloDeCapturaDelBanco, TITULO_DE_AJUSTES, Screen.CapturaDelBanco, listOf("captura del banco", "mensajes del banco", "sms", "notificaciones", "banco mudo", "correo")),
     PantallaBuscable("Borrar mi cuenta", "Perfil", Screen.BorrarLaCuenta, listOf("eliminar cuenta")),
     PantallaBuscable("Primeros pasos", TITULO_DE_AJUSTES, Screen.PrimerosPasos),

@@ -69,20 +69,36 @@ fun preguntasSugeridas(data: DashboardData): List<String> = preguntasSugeridas(s
  * El id sale de la definición de la pregunta, no de comparar el texto: lo que el dueño escribe a
  * mano nunca lo lleva.
  */
-data class PreguntaParaTocar(val texto: String, val sugerida: PreguntaSugerida? = null)
+data class PreguntaParaTocar(
+    val texto: String,
+    val sugerida: PreguntaSugerida? = null,
+    /**
+     * **Lo que dice el chip de Hoy** (Ola 3 · Hoy en una mirada): la misma pregunta en pocas
+     * palabras. Lo que se manda al tocarlo es siempre [texto], la pregunta completa; y una de
+     * respaldo se reconoce por [sugerida], nunca por el texto. El chat sigue mostrando [texto].
+     */
+    val corta: String = texto,
+)
 
 /** Las mismas [preguntasSugeridas], con el id de las de respaldo. Es lo que pintan los chips. */
 fun preguntasParaTocar(data: DashboardData): List<PreguntaParaTocar> = preguntasParaTocar(senalesDe(data))
 
 /** Ver [preguntasParaTocar]. */
 fun preguntasParaTocar(senales: SenalesParaPreguntar): List<PreguntaParaTocar> =
-    (candidatasDe(senales).sortedByDescending { it.peso }.map { PreguntaParaTocar(it.texto) } + PREGUNTAS_PARA_TOCAR_DE_RESPALDO)
+    (candidatasDe(senales).sortedByDescending { it.peso }.map { PreguntaParaTocar(it.texto, corta = it.corta) } + PREGUNTAS_PARA_TOCAR_DE_RESPALDO)
         .distinctBy { it.texto }
         .take(CUANTAS_PREGUNTAS_SUGERIDAS)
 
 /** Las tres de respaldo, cada una con su id: las que Movi contesta sin el modelo. */
 val PREGUNTAS_PARA_TOCAR_DE_RESPALDO: List<PreguntaParaTocar> =
-    PreguntaSugerida.entries.map { PreguntaParaTocar(it.texto, it) }
+    PreguntaSugerida.entries.map { PreguntaParaTocar(it.texto, it, cortaDeRespaldo(it)) }
+
+/** Cómo dice el chip de Hoy cada una de las tres de respaldo. Su id y su [PreguntaSugerida.texto] no cambian. */
+internal fun cortaDeRespaldo(pregunta: PreguntaSugerida): String = when (pregunta) {
+    PreguntaSugerida.COMO_VOY -> "¿Cómo voy?"
+    PreguntaSugerida.EN_QUE_SE_VA -> "¿En qué se me va la plata?"
+    PreguntaSugerida.QUE_REVISAR -> "¿Qué reviso primero?"
+}
 
 /**
  * Lo que las reglas miran, ya destilado del [DashboardData]. Existe aparte para que cada regla se
@@ -125,8 +141,11 @@ data class DeudaParaPreguntar(
     val saldo: Long = 0L,
 )
 
-/** Una pregunta candidata con su peso: más alto = más urgente para el dueño hoy. */
-private data class Candidata(val texto: String, val peso: Int)
+/**
+ * Una pregunta candidata con su peso: más alto = más urgente para el dueño hoy. [corta] es lo que
+ * dice el chip de Hoy (ver [PreguntaParaTocar.corta]).
+ */
+private data class Candidata(val texto: String, val peso: Int, val corta: String = texto)
 
 /**
  * **Cuándo los intereses ya son «altos»**: medio millón al mes, o la décima parte de lo que entró
@@ -151,37 +170,55 @@ private fun candidatasDe(senales: SenalesParaPreguntar): List<Candidata> =
         // plata que se va todos los meses sin comprar nada. La pantalla de Créditos ya lo dice; la
         // pregunta lleva al por qué y al qué hacer.
         senales.deudas.filter { it.noBaja }.maxByOrNull { it.saldo }?.let {
-            add(Candidata("¿Por qué ${it.nombre} no baja aunque pago la cuota?", 100))
+            add(Candidata("¿Por qué ${it.nombre} no baja aunque pago la cuota?", 100, "¿Por qué ${it.nombre} no baja?"))
         }
         // Lo que falta por pagar ya no cabe en lo que tiene: la pregunta de la semana.
         val falta = senales.faltaPorPagar
         val plata = senales.tuPlata
         if (falta != null && falta > 0L && plata != null) {
             val peso = if (falta > plata) 95 else 40
-            add(Candidata("¿Me alcanza para los ${formatMoneyCompactSinOcultar(falta)} que me faltan por pagar este período?", peso))
+            add(
+                Candidata(
+                    "¿Me alcanza para los ${formatMoneyCompactSinOcultar(falta)} que me faltan por pagar este período?",
+                    peso,
+                    "¿Me alcanza para los ${formatMoneyCompactSinOcultar(falta)} por pagar?",
+                ),
+            )
         }
         senales.presupuestoMasPasado?.let {
-            add(Candidata("¿Qué hago para no pasarme en ${it.categoria} el próximo período?", 90))
+            add(Candidata("¿Qué hago para no pasarme en ${it.categoria} el próximo período?", 90, "¿Cómo no pasarme en ${it.categoria}?"))
         }
         val entro = senales.ingresosDelPeriodo
         val salio = senales.gastosDelPeriodo
         if (entro != null && salio != null && salio > entro) {
-            add(Candidata("¿Por qué este período salieron ${formatMoneyCompactSinOcultar(salio - entro)} más de los que entraron?", 85))
+            add(
+                Candidata(
+                    "¿Por qué este período salieron ${formatMoneyCompactSinOcultar(salio - entro)} más de los que entraron?",
+                    85,
+                    "¿Por qué salieron ${formatMoneyCompactSinOcultar(salio - entro)} de más?",
+                ),
+            )
         }
         val intereses = senales.interesesPropiosAlMes
         val umbral = entro?.takeIf { it > 0L }
             ?.let { minOf(INTERESES_QUE_YA_PESAN, it / PARTE_DE_LOS_INGRESOS_EN_INTERESES) }
             ?: INTERESES_QUE_YA_PESAN
         if (intereses > 0L && intereses >= umbral) {
-            add(Candidata("Pago ${formatMoneyCompactSinOcultar(intereses)} de intereses al mes, ¿qué hago para bajarlo?", 70))
+            add(
+                Candidata(
+                    "Pago ${formatMoneyCompactSinOcultar(intereses)} de intereses al mes, ¿qué hago para bajarlo?",
+                    70,
+                    "¿Cómo bajo ${formatMoneyCompactSinOcultar(intereses)} de intereses?",
+                ),
+            )
         }
         // Con una sola tasa no hay nada que elegir; con dos distintas, cuál abonar primero es LA
         // pregunta de quien tiene varias deudas.
         if (senales.deudas.map { it.tasaEa }.distinct().size >= 2) {
-            add(Candidata("¿Qué deuda me conviene abonar primero?", 60))
+            add(Candidata("¿Qué deuda me conviene abonar primero?", 60, "¿Qué deuda abono primero?"))
         }
         if (senales.bienes > 0L && senales.deudasTotales > 0L) {
-            add(Candidata("¿Cómo está mi patrimonio si cuento mis bienes y mis deudas?", 30))
+            add(Candidata("¿Cómo está mi patrimonio si cuento mis bienes y mis deudas?", 30, "¿Cómo está mi patrimonio?"))
         }
     }
 

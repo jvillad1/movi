@@ -126,6 +126,66 @@ fun veredictoDelInicio(
 }
 
 /**
+ * **El veredicto en una línea corta, con cifras** (Ola 3 · Hoy en una mirada, 22-oct-2026).
+ *
+ * «Este período salieron $893.300 más de los que entraron — lo que más pesó fue Mercado: $392.100»
+ * eran dos renglones antes de la primera cifra útil. Hoy pinta esta línea —«−$893.300 este período ·
+ * Mercado $392.100»— y deja la frase larga de [veredictoDelPeriodo] como `contentDescription`, para
+ * el lector de pantalla. **La misma regla, los mismos datos**: sale de [veredictoDelPeriodo] su tono
+ * y de acá solo la forma corta; si una cambia sin la otra, `InicioDeUnVistazoTest` lo nota.
+ *
+ * Solo la pinta Hoy. Movi AI, el correo y la tarjeta de cierre tienen sus propias frases y no se tocan.
+ *
+ * - En contra: «−$11,7M este período · Cuotas $12,9M» (las cuotas de crédito), o la categoría que más pesó.
+ * - A favor: «+$3M este período», y si el disponible está en rojo, «· te pasaste del disponible…».
+ * - Parejo: «$0 este período · entró lo mismo que salió».
+ */
+fun veredictoCortoDelPeriodo(
+    ingresos: Long,
+    egresos: Long,
+    cuotasDeCredito: Long = 0L,
+    mayorGasto: Pair<String, Long>? = null,
+    avisoDelDisponible: String? = null,
+): String? {
+    if (ingresos <= 0L && egresos <= 0L) return null
+    val flujo = ingresos - egresos
+    if (flujo < 0L) {
+        val porque = when {
+            cuotasDeCredito > 0L -> " · Cuotas ${formatMoneyCompact(cuotasDeCredito)}"
+            mayorGasto != null && mayorGasto.second > 0L -> " · ${mayorGasto.first} ${formatMoneyCompact(mayorGasto.second)}"
+            else -> ""
+        }
+        // `formatMoneyCompact` pone su propio signo menos (o tapa la cifra si los saldos están ocultos).
+        return "${formatMoneyCompact(flujo)} este período$porque"
+    }
+    if (flujo == 0L) return "${formatMoneyCompact(0L)} este período · entró lo mismo que salió"
+    val cifra = formatMoneyCompact(flujo)
+    // Con los saldos ocultos la cifra es «$•••»: un «+» delante no agrega nada.
+    val conSigno = if (cifra.any { it.isDigit() }) "+$cifra" else cifra
+    return "$conSigno este período" + (avisoDelDisponible?.let { " · $it" } ?: "")
+}
+
+/**
+ * [veredictoCortoDelPeriodo] con lo que el Inicio ya cargó; mismas condiciones que
+ * [veredictoDelInicio] (sin resumen, `null`).
+ */
+fun veredictoCortoDelInicio(
+    data: DashboardData,
+    hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
+    conAvisoDelDisponible: Boolean = true,
+): String? {
+    val summary = data.summary ?: return null
+    val gasto = data.spentByCategory.orEmpty()
+    return veredictoCortoDelPeriodo(
+        ingresos = summary.ingresos,
+        egresos = summary.egresos,
+        cuotasDeCredito = gasto[CUOTA_CATEGORY] ?: 0L,
+        mayorGasto = mayorGastoDelPeriodo(gasto),
+        avisoDelDisponible = if (conAvisoDelDisponible) disponibleDelInicio(data, hoy)?.let(::avisoDelDisponible) else null,
+    )
+}
+
+/**
  * La categoría que más pesó, sin contar «Otros»: «lo que más pesó fue Otros» no le dice nada a nadie.
  * A igual monto, por nombre, para que no cambie entre recargas sin que nada haya cambiado.
  */

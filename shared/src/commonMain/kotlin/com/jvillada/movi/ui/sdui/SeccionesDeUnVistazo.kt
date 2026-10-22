@@ -36,6 +36,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.ScreenSection
@@ -82,6 +85,7 @@ import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_VEREDICTO_DEL_HERO
 import com.jvillada.movi.ui.dashboard.TAG_TARJETA_DEL_HERO
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
 import com.jvillada.movi.ui.dashboard.veredictoDelInicio
+import com.jvillada.movi.ui.dashboard.veredictoCortoDelInicio
 import com.jvillada.movi.ui.dashboard.NivelDelGasto
 import com.jvillada.movi.ui.dashboard.TAG_CIFRA_TE_QUEDAN
 import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_DETALLE_DEL_HERO
@@ -104,17 +108,21 @@ import kotlinx.datetime.LocalDate
 
 // ── ¿Cómo estoy? ─────────────────────────────────────────────────────────────
 
+/** La línea del veredicto del héroe (la corta en pantalla, la larga como `contentDescription`). */
+const val TAG_VEREDICTO_DEL_HERO: String = "veredicto-del-hero"
+
 /**
  * El alto mínimo del hero cuando `accounts` contestó vacía, para que
  * la transición esqueleto → vacío no salte. Medido con `@GraphicsMode(NATIVE)` + `sdk = 34` (el
  * motor de texto real, ×1.12 de escala de letra de la app): el esqueleto (cifra + veredicto +
  * barra + fila) daba ~242dp y el vacío por sí solo (título + detalle + botón, sin esas cuatro
  * piezas) da ~207dp. Desde la Ola 1 el esqueleto tiene la forma de «Te quedan» —con la línea del
- * detalle y la fila de «Tu plata»— y mide 307dp: 302dp deja los ±8dp de `EsqueletosDelInicioTest`
- * con margen sin ser el número exacto medido, así que una fuente ligeramente distinta no tira la
- * prueba.
+ * detalle y la fila de «Tu plata»— y medía 307dp. Desde la Ola 3 (Hoy en una mirada) el veredicto
+ * es una línea corta y su esqueleto también: el esqueleto mide 289dp, y 285dp deja los ±8dp de
+ * `EsqueletosDelInicioTest` con margen sin ser el número exacto medido, así que una fuente
+ * ligeramente distinta no tira la prueba.
  */
-private val ALTO_MINIMO_DEL_HERO_VACIO = 302.dp
+private val ALTO_MINIMO_DEL_HERO_VACIO = 285.dp
 
 /**
  * **El hero: «Te quedan $X», un veredicto y la barra de lo que entró contra lo que salió.**
@@ -208,6 +216,9 @@ internal fun HeroDeUnVistazo(
     val entradaDeLaBarra = rememberProgresoDeEntrada("hero.barra", listo = data.summary != null)
     // Con «Te pasaste por $X» ya arriba, el veredicto no lo repite (ver [veredictoDelInicio]).
     val veredicto = veredictoDelInicio(data, hoy, conAvisoDelDisponible = teQuedan == null)
+    // Ola 3 · Hoy en una mirada: en pantalla va la línea corta con cifras; la frase larga queda para
+    // el lector de pantalla (ver [veredictoCortoDelInicio]).
+    val veredictoCorto = veredictoCortoDelInicio(data, hoy, conAvisoDelDisponible = teQuedan == null)
     val ingresos = data.summary?.ingresos ?: 0L
     val egresos = data.summary?.egresos ?: 0L
     // Fix round 1 (Task 7): el brief original pedía UNA condición para todo el hero
@@ -340,11 +351,14 @@ internal fun HeroDeUnVistazo(
         }
         if (resumenCargando) {
             Spacer(Modifier.height(Movi.espacios.medio))
-            // Dos líneas en vez del veredicto: en la práctica casi siempre ocupa dos renglones
-            // (es una frase con un número adentro), y apiladas sin espacio entre sí dan el mismo
-            // alto que esas dos líneas de `Movi.textos.cuerpo` tendrían de verdad.
-            LineaEsqueleto(fraccionDelAncho = 0.95f, modifier = Modifier.testTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
-            LineaEsqueleto(fraccionDelAncho = 0.7f, modifier = Modifier.testTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
+            // Ola 3: el veredicto es UNA línea corta —«−$893.300 este período · Mercado $392.100»—,
+            // así que su esqueleto también: dos trozos en el mismo renglón, la cifra y el porqué.
+            // Antes eran dos renglones apilados, del alto de la frase larga.
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
+                LineaEsqueleto(fraccionDelAncho = 1f, modifier = Modifier.weight(0.55f).testTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
+                LineaEsqueleto(fraccionDelAncho = 1f, modifier = Modifier.weight(0.35f).testTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
+                Spacer(Modifier.weight(0.1f))
+            }
             Spacer(Modifier.height(Movi.espacios.amplio))
             BloqueEsqueleto(alto = Movi.espacios.corto, modifier = Modifier.testTag(TAG_ESQUELETO_BARRA_DEL_HERO))
             Spacer(Modifier.height(Movi.espacios.corto))
@@ -356,9 +370,19 @@ internal fun HeroDeUnVistazo(
                 )
             }
         } else {
-            if (veredicto != null) {
+            if (veredicto != null && veredictoCorto != null) {
                 Spacer(Modifier.height(Movi.espacios.medio))
-                Text(text = veredicto.frase, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                // Lo toca la tarjeta entera, que lleva a «Tus períodos»: el detalle del período.
+                Text(
+                    text = veredictoCorto,
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.texto,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .testTag(TAG_VEREDICTO_DEL_HERO)
+                        .semantics { contentDescription = veredicto.frase },
+                )
             }
             val fraccion = fraccionQueEntro(ingresos, egresos)
             if (data.summary != null && fraccion != null) {
@@ -768,8 +792,10 @@ internal fun PreguntaleAMoviSection(
             } else {
                 preguntas.forEachIndexed { i, pregunta ->
                     // Se pinta con las cifras tapadas si los saldos están ocultos, pero viaja
-                    // entera: Movi AI tiene que saber de qué cifra se le pregunta.
-                    FilaDePregunta(conCifrasOcultas(pregunta.texto)) {
+                    // entera: Movi AI tiene que saber de qué cifra se le pregunta. Ola 3: el chip
+                    // dice la versión corta; la que se manda (y la que oye el lector de pantalla)
+                    // es la completa.
+                    FilaDePregunta(conCifrasOcultas(pregunta.corta), completa = conCifrasOcultas(pregunta.texto)) {
                         onNavigate(Screen.AIChat(preguntaInicial = pregunta.texto, sugerida = pregunta.sugerida?.id))
                     }
                     if (i < preguntas.lastIndex) Hairline()
@@ -806,11 +832,11 @@ private fun FilaDePreguntaEsqueleto() {
 }
 
 @Composable
-private fun FilaDePregunta(pregunta: String, onClick: () -> Unit) {
+private fun FilaDePregunta(pregunta: String, completa: String = pregunta, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(role = Role.Button, onClickLabel = "Preguntarle a Movi", onClick = onClick)
             .padding(vertical = Movi.espacios.medio),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
@@ -825,7 +851,9 @@ private fun FilaDePregunta(pregunta: String, onClick: () -> Unit) {
             text = pregunta,
             style = Movi.textos.cuerpo,
             color = Movi.colores.texto,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .then(if (completa != pregunta) Modifier.semantics { contentDescription = completa } else Modifier),
         )
         ChevronRight()
     }

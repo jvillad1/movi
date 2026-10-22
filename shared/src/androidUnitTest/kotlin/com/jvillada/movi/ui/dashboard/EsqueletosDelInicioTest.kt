@@ -25,7 +25,8 @@ import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.ai.PREGUNTAS_DE_RESPALDO
-import com.jvillada.movi.ui.ai.preguntasSugeridas
+import com.jvillada.movi.ui.ai.PREGUNTAS_PARA_TOCAR_DE_RESPALDO
+import com.jvillada.movi.ui.ai.preguntasParaTocar
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.sdui.TAG_FILA_ESQUELETO_PREGUNTA
 import kotlinx.datetime.Clock
@@ -235,8 +236,10 @@ class EsqueletosDelInicioTest {
         assertEquals(0, contarTag(TAG_ESQUELETO_FILA_DEL_HERO))
         assertEquals(0, contarTag(TAG_FILA_ESQUELETO_PREGUNTA))
         composeRule.onNodeWithText("—", useUnmergedTree = true).assertIsDisplayed()
-        PREGUNTAS_DE_RESPALDO.forEach { pregunta ->
-            composeRule.onNodeWithText(pregunta, useUnmergedTree = true).assertIsDisplayed()
+        // Ola 3 · Hoy en una mirada: el chip dice la versión corta de cada una (la completa es la
+        // que se manda; ver `PreguntaParaTocar.corta`).
+        PREGUNTAS_PARA_TOCAR_DE_RESPALDO.forEach { pregunta ->
+            composeRule.onNodeWithText(pregunta.corta, useUnmergedTree = true).assertIsDisplayed()
         }
     }
 
@@ -301,6 +304,9 @@ class EsqueletosDelInicioTest {
         PREGUNTAS_DE_RESPALDO.forEach { pregunta ->
             composeRule.onNodeWithText(pregunta, useUnmergedTree = true).assertDoesNotExist()
         }
+        PREGUNTAS_PARA_TOCAR_DE_RESPALDO.forEach { pregunta ->
+            composeRule.onNodeWithText(pregunta.corta, useUnmergedTree = true).assertDoesNotExist()
+        }
         // El campo se puede usar igual, sin datos.
         composeRule.onNodeWithText("Escribe tu pregunta…", useUnmergedTree = true).assertIsDisplayed()
     }
@@ -310,8 +316,9 @@ class EsqueletosDelInicioTest {
         montarHero(datosCargados, cargando = false)
 
         assertEquals(0, contarTag(TAG_FILA_ESQUELETO_PREGUNTA))
-        preguntasSugeridas(datosCargados).forEach { pregunta ->
-            composeRule.onNodeWithText(pregunta, useUnmergedTree = true).assertIsDisplayed()
+        // Ola 3: el chip dice la versión corta (ver `PreguntaParaTocar.corta`).
+        preguntasParaTocar(datosCargados).forEach { pregunta ->
+            composeRule.onNodeWithText(pregunta.corta, useUnmergedTree = true).assertIsDisplayed()
         }
     }
 

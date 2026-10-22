@@ -52,6 +52,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.documentos.DocumentosScreen
 import com.jvillada.movi.ui.compartir.CompartirScreen
+import com.jvillada.movi.ui.dashboard.EditarInicioScreen
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.LocalNavigate
 import com.jvillada.movi.ui.LocalPilaDeHojas
@@ -453,6 +454,7 @@ fun App() {
                 Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.Compartir         -> CompartirScreen(navigate)
                 Screen.LoQueMoviSabe     -> LoQueMoviSabeScreen(navigate)
+                Screen.EditarInicio      -> EditarInicioScreen(navigate)
                 Screen.BorrarLaCuenta    -> BorrarLaCuentaScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)

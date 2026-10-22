@@ -201,6 +201,12 @@ sealed class Screen {
      */
     data object LoQueMoviSabe : Screen()
     /**
+     * **«Editar inicio»** (Ola 3 · Hoy en una mirada): qué secciones de Hoy se ven y en qué orden. Se
+     * abre desde el botón del final de Hoy y desde Ajustes → Perfil. Ficha de Ajustes, como
+     * [LoQueMoviSabe]: no marca pestaña, pero la barra sigue abajo.
+     */
+    data object EditarInicio : Screen()
+    /**
      * **Borrar mi cuenta**: la descarga de los datos primero, qué se borra, y la contraseña con la
      * palabra BORRAR. Se abre desde Ajustes, abajo de todo.
      */
@@ -335,7 +341,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
     Screen.Mas, Screen.Profile, Screen.Goals, Screen.Extractos, is Screen.AIChat,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos,
-    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.BorrarLaCuenta -> true
+    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio -> true
     else -> false
 }
 

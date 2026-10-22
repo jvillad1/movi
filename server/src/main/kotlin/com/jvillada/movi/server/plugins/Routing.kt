@@ -106,6 +106,7 @@ fun Application.configureRouting() {
             apartadoRoutes()
             destinoRoutes()
             screenRoutes()
+            inicioRoutes()
             pushRoutes()
             reminderRoutes()
             smsRoutes()

@@ -905,6 +905,25 @@ interface WalletRepository {
     suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition
     suspend fun restoreScreen(slug: String): ScreenDefinition
     suspend fun isScreenAdmin(): Boolean
+
+    /**
+     * La definición **sin** la preferencia del dueño (`GET /api/screens/{slug}?crudo=1`), para el
+     * Editor de pantallas: edita la de todos, y guardar la personal escondería para todos lo que el
+     * dueño escondió para sí.
+     */
+    suspend fun getScreenParaEditar(slug: String): ScreenDefinition? = getScreen(slug)
+
+    /**
+     * `GET /api/inicio/preferencias` («Editar inicio», Ola 3): qué secciones de Hoy ve el dueño y en
+     * qué orden, con `ordenDeMovi` para listarlas.
+     */
+    suspend fun getPreferenciasDelInicio(): com.jvillada.movi.shared.model.PreferenciasDelInicio =
+        noLoTiene("getPreferenciasDelInicio")
+
+    /** `PUT /api/inicio/preferencias`: la guarda y devuelve lo guardado. Vacía = el orden de Movi. */
+    suspend fun guardarPreferenciasDelInicio(
+        preferencias: com.jvillada.movi.shared.model.PreferenciasDelInicio,
+    ): com.jvillada.movi.shared.model.PreferenciasDelInicio = noLoTiene("guardarPreferenciasDelInicio")
 }
 
 /** Lo que contesta un repositorio que no implementa una lectura o escritura nueva. */
