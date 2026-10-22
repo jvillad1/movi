@@ -1,6 +1,7 @@
 package com.jvillada.movi
 
 import com.jvillada.movi.ui.ai.LoQueMoviSabeScreen
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.LocalMovimientoReducido
+import com.jvillada.movi.platform.movimientoReducidoDelSistema
+import com.jvillada.movi.ui.direccionDe
+import com.jvillada.movi.ui.transicionEntrePantallas
+import com.jvillada.movi.ui.components.LocalRetoqueDePestana
+import com.jvillada.movi.ui.components.RetoqueDePestana
 import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.avisos.DestinoDesdeAfuera
 import com.jvillada.movi.ui.papeles.ArchivoCompartido
@@ -54,6 +61,7 @@ import com.jvillada.movi.ui.destinoResaltado
 import com.jvillada.movi.ui.muestraLaNavegacion
 import com.jvillada.movi.ui.opensAsOverlay
 import com.jvillada.movi.ui.screenForTab
+import com.jvillada.movi.ui.destinoVigente
 import com.jvillada.movi.ui.auth.LoginScreen
 import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.ai.AIChatScreen
@@ -109,12 +117,16 @@ fun App() {
     // en Ajustes recompone desde acá para abajo — o sea, todo. «Igual que el teléfono» le pregunta
     // al sistema, y cambiar el tema del teléfono con Movi abierta también se ve en el acto.
     val oscuro = TemaStore.preferencia.esOscuro(sistemaOscuro = isSystemInDarkTheme())
+    // ¿El sistema pidió menos movimiento? Se decide una vez y lo lee todo lo que se mueve (ver
+    // [com.jvillada.movi.theme.Movimiento]).
+    val movimientoReducido = movimientoReducidoDelSistema()
     MoviTheme(oscuro = oscuro) {
         // La barra de estado la pinta el sistema, no Movi: hay que decirle de qué color va.
         AjustarBarrasDelSistema(oscuro)
         val baseDensity = LocalDensity.current
         CompositionLocalProvider(
-            LocalDensity provides Density(baseDensity.density, baseDensity.fontScale * 1.12f)
+            LocalDensity provides Density(baseDensity.density, baseDensity.fontScale * 1.12f),
+            LocalMovimientoReducido provides movimientoReducido,
         ) {
             // **La puerta de «Entrar con huella».**
             //
@@ -299,7 +311,18 @@ fun App() {
                 // Ola C: Ajustes y lo que cuelga de ahí no marcan pestaña pero sí llevan la
                 // barra — ver [muestraLaNavegacion].
                 val conNavegacion = muestraLaNavegacion(currentScreen)
-                val onTabSelected: (NavTab) -> Unit = { tab -> navigate(screenForTab(tab)) }
+                // Ola 1 · «Que Movi se sienta viva»: tocar la pestaña de la raíz que ya se está
+                // viendo la sube al principio (ver [RetoqueDePestana]); cualquier otro toque navega,
+                // y una raíz reemplaza la pila en vez de apilarse (ver [NavStack.pilaDeLaPestana]).
+                val retoque = remember { RetoqueDePestana() }
+                val onTabSelected: (NavTab) -> Unit = { tab ->
+                    val destino = screenForTab(tab)
+                    if (!opensAsOverlay(destino) && quickAdd == null && backStack.last() == destinoVigente(destino)) {
+                        retoque.retocar()
+                    } else {
+                        navigate(destino)
+                    }
+                }
 
                 // Los márgenes a los lados de la columna reenvían la rueda del mouse a la lista de
                 // la pantalla activa. Ver [RelevoDeScroll] para el bug y el porqué.
@@ -318,16 +341,34 @@ fun App() {
                     onTabSelected = onTabSelected,
                     relevoDeScroll = relevoDeScroll,
                 ) {
-                saveableStateHolder.SaveableStateProvider(key = currentScreen.toString()) {
-                CompositionLocalProvider(LocalGoBack provides goBackTo, LocalNavigate provides navigate) {
-                when (currentScreen) {
+                // Ola 1 · «Que Movi se sienta viva»: el cambio de pantalla se anima. Lo que se anima es
+                // la PILA entera (no solo la de arriba): así la transición sabe si se apiló, se volvió
+                // o se cambió de pestaña comparando la de antes con la de ahora (ver [direccionDe]).
+                // La clave del contenido sigue siendo la pantalla de arriba, la misma del
+                // `SaveableStateProvider`: dos pilas con la misma pantalla arriba son la misma
+                // pantalla y no se animan.
+                AnimatedContent(
+                    targetState = backStack.toList(),
+                    modifier = Modifier.fillMaxSize(),
+                    contentKey = { it.last() },
+                    transitionSpec = { transicionEntrePantallas(direccionDe(initialState, targetState), movimientoReducido) },
+                    label = "pantallas",
+                ) { pila ->
+                val pantalla = pila.last()
+                saveableStateHolder.SaveableStateProvider(key = pantalla.toString()) {
+                CompositionLocalProvider(
+                    LocalGoBack provides goBackTo,
+                    LocalNavigate provides navigate,
+                    LocalRetoqueDePestana provides retoque,
+                ) {
+                when (pantalla) {
                 Screen.Login             -> LoginScreen(navigate)
                 Screen.Register          -> RegisterScreen(navigate)
                 Screen.Dashboard         -> DashboardScreen(navigate)
                 is Screen.Transactions   -> TransactionsScreen(
                     navigate,
-                    chipInicial = currentScreen.chipInicial,
-                    periodoInicial = currentScreen.periodoInicial,
+                    chipInicial = pantalla.chipInicial,
+                    periodoInicial = pantalla.periodoInicial,
                 )
                 // Inalcanzable: `navigate` desvía QuickAdd al overlay de más abajo antes de que
                 // llegue a la pila (ver [opensAsOverlay]). La rama existe para que el `when` siga
@@ -342,14 +383,14 @@ fun App() {
                         backStack.add(Screen.Login)
                     },
                 )
-                is Screen.AIChat         -> AIChatScreen(navigate, preguntaInicial = currentScreen.preguntaInicial, sugeridaInicial = currentScreen.sugerida)
+                is Screen.AIChat         -> AIChatScreen(navigate, preguntaInicial = pantalla.preguntaInicial, sugeridaInicial = pantalla.sugerida)
                 Screen.Credits           -> CreditosScreen(navigate)
                 Screen.SalidaDeDeudas    -> SalidaDeDeudasScreen(navigate)
                 Screen.Goals             -> MetasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)
-                is Screen.Plan           -> PlanScreen(navigate, segmento = currentScreen.segmento)
+                is Screen.Plan           -> PlanScreen(navigate, segmento = pantalla.segmento)
                 Screen.Categorias        -> CategoriasScreen(navigate)
-                is Screen.Destinos       -> DestinosScreen(navigate, abrir = currentScreen.abrir, conSugeridosAbiertos = currentScreen.sugeridos)
+                is Screen.Destinos       -> DestinosScreen(navigate, abrir = pantalla.abrir, conSugeridosAbiertos = pantalla.sugeridos)
                 Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.Compartir         -> CompartirScreen(navigate)
                 Screen.LoQueMoviSabe     -> LoQueMoviSabeScreen(navigate)
@@ -357,32 +398,33 @@ fun App() {
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
-                is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)
+                is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, pantalla.smsId)
                 Screen.Mas               -> MasScreen(navigate)
                 Screen.Extractos         -> ExtractosScreen(navigate)
                 Screen.Accounts         -> AccountsScreen(navigate)
                 Screen.CuadreDeSaldos   -> CuadreDeSaldosScreen(navigate)
                 is Screen.AccountDetail -> AccountDetailScreen(
                     onNavigate = navigate,
-                    accountId = currentScreen.accountId,
-                    group = currentScreen.group,
+                    accountId = pantalla.accountId,
+                    group = pantalla.group,
                 )
                 is Screen.StatementReview -> StatementReviewScreen(
                     onNavigate = navigate,
-                    result = Json.decodeFromString(currentScreen.resultJson),
+                    result = Json.decodeFromString(pantalla.resultJson),
                 )
                 is Screen.ImportDetail -> ImportDetailScreen(
                     onNavigate = navigate,
-                    importId = currentScreen.importId,
+                    importId = pantalla.importId,
                 )
                 Screen.ScreenEditor      -> ScreenEditorScreen(navigate)
                 // Ola W2: en el teléfono son las dos pantallas de siempre; en la web, una lista con
                 // el detalle del período elegido al lado (ver [PeriodosListaYDetalle]).
                 Screen.Periodos          -> PeriodosListaYDetalle(navigate, idPedido = null)
-                is Screen.DetalleDePeriodo -> PeriodosListaYDetalle(navigate, idPedido = currentScreen.id)
+                is Screen.DetalleDePeriodo -> PeriodosListaYDetalle(navigate, idPedido = pantalla.id)
                 }
                 } // CompositionLocalProvider(LocalGoBack)
                 } // SaveableStateProvider
+                } // AnimatedContent
 
                 // La hoja de Agregar, DENTRO del área de contenido y encima de la pantalla que
                 // ya estaba: su propio fondo oscuro atenúa lo de atrás, y como este Box es el

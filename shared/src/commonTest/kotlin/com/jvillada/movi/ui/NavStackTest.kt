@@ -264,6 +264,77 @@ class NavStackTest {
         assertEquals(listOf(Screen.Dashboard, Screen.Plan(SEGMENTO_PAGOS)), pila)
     }
 
+    // ── Ola 1 · Saltar entre pestañas no apila historial ──────────────────────
+
+    /**
+     * El defecto: cada toque en la barra apilaba. Hoy → Movimientos → Hoy → Plan dejaba cuatro
+     * pantallas, y el «atrás» del teléfono recorría el zigzag entero antes de salir.
+     */
+    @Test
+    fun `saltar entre pestanas raiz no apila`() {
+        val pila = mutableListOf<Screen>(Screen.Dashboard)
+        NavStack.navegar(pila, screenForTab(NavTab.MOVIMIENTOS))
+        assertEquals(listOf(Screen.Dashboard, Screen.Transactions()), pila, "Hoy queda abajo, Movimientos encima")
+
+        NavStack.navegar(pila, screenForTab(NavTab.HOY))
+        assertEquals(listOf<Screen>(Screen.Dashboard), pila, "volver a Hoy no deja Movimientos atrás")
+
+        NavStack.navegar(pila, screenForTab(NavTab.MOVIMIENTOS))
+        NavStack.navegar(pila, screenForTab(NavTab.PLAN))
+        NavStack.navegar(pila, screenForTab(NavTab.PATRIMONIO))
+        assertEquals(listOf(Screen.Dashboard, Screen.Accounts), pila, "una pestaña reemplaza a la otra")
+    }
+
+    @Test
+    fun `ir a otra pestana suelta lo que se habia apilado en la de antes`() {
+        val pila = mutableListOf<Screen>(Screen.Dashboard)
+        NavStack.navegar(pila, screenForTab(NavTab.MOVIMIENTOS))
+        NavStack.navegar(pila, Screen.PorRevisar)
+        NavStack.navegar(pila, Screen.SMSReconcile("s1"))
+        NavStack.navegar(pila, screenForTab(NavTab.PLAN))
+        assertEquals(listOf(Screen.Dashboard, Screen.Plan()), pila)
+    }
+
+    @Test
+    fun `atras desde una pantalla apilada vuelve a su pestana`() {
+        val pila = mutableListOf<Screen>(Screen.Dashboard)
+        NavStack.navegar(pila, screenForTab(NavTab.PATRIMONIO))
+        NavStack.navegar(pila, Screen.Credits)
+        assertEquals(listOf(Screen.Dashboard, Screen.Accounts, Screen.Credits), pila, "dentro de la pestaña sí se apila")
+
+        atras(PilaDeHojas(), pila)
+        assertEquals(Screen.Accounts, pila.last(), "atrás vuelve a la raíz de su pestaña")
+        assertEquals(NavTab.PATRIMONIO, navTabFor(pila.last()))
+
+        atras(PilaDeHojas(), pila)
+        assertEquals(listOf<Screen>(Screen.Dashboard), pila, "y desde otra pestaña, a Hoy")
+        assertFalse(hayAdondeVolver(PilaDeHojas(), pila), "desde Hoy el atrás es del sistema")
+    }
+
+    @Test
+    fun `las raices son las cuatro pestanas, sin filtros`() {
+        listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan(), Screen.Accounts)
+            .forEach { assertTrue(NavStack.esRaizDePestana(it), "$it") }
+        listOf(
+            Screen.Transactions(CHIP_ENTRE_CUENTAS), Screen.Plan(SEGMENTO_PRESUPUESTOS), Screen.Credits,
+            Screen.PorRevisar, Screen.AIChat(), Screen.QuickAdd(), Screen.Profile,
+        ).forEach { assertFalse(NavStack.esRaizDePestana(it), "$it") }
+    }
+
+    @Test
+    fun `Movimientos con un chip sigue apilandose encima de Movimientos`() {
+        val pila = mutableListOf<Screen>(Screen.Dashboard, Screen.Transactions())
+        NavStack.navegar(pila, Screen.Transactions(CHIP_ENTRE_CUENTAS))
+        assertEquals(listOf(Screen.Dashboard, Screen.Transactions(), Screen.Transactions(CHIP_ENTRE_CUENTAS)), pila)
+    }
+
+    @Test
+    fun `entrar sigue reemplazando la pila por Hoy`() {
+        val pila = mutableListOf<Screen>(Screen.Login, Screen.Register)
+        NavStack.navegar(pila, screenForTab(NavTab.HOY))
+        assertEquals(listOf<Screen>(Screen.Dashboard), pila)
+    }
+
     // ── Agregar es una ventana modal, no un destino ───────────────────────────
 
     @Test
