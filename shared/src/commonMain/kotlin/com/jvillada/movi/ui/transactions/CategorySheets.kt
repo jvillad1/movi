@@ -69,6 +69,7 @@ import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.fecha.timestampParaFecha
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.shared.model.marcaDe
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
 import com.jvillada.movi.ui.recurrentes.claveDeNombre
 import com.jvillada.movi.ui.recurrentes.equivalenteYaAnotadoDe
@@ -718,7 +719,7 @@ internal fun ContenidoDelMovimiento(
     val alCerrar: () -> Unit = { if (renombradoAca != null) onEventChanged(renombradoAca) else onDismiss() }
     MarcoDelMovimiento(lugar, onDismiss = alCerrar, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            NombreQueSeEdita(renombradoAca?.description ?: event.description) { edicionAbierta = true }
+            NombreQueSeEdita(renombradoAca?.description ?: event.description, evento = renombradoAca ?: event) { edicionAbierta = true }
             Spacer(Modifier.height(12.dp))
             PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
             Spacer(Modifier.height(18.dp))
@@ -1142,11 +1143,21 @@ fun CardPaymentCandidatesSheet(
  */
 /** El nombre del movimiento, tocable: abre el editor del concepto. */
 @Composable
-private fun NombreQueSeEdita(nombre: String, onEditar: () -> Unit) {
+private fun NombreQueSeEdita(nombre: String, evento: FinancialEvent? = null, onEditar: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onEditar),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Ola 2a: la marca del comercio junto al título, si Movi la reconoce. Solo eso: el rediseño de
+        // esta hoja viene después. Del alto del renglón (20 dp) y no los 48 de un encabezado: con 48,
+        // y aun con 36, la búsqueda de categorías se salía de la vista en un teléfono de 731 dp
+        // (`la_busqueda_esta_a_la_vista_sin_buscarla_debajo_de_una_lista_larga`). Sin marca no se
+        // pone nada: la categoría ya tiene su ícono más abajo, en su fila.
+        val marca = remember(evento?.merchant, evento?.description) { evento?.let(::marcaDe) }
+        if (marca != null) {
+            CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea)
+            Spacer(Modifier.width(12.dp))
+        }
         Text(
             nombre,
             style = Movi.textos.titulo,

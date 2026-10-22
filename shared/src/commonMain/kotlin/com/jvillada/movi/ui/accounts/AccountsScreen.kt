@@ -336,7 +336,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
                                     Text("Deudas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                                    Cifra("−${formatCOP(balance.deudas)}", Movi.textos.apoyo, color = Movi.colores.sale)
+                                    // En el tono de las otras líneas: deber no es una alerta (Ola 2a).
+                                    Cifra("−${formatCOP(balance.deudas)}", Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                 }
                             }
                         }
@@ -728,20 +729,16 @@ private fun AccountsGroup(
                 )
             }
             accounts.forEachIndexed { index, account ->
-                val icon = accountTypeIcon(account.type)
-                // F56: el subtítulo ya no repite el tipo crudo ("Ahorros", "Corriente"…) — son
-                // el mismo grupo (Dinero) en todos los cálculos, así que muestran su grupo; el
-                // nombre que puso el dueño es lo que de verdad distingue una cuenta de otra.
-                val typeLabel = account.type.groupLabel
                 val saldo = saldoDeLaFila(account)
                 val condicionada = esDeUsoCondicionado(account)
                 CardRow(
                     left = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Icon(imageVector = icon, contentDescription = typeLabel, tint = Movi.colores.textoMedio, modifier = Modifier.size(20.dp))
+                            // La marca del banco (Ola 2a) o, sin marca, el ícono del tipo de siempre.
+                            AvatarDeLaCuenta(account)
                             Text(
                                 text = account.name,
                                 style = Movi.textos.titulo,
@@ -777,17 +774,6 @@ private fun AccountsGroup(
             }
         }
     }
-}
-
-// El ícono se queda por tipo específico (glifo, no texto — no repite "Ahorros"/"Corriente" en
-// palabras); el texto que ve el dueño es [AccountType.groupLabel] (ver arriba).
-private fun accountTypeIcon(type: AccountType): ImageVector = when (type) {
-    AccountType.CASH        -> Icons.Filled.Payments
-    AccountType.SAVINGS     -> Icons.Filled.AccountBalance
-    AccountType.CHECKING    -> Icons.Filled.AccountBalanceWallet
-    AccountType.INVESTMENT  -> Icons.AutoMirrored.Filled.TrendingUp
-    AccountType.CREDIT_CARD -> Icons.Filled.CreditCard
-    AccountType.LOAN        -> Icons.Filled.RequestQuote
 }
 
 /** La tarjeta del patrimonio neto, cargando o cargada: el mismo tag en las dos para medir que no salte. */
@@ -965,8 +951,8 @@ private fun SeccionDeDeudas(
             titulo = "Deudas",
             subtitulo = resumenDeDeudas(creditos, tarjetas),
             cifra = if (hayDeuda) formatCOP(total) else null,
-            // Sin deudas, un «$0» en rojo parece una alarma: el rojo es para lo que se debe.
-            colorCifra = if (total == 0L) Movi.colores.texto else Movi.colores.sale,
+            // Neutro (Ola 2a): las deudas no son una alerta, y el rojo quedó para lo que sí lo es.
+            colorCifra = Movi.colores.texto,
             onClick = onClick,
             testTag = TAG_TARJETA_DE_DEUDAS,
         )

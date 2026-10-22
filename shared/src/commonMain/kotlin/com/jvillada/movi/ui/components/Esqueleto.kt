@@ -283,14 +283,14 @@ fun FilaDeListaEsqueleto(isLast: Boolean = false, conIcono: Boolean = false, dia
             }
             Column(modifier = Modifier.weight(1f)) {
                 if (conIcono) {
-                    // El ícono de 20 dp de la fila de una cuenta, a 8 dp del nombre: los dos
-                    // valores de `AccountsGroup`. El renglón mide el más alto de los dos, como el
-                    // real.
+                    // El avatar de 36 dp de la fila de una cuenta (Ola 2a, `AvatarDeLaCuenta`), a
+                    // 12 dp del nombre: los dos valores de `AccountsGroup`. El renglón mide el más
+                    // alto de los dos, como el real.
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        BloqueEsqueleto(alto = 20.dp, ancho = 20.dp)
+                        CirculoEsqueleto(TamanoDeAvatar.Fila.circulo)
                         LineaEsqueleto(
                             fraccionDelAncho = 0.55f,
                             estilo = Movi.textos.titulo,

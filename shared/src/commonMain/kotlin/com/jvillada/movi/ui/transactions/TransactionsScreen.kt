@@ -244,7 +244,10 @@ fun isOrphanedTransferLeg(event: FinancialEvent): Boolean = event.category == OR
  * confundirse a simple vista.
  */
 enum class TonoDelMonto {
-    /** Plata que salió del bolsillo. Rojo y con «−». */
+    /**
+     * Plata que salió del bolsillo. **En el color del texto** y con «−» (Ola 2a, decisión del dueño
+     * del 22-oct-2026): el rojo quedó solo para lo que pide atención, y gastar no es un problema.
+     */
     GASTO,
     /** Plata que entró al bolsillo. Verde y con «+». */
     INGRESO,
@@ -1797,7 +1800,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null, p
  * las dos paletas, así que ahora la distinción se verifica **en los dos temas**, no en uno.
  */
 fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color = when (tono) {
-    TonoDelMonto.GASTO -> colores.sale
+    // Neutro, no `sale`: ver [TonoDelMonto.GASTO]. Lo distingue el signo «−».
+    TonoDelMonto.GASTO -> colores.texto
     TonoDelMonto.INGRESO -> colores.entra
     TonoDelMonto.ENTRE_CUENTAS -> colores.entreCuentas
     TonoDelMonto.NEUTRO -> colores.textoApagado
@@ -1996,11 +2000,18 @@ internal fun MovementSingleRow(
     esRecurrente: Boolean = false,
     /** Es el que muestra el panel de la derecha (Ola W4). Solo en pantalla ancha. */
     elegido: Boolean = false,
+    /** Una línea más debajo del subtítulo (el detalle de una cuenta explica ahí un pago que no fue la cuota). */
+    nota: String? = null,
+    /**
+     * El tono decidido por quien llama. El detalle de una cuenta lo usa para pintar el signo
+     * siempre: ahí el total del día cuenta todo lo que mueve el saldo, no solo el flujo de caja.
+     */
+    tonoForzado: TonoDelMonto? = null,
     onClick: () -> Unit,
 ) {
-    // Rojo gasto, verde ingreso, gris lo que no movió plata del bolsillo — la apertura de una
+    // Texto el gasto, verde el ingreso, gris lo que no movió plata del bolsillo — la apertura de una
     // cuenta, la pata huérfana, la cuota que paga un tercero. Una sola regla, ver [tonoDelEvento].
-    val tono = tonoDelEvento(tx)
+    val tono = tonoForzado ?: tonoDelEvento(tx)
     val subtitulo = accountNames[tx.accountId]
         ?.let { "${tx.category} · $it" }
         ?: tx.category
@@ -2014,9 +2025,10 @@ internal fun MovementSingleRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // El ícono de la categoría — la apertura, el ajuste y la pata huérfana ya resuelven a un
-        // ícono neutro por su nombre (ver `aparienciaDe`), así que acá no hace falta distinguir.
-        IconoDeCategoria(tx.category)
+        // La marca del comercio si Movi la reconoce (Ola 2a), y si no el ícono de la categoría — la
+        // apertura, el ajuste y la pata huérfana ya resuelven a un ícono neutro por su nombre (ver
+        // `aparienciaDe`), así que acá no hace falta distinguir.
+        AvatarDelComercio(tx)
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -2063,6 +2075,10 @@ internal fun MovementSingleRow(
                     // ancho acotado y el ellipsis de arriba no tiene sobre qué recortar.
                     modifier = Modifier.weight(1f, fill = false),
                 )
+            }
+            nota?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 16.sp)
             }
         }
         Text(

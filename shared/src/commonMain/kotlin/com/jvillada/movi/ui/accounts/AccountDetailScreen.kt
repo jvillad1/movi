@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.draw.clip
@@ -27,6 +28,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Apartado
@@ -36,7 +39,6 @@ import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.accountDayTotal
 import com.jvillada.movi.shared.model.masRecientePrimero
@@ -48,6 +50,10 @@ import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.credits.textosDeLosPagosQueNoFueronLaCuota
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
+import com.jvillada.movi.ui.transactions.MovementSingleRow
+import com.jvillada.movi.ui.transactions.TonoDelMonto
+import com.jvillada.movi.ui.cuadre.textoDelUltimoCuadre
+import com.jvillada.movi.shared.model.sePuedeCuadrar
 import kotlinx.coroutines.CancellationException
 import com.jvillada.movi.shared.time.AppTimeZone
 import kotlinx.datetime.Clock
@@ -272,61 +278,35 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 Spacer(Modifier.height(4.dp))
             }
 
+            // **Abrir arriba.** Mientras la cuenta no llega, el primer ítem de la lista es
+            // «section-header»; cuando llega, el encabezado del saldo se inserta ANTES, y la
+            // LazyColumn ancla la posición por clave: se queda mirando «section-header» y el saldo
+            // queda escondido arriba (en la web, con la red de por medio, abría así siempre). La
+            // primera vez que la cuenta llega, la lista vuelve al principio.
+            val lista = rememberLazyListState()
+            val cuentaLlego = account != null
+            LaunchedEffect(cuentaLlego) {
+                if (cuentaLlego) lista.scrollToItem(0)
+            }
+
             LazyColumn(
+                state = lista,
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(
                     start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp,
                 ),
             ) {
-                // Balance hero card
+                // **El saldo arriba** (Ola 2a). Antes el detalle abría casi directo en la lista y el
+                // dueño tenía que leer una tarjeta genérica para saber de qué cuenta se trataba: ahora
+                // el encabezado dice la cuenta (su marca), cuánto hay, desde cuándo nadie la cuadra y
+                // cómo cuadrarla. El saldo es el que ya trae `Account` —derivado por el server, sin
+                // anulados—: acá no se suma nada a mano.
                 account?.let { acc ->
                     item(key = "balance-card") {
-                        val typeLabel = accountTypeIcon(acc.type).second
-                        val isCard = isDebtAccount(acc.type)
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(20.dp),
-                        ) {
-                            Text(
-                                text = if (isCard) "DEUDA ACTUAL" else "SALDO ACTUAL",
-                                style = Movi.textos.rotulo,
-                                color = Movi.colores.textoMedio,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            if (isCard) {
-                                val (debt, isEstimate) = cardDebt(acc)
-                                // El signo invertido —negativo es saldo a FAVOR— vive en
-                                // [saldoDeDeuda] desde la Ola 15: acá nació, y el selector de
-                                // «¿de dónde sale la plata?» lo necesitaba igual. Dos copias de
-                                // qué significa el menos era exactamente cómo se llegaba a un
-                                // «Debes −$50.000» en la otra pantalla.
-                                val saldo = saldoDeDeuda(debt)
-                                // La cifra protagonista de esta pantalla: `Movi.textos.cifra`, que se
-                                // achica sola si una deuda larga no entra en un renglón.
-                                CifraProtagonista(
-                                    text = "${if (isEstimate) "≈" else ""}${if (saldo.aFavor) "+" else ""}${saldo.magnitud}",
-                                    color = if (saldo.aFavor) Movi.colores.entra else Movi.colores.sale,
-                                )
-                            } else {
-                                CifraProtagonista(
-                                    text = formatCOP(acc.balance), // formatCOP ya trae el signo (F36)
-                                    color = if (acc.balance >= 0) Movi.colores.entra else Movi.colores.sale,
-                                )
-                            }
-                            if (typeLabel.isNotEmpty()) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = if (isCard) typeLabel else "COP · $typeLabel",
-                                    style = Movi.textos.apoyo,
-                                    color = Movi.colores.textoMedio,
-                                )
-                            }
-                            if (hasForeignBalance(acc)) {
-                                Spacer(Modifier.height(12.dp))
-                                CurrencyBreakdown(acc)
-                            }
-                        }
+                        EncabezadoDeLaCuenta(
+                            acc = acc,
+                            onCuadrar = { onNavigate(Screen.CuadreDeSaldos) },
+                        )
                         Spacer(Modifier.height(20.dp))
                     }
 
@@ -462,80 +442,28 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                             ) {
                                 day.items.forEachIndexed { i, event ->
-                                    val isIncome = event.type == TransactionType.INCOME
                                     Column {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { selectedEvent = event }
-                                                .padding(vertical = 14.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                ) {
-                                                    Text(
-                                                        text = event.description,
-                                                        style = Movi.textos.cuerpo,
-                                                        color = Movi.colores.texto,
-                                                    )
-                                                    if (event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
-                                                        StatusDot(Movi.colores.aviso)
-                                                    }
-                                                }
-                                                Spacer(Modifier.height(2.dp))
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                ) {
-                                                    Text(event.category, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                                                    StatusDot(Movi.colores.textoApagado, 2.dp)
-                                                    Text(
-                                                        text = event.source.name,
-                                                        style = Movi.textos.apoyo,
-                                                        color = Movi.colores.textoMedio,
-                                                        letterSpacing = 0.3.sp,
-                                                    )
-                                                }
-                                                // **Qué le pasó a la deuda si este pago no fue la
-                                                // cuota.** El concepto de la fila ya dice «Abono a
-                                                // capital desde X» cuando la cuota se repartió,
-                                                // pero no dice que el monto no era el pactado —y
-                                                // eso es justo lo que el dueño no podía ver cuando
-                                                // pagó $77.040 de más. Ver
-                                                // [textosDeLosPagosQueNoFueronLaCuota]: se
-                                                // juzga la cuota entera, en su último pago.
-                                                lineasDeLaCuota[event.id]?.let { linea ->
-                                                    Spacer(Modifier.height(4.dp))
-                                                    Text(
-                                                        text = linea,
-                                                        style = Movi.textos.apoyo,
-                                                        color = Movi.colores.textoMedio,
-                                                        lineHeight = 16.sp,
-                                                    )
-                                                }
-}
-                                            // Acá el signo se pinta SIEMPRE, y no es un olvido de
-                                            // la ola 15: en Movimientos `rowShowsSign` se lo quita
-                                            // a la pata huérfana (y a la apertura) porque ahí el
-                                            // total del día es flujo de caja y la fila lo
-                                            // contradecía. Esta pantalla suma con `accountDayTotal`
-                                            // /`signedDelta`, que cuentan TODO lo que mueve el
-                                            // saldo — la pata huérfana incluida, que es justo lo
-                                            // que hay que mostrar acá. Sin signo, la fila
-                                            // contradiría el total de ESTA pantalla. Por eso «Saldo
-                                            // inicial» tampoco está exento acá desde siempre.
-                                            Text(
-                                                text = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}",
-                                                style = Movi.textos.monto,
-                                                fontWeight = FontWeight.Medium,
-                                                color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
-                                                letterSpacing = (-0.3).sp,
-                                            )
-                                        }
+                                        // **Las mismas filas que Movimientos** (Ola 2a): con la marca
+                                        // del comercio, la categoría de subtítulo y sin el `source`
+                                        // crudo («MANUAL», «SMS») que se leía acá. Dos cosas propias
+                                        // de esta pantalla, pasadas como parámetro:
+                                        //
+                                        // - **El signo se pinta SIEMPRE.** En Movimientos `tonoDelEvento`
+                                        //   se lo quita a la pata huérfana y a la apertura porque ahí el
+                                        //   total del día es flujo de caja. Esta pantalla suma con
+                                        //   `accountDayTotal`, que cuenta TODO lo que mueve el saldo —
+                                        //   la pata huérfana incluida—: sin signo, la fila contradiría
+                                        //   el total de ESTA pantalla.
+                                        // - **Qué le pasó a la deuda si este pago no fue la cuota**, en
+                                        //   una línea debajo (ver [textosDeLosPagosQueNoFueronLaCuota]:
+                                        //   se juzga la cuota entera, en su último pago).
+                                        MovementSingleRow(
+                                            tx = event,
+                                            accountNames = emptyMap(),
+                                            nota = lineasDeLaCuota[event.id],
+                                            tonoForzado = if (event.type == TransactionType.INCOME) TonoDelMonto.INGRESO else TonoDelMonto.GASTO,
+                                            onClick = { selectedEvent = event },
+                                        )
                                         if (i < day.items.size - 1) Hairline()
                                     }
                                 }
@@ -736,5 +664,99 @@ private fun SeccionDeApartados(
             showChevron = true,
             onClick = onApartar,
         )
+    }
+}
+
+/** El `testTag` del encabezado del detalle de una cuenta. */
+const val TAG_ENCABEZADO_DE_LA_CUENTA: String = "encabezado-de-la-cuenta"
+
+/**
+ * El encabezado del detalle de una cuenta: su avatar (la marca del banco, o el ícono del tipo), el
+ * saldo en la cifra protagonista, el tipo y desde cuándo no se cuadra, y «Cuadrar con el banco», que
+ * abre Cuadre de saldos —lo que ya existe— y no una forma nueva de tocar un saldo.
+ *
+ * **Colores.** Un saldo en contra de una cuenta de dinero va en rojo: es de lo poco que de verdad pide
+ * atención. Una deuda va en el color del texto: deber no es una alerta (Ola 2a), y un saldo a favor
+ * de una tarjeta sí va en verde, porque es plata tuya.
+ */
+@Composable
+private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit) {
+    val isCard = isDebtAccount(acc.type)
+    val typeLabel = accountTypeIcon(acc.type).second
+    MinCard(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_LA_CUENTA),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(20.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            AvatarDeLaCuenta(acc, tamano = TamanoDeAvatar.Encabezado)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (isCard) "DEUDA ACTUAL" else "SALDO ACTUAL",
+                    style = Movi.textos.rotulo,
+                    color = Movi.colores.textoMedio,
+                )
+                if (typeLabel.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = if (isCard) typeLabel else "${acc.currency} · $typeLabel",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        if (isCard) {
+            val (debt, isEstimate) = cardDebt(acc)
+            // El signo invertido —negativo es saldo a FAVOR— vive en [saldoDeDeuda] desde la Ola 15.
+            val saldo = saldoDeDeuda(debt)
+            CifraProtagonista(
+                text = "${if (isEstimate) "≈" else ""}${if (saldo.aFavor) "+" else ""}${saldo.magnitud}",
+                color = if (saldo.aFavor) Movi.colores.entra else Movi.colores.texto,
+            )
+        } else {
+            CifraProtagonista(
+                text = formatCOP(acc.balance), // formatCOP ya trae el signo (F36)
+                color = if (acc.balance < 0) Movi.colores.sale else Movi.colores.texto,
+            )
+        }
+        if (hasForeignBalance(acc)) {
+            Spacer(Modifier.height(12.dp))
+            CurrencyBreakdown(acc)
+        }
+        if (sePuedeCuadrar(acc)) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = textoDelUltimoCuadre(acc, hoyEnAppZone()),
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.weight(1f),
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Movi.colores.marca.copy(alpha = 0.16f))
+                        .clickable(role = Role.Button, onClick = onCuadrar)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "Cuadrar con el banco",
+                        style = Movi.textos.apoyo,
+                        fontWeight = FontWeight.Medium,
+                        color = Movi.colores.marca,
+                    )
+                }
+            }
+        }
     }
 }

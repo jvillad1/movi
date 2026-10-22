@@ -508,7 +508,8 @@ private fun NewTransactionRow(
                 )
             }
         }
-        val amountColor = if (tx.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.sale
+        // Ola 2a: el gasto en el color del texto; el signo «−» ya lo dice.
+        val amountColor = if (tx.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.texto
         val prefix = if (tx.type == TransactionType.INCOME) "+" else "−"
         Text(
             "$prefix${formatMoney(tx.amount, tx.currency)}",
@@ -555,7 +556,7 @@ private fun ReconciliationCard(
                     style = Movi.textos.rotulo, color = Movi.colores.aviso,
                 )
             }
-            val amtColor = if (match.parsed.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.sale
+            val amtColor = if (match.parsed.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.texto
             val prefix = if (match.parsed.type == TransactionType.INCOME) "+" else "−"
             Text(
                 "$prefix${formatMoney(match.parsed.amount, match.parsed.currency)}",

@@ -90,6 +90,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.shared.model.marcaDelAviso
 import com.jvillada.movi.ui.quickadd.simboloDeMoneda
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -526,6 +527,10 @@ internal fun TarjetaDeMensajeDelBanco(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            // Ola 2a: la marca del comercio que nombra el aviso o, si no nombra ninguno, la del
+            // banco que lo mandó. Sin marca, nada: el origen escrito al lado ya lo dice.
+            val marca = remember(sms.text, sms.bank) { marcaDelAviso(sms.text, sms.bank) }
+            if (marca != null) CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea)
             // Con tope y en un renglón: «Comprobante · transferencia de septiembre.png» (Ola 2) se
             // comía el ancho entero y la fecha quedaba en un dígito suelto. Un código de SMS o
             // «Notificación · Nu» ni se acercan al tope.
@@ -1399,7 +1404,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                                 )
                             }
                             val sign = if (p.type == TransactionType.EXPENSE) "−" else "+"
-                            val color = if (p.type == TransactionType.EXPENSE) Movi.colores.sale else Movi.colores.entra
+                            // Ola 2a: el gasto en el color del texto; el signo «−» ya lo dice.
+                            val color = if (p.type == TransactionType.EXPENSE) Movi.colores.texto else Movi.colores.entra
                             Text(
                                 "$sign${formatMoney(p.amount.roundToLong(), p.currency)}",
                                 style = Movi.textos.monto,

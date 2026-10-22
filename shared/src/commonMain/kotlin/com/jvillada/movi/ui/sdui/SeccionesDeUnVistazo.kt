@@ -45,7 +45,9 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.ai.CUANTAS_PREGUNTAS_SUGERIDAS
 import com.jvillada.movi.ui.ai.preguntasParaTocar
+import com.jvillada.movi.ui.components.AvatarDeLaCuenta
 import com.jvillada.movi.ui.components.BloqueEsqueleto
+import com.jvillada.movi.ui.components.TamanoDeAvatar
 import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.CifraProtagonista
@@ -356,16 +358,18 @@ internal fun HeroDeUnVistazo(
             val fraccion = fraccionQueEntro(ingresos, egresos)
             if (data.summary != null && fraccion != null) {
                 Spacer(Modifier.height(Movi.espacios.amplio))
+                // «Salió» en neutro (Ola 2a): gastar no es una alerta. Lo que sí lo es —«Te pasaste
+                // por»— tiene su propio rojo más arriba.
                 BarraDeDosTramos(
                     fraccionIzquierda = fraccion,
                     colorIzquierda = Movi.colores.entra,
-                    colorDerecha = Movi.colores.sale,
+                    colorDerecha = Movi.colores.neutro,
                     entrada = entradaDeLaBarra,
                 )
                 Spacer(Modifier.height(Movi.espacios.corto))
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     ParDeCifra("Entró", formatMoneyCompact(ingresos), Movi.colores.entra, Modifier.weight(1f))
-                    ParDeCifra("Salió", formatMoneyCompact(egresos), Movi.colores.sale, alFinal = true)
+                    ParDeCifra("Salió", formatMoneyCompact(egresos), Movi.colores.texto, alFinal = true)
                 }
             }
         }
@@ -568,7 +572,11 @@ private fun FilaDeCuentaDelHero(cuenta: CuentaHero, modifier: Modifier = Modifie
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        // La marca del banco en chiquito (Ola 2a), o el ícono del tipo de cuenta.
+        AvatarDeLaCuenta(nombre = cuenta.nombre, tipo = cuenta.tipo, tamano = TamanoDeAvatar.Linea)
+        Spacer(Modifier.width(Movi.espacios.corto))
         Text(
             text = cuenta.nombre,
             style = Movi.textos.apoyo,
@@ -860,13 +868,14 @@ internal fun PatrimonioSection(
             BarraDeDosTramos(
                 fraccionIzquierda = patrimonio.fraccionQueTienes,
                 colorIzquierda = Movi.colores.entra,
-                colorDerecha = Movi.colores.sale,
+                // Las deudas no son una alerta (Ola 2a): son estructura de largo plazo, en neutro.
+                colorDerecha = Movi.colores.neutro,
                 entrada = entrada,
             )
             Spacer(Modifier.height(Movi.espacios.corto))
             Row(modifier = Modifier.fillMaxWidth()) {
                 ParDeCifra("Tienes", formatMoneyCompact(patrimonio.tienes), Movi.colores.entra, Modifier.weight(1f))
-                ParDeCifra("Debes", formatMoneyCompact(patrimonio.debes), Movi.colores.sale, alFinal = true)
+                ParDeCifra("Debes", formatMoneyCompact(patrimonio.debes), Movi.colores.texto, alFinal = true)
             }
             Spacer(Modifier.height(Movi.espacios.medio))
             Hairline()
@@ -896,7 +905,7 @@ private fun FilaDeTramo(tramo: TramoDelPatrimonio, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
     ) {
-        StatusDot(color = if (tramo.esDeuda) Movi.colores.sale else Movi.colores.entra, size = 7.dp)
+        StatusDot(color = if (tramo.esDeuda) Movi.colores.neutro else Movi.colores.entra, size = 7.dp)
         Text(
             text = tramo.nombre,
             style = Movi.textos.cuerpo,

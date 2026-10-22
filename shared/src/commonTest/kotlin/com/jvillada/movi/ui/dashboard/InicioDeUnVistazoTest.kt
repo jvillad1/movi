@@ -374,7 +374,7 @@ class InicioDeUnVistazoTest {
         assertTrue(hero.muestraPatrimonio)
         assertEquals("Tu plata más \$8M apartados para Colegio nov-dic", patrimonioExplicacion(hero))
         // La fila de la cuenta dice lo libre: las filas suman «Tu plata».
-        assertEquals(listOf(CuentaHero("Nu", "\$217.464")), cuentasDelHero(data.accounts, data.apartados!!))
+        assertEquals(listOf(CuentaHero("Nu", "\$217.464", AccountType.SAVINGS)), cuentasDelHero(data.accounts, data.apartados!!))
     }
 
     @Test

@@ -6,12 +6,14 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.jvillada.movi.app.R
 import com.jvillada.movi.shared.model.AvisoPorRevisar
+import com.jvillada.movi.shared.model.marcaDelAviso
 
 /**
  * **Quien hace sonar el teléfono** (Ola 1 · Movi avisa). Lo que dicen los avisos y cuándo se decide
@@ -84,7 +86,12 @@ object Avisador {
         )
         PreferenciasDeAvisos.guardarAgrupados(context, todos)
         val texto = textoDeMovimientos(todos) ?: return
-        publicar(context, ID_MOVIMIENTOS, CANAL_MOVIMIENTOS, texto, ABRIR_POR_REVISAR, cuantos = todos.size)
+        // Ola 2a: con un solo movimiento la notificación nombra su comercio, y lleva su marca
+        // dibujada (círculo y letra, del catálogo propio: nada sale del teléfono). Con varios, no:
+        // la marca de uno solo diría que todos son de ahí.
+        val marca = todos.singleOrNull()?.let { marcaDelAviso(it.descripcion, it.origen) }
+        val icono = marca?.let { runCatching { iconoDeMarca(context, it) }.getOrNull() }
+        publicar(context, ID_MOVIMIENTOS, CANAL_MOVIMIENTOS, texto, ABRIR_POR_REVISAR, cuantos = todos.size, icono = icono)
     }
 
     /** Avisa los vencimientos de hoy y mañana con [texto] (ver [textoDeVencimientos]). */
@@ -119,7 +126,15 @@ object Avisador {
 
     // `puedeAvisar` ya miró el permiso justo antes; el lint no lo ve a través de la función.
     @SuppressLint("MissingPermission")
-    private fun publicar(context: Context, id: Int, canal: String, texto: TextoDeAviso, abrir: String, cuantos: Int) {
+    private fun publicar(
+        context: Context,
+        id: Int,
+        canal: String,
+        texto: TextoDeAviso,
+        abrir: String,
+        cuantos: Int,
+        icono: Bitmap? = null,
+    ) {
         if (!puedeAvisar(context)) return
         crearCanales(context)
         val intent = (context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return)
@@ -138,6 +153,7 @@ object Avisador {
         }
         val aviso = NotificationCompat.Builder(context, canal)
             .setSmallIcon(R.drawable.ic_stat_movi)
+            .setLargeIcon(icono)
             .setContentTitle(texto.titulo)
             .setContentText(texto.texto)
             .setStyle(estilo)
