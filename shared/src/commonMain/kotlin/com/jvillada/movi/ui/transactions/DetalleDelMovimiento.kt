@@ -40,7 +40,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.theme.Movi
@@ -137,8 +136,10 @@ internal fun EncabezadoDelMovimiento(
     val tono = tonoDelEvento(evento)
     val monto = textoDelMontoConSigno(evento, tono)
     // La cifra protagonista, en `cifra` (42 sp). Una cifra larga —millones en dólares con
-    // centavos— baja a 32 sp para no partirse en dos renglones en un teléfono de 360 dp.
-    val estilo = if (monto.length > 12) Movi.textos.cifra.copy(fontSize = 32.sp, lineHeight = 36.sp) else Movi.textos.cifra
+    // centavos— baja a tres cuartos de la misma `cifra` (~32 sp) para no salirse en un teléfono de
+    // 360 dp. Derivada de la escala y no un tamaño suelto: si `cifra` cambia, esta la sigue.
+    val cifra = Movi.textos.cifra
+    val estilo = if (monto.length > 12) cifra.copy(fontSize = cifra.fontSize * 0.76f, lineHeight = cifra.lineHeight * 0.78f) else cifra
     Text(
         monto,
         style = estilo,
