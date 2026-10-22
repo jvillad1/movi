@@ -487,6 +487,9 @@ class WalletRepositoryImpl(
     override suspend fun getGastoDelDiaADia(): com.jvillada.movi.shared.model.GastoDelDiaADia =
         client.get("$baseUrl/api/caja-proyectada/gasto-del-dia-a-dia").exigirExito().body()
 
+    override suspend fun getHistoriaDelPatrimonio(): com.jvillada.movi.shared.model.HistoriaDelPatrimonio =
+        client.get("$baseUrl/api/patrimonio/historia").exigirExito().body()
+
     override suspend fun getAnomalias(): List<com.jvillada.movi.shared.model.Anomalia> =
         // `conDeudas=1`: esta app conoce los dos avisos de las deudas (ver `TipoDeAnomalia`).
         client.get("$baseUrl/api/anomalias?conDeudas=1").exigirExito().body()

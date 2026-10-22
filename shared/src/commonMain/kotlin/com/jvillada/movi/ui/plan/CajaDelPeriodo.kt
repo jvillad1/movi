@@ -17,6 +17,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import com.jvillada.movi.shared.model.DiaDeLaCaja
+import com.jvillada.movi.ui.components.graficaQueSeToca
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -246,13 +253,29 @@ private fun CuerpoDeLaCaja(
     }
     Text(fraseDelDiaMasBajo(caja, hoy), style = Movi.textos.cuerpo, color = Movi.colores.texto)
     Spacer(Modifier.height(Movi.espacios.medio))
-    GraficaDeLaCaja(caja)
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    // Ola 4 · Ver la plata: el día elegido al deslizar (o tocar un pago) se dice en el renglón de
+    // abajo, en el lugar de «Al cierre»: el mismo alto, nada se mueve.
+    var elegido by remember(caja) { mutableStateOf<Int?>(null) }
+    GraficaDeLaCaja(caja, elegido = elegido, alElegir = { elegido = it })
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(fechaCorta(caja.dias.first().fecha), style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+        val dia = elegido?.let { caja.dias.getOrNull(it) }
         Text(
-            "Al cierre: ${formatMoneyCompact(caja.alCierre.saldo)}",
+            text = dia?.let(::leyendaDelDiaDeLaCaja) ?: "Al cierre: ${formatMoneyCompact(caja.alCierre.saldo)}",
             style = Movi.textos.apoyo,
-            color = if (caja.alCierre.saldo < 0) Movi.colores.sale else Movi.colores.textoMedio,
+            color = when {
+                (dia?.saldo ?: caja.alCierre.saldo) < 0 -> Movi.colores.sale
+                dia != null -> Movi.colores.texto
+                else -> Movi.colores.textoMedio
+            },
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).testTag(TAG_LEYENDA_DE_LA_CAJA),
         )
         Text(fechaCorta(caja.dias.last().fecha), style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
     }
@@ -279,34 +302,75 @@ private fun fechaCorta(iso: String): String {
     return "${fecha.dayOfMonth} ${MESES_DEL_ANIO[fecha.monthNumber - 1].take(3)}"
 }
 
+/** El renglón de la leyenda de la caja. */
+const val TAG_LEYENDA_DE_LA_CAJA = "leyenda-de-la-caja"
+
 /**
- * La línea: un punto por día, el cero punteado si la línea lo cruza, el tramo bajo cero en rojo y
- * el día más justo con un punto.
+ * **Lo que se dice de un día elegido**: la fecha, el saldo proyectado y, si ese día vence algo, qué.
+ * «17 oct: $1,2M · Arriendo, Netflix».
+ */
+internal fun leyendaDelDiaDeLaCaja(dia: DiaDeLaCaja): String {
+    val pagos = dia.movimientos.filter { it.monto < 0 }.joinToString(", ") { it.nombre }
+    val base = "${fechaCorta(dia.fecha)}: ${formatMoneyCompact(dia.saldo)}"
+    return if (pagos.isEmpty()) base else "$base · $pagos"
+}
+
+/** Los días con un pago pendiente: los marcadores sobre la línea. */
+internal fun diasConPago(caja: CajaProyectada): List<Int> =
+    caja.dias.indices.filter { i -> caja.dias[i].movimientos.any { it.monto < 0 } }
+
+/**
+ * **La escala vertical de la caja**: el rango de los datos con un margen arriba y abajo, no desde
+ * cero. Una caja de $8M que baja a $6M dibujada desde cero es una raya casi plana; dibujada entre
+ * $5,7M y $8,3M dice cuánto baja y cuándo. El cero solo entra si los datos lo cruzan.
+ */
+internal fun escalaDeLaCaja(saldos: List<Long>): Pair<Long, Long> {
+    val maximo = saldos.max()
+    val minimo = saldos.min()
+    // Un sexto del rango de aire; con una línea plana, un poco del valor (o $1, si es cero).
+    val margen = ((maximo - minimo) / 6).takeIf { it > 0 } ?: (kotlin.math.abs(maximo) / 10).coerceAtLeast(1L)
+    return (minimo - margen) to (maximo + margen)
+}
+
+/**
+ * La línea: un punto por día, la escala ajustada a los datos ([escalaDeLaCaja]), el cero punteado si
+ * la línea lo cruza, el tramo bajo cero en rojo, un marcador chico en cada día con un pago pendiente
+ * y el día más justo resaltado con su cifra. Deslizar (o pasar el mouse) elige un día; tocar también.
  */
 @Composable
-private fun GraficaDeLaCaja(caja: CajaProyectada) {
+private fun GraficaDeLaCaja(caja: CajaProyectada, elegido: Int?, alElegir: (Int?) -> Unit) {
     val linea = Movi.colores.textoMedio
     val rojo = Movi.colores.sale
     val cero = Movi.colores.hilo
+    val marcador = Movi.colores.textoApagado
+    val guia = Movi.colores.hilo
+    val fondo = Movi.colores.tarjeta
     val punto = if (caja.diaMasBajo.saldo < 0) rojo else Movi.colores.aviso
     val saldos = caja.dias.map { it.saldo }
+    val conPago = remember(caja) { diasConPago(caja) }
+    val medidor = rememberTextMeasurer()
+    val estiloDeLaCifra = Movi.textos.apoyo.copy(color = if (caja.diaMasBajo.saldo < 0) rojo else Movi.colores.texto)
+    val cifraDelMasBajo = formatMoneyCompact(caja.diaMasBajo.saldo)
     val descripcion = "Gráfica de tu plata día a día: de ${formatMoneyCompact(saldos.first())} hoy a " +
-        "${formatMoneyCompact(saldos.last())} al cierre, el punto más bajo ${formatMoneyCompact(caja.diaMasBajo.saldo)}"
+        "${formatMoneyCompact(saldos.last())} al cierre, el punto más bajo $cifraDelMasBajo"
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(ALTO_DE_LA_GRAFICA)
             .testTag(TAG_GRAFICA_DE_LA_CAJA)
-            .semantics { contentDescription = descripcion },
+            .semantics { contentDescription = descripcion }
+            .graficaQueSeToca(cuantos = saldos.size, datos = caja, alElegir = alElegir, alTocar = alElegir, enPuntos = true),
     ) {
-        val maximo = maxOf(saldos.max(), 0L).toFloat()
-        val minimo = minOf(saldos.min(), 0L).toFloat()
-        val rango = (maximo - minimo).takeIf { it > 0f } ?: 1f
-        val margen = 6.dp.toPx()
-        val alto = size.height - 2 * margen
+        val (piso, tope) = escalaDeLaCaja(saldos)
+        val rango = (tope - piso).toFloat().takeIf { it > 0f } ?: 1f
+        val etiqueta = medidor.measure(cifraDelMasBajo, estiloDeLaCifra)
+        // Arriba queda lugar para la cifra del día más justo cuando cae cerca del techo.
+        val arriba = 6.dp.toPx()
+        val abajo = 6.dp.toPx()
+        val alto = size.height - arriba - abajo
         fun x(i: Int) = if (saldos.size == 1) size.width / 2 else size.width * i / (saldos.size - 1)
-        fun y(v: Long) = margen + alto * (maximo - v) / rango
-        if (minimo < 0f) {
+        fun y(v: Long) = arriba + alto * (tope - v).toFloat() / rango
+        if (piso < 0L && tope > 0L) {
             drawLine(
                 color = cero,
                 start = Offset(0f, y(0L)),
@@ -314,6 +378,9 @@ private fun GraficaDeLaCaja(caja: CajaProyectada) {
                 strokeWidth = 1.dp.toPx(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
             )
+        }
+        elegido?.let { i ->
+            drawLine(guia, Offset(x(i), 0f), Offset(x(i), size.height), strokeWidth = 1.dp.toPx())
         }
         val trazo = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         // Cada tramo con el color de su punta derecha: lo que baja de cero se ve rojo desde el día
@@ -325,7 +392,22 @@ private fun GraficaDeLaCaja(caja: CajaProyectada) {
             }
             drawPath(path, color = if (saldos[i] < 0) rojo else linea, style = trazo)
         }
+        // Los pagos pendientes: un punto chico con aro, sobre la línea.
+        conPago.forEach { i ->
+            val c = Offset(x(i), y(saldos[i]))
+            drawCircle(fondo, radius = 3.5.dp.toPx(), center = c)
+            drawCircle(marcador, radius = 2.5.dp.toPx(), center = c)
+        }
+        elegido?.let { i -> drawCircle(linea, radius = 3.5.dp.toPx(), center = Offset(x(i), y(saldos[i]))) }
+        // El día más justo: su punto y su cifra, encima del punto (o debajo, si no cabe arriba).
         val iBajo = caja.dias.indexOf(caja.diaMasBajo)
-        drawCircle(color = punto, radius = 4.dp.toPx(), center = Offset(x(iBajo), y(saldos[iBajo])))
+        val centro = Offset(x(iBajo), y(saldos[iBajo]))
+        drawCircle(punto, radius = 4.dp.toPx(), center = centro)
+        val ancho = etiqueta.size.width.toFloat()
+        val altoDeLaEtiqueta = etiqueta.size.height.toFloat()
+        val izquierda = (centro.x - ancho / 2).coerceIn(0f, (size.width - ancho).coerceAtLeast(0f))
+        val encima = centro.y - 6.dp.toPx() - altoDeLaEtiqueta
+        val top = if (encima >= 0f) encima else centro.y + 6.dp.toPx()
+        drawText(etiqueta, topLeft = Offset(izquierda, top))
     }
 }

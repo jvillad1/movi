@@ -135,6 +135,12 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     val apartadosLeidos = rememberLectura(ClaveDeLectura.Apartados, reintento = refreshKey) { Repositories.wallets.getApartados() }
     val apartados = apartadosLeidos.valor.orEmpty()
 
+    // ── Ola 4 · Ver la plata: el patrimonio en el tiempo, debajo de la cifra. Secundaria, como los
+    // apartados: si falla no se dice nada y la tarjeta queda como siempre, sin curva.
+    val historiaLeida = rememberLectura(ClaveDeLectura.HistoriaDelPatrimonio, reintento = refreshKey) {
+        Repositories.wallets.getHistoriaDelPatrimonio()
+    }
+
     val lecturas = listOf(cuentasLeidas, creditosLeidos, tarjetasLeidas, destinosLeidos)
     // Se está pintando algo que esta visita todavía no confirmó (lo recordado, o lo de antes de un
     // «Reintentar»): lo dice «Actualizando…» en la cabecera, como el Inicio.
@@ -274,6 +280,14 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 // carga la lectura de signo, con más información que un solo color.
                                 color = Movi.colores.texto,
                             )
+                            // La curva de los últimos meses; mientras su primera lectura viaja,
+                            // su lugar (para que la tarjeta no crezca de golpe al llegar).
+                            val historia = historiaLeida.valor
+                            if (historia != null) {
+                                CurvaDelPatrimonio(historia)
+                            } else if (historiaLeida.actualizando) {
+                                ReservaDeLaCurva()
+                            }
                             Spacer(Modifier.height(12.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

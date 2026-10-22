@@ -47,6 +47,8 @@ sealed interface ClaveDeLectura<T : Any> {
     data object Apartados : ClaveDeLectura<List<com.jvillada.movi.shared.model.Apartado>>
     /** Ola 4: el supuesto del gasto del día a día de la caja proyectada (sale de períodos cerrados). */
     data object GastoDelDiaADia : ClaveDeLectura<com.jvillada.movi.shared.model.GastoDelDiaADia>
+    /** Ola 4 · Ver la plata: el patrimonio neto al cierre de cada mes y hoy, para la curva de Patrimonio. */
+    data object HistoriaDelPatrimonio : ClaveDeLectura<com.jvillada.movi.shared.model.HistoriaDelPatrimonio>
 
     /** Los límites no cambian con el período, pero Presupuestos los pinta junto al gasto de uno. */
     data object Presupuestos : ClaveDeLectura<List<Budget>> {

@@ -60,6 +60,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
+import com.jvillada.movi.shared.model.FiltroDeMovimientos
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
@@ -873,7 +874,12 @@ fun TransactionsScreen(
     periodoInicial: String? = null,
     /** Ola 5: la búsqueda con que arranca (un comercio tocado en «Buscar»). Ver [Screen.Transactions]. */
     consultaInicial: String? = null,
+    filtroInicial: FiltroDeMovimientos? = null,
 ) {
+    // Ola 4 · Ver la plata: lo que pidió «En qué se va» al tocar una barra o una fila (ver
+    // [Screen.Transactions.filtro]). Se quita con la × de su chip; volver a entrar pidiendo otro
+    // filtro rearranca en el nuevo.
+    var filtro by remember(filtroInicial) { mutableStateOf(filtroInicial) }
     // Con qué chip arranca — ver [chipInicialDeMovimientos]. `remember(chipInicial)` y no
     // `remember { }` a secas: si se vuelve a entrar pidiendo otro filtro, el estado tiene que
     // rearrancar en el que se pidió, no quedarse con el de la visita anterior.
@@ -1138,8 +1144,8 @@ fun TransactionsScreen(
     // contestar la relectura movería la lista en cada visita.
     val reservaElDiaADia = datosDelDiaADia.valor == null && perfilParaElDiaADia != null && !datosDelDiaADia.terminada
 
-    val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo, accountTypes) {
-        val filtrados = diasVisibles(allDays, activeFilter, searchQuery, accountTypes)
+    val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo, accountTypes, filtro) {
+        val filtrados = diasVisibles(conElFiltro(allDays, filtro), activeFilter, searchQuery, accountTypes)
         // **Buscar atraviesa los períodos**, por cuarta vez en esta pantalla y por el mismo motivo
         // que las otras tres: escribir una consulta es pedir que algo aparezca, y encontrarlo solo
         // si además caía en el mes que estabas mirando es la peor forma de no encontrarlo.
@@ -1355,6 +1361,11 @@ fun TransactionsScreen(
                     ),
                 )
             }
+        }
+
+        // Ola 4 · Ver la plata: el filtro que mandó «En qué se va», dicho y con su ×.
+        filtro?.let { activo ->
+            ChipDelFiltro(activo, onQuitar = { filtro = null })
         }
 
         // Filter chips
@@ -2171,3 +2182,51 @@ private fun Modifier.marcaDeElegido(elegido: Boolean): Modifier =
         .semantics { selected = true }
         .clip(RoundedCornerShape(8.dp))
         .background(Movi.colores.marca.copy(alpha = 0.10f))
+
+/**
+ * Ola 4 · Ver la plata: [dias] con solo lo que deja pasar [filtro] (ver `FiltroDeMovimientos` en
+ * `:core`), o tal cual sin filtro. Va antes de [diasVisibles], que recalcula el total de cada día
+ * sobre lo que quedó.
+ */
+fun conElFiltro(dias: List<EventDay>, filtro: FiltroDeMovimientos?): List<EventDay> {
+    if (filtro == null) return dias
+    return dias.mapNotNull { dia ->
+        val quedan = dia.items.filter { filtro.deja(it) }
+        if (quedan.isEmpty()) null else dia.copy(items = quedan)
+    }
+}
+
+/** El tag del chip del filtro que mandó «En qué se va», para las pruebas. */
+const val TAG_CHIP_DEL_FILTRO: String = "chip-del-filtro"
+
+/** El chip del filtro que mandó «En qué se va»: lo que se está mirando, y la × que lo quita. */
+@Composable
+private fun ChipDelFiltro(filtro: FiltroDeMovimientos, onQuitar: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 12.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Movi.colores.tarjeta)
+            .clickable(onClickLabel = "Quitar el filtro") { onQuitar() }
+            .testTag(TAG_CHIP_DEL_FILTRO)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = "Solo ${filtro.rotulo}",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.texto,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 260.dp),
+        )
+        Icon(
+            imageVector = Icons.Rounded.Close,
+            contentDescription = "Quitar el filtro",
+            tint = Movi.colores.textoMedio,
+            modifier = Modifier.size(14.dp),
+        )
+    }
+}

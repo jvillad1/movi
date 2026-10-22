@@ -76,6 +76,7 @@ import com.jvillada.movi.ui.ai.AIChatScreen
 import com.jvillada.movi.ui.plan.PlanScreen
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.periodos.PeriodosListaYDetalle
+import com.jvillada.movi.ui.analisis.EnQueSeVaScreen
 import com.jvillada.movi.ui.categorias.CategoriasScreen
 import com.jvillada.movi.ui.destinos.DestinosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
@@ -424,8 +425,10 @@ fun App() {
                     chipInicial = pantalla.chipInicial,
                     periodoInicial = pantalla.periodoInicial,
                     consultaInicial = pantalla.consultaInicial,
+                    filtroInicial = pantalla.filtro,
                 )
                 Screen.Buscar            -> BuscarScreen(navigate)
+                is Screen.EnQueSeVa      -> EnQueSeVaScreen(navigate, periodoInicial = pantalla.periodo)
                 // Inalcanzable: `navigate` desvía QuickAdd al overlay de más abajo antes de que
                 // llegue a la pila (ver [opensAsOverlay]). La rama existe para que el `when` siga
                 // siendo exhaustivo sobre `Screen` — con un `else` perdería el chequeo que avisa

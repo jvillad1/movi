@@ -36,6 +36,10 @@ sealed class Screen {
      * —lo normal— es el período de hoy. Lo pide «Ver los movimientos de este período» del detalle
      * de un período, que sin él aterrizaba en el mes en curso y obligaba a volver a buscar el que
      * se estaba mirando con las flechas. Un prefijo que no se entiende también cae en el de hoy.
+     *
+     * [filtro] (Ola 4 · Ver la plata) lo manda «En qué se va» al tocar una barra o una fila: la
+     * lista arranca mostrando solo esa categoría, ese comercio, esa cuenta o esos días, con un chip
+     * que lo dice y se quita. `null` —lo normal— no filtra nada.
      */
     data class Transactions(
         val chipInicial: Int? = null,
@@ -45,6 +49,7 @@ sealed class Screen {
          * escrita (la misma que deja «Ver el comercio» de la hoja de un movimiento). `null`, lo normal.
          */
         val consultaInicial: String? = null,
+        val filtro: com.jvillada.movi.shared.model.FiltroDeMovimientos? = null,
     ) : Screen()
     /**
      * La hoja de «Agregar», opcionalmente **prellenada**.
@@ -281,6 +286,13 @@ sealed class Screen {
      * pantallas. Se abre con la lupa del encabezado de Hoy, así que marca Hoy.
      */
     data object Buscar : Screen()
+
+    /**
+     * **«En qué se va»** (Ola 4 · Ver la plata): el gasto de un período día por día contra el
+     * anterior, y la lista por categoría, comercio o cuenta. Se abre desde la sección del mismo
+     * nombre en Hoy. [periodo] es el prefijo («2026-10») con el que arranca; `null` es el de hoy.
+     */
+    data class EnQueSeVa(val periodo: String? = null) : Screen()
 }
 
 /**
@@ -300,7 +312,8 @@ sealed class Screen {
  * no es lo mismo que sin navegación.
  */
 fun navTabFor(screen: Screen): NavTab? = when (screen) {
-    Screen.Dashboard, Screen.Buscar -> NavTab.HOY
+    // «En qué se va» se abre desde Hoy y contesta la pregunta de Hoy: ¿cómo voy? Buscar también.
+    Screen.Dashboard, Screen.Buscar, is Screen.EnQueSeVa -> NavTab.HOY
     // «Por revisar» y el detalle de un mensaje se abren desde Movimientos (su renglón «N por
     // revisar»): marcan esa pestaña, no Ajustes.
     is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile, is Screen.Destinos -> NavTab.MOVIMIENTOS
