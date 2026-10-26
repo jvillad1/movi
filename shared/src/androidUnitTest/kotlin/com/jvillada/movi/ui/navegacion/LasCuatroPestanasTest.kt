@@ -60,7 +60,7 @@ class LasCuatroPestanasTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val rotulos = listOf("Hoy", "Movimientos", "Plan", "Patrimonio")
+    private val rotulos = listOf("Hoy", "Movimientos", "Plan", "Espacios", "Patrimonio")
     private val loQueYaNoEsPestana = listOf("Más", "Inicio", "Movs", "Cuentas", "Créditos", "Presupuestos")
 
     private var elegida: NavTab? = null
@@ -151,27 +151,21 @@ class LasCuatroPestanasTest {
 
     /**
      * **Con la letra del sistema más grande (1,3×, y encima el 1,12× de la app) ningún rótulo sale
-     * cortado.** Con `maxLines = 1`, una palabra que no entra se parte por la mitad y se ve
-     * «Movimie». Medido: a 390 dp «Movimientos» ocupa ~95 dp y la fila entera ~323 dp, así que entra
-     * entero y no hace falta volver a «Movs». Si algún día deja de entrar, esta prueba lo dice.
+     * cortado.** R3: con Espacios son cinco pestañas y a 1,3× no entran las cinco con su rótulo, así
+     * que la barra muestra solo el de la activa (las demás, su ícono; el lector de pantalla las
+     * sigue nombrando). El rótulo no se achica nunca por debajo del token. Ver `rotulosQueEntran`.
      */
     @Test
     fun `con la letra del sistema al 130 por ciento ningun rotulo sale cortado`() {
         montarBarra(letraDelSistema = 1.3f)
 
-        rotulos.forEach { rotulo ->
-            val texto = layoutDelTexto(rotulo)
-            assertEquals(1, texto.lineCount, "«$rotulo» en un renglón")
-            assertFalse(texto.multiParagraph.didExceedMaxLines, "«$rotulo» sin partirse")
-            val anchoDelTexto = texto.getLineRight(0) - texto.getLineLeft(0)
-            val anchoDelNodo = composeRule.onNodeWithText(rotulo, useUnmergedTree = true)
-                .fetchSemanticsNode().boundsInRoot.width
-            assertTrue(anchoDelNodo + 0.5f >= anchoDelTexto, "«$rotulo» entero: $anchoDelNodo < $anchoDelTexto")
+        val texto = layoutDelTexto("Hoy")
+        assertEquals(1, texto.lineCount)
+        assertFalse(texto.multiParagraph.didExceedMaxLines, "«Hoy» sin partirse")
+        rotulos.filter { it != "Hoy" }.forEach {
+            composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist()
+            composeRule.onNodeWithContentDescription(it, useUnmergedTree = true).assertIsDisplayed()
         }
-        val ancho = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.right
-        val patrimonio = composeRule.onNodeWithText("Patrimonio", useUnmergedTree = true)
-            .fetchSemanticsNode().boundsInRoot
-        assertTrue(patrimonio.right <= ancho, "el último rótulo termina adentro de la pantalla")
     }
 
     @Test
@@ -182,6 +176,8 @@ class LasCuatroPestanasTest {
         assertEquals(NavTab.PLAN, elegida)
         composeRule.onNodeWithText("Patrimonio", useUnmergedTree = true).performClick()
         assertEquals(NavTab.PATRIMONIO, elegida)
+        composeRule.onNodeWithText("Espacios", useUnmergedTree = true).performClick()
+        assertEquals(NavTab.ESPACIOS, elegida)
         composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).performClick()
         assertEquals(NavTab.ADD, elegida)
     }
@@ -204,7 +200,7 @@ class LasCuatroPestanasTest {
         composeRule.onNodeWithText("Movi AI", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Agregar", useUnmergedTree = true).assertIsDisplayed()
         loQueYaNoEsPestana.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
-        assertEquals(4, destinosPrincipales.size)
+        assertEquals(5, destinosPrincipales.size)
         assertEquals(destinosPrincipales + destinoMoviAi, destinosDelRail)
     }
 

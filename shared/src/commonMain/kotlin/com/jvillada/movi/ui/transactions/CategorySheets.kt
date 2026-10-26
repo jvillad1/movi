@@ -791,6 +791,9 @@ internal fun ContenidoDelMovimiento(
                 Spacer(Modifier.height(8.dp))
                 LineaEnEsteComercio(enEsteComercio, onVer = onVerElComercio?.let { ver -> { ver(enEsteComercio.busqueda) } })
             }
+            // R3 · «Repartir»: un gasto propio pasa a un espacio y cuenta solo tu parte. Solo si el
+            // dueño tiene algún espacio (o ya está repartido); ver [FilaDeRepartir].
+            com.jvillada.movi.ui.espacios.FilaDeRepartir(evento = event, onCambiado = onEventChanged)
             // Lo que espera una decisión no se esconde detrás de una acción: confirmarlo es lo que
             // el dueño vino a hacer cuando abre un aviso pendiente.
             if (event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {

@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.LoCompartido
+import com.jvillada.movi.shared.model.conLoCompartido
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.GrupoDeAvisos
 import com.jvillada.movi.shared.model.MismoPagoConfirmado
@@ -855,6 +857,8 @@ class LocalRepository(
                 lapidasQueSobran.forEach { db.voidEventQueries.olvidarFantasma(it) }
             }
         }
+        // R3: la foto de lo compartido, para que sin señal se siga contando solo tu parte.
+        runCatching { guardarLoCompartido(uid, remotos) }
         // El contenido de lo que el server conoce sale del server; lo que solo existe acá (todavía
         // sin subir) sale del espejo; y lo que el server ya no tiene lo deja fuera la consulta.
         leerEventosLocales(uid, accountId)
@@ -932,9 +936,10 @@ class LocalRepository(
     private fun leerEventosLocales(uid: String, accountId: String?): List<FinancialEvent> {
         val types = accountTypes(uid)
         val anulados = db.voidEventQueries.selectAllVoidedIds().executeAsList().toSet()
+        val compartido = loCompartidoGuardado(uid)
         return leerFilasLocales(uid, accountId)
             .filterNot { it.id in anulados }
-            .map { it.toModel(types) }
+            .map { it.toModel(types).conLoCompartido(compartido) }
             .masRecientePrimero()
     }
 
@@ -2005,6 +2010,22 @@ class LocalRepository(
     override suspend fun guardarApartado(a: Apartado): Apartado = remote.guardarApartado(a)
     override suspend fun quitarApartado(id: String) = remote.quitarApartado(id)
 
+    // Espacios (R3): como los apartados, la lectura guarda su última respuesta buena y las
+    // escrituras piden red.
+    override suspend fun getEspacios(): List<com.jvillada.movi.shared.model.Espacio> =
+        leerConCache("espacios") { remote.getEspacios() }
+    override suspend fun guardarEspacio(espacio: com.jvillada.movi.shared.model.Espacio) = remote.guardarEspacio(espacio)
+    override suspend fun getDetalleDelEspacio(id: String): com.jvillada.movi.shared.model.DetalleDelEspacio =
+        leerUnoConCache("espacio:$id") { remote.getDetalleDelEspacio(id) }
+    override suspend fun repartirMovimiento(espacioId: String, eventoId: String) = remote.repartirMovimiento(espacioId, eventoId)
+    override suspend fun quitarDelEspacio(espacioId: String, eventoId: String) = remote.quitarDelEspacio(espacioId, eventoId)
+    override suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio) =
+        remote.anotarGastoDeOtro(espacioId, gasto)
+    override suspend fun liquidarEspacio(espacioId: String, liquidacion: com.jvillada.movi.shared.model.LiquidacionDelEspacio) =
+        remote.liquidarEspacio(espacioId, liquidacion)
+    override suspend fun getTuParteDeOtros(): List<FinancialEvent> =
+        leerConCache("tu-parte-de-otros") { remote.getTuParteDeOtros() }
+
     /**
      * **Las cuentas de otros van siempre al server, y sin caché.**
      *
@@ -2230,6 +2251,57 @@ class LocalRepository(
             val guardado = db.remoteCacheQueries.get(clave, uid).executeAsOneOrNull() ?: throw e
             runCatching { Json.decodeFromString(serializador, guardado.payload) }.getOrElse { throw e }
         }
+    }
+
+    /** [leerConCache] para una respuesta que no es lista (el detalle de un espacio). */
+    private suspend inline fun <reified T> leerUnoConCache(clave: String, traer: () -> T): T {
+        val serializador = kotlinx.serialization.serializer<T>()
+        val uid = userId()
+        return try {
+            val fresco = traer()
+            db.remoteCacheQueries.put(
+                cacheKey = clave,
+                userId = uid,
+                payload = Json.encodeToString(serializador, fresco),
+                updatedAt = Clock.System.now().toEpochMilliseconds(),
+            )
+            fresco
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val guardado = db.remoteCacheQueries.get(clave, uid).executeAsOneOrNull() ?: throw e
+            runCatching { Json.decodeFromString(serializador, guardado.payload) }.getOrElse { throw e }
+        }
+    }
+
+    /**
+     * **Lo que los espacios dicen de cada movimiento, guardado para leer sin señal** (R3). La parte
+     * ajena de un gasto repartido y si salda un espacio son derivados del server (como
+     * `countsAsCashFlow`): la tabla local no los tiene. Con señal llegan en la respuesta; acá se
+     * guarda esa foto para que sin señal el teléfono siga contando solo tu parte.
+     */
+    private fun guardarLoCompartido(uid: String, remotos: List<FinancialEvent>) {
+        val marcas = remotos
+            .filter { it.parteAjena > 0L || it.espacioId != null || it.saldaEspacioId != null }
+            .map { MarcaCompartida(it.id, it.parteAjena, it.espacioId, it.saldaEspacioId) }
+        db.remoteCacheQueries.put(
+            cacheKey = CLAVE_LO_COMPARTIDO,
+            userId = uid,
+            payload = Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(MarcaCompartida.serializer()), marcas),
+            updatedAt = Clock.System.now().toEpochMilliseconds(),
+        )
+    }
+
+    private fun loCompartidoGuardado(uid: String): LoCompartido {
+        val guardado = db.remoteCacheQueries.get(CLAVE_LO_COMPARTIDO, uid).executeAsOneOrNull() ?: return LoCompartido.NADA
+        val marcas = runCatching {
+            Json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(MarcaCompartida.serializer()), guardado.payload)
+        }.getOrElse { return LoCompartido.NADA }
+        return LoCompartido(
+            parteAjenaPorEvento = marcas.filter { it.parteAjena > 0L }.associate { it.eventoId to it.parteAjena },
+            espacioPorEvento = marcas.mapNotNull { m -> m.espacioId?.let { m.eventoId to it } }.toMap(),
+            saldaPorEvento = marcas.mapNotNull { m -> m.saldaEspacioId?.let { m.eventoId to it } }.toMap(),
+        )
     }
 
     /** Preferencias puras: no tocan ni un movimiento, así que no hay nada que espejar. */
@@ -2531,3 +2603,15 @@ private fun siNoSeRepite(valor: Boolean): Long = if (valor) 1L else 0L
 // Misma zona civil que el server (/api/events/by-day) — ver AppTimeZone. Offline y online
 // tienen que agrupar por el mismo día.
 private fun epochMillisToDate(millis: Long): String = epochMillisToAppDate(millis).toString()
+
+/** La clave de `remote_cache` con la foto de [MarcaCompartida]. */
+private const val CLAVE_LO_COMPARTIDO = "lo-compartido"
+
+/** Lo que un espacio dice de un movimiento, guardado para leer sin señal (ver `guardarLoCompartido`). */
+@kotlinx.serialization.Serializable
+private data class MarcaCompartida(
+    val eventoId: String,
+    val parteAjena: Long = 0L,
+    val espacioId: String? = null,
+    val saldaEspacioId: String? = null,
+)

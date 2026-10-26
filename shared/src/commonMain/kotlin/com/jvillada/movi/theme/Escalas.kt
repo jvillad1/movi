@@ -142,6 +142,9 @@ object Medida {
     /** El grosor de una barra de progreso. */
     val altoDeBarraDeProgreso: Dp = 4.dp
 
+    /** El alto de la marca sobre una barra de progreso («la mitad», en Espacios). */
+    val altoDeMarcaDeBarra: Dp = 12.dp
+
     /** Una línea: separador, borde. */
     val trazo: Dp = 1.dp
 

@@ -135,6 +135,12 @@ fun EnQueSeVaScreen(
     val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = reintento) { Repositories.wallets.getUserProfile() }
     val eventos = rememberLectura(ClaveDeLectura.EventosPorDia, reintento = reintento) { Repositories.wallets.getEventsByDay() }
     val cuentas = rememberLectura(ClaveDeLectura.Cuentas, reintento = reintento) { Repositories.wallets.getAccounts() }
+    // R3 · tu parte de lo que pagaron otros («Caro pagó el mercado»): es gasto tuyo el día del gasto,
+    // igual que en «Salió». No está en la lista de movimientos (no es de tus cuentas).
+    var tuParteDeOtros by remember { mutableStateOf<List<com.jvillada.movi.shared.model.FinancialEvent>>(emptyList()) }
+    LaunchedEffect(reintento) {
+        tuParteDeOtros = runCatching { Repositories.wallets.getTuParteDeOtros() }.getOrDefault(emptyList())
+    }
 
     // Sin el perfil no se sabe dónde empieza el período. Si su lectura falló, el mes de calendario
     // (como Movimientos): es lo único honesto que se puede mostrar sin él.
@@ -151,9 +157,9 @@ fun EnQueSeVaScreen(
     val nombres = remember(lasCuentas) { lasCuentas.associate { it.id to it.name } }
     val dias = eventos.valor
     val p = periodo
-    val analisis = remember(dias, p, ajustes, hoy, tipos) {
+    val analisis = remember(dias, p, ajustes, hoy, tipos, tuParteDeOtros) {
         if (dias == null || p == null || ajustes == null) null
-        else analisisDelPeriodo(dias.flatMap { it.items }, p, ajustes, hoy, tipos)
+        else analisisDelPeriodo(dias.flatMap { it.items } + tuParteDeOtros, p, ajustes, hoy, tipos)
     }
     val laVista = VistaDelAnalisis.entries[vista]
     val filas = remember(analisis, laVista, nombres) { analisis?.let { filasDelAnalisis(it, laVista, nombres) }.orEmpty() }

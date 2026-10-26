@@ -231,7 +231,7 @@ fun buscarEnMovi(
                 nombre = (ejemplo.merchant?.takeIf { it.isNotBlank() } ?: ejemplo.description).trim(),
                 ejemplo = ejemplo,
                 enElPeriodo = enElPeriodo.size,
-                totalDelPeriodo = enElPeriodo.filter { it.currency == ejemplo.currency }.sumOf { it.amount },
+                totalDelPeriodo = enElPeriodo.filter { it.currency == ejemplo.currency }.sumOf { com.jvillada.movi.shared.model.montoContado(it) },
                 moneda = ejemplo.currency,
             )
         }

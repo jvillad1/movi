@@ -463,6 +463,8 @@ fun App() {
                 Screen.Mas               -> MasScreen(navigate)
                 Screen.Extractos         -> ExtractosScreen(navigate)
                 Screen.Accounts         -> AccountsScreen(navigate)
+                Screen.Espacios         -> com.jvillada.movi.ui.espacios.EspaciosScreen(navigate)
+                is Screen.Espacio       -> com.jvillada.movi.ui.espacios.EspacioScreen(pantalla.id, pagoOtro = pantalla.pagoOtro)
                 Screen.CuadreDeSaldos   -> CuadreDeSaldosScreen(navigate)
                 is Screen.AccountDetail -> AccountDetailScreen(
                     onNavigate = navigate,

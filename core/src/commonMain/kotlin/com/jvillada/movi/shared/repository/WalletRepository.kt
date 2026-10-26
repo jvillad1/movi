@@ -143,6 +143,34 @@ interface WalletRepository {
     suspend fun guardarApartado(a: Apartado): Apartado
     suspend fun quitarApartado(id: String)
 
+    // ── Espacios (R3): lo grupal, «Casa con Caro» ─────────────────────────────
+    // Defaults para que los dobles de prueba que no los usan sigan compilando. Las escrituras piden
+    // red (como los apartados): no hay tabla local ni sync.
+
+    /** Los espacios del dueño. Un server viejo (404) cuenta como «ninguno». */
+    suspend fun getEspacios(): List<com.jvillada.movi.shared.model.Espacio> = emptyList()
+    /** Upsert por id: sin id, el cliente genera `esp_<uuid>` para que reintentar no duplique. */
+    suspend fun guardarEspacio(espacio: com.jvillada.movi.shared.model.Espacio): com.jvillada.movi.shared.model.Espacio =
+        noLoTiene("guardarEspacio")
+    suspend fun getDetalleDelEspacio(id: String): com.jvillada.movi.shared.model.DetalleDelEspacio =
+        noLoTiene("getDetalleDelEspacio")
+    /** «Repartir»: el movimiento propio [eventoId] pasa a ser del espacio. Idempotente. */
+    suspend fun repartirMovimiento(espacioId: String, eventoId: String): com.jvillada.movi.shared.model.GastoDelEspacio =
+        noLoTiene("repartirMovimiento")
+    /** Lo saca del espacio: vuelve a contar entero. */
+    suspend fun quitarDelEspacio(espacioId: String, eventoId: String): Unit = noLoTiene("quitarDelEspacio")
+    /** «Pagó otro»: un gasto del espacio que pagó otro miembro. Upsert por id. */
+    suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio): com.jvillada.movi.shared.model.GastoDelEspacio =
+        noLoTiene("anotarGastoDeOtro")
+    /** «Marcar como saldado». Upsert por id: saldar dos veces con el mismo id es saldar una. */
+    suspend fun liquidarEspacio(espacioId: String, liquidacion: com.jvillada.movi.shared.model.LiquidacionDelEspacio): com.jvillada.movi.shared.model.LiquidacionDelEspacio =
+        noLoTiene("liquidarEspacio")
+    /**
+     * Tu parte de los gastos que pagaron otros, como movimientos para los totales que arma el
+     * cliente (En qué se va). Ver `tuParteComoEventos`. Nunca van a la lista de movimientos.
+     */
+    suspend fun getTuParteDeOtros(): List<FinancialEvent> = emptyList()
+
     // ── Cuentas de otros (destinos conocidos) ─────────────────────────────────
 
     /**

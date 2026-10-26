@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.shared.model.montoContado
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -2165,17 +2166,32 @@ internal fun MovementSingleRow(
                 Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 16.sp)
             }
         }
-        Text(
-            // En la moneda del movimiento, como la hoja de anular y el detalle de la cuenta: un
-            // cargo de US$20 en la tarjeta en dólares se leía «−$20». La misma regla que el monto
-            // grande del detalle (ver [textoDelMontoConSigno]).
-            text = textoDelMontoConSigno(tx, tono),
-            style = Movi.textos.monto,
-            fontWeight = FontWeight.Medium,
-            color = colorDelTono(tono, Movi.colores),
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                // En la moneda del movimiento, como la hoja de anular y el detalle de la cuenta: un
+                // cargo de US$20 en la tarjeta en dólares se leía «−$20». La misma regla que el monto
+                // grande del detalle (ver [textoDelMontoConSigno]).
+                text = textoDelMontoConSigno(tx, tono),
+                style = Movi.textos.monto,
+                fontWeight = FontWeight.Medium,
+                color = colorDelTono(tono, Movi.colores),
+            )
+            // R3 · un gasto repartido: la plata salió entera (el monto de arriba), pero en tus
+            // gastos cuenta solo tu parte (ver `montoContado` en :core).
+            if (tx.parteAjena > 0L) {
+                Text(
+                    text = "Tu parte ${formatMoney(montoContado(tx), tx.currency)}",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.testTag(TAG_TU_PARTE),
+                )
+            }
+        }
     }
 }
+
+/** El `testTag` de «Tu parte $X» bajo el monto de un movimiento repartido. */
+const val TAG_TU_PARTE: String = "tu-parte"
 
 /**
  * La fila que muestra el panel de la derecha (Ola W4): un fondo de la marca, tenue, y la semántica

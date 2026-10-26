@@ -10,6 +10,7 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.espacios.espaciosDe
 import com.jvillada.movi.server.espacios.gastosDe
 import com.jvillada.movi.server.espacios.liquidacionesDe
+import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import com.jvillada.movi.server.espacios.miembrosComoJson
 import com.jvillada.movi.server.espacios.partesComoJson
 import com.jvillada.movi.server.plugins.userId
@@ -58,6 +59,7 @@ import java.util.UUID
  * repetirla no duplica nada — en particular, **saldar dos veces con el mismo id es saldar una**.
  *
  * - `GET /api/espacios` · `POST /api/espacios` (upsert) · `DELETE /api/espacios/{id}`
+ * - `GET /api/espacios/tu-parte`: tu parte de lo que pagaron otros, para los totales del cliente.
  * - `GET /api/espacios/{id}`: [DetalleDelEspacio] (saldo, quién puso qué en el período, gastos,
  *   liquidaciones y las transferencias que Movi propone vincular).
  * - `POST /api/espacios/{id}/compartir` (repartir un movimiento propio) ·
@@ -68,6 +70,10 @@ import java.util.UUID
 fun Route.espacioRoutes() {
     route("/api/espacios") {
         get { call.respond(dbQuery { espaciosDe(call.userId()) }) }
+
+        // Tu parte de lo que pagaron otros, como movimientos de gasto para los totales que arma el
+        // cliente (En qué se va). Nunca van a la lista de movimientos ni a un saldo.
+        get("/tu-parte") { call.respond(dbQuery { loCompartidoDelUsuario(call.userId()).tuParteDeOtros }) }
 
         post {
             val uid = call.userId()

@@ -304,6 +304,66 @@ class WalletRepositoryImpl(
         }
     }
 
+    // ── Espacios (R3) ─────────────────────────────────────────────────────────
+
+    private suspend fun <T> conRespuesta(response: io.ktor.client.statement.HttpResponse, leer: suspend (io.ktor.client.statement.HttpResponse) -> T): T {
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return leer(response)
+    }
+
+    override suspend fun getEspacios(): List<com.jvillada.movi.shared.model.Espacio> {
+        val response = client.get("$baseUrl/api/espacios")
+        if (response.status == HttpStatusCode.NotFound) return emptyList()
+        return conRespuesta(response) { it.body() }
+    }
+
+    override suspend fun guardarEspacio(espacio: com.jvillada.movi.shared.model.Espacio): com.jvillada.movi.shared.model.Espacio =
+        conRespuesta(
+            client.post("$baseUrl/api/espacios") {
+                contentType(ContentType.Application.Json)
+                setBody(if (espacio.id.isBlank()) espacio.copy(id = newId("esp")) else espacio)
+            },
+        ) { it.body() }
+
+    override suspend fun getDetalleDelEspacio(id: String): com.jvillada.movi.shared.model.DetalleDelEspacio =
+        conRespuesta(client.get("$baseUrl/api/espacios/$id")) { it.body() }
+
+    override suspend fun repartirMovimiento(espacioId: String, eventoId: String): com.jvillada.movi.shared.model.GastoDelEspacio =
+        conRespuesta(
+            client.post("$baseUrl/api/espacios/$espacioId/compartir") {
+                contentType(ContentType.Application.Json)
+                setBody(com.jvillada.movi.shared.model.CompartirMovimientoRequest(eventoId = eventoId, gastoId = newId("gde")))
+            },
+        ) { it.body() }
+
+    override suspend fun quitarDelEspacio(espacioId: String, eventoId: String) {
+        conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/compartir/$eventoId")) { }
+    }
+
+    override suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio): com.jvillada.movi.shared.model.GastoDelEspacio =
+        conRespuesta(
+            client.post("$baseUrl/api/espacios/$espacioId/gastos") {
+                contentType(ContentType.Application.Json)
+                setBody(if (gasto.id.isBlank()) gasto.copy(id = newId("gde")) else gasto)
+            },
+        ) { it.body() }
+
+    override suspend fun liquidarEspacio(espacioId: String, liquidacion: com.jvillada.movi.shared.model.LiquidacionDelEspacio): com.jvillada.movi.shared.model.LiquidacionDelEspacio =
+        conRespuesta(
+            client.post("$baseUrl/api/espacios/$espacioId/liquidaciones") {
+                contentType(ContentType.Application.Json)
+                setBody(if (liquidacion.id.isBlank()) liquidacion.copy(id = newId("liq")) else liquidacion)
+            },
+        ) { it.body() }
+
+    override suspend fun getTuParteDeOtros(): List<FinancialEvent> {
+        val response = client.get("$baseUrl/api/espacios/tu-parte")
+        if (response.status == HttpStatusCode.NotFound) return emptyList()
+        return conRespuesta(response) { it.body() }
+    }
+
     override suspend fun getDestinos(): List<DestinoConocido> =
         client.get("$baseUrl/api/destinos").body()
 
