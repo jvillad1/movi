@@ -295,8 +295,9 @@ class InicioDelRedisenoEnPantallaTest {
         assertEquals(Screen.AIChat(), navegado.last())
         composeRule.onNodeWithContentDescription("Subir comprobante", useUnmergedTree = true).performClick()
         assertTrue(subioComprobante, "elige un archivo en vez de navegar")
-        // «Repartir» llega con la ola de Espacios.
-        composeRule.onNodeWithContentDescription("Repartir", useUnmergedTree = true).assertDoesNotExist()
+        // R3 · «Repartir» lleva a Espacios.
+        composeRule.onNodeWithContentDescription("Repartir", useUnmergedTree = true).performClick()
+        assertEquals(Screen.Espacios, navegado.last())
     }
 
     // ── Ocultar los saldos ───────────────────────────────────────────────────
