@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,7 +51,25 @@ import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.SelectorSegmentado
 import com.jvillada.movi.ui.components.formatCOP
-import com.jvillada.movi.ui.recurrentes.ActionChip
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ANCHO_DE_LECTURA
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.recurrentes.BajoLaFila
+import com.jvillada.movi.ui.recurrentes.NumeroEnCirculo
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ErrorOutline
 import kotlinx.datetime.Clock
 
 const val TAG_SALIDA_DE_DEUDAS = "salida-de-deudas"
@@ -93,14 +112,14 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(bottom = 80.dp),
+                    .padding(bottom = Medida.botonFlotante + Espacio.xl),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Column(
                     modifier = Modifier
-                        .widthIn(max = 680.dp)
+                        .widthIn(max = ANCHO_DE_LECTURA)
                         .fillMaxWidth()
-                        .padding(horizontal = Movi.espacios.amplio)
+                        .padding(horizontal = Medida.margenDePantalla)
                         .testTag(TAG_SALIDA_DE_DEUDAS),
                 ) {
                     when {
@@ -170,8 +189,8 @@ private fun ContenidoDelPlan(
     }
 
     // ── El simulador ──
-    MinSectionHeader(title = "Si abonas al mes extra")
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(Movi.espacios.amplio)) {
+    Seccion(titulo = "Si abonas al mes extra")
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         MoneyField(abono, onAbono, placeholder = "Abono extra al mes, por ejemplo \$500.000")
         Spacer(Modifier.height(Movi.espacios.medio))
         resumenDelSimulador(plan, periodoActual).forEachIndexed { i, linea ->
@@ -189,76 +208,76 @@ private fun ContenidoDelPlan(
 
     // ── El orden ──
     if (plan.enElCalculo.isNotEmpty()) {
-        Spacer(Modifier.height(Movi.espacios.seccion))
-        MinSectionHeader(title = "En qué orden abonar")
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Seccion(titulo = "En qué orden abonar")
         SelectorSegmentado(labels = ROTULOS_DE_LAS_ESTRATEGIAS, selected = estrategia, onSelect = onEstrategia)
         Spacer(Modifier.height(Movi.espacios.corto))
         Text(explicacionDe(plan.estrategia), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(Movi.espacios.medio))
-        MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(horizontal = 18.dp, vertical = 6.dp)) {
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             plan.enElCalculo.forEachIndexed { i, salida ->
-                Column(modifier = Modifier.padding(vertical = 12.dp)) {
-                    Text(
-                        "${salida.orden}. ${salida.deuda.nombre}",
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                    )
-                    Text(textoDeLaDeuda(salida.deuda), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Fila(
+                    titulo = salida.deuda.nombre,
+                    subtitulo = textoDeLaDeuda(salida.deuda),
+                    inicio = { NumeroEnCirculo(salida.orden) },
+                )
+                BajoLaFila {
                     Text(textoDeLaSalida(salida, plan.abonoMensual, periodoActual), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
-                if (i < plan.enElCalculo.lastIndex) Hairline()
+                if (i < plan.enElCalculo.lastIndex) Separador(SangriaDeSeparador.ConInicio)
             }
         }
     }
 
     // ── Lo que no entra ──
     if (plan.faltanDatos.isNotEmpty()) {
-        Spacer(Modifier.height(Movi.espacios.seccion))
-        MinSectionHeader(title = "Faltan datos", count = plan.faltanDatos.size)
-        MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(horizontal = 18.dp, vertical = 6.dp)) {
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Seccion(titulo = "Faltan datos", conteo = plan.faltanDatos.size)
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             plan.faltanDatos.forEachIndexed { i, deuda ->
-                Column(modifier = Modifier.padding(vertical = 12.dp)) {
-                    Text(deuda.nombre, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                    Text(textoDeLaDeuda(deuda), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Fila(
+                    titulo = deuda.nombre,
+                    subtitulo = textoDeLaDeuda(deuda),
+                    inicio = { IconoEnCirculo(Icons.Rounded.ErrorOutline, tono = TonoDeIcono.Aviso) },
+                )
+                BajoLaFila {
                     Text(motivoDeFuera(deuda), style = Movi.textos.apoyo, color = Movi.colores.aviso)
                     if (deuda.porQueNoEntra != com.jvillada.movi.shared.model.PorQueNoEntraAlPlan.EN_OTRA_MONEDA) {
-                        Spacer(Modifier.height(Movi.espacios.corto))
-                        ActionChip(
-                            label = if (deuda.tipo == TipoDeDeuda.TARJETA) "Cargar en la tarjeta" else "Ir a Créditos",
-                            primary = false,
-                        ) { onCargar(deuda) }
+                        Boton(
+                            texto = if (deuda.tipo == TipoDeDeuda.TARJETA) "Cargar en la tarjeta" else "Ir a Créditos",
+                            onClick = { onCargar(deuda) },
+                            variante = VarianteDeBoton.Secundario,
+                            tamano = TamanoDeBoton.S,
+                        )
                     }
                 }
-                if (i < plan.faltanDatos.lastIndex) Hairline()
+                if (i < plan.faltanDatos.lastIndex) Separador(SangriaDeSeparador.ConInicio)
             }
         }
     }
 
     // ── Lo ajeno ──
     if (plan.ajenas.isNotEmpty()) {
-        Spacer(Modifier.height(Movi.espacios.seccion))
-        MinSectionHeader(title = "No salen de tu bolsillo", count = plan.ajenas.size)
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Seccion(titulo = "No salen de tu bolsillo", conteo = plan.ajenas.size)
         Text(
             "Su cuota la paga otro, así que no compiten por tu abono.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
-            modifier = Modifier.padding(start = Movi.espacios.corto, bottom = Movi.espacios.corto),
+            modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
         )
-        MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(horizontal = 18.dp, vertical = 6.dp)) {
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             plan.ajenas.forEachIndexed { i, deuda ->
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(deuda.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto)
-                        Text(quienPagaEnTexto(deuda), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    }
-                    Text(formatCOP(deuda.saldo), style = Movi.textos.monto, color = Movi.colores.textoMedio)
-                }
-                if (i < plan.ajenas.lastIndex) Hairline()
+                Fila(
+                    titulo = deuda.nombre,
+                    subtitulo = quienPagaEnTexto(deuda),
+                    final = { Cifra(deuda.saldo, tono = TonoDeCifra.Apagado) },
+                )
+                if (i < plan.ajenas.lastIndex) Separador(SangriaDeSeparador.Margen)
             }
         }
     }
 
-    Spacer(Modifier.height(Movi.espacios.seccion))
+    Spacer(Modifier.height(Medida.entreSecciones))
     Text(PIE_DEL_PLAN_DE_SALIDA, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
 }

@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -46,6 +49,33 @@ import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.planDelCredito
 import com.jvillada.movi.shared.model.resumirDeudas
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.ds.BarraDeProgreso
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeBarra
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.recurrentes.BajoLaFila
+import com.jvillada.movi.ui.recurrentes.MontoDeFila
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.automirrored.rounded.TrendingDown
+import androidx.compose.material.icons.rounded.AccountBalance
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CreditCard
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.datetime.Clock
@@ -223,49 +253,56 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 action = if (actualizandoConAlgoALaVista) {
                     { ActualizandoEnLaCabecera() }
                 } else if (nuevoEnLaCabecera) {
-                    { NewItemButton(label = "Nuevo crédito", onClick = { showTypeChooser = true }) }
+                    {
+                        Boton(
+                            texto = "Nuevo crédito",
+                            onClick = { showTypeChooser = true },
+                            variante = VarianteDeBoton.Secundario,
+                            tamano = TamanoDeBoton.S,
+                            icono = Icons.Rounded.Add,
+                        )
+                    }
                 } else null,
             )
             // Un solo aviso: sin nada que mostrar, el de «No pudimos cargar» de abajo ya lo dice todo.
             if (noSePudoActualizar && !noSeLeyo) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
                 NoSePudoActualizar(
                     onReintentar = { reloadKey++ },
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = Espacio.m),
                 )
             }
             if (noSeLeyo) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
                 NoSePudoLeer(
                     "No pudimos cargar tus créditos",
                     onReintentar = { reloadKey++ },
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = Espacio.m),
                 )
             } else if (isEmpty) {
-                NewItemButton(
-                    label = "Nuevo crédito",
+                Boton(
+                    texto = "Nuevo crédito",
                     onClick = { showTypeChooser = true },
-                    modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
-                    full = true,
+                    modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(vertical = Espacio.s),
+                    icono = Icons.Rounded.Add,
+                    anchoCompleto = true,
                 )
             } else {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
             }
 
             // Las piezas de la pantalla, una sola vez: la lista de una columna y la página de dos
             // columnas las ponen en lugares distintos, con el mismo contenido.
             val resumenDeDeuda: @Composable (List<CreditSummary>, List<CardSummary>) -> Unit = { creditosALaVista, tarjetasALaVista ->
-                MinCard(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(22.dp),
+                Superficie(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
                 ) {
                     Text("Deuda total", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     // F20: préstamos + tarjetas — la MISMA función que usa el Inicio.
                     // La protagonista de esta pantalla, igual que «Tu plata» en el Inicio: misma
                     // letra, mismo tamaño, y un renglón siempre. Ver [CifraProtagonista].
-                    CifraProtagonista(formatCOP(totalDebtCop(creditosALaVista, tarjetasALaVista)), color = Movi.colores.texto)
+                    Cifra(totalDebtCop(creditosALaVista, tarjetasALaVista), VarianteDeCifra.Heroe)
                     // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
                     // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
                     // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
@@ -308,61 +345,61 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 // sus tarjetas se reparten en las dos columnas bajo un solo título.
                 Column(
                     modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollDeDosColumnas)
-                        .padding(bottom = 80.dp),
+                        .padding(bottom = Medida.botonFlotante + Espacio.xl),
                 ) {
                     resumenDeDeuda(creditosListos, tarjetasListas)
                     FilaComoSalirDeTusDeudas(onClick = { onNavigate(Screen.SalidaDeDeudas) })
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(Medida.entreSecciones))
                     val ambos = creditosListos.isNotEmpty() && tarjetasListas.isNotEmpty()
                     if (!ambos) {
-                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Box(modifier = Modifier.padding(horizontal = Espacio.m)) {
                             if (creditosListos.isNotEmpty()) {
-                                MinSectionHeader(title = "Préstamos", count = creditosListos.size)
+                                Seccion(titulo = "Préstamos", conteo = creditosListos.size)
                             } else {
-                                MinSectionHeader(title = "Tarjetas", count = tarjetasListas.size)
+                                Seccion(titulo = "Tarjetas", conteo = tarjetasListas.size)
                             }
                         }
                     }
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.m),
+                        horizontalArrangement = Arrangement.spacedBy(Medida.margenDePantalla),
                         verticalAlignment = Alignment.Top,
                     ) {
                         val izquierda = Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS)
                         val derecha = Modifier.weight(1f).testTag(TAG_COLUMNA_DERECHA_DE_CREDITOS)
                         if (ambos) {
                             Column(modifier = izquierda) {
-                                MinSectionHeader(title = "Préstamos", count = creditosListos.size)
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Seccion(titulo = "Préstamos", conteo = creditosListos.size)
+                                Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                                     creditosListos.forEach { tarjetaDePrestamo(it) }
                                 }
                             }
                             Column(modifier = derecha) {
-                                MinSectionHeader(title = "Tarjetas", count = tarjetasListas.size)
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Seccion(titulo = "Tarjetas", conteo = tarjetasListas.size)
+                                Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                                     tarjetasListas.forEach { tarjetaDeCredito(it) }
                                 }
                             }
                         } else if (creditosListos.isNotEmpty()) {
                             val (pares, impares) = repartirEnDos(creditosListos)
-                            Column(modifier = izquierda, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(modifier = izquierda, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                                 pares.forEach { tarjetaDePrestamo(it) }
                             }
-                            Column(modifier = derecha, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(modifier = derecha, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                                 impares.forEach { tarjetaDePrestamo(it) }
                             }
                         } else {
                             val (pares, impares) = repartirEnDos(tarjetasListas)
-                            Column(modifier = izquierda, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(modifier = izquierda, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                                 pares.forEach { tarjetaDeCredito(it) }
                             }
-                            Column(modifier = derecha, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(modifier = derecha, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                                 impares.forEach { tarjetaDeCredito(it) }
                             }
                         }
                     }
                 }
-            } else if (creditosListos != null && tarjetasListas != null) LazyColumn(state = estadoDeLaLista, modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
+            } else if (creditosListos != null && tarjetasListas != null) LazyColumn(state = estadoDeLaLista, modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl)) {
                 // Sin un solo crédito ni tarjeta no hay deuda que resumir — «Deuda total $0»
                 // arriba del vacío que enseña presentaba un cero como si fuera un hecho. Con
                 // cualquier crédito o tarjeta, esta tarjeta sigue apareciendo igual que siempre.
@@ -373,7 +410,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
 
                 if (isEmpty) {
                     item {
-                        Spacer(Modifier.height(20.dp))
+                        Spacer(Modifier.height(Medida.entreSecciones))
                         // Reemplaza al «Sin créditos registrados» de siempre — el
                         // botón hace lo mismo que «Nuevo crédito» del encabezado (ambos ponen
                         // `showTypeChooser = true`, la misma hoja de elegir préstamo o tarjeta).
@@ -383,17 +420,17 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                                 "cuándo terminas y si la cuota alcanza.",
                             accion = "Agregar un crédito",
                             onAccion = { showTypeChooser = true },
-                            modifier = Modifier.padding(horizontal = 16.dp),
+                            modifier = Modifier.padding(horizontal = Espacio.m),
                         )
                     }
                 }
 
                 if (creditosListos.isNotEmpty()) {
                     item {
-                        Spacer(Modifier.height(20.dp))
-                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            MinSectionHeader(title = "Préstamos", count = creditosListos.size)
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Spacer(Modifier.height(Medida.entreSecciones))
+                        Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
+                            Seccion(titulo = "Préstamos", conteo = creditosListos.size)
+                            Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                                 creditosListos.forEach { tarjetaDePrestamo(it) }
                             }
                         }
@@ -402,10 +439,10 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
 
                 if (tarjetasListas.isNotEmpty()) {
                     item {
-                        Spacer(Modifier.height(20.dp))
-                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            MinSectionHeader(title = "Tarjetas", count = tarjetasListas.size)
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Spacer(Modifier.height(Medida.entreSecciones))
+                        Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
+                            Seccion(titulo = "Tarjetas", conteo = tarjetasListas.size)
+                            Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                                 tarjetasListas.forEach { tarjetaDeCredito(it) }
                             }
                         }
@@ -494,9 +531,9 @@ private fun LoQueCuestaLaDeuda(
 ) {
     if (planes.isEmpty()) return
     val resumen = resumirDeudas(planes)
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Espacio.m))
     Hairline()
-    Spacer(Modifier.height(14.dp))
+    Spacer(Modifier.height(Espacio.s))
 
     // **Las dos cifras se muestran, no se colapsan en una, y las dos son filas.** Quedarse solo con
     // el total le cobraría al bolsillo millones que no salen de su cuenta; quedarse solo con lo suyo
@@ -505,18 +542,18 @@ private fun LoQueCuestaLaDeuda(
     TituloDelGrupo(TITULO_INTERES_DEL_MES)
     FilaDelResumen(ALCANCE_INTERES_PROPIO, formatCOP(resumen.interesMensualPropio))
     if (resumen.interesMensualAjeno > 0L) {
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(Espacio.xxs))
         FilaDelResumen(alcanceDelInteresAjeno(quienesPagan), formatCOP(resumen.interesMensualAjeno))
     }
 
     if (resumen.interesPorPagarPropio > 0L || resumen.interesPorPagarAjeno > 0L) {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
         TituloDelGrupo(TITULO_INTERES_POR_PAGAR)
         if (resumen.interesPorPagarPropio > 0L) {
             FilaDelResumen(ALCANCE_FALTA_PROPIO, formatCOP(resumen.interesPorPagarPropio))
         }
         if (resumen.interesPorPagarAjeno > 0L) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(Espacio.xxs))
             FilaDelResumen(alcanceDeLaFaltaAjena(quienesPagan), formatCOP(resumen.interesPorPagarAjeno))
         }
     }
@@ -524,7 +561,7 @@ private fun LoQueCuestaLaDeuda(
     // La fecha final solo aparece cuando hay algo que decir: o una fecha, o el «Sin fecha» que el
     // aviso de abajo explica. Una cartera entera sin tasas registradas no tiene ninguna de las dos.
     if (resumen.mesesHastaLaUltimaCuota != null || resumen.creditosQueNoSeTerminan > 0) {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
         TituloDelGrupo(TITULO_ULTIMA_CUOTA)
         FilaDelResumen(ALCANCE_ULTIMA_CUOTA, textoDeLaUltimaCuota(resumen, periodoActual))
     }
@@ -533,35 +570,35 @@ private fun LoQueCuestaLaDeuda(
     // se probaba y no se dibujaba: la única advertencia visible contaba 1 (la amortización
     // negativa) y los $100.000.000 del Crédito Mamá no aparecían en ningún lado del resumen.
     if (resumen.creditosQueNoSeTerminan > 0) {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
         AvisoDeLaPantalla(
             texto = textoDeLoQueNoSeTermina(resumen.creditosQueNoSeTerminan, resumen.deudaQueNoSeTermina),
             color = Movi.colores.aviso,
-            fondo = Movi.colores.tarjeta,
+            fondo = Movi.colores.lavado(Movi.colores.aviso),
             onRenglones = onRenglonesDelAvisoAmbar,
         )
     }
     // La alerta, arriba de todo y contada en créditos: si hay uno solo en el que la deuda crece
     // sola, el dueño tiene que salir de esta pantalla sabiéndolo.
     if (resumen.creditosQueCrecen > 0) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         AvisoDeLaPantalla(
             texto = textoDeLaAmortizacionNegativa(resumen.creditosQueCrecen),
             color = Movi.colores.sale,
-            fondo = Movi.colores.sale.copy(alpha = 0.14f),
+            fondo = Movi.colores.lavado(Movi.colores.sale),
             onRenglones = onRenglonesDelAvisoRojo,
         )
     }
 
-    Spacer(Modifier.height(12.dp))
-    Text(SUPUESTO_DE_LA_PROYECCION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 15.sp)
+    Spacer(Modifier.height(Espacio.s))
+    Text(SUPUESTO_DE_LA_PROYECCION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
 }
 
 /** El rótulo de un grupo de filas del resumen: qué se está midiendo, antes de con qué alcance. */
 @Composable
 private fun TituloDelGrupo(titulo: String) {
     Text(titulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(Espacio.xs))
 }
 
 /**
@@ -571,13 +608,13 @@ private fun TituloDelGrupo(titulo: String) {
 @Composable
 private fun FilaDelResumen(alcance: String, valor: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = Espacio.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(alcance, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(10.dp))
-        Text(valor, style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+        Spacer(Modifier.width(Espacio.xs))
+        MontoDeFila(valor)
     }
 }
 
@@ -590,7 +627,7 @@ private fun AvisoDeLaPantalla(texto: String, color: Color, fondo: Color, onRengl
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(fondo)
             .padding(horizontal = RELLENO_DEL_AVISO_H, vertical = RELLENO_DEL_AVISO_V),
     ) {
@@ -608,8 +645,8 @@ private fun AvisoDeLaPantalla(texto: String, color: Color, fondo: Color, onRengl
 }
 
 /** Los rellenos y el interlineado de [AvisoDeLaPantalla], compartidos con [AvisoEsqueleto]. */
-private val RELLENO_DEL_AVISO_H = 12.dp
-private val RELLENO_DEL_AVISO_V = 10.dp
+private val RELLENO_DEL_AVISO_H = Espacio.s
+private val RELLENO_DEL_AVISO_V = Espacio.xs
 private val INTERLINEADO_DEL_AVISO = 16.sp
 
 /**
@@ -620,6 +657,7 @@ private val INTERLINEADO_DEL_AVISO = 16.sp
  * Desde esta rama también dice **cuánto de la cuota es interés y cuándo se termina la deuda**
  * ([plan]), que es lo que la pantalla no contestaba.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LoanCard(
     credit: CreditSummary,
@@ -631,221 +669,92 @@ private fun LoanCard(
     onSimulate: () -> Unit,
     onPayrollDeduction: () -> Unit,
 ) {
-    // Ola 14: no siempre es un porcentaje. Un crédito recién creado en $0 —el paso 1 de registrar
-    // un desembolso— decía «100% pagado» con la barra llena. Ver [progresoDeCredito].
     val progreso = progresoDeCredito(credit)
-    val pct = progreso.fraccion
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
-        onClick = onOpen,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
-            Text(credit.terms?.let { if (it.sinIntereses) "Sin intereses" else "${it.rateEa}% EA" } ?: "", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            EditTermsIcon(onEdit)
-        }
-        Text(credit.terms?.bank ?: "Sin términos registrados", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(formatCOP(credit.account.balance), style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
-            // Sin monoespaciada cuando no es una cifra (ver [ProgresoDeCredito.esAviso]).
+    val tasa = credit.terms?.let { if (it.sinIntereses) "Sin intereses" else "${it.rateEa}% EA" }
+    // Ola R4: la tarjeta es una [Fila] (nombre, banco y tasa, el saldo en [Cifra]) con lo demás
+    // colgando debajo ([BajoLaFila]): el avance, la cuota con quién la paga en una [Pildora], el plan
+    // y las acciones en botones chicos. Tocar la fila abre el historial de la cuenta.
+    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+        Fila(
+            titulo = credit.account.name,
+            subtitulo = listOfNotNull(credit.terms?.bank ?: "Sin términos registrados", tasa).joinToString(" · "),
+            inicio = { IconoEnCirculo(Icons.Rounded.AccountBalance, tono = TonoDeIcono.Neutro) },
+            final = { Cifra(credit.account.balance) },
+            onClick = onOpen,
+        )
+        BajoLaFila {
             Text(
                 progreso.etiqueta,
                 style = Movi.textos.apoyo,
                 fontFamily = if (progreso.esAviso) FontFamily.Default else FontFamily.Monospace,
                 color = Movi.colores.textoMedio,
             )
-        }
-        // La barra solo se dibuja cuando hay progreso que dibujar. Una barra vacía sobre una deuda
-        // que creció por encima del capital original dice lo contrario de lo que pasó — la etiqueta
-        // de al lado ya dice cuánto se pasó, en pesos. Ver [ProgresoDeCredito.mostrarBarra].
-        if (progreso.mostrarBarra) {
-            Spacer(Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .testTag(TAG_BARRA_DE_PROGRESO)
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(Movi.colores.hilo)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(pct)
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(Movi.colores.texto.copy(alpha = 0.9f))
-                )
+            if (progreso.mostrarBarra) {
+                Box(Modifier.fillMaxWidth().testTag(TAG_BARRA_DE_PROGRESO)) {
+                    BarraDeProgreso(fraccion = progreso.fraccion, tono = TonoDeBarra.Neutro)
+                }
             }
-        }
-        credit.terms?.let { t ->
-            Spacer(Modifier.height(14.dp))
-            Hairline()
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                // Quién paga va PEGADO a la cuota, no en una fila aparte: es lo que decide si
-                // ese número sale del bolsillo del dueño, y leerlo suelto —«$9.147.408» a secas—
-                // es exactamente el malentendido que esta feature vino a evitar. Sin esto, la
-                // pantalla de Créditos sumaría $13,1 millones al mes de cuotas que él no paga.
-                Text(
-                    text = when {
-                        t.payrollDeduction -> "Cuota · día ${t.dayOfMonth} · de tu nómina"
-                        !t.paidBy.isNullOrBlank() -> "Cuota · día ${t.dayOfMonth} · la paga ${t.paidBy}"
-                        else -> "Cuota · día ${t.dayOfMonth}"
-                    },
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                )
-                Text(formatCOP(t.installment), style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            }
-            // Plazo y fecha de desembolso: son los dos datos que uno compara contra el extracto,
-            // y estaban solo dentro de la hoja de edición.
-            //
-            // Dice **«Plazo pactado»** y no solo «105 meses» porque tres líneas más abajo aparece
-            // la proyección, y las dos difieren: al ·9695 le quedan 42 meses de contrato y 46 de
-            // proyección. Dos números de cuotas sin rótulo en la misma tarjeta se leen como un
-            // error de la app; con el rótulo son dos hechos distintos —lo que se firmó y lo que
-            // pasa a este ritmo— y la diferencia es justamente la información.
-            Spacer(Modifier.height(6.dp))
-            // El plazo se lleva el ancho que sobre y el banco se corta con «…». Con los dos sin peso,
-            // un banco de nombre largo se quedaba sin lugar y se partía una letra por renglón:
-            // visto en la web a 390 dp con «Banco de ejemplo».
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
-            ) {
+            credit.terms?.let { t ->
+                Separador(SangriaDeSeparador.Ninguna)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Cuota · día ${t.dayOfMonth}",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // El monto se mide primero y entero; lo que se achica es el rótulo.
+                    Cifra(t.installment)
+                }
+                // Quién la paga, si no es el dueño: un estado de la cuota, en una píldora, en su
+                // renglón (al lado del monto no entraba a 360 dp).
+                when {
+                    t.payrollDeduction -> Pildora("De tu nómina", TonoDePildora.Info)
+                    !t.paidBy.isNullOrBlank() -> Pildora("La paga ${t.paidBy}", TonoDePildora.Info)
+                }
                 Text(
                     "Plazo pactado ${t.termMonths} meses · desde el ${fechaEnPalabras(t.startDate, hoyEnAppZone())}",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoApagado,
-                    modifier = Modifier.weight(1f),
                 )
-                Text(
-                    t.bank,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoApagado,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            // **Qué parte de esa cuota es alquiler de la plata, y cuándo se termina esta deuda.**
-            // Las dos salen del mismo desglose que la app ya calculaba al registrar cada pago y
-            // tiraba después de mover el saldo. Ver [PlanDelCredito].
-            plan?.let { p ->
-                Spacer(Modifier.height(10.dp))
-                Text(textoDelInteres(p), style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 16.sp)
-                comoVaEstaDeuda(p, periodoActual)?.let { comoVa ->
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        comoVa.texto,
-                        style = Movi.textos.apoyo,
-                        // La alerta va con color y en negrita; el resto no. El Crédito Mamá —cuya
-                        // cuota también es interés puro, pero por acuerdo— cae del lado sin color.
-                        color = if (comoVa.esAlerta) Movi.colores.sale else Movi.colores.textoApagado,
-                        fontWeight = if (comoVa.esAlerta) FontWeight.Medium else FontWeight.Normal,
-                        lineHeight = 16.sp,
-                    )
+                plan?.let { p ->
+                    Text(textoDelInteres(p), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    comoVaEstaDeuda(p, periodoActual)?.let { comoVa ->
+                        Text(
+                            comoVa.texto,
+                            style = Movi.textos.apoyo,
+                            color = if (comoVa.esAlerta) Movi.colores.sale else Movi.colores.textoApagado,
+                            fontWeight = if (comoVa.esAlerta) FontWeight.Medium else FontWeight.Normal,
+                        )
+                    }
                 }
-                // **«¿Y si abonas de más?»**, pegado a la proyección que modifica y no en la fila
-                // de acciones de abajo. Por dos motivos: ahí abajo son operaciones que ESCRIBEN
-                // (registrar un descuento, ajustar el saldo) y esto no escribe nada; y con un
-                // crédito que paga un tercero eran tres botones en una fila que no entra en 411dp.
-                //
-                // Solo donde hay algo que simular: sin tasa, sin cuota o sin deuda no hay
-                // proyección que acortar, y la hoja solo podría contestar «no se sabe». Ver
-                // [ComoVaLaDeuda.seProyecta].
-                if (p.comoVa.seProyecta) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        ACCION_SIMULAR_ABONO,
-                        style = Movi.textos.apoyo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.marca,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickableSimple(onSimulate)
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
+                t.notes?.takeIf { it.isNotBlank() }?.let { nota ->
+                    Text(text = nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
             }
-            // La NOTA, que es donde vive lo que falta confirmar con el banco («plazo estimado»,
-            // «la deuda subió», «preguntar el capital original»). Estaba escondida detrás del
-            // lápiz: había que entrar a cada crédito para recordar qué tenía pendiente, que es
-            // justo lo contrario de para qué sirve una nota.
-            t.notes?.takeIf { it.isNotBlank() }?.let { nota ->
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = nota,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    lineHeight = 16.sp,
-                )
+            // Las acciones, en botones chicos del sistema. Envuelven a un segundo renglón si no
+            // caben (a 360 dp, con «Registrar pago de …», no caben).
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+            ) {
+                if (plan?.comoVa?.seProyecta == true) {
+                    Boton(ACCION_SIMULAR_ABONO, onClick = onSimulate, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
+                }
+                val quienPaga = credit.terms?.paidBy?.takeIf { it.isNotBlank() }
+                if (quienPaga != null && credit.terms?.payrollDeduction != true) {
+                    Boton("Registrar pago de $quienPaga", onClick = onPayrollDeduction, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
+                }
+                if (credit.terms?.payrollDeduction == true) {
+                    Boton("Registrar descuento", onClick = onPayrollDeduction, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
+                }
+                Boton("Ajustar saldo", onClick = onAdjust, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
+                Boton("Editar", onClick = onEdit, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S, icono = Icons.Rounded.Edit)
             }
-        }
-        // La deuda es estado (se mueve a diario por intereses), no
-        // contrato: por eso cuadrarla con el banco vive fuera de la
-        // hoja de términos.
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            // Una libranza no se «paga»: ya se descontó del sueldo. Lo único que falta es que la
-            // deuda lo refleje, y eso es un toque — no anotar un gasto que no existió.
-            // Y una cuota que paga OTRO tampoco se «paga» desde acá: la giró Skandia, o la pagó
-            // Caro. Lo único que falta es que la deuda lo refleje. Mismo endpoint que la
-            // libranza (ver POST /credits/{id}/payroll-deduction), distinto rótulo — el rótulo
-            // es lo que le dice al dueño qué está confirmando.
-            val quienPaga = credit.terms?.paidBy?.takeIf { it.isNotBlank() }
-            if (quienPaga != null && credit.terms?.payrollDeduction != true) {
-                Text(
-                    "Registrar pago de $quienPaga",
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.marca,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickableSimple(onPayrollDeduction)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                )
-                Spacer(Modifier.width(4.dp))
-            }
-            if (credit.terms?.payrollDeduction == true) {
-                Text(
-                    "Registrar descuento",
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.marca,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickableSimple(onPayrollDeduction)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                )
-                Spacer(Modifier.width(4.dp))
-            }
-            Text(
-                "Ajustar saldo",
-                style = Movi.textos.apoyo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.textoMedio,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickableSimple(onAdjust)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
         }
     }
 }
@@ -859,46 +768,32 @@ private fun LoanCard(
 private fun CreditCardCard(card: CardSummary, onOpen: () -> Unit, onEdit: () -> Unit) {
     val currency = card.account.currency
     val debt = card.account.balancesByCurrency[currency] ?: card.account.balance
-    // Ola 7 (F61): tocar la tarjeta abre su historial (AccountDetail); el lápiz edita corte y pago.
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
-        onClick = onOpen,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(card.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
-            if (currency != "COP") {
-                Text(currency, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            }
-            EditTermsIcon(onEdit)
-        }
-        Text(card.terms?.bank ?: "Sin corte ni pago — edítalos con el lápiz", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(formatMoney(debt, currency), style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
+    // Ola R4: una [Fila] como la de un préstamo. La deuda en SU moneda (`formatMoney`): una
+    // Mastercard en USD debe dólares, y su componente COP sería $0, un número que miente.
+    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+        Fila(
+            titulo = card.account.name,
+            subtitulo = card.terms?.bank ?: "Sin corte ni pago — edítalos",
+            inicio = { IconoEnCirculo(Icons.Rounded.CreditCard, tono = TonoDeIcono.Neutro) },
+            final = { MontoDeFila(formatMoney(debt, currency)) },
+            onClick = onOpen,
+        )
+        BajoLaFila {
             card.available?.let {
                 Text("Disponible ${formatMoney(it, currency)}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
-        }
-        card.terms?.let { t ->
-            Spacer(Modifier.height(14.dp))
-            Hairline()
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(t.cutoffDay?.let { "Corte · día $it" } ?: "Sin día de corte", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                Text("Pago · día ${t.paymentDay}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            card.terms?.let { t ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(t.cutoffDay?.let { "Corte · día $it" } ?: "Sin día de corte", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    Text("Pago · día ${t.paymentDay}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                if (currency != "COP") Pildora(currency, TonoDePildora.Neutra)
+                Boton("Editar", onClick = onEdit, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S, icono = Icons.Rounded.Edit)
             }
         }
     }
@@ -932,58 +827,29 @@ private fun DebtTypeChooserSheet(
                 .weight(1f, fill = false),
         ) {
             Text("¿Qué deuda quieres registrar?", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
             DebtTypeOption(
                 title = "Préstamo",
                 subtitle = "Cuota fija, tasa y plazo — libranza, libre inversión, vehículo",
                 onClick = onLoan,
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             DebtTypeOption(
                 title = "Tarjeta de crédito",
                 subtitle = "Cupo, día de corte y día de pago",
                 onClick = onCard,
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Espacio.xl))
         }
     }
 }
 
 @Composable
 private fun DebtTypeOption(title: String, subtitle: String, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Movi.colores.tarjeta)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-    ) {
-        Text(title, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-        Spacer(Modifier.height(2.dp))
-        Text(subtitle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+        Fila(titulo = title, subtitulo = subtitle, final = { Chevron() }, onClick = onClick)
     }
 }
-
-/** Lápiz de «editar términos» a la derecha de la fila — acción secundaria explícita (Ola 7). */
-@Composable
-private fun EditTermsIcon(onEdit: () -> Unit) {
-    Icon(
-        Icons.Rounded.Edit,
-        contentDescription = "Editar términos",
-        tint = Movi.colores.textoMedio,
-        modifier = Modifier
-            .padding(start = 8.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickableSimple(onEdit)
-            .padding(6.dp)
-            .size(16.dp),
-    )
-}
-
-private fun Modifier.clickableSimple(onClick: () -> Unit) = this.then(
-    Modifier.clickable(onClick = onClick)
-)
 
 /** La tarjeta de «Deuda total», cargando o cargada: el mismo tag en las dos para medir que no salte. */
 const val TAG_TARJETA_DEL_RESUMEN_DE_DEUDA: String = "tarjeta-del-resumen-de-deuda"
@@ -1025,18 +891,16 @@ private const val MAX_PRESTAMOS_ESQUELETO = 12
 private fun CreditosEsqueleto(forma: FormaDeCreditos?, dosColumnas: Boolean = false, modifier: Modifier = Modifier) {
     val grupos = forma?.gruposDelResumen ?: listOf(1, 1, 1)
     val prestamos = (forma?.prestamos ?: 3).coerceAtMost(MAX_PRESTAMOS_ESQUELETO)
-    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 80.dp), userScrollEnabled = false) {
+    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl), userScrollEnabled = false) {
         item {
-            MinCard(
+            Superficie(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = Medida.margenDePantalla)
                     .testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(22.dp),
             ) {
                 LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.apoyo)
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 LineaEsqueleto(
                     fraccionDelAncho = 0.7f,
                     estilo = Movi.textos.cifra,
@@ -1046,19 +910,19 @@ private fun CreditosEsqueleto(forma: FormaDeCreditos?, dosColumnas: Boolean = fa
                 // supuesto.
                 if (grupos.isNotEmpty()) {
                     // Los mismos espacios que [LoQueCuestaLaDeuda]: 16 · hilo · 14 y 12 entre grupos.
-                    Spacer(Modifier.height(16.dp))
-                    Hairline()
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(Espacio.m))
+                    Separador(SangriaDeSeparador.Ninguna)
+                    Spacer(Modifier.height(Espacio.s))
                     grupos.forEachIndexed { i, filas ->
-                        if (i > 0) Spacer(Modifier.height(12.dp))
+                        if (i > 0) Spacer(Modifier.height(Espacio.s))
                         // [TituloDelGrupo] y [FilaDelResumen]: el rótulo, 6 dp, y cada fila con 10 dp
                         // de sangría y 4 dp entre una y otra.
                         LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         repeat(filas) { f ->
-                            if (f > 0) Spacer(Modifier.height(4.dp))
+                            if (f > 0) Spacer(Modifier.height(Espacio.xxs))
                             RenglonConCifraEsqueleto(
-                                modifier = Modifier.padding(start = 10.dp),
+                                modifier = Modifier.padding(start = Espacio.xs),
                                 fraccionDelRotulo = 0.55f,
                             )
                         }
@@ -1067,35 +931,34 @@ private fun CreditosEsqueleto(forma: FormaDeCreditos?, dosColumnas: Boolean = fa
                     // antes del rojo.
                     val ambar = forma?.renglonesDelAvisoAmbar ?: 0
                     if (ambar > 0) {
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(Espacio.s))
                         AvisoEsqueleto(ambar)
                     }
                     val rojo = forma?.renglonesDelAvisoRojo ?: 0
                     if (rojo > 0) {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         AvisoEsqueleto(rojo)
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(Espacio.s))
                     // [SUPUESTO_DE_LA_PROYECCION]: dos renglones de apoyo a 15 sp de interlineado en
                     // un teléfono.
-                    val supuesto = Movi.textos.apoyo.copy(lineHeight = 15.sp)
-                    LineaEsqueleto(fraccionDelAncho = 0.95f, estilo = supuesto)
-                    LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = supuesto)
+                    LineaEsqueleto(fraccionDelAncho = 0.95f, estilo = Movi.textos.apoyo)
+                    LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 }
             }
         }
         if (prestamos > 0) {
             item {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(Medida.entreSecciones))
                 // En dos columnas (Ola W3) los préstamos caen a la izquierda, donde van a quedar: la
                 // derecha es de las tarjetas, que la forma recordada no cuenta.
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.m),
+                    horizontalArrangement = Arrangement.spacedBy(Medida.margenDePantalla),
                 ) {
                     Column(modifier = if (dosColumnas) Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS) else Modifier.weight(1f)) {
                         RotuloDeSeccionEsqueleto()
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                             repeat(prestamos) { TarjetaDePrestamoEsqueleto() }
                         }
                     }
@@ -1125,37 +988,19 @@ private fun AvisoEsqueleto(renglones: Int) {
  */
 @Composable
 private fun TarjetaDePrestamoEsqueleto() {
-    MinCard(
+    Superficie(
         modifier = Modifier.fillMaxWidth().testTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
+        relleno = RellenoDeSuperficie.Lista,
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.titulo) }
-            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 52.dp)
-            // El lugar del lápiz de [EditTermsIcon]: 8 dp antes, 6 dp alrededor y 16 dp de ícono.
-            Box(Modifier.padding(start = 8.dp).padding(6.dp)) { BloqueEsqueleto(alto = 16.dp, ancho = 16.dp) }
+        EsqueletoDeFila()
+        BajoLaFila {
+            LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
+            BloqueEsqueleto(alto = Medida.altoDeBarraDeProgreso)
+            RenglonConCifraEsqueleto(fraccionDelRotulo = 0.4f)
+            LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.apoyo)
+            LineaEsqueleto(fraccionDelAncho = 0.85f, estilo = Movi.textos.apoyo)
+            BloqueEsqueleto(alto = Medida.altoChico, ancho = Medida.avatar * 3)
         }
-        LineaEsqueleto(
-            fraccionDelAncho = 0.3f,
-            estilo = Movi.textos.apoyo,
-            modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
-        )
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.monto), ancho = 112.dp)
-            Spacer(Modifier.weight(1f))
-            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 64.dp)
-        }
-        Spacer(Modifier.height(8.dp))
-        BloqueEsqueleto(alto = 2.dp)
-        Spacer(Modifier.height(14.dp))
-        Hairline()
-        Spacer(Modifier.height(12.dp))
-        RenglonConCifraEsqueleto(fraccionDelRotulo = 0.4f)
-        Spacer(Modifier.height(6.dp))
-        LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.apoyo)
-        Spacer(Modifier.height(10.dp))
-        LineaEsqueleto(fraccionDelAncho = 0.85f, estilo = Movi.textos.apoyo)
     }
 }
 
@@ -1168,30 +1013,19 @@ const val TAG_FILA_COMO_SALIR_DE_TUS_DEUDAS: String = "fila-como-salir-de-tus-de
  */
 @Composable
 private fun FilaComoSalirDeTusDeudas(onClick: () -> Unit) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Spacer(Modifier.height(12.dp))
-        MinCard(
+    Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        Superficie(
             modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_COMO_SALIR_DE_TUS_DEUDAS),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
-            onClick = onClick,
+            relleno = RellenoDeSuperficie.Lista,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(TITULO_SALIDA_DE_DEUDAS, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                    Spacer(Modifier.height(Movi.espacios.minimo))
-                    Text(
-                        "En qué orden abonar y cuánto interés te ahorras",
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                    )
-                }
-                ChevronRight()
-            }
+            Fila(
+                titulo = TITULO_SALIDA_DE_DEUDAS,
+                subtitulo = "En qué orden abonar y cuánto interés te ahorras",
+                inicio = { IconoEnCirculo(Icons.AutoMirrored.Rounded.TrendingDown) },
+                final = { Chevron() },
+                onClick = onClick,
+            )
         }
     }
 }

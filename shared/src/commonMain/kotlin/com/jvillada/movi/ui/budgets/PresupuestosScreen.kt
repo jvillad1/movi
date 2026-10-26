@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.budgets
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -28,7 +33,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Lectura
 import com.jvillada.movi.data.Repositories
@@ -46,6 +50,22 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.ds.BarraDeProgreso
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeBarra
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.recurrentes.BajoLaFila
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.components.*
@@ -519,18 +539,18 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
     item {
         // Un solo aviso: sin nada que mostrar, el «No pudimos cargar» de abajo ya lo dice todo.
         if (estado.noSePudoActualizar && !estado.noSeLeyo) {
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
             NoSePudoActualizar(
                 onReintentar = { estado.reintentar() },
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.padding(horizontal = Espacio.m),
             )
         }
         if (estado.noSeLeyo) {
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
             NoSePudoLeer(
                 "No pudimos cargar tus presupuestos",
                 onReintentar = { estado.reintentar() },
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.padding(horizontal = Espacio.m),
             )
         } else if (estado.vacioAfirmable) {
             // En Plan, el segmento «Pagos del mes» siempre deja `Movi.espacios.amplio` de
@@ -539,7 +559,7 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
             Spacer(Modifier.height(Movi.espacios.amplio))
             VacioDePresupuestos(estado)
         } else {
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
         }
         // Con la lista ya pintada (alguna propuesta sí se creó), el aviso de las que faltan va
         // arriba de ella, donde queda la vista al irse el vacío. Mientras el vacío sigue, el aviso va
@@ -561,17 +581,15 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
         presupuestosEsqueleto()
     } else if (estado.listo && !estado.sinPresupuestos) {
         item {
-            MinCard(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(22.dp),
+            Superficie(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
             ) {
                 Text(estado.tituloDelGasto, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 // La protagonista de esta pantalla, como «Tu plata» en el Inicio y la deuda
                 // total en Créditos: misma letra y un renglón siempre.
-                CifraProtagonista(formatCOP(estado.totalSpent), color = Movi.colores.texto)
-                Spacer(Modifier.height(6.dp))
+                Cifra(estado.totalSpent, VarianteDeCifra.Heroe)
+                Spacer(Modifier.height(Espacio.xxs))
                 Text(
                     text = "de ${formatCOP(estado.totalLimit)}",
                     color = Movi.colores.textoMedio,
@@ -580,36 +598,27 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
                 val warnCount = estado.warnCount
                 val overCount = estado.overCount
                 if (warnCount + overCount > 0) {
-                    Spacer(Modifier.height(14.dp))
-                    Hairline()
-                    Spacer(Modifier.height(14.dp))
-                    // Las insignias dicen lo MISMO que las tarjetas de abajo.
-                    //
-                    // Antes el encabezado rotulaba «Cerca del límite» en amarillo a los
-                    // presupuestos que las tarjetas pintan verdes — y uno de ellos es el
-                    // que está justo en el límite, del que el comentario de la tarjeta
-                    // dice literalmente «no está cerca, está justo ahí». La misma pantalla
-                    // se contradecía a sí misma en color y en palabra.
-                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        if (overCount > 0) {
-                            AlertBadge("Sobrepasados", overCount, Movi.colores.sale)
-                        }
-                        if (warnCount > 0) {
-                            AlertBadge("Sin margen o cerca", warnCount, Movi.colores.entra)
-                        }
+                    Spacer(Modifier.height(Espacio.s))
+                    // Las píldoras dicen lo MISMO que las filas de abajo, con el mismo tono: el
+                    // rojo para lo sobrepasado y el ámbar para lo que está sin margen o cerca
+                    // (decisión del 13-oct, ver [colorDelEstadoDePresupuesto]).
+                    Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                        if (overCount > 0) Pildora("Sobrepasados · $overCount", TonoDePildora.Peligro)
+                        if (warnCount > 0) Pildora("Sin margen o cerca · $warnCount", TonoDePildora.Aviso)
                     }
                 }
             }
         }
 
         item {
-            Spacer(Modifier.height(20.dp))
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            Spacer(Modifier.height(Medida.entreSecciones))
+            Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
                 val progresses = estado.progresses
-                MinSectionHeader(title = "Categorías", count = progresses.size)
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    progresses.forEach { p ->
-                        BudgetCard(p, onClick = { estado.sheet = Sheet.Edit(p.budget) })
+                Seccion(titulo = "Categorías", conteo = progresses.size)
+                Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                    progresses.forEachIndexed { i, p ->
+                        FilaDePresupuesto(p, onClick = { estado.sheet = Sheet.Edit(p.budget) })
+                        if (i < progresses.lastIndex) Separador(SangriaDeSeparador.ConInicio)
                     }
                 }
             }
@@ -728,44 +737,26 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                     // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la
                     // pantalla quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En esta
                     // pantalla no hay otra cosa que se pueda crear, así que la palabra alcanza.
-                    { NewItemButton(label = "Nuevo", onClick = { estado.abrirNuevo() }) }
+                    {
+                        Boton(
+                            texto = "Nuevo",
+                            onClick = { estado.abrirNuevo() },
+                            variante = VarianteDeBoton.Secundario,
+                            tamano = TamanoDeBoton.S,
+                            icono = Icons.Rounded.Add,
+                        )
+                    }
                 } else null,
             )
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(bottom = 80.dp),
+                contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl),
             ) {
                 presupuestos(estado)
             }
         }
 
         HojasDePresupuestos(estado)
-    }
-}
-
-/**
- * El número de una insignia de [AlertBadge]. Tamaño suelto a propósito: el número grande de un
- * contador en la tarjeta; `cifra` (42) no cabe y `titular` (19) es para títulos.
- *
- * **Con su interlineado declarado** (ola B). Antes eran 22 sp sobre el interlineado de `monto`
- * (18 sp): el renglón medía lo que pedía la fuente —28 dp, medido con el motor de texto real— y
- * el esqueleto de la tarjeta no tenía de dónde sacar ese número. Declarado, el renglón mide lo
- * mismo que antes y [presupuestosEsqueleto] lo lee de acá.
- */
-@Composable
-private fun estiloDelContador(): TextStyle = Movi.textos.monto.copy(fontSize = 22.sp, lineHeight = 28.sp)
-
-@Composable
-private fun AlertBadge(label: String, count: Int, color: Color) {
-    Column {
-        Text(
-            text = "$count",
-            style = estiloDelContador(),
-            fontWeight = FontWeight.Medium,
-            color = color,
-            letterSpacing = (-0.4).sp,
-        )
-        Text(label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
     }
 }
 
@@ -794,114 +785,43 @@ internal fun colorDelEstadoDePresupuesto(estado: EstadoDePresupuesto): Color = w
     EstadoDePresupuesto.DENTRO -> Movi.colores.entra
 }
 
+/** El tono de la píldora y de la barra de un presupuesto: el mismo semáforo de [colorDelEstadoDePresupuesto]. */
+private fun tonoDelPresupuesto(estado: EstadoDePresupuesto): Pair<TonoDePildora, TonoDeBarra> = when (estado) {
+    EstadoDePresupuesto.EXCEDIDO_MUCHO -> TonoDePildora.Peligro to TonoDeBarra.Peligro
+    EstadoDePresupuesto.EXCEDIDO_POCO,
+    EstadoDePresupuesto.AL_LIMITE,
+    EstadoDePresupuesto.CERCA -> TonoDePildora.Aviso to TonoDeBarra.Aviso
+    EstadoDePresupuesto.DENTRO -> TonoDePildora.Exito to TonoDeBarra.Exito
+}
+
+/**
+ * **Un presupuesto, como fila del sistema** (ola R4; era una tarjeta por categoría): el ícono de la
+ * categoría, su nombre, «$290.340 de $200.000» y el porcentaje en una [Pildora] del semáforo. Debajo,
+ * colgando de la fila, la barra y lo que queda o lo que se pasó. Tocarla abre la hoja de editar.
+ */
 @Composable
-private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
-    val barColor = colorDelEstadoDePresupuesto(p.state)
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
+private fun FilaDePresupuesto(p: BudgetProgress, onClick: () -> Unit) {
+    val (tonoDePildora, tonoDeBarra) = tonoDelPresupuesto(p.state)
+    Fila(
+        titulo = p.budget.category,
+        // «de» y no «/»: deja explícito que el límite es del período. Sin «este mes»: con corte 25
+        // ninguno de los dos montos es «este mes»; el rango está en el título de la tarjeta de arriba.
+        subtitulo = "${formatCOP(p.spent)} de\u00A0${formatCOP(p.budget.monthlyLimit)}",
+        inicio = { IconoDeCategoria(p.budget.category) },
+        final = { Pildora("${p.pct}%", tonoDePildora) },
         onClick = onClick,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
-                modifier = Modifier.weight(1f, fill = false),
-            ) {
-                // Task 3 (Ola B): el ícono de la categoría, chico — el mismo que ya identifica a
-                // «Comida» en Movimientos y en el Inicio, acá junto a su nombre.
-                IconoDeCategoria(p.budget.category, tamano = TamanoDeIconoDeCategoria.Chico)
-                Text(
-                    text = p.budget.category,
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                    letterSpacing = (-0.1).sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            // F15: el chevron es lo que insinúa que la tarjeta se toca — mismo ícono que usa la
-            // guía de primeros pasos del Inicio (ver ChevronRight).
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "${p.pct}%",
-                    // Dato de apoyo junto al chevron: la talla del apoyo, tabular como un monto.
-                    style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
-                    color = barColor,
-                    fontWeight = FontWeight.Medium,
-                )
-                ChevronRight()
-            }
+    )
+    BajoLaFila {
+        BarraDeProgreso(fraccion = p.pctRaw, tono = tonoDeBarra)
+        val tail = when (p.state) {
+            EstadoDePresupuesto.EXCEDIDO_MUCHO,
+            EstadoDePresupuesto.EXCEDIDO_POCO -> "Sobrepasado · ${formatCOP(-p.remaining)}"
+            // Ni «sobrepasado» (no se pasó) ni «cerca» (no está cerca, está justo ahí).
+            EstadoDePresupuesto.AL_LIMITE -> "Sin margen · gastaste justo el límite"
+            EstadoDePresupuesto.CERCA -> "Cerca del límite"
+            else -> "${formatCOP(p.remaining)} disponibles"
         }
-        Spacer(Modifier.height(10.dp))
-        // **Cada lado con su parte del ancho.** Antes los dos iban sin peso: con «Sobrepasado ·
-        // $50.000» a la derecha, ese texto se partía en tres renglones y se dibujaba ENCIMA de
-        // «este mes». Visto en la web a 390 dp. Ahora el monto se lleva más ancho, el aviso menos,
-        // y los dos parten renglón adentro de su espacio en vez de pisarse.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // F16: "de $2.000.000" en vez de "/ $2.000.000" — deja explícito que el límite es del
-            // período sin depender solo del texto chico bajo el monto en la hoja.
-            //
-            // Sin el «este mes» final. Con corte 25 la fila decía «$290.340 de
-            // $200.000 este mes» sobre un período que va del 25 de agosto al 24 de septiembre —
-            // ninguno de los dos es «este mes». El rango exacto ya está arriba, en el título de la
-            // tarjeta ([tituloDelGastoDelPeriodo]) y en Plan ([rangoLegibleDe]); acá alcanza con
-            // el límite solo.
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = Movi.colores.texto)) {
-                        append(formatCOP(p.spent))
-                    }
-                    // Espacio que no corta: si hace falta partir, se parte antes de «de».
-                    append(" de\u00A0${formatCOP(p.budget.monthlyLimit)}")
-                },
-                style = Movi.textos.monto,
-                color = Movi.colores.textoMedio,
-                letterSpacing = (-0.3).sp,
-                modifier = Modifier.weight(1.7f),
-            )
-            val tail = when (p.state) {
-                EstadoDePresupuesto.EXCEDIDO_MUCHO,
-                EstadoDePresupuesto.EXCEDIDO_POCO -> "Sobrepasado · ${formatCOP(-p.remaining)}"
-                // Ni «sobrepasado» (no se pasó) ni «cerca» (no está cerca, está justo ahí).
-                EstadoDePresupuesto.AL_LIMITE -> "Sin margen · gastaste justo el límite"
-                EstadoDePresupuesto.CERCA -> "Cerca del límite"
-                else -> "${formatCOP(p.remaining)} disponibles"
-            }
-            Text(
-                tail,
-                style = Movi.textos.apoyo,
-                color = barColor,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(2.dp)
-                .clip(RoundedCornerShape(1.dp))
-                .background(Movi.colores.hilo)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(p.pctRaw.coerceAtMost(1f))
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(barColor)
-            )
-        }
+        Text(tail, style = Movi.textos.apoyo, color = colorDelEstadoDePresupuesto(p.state))
     }
 }
 
@@ -962,8 +882,7 @@ private fun BudgetSheet(
                 style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                letterSpacing = (-0.2).sp,
-                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )
 
             // Category
@@ -989,13 +908,12 @@ private fun BudgetSheet(
                 // (spentByCategoryForPeriod), no por un id estable — renombrar corta ese cruce
                 // para los movimientos viejos.
                 if (onDelete != null) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(
                         text = "El gasto se cruza por nombre: si renombras \"$initialCategory\" a otra cosa, " +
                             "los movimientos que digan \"$initialCategory\" dejan de contar aquí.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 15.sp,
                     )
                 }
                 // La verdad sobre la categoría escrita, ANTES de guardar. El dueño creó un
@@ -1003,12 +921,11 @@ private fun BudgetSheet(
                 // y la app lo dejó crear algo que no vigilaba nada, en silencio. Ver
                 // [avisoDeCategoria].
                 gastoPorCategoria?.let { avisoDeCategoria(category, it, ::formatCOP) }?.let { aviso ->
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(
                         text = aviso.texto,
                         style = Movi.textos.apoyo,
                         color = if (aviso.esAdvertencia) Movi.colores.aviso else Movi.colores.textoMedio,
-                        lineHeight = 15.sp,
                     )
                     // Los movimientos del período que se LLAMAN como la categoría pero están en
                     // otra. Es la otra mitad de lo que el dueño pidió: el aviso le dice qué
@@ -1016,7 +933,7 @@ private fun BudgetSheet(
                     // eligió vigilar. Ver [gastosQueSuenanA].
                     val candidatos = gastosQueSuenanA(category, dias, ventana)
                     if (candidatos.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         // El texto dice CÓMO coincidió, no solo que coincidió: «llamado» cuando
                         // la descripción es el nombre de la categoría, «que mencionan» cuando
                         // apenas la nombra («Mercado Éxito»). Si el dueño no puede ver por qué se
@@ -1035,16 +952,15 @@ private fun BudgetSheet(
                             },
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
-                            lineHeight = 16.sp,
                         )
                         candidatos.take(3).forEach { (ev, _) ->
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(Espacio.xs))
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(Radio.m))
                                     .clickable { onAsociar(ev, category.trim()) }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    .padding(horizontal = Espacio.xs, vertical = Espacio.xs),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Column(Modifier.weight(1f)) {
@@ -1056,8 +972,8 @@ private fun BudgetSheet(
                         }
                     }
                     if (aviso.sugerencias.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Spacer(Modifier.height(Espacio.xs))
+                        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                             aviso.sugerencias.forEach { sugerida ->
                                 Text(
                                     text = sugerida,
@@ -1065,9 +981,9 @@ private fun BudgetSheet(
                                     color = Movi.colores.marca,
                                     fontWeight = FontWeight.Medium,
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
+                                        .clip(RoundedCornerShape(Radio.s))
                                         .clickable { category = sugerida }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        .padding(horizontal = Espacio.xs, vertical = Espacio.xs),
                                 )
                             }
                         }
@@ -1076,14 +992,14 @@ private fun BudgetSheet(
             } else {
                 // Al editar un presupuesto existente la categoría es su clave — no se cambia acá.
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("Categoría", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
-                    Spacer(Modifier.height(8.dp))
+                    Text("Categoría", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(
                         text = category,
                         style = Movi.textos.titulo,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
-                        modifier = Modifier.padding(vertical = 6.dp),
+                        modifier = Modifier.padding(vertical = Espacio.xs),
                     )
                 }
             }
@@ -1113,29 +1029,27 @@ private fun BudgetSheet(
                 faltanMovimientosPorVer(gasto[category.trim()] ?: 0L, movimientos.sumOf { com.jvillada.movi.shared.model.montoContado(it) })
             } ?: 0L
             if (faltante != 0L && movimientos.isEmpty() && category.isNotBlank()) {
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(Espacio.m))
                 Hairline()
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(
                     // Igual que el renglón de más abajo: se nombra la diferencia, no una causa
                     // que no se puede verificar desde acá.
                     text = "Hay ${formatCOP(faltante)} contados en esta categoría que no aparecen en esta lista.",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 15.sp,
                 )
             }
             if (movimientos.isNotEmpty()) {
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(Espacio.m))
                 Hairline()
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = if (movimientos.size == 1) "1 movimiento" else "${movimientos.size} movimientos",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         fontWeight = FontWeight.Medium,
-                        letterSpacing = 0.4.sp,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
@@ -1158,7 +1072,7 @@ private fun BudgetSheet(
                 // real (un SMS que otro aparato ya subió) sigue siendo posible — pero ahora
                 // constata lo que se puede ver y no adivina por qué.
                 if (faltante != 0L) {
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(
                         text = if (faltante > 0L)
                             "El total de arriba cuenta ${formatCOP(faltante)} más de lo que suma esta lista."
@@ -1166,13 +1080,12 @@ private fun BudgetSheet(
                             "Esta lista suma ${formatCOP(-faltante)} más de lo que cuenta el total de arriba.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 15.sp,
                     )
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 movimientos.forEach { ev ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = Espacio.xs),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
@@ -1188,7 +1101,7 @@ private fun BudgetSheet(
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             // Amount display
             Column(
@@ -1198,21 +1111,17 @@ private fun BudgetSheet(
                 Text(
                     // F14: separador de miles mientras se escribe, no solo al guardar.
                     text = "$" + formatAmountKeypadDisplay(amount),
-                    // Tamaño suelto a propósito: el monto que se está tecleando; ningún estilo de la escala llega a 48.
-                    fontSize = 48.sp,
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Normal,
+                    // La cifra héroe de la hoja (ola R4: era 48 sp a mano).
+                    style = Movi.textos.cifra,
                     color = Movi.colores.texto,
-                    letterSpacing = (-1.8).sp,
-                    lineHeight = 48.sp,
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 // F16: decía "Límite mensual · COP" — la moneda ya es obvia en toda la app, pero
                 // que se reinicia cada mes no, y es la pregunta real ("¿por cuánto tiempo?").
-                Text("Límite mensual · se reinicia cada mes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
+                Text("Límite mensual · se reinicia cada mes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
 
             // Numpad
             Column {
@@ -1227,19 +1136,17 @@ private fun BudgetSheet(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(48.dp)
+                                    .height(Medida.objetivoTactil)
                                     .clickable { onKey(key) },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (key == "⌫") {
-                                    Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = Movi.colores.texto, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = Movi.colores.texto, modifier = Modifier.size(Icono.m))
                                 } else {
                                     Text(
                                         text = key,
-                                        // Tamaño suelto a propósito: tecla del teclado numérico; `titular` (19) no es para dígitos y `cifra` (42) no cabe.
-                                        fontSize = 20.sp,
-                                        style = Movi.textos.monto,
-                                        fontWeight = FontWeight.Normal,
+                                        // Una tecla del teclado numérico: `titular` (ola R4: era 20 sp a mano).
+                                        style = Movi.textos.titular,
                                         color = Movi.colores.texto,
                                     )
                                 }
@@ -1250,55 +1157,37 @@ private fun BudgetSheet(
             }
 
             error?.let {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
 
             // Actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 if (onDelete != null) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
-                            .clickable(onClick = onDelete),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "Eliminar",
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.sale,
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .weight(if (onDelete != null) 1.4f else 1f)
-                        .height(50.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                        // Ola 2 #2: recorte al guardar — canSave ya exige no-vacío, pero
-                        // "  Comida  " pasaba esa guarda y se guardaba con espacios.
-                        .clickable(enabled = canSave) { onSave(category.trim(), parsedAmount) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "Guardar",
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = if (canSave) Movi.colores.marca else Movi.colores.textoMedio,
+                    Boton(
+                        texto = "Eliminar",
+                        onClick = onDelete,
+                        variante = VarianteDeBoton.Peligro,
+                        modifier = Modifier.weight(1f),
+                        anchoCompleto = true,
                     )
                 }
+                // Ola 2 #2: recorte al guardar — canSave ya exige no-vacío, pero
+                // "  Comida  " pasaba esa guarda y se guardaba con espacios.
+                Boton(
+                    texto = "Guardar",
+                    onClick = { onSave(category.trim(), parsedAmount) },
+                    habilitado = canSave,
+                    modifier = Modifier.weight(if (onDelete != null) 1.4f else 1f),
+                    anchoCompleto = true,
+                )
             }
             if (!canSave && missingFieldMessage != null) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(
                     text = missingFieldMessage,
                     style = Movi.textos.apoyo,
@@ -1308,7 +1197,7 @@ private fun BudgetSheet(
                 )
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
         }
     }
 }
@@ -1336,41 +1225,30 @@ const val TAG_ESQUELETO_FILA_DE_PRESUPUESTO: String = "esqueleto-fila-de-presupu
  */
 private fun LazyListScope.presupuestosEsqueleto() {
     item {
-        MinCard(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(22.dp),
+        Superficie(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
         ) {
             // El nombre del mes también espera: sale del período del dueño, que llega con el
             // perfil — con corte 25, el 26 ya es el mes siguiente.
             LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Espacio.xs))
             LineaEsqueleto(
                 fraccionDelAncho = 0.55f,
                 estilo = Movi.textos.cifra,
                 modifier = Modifier.testTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO),
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xxs))
             LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.monto)
-            Spacer(Modifier.height(14.dp))
-            Hairline()
-            Spacer(Modifier.height(14.dp))
-            // Las dos insignias de [AlertBadge]: el número y su rótulo, a 20 dp una de otra.
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                repeat(2) {
-                    Column {
-                        BloqueEsqueleto(alto = altoDeUnRenglon(estiloDelContador()), ancho = 24.dp)
-                        BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 76.dp)
-                    }
-                }
-            }
+            Spacer(Modifier.height(Espacio.s))
+            // Las píldoras de los avisos: el alto de una píldora.
+            BloqueEsqueleto(alto = Medida.altoDePildora, ancho = Medida.avatar * 3)
         }
     }
     item {
-        Spacer(Modifier.height(20.dp))
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
             RotuloDeSeccionEsqueleto()
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                 repeat(4) { FilaDePresupuestoEsqueleto() }
             }
         }
@@ -1380,44 +1258,31 @@ private fun LazyListScope.presupuestosEsqueleto() {
 /** Una categoría que todavía no llegó, con la forma de [BudgetCard]: ícono, nombre y porcentaje, «$… de $…» y la barra. */
 @Composable
 private fun FilaDePresupuestoEsqueleto() {
-    MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_ESQUELETO_FILA_DE_PRESUPUESTO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // Ola B, tarea 3 (fix round 1): el círculo de 24 dp de `IconoDeCategoria` (tamaño
-            // `Chico`), al mismo `Movi.espacios.corto` (8 dp) del nombre que usa `BudgetCard` —
-            // sin esto el título arrancaba ~32 dp más a la izquierda que en la fila real.
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
-            ) {
-                CirculoEsqueleto(24.dp)
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_ESQUELETO_FILA_DE_PRESUPUESTO)) {
+        // La forma de la [Fila] de verdad (64 de alto, el círculo, dos renglones y la píldora), con
+        // el tag en el título para medir que arranca en el mismo x que el real.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = Medida.altoDeFilaDoble)
+                .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+        ) {
+            CirculoEsqueleto(Medida.avatar)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
                 LineaEsqueleto(
                     fraccionDelAncho = 0.45f,
-                    estilo = Movi.textos.titulo,
+                    estilo = Movi.textos.cuerpo,
                     modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
                 )
+                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
             }
-            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 32.dp)
-            Spacer(Modifier.width(6.dp))
-            // El lugar del chevron (18 dp).
-            Spacer(Modifier.size(18.dp))
+            BloqueEsqueleto(alto = Medida.altoDePildora, ancho = Medida.avatar)
         }
-        Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.weight(1.7f)) { LineaEsqueleto(fraccionDelAncho = 0.8f, estilo = Movi.textos.monto) }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                LineaEsqueleto(fraccionDelAncho = 0.8f, estilo = Movi.textos.apoyo)
-            }
+        BajoLaFila {
+            BloqueEsqueleto(alto = Medida.altoDeBarraDeProgreso)
+            LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
         }
-        Spacer(Modifier.height(8.dp))
-        BloqueEsqueleto(alto = 2.dp)
     }
 }

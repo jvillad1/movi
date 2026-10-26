@@ -3,7 +3,6 @@ package com.jvillada.movi.ui.plan
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,8 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.History
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.periodoActual
@@ -39,14 +39,20 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.budgets.HojasDePresupuestos
 import com.jvillada.movi.ui.budgets.presupuestos
 import com.jvillada.movi.ui.budgets.rememberEstadoDePresupuestos
-import com.jvillada.movi.ui.components.ChevronRight
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
-import com.jvillada.movi.ui.components.MinSectionHeader
-import com.jvillada.movi.ui.components.NewItemButton
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.PanelDeTablero
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
@@ -77,14 +83,26 @@ import kotlinx.datetime.Clock
  * [planEnDosColumnas].
  */
 
-/** «Pagos del mes»: el tablero de Recurrentes. Es el segmento con el que se entra por la pestaña. */
+/** «Pagos»: el tablero de Recurrentes. Es el segmento con el que se entra por la pestaña. */
 const val SEGMENTO_PAGOS: Int = 0
 
 /** «Presupuestos». */
 const val SEGMENTO_PRESUPUESTOS: Int = 1
 
 /** Los rótulos del selector, en el orden de los índices de arriba. */
-private val ROTULOS_DE_LOS_SEGMENTOS = listOf("Pagos del mes", "Presupuestos")
+private val ROTULOS_DE_LOS_SEGMENTOS = listOf(ROTULO_SEGMENTO_PAGOS, "Presupuestos")
+
+/**
+ * El rótulo del segmento de los pagos. Era «Pagos del mes», pero el período del dueño no es el mes de
+ * calendario (su corte es el 25): «Pagos» a secas, y la sección de adentro dice «Pagos del período».
+ */
+const val ROTULO_SEGMENTO_PAGOS: String = "Pagos"
+
+/**
+ * El aire entre el selector y lo primero de su segmento: el mismo en «Pagos» y en «Presupuestos»
+ * (el vacío de Presupuestos lo usa también), para que cambiar de segmento no mueva el comienzo.
+ */
+val AIRE_DEBAJO_DEL_SELECTOR = Espacio.m
 
 /** La línea del rango del período bajo el título, y su esqueleto mientras el perfil no contestó. */
 const val TAG_LINEA_DEL_PERIODO_DE_PLAN: String = "linea-del-periodo-de-plan"
@@ -155,22 +173,24 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             onReintentar = { pagos.estado.recargar() },
         )
     }
-    // Ola 4: lo que viene. Debajo de «Cuánto puedes gastar», con la misma lista del período.
+    // Ola 4: lo que viene. **El orden de Plan (ola R4)**: «Cuánto puedes gastar» → «Pagos del
+    // período» → «Tu plata, día a día» → lo que se repite y las suscripciones; Presupuestos es el
+    // segundo segmento.
     //
-    // **Dónde va, y por qué no pegada a la tarjeta en una columna.** Plan tiene una regla vieja y
-    // probada (`PlanScreenTest`): al llegar los datos ni la tarjeta, ni «Tus períodos», ni el
-    // selector se corren más de 8 dp. La caja tiene un alto que depende de lo que diga (un día en
+    // **Por qué la caja va debajo del selector y no pegada a la tarjeta.** Plan tiene una regla
+    // vieja y probada (`PlanScreenTest`): al llegar los datos ni la tarjeta, ni «Tus períodos», ni
+    // el selector se corren más de 8 dp. La caja tiene un alto que depende de lo que diga (un día en
     // rojo, una tarjeta sin mínimo), así que encima del selector lo empujaba ~100 dp. En pantalla
-    // ancha va en la columna del disponible, debajo de todo; en una columna, primera cosa de «Pagos
-    // del mes»: debajo del selector, encima de los pagos que la mueven.
-    val cajaProyectada: @Composable (androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp) -> Unit = { arriba, abajo ->
+    // ancha va en la columna del disponible, debajo de todo; en una columna, dentro de «Pagos»,
+    // justo después de la lista del período: los pagos primero, y debajo cómo mueven tu plata.
+    val cajaProyectada: @Composable (Boolean, Boolean) -> Unit = { arriba, abajo ->
         SeccionCajaProyectada(
             data = data,
             cargando = disponible.cargando,
             recarga = pagos.estado.recargas,
             onNavigate = onNavigate,
-            espacioArriba = arriba,
-            espacioAbajo = abajo,
+            aireArriba = arriba,
+            aireAbajo = abajo,
         )
     }
     val tusPeriodos: @Composable () -> Unit = {
@@ -186,13 +206,15 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     // Lo de debajo del selector: el tablero de Recurrentes o los presupuestos. Perezoso siempre.
     fun LazyListScope.segmentoElegido(dosColumnas: Boolean) {
         if (enPagos) {
-            item(key = "aire-de-pagos") { Spacer(Modifier.height(Movi.espacios.amplio)) }
-            // En una columna la caja va acá (ver `cajaProyectada`); en dos ya está a la izquierda.
-            if (!dosColumnas) {
-                item(key = "caja-proyectada") { cajaProyectada(0.dp, Movi.espacios.seccion) }
+            item(key = "aire-de-pagos") { Spacer(Modifier.height(AIRE_DEBAJO_DEL_SELECTOR)) }
+            // En una columna la caja va después de la lista del período (ver `cajaProyectada`); en
+            // dos ya está a la izquierda.
+            val caja: (LazyListScope.() -> Unit)? = if (dosColumnas) null else {
+                { item(key = "caja-proyectada") { cajaProyectada(false, true) } }
             }
             if (esqueletoDePagos) {
                 tableroDeRecurrentesEsqueleto()
+                caja?.invoke(this)
             } else {
                 tableroDeRecurrentes(
                     estado = pagos.estado,
@@ -201,6 +223,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                     ajustesDelPeriodo = ajustesDelPeriodo,
                     accountNames = pagos.accountNames,
                     onNavigate = onNavigate,
+                    despuesDeLaLista = caja,
                 )
             }
         } else {
@@ -233,7 +256,13 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                         )
                     }
                     if (!enPagos && presupuestos.nuevoEnElEncabezado) {
-                        NewItemButton(label = "Nuevo", onClick = { presupuestos.abrirNuevo() })
+                        Boton(
+                            texto = "Nuevo",
+                            onClick = { presupuestos.abrirNuevo() },
+                            variante = VarianteDeBoton.Secundario,
+                            tamano = TamanoDeBoton.S,
+                            icono = Icons.Rounded.Add,
+                        )
                     }
                 },
             )
@@ -248,21 +277,21 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                             .fillMaxHeight()
                             .testTag(TAG_COLUMNA_DEL_DISPONIBLE)
                             .verticalScroll(scrollDelDisponible)
-                            .padding(bottom = 80.dp),
+                            .padding(bottom = Medida.botonFlotante + Espacio.xl),
                     ) {
                         lineaDelPeriodo()
                         cuantoPuedesGastar()
                         tusPeriodos()
-                        cajaProyectada(Movi.espacios.seccion, 0.dp)
+                        cajaProyectada(true, false)
                     }
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LOS_PAGOS),
-                        contentPadding = PaddingValues(bottom = 80.dp),
+                        contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl),
                     ) {
                         item(key = "segmentos") {
                             // A la altura de la línea del período de la izquierda (su aire `corto`).
-                            Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio).padding(top = Movi.espacios.corto)) {
+                            Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.xs)) {
                                 selector()
                             }
                         }
@@ -273,14 +302,14 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 80.dp),
+                    contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl),
                 ) {
                     item(key = "periodo") { lineaDelPeriodo() }
                     item(key = "disponible") { cuantoPuedesGastar() }
                     item(key = "tus-periodos") { tusPeriodos() }
                     item(key = "segmentos") {
-                        Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-                            Spacer(Modifier.height(Movi.espacios.seccion))
+                        Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
+                            Spacer(Modifier.height(Medida.entreSecciones))
                             selector()
                         }
                     }
@@ -291,7 +320,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
         } // PanelDeTablero
         SnackbarHost(
             hostState = pagos.aviso,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Espacio.s),
         )
         HojasDelTableroDeRecurrentes(pagos.estado)
         HojasDePresupuestos(presupuestos)
@@ -313,10 +342,8 @@ private fun LineaDelPeriodo(texto: String?, reservar: Boolean) {
     // abajo, como siempre, y no 8 + 16 vacíos sobre la tarjeta.
     val hayLinea = texto != null || reservar
     Column(
-        modifier = Modifier.fillMaxWidth().padding(
-            start = Movi.espacios.margen,
-            end = Movi.espacios.margen,
-            top = if (hayLinea) Movi.espacios.corto else 0.dp,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).then(
+            if (hayLinea) Modifier.padding(top = Espacio.xs) else Modifier,
         ),
     ) {
         when {
@@ -332,7 +359,7 @@ private fun LineaDelPeriodo(texto: String?, reservar: Boolean) {
                 modifier = Modifier.testTag(TAG_LINEA_DEL_PERIODO_DE_PLAN_ESQUELETO),
             )
         }
-        Spacer(Modifier.height(Movi.espacios.amplio))
+        Spacer(Modifier.height(Espacio.m))
     }
 }
 
@@ -362,13 +389,9 @@ private fun SeccionCuantoPuedesGastar(disponible: DisponibleDelPlan, onReintenta
             if (cifras != null) {
                 TarjetaDelDisponible(titulo = TITULO_CUANTO_PUEDES_GASTAR, disponible = cifras)
             } else {
-                Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-                    MinSectionHeader(title = TITULO_CUANTO_PUEDES_GASTAR)
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(Movi.espacios.amplio),
-                    ) {
+                Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
+                    Seccion(titulo = TITULO_CUANTO_PUEDES_GASTAR)
+                    Superficie(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             text = "Anota tus ingresos y tus cuentas para saber cuánto puedes gastar en el período",
                             style = Movi.textos.cuerpo,
@@ -385,8 +408,8 @@ private fun SeccionCuantoPuedesGastar(disponible: DisponibleDelPlan, onReintenta
 
 @Composable
 private fun NoSePudoLeerElDisponible(onReintentar: () -> Unit) {
-    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-        MinSectionHeader(title = TITULO_CUANTO_PUEDES_GASTAR)
+    Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
+        Seccion(titulo = TITULO_CUANTO_PUEDES_GASTAR)
         NoSePudoLeer("No pudimos calcular cuánto puedes gastar", onReintentar = onReintentar)
     }
 }
@@ -401,28 +424,21 @@ const val TAG_FILA_DE_TUS_PERIODOS: String = "fila-de-tus-periodos"
  */
 @Composable
 private fun FilaDeTusPeriodos(onClick: () -> Unit) {
-    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
+    Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
         // El mismo aire que hay entre cualquier par de secciones de la pantalla (y del Inicio): la
         // fila hablaba de otra cosa que la tarjeta de arriba y estaba pegada a ella, sin nada.
-        Spacer(Modifier.height(Movi.espacios.seccion))
-        MinCard(
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Superficie(
             modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_TUS_PERIODOS),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
-            onClick = onClick,
+            relleno = RellenoDeSuperficie.Lista,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column {
-                    Text("Tus períodos", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                    Spacer(Modifier.height(Movi.espacios.minimo))
-                    Text("Cómo te fue en cada ciclo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
-                ChevronRight()
-            }
+            Fila(
+                titulo = "Tus períodos",
+                subtitulo = "Cómo te fue en cada ciclo",
+                inicio = { IconoEnCirculo(Icons.Rounded.History) },
+                final = { Chevron() },
+                onClick = onClick,
+            )
         }
     }
 }
