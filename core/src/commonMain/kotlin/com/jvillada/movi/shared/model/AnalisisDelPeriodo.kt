@@ -143,12 +143,12 @@ fun analisisDelPeriodo(
         val dia = epochMillisToAppDate(e.timestamp)
         when {
             dia >= inicio && dia < siguiente -> {
-                porDia[inicio.daysUntil(dia)] += e.amount
+                porDia[inicio.daysUntil(dia)] += montoContado(e)
                 gastosDelPeriodo += e
             }
             cubierto && dia >= inicioDelAnterior && dia < inicio -> {
                 val i = inicioDelAnterior.daysUntil(dia)
-                porDiaDelAnterior[i] += e.amount
+                porDiaDelAnterior[i] += montoContado(e)
                 gastosDelAnteriorEnteros += i to e
             }
         }
@@ -191,9 +191,9 @@ fun analisisDelPeriodo(
         hasta = siguiente.minus(1, DateTimeUnit.DAY),
         porSemana = porSemana,
         tramos = tramos,
-        total = gastosDelPeriodo.sumOf { it.amount },
+        total = gastosDelPeriodo.sumOf { montoContado(it) },
         diasTranscurridos = transcurridos,
-        anteriorAMismaAltura = if (cubierto) delAnterior.sumOf { it.amount } else null,
+        anteriorAMismaAltura = if (cubierto) delAnterior.sumOf { montoContado(it) } else null,
         diasComparados = altura,
         gastos = gastosDelPeriodo,
         gastosDelAnterior = delAnterior,
@@ -257,10 +257,10 @@ fun filasDelAnalisis(
 ): List<FilaDelAnalisis> {
     val total = analisis.total
     val delAnterior = analisis.gastosDelAnterior.groupBy { claveDelAnalisis(it, vista) }
-        .mapValues { (_, l) -> l.sumOf { it.amount } }
+        .mapValues { (_, l) -> l.sumOf { montoContado(it) } }
     return analisis.gastos.groupBy { claveDelAnalisis(it, vista) }
         .map { (clave, movimientos) ->
-            val gasto = movimientos.sumOf { it.amount }
+            val gasto = movimientos.sumOf { montoContado(it) }
             val anterior = if (analisis.conComparacion) delAnterior[clave] ?: 0L else null
             // El más grande representa la fila: su marca es la que más pesa ahí.
             val muestra = movimientos.maxBy { it.amount }

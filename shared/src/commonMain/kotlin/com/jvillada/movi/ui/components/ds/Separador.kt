@@ -2,6 +2,9 @@ package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -9,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -81,7 +85,39 @@ fun BarraDeProgreso(
     fraccion: Float,
     modifier: Modifier = Modifier,
     tono: TonoDeBarra = TonoDeBarra.Marca,
+    /**
+     * Una marca vertical sobre la pista, en esta fracción (0–1): «la mitad» en «Quién puso qué» de
+     * Espacios. `null`, ninguna.
+     */
+    marca: Float? = null,
 ) {
+    if (marca == null) {
+        Pista(fraccion, tono, modifier)
+        return
+    }
+    Box(
+        modifier = modifier.fillMaxWidth().height(Medida.altoDeMarcaDeBarra),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Pista(fraccion, tono, Modifier)
+        Row(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+            Spacer(Modifier.fillMaxWidth(marca.coerceIn(0f, 1f)))
+            Box(
+                modifier = Modifier
+                    .width(Medida.trazoDeCarga)
+                    .fillMaxHeight()
+                    .background(Movi.colores.texto)
+                    .testTag(TAG_MARCA_DE_BARRA),
+            )
+        }
+    }
+}
+
+/** El `testTag` de la marca de una [BarraDeProgreso]. */
+const val TAG_MARCA_DE_BARRA: String = "ds:marca-de-barra"
+
+@Composable
+private fun Pista(fraccion: Float, tono: TonoDeBarra, modifier: Modifier) {
     val recortada = fraccion.coerceIn(0f, 1f)
     val forma = RoundedCornerShape(Radio.pill)
     Box(

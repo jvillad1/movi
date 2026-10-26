@@ -151,13 +151,14 @@ class InicioDelRedisenoTest {
     // ── La cuadrícula ────────────────────────────────────────────────────────
 
     @Test
-    fun `Repartir no se muestra hasta la ola de Espacios`() {
-        assertEquals(false, REPARTIR_ESTA_LISTO)
+    fun `con la ola de Espacios Repartir se muestra en su lugar, y apagado se salta`() {
+        assertEquals(true, REPARTIR_ESTA_LISTO)
         assertEquals(
-            listOf("Anotar gasto", "Anotar ingreso", "Traspasar", "Pagar tarjeta", "Subir comprobante", "Revisar avisos", "Preguntar a Movi"),
+            listOf("Anotar gasto", "Anotar ingreso", "Traspasar", "Pagar tarjeta", "Repartir", "Subir comprobante", "Revisar avisos", "Preguntar a Movi"),
             accionesDelInicio().map { it.rotulo },
         )
-        assertEquals(8, accionesDelInicio(repartirListo = true).size)
+        assertEquals(7, accionesDelInicio(repartirListo = false).size)
+        assertTrue(accionesDelInicio(repartirListo = false).none { it == AccionDelInicio.REPARTIR })
     }
 
     @Test
@@ -172,6 +173,7 @@ class InicioDelRedisenoTest {
         assertNull(destinoDeLaAccion(AccionDelInicio.SUBIR_COMPROBANTE), "elegir un archivo no es una pantalla")
         assertEquals(Screen.PorRevisar, destinoDeLaAccion(AccionDelInicio.REVISAR_AVISOS))
         assertEquals(Screen.AIChat(), destinoDeLaAccion(AccionDelInicio.PREGUNTAR_A_MOVI))
+        assertEquals(Screen.Espacios, destinoDeLaAccion(AccionDelInicio.REPARTIR))
     }
 
     @Test

@@ -41,6 +41,7 @@ Las reglas que se repiten tienen nombre propio (`Medida`), y se usa el nombre, n
 | `Medida.altoChico` | 36 — botón chico y filtro, solo dentro de una tarjeta |
 | `Medida.altoDeEncabezado` | 56 |
 | `Medida.avatar` / `avatarGrande` / `accionRapida` | 40 / 48 / 56 |
+| `Medida.altoDeMarcaDeBarra` | 12 — la marca sobre una `BarraDeProgreso` («la mitad» en Espacios) |
 | `Medida.altoDeTarjetaDeCuenta` | 128 — la tarjeta de una cuenta en el carrusel (ola R1) |
 
 `Movi.espacios.*` sigue existiendo (lo nombra media app) y ahora sale de acá. **Con la R0 cambiaron en
@@ -216,7 +217,13 @@ Encabezado("Movimientos", acciones = { BotonDeIcono(Icons.Rounded.Search, "Busca
 
 **`Vacio`** (es `VacioQueEnsena`), **`EsqueletoDeFila`** (mide lo mismo que la `Fila`), **`Separador`**
 (`hilo`, con sangría `Ninguna`, `Margen` o `ConInicio`) y **`BarraDeProgreso`** (pista en capa 3, tono
-del relleno).
+del relleno; con `marca` opcional, una raya vertical en esa fracción: «la mitad» de «Quién puso qué»).
+
+**`AvatarDePersona`** (R3) — una persona: su inicial en un círculo de `Medida.avatar`, en el lavado de
+su tono (`TonoDeIcono`). Los miembros de un espacio y quien pagó un gasto.
+```kotlin
+AvatarDePersona("Caro", tono = TonoDeIcono.Info)
+```
 
 ## 7. La regla de secciones
 

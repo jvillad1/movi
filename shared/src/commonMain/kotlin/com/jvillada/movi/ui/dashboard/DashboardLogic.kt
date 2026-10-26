@@ -958,7 +958,8 @@ fun spentByCategoryForPeriod(days: List<EventDay>, ventana: LongRange): Map<Stri
         .filter { it.timestamp in ventana }
         .filter { it.type == TransactionType.EXPENSE && cuentaEnGastosEIngresos(it) && it.currency == "COP" }
         .groupBy { it.category }
-        .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+        // Solo tu parte de un gasto repartido (R3, `montoContado` en :core), como `monthCashFlow`.
+        .mapValues { (_, txs) -> txs.sumOf { com.jvillada.movi.shared.model.montoContado(it) } }
 
 /**
  * **Lo que el Inicio recomienda mirar hoy**, armado con lo que ya cargó la pantalla.

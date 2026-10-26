@@ -123,6 +123,17 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido = trasEscribir { delegado.updateDestino(id, destino) }
     override suspend fun guardarApartado(a: Apartado): Apartado = trasEscribir { delegado.guardarApartado(a) }
     override suspend fun quitarApartado(id: String): Unit = trasEscribir { delegado.quitarApartado(id) }
+    // R3 · Espacios: repartir o saldar cambia «Salió» y «Te quedan».
+    override suspend fun guardarEspacio(espacio: com.jvillada.movi.shared.model.Espacio) =
+        trasEscribir { delegado.guardarEspacio(espacio) }
+    override suspend fun repartirMovimiento(espacioId: String, eventoId: String) =
+        trasEscribir { delegado.repartirMovimiento(espacioId, eventoId) }
+    override suspend fun quitarDelEspacio(espacioId: String, eventoId: String): Unit =
+        trasEscribir { delegado.quitarDelEspacio(espacioId, eventoId) }
+    override suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio) =
+        trasEscribir { delegado.anotarGastoDeOtro(espacioId, gasto) }
+    override suspend fun liquidarEspacio(espacioId: String, liquidacion: com.jvillada.movi.shared.model.LiquidacionDelEspacio) =
+        trasEscribir { delegado.liquidarEspacio(espacioId, liquidacion) }
     override suspend fun deleteDestino(id: String): Unit = trasEscribir { delegado.deleteDestino(id) }
     override suspend fun agregarIdentificador(id: String, pedido: com.jvillada.movi.shared.model.AgregarIdentificador) =
         trasEscribir { delegado.agregarIdentificador(id, pedido) }

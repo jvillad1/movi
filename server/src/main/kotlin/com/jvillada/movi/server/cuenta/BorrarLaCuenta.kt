@@ -18,6 +18,9 @@ import com.jvillada.movi.server.db.DebitosDescartados
 import com.jvillada.movi.server.db.DestinosDescartados
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.EnlacesCompartidos
+import com.jvillada.movi.server.db.Espacios
+import com.jvillada.movi.server.db.GastosDelEspacio
+import com.jvillada.movi.server.db.LiquidacionesDelEspacio
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.KnownDestinations
@@ -97,6 +100,9 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(Budgets, Budgets.userId),
     TablaDelUsuario(Goals, Goals.userId),
     TablaDelUsuario(Apartados, Apartados.userId),
+    TablaDelUsuario(Espacios, Espacios.userId),
+    TablaDelUsuario(GastosDelEspacio, GastosDelEspacio.userId),
+    TablaDelUsuario(LiquidacionesDelEspacio, LiquidacionesDelEspacio.userId),
     TablaDelUsuario(CategoryPrefs, CategoryPrefs.userId),
     TablaDelUsuario(AnomaliasDescartadas, AnomaliasDescartadas.userId),
     TablaDelUsuario(DebitosDescartados, DebitosDescartados.userId),

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.material.icons.rounded.Groups
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
 import com.jvillada.movi.ui.papeles.ArchivoCompartido
@@ -111,6 +112,9 @@ internal const val TAG_CERRAR_SUB_PICKER = "quickadd:cerrar-sub-picker"
 
 /** El campo de texto del sub-picker «Nota» — para encontrarlo en una prueba (Task 5). */
 internal const val TAG_CAMPO_DE_NOTA = "quickadd:campo-de-nota"
+
+/** El botón «Pagó otro» de Agregar (R3): un gasto que pagó otro miembro de un espacio. */
+const val TAG_PAGO_OTRO_EN_AGREGAR: String = "pago-otro-en-agregar"
 
 /** El botón «Subir comprobante o extracto» de Agregar (Ola 2). */
 const val TAG_SUBIR_PAPEL_EN_AGREGAR: String = "quickadd:subir-papel"
@@ -525,6 +529,12 @@ fun QuickAddScreen(
     // decir «Hoy» y guardar la fecha de mañana.
     // Ola 2 · «Compartir con Movi»: el papel elegido va a la cola de lo compartido y la hoja se
     // cierra; `App()` abre la de lectura encima de la pantalla.
+    // R3 · «Pagó otro»: con algún espacio, un gasto que pagó otro miembro se anota en su espacio
+    // (no es un movimiento de tus cuentas). Sin espacios no aparece nada.
+    var espaciosParaPagoOtro by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Espacio>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        espaciosParaPagoOtro = runCatching { Repositories.wallets.getEspacios() }.getOrDefault(emptyList())
+    }
     val elegirPapel = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
         PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
         onDismiss()
@@ -1415,6 +1425,14 @@ fun QuickAddScreen(
                                 hasNoAccounts = accountsLoaded && accounts.isEmpty(),
                                 onCreateAccount = { showCreateSheet = true },
                                 onSubirPapel = elegirPapel,
+                                onPagoOtro = if (pickers.typeIndex == PestanaDeAgregar.GASTO.indice && espaciosParaPagoOtro.isNotEmpty()) {
+                                    {
+                                        val unico = espaciosParaPagoOtro.singleOrNull()
+                                        onNavigate(if (unico != null) Screen.Espacio(unico.id, pagoOtro = true) else Screen.Espacios)
+                                    }
+                                } else {
+                                    null
+                                },
                             )
                         }
                     }
@@ -1498,6 +1516,8 @@ private fun EditorBody(
      * Va en el lugar que tenía la cámara falsa, al lado de guardar, para no mover nada de la hoja.
      */
     onSubirPapel: (() -> Unit)? = null,
+    /** R3 · «Pagó otro»: lo pagó otro miembro de un espacio. `null` sin espacios o fuera de «Gasto». */
+    onPagoOtro: (() -> Unit)? = null,
 ) {
     // Ola 13 — DE DÓNDE SALIERON ESTOS DOS SPACERS MÁS CHICOS (22→16 y 8→2).
     //
@@ -1813,9 +1833,30 @@ private fun EditorBody(
         // mismo tamaño, así la hoja no cambia de alto— va el de verdad (Ola 2): subir el papel y
         // que Movi lo lea.
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            // Con «Pagó otro» la fila toma el alto de sus hermanos (el botón de guardar), así la
+            // hoja no cambia de alto. Sin él, la fila de siempre.
+            modifier = Modifier.fillMaxWidth().then(if (onPagoOtro != null) Modifier.height(IntrinsicSize.Min) else Modifier),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (onPagoOtro != null) {
+                Box(
+                    modifier = Modifier
+                        .width(Medida.accionRapida)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(Radio.l))
+                        .background(Movi.colores.capa2)
+                        .clickable(enabled = !saving, onClickLabel = "Pagó otro") { onPagoOtro() }
+                        .testTag(TAG_PAGO_OTRO_EN_AGREGAR),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Groups,
+                        contentDescription = "Pagó otro",
+                        tint = Movi.colores.texto,
+                        modifier = Modifier.size(Icono.l),
+                    )
+                }
+            }
             if (onSubirPapel != null) {
                 Box(
                     modifier = Modifier

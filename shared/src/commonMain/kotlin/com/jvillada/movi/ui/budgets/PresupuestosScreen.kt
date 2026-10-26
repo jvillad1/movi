@@ -1110,7 +1110,7 @@ private fun BudgetSheet(
             // Sin el gasto todavía no hay «total de arriba» contra el cual comparar: cero, y ningún
             // renglón de diferencia.
             val faltante = gastoPorCategoria?.let { gasto ->
-                faltanMovimientosPorVer(gasto[category.trim()] ?: 0L, movimientos.sumOf { it.amount })
+                faltanMovimientosPorVer(gasto[category.trim()] ?: 0L, movimientos.sumOf { com.jvillada.movi.shared.model.montoContado(it) })
             } ?: 0L
             if (faltante != 0L && movimientos.isEmpty() && category.isNotBlank()) {
                 Spacer(Modifier.height(18.dp))
@@ -1139,7 +1139,7 @@ private fun BudgetSheet(
                         modifier = Modifier.weight(1f),
                     )
                     Text(
-                        text = formatCOP(movimientos.sumOf { it.amount }),
+                        text = formatCOP(movimientos.sumOf { com.jvillada.movi.shared.model.montoContado(it) }),
                         // Plata en la línea del rótulo: la talla del apoyo, tabular como un monto.
                         style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
                         color = Movi.colores.textoMedio,

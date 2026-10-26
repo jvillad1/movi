@@ -60,7 +60,7 @@ fun enEsteComercio(evento: FinancialEvent, delPeriodo: List<FinancialEvent>): En
     if (conEste.size < 2) return null
     return EnEsteComercio(
         veces = conEste.size,
-        total = conEste.sumOf { it.amount },
+        total = conEste.sumOf { com.jvillada.movi.shared.model.montoContado(it) },
         moneda = evento.currency,
         busqueda = busquedaParaElComercio(evento, conEste),
     )

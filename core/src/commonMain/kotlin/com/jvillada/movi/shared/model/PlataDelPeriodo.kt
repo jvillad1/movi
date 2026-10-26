@@ -172,7 +172,8 @@ fun plataDelPeriodo(
                 // apertura no son pagos de nada.
                 (cuentaEnGastosEIngresos(e) || e.category == CARD_PAYMENT_CATEGORY)
         }
-        .sumOf { it.amount }
+        // Solo tu parte de un gasto repartido: es lo que el variable cuenta (R3, ver [montoContado]).
+        .sumOf { montoContado(it) }
 
     // **Aperturas y ajustes dentro del período cuentan como «lo que tenías».** Una cuenta que Movi
     // empezó a llevar a mitad del período (la Fiducuenta abrió el 6-sep con $113.264) o un ajuste

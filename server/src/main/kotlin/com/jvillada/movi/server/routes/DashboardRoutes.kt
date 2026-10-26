@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
+import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.hayMovimientosEnOtraMoneda
 import com.jvillada.movi.server.apartados.pagosQuePuedenCruzarApartados
@@ -283,8 +285,10 @@ internal fun Transaction.disponibleDelServidor(
     return DisponibleDelServidor(
         apartado = apartado,
         plata = plata,
+        // R3: tu parte de lo que pagó otro también es gasto variable del día en que se gastó.
         gastoVariablePorDia = gastoVariablePorDia(
-            eventos = eventosDelPeriodo,
+            eventos = eventosDelPeriodo + loCompartidoDelUsuario(uid).tuParteDeOtros
+                .filter { it.timestamp >= monthStart && it.timestamp < monthEnd },
             parteFija = parteFija,
             diaDe = { epochMillisToAppDateString(it) },
         ),
@@ -396,8 +400,14 @@ internal fun Transaction.movimientosDeFlujo(
     hastaExclusivo: Long,
     voidedIds: Set<String>,
     accountTypeById: Map<String, AccountType>,
-): List<MovimientoDeFlujo> =
-    Events.select(
+): List<MovimientoDeFlujo> {
+    // R3 · **solo tu parte** (decisión del dueño, 26-oct-2026; ver `Espacio.kt` en :core). Un gasto
+    // repartido suma su monto menos la parte ajena, lo que salda un espacio no suma, y tu parte de
+    // lo que pagó otro suma el día del gasto. Acá y en ningún otro lado del server: todas las cifras
+    // de flujo (Salió, categorías, presupuestos, Tus períodos, el cierre, las preguntas sugeridas,
+    // «vs. período pasado») salen de esta lista.
+    val compartido = loCompartidoDelUsuario(uid)
+    val propios = Events.select(
         Events.id, Events.accountId, Events.type, Events.amount, Events.category,
         Events.reconciliationStatus, Events.timestamp,
     )
@@ -412,6 +422,7 @@ internal fun Transaction.movimientosDeFlujo(
         // Presupuestos, que leen este mismo `spentByCategory`. Misma regla que el chip «Gastos» y
         // que `spentByCategoryForPeriod` del cliente: las dos mitades tienen que coincidir.
         .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
+        .filterNot { it[Events.id] in compartido.indice.saldaPorEvento }
         .mapNotNull { row ->
             // Una fila con un tipo que no se entiende no es ingreso ni gasto: se salta en vez de
             // tumbar el Inicio entero (antes, una así sin cuenta conocida no sumaba en ningún lado,
@@ -419,14 +430,21 @@ internal fun Transaction.movimientosDeFlujo(
             val tipo = runCatching { TransactionType.valueOf(row[Events.type]) }.getOrNull() ?: return@mapNotNull null
             val accountType = accountTypeById[row[Events.accountId]]
             if (accountType != null && !isCashFlow(accountType, tipo, row[Events.category])) return@mapNotNull null
+            val monto = row[Events.amount]
+            val ajena = if (tipo == TransactionType.EXPENSE) compartido.indice.parteAjenaPorEvento[row[Events.id]] ?: 0L else 0L
             MovimientoDeFlujo(
                 id = row[Events.id],
                 timestamp = row[Events.timestamp],
                 type = tipo,
-                amount = row[Events.amount],
+                amount = (monto - ajena).coerceIn(0L, monto),
                 category = row[Events.category],
             )
         }
+    val deOtros = compartido.tuParteDeOtros
+        .filter { it.timestamp >= desde && it.timestamp < hastaExclusivo }
+        .map { MovimientoDeFlujo(id = it.id, timestamp = it.timestamp, type = it.type, amount = montoContado(it), category = it.category) }
+    return propios + deOtros
+}
 
 /** Ingresos y gasto por categoría de [movimientos] — la suma de [monthCashFlow]. */
 internal fun flujoDeCaja(movimientos: List<MovimientoDeFlujo>): Pair<Long, Map<String, Long>> {

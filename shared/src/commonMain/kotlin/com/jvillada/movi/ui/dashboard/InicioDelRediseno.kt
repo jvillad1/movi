@@ -45,12 +45,11 @@ fun periodoDelEncabezado(data: DashboardData): String? {
 // ── La cuadrícula de acciones ────────────────────────────────────────────────
 
 /**
- * **«Repartir» todavía no se muestra.** Repartir un gasto con Caro es de la ola de Espacios, que no
- * llegó: una acción que abre «Agregar» con un «Pronto» sería una puerta que no lleva a lo que dice. La
- * cuadrícula la salta mientras esto sea `false` (queda un hueco a la derecha de la segunda fila, que
- * `CuadriculaDeAcciones` ya sabe dejar), y la ola de Espacios la prende.
+ * **«Repartir» ya se muestra** (ola R3, Espacios). R1 la dejó apagada porque abría «Agregar» con un
+ * «Pronto»; ahora lleva a Espacios, donde está «Casa con Caro», el saldo y «Anotar lo que pagó Caro».
+ * Un gasto propio se reparte desde su detalle en Movimientos.
  */
-const val REPARTIR_ESTA_LISTO: Boolean = false
+const val REPARTIR_ESTA_LISTO: Boolean = true
 
 /** Las acciones de la cuadrícula del Inicio (camino 3), en su orden. */
 enum class AccionDelInicio(val rotulo: String) {
@@ -64,13 +63,14 @@ enum class AccionDelInicio(val rotulo: String) {
     PREGUNTAR_A_MOVI("Preguntar a Movi"),
 }
 
-/** Las acciones que se ven: todas, menos «Repartir» hasta que la ola de Espacios lo prenda. */
+/** Las acciones que se ven: todas (con [REPARTIR_ESTA_LISTO] en `false`, todas menos «Repartir»). */
 fun accionesDelInicio(repartirListo: Boolean = REPARTIR_ESTA_LISTO): List<AccionDelInicio> =
     AccionDelInicio.entries.filter { it != AccionDelInicio.REPARTIR || repartirListo }
 
 /**
  * A dónde lleva cada acción: **lo que ya existe**. Las de anotar son los atajos del «+» (la hoja de
- * «Agregar» en su pestaña, `pantallaDelAtajo`); revisar es Por revisar; preguntar es Movi AI.
+ * «Agregar» en su pestaña, `pantallaDelAtajo`); repartir es Espacios; revisar es Por revisar; preguntar
+ * es Movi AI.
  * «Subir comprobante» devuelve `null`: no es una pantalla, es elegir un archivo y dejarlo en el flujo
  * de papeles (lo hace la pantalla, como el atajo del «+»).
  */
@@ -79,7 +79,7 @@ fun destinoDeLaAccion(accion: AccionDelInicio): Screen? = when (accion) {
     AccionDelInicio.ANOTAR_INGRESO -> pantallaDelAtajo(AtajoDeAgregar.INGRESO)
     AccionDelInicio.TRASPASAR -> pantallaDelAtajo(AtajoDeAgregar.TRASPASO)
     AccionDelInicio.PAGAR_TARJETA -> pantallaDelAtajo(AtajoDeAgregar.PAGO_DE_TARJETA)
-    AccionDelInicio.REPARTIR -> Screen.QuickAdd()
+    AccionDelInicio.REPARTIR -> Screen.Espacios
     AccionDelInicio.SUBIR_COMPROBANTE -> null
     AccionDelInicio.REVISAR_AVISOS -> Screen.PorRevisar
     AccionDelInicio.PREGUNTAR_A_MOVI -> Screen.AIChat()

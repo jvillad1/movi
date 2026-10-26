@@ -149,3 +149,31 @@ fun Chevron(modifier: Modifier = Modifier) {
         modifier = modifier.size(Icono.m),
     )
 }
+
+/** La inicial con que [AvatarDePersona] nombra a alguien: la primera letra, en mayúscula. */
+fun inicialDe(nombre: String): String = nombre.trim().firstOrNull()?.uppercase() ?: "?"
+
+/** El `testTag` de [AvatarDePersona]. */
+const val TAG_AVATAR_DE_PERSONA: String = "ds:avatar-de-persona"
+
+/**
+ * **Una persona**: su inicial en un círculo de [Medida.avatar], en el lavado de su [tono]. Para los
+ * miembros de un espacio («J» y «C» en «Casa con Caro») y quien pagó un gasto.
+ */
+@Composable
+fun AvatarDePersona(
+    nombre: String,
+    modifier: Modifier = Modifier,
+    tono: TonoDeIcono = TonoDeIcono.Marca,
+) {
+    val color = colorDelTonoDeIcono(tono, Movi.colores)
+    Box(
+        modifier = modifier
+            .size(Medida.avatar)
+            .background(Movi.colores.lavado(color), CircleShape)
+            .testTag(TAG_AVATAR_DE_PERSONA),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(inicialDe(nombre), style = Movi.textos.titulo, color = color, maxLines = 1)
+    }
+}

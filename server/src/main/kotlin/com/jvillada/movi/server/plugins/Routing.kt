@@ -104,6 +104,7 @@ fun Application.configureRouting() {
             subscriptionRoutes()
             goalRoutes()
             apartadoRoutes()
+            espacioRoutes()
             destinoRoutes()
             screenRoutes()
             inicioRoutes()

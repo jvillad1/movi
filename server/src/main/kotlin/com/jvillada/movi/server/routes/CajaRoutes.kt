@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import com.jvillada.movi.server.apartados.tuPlataConApartados
 import com.jvillada.movi.server.balance.hayMovimientosEnOtraMoneda
 import com.jvillada.movi.server.db.Events
@@ -90,7 +91,9 @@ internal fun Transaction.gastoDelDiaADiaSinSuspender(uid: String, hoy: LocalDate
         val eventos = loadEventsBetween(uid, ventana.first, finExclusivo)
         val ultimoDia = epochMillisToAppDate(ventana.last)
         val parteFija = parteFijaDelDisponible(uid, ultimoDia, ajustes, eventos)
-        val total = gastoVariablePorDia(eventos, parteFija) { epochMillisToAppDateString(it) }.values.sum()
+        // R3: tu parte de lo que pagó otro también es gasto del día a día.
+        val deOtros = loCompartidoDelUsuario(uid).tuParteDeOtros.filter { it.timestamp >= ventana.first && it.timestamp < finExclusivo }
+        val total = gastoVariablePorDia(eventos + deOtros, parteFija) { epochMillisToAppDateString(it) }.values.sum()
         val dias = ChronoUnit.DAYS.between(epochMillisToAppDate(ventana.first), epochMillisToAppDate(finExclusivo)).toInt()
         cerrados += GastoVariableDeUnPeriodo(periodo = periodo.prefijo, total = total, dias = dias)
     }

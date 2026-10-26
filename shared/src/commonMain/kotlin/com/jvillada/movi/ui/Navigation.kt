@@ -299,6 +299,18 @@ sealed class Screen {
      * nombre en Hoy. [periodo] es el prefijo («2026-10») con el que arranca; `null` es el de hoy.
      */
     data class EnQueSeVa(val periodo: String? = null) : Screen()
+
+    /**
+     * **Espacios** (R3): lo grupal con casa propia —«Casa con Caro»—, su saldo de quién le debe a
+     * quién y lo que paga otra persona. Raíz de su pestaña.
+     */
+    data object Espacios : Screen()
+
+    /**
+     * Un espacio: quién puso qué, el saldo con «Marcar como saldado», lo que Movi propone vincular y
+     * la lista de sus gastos. [pagoOtro] abre de entrada la hoja «Pagó otro» (viene de Agregar).
+     */
+    data class Espacio(val id: String, val pagoOtro: Boolean = false) : Screen()
 }
 
 /**
@@ -325,6 +337,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile, is Screen.Destinos -> NavTab.MOVIMIENTOS
     is Screen.Plan, Screen.Budgets, Screen.Periodos, is Screen.DetalleDePeriodo -> NavTab.PLAN
     Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos -> NavTab.PATRIMONIO
+    Screen.Espacios, is Screen.Espacio -> NavTab.ESPACIOS
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse. Hoy las dos (Cuentas y Créditos) son Patrimonio.
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))
@@ -387,6 +400,7 @@ fun screenForTab(tab: NavTab): Screen = when (tab) {
     NavTab.ADD -> Screen.QuickAdd()
     NavTab.PLAN -> Screen.Plan()
     NavTab.PATRIMONIO -> Screen.Accounts
+    NavTab.ESPACIOS -> Screen.Espacios
     NavTab.MOVI_AI -> Screen.AIChat()
 }
 
@@ -486,7 +500,7 @@ object NavStack {
     fun esRaizDePestana(screen: Screen): Boolean = screen in RAICES_DE_PESTANA
 
     private val RAICES_DE_PESTANA: List<Screen> =
-        listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.PATRIMONIO).map(::screenForTab)
+        listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.ESPACIOS, NavTab.PATRIMONIO).map(::screenForTab)
 
     /**
      * **Saltar entre pestañas no apila historial** (Ola 1 · «Que Movi se sienta viva»).
