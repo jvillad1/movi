@@ -25,6 +25,7 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.ai.FallaDeLaIa
 import com.jvillada.movi.server.ai.conLaIa
+import com.jvillada.movi.server.parsing.leerLosMovimientosDeBancolombia
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.parsing.LectorDePapeles
 import com.jvillada.movi.server.parsing.FamiriosParser
@@ -360,6 +361,19 @@ internal suspend fun leerElExtracto(
                     resumenDeSaldo = resumen,
                 )
             }
+        }
+        // **Los movimientos de una cuenta de Bancolombia** (la impresión de «Movimientos: Cuentas» de
+        // la Sucursal Virtual) se leen sin IA: es la lista con la que se concilia cada mes, y trae
+        // lo que ningún banco avisa (4x1000, intereses, comisiones). Lo de después —conciliar y
+        // agrupar los cargos del banco— es el camino de siempre. Ver `leerLosMovimientosDeBancolombia`.
+        leerLosMovimientosDeBancolombia(text)?.let { movimientos ->
+            return ExtractoLeido(
+                bankName = "Bancolombia",
+                filas = movimientos.filas,
+                esFamirios = false,
+                numerosDeCuenta = (listOfNotNull(movimientos.numero) +
+                    StatementParser.numerosDeCuenta(fileName, text)).distinct(),
+            )
         }
         val docType = StatementParser.detectDocumentType(text)
         // El extracto de un crédito no trae movimientos sino cómo va la deuda: se lee eso (sin IA,
