@@ -894,6 +894,27 @@ fun Route.statementRoutes() {
     }
 }
 
+/** Lo que hace falta de una cuenta para saber a cuál va cada fila de un extracto. */
+internal data class CuentaParaImportar(val id: String, val name: String, val type: String, val currency: String)
+
+/**
+ * **La cuenta de una fila del extracto**: la [elegida] si la fila va en su moneda; si no, su
+ * hermana en la moneda de la fila — misma clase de cuenta y los mismos últimos cuatro dígitos en el
+ * nombre («Master Black 3684» ↔ «Master Black 3684 USD»), o el mismo nombre sin la moneda. Con
+ * cero o dos hermanas no se adivina y queda la elegida, como antes.
+ */
+internal fun cuentaParaLaFila(moneda: String, elegida: CuentaParaImportar, cuentas: List<CuentaParaImportar>): String {
+    if (moneda.equals(elegida.currency, ignoreCase = true)) return elegida.id
+    val digitos = Regex("""(?<!\d)\d{4}(?!\d)""").findAll(elegida.name).lastOrNull()?.value
+    fun sinMoneda(nombre: String) = nombre.replace(Regex("""\s+(USD|COP)$""", RegexOption.IGNORE_CASE), "").trim()
+    val hermanas = cuentas.filter {
+        it.id != elegida.id && it.type == elegida.type && it.currency.equals(moneda, ignoreCase = true) &&
+            ((digitos != null && Regex("""(?<!\d)$digitos(?!\d)""").containsMatchIn(it.name)) ||
+                sinMoneda(it.name).equals(sinMoneda(elegida.name), ignoreCase = true))
+    }
+    return hermanas.singleOrNull()?.id ?: elegida.id
+}
+
 /**
  * Lo que dejó escrito un importe. Se cuenta **adentro** de la transacción y se usa afuera, para
  * armar la respuesta y para lo que no es de Postgres.
@@ -935,8 +956,17 @@ private fun Transaction.escribirElImporte(
     // la búsqueda de la fila 1 caía sobre el evento que la fila 2 acababa de crear, y entraba
     // un solo viaje. Por eso cada id creado entra al mismo conjunto de «ya usados».
     val reconciliadosEnEsteImporte = mutableSetOf<String>()
+    // **Cada fila a la cuenta de su moneda.** La tarjeta del dueño vive en dos cuentas de Movi
+    // («Master Black 3684» en pesos y «Master Black 3684 USD»), y su extracto trae las dos monedas
+    // mezcladas. Sin esto, un cobro de US$20 entraba como 20 en la cuenta en pesos.
+    val cuentasDelDueno = Accounts.selectAll().where { Accounts.userId eq uid }.map {
+        CuentaParaImportar(it[Accounts.id], it[Accounts.name], it[Accounts.type], it[Accounts.currency])
+    }
+    val elegida = cuentasDelDueno.firstOrNull { it.id == decision.accountId }
+    fun cuentaDe(fila: ParsedTransaction): String =
+        if (elegida == null) decision.accountId else cuentaParaLaFila(fila.currency, elegida, cuentasDelDueno)
     for (tx in decision.imports) {
-        val creado = createEventFromParsed(tx, decision.accountId, uid, importId)
+        val creado = createEventFromParsed(tx, cuentaDe(tx), uid, importId)
         if (creado != null) { importedCount++; reconciliadosEnEsteImporte += creado } else sinFecha++
     }
 
@@ -950,12 +980,13 @@ private fun Transaction.escribirElImporte(
             val propuesta = Events.selectAll()
                 .where { (Events.id eq dec.existingEventId) and (Events.userId eq uid) }
                 .firstOrNull()
-            val parejaId = if (propuesta != null && propuesta[Events.accountId] == decision.accountId &&
+            val cuentaDeLaFila = cuentaDe(dec.parsed)
+            val parejaId = if (propuesta != null && propuesta[Events.accountId] == cuentaDeLaFila &&
                 dec.existingEventId !in reconciliadosEnEsteImporte
             ) {
                 dec.existingEventId
             } else {
-                parejaEnLaCuenta(uid, decision.accountId, dec.parsed, reconciliadosEnEsteImporte)
+                parejaEnLaCuenta(uid, cuentaDeLaFila, dec.parsed, reconciliadosEnEsteImporte)
             }
             val existingEvent = if (parejaId == null) null else Events.selectAll()
                 .where { (Events.id eq parejaId) and (Events.userId eq uid) }
@@ -1030,11 +1061,11 @@ private fun Transaction.escribirElImporte(
             } else {
                 // No es el mismo movimiento (otra cuenta, o ya usado en este importe): la fila
                 // del extracto es un movimiento real y entra como nuevo en vez de perderse.
-                val creado = createEventFromParsed(dec.parsed, decision.accountId, uid, importId)
+                val creado = createEventFromParsed(dec.parsed, cuentaDe(dec.parsed), uid, importId)
                 if (creado != null) { importedCount++; reconciliadosEnEsteImporte += creado } else sinFecha++
             }
         } else {
-            val creado = createEventFromParsed(dec.parsed, decision.accountId, uid, importId)
+            val creado = createEventFromParsed(dec.parsed, cuentaDe(dec.parsed), uid, importId)
             if (creado != null) { importedCount++; reconciliadosEnEsteImporte += creado } else sinFecha++
         }
     }

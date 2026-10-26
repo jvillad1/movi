@@ -353,6 +353,57 @@ class StatementRoutesTest {
 
     // ── Deshacer, reimportar y fechas ─────────────────────────────────────────────────────────
 
+    /**
+     * La tarjeta vive en dos cuentas de Movi, una por moneda, y su extracto trae las dos mezcladas: el
+     * cobro en dólares va a la hermana en USD (y se concilia ahí), el de pesos a la elegida.
+     */
+    @Test
+    fun `una fila en dolares del extracto de la tarjeta va a su hermana en USD`() = testApplication {
+        wireApp()
+        transaction {
+            Accounts.insert { it[id] = "acc-tc-usd"; it[userId] = userAId; it[name] = "Tarjeta de Crédito USD"; it[type] = "CREDIT_CARD"; it[currency] = "USD" }
+        }
+        sembrar("ev-usd", "acc-tc-usd", 20)
+        transaction { Events.update({ Events.id eq "ev-usd" }) { it[currency] = "USD" } }
+
+        val enDolares = parsedTx("u1", "2026-06-14", "SUSCRIPCION", 20).replace("\"COP\"", "\"USD\"")
+        val otroEnDolares = parsedTx("u2", "2026-06-15", "OTRA SUSCRIPCION", 7).replace("\"COP\"", "\"USD\"")
+        val conciliar = """{"parsedId":"u1","existingEventId":"ev-usd","confirm":true,"categorySource":"MANUAL",
+            "descriptionSource":"MANUAL","merchantSource":"MANUAL","parsed":$enDolares}"""
+        val body = """{"statementId":"st-usd","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-06",
+            "imports":[${parsedTx("p1", "2026-06-14", "CUOTA DE MANEJO", 35_672)},$otroEnDolares],
+            "reconciliations":[$conciliar],"skipped":[]}"""
+        assertEquals(HttpStatusCode.OK, importar(body).status)
+
+        val porCuenta = transaction {
+            Events.selectAll().where { Events.userId eq userAId }.map { Triple(it[Events.accountId], it[Events.currency], it[Events.amount]) }
+        }
+        assertEquals(listOf(Triple("acc-tc-a", "COP", 35_672L)), porCuenta.filter { it.first == "acc-tc-a" })
+        assertEquals(setOf(20L, 7L), porCuenta.filter { it.first == "acc-tc-usd" }.map { it.third }.toSet())
+        assertTrue(porCuenta.none { it.first == "acc-tc-a" && it.second == "USD" }, "nada en dólares en la cuenta en pesos: $porCuenta")
+        assertEquals("RECONCILED", transaction { Events.selectAll().where { Events.id eq "ev-usd" }.single()[Events.reconciliationStatus] })
+    }
+
+    @Test
+    fun `la hermana se busca por los ultimos cuatro o por el nombre sin la moneda, y no se adivina entre dos`() {
+        val master = CuentaParaImportar("m", "Master Black 3684", "CREDIT_CARD", "COP")
+        val masterUsd = CuentaParaImportar("mu", "Master Black 3684 USD", "CREDIT_CARD", "USD")
+        val amexUsd = CuentaParaImportar("au", "AMEX 9208 USD", "CREDIT_CARD", "USD")
+        val sinNumero = CuentaParaImportar("v", "Visa", "CREDIT_CARD", "COP")
+        val sinNumeroUsd = CuentaParaImportar("vu", "Visa USD", "CREDIT_CARD", "USD")
+        val cuentas = listOf(master, masterUsd, amexUsd, sinNumero, sinNumeroUsd)
+
+        assertEquals("m", cuentaParaLaFila("COP", master, cuentas))
+        assertEquals("mu", cuentaParaLaFila("USD", master, cuentas))
+        assertEquals("m", cuentaParaLaFila("COP", masterUsd, cuentas))
+        assertEquals("vu", cuentaParaLaFila("USD", sinNumero, cuentas))
+        // Dos hermanas posibles: no se adivina, queda la elegida.
+        val otraUsd = CuentaParaImportar("mu2", "Master Black 3684 USD viaje", "CREDIT_CARD", "USD")
+        assertEquals("m", cuentaParaLaFila("USD", master, cuentas + otraUsd))
+        // Sin hermana, la elegida, como antes.
+        assertEquals("au", cuentaParaLaFila("COP", amexUsd, cuentas))
+    }
+
     private suspend fun io.ktor.server.testing.ApplicationTestBuilder.importar(body: String) =
         client.post("/api/statements/import") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
