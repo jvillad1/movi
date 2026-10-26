@@ -152,8 +152,9 @@ internal sealed interface Repartido {
  *   lleva su movimiento: [ParteDelReparto.patas] para la cuota de un crédito suyo que él paga,
  *   [ParteDelReparto.evento] para un recurrente común. Nada de un pago de tarjeta.
  * - Un recurrente queda sellado en su período con su movimiento ([sellarOcurrencia]). Si su
- *   vencimiento todavía no llegó, el sello no se puede poner —es la guarda de siempre—, y el pago se
- *   reconoce por el nombre cuando venza: el movimiento lleva el nombre del pago.
+ *   vencimiento todavía no llegó, el sello solo se pone si cae en el período en curso (el techo de
+ *   [sellarOcurrencia]: pagar antes es lo normal); si no, el pago se reconoce por el nombre cuando
+ *   venza: el movimiento lleva el nombre del pago.
  * - [recordarDestinoId]: los pagos elegidos quedan asociados a ese tercero (si es del dueño y el pago
  *   no tenía uno), para que la próxima vez la suma exacta se proponga sola.
  *
@@ -236,8 +237,8 @@ internal fun Transaction.escribirElReparto(
         val regla = RecurringRules.selectAll()
             .where { (RecurringRules.id eq parte.ruleId) and (RecurringRules.userId eq uid) }
             .first().toRule()
-        // Si su vencimiento todavía no llegó, el sello no se puede poner (la guarda de siempre): el
-        // pago se reconoce por el nombre cuando venza.
+        // Si su vencimiento todavía no llegó y no es del período en curso, el sello no se puede poner
+        // (el techo de `sellarOcurrencia`): el pago se reconoce por el nombre cuando venza.
         sellarOcurrencia(uid, regla, parte.periodo, evento.id, hoy)
     }
 

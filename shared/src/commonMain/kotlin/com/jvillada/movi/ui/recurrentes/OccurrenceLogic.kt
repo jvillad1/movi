@@ -73,6 +73,21 @@ fun tituloPropuesta(tipo: TransactionType, period: String): String {
 }
 
 /**
+ * **La pregunta de una fila con dudas**, con el mes de la CUOTA: el del vencimiento, que es el mismo
+ * con el que «Sí, fue este» la sella ([PagoDelPeriodo.periodoDelSello]).
+ *
+ * No el nombre del período del dueño (`periodoDelDueno`). Con corte 25, la cuota que vence el 30 de
+ * octubre cae en el período que arranca el 25 de octubre, que se llama «noviembre», y la fila
+ * preguntaba «¿Ya pagaste el de noviembre?» sobre el pago del 30 de octubre (25-oct-2026). «El de»
+ * nombra la cuota, y una cuota del 30 de octubre es la de octubre; el período se dice en otro lado
+ * («Del período de septiembre», [tituloDeLosAnteriores]).
+ */
+fun preguntaDeLaFila(pago: PagoDelPeriodo): String = tituloPropuesta(
+    if (pago.esIngreso) TransactionType.INCOME else TransactionType.EXPENSE,
+    pago.periodoDelSello ?: pago.vence,
+)
+
+/**
  * **De dónde sale un «ya ocurrió»**, en media frase y sin el «cuándo» adelante.
  *
  * Es la línea de evidencia de cada fila de «Ya pagaste» en la lista del período, y la del detalle de

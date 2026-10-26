@@ -44,7 +44,6 @@ import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PlanDelCredito
-import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.Celebracion
 import com.jvillada.movi.ui.components.Cifra
@@ -657,10 +656,7 @@ private fun LoQueOfreceLaFila(
             // fila cae a la misma salida que una que nunca tuvo: anotar el movimiento que falta.
             EstadoDeLaFila.CON_DUDAS -> if (propuesta != null) {
                 Text(
-                    text = tituloPropuesta(
-                        if (pago.esIngreso) TransactionType.INCOME else TransactionType.EXPENSE,
-                        pago.periodoDelDueno ?: pago.periodoDelSello.orEmpty(),
-                    ),
+                    text = preguntaDeLaFila(pago),
                     style = Movi.textos.apoyo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
