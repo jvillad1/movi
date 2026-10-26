@@ -64,6 +64,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.ui.fecha.avisoDeCambioDeMes
 import com.jvillada.movi.ui.fecha.avisoDeSelloSuelto
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
@@ -1852,7 +1853,7 @@ private fun SeccionDeFecha(
     LaunchedEffect(abierto) {
         if (abierto) {
             runCatching { Repositories.wallets.getUserProfile() }
-                .onSuccess { periodo = PeriodSettings(cutoffDay = it.periodCutoffDay, iniciosPropios = it.periodStarts) }
+                .onSuccess { periodo = it.ajustesDelPeriodo() }
         }
     }
 

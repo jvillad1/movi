@@ -35,6 +35,14 @@ data class UserProfile(
      */
     val periodStarts: Map<String, String> = emptyMap(),
     /**
+     * **Qué hace el período cuando el día de corte cae en fin de semana**: el nombre de un
+     * [SiElCorteCaeEnFinDeSemana]. Ver `PeriodSettings.siCaeEnFinDeSemana`.
+     *
+     * Un `String` y no el enum: un valor que un APK viejo no conozca no puede reventarle el perfil
+     * entero. Se lee con [siElCorteCaeEnFinDeSemanaDe]; nunca `null` en la respuesta del server.
+     */
+    val periodWeekendRule: String = SiElCorteCaeEnFinDeSemana.ESE_DIA.name,
+    /**
      * Días de anticipación del aviso de vencimiento. Nunca `null` en la respuesta: cae al default
      * del lado del server, igual que [avatarColor] y [periodCutoffDay].
      */
@@ -77,6 +85,11 @@ data class UpdateProfileRequest(
      * inventar cómo se dice «borrá esta clave». Un mapa vacío es exactamente eso: ninguno.
      */
     val periodStarts: Map<String, String>? = null,
+    /**
+     * Qué hace el período cuando el corte cae en fin de semana: el nombre de un
+     * [SiElCorteCaeEnFinDeSemana]. `null` = no tocar; un nombre que no existe se rechaza.
+     */
+    val periodWeekendRule: String? = null,
     /** Días de aviso, 0..30. `null` = no tocar. */
     val reminderLeadDays: Int? = null,
     /**

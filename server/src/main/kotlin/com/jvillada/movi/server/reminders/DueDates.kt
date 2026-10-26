@@ -10,6 +10,7 @@ import com.jvillada.movi.shared.model.ventanaDe
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
+import com.jvillada.movi.shared.model.fechaEsperadaDelIngreso
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -41,6 +42,19 @@ fun occurrenceInMonth(month: YearMonth, dayOfMonth: Int): LocalDate =
  * ([ocurrenciaEnJuego]) y cómo se nombra en pantalla ([periodoDelDueno]).
  */
 fun periodOf(date: LocalDate): String = YearMonth.from(date).toString()
+
+/**
+ * **Cuándo se espera de verdad el vencimiento [vencimiento] de [rule]**: el mismo día, salvo el
+ * ingreso que cae el día de corte (el salario), que se espera el día en que arranca el período que
+ * abre — corrido si el corte cae en fin de semana, o el que el dueño declaró a mano. La regla vive en
+ * `fechaEsperadaDelIngreso` (:core); esto solo la pasa a `java.time` (por ISO: el server no ve
+ * los tipos de `kotlinx-datetime`).
+ *
+ * Es lo que se **muestra** y con lo que se decide si ya llegó el día; el sello sigue siendo
+ * [periodOf] del vencimiento por el día de la regla, que no se mueve.
+ */
+fun fechaEsperada(rule: RecurringRule, vencimiento: LocalDate, settings: PeriodSettings): LocalDate =
+    LocalDate.parse(fechaEsperadaDelIngreso(rule.type, rule.dayOfMonth, vencimiento.toString(), settings))
 
 /**
  * Los días del período del dueño que contiene [fecha], con los dos bordes incluidos.
@@ -324,7 +338,8 @@ fun upcomingPayments(
     settings: PeriodSettings = PeriodSettings(),
 ): List<UpcomingPayment> =
     rules.map { rule ->
-        val due = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty(), settings)
+        // El salario del día de corte se muestra el día en que de verdad se espera (ver [fechaEsperada]).
+        val due = fechaEsperada(rule, dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty(), settings), settings)
         UpcomingPayment(
             rule = rule,
             dueDate = due.toString(),

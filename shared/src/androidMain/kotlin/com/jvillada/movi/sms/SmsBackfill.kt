@@ -2,6 +2,7 @@ package com.jvillada.movi.sms
 
 import com.jvillada.movi.shared.model.desdeDondeRecuperarSms
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.data.Repositories
 import android.content.Context
 import com.jvillada.movi.data.SessionManager
@@ -30,7 +31,7 @@ object SmsBackfill {
         // El período del dueño sale de su perfil. Sin respuesta se usa el mes de calendario: igual
         // lee el mes pasado entero y el actual, que es más que los 30 días de antes.
         val periodo = runCatching { Repositories.wallets.getUserProfile() }
-            .map { PeriodSettings(cutoffDay = it.periodCutoffDay, iniciosPropios = it.periodStarts) }
+            .map { it.ajustesDelPeriodo() }
             .getOrDefault(PeriodSettings())
         conElPeriodo(context, periodo)
     }

@@ -41,6 +41,7 @@ import com.jvillada.movi.server.reminders.periodosPorRegla
 import com.jvillada.movi.server.reminders.ruleIsActiveOn
 import com.jvillada.movi.server.reminders.ReminderConfig
 import com.jvillada.movi.server.reminders.periodOf
+import com.jvillada.movi.server.reminders.fechaEsperada
 
 import com.jvillada.movi.server.reminders.upcomingPayments
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
@@ -879,11 +880,13 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
         // aunque el dueño cambie su corte. El nombre que se muestra es el del período.
         val periodoEnCurso = periodOf(due)
         val nombreDelPeriodo = periodoDelDueno(due, periodo)
+        // Lo que se muestra es cuándo se espera: el salario del 25 que cae domingo, el viernes 23.
+        val esperada = fechaEsperada(rule, due, periodo).toString()
         when (resolucion) {
             is Resolucion.Sellada -> OccurrenceState(
                 ruleId = rule.id,
                 period = periodoEnCurso,
-                dueDate = due.toString(),
+                dueDate = esperada,
                 occurred = true,
                 eventId = resolucion.fila?.eventId,
                 confirmedAt = resolucion.fila?.confirmedAt ?: 0L,
@@ -892,7 +895,7 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
             is Resolucion.Emparejada -> OccurrenceState(
                 ruleId = rule.id,
                 period = periodoEnCurso,
-                dueDate = due.toString(),
+                dueDate = esperada,
                 occurred = true,
                 eventId = resolucion.evento.id,
                 // No hubo confirmación que fechar —nadie tildó nada—, así que lo más cierto
@@ -915,7 +918,7 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
             is Resolucion.Abierta -> OccurrenceState(
                 ruleId = rule.id,
                 period = periodoEnCurso,
-                dueDate = due.toString(),
+                dueDate = esperada,
                 occurred = false,
                 // `reservados` y no los sellados solos: lo que otra regla ya emparejó sola no
                 // se vuelve a ofrecer acá. Y lo rechazado se saca antes de puntuar, para que
@@ -1123,7 +1126,8 @@ internal fun resolverOcurrencias(
         // hay candidatos que no alcanzan a ser concluyentes, se PREGUNTA —con el movimiento a la
         // vista—, porque ya pasó algo que se le parece. Lo que sigue siendo ruido es preguntar por algo
         // que vence en tres semanas sin que haya pasado nada: eso sigue siendo [Resolucion.PorLlegar].
-        due.isAfter(today) -> {
+        // El día que cuenta es el que se espera (el salario del 25 que cae domingo llega el viernes).
+        fechaEsperada(rule, due, periodo).isAfter(today) -> {
             val sinRechazados = lectura.sinRechazados(rule)
             val concluyentes = ocurrenciasConcluyentes(
                 rule, due, sinRechazados, lectura.reservados, settings = periodo, destinos = destinos,

@@ -54,6 +54,7 @@ import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.dashboard.spentByCategoryForPeriod
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.ventanaDe
 import kotlinx.coroutines.CoroutineScope
@@ -189,6 +190,8 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     internal val cutoffDay: Int get() = perfil?.periodCutoffDay ?: 1
     /** Los meses que arrancaron otro día. Ver `PeriodSettings.iniciosPropios`. */
     internal val iniciosPropios: Map<String, String> get() = perfil?.periodStarts ?: emptyMap()
+    /** El período entero del dueño: el corte, los meses que arrancaron otro día y el fin de semana. */
+    private val ajustesDelPeriodo: PeriodSettings get() = perfil?.ajustesDelPeriodo() ?: PeriodSettings()
     internal val days: List<EventDay> get() = lecturas?.eventos?.valor.orEmpty()
     // Se incrementa al asociar un gasto, para volver a leer con el movimiento ya movido.
     internal var refreshKeyLocal by mutableStateOf(0)
@@ -345,7 +348,7 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     internal val ventanaDelPeriodo: LongRange by derivedStateOf {
         // El período entero, no solo el corte: si el dueño declaró que este mes arrancó otro día,
         // Presupuestos tiene que contar la misma ventana que Movimientos le está mostrando.
-        val settings = PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios)
+        val settings = ajustesDelPeriodo
         ventanaDe(periodoDe(kotlinx.datetime.Clock.System.now().toEpochMilliseconds(), settings), settings)
     }
     internal val gastoPorCategoria: Map<String, Long> by derivedStateOf {
@@ -374,7 +377,7 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     // **período** (el mismo que suma `ventanaDelPeriodo`), no del mes de calendario: con corte 25,
     // el 26 de septiembre ya es octubre en Movimientos, y el título tiene que decir lo mismo.
     internal val monthName: String by derivedStateOf {
-        val settings = PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios)
+        val settings = ajustesDelPeriodo
         Month(periodoDe(Clock.System.now().toEpochMilliseconds(), settings).month).spanishName()
     }
 
@@ -383,7 +386,7 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
     // la misma regla que ya usa el resto de la app ([PeriodSettings.esMesDeCalendario]), si el
     // nombre del mes sigue siendo honesto o si hay que hablar de «este período» en general.
     internal val tituloDelGasto: String by derivedStateOf {
-        tituloDelGastoDelPeriodo(PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios), monthName)
+        tituloDelGastoDelPeriodo(ajustesDelPeriodo, monthName)
     }
 
     /**

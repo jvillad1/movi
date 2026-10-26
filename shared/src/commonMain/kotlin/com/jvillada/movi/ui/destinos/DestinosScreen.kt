@@ -37,6 +37,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.identificadoresDelDestino
 import com.jvillada.movi.shared.model.AgregarIdentificador
 import com.jvillada.movi.shared.model.DescartarSugerido
@@ -141,7 +142,7 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
         // movimiento. Si no se pudieron leer, el server rechaza igual.
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
         runCatching { Repositories.wallets.getUserProfile() }
-            .onSuccess { ajustes = PeriodSettings(it.periodCutoffDay, it.periodStarts) }
+            .onSuccess { ajustes = it.ajustesDelPeriodo() }
         runCatching { Repositories.wallets.getDestinosSugeridos() }.onSuccess { sugeridos = it }
         runCatching { Repositories.wallets.getDestinosDescartados() }.onSuccess { descartados = it.claves.toSet() }
         cargando = false

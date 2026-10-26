@@ -7,6 +7,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.ventanaDe
 import com.jvillada.movi.server.db.Users
@@ -125,5 +126,6 @@ fun ajustesDelPeriodoSinSuspender(uid: String): PeriodSettings {
                 Json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), json)
             }.getOrElse { emptyMap() }
         } ?: emptyMap(),
+        siCaeEnFinDeSemana = siElCorteCaeEnFinDeSemanaDe(fila?.get(Users.periodWeekendRule)),
     )
 }

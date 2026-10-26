@@ -180,7 +180,7 @@ class PerfilNoInventaTusAjustesTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    PeriodoSheet(cutoffActual = cutoff, onDismiss = {}, onSave = { guardado = it })
+                    PeriodoSheet(cutoffActual = cutoff, onDismiss = {}, onSave = { d, _ -> guardado = d })
                 }
             }
         }
