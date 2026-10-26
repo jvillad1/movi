@@ -368,7 +368,10 @@ internal suspend fun leerElExtracto(
         // agrupar los cargos del banco— es el camino de siempre. Ver `leerLosMovimientosDeBancolombia`.
         leerLosMovimientosDeBancolombia(text)?.let { movimientos ->
             return ExtractoLeido(
-                bankName = "Bancolombia",
+                // La lista del fondo no trae número: «Fiducuenta» es como se llama el fondo de la
+                // Sucursal Virtual, y con ese nombre la revisión encuentra la cuenta sola (si el
+                // dueño la llamó así; si no, la elige él).
+                bankName = if (movimientos.deUnFondo) "Fiducuenta" else "Bancolombia",
                 filas = movimientos.filas,
                 esFamirios = false,
                 numerosDeCuenta = (listOfNotNull(movimientos.numero) +
