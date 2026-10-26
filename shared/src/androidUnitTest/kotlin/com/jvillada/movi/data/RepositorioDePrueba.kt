@@ -146,6 +146,8 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun updateBien(id: String, bien: com.jvillada.movi.shared.model.Bien): Account = noUsado("updateBien")
     override suspend fun getUserProfile(): UserProfile = noUsado("getUserProfile")
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = noUsado("updateUserProfile")
+    override suspend fun marcarPrimerUso(): UserProfile = noUsado("marcarPrimerUso")
+    override suspend fun getDireccionDeCorreo(): DireccionDeCorreo = noUsado("getDireccionDeCorreo")
     override suspend fun changePassword(request: ChangePasswordRequest): String? = noUsado("changePassword")
     override suspend fun cerrarSesionesEnTodosLosAparatos() = noUsado("cerrarSesionesEnTodosLosAparatos")
     override suspend fun borrarLaCuenta(request: BorrarLaCuentaRequest): Unit = noUsado("borrarLaCuenta")

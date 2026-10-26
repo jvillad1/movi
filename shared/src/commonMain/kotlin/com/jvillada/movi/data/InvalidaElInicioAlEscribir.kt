@@ -177,6 +177,7 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account = trasEscribir { delegado.updateAccountCondition(id, condicionadaA) }
     override suspend fun updateBien(id: String, bien: com.jvillada.movi.shared.model.Bien): Account = trasEscribir { delegado.updateBien(id, bien) }
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = trasEscribir { delegado.updateUserProfile(request) }
+    override suspend fun marcarPrimerUso(): UserProfile = trasEscribir { delegado.marcarPrimerUso() }
     override suspend fun changePassword(request: ChangePasswordRequest): String? = trasEscribir { delegado.changePassword(request) }
     override suspend fun cerrarSesionesEnTodosLosAparatos() = trasEscribir { delegado.cerrarSesionesEnTodosLosAparatos() }
     override fun olvidarDatosLocales(userId: String) = trasEscribir { delegado.olvidarDatosLocales(userId) }

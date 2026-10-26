@@ -125,6 +125,8 @@ class ElForkLlegaLimpioTest {
         PapelesCompartidos.recibir(listOf(ArchivoCompartido("recibo.png", byteArrayOf(1), "image/png")))
         // Ola 4: un «Está bien» de otra prueba.
         com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.descartar("duplicado:a,b")
+        // La guía de primer uso, abierta en otra prueba: la siguiente no la vería revisar.
+        com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.abrir()
         // «Ocultar los saldos» prendido en otra prueba: la siguiente vería «$•••••» donde espera cifras.
         SaldosOcultosStore.almacenDePrueba = mutableMapOf()
         SaldosOcultosStore.poner(true)
@@ -197,10 +199,13 @@ class ElForkLlegaLimpioTest {
         assertNotNull("La forma de Categorías no quedó guardada", FormaRecordada.delAparato.categorias("u1"))
         assertNotNull("La forma de Cuentas no quedó guardada", FormaRecordada.delAparato.cuentas("u1"))
         assertTrue("La búsqueda reciente no quedó anotada", com.jvillada.movi.data.BusquedasRecientesStore.recientes.isNotEmpty())
+        assertTrue("La guía de primer uso no quedó abierta", com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.enCurso)
     }
 
     @Test
     fun bLosGlobalesLleganEnCero() {
+        assertFalse("La guía de primer uso trae la resaca de otra prueba", com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.revisada)
+        assertFalse("La guía de primer uso sigue en curso", com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.enCurso)
         assertTrue(
             "Los «Está bien» de la Ola 4 traen resaca",
             com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.huellas.isEmpty(),

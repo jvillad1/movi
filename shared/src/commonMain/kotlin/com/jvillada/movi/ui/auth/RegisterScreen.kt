@@ -26,6 +26,7 @@ import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.primeruso.GuiaDePrimerUso
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import kotlinx.coroutines.launch
@@ -64,7 +65,10 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
             }.onSuccess { resp ->
                 SessionManager.save(resp.token, resp.userId, resp.name, resp.email)
                 loading = false
-                onNavigate(Screen.Dashboard)
+                // Una cuenta recién creada no tiene nada: la guía de primer uso la acompaña paso a
+                // paso. Ya se sabe que va, así que el Inicio no tiene que volver a preguntarlo.
+                GuiaDePrimerUso.abrir()
+                onNavigate(Screen.PrimerUso)
             }.onFailure {
                 // Ver AuthErrors.kt. El 409 se detectaba buscando "409" DENTRO del texto del
                 // error, que además de frágil solo acertaba de casualidad: sin `expectSuccess`,

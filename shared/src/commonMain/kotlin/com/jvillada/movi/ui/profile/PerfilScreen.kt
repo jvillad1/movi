@@ -587,11 +587,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                 guardandoPeriodo = true
                 errorPeriodo = null
                 alcancePeriodo.launch {
-                    runCatching {
-                        Repositories.wallets.updateUserProfile(
-                            UpdateProfileRequest(periodCutoffDay = dia, periodWeekendRule = regla.name),
-                        )
-                    }
+                    runCatching { guardarElInicioDelMes(dia, regla) }
                         .onSuccess {
                             guardandoPeriodo = false
                             showPeriodo = false
@@ -609,6 +605,15 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     }
     }
 }
+
+/**
+ * **Guardar «Inicio del mes»**: el día de corte y qué hace si cae en fin de semana o festivo. Una
+ * sola escritura para Perfil y para el paso «Tu período» de la guía de primer uso.
+ */
+internal suspend fun guardarElInicioDelMes(dia: Int, regla: SiElCorteCaeEnFinDeSemana) =
+    Repositories.wallets.updateUserProfile(
+        UpdateProfileRequest(periodCutoffDay = dia, periodWeekendRule = regla.name),
+    )
 
 /**
  * Lo que dice la fila «Inicio del mes»: «Cada día 25 · o el día hábil anterior».

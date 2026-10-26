@@ -152,23 +152,7 @@ fun CreateAccountSheet(
                 currency = "COP",
             )
             val result = runCatching {
-                // La cuenta se crea SIEMPRE en $0 — el saldo/deuda inicial que el dueño tipeó
-                // arriba no viaja en este POST. Es este único call site el que decide "esta
-                // cuenta arranca con plata", posteando el evento de apertura aparte, explícito y
-                // una sola vez (ver el KDoc de openingEventFor en :core para el porqué: el server
-                // dejó de fabricarlo — hacerlo ahí duplicaba el saldo de una cuenta creada
-                // offline cuando el ingreso/gasto real anotado antes del sync se sumaba encima de
-                // la apertura que el server fabricaba a partir del balance sincronizado).
-                val created = createdAccount
-                    ?: Repositories.wallets.createAccount(account.copy(balance = 0L)).also { createdAccount = it }
-                if (account.balance != 0L) {
-                    val opening = openingEventFor(
-                        account.copy(id = created.id),
-                        now = Clock.System.now().toEpochMilliseconds(),
-                    )
-                    if (opening != null) Repositories.wallets.postEvent(opening)
-                }
-                created
+                crearCuentaConSaldo(account, yaCreada = createdAccount) { createdAccount = it }
             }
             saving = false
             result.onSuccess { onAccountCreated() }
@@ -297,6 +281,37 @@ fun CreateAccountSheet(
 
         Spacer(Modifier.height(Espacio.s))
     }
+}
+
+/**
+ * **La creación de cuenta de siempre**: la de esta hoja y la del paso «Tus cuentas» de la guía de
+ * primer uso, que no pueden ser dos.
+ *
+ * La cuenta se crea SIEMPRE en $0 — el saldo inicial que el dueño tipeó no viaja en ese POST. Es
+ * esta función la que decide «esta cuenta arranca con plata», posteando el evento de apertura
+ * aparte, explícito y una sola vez (ver el KDoc de `openingEventFor` en :core para el porqué: el
+ * server dejó de fabricarlo — hacerlo ahí duplicaba el saldo de una cuenta creada offline cuando
+ * el ingreso/gasto real anotado antes del sync se sumaba encima de la apertura que el server
+ * fabricaba a partir del balance sincronizado).
+ *
+ * [yaCreada] es la cuenta que un intento anterior ya creó en el server y cuya apertura falló: con
+ * ella el reintento no crea una SEGUNDA cuenta, solo repite la apertura. [alCrearla] avisa en
+ * cuanto la cuenta existe, antes de la apertura, para que quien llama la recuerde.
+ */
+internal suspend fun crearCuentaConSaldo(
+    cuenta: Account,
+    yaCreada: Account? = null,
+    alCrearla: (Account) -> Unit = {},
+): Account {
+    val creada = yaCreada ?: Repositories.wallets.createAccount(cuenta.copy(balance = 0L)).also(alCrearla)
+    if (cuenta.balance != 0L) {
+        val apertura = openingEventFor(
+            cuenta.copy(id = creada.id),
+            now = Clock.System.now().toEpochMilliseconds(),
+        )
+        if (apertura != null) Repositories.wallets.postEvent(apertura)
+    }
+    return creada
 }
 
 @Composable

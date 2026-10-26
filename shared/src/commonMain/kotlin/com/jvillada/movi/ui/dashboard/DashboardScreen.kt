@@ -33,6 +33,7 @@ import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.primeruso.GuiaDePrimerUso
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
@@ -572,7 +573,8 @@ fun DashboardScreen(
             // Eso solo se puede decir cuando cuentas y resumen YA contestaron. Sin esta guarda,
             // cada carga en frío de la web —donde la caché en memoria se pierde al recargar—
             // saludaba con una lista de tareas ya hechas hace meses.
-            val showGuide = data.guiaIncompleta
+            // Y no compite con la guía de primer uso: si está por abrirse, la tarjeta no se asoma.
+            val showGuide = data.guiaIncompleta && !GuiaDePrimerUso.enCurso
             // Ola 1 · Movi avisa: la tarjeta que ofrece los avisos del teléfono, una sola vez y
             // solo en Android 13+ sin el permiso (ver [AvisosEnHoy]). Va donde va la guía, y solo
             // cuando la guía no está: una cuenta recién creada tiene cosas más urgentes que hacer.

@@ -262,6 +262,23 @@ fun Route.userRoutes() {
          * Suelta además las suscripciones push, por lo mismo que el cambio de contraseña: un
          * navegador ajeno seguiría recibiendo en la pantalla de bloqueo los vencimientos.
          */
+        /**
+         * **«Primer uso» terminada o descartada** (la guía por pasos de una cuenta nueva). Sella
+         * `users.primer_uso_en` con la hora del server **solo la primera vez**: llamarlo de nuevo
+         * —el «Ir a Inicio» de otro aparato, un reintento— no mueve la fecha. Sin cuerpo, y
+         * devuelve el perfil como el `PUT`, para que la app no tenga que volver a pedirlo.
+         */
+        post("/primer-uso") {
+            val uid = call.userId()
+            val perfil = dbQuery {
+                Users.update({ (Users.id eq uid) and Users.primerUsoEn.isNull() }) {
+                    it[Users.primerUsoEn] = System.currentTimeMillis()
+                }
+                Users.selectAll().where { Users.id eq uid }.firstOrNull()
+            } ?: return@post call.respond(HttpStatusCode.NotFound)
+            call.respond(perfil.toProfile())
+        }
+
         post("/cerrar-sesiones") {
             val uid = call.userId()
             val versionNueva = dbQuery {
@@ -296,6 +313,8 @@ private fun ResultRow.toProfile() = UserProfile(
     diasParaBancoMudo = this[Users.diasParaBancoMudo] ?: DIAS_PARA_BANCO_MUDO_POR_DEFECTO,
     // Sin tocar = encendido: el resumen de cierre llega hasta que alguien lo apague.
     cierrePorCorreo = this[Users.cierrePorCorreo] ?: true,
+    // Sin tocar = la guía nunca se terminó ni se descartó.
+    primerUsoEn = this[Users.primerUsoEn],
 )
 
 /** Un período se escribe «AAAA-MM». */

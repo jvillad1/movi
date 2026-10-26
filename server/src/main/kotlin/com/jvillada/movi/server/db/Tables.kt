@@ -97,6 +97,17 @@ object Users : Table("users") {
      * `createMissingTablesAndColumns` puede agregar sin riesgo sobre una tabla con filas.
      */
     val cierrePorCorreo = bool("cierre_por_correo").nullable()
+    /**
+     * **Cuándo terminó (o descartó) la guía «Primer uso»**, en milisegundos; `null` = nunca. Por
+     * usuario y en el server, para que la guía no reaparezca en otro aparato. La escribe
+     * `POST /api/users/me/primer-uso` (la primera vez; después no se mueve).
+     *
+     * Las cuentas que ya existían quedan en `null` **sin migración**: la guía solo se abre para quien
+     * además no tiene ninguna cuenta de dinero (`debeAbrirseLaGuiaDePrimerUso` en :core), así que el
+     * dueño —con sus cuentas— no la ve. Nullable por lo mismo que sus vecinas: es el único DDL que
+     * `createMissingTablesAndColumns` puede agregar sin riesgo sobre una tabla con filas.
+     */
+    val primerUsoEn = long("primer_uso_en").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
