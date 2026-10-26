@@ -710,13 +710,11 @@ private fun SeccionDeDeudas(
                     titulo = CREDITOS_Y_TARJETAS,
                     subtitulo = resumenDeDeudas(creditos, tarjetas),
                     inicio = { IconoEnCirculo(Icons.Rounded.CreditCard, tono = TonoDeIcono.Neutro) },
-                    final = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                            // Neutro (Ola 2a): las deudas no son una alerta.
-                            if (hayDeuda) Cifra(totalDebtCop(creditos, tarjetas))
-                            Chevron()
-                        }
-                    },
+                    // Con monto, el monto es el final (como cada cuenta de arriba: la fila entera se
+                    // toca); sin deuda, la flecha. Con monto y flecha a la vez, a 360 dp el título se
+                    // quedaba con 68 dp y «Créditos y tarjetas» no entraba ni en dos renglones.
+                    // Neutro (Ola 2a): las deudas no son una alerta.
+                    final = { if (hayDeuda) Cifra(totalDebtCop(creditos, tarjetas)) else Chevron() },
                     onClick = onClick,
                 )
             }

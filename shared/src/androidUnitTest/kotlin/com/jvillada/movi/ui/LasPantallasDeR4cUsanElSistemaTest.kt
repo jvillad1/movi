@@ -251,4 +251,36 @@ class LasPantallasDeR4cUsanElSistemaTest {
         kotlin.test.assertEquals(margen, fila.boundsInRoot.left, 1f, "la fila empieza en el borde de la superficie")
         kotlin.test.assertEquals(ancho - margen, fila.boundsInRoot.right, 1f, "y termina en el otro borde")
     }
+
+    /**
+     * El título de una `Fila` va en hasta dos renglones antes del «…» (revisión de la R4 a 390 px:
+     * «Bancolombia Ahorr…» y «Créditos y tarjet…» al lado del monto). A 360 dp, con la letra de
+     * Movi (×1,12, la que pone `App.kt`), el nombre entero y el monto entero.
+     */
+    @Test
+    fun `a 360 dp el nombre largo de una cuenta se lee entero junto a su saldo`() {
+        Repositories.sustitutoDePrueba = repo
+        composeRule.setContent {
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, base.fontScale * 1.12f),
+            ) {
+                MoviTheme { Box(Modifier.fillMaxSize()) { AccountsScreen(onNavigate = {}) } }
+            }
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(com.jvillada.movi.ui.accounts.CREDITOS_Y_TARJETAS, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        listOf("Bancolombia Ahorros", "\$13.845.800", com.jvillada.movi.ui.accounts.CREDITOS_Y_TARJETAS).forEach { t ->
+            val nodo = composeRule.onAllNodesWithText(t, useUnmergedTree = true).fetchSemanticsNodes().first()
+            val r = mutableListOf<TextLayoutResult>()
+            nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(r)
+            val d = r.single()
+            assertTrue(seVeEntero(nodo), "«$t» se recorta a 360 dp: ancho ${nodo.size.width}, renglones ${d.lineCount}, " +
+                (0 until d.lineCount).joinToString { "${d.getLineLeft(it)}-${d.getLineRight(it)} …${d.isLineEllipsized(it)}" } + " excede ${d.multiParagraph.didExceedMaxLines}")
+        }
+        val minimo = with(composeRule.density) { Medida.altoDeFilaDoble.toPx() } - 0.5f
+        filas(TAG_FILA_DE_CUENTA).forEach { assertTrue(it.size.height >= minimo, "la fila conserva su alto mínimo") }
+    }
 }

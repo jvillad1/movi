@@ -28,6 +28,9 @@ import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 
+/** Cuántos renglones puede ocupar el título de una [Fila] antes de cortarse con «…». */
+const val LINEAS_DEL_TITULO_DE_FILA: Int = 2
+
 /** Tag estable de una [Fila]. */
 const val TAG_FILA: String = "ds-fila"
 
@@ -47,7 +50,11 @@ const val TAG_FILA: String = "ds-fila"
  * Las ranuras:
  * - [inicio]: un avatar de comercio (`AvatarDelComercio`), un [IconoEnCirculo] o el avatar de una
  *   persona. Mide [Medida.avatar].
- * - [titulo] y [subtitulo]: un renglón cada uno, con «…» si no entran.
+ * - [titulo]: hasta [LINEAS_DEL_TITULO_DE_FILA] renglones, y recién ahí «…»: un nombre largo
+ *   («Bancolombia Ahorros» al lado de «$13.845.800» a 360 dp) baja a un segundo renglón en vez de
+ *   cortarse. La fila crece; el mínimo de alto sigue siendo el de arriba.
+ * - [subtitulo]: un renglón, con «…» si no entra.
+ * - El [final] se mide primero y entero: un monto nunca se recorta; lo que cede es el texto.
  * - [final]: un monto ([Cifra]), una [Pildora] o un [Chevron].
  *
  * ```
@@ -88,7 +95,7 @@ fun Fila(
                 text = titulo,
                 style = Movi.textos.cuerpo,
                 color = Movi.colores.texto,
-                maxLines = 1,
+                maxLines = LINEAS_DEL_TITULO_DE_FILA,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitulo != null) {

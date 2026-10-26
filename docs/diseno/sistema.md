@@ -132,7 +132,8 @@ Seccion(titulo = "Tarjetas", conteo = 3, accion = "Ver todo", onAccion = ::verTo
 
 **`Fila`** — la fila de lista de toda la app: `inicio` (avatar de comercio, `IconoEnCirculo`, persona),
 `titulo`, `subtitulo?`, `final` (`Cifra`, `Pildora` o `Chevron`). 56 / 64 de alto mínimo, 16 a los
-lados, toque de borde a borde. Va directo sobre el fondo o en una `Superficie` con relleno `Lista`.
+lados, toque de borde a borde. El título va en hasta dos renglones antes del «…» (la fila crece) y el
+subtítulo en uno; el final se mide primero, así que un monto nunca se recorta. Va directo sobre el fondo o en una `Superficie` con relleno `Lista`.
 ```kotlin
 Fila(
     titulo = "Rappi · Las Doce", subtitulo = "Restaurantes · Nu",
