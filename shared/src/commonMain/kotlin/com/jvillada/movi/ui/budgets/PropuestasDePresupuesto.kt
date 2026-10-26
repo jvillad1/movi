@@ -24,7 +24,12 @@ import com.jvillada.movi.shared.model.diaLegible
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.components.CasillaDeSeleccion
-import com.jvillada.movi.ui.components.NewItemButton
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import com.jvillada.movi.ui.components.BotonReintentar
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.VacioQueEnsena
@@ -61,7 +66,7 @@ internal fun VacioDePresupuestos(estado: EstadoDePresupuestos) {
     // Las ya creadas no se vuelven a ofrecer: si la recarga de después falló, el vacío sigue acá
     // con las que faltan, y ninguna se manda dos veces.
     val propuestas = estado.propuestasPendientes
-    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
+    Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
         if (propuestas.isEmpty()) {
             VacioQueEnsena(
                 titulo = TITULO_DEL_VACIO,
@@ -94,15 +99,21 @@ internal fun VacioDePresupuestos(estado: EstadoDePresupuestos) {
                         AvisoDePropuestasQueFallaron(estado)
                         Spacer(Modifier.height(Movi.espacios.amplio))
                     }
-                    NewItemButton(
-                        label = rotuloDeCrearPropuestas(marcadas),
+                    Boton(
+                        texto = rotuloDeCrearPropuestas(marcadas),
                         onClick = { estado.crearPropuestas() },
                         modifier = Modifier.testTag(TAG_CREAR_PROPUESTAS),
-                        full = true,
-                        enabled = marcadas > 0 && !estado.creandoPropuestas,
+                        icono = Icons.Rounded.Add,
+                        anchoCompleto = true,
+                        habilitado = marcadas > 0 && !estado.creandoPropuestas,
                     )
-                    Spacer(Modifier.height(Movi.espacios.corto))
-                    NewItemButton(label = "Crear uno a mano", onClick = { estado.abrirNuevo() })
+                    Spacer(Modifier.height(Espacio.xs))
+                    Boton(
+                        texto = "Crear uno a mano",
+                        onClick = { estado.abrirNuevo() },
+                        variante = VarianteDeBoton.Fantasma,
+                        icono = Icons.Rounded.Add,
+                    )
                 },
             )
         }

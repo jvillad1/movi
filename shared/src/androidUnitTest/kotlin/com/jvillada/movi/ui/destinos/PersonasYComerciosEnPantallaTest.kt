@@ -138,31 +138,19 @@ class PersonasYComerciosEnPantallaTest {
 
     // ── El acceso principal ─────────────────────────────────────────────────────
 
+    /**
+     * **Ola R4: Movimientos ya no lleva la fila «Personas y comercios».** Su casa es Espacios /
+     * Ajustes; Movimientos contesta «¿en qué se fue?» y arriba de su lista solo quedan los filtros y
+     * lo que espera revisión.
+     */
     @Test
-    fun `Movimientos tiene el acceso a Personas y comercios con los nombres, y un toque abre la lista`() {
-        var navegoA: Screen? = null
+    fun `Movimientos ya no tiene el acceso a Personas y comercios`() {
         Repositories.sustitutoDePrueba = Repo()
-        composeRule.setContent {
-            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = { navegoA = it }) } }
-        }
-        // Primero a quien más se le mandó este período.
-        esperar("Hernán, Ana y Ana Prueba Salazar")
-        composeRule.onNodeWithTag(TAG_ACCESO_A_PERSONAS_Y_COMERCIOS, useUnmergedTree = true)
-            .performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
-        assertEquals(Screen.Destinos(), navegoA)
-    }
-
-    @Test
-    fun `el acceso esta aunque la lectura falle, e invita a guardar`() {
-        Repositories.sustitutoDePrueba = object : Repo() {
-            override suspend fun getDestinos(): List<DestinoConocido> = throw ApiException(503, "sin señal")
-        }
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
         }
-        esperar("Guarda a quién le envías plata")
-        assertEquals(1, composeRule.onAllNodesWithTag(TAG_ACCESO_A_PERSONAS_Y_COMERCIOS, useUnmergedTree = true).fetchSemanticsNodes().size)
+        composeRule.waitForIdle()
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_ACCESO_A_PERSONAS_Y_COMERCIOS, useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 
     // ── La ficha ────────────────────────────────────────────────────────────────

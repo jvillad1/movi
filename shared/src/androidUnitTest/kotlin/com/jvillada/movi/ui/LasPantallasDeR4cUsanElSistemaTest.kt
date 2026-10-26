@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
@@ -212,5 +213,42 @@ class LasPantallasDeR4cUsanElSistemaTest {
         assertTrue(nodos(com.jvillada.movi.ui.components.ds.TAG_CUADRICULA_DE_ACCIONES).isNotEmpty())
         val minimo = with(composeRule.density) { Medida.objetivoTactil.toPx() } - 0.5f
         nodos(com.jvillada.movi.ui.components.ds.TAG_ACCION_RAPIDA).forEach { assertTrue(it.size.height >= minimo) }
+    }
+
+    /**
+     * R4a: la fila de un movimiento ya trae su margen de 16 como `Fila`. En el detalle de la cuenta
+     * va en una `Superficie` con relleno de lista, así que la fila llega al borde de la superficie
+     * (16 dp del borde de la pantalla, el margen) y no queda con relleno doble.
+     */
+    @Test
+    fun `en el detalle de la cuenta las filas de movimientos no llevan relleno doble`() {
+        val nu = Account("acc-nu", "Nu", AccountType.SAVINGS, 1_250_000L)
+        val almuerzo = com.jvillada.movi.shared.model.FinancialEvent(
+            id = "ev-1", accountId = "acc-nu", amount = 27_500L, currency = "COP",
+            type = com.jvillada.movi.shared.model.TransactionType.EXPENSE, category = "Comida",
+            description = "Almuerzo con la hija", timestamp = 1_760_000_000_000L,
+        )
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccount(id: String): Account = nu
+            override suspend fun getEvents(accountId: String?): List<com.jvillada.movi.shared.model.FinancialEvent> = listOf(almuerzo)
+        }
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    com.jvillada.movi.ui.accounts.AccountDetailScreen(onNavigate = {}, accountId = "acc-nu", group = com.jvillada.movi.shared.model.AccountGroup.DINERO)
+                }
+            }
+        }
+        runCatching {
+            composeRule.waitUntil(timeoutMillis = 5_000) { nodos(com.jvillada.movi.ui.transactions.TAG_FILA_DE_MOVIMIENTO_SUELTO).isNotEmpty() }
+        }.onFailure {
+            val textos = composeRule.onAllNodes(SemanticsMatcher("todo") { true }, useUnmergedTree = true).fetchSemanticsNodes().map(::texto).filter { it.isNotEmpty() }
+            throw AssertionError("no apareció la fila; en pantalla: $textos", it)
+        }
+        val fila = nodos(com.jvillada.movi.ui.transactions.TAG_FILA_DE_MOVIMIENTO_SUELTO).single()
+        val margen = with(composeRule.density) { Medida.margenDePantalla.toPx() }
+        val ancho = with(composeRule.density) { 360.dp.toPx() }
+        kotlin.test.assertEquals(margen, fila.boundsInRoot.left, 1f, "la fila empieza en el borde de la superficie")
+        kotlin.test.assertEquals(ancho - margen, fila.boundsInRoot.right, 1f, "y termina en el otro borde")
     }
 }

@@ -2,7 +2,6 @@ package com.jvillada.movi.ui.transactions
 
 import com.jvillada.movi.shared.model.montoContado
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -12,11 +11,24 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.colorDeLaCifra
+import com.jvillada.movi.ui.components.ds.Vacio
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
@@ -31,20 +43,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.FormaRecordada
@@ -91,7 +98,6 @@ import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.ui.porrevisar.RenglonPorRevisar
 import com.jvillada.movi.ui.porrevisar.cuantosPorRevisar
 import com.jvillada.movi.ui.porrevisar.rememberLecturasPorRevisar
-import com.jvillada.movi.ui.destinos.RenglonDePersonasYComercios
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.plan.rememberMarcasDeRecurrentes
@@ -431,46 +437,43 @@ const val TAG_LINEA_DE_PERIODO: String = "linea-de-periodo"
 private val GRUPOS_DEL_ESQUELETO = listOf(3, 2, 2)
 
 private fun LazyListScope.movimientosEsqueleto() {
-    GRUPOS_DEL_ESQUELETO.forEach { filas ->
+    GRUPOS_DEL_ESQUELETO.forEachIndexed { indice, filas ->
         item {
-            // `top = 20.dp` SIEMPRE, sin excepción para el primer grupo — fix round 1. El
-            // `Column` de cada día real (más abajo, en el `forEach` de `visibleDays`) usa
-            // `padding(top = 20.dp)` para TODOS los días, primero incluido: el `contentPadding`
-            // de esta `LazyColumn` no trae ningún `top`, así que ese es el único aire arriba del
-            // primer renglón. Un `0.dp` acá adelantaba el primer grupo 20 dp contra el primer día
-            // real y la lista saltaba hacia abajo apenas llegaban los datos.
+            // El MISMO aire arriba que cada día real ([aireArribaDelDia]): si no, el primer grupo
+            // arrancaba más arriba que el primer día y la lista saltaba al llegar los datos.
             Column(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 20.dp)
+                    .padding(horizontal = Medida.margenDePantalla)
+                    .padding(top = aireArribaDelDia(indice))
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO)
-                        .padding(horizontal = 4.dp, vertical = 8.dp),
+                        .heightIn(min = Medida.objetivoTactil),
+                    contentAlignment = Alignment.CenterStart,
                 ) {
-                    RenglonConCifraEsqueleto(fraccionDelRotulo = 0.2f, anchoDeLaCifra = 110.dp)
+                    RenglonConCifraEsqueleto(fraccionDelRotulo = 0.2f, estiloDelRotulo = Movi.textos.titulo)
                 }
-                MinCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                ) {
-                    // El mismo círculo que `IconoDeCategoria` — ver el KDoc de
-                    // `FilaDeListaEsqueleto` (Task 3, fix round 1). Leído del tamaño y no copiado:
-                    // si el ícono cambia de medida, el esqueleto no se queda atrás.
+                // La forma de la lista real: una superficie con filas del sistema (mismo alto).
+                Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                     repeat(filas) { i ->
-                        FilaDeListaEsqueleto(
-                            isLast = i == filas - 1,
-                            diametroIconoAlFrente = TamanoDeIconoDeCategoria.Normal.circulo,
-                        )
+                        EsqueletoDeFila()
+                        if (i < filas - 1) Separador()
                     }
                 }
             }
         }
     }
 }
+
+/**
+ * El aire arriba de un día de la lista: entre dos días, [Medida.entreSecciones] (cada día es una
+ * sección); arriba del primero, [Medida.dentroDeSeccion], porque lo de arriba (los filtros) ya lo
+ * separa. Lo usan el día real y el esqueleto, para que nada salte al llegar los datos.
+ */
+internal fun aireArribaDelDia(indice: Int): Dp =
+    if (indice == 0) Medida.dentroDeSeccion else Medida.entreSecciones
 
 /**
  * Los rótulos de los chips, en el orden de sus índices. «Recurrentes» ya no se dibuja (ver
@@ -886,11 +889,10 @@ fun TransactionsScreen(
     // `remember { }` a secas: si se vuelve a entrar pidiendo otro filtro, el estado tiene que
     // rearrancar en el que se pidió, no quedarse con el de la visita anterior.
     var activeFilter by remember(chipInicial) { mutableStateOf(chipInicialDeMovimientos(chipInicial)) }
-    // F13: la lupa era un dibujo sin acción — ahora despliega un campo que filtra en memoria
-    // mientras se escribe (no hay ida al servidor: la lista ya está en pantalla).
-    var searchActive by remember(consultaInicial) { mutableStateOf(!consultaInicial.isNullOrBlank()) }
+    // Lo que se filtra por texto: lo que pidió «Buscar» (un comercio tocado allá) o «En este
+    // comercio» del detalle. Se ve como un chip con su ×; la lupa abre «Buscar» (ola R4: una sola
+    // búsqueda en la app).
     var searchQuery by remember(consultaInicial) { mutableStateOf(consultaInicial.orEmpty()) }
-    val searchFocusRequester = remember { FocusRequester() }
     // F12: "Pendientes" no decía qué es — son los movimientos que entraron solos (SMS, OCR,
     // extracto) y esperan que confirmes monto y categoría. "Por confirmar" sí lo dice.
     val filters = CHIPS_DE_MOVIMIENTOS
@@ -922,9 +924,6 @@ fun TransactionsScreen(
     val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = refreshKey) { Repositories.wallets.getUserProfile() }
     val eventos = rememberLectura(ClaveDeLectura.EventosPorDia, reintento = refreshKey) { Repositories.wallets.getEventsByDay() }
     val cuentas = rememberLectura(ClaveDeLectura.Cuentas, reintento = refreshKey) { Repositories.wallets.getAccounts() }
-    // «Personas y comercios» (4-oct-2026): solo para los nombres del renglón que lleva ahí. La misma
-    // lectura que Patrimonio y la lista, recordada: no se pide dos veces al ir y volver.
-    val personasYComercios = rememberLectura(ClaveDeLectura.Destinos, reintento = refreshKey) { Repositories.wallets.getDestinos() }
     /**
      * El perfil a la vista: el leído, el recordado, o el que devolvió guardar el arranque de un
      * período desde esta pantalla (ver [Lectura.anotar] más abajo).
@@ -1114,43 +1113,6 @@ fun TransactionsScreen(
         mutableStateOf(periodoInicial?.let { periodoDelPrefijo(it) } ?: periodoDeHoy)
     }
 
-    // **«Día a día»**: la meta diaria del Disponible de Plan, para decir en cada día del período en
-    // curso cuánto podías gastar y si te pasaste (ver [DiaADia]). Es una lectura de adorno: si no
-    // llega o falla no se dice nada —ni esqueleto, ni «Actualizando…», ni error— y la lista es la
-    // de siempre. Solo se lee con el período en curso a la vista (o buscando, que atraviesa
-    // períodos): en uno cerrado el Disponible de entonces no se puede reconstruir.
-    val hoyLocal = remember(hoyIso) { LocalDate.parse(hoyIso) }
-    val perfilParaElDiaADia = perfilVigente
-    val periodoDelDiaADia = periodoVigenteSegun(perfil)
-    val datosDelDiaADia = rememberLectura(
-        ClaveDeLectura.DatosDelDiaADia,
-        reintento = refreshKey,
-        periodoVigente = periodoDelDiaADia,
-        activa = perfilParaElDiaADia != null && (periodoVisible == periodoDeHoy || searchQuery.isNotBlank()),
-    ) {
-        // Lo reciente que ya esté en el cache (de Plan o del Inicio) no se vuelve a pedir: ver
-        // [datosParaElDiaADia]. El «Reintentar» de esta pantalla (`refreshKey`) sí pide de nuevo.
-        datosParaElDiaADia(
-            perfil = checkNotNull(perfilParaElDiaADia),
-            ahora = ahoraEnMs(),
-            tick = refreshTick,
-            forzar = refreshKey != 0,
-            periodoVigente = periodoDelDiaADia,
-        )
-    }
-    val diaADia = remember(datosDelDiaADia.valor, hoyLocal) {
-        datosDelDiaADia.valor?.let { diaADiaDe(it, hoyLocal) }
-    }
-    // Los días que pueden llevar la línea (del período en curso, hasta hoy) y, mientras la lectura
-    // viaja sin nada a la vista, reservan su alto: la línea aparece sin empujar la lista.
-    val inicioDelPeriodoEnCurso = remember(periodoDeHoy, ajustesDelPeriodo) {
-        inicioDelPeriodo(periodoDeHoy, ajustesDelPeriodo)
-    }
-    // Solo mientras **no se sabe nada**: con lo recordado a la vista —aunque no traiga meta, por un
-    // disponible sin margen— ya se sabe que no hay línea, y reservar el alto para recogerlo al
-    // contestar la relectura movería la lista en cada visita.
-    val reservaElDiaADia = datosDelDiaADia.valor == null && perfilParaElDiaADia != null && !datosDelDiaADia.terminada
-
     val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo, accountTypes, filtro) {
         val filtrados = diasVisibles(conElFiltro(allDays, filtro), activeFilter, searchQuery, accountTypes)
         // **Buscar atraviesa los períodos**, por cuarta vez en esta pantalla y por el mismo motivo
@@ -1170,7 +1132,6 @@ fun TransactionsScreen(
     }
     /** Ola 2b · tocar «En este comercio»: la búsqueda de siempre, con ese comercio escrito. */
     fun buscarElComercio(busqueda: String) {
-        searchActive = true
         searchQuery = busqueda
     }
 
@@ -1221,7 +1182,9 @@ fun TransactionsScreen(
         focoDelPanel = focoDelPanel,
         lista = {
     Column(modifier = Modifier.fillMaxSize()) {
-        // F60: encabezado único — Movimientos es raíz: avatar + rótulo del menú + la lupa.
+        // Movimientos es raíz: avatar, título y la lupa. **Una sola búsqueda en la app** (ola R4):
+        // la lupa abre «Buscar», que encuentra movimientos, comercios, personas, cuentas y
+        // pantallas. Lo que «Buscar» o «En este comercio» piden filtrar llega acá como un chip.
         MinScreenHeader(
             title = "Movimientos",
             leading = HeaderLeading.Avatar(onNavigate),
@@ -1229,93 +1192,38 @@ fun TransactionsScreen(
                 // Se está pintando algo que esta visita todavía no confirmó (lo recordado, o la lista
                 // de antes de un «Reintentar»). Sin nada pintado lo dice el esqueleto.
                 if (loading && visibleDays.isNotEmpty()) ActualizandoEnLaCabecera()
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = "Buscar",
-                    tint = Movi.colores.textoMedio,
-                    modifier = Modifier.size(22.dp).clickable {
-                        searchActive = !searchActive
-                        if (!searchActive) searchQuery = ""
-                    },
-                )
+                BotonDeIcono(Icons.Rounded.Search, "Buscar", onClick = { onNavigate(Screen.Buscar) })
             },
         )
-        Spacer(Modifier.height(12.dp))
-
-        // F13: campo de búsqueda, debajo del encabezado — solo aparece al tocar la lupa.
-        if (searchActive) {
-            LaunchedEffect(Unit) { searchFocusRequester.requestFocus() }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 12.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Movi.colores.tarjeta)
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(Icons.Filled.Search, contentDescription = null, tint = Movi.colores.textoApagado, modifier = Modifier.size(16.dp))
-                Box(modifier = Modifier.weight(1f)) {
-                    if (searchQuery.isEmpty()) {
-                        Text("Descripción, comercio o categoría", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado)
-                    }
-                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                    // [esAtajoDeSeleccionarTodo].
-                    val campo = rememberCampoConSeleccion(searchQuery) { searchQuery = it }
-                    BasicTextField(
-                        value = campo.valor,
-                        onValueChange = campo::alCambiar,
-                        singleLine = true,
-                        textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                        cursorBrush = SolidColor(Movi.colores.texto),
-                        modifier = Modifier.fillMaxWidth()
-                            .focusRequester(searchFocusRequester)
-                            .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                    )
-                }
-                Icon(
-                    imageVector = Icons.Rounded.Close,
-                    contentDescription = "Cerrar búsqueda",
-                    tint = Movi.colores.textoMedio,
-                    modifier = Modifier.size(16.dp).clickable {
-                        searchActive = false
-                        searchQuery = ""
-                    },
-                )
-            }
-        }
 
         // **De qué mes son estas cifras**, y cómo moverse entre meses.
         //
-        // Con la búsqueda abierta no se pinta: buscar atraviesa los períodos (ver `visibleDays`),
+        // Con una búsqueda puesta no se pinta: buscar atraviesa los períodos (ver `visibleDays`),
         // así que un encabezado que dijera «septiembre» encima de resultados de marzo estaría
         // mintiendo sobre lo que se ve.
-        if (!searchActive) {
+        if (searchQuery.isBlank()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 12.dp),
+                    .padding(horizontal = Medida.margenDePantalla - (Medida.objetivoTactil - Icono.l) / 2),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.KeyboardArrowLeft,
-                    contentDescription = "Período anterior",
-                    tint = Movi.colores.textoMedio,
-                    modifier = Modifier.size(22.dp).clickable {
-                        periodoVisible = periodoAnterior(periodoVisible)
-                    },
+                BotonDeIcono(
+                    Icons.Rounded.KeyboardArrowLeft,
+                    "Período anterior",
+                    onClick = { periodoVisible = periodoAnterior(periodoVisible) },
                 )
                 // Tocar el mes abre «¿cuándo empezó este?». Va acá y no en Perfil a propósito: la
                 // pregunta aparece justo cuando el dueño está mirando las cifras de ESE mes y nota
                 // que el sueldo cayó del lado equivocado. Ver [InicioDelPeriodoSheet].
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.clickable { editandoElInicio = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = Medida.objetivoTactil)
+                        .clickable(onClickLabel = "Cambiar el inicio del período") { editandoElInicio = true },
+                    verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
                         text = nombreDe(periodoVisible).replaceFirstChar { it.uppercase() },
@@ -1323,19 +1231,10 @@ fun TransactionsScreen(
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                     )
-                    // Ola B, tarea 2: mientras el perfil no contestó, un esqueleto reserva el
-                    // lugar de esta línea — sin él, aparecía recién cuando el perfil traía el
-                    // corte de verdad y empujaba toda la lista de abajo (el esqueleto de
-                    // Movimientos incluido). Con corte 1 (mes de calendario, ya confirmado) no
-                    // hay nada que aclarar y no se pinta nada, como siempre.
-                    //
-                    // Whole-branch review, final fix wave: reservarla SIEMPRE, para todos, tenía
-                    // su propio costo — un dueño con corte 1 (nunca tuvo línea) veía el esqueleto
-                    // subir ~18 dp apenas el perfil contestaba. `formaDeMovimientos` dice si la
-                    // última carga que salió bien tenía línea; `null` (nada recordado, la primera
-                    // vez) sigue reservando, como siempre.
+                    // Mientras el perfil no contestó, un esqueleto reserva el lugar de esta línea
+                    // —si no, aparecía al llegar el corte y empujaba la lista—, salvo que la última
+                    // carga que salió bien no la tuviera (corte 1, ver `formaDeMovimientos`).
                     if (!perfilLeido && formaDeMovimientos?.lineaDePeriodo != false) {
-                        Spacer(Modifier.height(2.dp))
                         LineaEsqueleto(
                             fraccionDelAncho = 0.5f,
                             estilo = Movi.textos.apoyo,
@@ -1346,105 +1245,94 @@ fun TransactionsScreen(
                         // un mes de calendario. Con cualquier otro corte es lo único que explica
                         // por qué «septiembre» empieza en agosto.
                         rangoLegibleDe(periodoVisible, ajustesDelPeriodo)?.let { rango ->
-                            Spacer(Modifier.height(2.dp))
                             Text(
                                 text = rango,
                                 style = Movi.textos.apoyo,
-                                color = Movi.colores.textoApagado,
+                                color = Movi.colores.textoMedio,
                                 modifier = Modifier.testTag(TAG_LINEA_DE_PERIODO),
                             )
                         }
                     }
                 }
-                val puedeAvanzar = puedeAvanzarDePeriodo(periodoVisible, periodoDeHoy)
-                Icon(
-                    imageVector = Icons.Rounded.KeyboardArrowRight,
-                    contentDescription = "Período siguiente",
-                    tint = if (puedeAvanzar) Movi.colores.textoMedio else Movi.colores.textoApagado,
-                    modifier = Modifier.size(22.dp).then(
-                        if (puedeAvanzar) Modifier.clickable {
-                            periodoVisible = periodoSiguiente(periodoVisible)
-                        } else Modifier
-                    ),
-                )
-            }
-        }
-
-        // Ola 4 · Ver la plata: el filtro que mandó «En qué se va», dicho y con su ×.
-        filtro?.let { activo ->
-            ChipDelFiltro(activo, onQuitar = { filtro = null })
-        }
-
-        // Filter chips
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 0.dp)
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CHIPS_VISIBLES.forEach { chip ->
-                val f = filters[chip]
-                val isActive = chip == activeFilter
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isActive) Movi.colores.tarjeta else Color.Transparent)
-                        .then(
-                            if (!isActive) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(8.dp))
-                            else Modifier
-                        )
-                        .clickable { activeFilter = chip }
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (isActive) {
-                        Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(14.dp))
-                    }
-                    Text(
-                        text = f,
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isActive) Movi.colores.texto else Movi.colores.textoMedio,
+                if (puedeAvanzarDePeriodo(periodoVisible, periodoDeHoy)) {
+                    BotonDeIcono(
+                        Icons.Rounded.KeyboardArrowRight,
+                        "Período siguiente",
+                        onClick = { periodoVisible = periodoSiguiente(periodoVisible) },
                     )
+                } else {
+                    // El período en curso no tiene siguiente: la flecha queda, apagada, para que el
+                    // mes no se corra de lugar.
+                    Box(Modifier.size(Medida.objetivoTactil), contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.KeyboardArrowRight,
+                            contentDescription = "Período siguiente",
+                            tint = Movi.colores.textoApagado,
+                            modifier = Modifier.size(Icono.l),
+                        )
+                    }
                 }
             }
         }
 
-        // **La puerta principal a «Personas y comercios»** (4-oct-2026): siempre, de una línea, y no
-        // con la búsqueda abierta (buscar es otra tarea). Ver [RenglonDePersonasYComercios].
-        if (!searchActive) {
-            RenglonDePersonasYComercios(
-                destinos = personasYComercios.valor,
-                onClick = { onNavigate(Screen.Destinos()) },
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
-            )
+        // Los filtros: el tipo, y lo que pidió otra pantalla (una búsqueda de «Buscar» o «En este
+        // comercio», una categoría de «En qué se va»), cada uno con su × para quitarlo.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = Medida.margenDePantalla)
+                .padding(top = Espacio.xs),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+        ) {
+            if (searchQuery.isNotBlank()) {
+                PildoraDeFiltro(
+                    texto = "«${searchQuery.trim()}»",
+                    seleccionada = true,
+                    icono = Icons.Rounded.Close,
+                    onClick = { searchQuery = "" },
+                    modifier = Modifier.testTag(TAG_CHIP_DE_LA_BUSQUEDA).semantics { contentDescription = "Quitar la búsqueda" },
+                )
+            }
+            filtro?.let { activo ->
+                PildoraDeFiltro(
+                    texto = "Solo ${activo.rotulo}",
+                    seleccionada = true,
+                    icono = Icons.Rounded.Close,
+                    onClick = { filtro = null },
+                    modifier = Modifier.testTag(TAG_CHIP_DEL_FILTRO).semantics { contentDescription = "Quitar el filtro" },
+                )
+            }
+            CHIPS_VISIBLES.forEach { chip ->
+                PildoraDeFiltro(
+                    texto = filters[chip],
+                    seleccionada = chip == activeFilter,
+                    onClick = { activeFilter = chip },
+                )
+            }
         }
 
+        // Lo que va arriba de la lista, cada cosa con su aire debajo.
+        val arribaDeLaLista = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Medida.dentroDeSeccion)
+
         textoDeRechazados(rechazados)?.let { texto ->
-            MinCard(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
-                variant = MinCardVariant.Default,
-                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            ) {
+            Superficie(modifier = arribaDeLaLista.fillMaxWidth()) {
                 Text(text = texto, style = Movi.textos.cuerpo, color = Movi.colores.aviso)
             }
         }
-        // Ola C, tarea 5: **un solo renglón** por todo lo que entró solo y espera una decisión —los
+        // Ola C, tarea 5: **una sola propuesta** por todo lo que entró solo y espera una decisión —los
         // movimientos por confirmar, los mensajes del banco y los pagos de tarjeta sin marcar— en
         // vez de un aviso por fuente. Abre la bandeja «Por revisar», donde se resuelve cada uno.
         //
-        // Espera a que las tres lecturas terminen: pintarlo con la primera que llega y corregir el
+        // Espera a que las tres lecturas terminen: pintarla con la primera que llega y corregir el
         // número con la segunda sería una cifra que baila, y con las tres en cero no ocupa lugar.
         //
         // Durante una recarga (cada «Reintentar», cada guardado desde Agregar) se queda con el
-        // último número que se contó: desmontarlo mientras se lee hacía saltar la lista ~56 dp y
-        // volver. Solo se va cuando una lectura que terminó dice cero.
+        // último número que se contó: desmontarla mientras se lee hacía saltar la lista y volver.
+        // Solo se va cuando una lectura que terminó dice cero.
         //
         // Con lo recordado de la visita anterior —las tres fuentes a la vista desde el primer cuadro—
-        // se cuenta ya, como se pinta ya la lista: esperar a que contesten haría aparecer el renglón
+        // se cuenta ya, como se pinta ya la lista: esperar a que contesten haría aparecer la tarjeta
         // DESPUÉS de la lista y la empujaría hacia abajo.
         val lasTresALaVista = perfilLeido && diasLeidos && porRevisar.mensajes != null && porRevisar.candidatos != null
         val conteoFresco = if ((!loading && porRevisar.terminaron) || lasTresALaVista) {
@@ -1463,36 +1351,20 @@ fun TransactionsScreen(
             RenglonPorRevisar(
                 cuantos = cuantosPorRevisarAhora,
                 onClick = { onNavigate(Screen.PorRevisar) },
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
+                modifier = arribaDeLaLista,
             )
         }
-        // Adentro de un modo sin chip («Entre cuentas»), el encabezado que dice dónde está y cómo
+        // Adentro de un modo sin chip («Entre cuentas»), el título que dice dónde está y cómo
         // salir. Hace falta porque sin chip **ningún chip queda marcado**: la lista se vería
         // filtrada sin nada que explicara por qué.
         val tituloDelModo = tituloDelModoSinChip(activeFilter)
         if (tituloDelModo != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = tituloDelModo,
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                )
-                Text(
-                    text = "Ver todos",
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.marca,
-                    modifier = Modifier.clickable { activeFilter = CHIP_TODO },
-                )
-            }
+            Seccion(
+                titulo = tituloDelModo,
+                accion = "Ver todos",
+                onAccion = { activeFilter = CHIP_TODO },
+                modifier = arribaDeLaLista,
+            )
         }
 
         // Con algo ya pintado, recargar lo dice «Actualizando…» en la cabecera (arriba), como el
@@ -1500,10 +1372,7 @@ fun TransactionsScreen(
         // la forma de lo que viene. Lo que sí va acá es la lectura que FALLÓ con la lista a la vista:
         // lo que se ve es lo último que vimos, y tiene que decirlo hasta que una lectura conteste.
         if (noSePudoActualizar) {
-            NoSePudoActualizar(
-                onReintentar = { refreshKey++ },
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
-            )
+            NoSePudoActualizar(onReintentar = { refreshKey++ }, modifier = arribaDeLaLista)
         }
 
         // Tirar hacia abajo pide lo mismo que «Reintentar»: `refreshKey` (ver [TirarParaActualizar]).
@@ -1515,11 +1384,11 @@ fun TransactionsScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 60.dp),
+            // El aire de abajo deja la última fila por encima del botón de Agregar.
+            contentPadding = PaddingValues(bottom = Medida.botonFlotante + Medida.margenDePantalla),
         ) {
-            // Task 7 puso una tarjeta de 6 filas sueltas; la Task 9 (ola B) la cambia por la forma
-            // real — 2-3 DÍAS, cada uno con su encabezado y su propia tarjeta. Ver
-            // [movimientosEsqueleto].
+            // Mientras carga, la forma real: dos o tres DÍAS, cada uno con su encabezado y su
+            // superficie. Ver [movimientosEsqueleto].
             if (loading && visibleDays.isEmpty()) {
                 movimientosEsqueleto()
             }
@@ -1529,41 +1398,28 @@ fun TransactionsScreen(
             // esta. Queda solo el aviso, con su «Reintentar».
             if (!loading && visibleDays.isEmpty() && !noSePudoActualizar) {
                 item {
+                    val alrededor = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.xxxl)
                     if (!diasLeidos) {
-                        NoSePudoLeer(
-                            "No pudimos cargar tus movimientos",
-                            onReintentar = { refreshKey++ },
-                            modifier = Modifier.padding(horizontal = 16.dp).padding(top = 40.dp),
-                        )
+                        NoSePudoLeer("No pudimos cargar tus movimientos", onReintentar = { refreshKey++ }, modifier = alrededor)
                     } else if (searchQuery.isNotBlank()) {
-                        // F13: nada que ver acá con "no hay dónde anotar" — la búsqueda no dio
-                        // resultados, así que el texto buscado es la pista que hace falta.
-                        Column(
-                            modifier = Modifier.fillParentMaxWidth().padding(top = 80.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                text = "Nada coincide con \"${searchQuery.trim()}\"",
-                                style = Movi.textos.cuerpo,
-                                color = Movi.colores.textoMedio,
-                            )
-                        }
+                        // La búsqueda no dio resultados: el texto buscado es la pista que hace falta,
+                        // y quitarla es lo que lo arregla.
+                        Vacio(
+                            titulo = "Nada coincide con «${searchQuery.trim()}»",
+                            detalle = null,
+                            accion = "Ver todos los movimientos",
+                            onAccion = { searchQuery = "" },
+                            modifier = alrededor,
+                        )
                     } else {
-                        // F10: el estado vacío ofrece la acción — registrar si ya hay dónde
-                        // anotar, crear una cuenta primero si no. Pero solo cuando el vacío es
-                        // «no hay nada anotado»: si es un chip el que dejó la lista vacía, se
-                        // dice eso y no se ofrece nada (ver [vacioDeMovimientos]).
-                        //
-                        // El mismo vacío de siempre, dibujado con [VacioQueEnsena]
-                        // en vez de con su propia Column — la prueba de que el componente sirve
-                        // para lo que ya estaba bien. El texto del botón perdió el «+ » a mano
-                        // (el componente ya pone su propio ícono de más; con los dos se leía
-                        // «+ + Registrar el primero») pero la condición y el destino son los de
-                        // siempre.
+                        // F10: el vacío ofrece la acción — registrar si ya hay dónde anotar, crear
+                        // una cuenta primero si no. Pero solo cuando el vacío es «no hay nada
+                        // anotado»: si es un chip el que dejó la lista vacía, se dice eso y no se
+                        // ofrece nada (ver [vacioDeMovimientos]).
                         val hayMovimientos = allDays.any { d -> d.items.any { !isOpeningBalance(it) } }
                         val vacio = vacioDeMovimientos(activeFilter, hayMovimientos)
                         val hayCuentaParaRegistrar = accounts.isNotEmpty() || !accountsLoaded
-                        VacioQueEnsena(
+                        Vacio(
                             titulo = vacio.titulo,
                             detalle = vacio.detalle,
                             accion = if (vacio.ofreceRegistrar) {
@@ -1575,108 +1431,43 @@ fun TransactionsScreen(
                                     else showCreateSheet = true
                                 }
                             } else null,
-                            modifier = Modifier.padding(horizontal = 16.dp).padding(top = 40.dp),
+                            modifier = alrededor,
                         )
                     }
                 }
             }
 
-            visibleDays.forEach { day ->
+            visibleDays.forEachIndexed { indiceDelDia, day ->
                 // Sin `key`: con la fecha como clave, `LazyColumn` ancla el primer día visible al
                 // cambiar de chip, y pasar de «Gastos» a «Todo» dejaba el día nuevo de arriba
                 // escondido por encima del tope (visto a ojo en la web). Posicional, como antes.
                 item {
                     val rows = agruparAjustesDeSaldo(collapseTransfers(day.items), searchQuery)
                     val plegado = day.date in diasPlegados
-                    Column(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 20.dp)) {
-                        // El encabezado entero es el botón que pliega y despliega el día. Plegado
-                        // sigue diciendo el «Flujo del día» y cuántos renglones esconde: plegar
-                        // es para acortar la lista, no para perder la información.
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                // Ola B, tarea 9 (fix round 1): el tag va ANTES de `clip`/
-                                // `clickable`/`padding` — mismo lugar en la cadena que
-                                // `TAG_ENCABEZADO_DE_DIA_ESQUELETO` en el esqueleto — para que
-                                // los dos midan el mismo punto (el borde exterior del renglón,
-                                // no adentro del relleno). Sin este orden, una prueba medía el
-                                // esqueleto 8 dp más abajo que el real sin que el padding de
-                                // ninguno de los dos hubiera cambiado.
-                                .testTag(TAG_ENCABEZADO_DE_DIA)
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { diasPlegados = DiasPlegadosStore.alternar(day.date) }
-                                .padding(horizontal = 4.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Icon(
-                                    imageVector = if (plegado) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
-                                    contentDescription = if (plegado) "Desplegar el día" else "Plegar el día",
-                                    tint = Movi.colores.textoApagado,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                                Text(
-                                    // V13: «23 DE AGOSTO» / «HOY», no la clave ISO del server.
-                                    text = formatDayHeading(day.date, hoyIso).uppercase(),
-                                    style = Movi.textos.apoyo,
-                                    color = Movi.colores.textoMedio,
-                                    fontWeight = FontWeight.Medium,
-                                    letterSpacing = 0.4.sp,
-                                )
-                                if (plegado) {
-                                    Text(
-                                        text = cuantosMovimientosDice(rows).let {
-                                            if (it == 1) "· 1 movimiento" else "· $it movimientos"
-                                        },
-                                        style = Movi.textos.apoyo,
-                                        color = Movi.colores.textoApagado,
-                                    )
-                                }
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                // V6: el total del día suma el FLUJO (lo que entró y salió del
-                                // bolsillo), no todos los renglones de abajo — la apertura de
-                                // una cuenta queda afuera. Decirlo con todas las letras cuesta
-                                // dos palabras y evita que la cifra parezca una suma mal hecha.
-                                Text(
-                                    text = "Flujo del día",
-                                    style = Movi.textos.apoyo,
-                                    color = Movi.colores.textoApagado,
-                                )
-                                Text(
-                                    text = "${if (day.total > 0) "+" else ""}${formatCOP(day.total)}",
-                                    color = Movi.colores.textoMedio,
-                                    // Plata en la línea de apoyo: la talla del apoyo, tabular como un monto.
-                                    style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
-                                )
-                            }
-                        }
-                        // Ola W: «Flujo del día» de arriba YA incluye el pago de tarjeta (ver
-                        // `diasVisibles`) — esta línea ya no aclara una exclusión, aclara que esa
-                        // parte no se duplica en el gasto del período/Disponible, que sigue sin
-                        // contarla (la compra ya restó el mes cuando se hizo). Sobre los mismos
-                        // `day.items` que ya arman el total de arriba, sin ninguna lectura nueva.
+                    Column(
+                        modifier = Modifier
+                            .padding(horizontal = Medida.margenDePantalla)
+                            .padding(top = aireArribaDelDia(indiceDelDia)),
+                    ) {
+                        // **El día en un renglón** (ola R4): la fecha y el flujo del día. Todo el
+                        // renglón pliega y despliega el día; plegado sigue diciendo el flujo y
+                        // cuántos renglones esconde. El «Día a día» (cuánto podías gastar) salió:
+                        // esa comparación es de Plan.
+                        EncabezadoDelDia(
+                            fecha = formatDayHeading(day.date, hoyIso),
+                            total = day.total,
+                            plegado = plegado,
+                            cuantos = cuantosMovimientosDice(rows),
+                            onAlternar = { diasPlegados = DiasPlegadosStore.alternar(day.date) },
+                        )
+                        // Ola W: «Flujo del día» YA incluye el pago de tarjeta (ver `diasVisibles`) —
+                        // esta línea aclara que esa parte no se duplica en el gasto del período.
                         val montoPagoDeTarjeta = montoPagoDeTarjetaEnElDia(day.items, accountTypes)
                         val textoPagoDeTarjeta = textoPagoDeTarjetaEnElDia(montoPagoDeTarjeta)
                         if (textoPagoDeTarjeta != null) LineaPagoDeTarjetaEnElDia(textoPagoDeTarjeta)
-                        // «Día a día»: debajo del «Flujo del día», del lado de la cifra. Con la meta a
-                        // la vista, la línea de ese día; sin ella y con la lectura en vuelo, su alto
-                        // reservado en los días que podrían llevarla; si no, nada.
-                        val diaCuenta = day.date >= inicioDelPeriodoEnCurso.toString() && day.date <= hoyIso
-                        val lineaDelDia = diaADia?.linea(day.date)
-                        if (lineaDelDia != null) LineaDelDiaADiaEnElDia(lineaDelDia)
-                        else if (reservaElDiaADia && diaCuenta) LineaDelDiaADiaEnElDia(null)
-                        if (!plegado) MinCard(
+                        if (!plegado) Superficie(
                             modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                            relleno = RellenoDeSuperficie.Lista,
                         ) {
                             rows.forEachIndexed { i, row ->
                                 Column {
@@ -1692,11 +1483,8 @@ fun TransactionsScreen(
                                                 reglasRecurrentes,
                                                 nombresDeSuscripcionesActivas,
                                             ) != null,
-                                            // Al tocarlo se abre la hoja de categoría sobre la
-                                            // pata de origen — que se niega a recategorizar y
-                                            // explica por qué. Es la única acción que un traspaso
-                                            // ofrece hoy desde acá, y es mejor que un renglón
-                                            // muerto que no responde al toque.
+                                            // Al tocarlo se abre la hoja sobre la pata de origen —
+                                            // que se niega a recategorizar y explica por qué.
                                             elegido = conPanel && selectedEvent?.id == row.out.id,
                                             onClick = { elegir(row.out) },
                                         )
@@ -1739,7 +1527,7 @@ fun TransactionsScreen(
                                             // cualquier renglón: el grupo cambia dónde están, no
                                             // qué se puede hacer con ellos.
                                             if (abierto) row.events.forEach { ajuste ->
-                                                Hairline()
+                                                Separador()
                                                 MovementSingleRow(
                                                     tx = ajuste,
                                                     accountNames = accountNames,
@@ -1749,7 +1537,7 @@ fun TransactionsScreen(
                                             }
                                         }
                                     }
-                                    if (i < rows.size - 1) Hairline()
+                                    if (i < rows.size - 1) Separador()
                                 }
                             }
                         }
@@ -1790,7 +1578,7 @@ fun TransactionsScreen(
 
     SnackbarHost(
         hostState = snackbarHostState,
-        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Medida.dentroDeSeccion),
     )
 
     // Con el panel al lado, el movimiento elegido va ahí y no se abre ninguna hoja.
@@ -1884,12 +1672,145 @@ fun TransactionsScreen(
  * Recibiendo la paleta es una función pura: la pantalla le pasa `Movi.colores` y la prueba le pasa
  * las dos paletas, así que ahora la distinción se verifica **en los dos temas**, no en uno.
  */
-fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color = when (tono) {
-    // Neutro, no `sale`: ver [TonoDelMonto.GASTO]. Lo distingue el signo «−».
-    TonoDelMonto.GASTO -> colores.texto
-    TonoDelMonto.INGRESO -> colores.entra
-    TonoDelMonto.ENTRE_CUENTAS -> colores.entreCuentas
-    TonoDelMonto.NEUTRO -> colores.textoApagado
+fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color =
+    colorDeLaCifra(tonoDeCifraDelTono(tono), colores)
+
+/**
+ * **El tono del sistema que le toca a cada tono de un movimiento** (ola R4): el gasto en el color del
+ * texto (lo distingue el «−»), el ingreso en `entra` con «+», el traspaso en `entreCuentas` y sin
+ * signo, y lo que no movió plata del bolsillo (la apertura, la pata huérfana) en gris. Así ninguna
+ * fila elige su color a mano: todas pintan con la [Cifra] del sistema.
+ */
+fun tonoDeCifraDelTono(tono: TonoDelMonto): TonoDeCifra = when (tono) {
+    TonoDelMonto.GASTO -> TonoDeCifra.Neutro
+    TonoDelMonto.INGRESO -> TonoDeCifra.Ingreso
+    TonoDelMonto.ENTRE_CUENTAS -> TonoDeCifra.EntreCuentas
+    TonoDelMonto.NEUTRO -> TonoDeCifra.Apagado
+}
+
+/** El monto con el signo que la [Cifra] tiene que pintar: negativo solo para un gasto. */
+fun montoParaLaCifra(tono: TonoDelMonto, monto: Long): Long = if (tono == TonoDelMonto.GASTO) -monto else monto
+
+/** **El monto de un movimiento**: la [Cifra] del sistema, en el tono y la moneda del movimiento. */
+@Composable
+internal fun CifraDelMovimiento(
+    monto: Long,
+    moneda: String,
+    tono: TonoDelMonto,
+    modifier: Modifier = Modifier,
+    variante: VarianteDeCifra = VarianteDeCifra.Fila,
+) {
+    Cifra(montoParaLaCifra(tono, monto), variante, modifier, tonoDeCifraDelTono(tono), moneda)
+}
+
+/**
+ * **El encabezado de un día, en un renglón** (ola R4): la fecha a la izquierda —«Hoy», «Ayer», «23
+ * de agosto», como se escribe, no en mayúsculas— y el flujo del día a la derecha. Es el título de la
+ * sección de ese día, con el estilo de [Seccion]; el renglón entero pliega y despliega el día, y
+ * plegado dice cuántos renglones esconde. Mide [Medida.objetivoTactil], igual que su esqueleto.
+ *
+ * V6: el total suma el FLUJO (lo que entró y salió del bolsillo), no todos los renglones de abajo —
+ * la apertura de una cuenta queda afuera—. «Flujo del día» lo dice en dos palabras, para que la
+ * cifra no parezca una suma mal hecha.
+ */
+@Composable
+private fun EncabezadoDelDia(
+    fecha: String,
+    total: Long,
+    plegado: Boolean,
+    cuantos: Int,
+    onAlternar: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            // El tag va antes de `clickable`: mide el borde del renglón, el mismo punto que
+            // `TAG_ENCABEZADO_DE_DIA_ESQUELETO` en el esqueleto.
+            .testTag(TAG_ENCABEZADO_DE_DIA)
+            .heightIn(min = Medida.objetivoTactil)
+            .clickable(
+                onClickLabel = if (plegado) "Desplegar el día" else "Plegar el día",
+                onClick = onAlternar,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            modifier = Modifier.weight(1f).semantics { heading() },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
+        ) {
+            Text(
+                text = fecha,
+                style = Movi.textos.titulo,
+                color = Movi.colores.texto,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (plegado) {
+                Text(
+                    text = if (cuantos == 1) "· 1 movimiento" else "· $cuantos movimientos",
+                    style = Movi.textos.titulo,
+                    fontWeight = FontWeight.Normal,
+                    color = Movi.colores.textoMedio,
+                    maxLines = 1,
+                )
+            }
+        }
+        Text(text = "Flujo del día", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
+        Cifra(total, VarianteDeCifra.Chica, tono = if (total > 0) TonoDeCifra.Ingreso else TonoDeCifra.Neutro)
+        Icon(
+            imageVector = if (plegado) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
+            contentDescription = if (plegado) "Desplegar el día" else "Plegar el día",
+            tint = Movi.colores.textoMedio,
+            modifier = Modifier.size(Icono.m),
+        )
+    }
+}
+
+/**
+ * Lo que va al final de una fila de movimiento: el punto de «por confirmar», el ícono de repetición
+ * y el monto (con «Tu parte» debajo si el gasto se repartió). El punto y el ícono dicen su nombre al
+ * lector de pantalla: el color nunca es la única pista.
+ */
+@Composable
+private fun FinalDeLaFila(
+    monto: Long,
+    moneda: String,
+    tono: TonoDelMonto,
+    porConfirmar: Boolean,
+    esRecurrente: Boolean,
+    tuParte: String? = null,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
+    ) {
+        if (porConfirmar) {
+            StatusDot(Movi.colores.aviso, modifier = Modifier.semantics { contentDescription = "Por confirmar" })
+        }
+        if (esRecurrente) {
+            Icon(
+                imageVector = Icons.Rounded.Repeat,
+                contentDescription = "Recurrente",
+                tint = Movi.colores.textoMedio,
+                modifier = Modifier.size(Icono.s),
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            CifraDelMovimiento(monto, moneda, tono)
+            if (tuParte != null) {
+                Text(
+                    text = tuParte,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    maxLines = 1,
+                    modifier = Modifier.testTag(TAG_TU_PARTE),
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -1899,42 +1820,13 @@ fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color = when (tono
  * Sin `+` ni `−` a propósito: la plata no entró ni salió del bolsillo, solo cambió de cuenta.
  * (El desembolso de un crédito es la excepción: entró plata prestada, va en verde con «+» y una
  * nota que aclara que es prestada — suma en «Entró» — ver [esDesembolso].)
- * Ponerle un signo obligaría a elegir el punto de vista de una de las dos cuentas, que es
- * exactamente la confusión que este renglón viene a sacar. El signo de cada pata sí aparece, con
- * su cuenta al lado, en el detalle de cada cuenta. El color, en cambio, sí distingue esto de un
- * NEUTRO real (ver [tonoDelRenglon]): el dueño lo pidió para no confundir un traspaso con un
- * movimiento que de verdad no cuenta nada.
  *
  * Lleva **el mismo ícono de repetición** que [MovementSingleRow] cuando el par es una cuota de
- * crédito o el pago de una tarjeta. Un par plegado es UN renglón, así que marcarlo no duplica nada;
- * sin esto, el mismo pago se leía como recurrente en el chip «Recurrentes» (donde entra sola la
- * pata del dinero) y como un par mudo en «Todo», que es la misma fila diciendo dos cosas distintas
- * según el filtro. La marca sale de la pata del dinero — [MovementRow.Transfer.out] —, que es la
- * que reconocen [com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada] y
- * [com.jvillada.movi.ui.recurrentes.nombreDePagoDeTarjeta].
+ * crédito o el pago de una tarjeta. La marca sale de la pata del dinero — [MovementRow.Transfer.out].
  *
- * Los dos pares se siguen viendo igual que antes —el azul de «entre cuentas», sin signo— y el
- * título los distingue («Cuota de crédito» / «Pago de tarjeta», ver [transferRowTitle]), que es lo
- * que hace falta: uno cuenta en el mes y el otro no.
- *
- * `internal` desde la ola C: la bandeja «Por revisar» pinta con este mismo renglón lo que entró
- * solo, para que un movimiento se vea igual allá y acá.
+ * Es una [Fila] del sistema (ola R4). `internal`: la bandeja «Por revisar» pinta con este mismo
+ * renglón lo que entró solo, para que un movimiento se vea igual allá y acá.
  */
-
-/**
- * El aire vertical de cada renglón de la lista de Movimientos: 14 dp en el teléfono, el de
- * siempre, y un poco más —18 dp— en pantalla ancha (Medio/Expandido). Ola X: el dueño la vio
- * apretada en la web, en alto además de en ancho.
- *
- * [TransferRow], [RenglonDeAjustes] y [MovementSingleRow] son el mismo renglón que pinta la lista
- * del teléfono y la lista al lado del panel (Ola W4) — no hay forma limpia de separar la densidad
- * de uno del otro sin duplicar los tres composables por 4 dp de diferencia, así que se resuelve
- * leyendo [LocalWindowWidthClass] acá adentro: el teléfono, que ya se ve bien, no cambia.
- */
-@Composable
-private fun paddingVerticalDeLaFila(): Dp =
-    if (LocalWindowWidthClass.current == WindowWidthClass.Compact) 14.dp else 18.dp
-
 @Composable
 internal fun TransferRow(
     row: MovementRow.Transfer,
@@ -1944,70 +1836,28 @@ internal fun TransferRow(
     elegido: Boolean = false,
     onClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .marcaDeElegido(elegido)
-            .clickable(onClick = onClick)
-            .padding(vertical = paddingVerticalDeLaFila()),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    val subtitulo = transferRowSubtitle(row, accountNames)
+    Fila(
+        titulo = transferRowTitle(row, accountTypes),
+        // El desembolso dice que la plata es prestada; el resto, de dónde a dónde fue.
+        subtitulo = if (esDesembolso(row, accountTypes)) "$NOTA_DE_DESEMBOLSO · $subtitulo" else subtitulo,
+        modifier = Modifier.marcaDeElegido(elegido),
         // Neutro a propósito: un traspaso (o la cuota / el pago de tarjeta que se ven con esta
-        // misma forma) no es una categoría del dueño, es plata que cambió de cuenta. Por eso el
-        // ícono es siempre el de TRANSFER_CATEGORY y no el de la categoría real de la pata —
-        // «Cuota de crédito» se vería violeta, como si fuera un gasto con carácter propio.
-        IconoDeCategoria(TRANSFER_CATEGORY)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = transferRowTitle(row, accountTypes),
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-                letterSpacing = (-0.1).sp,
+        // misma forma) no es una categoría del dueño, es plata que cambió de cuenta.
+        inicio = { IconoDeCategoria(TRANSFER_CATEGORY) },
+        final = {
+            FinalDeLaFila(
+                // En la moneda del movimiento: un traspaso de la Master Black USD no son pesos. Sin
+                // signo y en el azul de entre cuentas; el desembolso, en verde con «+».
+                monto = row.amount,
+                moneda = row.out.currency,
+                tono = tonoDelRenglon(row, accountTypes),
+                porConfirmar = false,
+                esRecurrente = esRecurrente,
             )
-            Spacer(Modifier.height(2.dp))
-            if (esDesembolso(row, accountTypes)) {
-                Text(
-                    text = NOTA_DE_DESEMBOLSO,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                if (esRecurrente) {
-                    Icon(
-                        imageVector = Icons.Rounded.Repeat,
-                        contentDescription = "Recurrente",
-                        tint = Movi.colores.textoMedio,
-                        modifier = Modifier.size(11.dp),
-                    )
-                }
-                Text(
-                    text = transferRowSubtitle(row, accountNames),
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    // Igual que en [MovementSingleRow]: sin el weight, el Row que envuelve al
-                    // ícono no le acota el ancho al texto y el ellipsis no tiene sobre qué cortar.
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
-        }
-        Text(
-            // En la moneda del movimiento: un traspaso de la Master Black USD no son pesos.
-            text = textoDelMontoDeTraspaso(row, accountTypes),
-            style = Movi.textos.monto,
-            fontWeight = FontWeight.Medium,
-            color = colorDelTono(tonoDelRenglon(row, accountTypes), Movi.colores),
-        )
-    }
+        },
+        onClick = onClick,
+    )
 }
 
 /**
@@ -2015,8 +1865,8 @@ internal fun TransferRow(
  *
  * **Sin monto a la derecha, y es lo honesto.** Cada ajuste lleva su delta, pero sumarlos no
  * significa nada: son deltas de cuentas distintas, algunas de activo y otras de deuda, y ninguno
- * es plata que entró o salió (`isCashFlow` los excluye). Una cifra ahí se leería como un total del
- * día y sería falsa. Lo que va en su lugar es cuántos hay, que es lo que el renglón promete abrir.
+ * es plata que entró o salió (`isCashFlow` los excluye). Lo que va en su lugar es cuántos hay, que
+ * es lo que el renglón promete abrir.
  */
 @Composable
 private fun RenglonDeAjustes(
@@ -2024,59 +1874,34 @@ private fun RenglonDeAjustes(
     abierto: Boolean,
     onAlternar: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onAlternar)
-            .padding(vertical = paddingVerticalDeLaFila()),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // Mismo criterio que TransferRow: un ajuste de saldo no es una categoría, es una
-        // corrección — el ícono es el neutro de ADJUSTMENT_CATEGORY, no el de ningún gasto.
-        IconoDeCategoria(ADJUSTMENT_CATEGORY)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = tituloDeLosAjustes(events),
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-                letterSpacing = (-0.1).sp,
+    Fila(
+        titulo = tituloDeLosAjustes(events),
+        subtitulo = if (events.size == 1) "$ADJUSTMENT_CATEGORY · 1 corrección"
+        else "$ADJUSTMENT_CATEGORY · ${events.size} correcciones",
+        // Un ajuste de saldo no es una categoría, es una corrección: el ícono neutro.
+        inicio = { IconoDeCategoria(ADJUSTMENT_CATEGORY) },
+        final = {
+            Icon(
+                imageVector = if (abierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                contentDescription = if (abierto) "Ocultar los ajustes" else "Ver los ajustes",
+                tint = Movi.colores.textoApagado,
+                modifier = Modifier.size(Icono.m),
             )
-            Spacer(Modifier.height(3.dp))
-            Text(
-                text = if (events.size == 1) "$ADJUSTMENT_CATEGORY · 1 corrección"
-                else "$ADJUSTMENT_CATEGORY · ${events.size} correcciones",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-            )
-        }
-        Icon(
-            imageVector = if (abierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
-            contentDescription = if (abierto) "Ocultar los ajustes" else "Ver los ajustes",
-            tint = Movi.colores.textoApagado,
-            modifier = Modifier.size(20.dp),
-        )
-    }
+        },
+        onClick = onAlternar,
+    )
 }
 
 /**
- * Un renglón suelto de la lista.
+ * Un renglón suelto de la lista: una [Fila] del sistema (ola R4) con la marca del comercio (o el
+ * ícono de la categoría), la descripción, «categoría · cuenta» y el monto.
  *
- * Ola 8 · V7: el subtítulo dice ahora **de qué cuenta es el movimiento**. Con dos cuentas
- * abiertas había dos «Saldo inicial» idénticos y nada los distinguía — el renglón de un
- * traspaso sí decía «De Bancolombia Ahorros a Nequi» y los demás no decían nada. En su lugar
- * sale `EventSource` («MANUAL», «SMS»…), que además de no aportar nada acá es el nombre crudo
- * de un enum en una app que habla español; el punto naranja al lado de la descripción ya avisa
- * lo único que importaba de ahí: que el movimiento entró solo y falta confirmarlo.
+ * Ola 8 · V7: el subtítulo dice **de qué cuenta es el movimiento** (con dos cuentas abiertas había
+ * dos «Saldo inicial» idénticos). El punto de «por confirmar» y el ícono de repetición van junto al
+ * monto ([FinalDeLaFila]); no son botones: para editar el recurrente se abre el movimiento.
  *
- * PR 1 del rediseño de Recurrentes: el mismo ícono de repetición que ya identifica a Recurrentes
- * en el rail y en Más ([Icons.Rounded.Repeat]), chico y sin color propio —el mismo `Movi.colores.textoMedio`
- * del subtítulo— junto a la categoría. No es un botón: solo informa: para editar el recurrente
- * hay que abrir el movimiento y usar «¿Se repite todos los meses?» (ver `SeccionEstoSeRepite`).
- *
- * `internal` desde la ola C: la bandeja «Por revisar» pinta con este mismo renglón lo que entró
- * solo, para que un movimiento se vea igual allá y acá.
+ * `internal`: la bandeja «Por revisar» y el detalle de una cuenta pintan con este mismo renglón, para
+ * que un movimiento se vea igual en todas partes.
  */
 @Composable
 internal fun MovementSingleRow(
@@ -2085,7 +1910,7 @@ internal fun MovementSingleRow(
     esRecurrente: Boolean = false,
     /** Es el que muestra el panel de la derecha (Ola W4). Solo en pantalla ancha. */
     elegido: Boolean = false,
-    /** Una línea más debajo del subtítulo (el detalle de una cuenta explica ahí un pago que no fue la cuota). */
+    /** Una línea más debajo de la fila (el detalle de una cuenta explica ahí un pago que no fue la cuota). */
     nota: String? = null,
     /**
      * El tono decidido por quien llama. El detalle de una cuenta lo usa para pintar el signo
@@ -2100,92 +1925,38 @@ internal fun MovementSingleRow(
     val subtitulo = accountNames[tx.accountId]
         ?.let { "${tx.category} · $it" }
         ?: tx.category
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(TAG_FILA_DE_MOVIMIENTO_SUELTO)
-            .marcaDeElegido(elegido)
-            .clickable(onClick = onClick)
-            .padding(vertical = paddingVerticalDeLaFila()),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // La marca del comercio si Movi la reconoce (Ola 2a), y si no el ícono de la categoría — la
-        // apertura, el ajuste y la pata huérfana ya resuelven a un ícono neutro por su nombre (ver
-        // `aparienciaDe`), así que acá no hace falta distinguir.
-        AvatarDelComercio(tx)
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = conCifrasOcultas(tx.description),
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                    letterSpacing = (-0.1).sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    // Sin este weight el Row no le acota el ancho al título y una descripción
-                    // larga («Ajuste al saldo de Skandia — quedó en $95.812.553 al 21-sep…»)
-                    // ocupaba cuatro renglones antes de recortarse; con él el punto de «sin
-                    // confirmar» sigue visible al lado incluso cuando el título se corta.
-                    modifier = Modifier.weight(1f, fill = false),
+    Column {
+        Fila(
+            titulo = conCifrasOcultas(tx.description),
+            subtitulo = subtitulo,
+            // El tag de la fila va en la fila misma —la que se toca—, no en lo que la envuelve.
+            modifier = Modifier.testTag(TAG_FILA_DE_MOVIMIENTO_SUELTO).marcaDeElegido(elegido),
+            // La marca del comercio si Movi la reconoce (Ola 2a), y si no el ícono de la categoría.
+            inicio = { AvatarDelComercio(tx) },
+            final = {
+                FinalDeLaFila(
+                    // En la moneda del movimiento: un cargo de US$20 en la tarjeta en dólares no son pesos.
+                    monto = tx.amount,
+                    moneda = tx.currency,
+                    tono = tono,
+                    porConfirmar = tx.reconciliationStatus == ReconciliationStatus.UNCONFIRMED,
+                    esRecurrente = esRecurrente,
+                    // R3 · un gasto repartido: la plata salió entera (el monto), pero en tus gastos
+                    // cuenta solo tu parte (ver `montoContado` en :core).
+                    tuParte = if (tx.parteAjena > 0L) "Tu parte ${formatMoney(montoContado(tx), tx.currency)}" else null,
                 )
-                if (tx.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
-                    StatusDot(Movi.colores.aviso)
-                }
-            }
-            Spacer(Modifier.height(2.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                if (esRecurrente) {
-                    Icon(
-                        imageVector = Icons.Rounded.Repeat,
-                        contentDescription = "Recurrente",
-                        tint = Movi.colores.textoMedio,
-                        modifier = Modifier.size(11.dp),
-                    )
-                }
-                Text(
-                    text = subtitulo,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    // Sin este weight, el Row que ahora envuelve el ícono no le da al texto un
-                    // ancho acotado y el ellipsis de arriba no tiene sobre qué recortar.
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
-            nota?.let {
-                Spacer(Modifier.height(4.dp))
-                Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 16.sp)
-            }
-        }
-        Column(horizontalAlignment = Alignment.End) {
+            },
+            onClick = onClick,
+        )
+        nota?.let {
             Text(
-                // En la moneda del movimiento, como la hoja de anular y el detalle de la cuenta: un
-                // cargo de US$20 en la tarjeta en dólares se leía «−$20». La misma regla que el monto
-                // grande del detalle (ver [textoDelMontoConSigno]).
-                text = textoDelMontoConSigno(tx, tono),
-                style = Movi.textos.monto,
-                fontWeight = FontWeight.Medium,
-                color = colorDelTono(tono, Movi.colores),
+                text = it,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier
+                    .padding(start = Medida.margenDePantalla + Medida.avatar + Espacio.s, end = Medida.margenDePantalla)
+                    .padding(bottom = Espacio.xs),
             )
-            // R3 · un gasto repartido: la plata salió entera (el monto de arriba), pero en tus
-            // gastos cuenta solo tu parte (ver `montoContado` en :core).
-            if (tx.parteAjena > 0L) {
-                Text(
-                    text = "Tu parte ${formatMoney(montoContado(tx), tx.currency)}",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    modifier = Modifier.testTag(TAG_TU_PARTE),
-                )
-            }
         }
     }
 }
@@ -2194,16 +1965,16 @@ internal fun MovementSingleRow(
 const val TAG_TU_PARTE: String = "tu-parte"
 
 /**
- * La fila que muestra el panel de la derecha (Ola W4): un fondo de la marca, tenue, y la semántica
- * de «elegida» — el mismo papel que el borde de la fila elegida en «Tus períodos».
+ * La fila que muestra el panel de la derecha (Ola W4): el lavado de la marca y la semántica de
+ * «elegida».
  */
 @Composable
 private fun Modifier.marcaDeElegido(elegido: Boolean): Modifier =
     if (!elegido) this
     else this
         .semantics { selected = true }
-        .clip(RoundedCornerShape(8.dp))
-        .background(Movi.colores.marca.copy(alpha = 0.10f))
+        .clip(RoundedCornerShape(Radio.s))
+        .background(Movi.colores.lavado(Movi.colores.marca))
 
 /**
  * Ola 4 · Ver la plata: [dias] con solo lo que deja pasar [filtro] (ver `FiltroDeMovimientos` en
@@ -2221,34 +1992,5 @@ fun conElFiltro(dias: List<EventDay>, filtro: FiltroDeMovimientos?): List<EventD
 /** El tag del chip del filtro que mandó «En qué se va», para las pruebas. */
 const val TAG_CHIP_DEL_FILTRO: String = "chip-del-filtro"
 
-/** El chip del filtro que mandó «En qué se va»: lo que se está mirando, y la × que lo quita. */
-@Composable
-private fun ChipDelFiltro(filtro: FiltroDeMovimientos, onQuitar: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 12.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Movi.colores.tarjeta)
-            .clickable(onClickLabel = "Quitar el filtro") { onQuitar() }
-            .testTag(TAG_CHIP_DEL_FILTRO)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            text = "Solo ${filtro.rotulo}",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.texto,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 260.dp),
-        )
-        Icon(
-            imageVector = Icons.Rounded.Close,
-            contentDescription = "Quitar el filtro",
-            tint = Movi.colores.textoMedio,
-            modifier = Modifier.size(14.dp),
-        )
-    }
-}
+/** El tag del chip de la búsqueda que llegó de «Buscar» o de «En este comercio». */
+const val TAG_CHIP_DE_LA_BUSQUEDA: String = "chip-de-la-busqueda"

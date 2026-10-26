@@ -80,12 +80,21 @@ import com.jvillada.movi.ui.components.AvatarDelComercio
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.PanelDeTablero
 import com.jvillada.movi.ui.components.SelectorSegmentado
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.Vacio
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.components.ds.Cifra as DsCifra
 import com.jvillada.movi.ui.components.cabenDosColumnasIguales
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
@@ -116,7 +125,6 @@ import kotlinx.datetime.LocalDate
 const val TITULO_EN_QUE_SE_VA = "En qué se va"
 const val TAG_GRAFICA_DEL_ANALISIS = "grafica-del-analisis"
 const val TAG_FILA_DEL_ANALISIS = "fila-del-analisis"
-const val TAG_NOMBRE_DE_LA_FILA = "nombre-de-la-fila-del-analisis"
 const val TAG_LEYENDA_DEL_ANALISIS = "leyenda-del-analisis"
 const val TAG_TOTAL_DEL_ANALISIS = "total-del-analisis"
 
@@ -188,7 +196,7 @@ fun EnQueSeVaScreen(
                         when {
                             analisis != null -> {
                                 ResumenDelAnalisis(analisis, hoy)
-                                Spacer(Modifier.height(Movi.espacios.amplio))
+                                Spacer(Modifier.height(Medida.dentroDeSeccion))
                                 TarjetaDelGrafico(
                                     analisis = analisis,
                                     acumulado = acumulado,
@@ -205,30 +213,25 @@ fun EnQueSeVaScreen(
 
                 fun LazyListScope.laLista() {
                     item {
+                        Seccion(titulo = "Por dónde se fue")
                         SelectorSegmentado(
                             labels = VistaDelAnalisis.entries.map { it.rotulo },
                             selected = vista,
                             onSelect = { vista = it },
                         )
-                        Spacer(Modifier.height(Movi.espacios.medio))
+                        Spacer(Modifier.height(Medida.dentroDeSeccion))
                     }
                     if (analisis != null) {
                         if (filas.isEmpty()) {
                             item {
-                                Text(
-                                    "No hay gastos en este período.",
-                                    style = Movi.textos.cuerpo,
-                                    color = Movi.colores.textoMedio,
-                                    modifier = Modifier.padding(vertical = Movi.espacios.medio),
+                                Vacio(
+                                    titulo = "No hay gastos en este período",
+                                    detalle = "Lo que gastes aparece aquí, por categoría, comercio o cuenta.",
                                 )
                             }
                         } else {
                             item {
-                                MinCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    variant = MinCardVariant.Elevated,
-                                    padding = PaddingValues(vertical = Movi.espacios.corto),
-                                ) {
+                                Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                                     filas.forEach { fila ->
                                         FilaDeLaLista(
                                             fila = fila,
@@ -240,23 +243,23 @@ fun EnQueSeVaScreen(
                                 }
                             }
                             if (analisis.conComparacion) item {
-                                Spacer(Modifier.height(Movi.espacios.corto))
+                                Spacer(Modifier.height(Espacio.xs))
                                 Text(
                                     pieDeLasFlechas(analisis),
                                     style = Movi.textos.apoyo,
-                                    color = Movi.colores.textoApagado,
+                                    color = Movi.colores.textoMedio,
                                 )
                             }
                         }
                     }
-                    item { Spacer(Modifier.height(Movi.espacios.seccion)) }
+                    item { Spacer(Modifier.height(Medida.entreSecciones)) }
                 }
 
-                val relleno = PaddingValues(horizontal = Movi.espacios.amplio)
+                val relleno = PaddingValues(horizontal = Medida.margenDePantalla)
                 if (dosColumnas) {
                     Row(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = Movi.espacios.amplio),
-                        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.amplio),
+                        modifier = Modifier.fillMaxSize().padding(horizontal = Medida.margenDePantalla),
+                        horizontalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
                     ) {
                         LazyColumn(modifier = Modifier.weight(1f)) { resumenYGrafico() }
                         LazyColumn(modifier = Modifier.weight(1f)) { laLista() }
@@ -264,7 +267,7 @@ fun EnQueSeVaScreen(
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = relleno) {
                         resumenYGrafico()
-                        item { Spacer(Modifier.height(Movi.espacios.margen)) }
+                        item { Spacer(Modifier.height(Medida.entreSecciones)) }
                         laLista()
                     }
                 }
@@ -283,21 +286,16 @@ private fun SelectorDelPeriodo(
     onAnterior: () -> Unit,
     onSiguiente: () -> Unit,
 ) {
+    // Las flechas en su área de toque de 48; el dibujo queda alineado con el margen de la pantalla.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Movi.espacios.amplio)
-            .padding(bottom = Movi.espacios.medio),
+            .padding(horizontal = Medida.margenDePantalla - (Medida.objetivoTactil - Icono.l) / 2),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Icon(
-            imageVector = Icons.Rounded.KeyboardArrowLeft,
-            contentDescription = "Período anterior",
-            tint = Movi.colores.textoMedio,
-            modifier = Modifier.size(22.dp).clickable(onClick = onAnterior),
-        )
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        BotonDeIcono(Icons.Rounded.KeyboardArrowLeft, "Período anterior", onClick = onAnterior)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
             Text(
                 text = tituloDelPeriodo(periodo),
                 style = Movi.textos.cuerpo,
@@ -305,15 +303,21 @@ private fun SelectorDelPeriodo(
                 color = Movi.colores.texto,
             )
             rangoLegibleDe(periodo, ajustes)?.let { rango ->
-                Text(rango, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+                Text(rango, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
-        Icon(
-            imageVector = Icons.Rounded.KeyboardArrowRight,
-            contentDescription = "Período siguiente",
-            tint = if (puedeAvanzar) Movi.colores.textoMedio else Movi.colores.textoApagado,
-            modifier = Modifier.size(22.dp).then(if (puedeAvanzar) Modifier.clickable(onClick = onSiguiente) else Modifier),
-        )
+        if (puedeAvanzar) {
+            BotonDeIcono(Icons.Rounded.KeyboardArrowRight, "Período siguiente", onClick = onSiguiente)
+        } else {
+            Box(Modifier.size(Medida.objetivoTactil), contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Rounded.KeyboardArrowRight,
+                    contentDescription = "Período siguiente",
+                    tint = Movi.colores.textoApagado,
+                    modifier = Modifier.size(Icono.l),
+                )
+            }
+        }
     }
 }
 
@@ -321,7 +325,7 @@ private fun SelectorDelPeriodo(
 
 /** «Llevas gastado» en el período en curso; «Gastaste» en uno que ya cerró. */
 internal fun rotuloDelTotal(analisis: AnalisisDelPeriodo, hoy: LocalDate): String =
-    if (hoy <= analisis.hasta) "LLEVAS GASTADO" else "GASTASTE"
+    if (hoy <= analisis.hasta) "Llevas gastado" else "Gastaste"
 
 /**
  * La frase de la comparación: «$120.000 más que a esta altura del período pasado ($1,2M)», o por qué
@@ -342,22 +346,17 @@ internal fun fraseDeLaComparacion(analisis: AnalisisDelPeriodo): String {
 
 @Composable
 private fun ResumenDelAnalisis(analisis: AnalisisDelPeriodo, hoy: LocalDate) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(Movi.espacios.margen),
-    ) {
+    // La cifra de esta pantalla: lo gastado en el período, la héroe (una por pantalla).
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = rotuloDelTotal(analisis, hoy),
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             fontWeight = FontWeight.Medium,
         )
-        Spacer(Modifier.height(Movi.espacios.minimo))
-        Box(Modifier.testTag(TAG_TOTAL_DEL_ANALISIS)) {
-            Cifra(formatCOP(analisis.total), Movi.textos.titular, color = Movi.colores.texto, fontWeight = FontWeight.SemiBold)
+        Box(Modifier.padding(vertical = Espacio.xxs).testTag(TAG_TOTAL_DEL_ANALISIS)) {
+            DsCifra(analisis.total, VarianteDeCifra.Heroe)
         }
-        Spacer(Modifier.height(Movi.espacios.minimo))
         val tendencia = analisis.anteriorAMismaAltura?.let { contraElAnterior(analisis.total, it)?.tendencia }
         Text(
             text = fraseDeLaComparacion(analisis),
@@ -404,17 +403,13 @@ private fun TarjetaDelGrafico(
     onTocarTramo: (TramoDelAnalisis) -> Unit,
 ) {
     var elegido by remember(analisis) { mutableStateOf<Int?>(null) }
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(Movi.espacios.amplio),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         SelectorSegmentado(
             labels = listOf(if (analisis.porSemana) "Por semana" else "Por día", "Acumulado"),
             selected = if (acumulado) 1 else 0,
             onSelect = { onCambiarModo(it == 1) },
         )
-        Spacer(Modifier.height(Movi.espacios.medio))
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
         // Un renglón de alto fijo: elegir una barra cambia el texto, nunca empuja el gráfico.
         Text(
             text = elegido?.let { analisis.tramos.getOrNull(it) }?.let { leyendaDelTramo(it, analisis.porSemana, acumulado) }
@@ -425,7 +420,7 @@ private fun TarjetaDelGrafico(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth().testTag(TAG_LEYENDA_DEL_ANALISIS),
         )
-        Spacer(Modifier.height(Movi.espacios.corto))
+        Spacer(Modifier.height(Espacio.xs))
         GraficoDelAnalisis(
             analisis = analisis,
             acumulado = acumulado,
@@ -433,10 +428,10 @@ private fun TarjetaDelGrafico(
             alElegir = { elegido = it },
             alTocar = { i -> analisis.tramos.getOrNull(i)?.takeUnless { it.porVenir }?.let(onTocarTramo) },
         )
-        Spacer(Modifier.height(Movi.espacios.minimo))
+        Spacer(Modifier.height(Espacio.xxs))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(fechaCorta(analisis.desde), style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-            Text(fechaCorta(analisis.hasta), style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+            Text(fechaCorta(analisis.desde), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            Text(fechaCorta(analisis.hasta), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
     }
 }
@@ -473,13 +468,13 @@ private fun GraficoDelAnalisis(
             .graficaQueSeToca(cuantos = tramos.size, datos = analisis, alElegir = alElegir, alTocar = alTocar),
     ) {
         val maximo = (barras.filterNotNull() + anteriores.filterNotNull()).maxOrNull()?.coerceAtLeast(1L) ?: 1L
-        val arriba = 8.dp.toPx()
+        val arriba = Espacio.xs.toPx()
         val alto = size.height - arriba
         val franja = size.width / tramos.size
         val ancho = (franja * 0.62f).coerceAtLeast(1f)
         fun y(v: Long): Float = arriba + alto * (1f - v.toFloat() / (maximo * 1.08f))
         // La base: dónde está el cero.
-        drawLine(pista, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
+        drawLine(pista, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = Medida.trazo.toPx())
         barras.forEachIndexed { i, v ->
             if (v == null || v <= 0L) return@forEachIndexed
             val tope = y(v)
@@ -488,7 +483,7 @@ private fun GraficoDelAnalisis(
                 color = if (i == elegido) barraElegida else barra,
                 topLeft = Offset(franja * i + (franja - ancho) / 2, size.height - altoDeLaBarra),
                 size = Size(ancho, altoDeLaBarra),
-                cornerRadius = CornerRadius(minOf(ancho / 2, 3.dp.toPx())),
+                cornerRadius = CornerRadius(minOf(ancho / 2, Espacio.xxs.toPx())),
             )
         }
         // La línea del período pasado, por los centros de las franjas que tuvo.
@@ -506,7 +501,7 @@ private fun GraficoDelAnalisis(
                 path,
                 color = linea,
                 style = Stroke(
-                    width = 1.5.dp.toPx(),
+                    width = Medida.trazoDeCarga.toPx(),
                     cap = StrokeCap.Round,
                     join = StrokeJoin.Round,
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)),
@@ -516,7 +511,7 @@ private fun GraficoDelAnalisis(
         // La guía de lo elegido.
         elegido?.let { i ->
             val x = franja * i + franja / 2
-            drawLine(barraElegida, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx(), alpha = 0.35f)
+            drawLine(barraElegida, Offset(x, 0f), Offset(x, size.height), strokeWidth = Medida.trazo.toPx())
         }
     }
 }
@@ -529,6 +524,11 @@ internal fun pieDeLasFlechas(analisis: AnalisisDelPeriodo): String = when (val d
     else -> "Las flechas comparan con los primeros $d días del período pasado."
 }
 
+/**
+ * Una fila de la lista: una [Fila] del sistema con el avatar de lo que es (categoría, comercio o
+ * cuenta), el nombre, «32 % · 4 movimientos» y, al final, lo gastado con la flecha contra el período
+ * pasado. Tocarla abre esos movimientos.
+ */
 @Composable
 private fun FilaDeLaLista(
     fila: FilaDelAnalisis,
@@ -536,70 +536,50 @@ private fun FilaDeLaLista(
     tipoDeCuenta: AccountType?,
     onClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClickLabel = "Ver los movimientos", onClick = onClick)
-            .testTag(TAG_FILA_DEL_ANALISIS)
-            .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.corto),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        when (vista) {
-            VistaDelAnalisis.CATEGORIA -> IconoDeCategoria(fila.nombre)
-            VistaDelAnalisis.COMERCIO -> AvatarDelComercio(fila.muestra)
-            VistaDelAnalisis.CUENTA -> AvatarDeLaCuenta(nombre = fila.nombre, tipo = tipoDeCuenta ?: AccountType.CHECKING)
-        }
-        Spacer(Modifier.size(Movi.espacios.medio))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = fila.nombre,
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.texto,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag(TAG_NOMBRE_DE_LA_FILA),
-            )
-            Text(
-                text = "${(fila.fraccion * 100).toInt()} % · ${if (fila.veces == 1) "1 movimiento" else "${fila.veces} movimientos"}",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoApagado,
-                maxLines = 1,
-            )
-        }
-        Spacer(Modifier.size(Movi.espacios.corto))
-        Column(horizontalAlignment = Alignment.End) {
-            Cifra(formatMoneyCompact(fila.gasto), Movi.textos.monto, color = Movi.colores.texto)
-            fila.contraElAnterior?.let { flecha ->
-                val color = when (flecha.tendencia) {
-                    Tendencia.SUBE -> Movi.colores.texto
-                    Tendencia.BAJA -> Movi.colores.entra
-                    Tendencia.IGUAL -> Movi.colores.textoApagado
-                }
-                val descripcion = descripcionDeLaFlecha(flecha)
-                Text(
-                    text = textoDeLaFlecha(flecha),
-                    style = Movi.textos.apoyo,
-                    color = color,
-                    maxLines = 1,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.widthIn(min = 64.dp).semantics { contentDescription = descripcion },
-                )
+    Fila(
+        titulo = fila.nombre,
+        subtitulo = "${(fila.fraccion * 100).toInt()} % · ${if (fila.veces == 1) "1 movimiento" else "${fila.veces} movimientos"}",
+        modifier = Modifier.testTag(TAG_FILA_DEL_ANALISIS),
+        inicio = {
+            when (vista) {
+                VistaDelAnalisis.CATEGORIA -> IconoDeCategoria(fila.nombre)
+                VistaDelAnalisis.COMERCIO -> AvatarDelComercio(fila.muestra)
+                VistaDelAnalisis.CUENTA -> AvatarDeLaCuenta(nombre = fila.nombre, tipo = tipoDeCuenta ?: AccountType.CHECKING)
             }
-        }
-    }
+        },
+        final = {
+            Column(horizontalAlignment = Alignment.End) {
+                DsCifra(fila.gasto)
+                fila.contraElAnterior?.let { flecha ->
+                    val color = when (flecha.tendencia) {
+                        Tendencia.SUBE -> Movi.colores.texto
+                        Tendencia.BAJA -> Movi.colores.entra
+                        Tendencia.IGUAL -> Movi.colores.textoMedio
+                    }
+                    val descripcion = descripcionDeLaFlecha(flecha)
+                    Text(
+                        text = textoDeLaFlecha(flecha),
+                        style = Movi.textos.apoyo,
+                        color = color,
+                        maxLines = 1,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.semantics { contentDescription = descripcion },
+                    )
+                }
+            }
+        },
+        onClick = onClick,
+        onClickLabel = "Ver los movimientos",
+    )
 }
 
 @Composable
 private fun EsqueletoDelAnalisis() {
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(Movi.espacios.margen),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.apoyo)
-        Spacer(Modifier.height(Movi.espacios.corto))
-        LineaEsqueleto(fraccionDelAncho = 0.55f, estilo = Movi.textos.titular)
-        Spacer(Modifier.height(Movi.espacios.amplio))
+        Spacer(Modifier.height(Espacio.xs))
+        LineaEsqueleto(fraccionDelAncho = 0.55f, estilo = Movi.textos.cifra)
+        Spacer(Modifier.height(Espacio.m))
         Spacer(Modifier.height(ALTO_DEL_GRAFICO))
     }
 }

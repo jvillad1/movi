@@ -5,6 +5,8 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import com.jvillada.movi.data.Repositories
@@ -138,13 +140,15 @@ class SimuladorDeAbonoEnPantallaTest {
      *   abierto la hoja.
      */
     private fun abrirElSimulador() {
-        composeRule.onNodeWithText(ACCION_SIMULAR_ABONO, useUnmergedTree = true)
+        // Ola R4: el enlace es un `Boton` del sistema, que funde su texto con su toque. Se busca el
+        // nodo que tiene las dos cosas.
+        composeRule.onNode(hasText(ACCION_SIMULAR_ABONO) and hasClickAction())
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 
     private fun tocarElChip(etiqueta: String) {
-        composeRule.onNodeWithText(etiqueta, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNode(hasText(etiqueta) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 

@@ -157,3 +157,28 @@ object Medida {
     /** El trazo de la ruedita de un botón que está cargando. */
     val trazoDeCarga: Dp = 2.dp
 }
+
+/**
+ * **Las medidas de una gráfica dibujada a mano** (ola R4, «Tu plata, día a día» de Plan): el alto,
+ * el aire de arriba y abajo para que la cifra del punto más bajo no se corte, el trazo de la línea y
+ * los puntos. Estaban como `6.dp`, `3.5.dp`, `2.5.dp` sueltos dentro del `Canvas`.
+ */
+object Grafica {
+    /** El alto de la gráfica de una tarjeta. */
+    val alto: Dp = 120.dp
+
+    /** El aire de arriba y de abajo de la línea, y entre un punto y su cifra. */
+    val margen: Dp = 6.dp
+
+    /** El trazo de la línea. */
+    val trazo: Dp = Medida.trazoDeCarga
+
+    /** El radio de un punto chico sobre la línea (un pago pendiente). */
+    val punto: Dp = 2.5.dp
+
+    /** El aro de fondo alrededor de un punto chico, y el del día elegido. */
+    val aroDelPunto: Dp = 3.5.dp
+
+    /** El punto destacado: el día más justo. */
+    val puntoDestacado: Dp = 4.dp
+}

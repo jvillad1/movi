@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,7 +22,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.AvisoSinLeer
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.Movi
@@ -69,12 +71,12 @@ internal fun FormularioDeAnotarloIgual(
 ) {
     Column {
         Text(AYUDA_DE_ANOTARLO_IGUAL, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
             PastillaDeTipo("Gasto", TransactionType.EXPENSE, tipo, habilitado, onTipo)
             PastillaDeTipo("Ingreso", TransactionType.INCOME, tipo, habilitado, onTipo)
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
         MoneyField(
             value = monto,
             onValueChange = { if (habilitado) onMonto(it) },
@@ -94,16 +96,11 @@ private fun PastillaDeTipo(
     habilitado: Boolean,
     onTipo: (TransactionType) -> Unit,
 ) {
-    val on = este == elegido
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(if (on) Movi.colores.texto else Color.Transparent)
-            .then(if (!on) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp)) else Modifier)
-            .clickable(enabled = habilitado, role = Role.Button) { onTipo(este) }
-            .testTag(tagDelTipoDeAnotarloIgual(este))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    ) {
-        Text(texto, style = Movi.textos.apoyo, color = if (on) Movi.colores.fondo else Movi.colores.texto, fontWeight = FontWeight.Medium)
-    }
+    // Gasto o ingreso: un filtro del sistema que se elige.
+    PildoraDeFiltro(
+        texto = texto,
+        seleccionada = este == elegido,
+        onClick = { if (habilitado) onTipo(este) },
+        modifier = Modifier.testTag(tagDelTipoDeAnotarloIgual(este)),
+    )
 }

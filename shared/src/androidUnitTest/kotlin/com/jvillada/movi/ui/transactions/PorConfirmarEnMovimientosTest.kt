@@ -179,7 +179,8 @@ class PorConfirmarEnMovimientosTest {
         composeRule.onNodeWithText("entró solo", substring = true, useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("sin marcar", substring = true, useUnmergedTree = true).assertDoesNotExist()
 
-        composeRule.onNodeWithText("4 por revisar", useUnmergedTree = true).performClick()
+        // Ola R4: es una propuesta del sistema; se abre con su botón «Revisar».
+        composeRule.onNodeWithText("Revisar", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         assertEquals(listOf<Screen>(Screen.PorRevisar), navegaciones)
     }

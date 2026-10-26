@@ -163,10 +163,9 @@ sealed class Screen {
      * No vive dentro de `Screen.Accounts` **a propósito**: `Screen.Accounts` lista la plata del
      * dueño, y la cuenta de otra persona no es su plata.
      *
-     * **La puerta principal es Movimientos** (4-oct-2026, ver `RenglonDePersonasYComercios`): es
-     * donde se piensa «¿a quién le mandé plata?», y el dueño pidió un acceso «muy fácil de
-     * encontrar». Por eso marca la pestaña Movimientos ([navTabFor]). Siguen las puertas de
-     * Patrimonio (sin cifra: no es plata suya) y de Ajustes, y la alerta de Hoy.
+     * **Dos puertas** (ola R4): la fila al final de **Espacios** (ver `RenglonDePersonasYComercios`)
+     * —lo que tienes con los demás— y la ficha de Ajustes, más la alerta de Hoy. Por eso marca la
+     * pestaña Espacios ([navTabFor]). Antes la principal era Movimientos y había otra en Patrimonio.
      *
      * [abrir] es el id de un tercero cuya ficha se abre al llegar: lo pide «Ver su ficha» desde el
      * detalle de un movimiento. [sugeridos] = llegar con lo que Movi encontró ya abierto: lo pide la
@@ -333,10 +332,10 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Dashboard, Screen.Buscar, is Screen.EnQueSeVa -> NavTab.HOY
     // «Por revisar» y el detalle de un mensaje se abren desde Movimientos (su renglón «N por
     // revisar»): marcan esa pestaña, no Ajustes.
-    is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile, is Screen.Destinos -> NavTab.MOVIMIENTOS
+    is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile -> NavTab.MOVIMIENTOS
     is Screen.Plan, Screen.Budgets, Screen.Periodos, is Screen.DetalleDePeriodo -> NavTab.PLAN
     Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos -> NavTab.PATRIMONIO
-    Screen.Espacios, is Screen.Espacio -> NavTab.ESPACIOS
+    Screen.Espacios, is Screen.Espacio, is Screen.Destinos -> NavTab.ESPACIOS
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse. Hoy las dos (Cuentas y Créditos) son Patrimonio.
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.periodos
 
+import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyListState
@@ -47,6 +48,12 @@ import com.jvillada.movi.shared.model.diaLegible
 import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.tituloDelPeriodo
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDePildora
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.ChevronRight
@@ -193,9 +200,9 @@ internal fun ListaDePeriodos(
                 start = Movi.espacios.amplio,
                 end = Movi.espacios.amplio,
                 top = Movi.espacios.corto,
-                bottom = 80.dp,
+                bottom = Medida.botonFlotante + Espacio.xl,
             ),
-            verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+            verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
         ) {
             if (estado.noSePudoActualizar) {
                 item { NoSePudoActualizar(onReintentar = { estado.reintentar() }) }
@@ -272,50 +279,43 @@ private fun colorDeTeQuedo(monto: Long): Color = when {
  */
 @Composable
 private fun FilaDePeriodo(resumen: ResumenDePeriodo, elegida: Boolean, onClick: () -> Unit) {
+    // La elegida (solo en la web, con el detalle al lado) se marca con el foco de la marca: un
+    // trazo de `marca` —la marca es acción y foco— y se anuncia como seleccionada.
     val marcaDeElegida = if (elegida) {
         Modifier
-            .border(1.5.dp, Movi.colores.marca, RoundedCornerShape(Movi.formas.amplia))
+            .border(Medida.trazoDeCarga, Movi.colores.marca, RoundedCornerShape(Radio.l))
             .semantics { selected = true }
     } else {
         Modifier
     }
-    MinCard(
+    Superficie(
         modifier = Modifier.fillMaxWidth().then(marcaDeElegida).testTag(TAG_FILA_DE_PERIODO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
         onClick = onClick,
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = resumen.nombre,
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                )
+                Text(text = resumen.nombre, style = Movi.textos.titulo, color = Movi.colores.texto)
                 val rango = rangoDelResumen(resumen)
                 if (rango != null) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(text = rango, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+                    Spacer(Modifier.height(Espacio.xxs))
+                    Text(text = rango, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
+                // «En curso» y «Empezó el 24» son estados del período: píldoras, no texto de color.
                 val marcas = marcasDe(resumen)
                 if (marcas.isNotEmpty()) {
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = marcas.joinToString(" · "),
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.marca,
-                        fontWeight = FontWeight.Medium,
-                    )
+                    Spacer(Modifier.height(Espacio.xs))
+                    Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                        marcas.forEach { Pildora(it, if (it == "En curso") TonoDePildora.Marca else TonoDePildora.Neutra) }
+                    }
                 }
             }
-            ChevronRight()
+            Chevron()
         }
         CifrasDelPeriodo(resumen)
         LineaDeCreditosDesembolsados(resumen)
         val cubierto = loQueCubrioLoDemas(resumen)
         if (cubierto != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = cubierto,
                 style = Movi.textos.apoyo,
@@ -362,7 +362,7 @@ internal fun textoDeCreditosDesembolsados(resumen: ResumenDePeriodo): String? {
 @Composable
 internal fun LineaDeCreditosDesembolsados(resumen: ResumenDePeriodo) {
     val texto = textoDeCreditosDesembolsados(resumen) ?: return
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Espacio.xs))
     Text(
         text = texto,
         style = Movi.textos.apoyo,
@@ -379,10 +379,10 @@ internal fun LineaDeCreditosDesembolsados(resumen: ResumenDePeriodo) {
 internal fun CifrasDelPeriodo(resumen: ResumenDePeriodo) {
     val fraccion = fraccionQueEntro(resumen.entradas, resumen.salidas)
     if (fraccion == null) {
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Text(text = "Sin movimientos de flujo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
     } else {
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(Espacio.s))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             ParDeCifraDePeriodo("Entró", formatMoneyCompact(resumen.entradas), Movi.colores.entra)
             // Ola 2a: lo que salió en neutro; el rojo queda para «Te quedó» en negativo.
@@ -390,7 +390,7 @@ internal fun CifrasDelPeriodo(resumen: ResumenDePeriodo) {
             val teQuedo = teQuedoDe(resumen)
             ParDeCifraDePeriodo("Te quedó", textoDeTeQuedo(teQuedo), colorDeTeQuedo(teQuedo), alFinal = true)
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         BarraDeDosTramos(
             fraccionIzquierda = fraccion,
             colorIzquierda = Movi.colores.entra,
@@ -415,19 +415,15 @@ private fun ParDeCifraDePeriodo(rotulo: String, cifra: String, color: Color, alF
  */
 @Composable
 private fun FilaDePeriodoEsqueleto(conMarca: Boolean) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_PERIODO_ESQUELETO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_PERIODO_ESQUELETO)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.titulo)
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 LineaEsqueleto(fraccionDelAncho = 0.65f, estilo = Movi.textos.apoyo)
                 if (conMarca) {
-                    Spacer(Modifier.height(2.dp))
-                    LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.apoyo)
+                    Spacer(Modifier.height(Espacio.xs))
+                    BloqueEsqueleto(alto = Medida.altoDePildora, ancho = Medida.avatar * 2)
                 }
             }
         }
@@ -438,7 +434,7 @@ private fun FilaDePeriodoEsqueleto(conMarca: Boolean) {
 /** [CifrasDelPeriodo] mientras no llegó: los tres pares y la barra, sin una sola cifra. */
 @Composable
 internal fun CifrasDelPeriodoEsqueleto() {
-    Spacer(Modifier.height(14.dp))
+    Spacer(Modifier.height(Espacio.s))
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         repeat(3) {
             Column {
@@ -447,7 +443,7 @@ internal fun CifrasDelPeriodoEsqueleto() {
             }
         }
     }
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Espacio.xs))
     BloqueEsqueleto(alto = Movi.espacios.corto)
 }
 

@@ -47,6 +47,10 @@ Las reglas que se repiten tienen nombre propio (`Medida`), y se usa el nombre, n
 `Movi.espacios.*` sigue existiendo (lo nombra media app) y ahora sale de acá. **Con la R0 cambiaron en
 toda la app a la vez:** el margen de pantalla de 20 a 16 y la separación entre secciones de 32 a 24.
 
+**Ola R4b:** `Grafica` (en `Escalas.kt`) nombra las medidas de una gráfica dibujada a mano en un
+`Canvas` —`alto` 120, `margen` 6, `trazo` 2, `punto` 2,5, `aroDelPunto` 3,5, `puntoDestacado` 4—: la
+de «Tu plata, día a día» de Plan las tenía sueltas.
+
 ## 2. Radios e íconos
 
 | token | dp | para |
@@ -173,10 +177,12 @@ TarjetaDePropuesta(
 
 **`Cifra`** — un monto: `Heroe` (una por pantalla), `Grande` (se achica hasta `Fila` si no entra, como
 la héroe hasta `Grande`), `Fila`, `Chica`; tono `Neutro`, `Ingreso`,
-`Alerta`, `Apagado`; signo y «Ocultar los saldos» incluidos.
+`Alerta`, `Apagado` y `EntreCuentas` (un traspaso: en `entreCuentas` y sin signo); signo y «Ocultar
+los saldos» incluidos.
 ```kotlin
 Cifra(-27_500)
 Cifra(4_500_000, tono = TonoDeCifra.Ingreso)        // +$4.500.000
+Cifra(500_000, tono = TonoDeCifra.EntreCuentas)     // $500.000, sin signo
 Cifra(teQuedan, VarianteDeCifra.Heroe)
 ```
 
@@ -275,7 +281,56 @@ arriba:
 «Tu plata» salieron del héroe. ALERTS y el BANNER siguen al final de la definición solo para los APK
 viejos; este cliente no los pinta.
 
-## 12. Ola R4c: Patrimonio, Ajustes y lo que cuelga de ellos
+## 11. Movimientos y los avisos (ola R4a)
+
+- **Una sola búsqueda.** La lupa de Movimientos abre «Buscar». Lo que otra pantalla pide filtrar (un
+  comercio tocado en Buscar, «En este comercio», una categoría de «En qué se va») llega como un
+  `PildoraDeFiltro` elegido con su ×, al lado de los filtros de tipo.
+- **El día en un renglón**: la fecha como se escribe («Hoy», «23 de agosto») con el estilo de `Seccion`
+  y el flujo del día a la derecha; todo el renglón pliega el día (alto `Medida.objetivoTactil`). La
+  comparación «Día a día» salió: es de Plan.
+- **«N por revisar» es una `TarjetaDePropuesta`**, como en «Movi propone hoy». «Personas y comercios»
+  ya no está arriba de la lista.
+- **La fila de un movimiento es una `Fila`** (Movimientos, Por revisar, Buscar, el detalle de una
+  cuenta) y **su monto es la `Cifra` del sistema** (`CifraDelMovimiento`): el gasto `Neutro` con «−»,
+  el ingreso `Ingreso` con «+», el traspaso `EntreCuentas` sin signo y lo que no movió plata
+  `Apagado` (`tonoDeCifraDelTono`). Ninguna fila elige su color a mano. El punto de «por confirmar» y
+  el ícono de repetición van junto al monto y dicen su nombre al lector de pantalla.
+- **Un aviso del banco se ve igual en todas partes** (`TarjetaDeAviso`, en `ui/sms/ElMismoPago.kt`):
+  la superficie de la propuesta cuando pide decisión y la capa 1 cuando es historial, el estado en una
+  `Pildora` en frase («Pendiente», «Confirmado»), lo que dijo el banco como cita y las acciones en
+  `Boton` chicos. La usan Por revisar, Captura del banco, Reconciliar y los débitos automáticos.
+
+## 12. Plan, Presupuestos, Tus períodos y Créditos (ola R4b)
+
+Plan es dueño de «¿cuánto puedo gastar y qué me falta pagar?», en este orden:
+
+| sección | componente | nota |
+|---|---|---|
+| Cuánto puedes gastar | `Seccion` + `Superficie`, barras con `BarraDeProgreso` | la versión completa del disponible vive acá |
+| Tus períodos | `Fila` en una `Superficie` de lista | lleva a la lista de períodos |
+| selector | «Pagos» · «Presupuestos» | era «Pagos del mes»: el período del dueño no es el mes |
+| Pagos del período | `Fila` + `Pildora` de estado (Pagado, Vencido, Por confirmar, Hoy, En N días, Falta) | «¿Ya pagaste…?» va en la superficie de las propuestas con `Boton` S |
+| Tu plata, día a día | `Seccion` + `Superficie` + `Grafica` | debajo de los pagos que la mueven |
+| Lo que se repite al mes, suscripciones | `Cifra.Grande`, `Fila` | |
+| Tus recordatorios no te van a llegar | `TarjetaDePropuesta`, al final | era un cartel en el medio de la lista |
+
+**Lo que cuelga de una fila** (`ui/recurrentes/BajoLaFila.kt`): una fila de Plan, de Créditos o de un
+período ofrece acciones («Anotar este pago», «Editar», «Ajustar saldo») o trae una línea más (la
+evidencia, la barra de un presupuesto). Va debajo de la `Fila`, con `BajoLaFila`: alineado con el
+texto de la fila (`SANGRIA_DEL_TEXTO_DE_LA_FILA` = margen + avatar + 12), nunca con una sangría
+propia. `MontoDeFila` es la letra de `Cifra.Fila` para un monto ya escrito (en dólares, «al año»), y
+`NumeroEnCirculo`, el inicio de una fila que se nombra por un número (el día de un cobro, el orden de
+una deuda).
+
+**El período en curso no repite Plan**: su detalle muestra cómo va (entró, salió, en qué se fue) y,
+en vez de sus pagos fijos y presupuestos, dos filas que llevan a Plan. Un período cerrado sí los
+pinta: mirar atrás es lo que contesta esa pantalla.
+
+Lo vigila `LasPantallasDePlanUsanElSistemaTest` (a 360 dp: secciones sin mayúsculas, filas de 56 o
+más, ninguna cifra recortada).
+
+## 13. Ola R4c: Patrimonio, Ajustes y lo que cuelga de ellos
 
 Patrimonio, Detalle de cuenta, Cuadre de saldos, Personas y comercios, Ajustes, Perfil, Categorías,
 Documentos, Captura del banco, Compartir, Movi AI, Agregar, la entrada, Editar inicio y Primeros pasos

@@ -1,5 +1,11 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -379,10 +385,10 @@ fun CreditTermsSheet(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             if (editing != null) {
                 SectionLabel("CRÉDITO")
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 // Editable, no un rótulo: ver [nombreEditado].
                 FieldBox("Nombre del crédito", nombreEditado, { nombreEditado = it })
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.m))
             } else {
                 // F25: el selector "CUENTA DEL PRÉSTAMO · + Nueva cuenta de préstamo"
                 // desapareció del flujo normal — era la estructura interna (cuenta +
@@ -396,7 +402,7 @@ fun CreditTermsSheet(
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     candidates.forEach { acc ->
                         SelectRow(
                             label = acc.name,
@@ -413,9 +419,9 @@ fun CreditTermsSheet(
                                 }
                             },
                         )
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                 }
                 if (newAccountMode) {
                     // ── La pregunta, y va PRIMERA ────────────────────────────────────
@@ -445,7 +451,7 @@ fun CreditTermsSheet(
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     OpcionDeAlta(
                         titulo = "Sí, me la acaban de depositar",
                         detalle = "Es un crédito nuevo y el banco ya giró la plata.",
@@ -453,7 +459,7 @@ fun CreditTermsSheet(
                         enabled = !saving,
                         onClick = { recienRecibido = true },
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     OpcionDeAlta(
                         titulo = "No, ya lo tenía desde antes",
                         detalle = "Viene de antes; la plata no acaba de entrar a tu cuenta.",
@@ -461,7 +467,7 @@ fun CreditTermsSheet(
                         enabled = !saving,
                         onClick = { recienRecibido = false },
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(Espacio.s))
 
                     FieldBox("Nombre (p.ej. Crédito Vehículo Santander)", newAccountName, { newAccountName = it })
                     // La deuda actual solo tiene sentido en el crédito que ya venía: en el
@@ -470,9 +476,9 @@ fun CreditTermsSheet(
                     // que desde la ola 14: se puede anotar un crédito sin saber todavía el
                     // saldo exacto y cuadrarlo después con «Ajustar saldo».
                     if (recienRecibido == false) {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         MoneyField(newAccountDebt, { newAccountDebt = it }, placeholder = "Deuda actual (COP, opcional)")
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         Text(
                             "Lo que tu banco dice que debes hoy. Si no lo tienes a mano, " +
                                 "déjalo en blanco y cuádralo después con «Ajustar saldo».",
@@ -481,16 +487,16 @@ fun CreditTermsSheet(
                         )
                     }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.m))
             }
 
             SectionLabel("TÉRMINOS")
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             FieldBox("Banco", bank, { bank = it })
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             MoneyField(principal, { principal = it }, placeholder = "Capital original (COP)")
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(Espacio.xs))
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 // Sin intereses no hay tasa que pedir: el campo se va y el plazo ocupa la fila.
                 if (!sinIntereses) {
                     Box(Modifier.weight(1f)) {
@@ -517,32 +523,32 @@ fun CreditTermsSheet(
                 habilitada = !saving,
                 alCambiar = { sinIntereses = !sinIntereses },
             )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(Espacio.xs))
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 Box(Modifier.weight(1f)) { MoneyField(installment, { installment = it }, label = "Cuota mensual", placeholder = "$ 0") }
                 Box(Modifier.weight(1f)) {
                     FieldBox("5", dayOfMonth, { dayOfMonth = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number, rotulo = "Día de pago")
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             // El seguro va PEGADO a la cuota, no al final con las notas: es plata que está
             // adentro de la cifra de arriba, y leerlas juntas es lo que hace evidente qué se
             // está declarando. Ver `desglosarCuota` en :core para qué hace con él.
             MoneyField(seguroMensual, { seguroMensual = it }, placeholder = "Seguro mensual (COP, opcional)")
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 "Si tu cuota incluye seguro de vida deudor, escríbelo aquí. Esa parte no baja " +
                     "la deuda, así que sin este dato Movi te mostraría menos deuda de la que tienes.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             // El cuarto renglón, pegado al seguro y no al final: los dos son plata que está
             // adentro de la cuota de arriba, y se leen juntos o no se entienden. Campo aparte
             // del seguro porque el extracto los nombra distinto, y un dato que no se puede
             // contrastar contra el papel del banco es un dato que nadie verifica.
             MoneyField(otrosCargos, { otrosCargos = it }, placeholder = "Otros cargos mensuales (COP, opcional)")
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 "Algunos créditos cobran algo más dentro de la cuota que no es interés, ni " +
                     "seguro, ni abono: en el extracto suele decir «otros conceptos». Escríbelo " +
@@ -550,11 +556,11 @@ fun CreditTermsSheet(
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             // F23/F24: solo dígitos y guiones — sin selector de calendario todavía
             // (pendiente, ver KDoc de isValidCreditDate más abajo).
             FieldBox("Desembolso (AAAA-MM-DD)", startDate, { startDate = filterDateInput(it) })
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             FieldBox("Notas (opcional)", notes, { notes = it })
 
             // ── El desembolso ────────────────────────────────────────────────────────
@@ -565,9 +571,9 @@ fun CreditTermsSheet(
             // el campo aparece con la cifra correcta y el caso común —desembolso completo—
             // es no tocar nada. La pregunta, arriba, ya anunció que esto venía.
             if (preguntaVisible && recienRecibido == true) {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(Espacio.l))
                 SectionLabel("LA PLATA QUE TE ENTRÓ")
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 when {
                     !cuentasCargadas -> Text("Cargando tus cuentas…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     // Un fallo de red NO es «no tienes cuentas»: acá se dice lo que pasó y se
@@ -575,7 +581,7 @@ fun CreditTermsSheet(
                     // existe. Ver [falloCargarCuentas].
                     falloCargarCuentas -> {
                         Text(NO_PUDIMOS_CARGAR_TUS_CUENTAS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         Text(
                             "Reintentar",
                             style = Movi.textos.cuerpo,
@@ -583,7 +589,7 @@ fun CreditTermsSheet(
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier
                                 .clickable(enabled = !saving) { intentoDeCarga++ }
-                                .padding(vertical = 4.dp),
+                                .padding(vertical = Espacio.xxs),
                         )
                     }
                     // Sin ninguna cuenta en pesos no hay dónde poner la plata, y el alta se
@@ -598,22 +604,22 @@ fun CreditTermsSheet(
                     )
                     else -> {
                         Text("¿A qué cuenta te entró?", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         cuentasDestino.forEach { acc ->
                             SelectRow(
                                 label = acc.name,
                                 selected = cuentaDelDesembolso == acc.id,
                                 onClick = { cuentaDelDesembolso = acc.id },
                             )
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(Espacio.xs))
                         }
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         MoneyField(
                             montoDesembolso,
                             { montoDesembolsoEditado = it },
                             placeholder = "Cuánto te entró (COP)",
                         )
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         // La aritmética, antes de guardar y con las dos cifras a la vista.
                         // Mismo recurso que `deudaDespuesDelTraspaso` en la hoja de Agregar,
                         // y por el mismo motivo: un aviso genérico se lee y se olvida; dos
@@ -638,7 +644,7 @@ fun CreditTermsSheet(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
             // Libranza. Va ANTES del recordatorio porque lo desactiva: a una cuota que el
             // empleador ya descontó no tiene sentido recordarla.
             CasillaConExplicacion(
@@ -660,15 +666,14 @@ fun CreditTermsSheet(
             // puede enumerar de antemano. El dueño tiene tres casos y ninguno se parece —una
             // pensión voluntaria, su esposa, su papá.
             if (!esLibranza) {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.m))
                 Text(
                     "¿LA PAGA ALGUIEN MÁS?",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     fontWeight = FontWeight.Medium,
-                    letterSpacing = 0.4.sp,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 // El tope es el de la columna (`varchar(60)`). Sin él, un nombre más largo
                 // hacía fallar el INSERT en Postgres y se caía el guardado ENTERO del
                 // crédito con un 500 sin mensaje —no hay StatusPages—: el dueño perdía la
@@ -692,7 +697,7 @@ fun CreditTermsSheet(
                 )
                 // El texto de abajo cambia según el estado, en vez de aparecer solo cuando ya
                 // se escribió algo: la duda («¿esto qué hace?») llega ANTES de escribir.
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 if (quienPaga.isBlank()) {
                     Text(
                         text = "Déjalo vacío si la pagas tú. Escribe un nombre solo si la cuota la " +
@@ -700,7 +705,6 @@ fun CreditTermsSheet(
                             "pareja, un familiar.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 16.sp,
                     )
                 } else {
                     Text(
@@ -709,7 +713,6 @@ fun CreditTermsSheet(
                             "deja de recordártela — en su lugar te ofrece bajar la deuda con un toque.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 16.sp,
                     )
                 }
             }
@@ -718,7 +721,7 @@ fun CreditTermsSheet(
             // pregunta si la respuesta fue «no, la pago yo»: la libranza y el tercero ya dijeron
             // que la cuota no sale de una cuenta suya.
             if (debitoVisible) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 CasillaConExplicacion(
                     marcada = seDebitaSolo,
                     titulo = TITULO_DEL_DEBITO_AUTOMATICO,
@@ -733,7 +736,7 @@ fun CreditTermsSheet(
                 )
                 if (seDebitaSolo) {
                     Text("¿De qué cuenta la cobra?", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     val opciones = cuentasDelDebito?.let { cuentasParaElDebito(it, monedaDelCredito) }
                     when {
                         falloCuentasDelDebito -> {
@@ -743,7 +746,7 @@ fun CreditTermsSheet(
                                 style = Movi.textos.cuerpo,
                                 color = Movi.colores.texto,
                                 fontWeight = FontWeight.Medium,
-                                modifier = Modifier.clickable(enabled = !saving) { intentoDeCarga++ }.padding(vertical = 4.dp),
+                                modifier = Modifier.clickable(enabled = !saving) { intentoDeCarga++ }.padding(vertical = Espacio.xxs),
                             )
                         }
                         opciones == null -> Text("Cargando tus cuentas…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -758,7 +761,7 @@ fun CreditTermsSheet(
                                 selected = cuentaDelDebito == acc.id,
                                 onClick = { cuentaDelDebito = acc.id },
                             )
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(Espacio.xs))
                         }
                     }
                 }
@@ -767,7 +770,7 @@ fun CreditTermsSheet(
             // ¿A quién le giras la cuota? Solo si la paga él (ni libranza ni «la paga otro»): es la
             // persona a la que le manda la plata para que la pague, como el papá.
             if (debitoVisible && !seDebitaSolo) {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.m))
                 com.jvillada.movi.ui.recurrentes.DestinoConocidoPickerField(
                     destinos = destinosDeLaCuota,
                     selectedId = destinoDeLaCuota,
@@ -786,7 +789,7 @@ fun CreditTermsSheet(
             // El recordatorio no aplica a una libranza ni a una cuota que paga otro: en los
             // dos casos ya se pagó sola.
             if (!esLibranza && quienPaga.isBlank()) {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.m))
                 // La cuota de este crédito entra al barrido de recordatorios salvo que el dueño
                 // diga que no. Casilla, no diálogo: no interrumpe el alta.
                 ReminderOptInField(
@@ -809,7 +812,7 @@ fun CreditTermsSheet(
         // Que el error del server, que es MÁS importante, estuviera adentro era la asimetría.
         // Mismo defecto que la hoja de editar documentos, y la misma cura.
         error?.let {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = it,
                 style = Movi.textos.apoyo,
@@ -819,21 +822,16 @@ fun CreditTermsSheet(
             )
         }
 
-        Spacer(Modifier.height(16.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
-                .clickable(enabled = canSave) { save() }
-                .padding(vertical = 15.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(if (saving) "Guardando…" else "Guardar crédito", color = Movi.colores.fondo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium)
-        }
+        Spacer(Modifier.height(Espacio.m))
+        Boton(
+            texto = if (saving) "Guardando…" else "Guardar crédito",
+            onClick = { save() },
+            habilitado = canSave,
+            anchoCompleto = true,
+        )
         // F24: antes el botón se apagaba en silencio. Ahora dice la primera cosa que falta.
         if (!canSave && !saving && missingFieldMessage != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = missingFieldMessage,
                 style = Movi.textos.apoyo,
@@ -843,7 +841,7 @@ fun CreditTermsSheet(
             )
         }
         if (editing?.terms != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             if (pidiendoBorrar) {
                 // Borrar pregunta antes (ver [ConfirmacionEnLinea]).
                 ConfirmacionEnLinea(
@@ -860,11 +858,11 @@ fun CreditTermsSheet(
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.sale,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = Espacio.xs),
                 )
             }
         }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.l))
     }
 }
 
@@ -877,7 +875,6 @@ internal fun SectionLabel(text: String) {
         text = text,
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
-        letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
     )
 }
@@ -903,10 +900,10 @@ internal fun FieldBox(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     ) {
         // Una sola línea SIEMPRE, igual que en [MoneyField] y por lo mismo: estos campos se usan
         // a media fila (los dos días de la tarjeta) y un placeholder que se parte en dos renglones
@@ -954,11 +951,11 @@ private fun OpcionDeAlta(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(if (selected) Movi.colores.tarjeta else Color.Transparent)
-            .border(1.dp, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(12.dp))
+            .border(Medida.trazo, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(Radio.m))
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     ) {
         Text(
             titulo,
@@ -966,7 +963,7 @@ private fun OpcionDeAlta(
             color = Movi.colores.texto,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
         )
-        Spacer(Modifier.height(3.dp))
+        Spacer(Modifier.height(Espacio.xxs))
         Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
     }
 }
@@ -1109,11 +1106,11 @@ private fun SelectRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(if (selected) Movi.colores.tarjeta else Color.Transparent)
-            .border(1.dp, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(12.dp))
+            .border(Medida.trazo, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(Radio.m))
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
@@ -1135,15 +1132,15 @@ private fun CasillaConExplicacion(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .clickable(enabled = habilitada) { alCambiar() }
-            .padding(vertical = 10.dp),
+            .padding(vertical = Espacio.xs),
         verticalAlignment = Alignment.Top,
     ) {
         Box(
             modifier = Modifier
-                .size(20.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .size(Icono.m)
+                .clip(RoundedCornerShape(Radio.s))
                 .background(if (marcada) Movi.colores.marca else Movi.colores.tarjeta)
                 // **Sin marcar, la casilla no se veía.** Se pintaba del color de la tarjeta encima
                 // de una hoja del mismo color: quedaban el texto y su sangría, sin el cuadro que
@@ -1151,7 +1148,7 @@ private fun CasillaConExplicacion(
                 // siempre se vio.
                 .then(
                     if (marcada) Modifier
-                    else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(6.dp)),
+                    else Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.s)),
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -1167,18 +1164,17 @@ private fun CasillaConExplicacion(
                     Icons.Rounded.Check,
                     contentDescription = null,
                     tint = Movi.colores.fondo,
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(Icono.s),
                 )
             }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(Espacio.s))
         Column {
             Text(titulo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Text(
                 text = explicacion,
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
-                lineHeight = 16.sp,
             )
         }
     }
@@ -1201,10 +1197,10 @@ internal fun RateFieldBox(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) {

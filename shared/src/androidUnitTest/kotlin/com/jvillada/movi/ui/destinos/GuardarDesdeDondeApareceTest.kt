@@ -199,11 +199,17 @@ class GuardarDesdeDondeApareceTest {
 
         esperar("¿De quién es la cuenta ·0756?")
         val antes = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true).fetchSemanticsNodes().size
+        // «Comercio» ya está en Reconciliar (la fila del comercio que se edita): se cuenta antes y después.
+        val comerciosAntes = composeRule.onAllNodesWithText("Comercio", substring = true, useUnmergedTree = true).fetchSemanticsNodes().size
         tocar(PONERLE_NOMBRE)
         val despues = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true).fetchSemanticsNodes().size
         assertEquals(1, despues - antes, "la fila abierta debe sumar un solo campo, el nombre")
         assertFalse(hay(AGREGAR_UNA_NOTA), "la nota volvió a la fila")
-        assertFalse(hay("Comercio"), "Persona/Comercio volvió a la fila")
+        assertEquals(
+            comerciosAntes,
+            composeRule.onAllNodesWithText("Comercio", substring = true, useUnmergedTree = true).fetchSemanticsNodes().size,
+            "Persona/Comercio volvió a la fila",
+        )
         assertTrue(hay(YA_LO_TENGO_GUARDADO).not(), "sin nadie guardado no se ofrece elegir")
         assertTrue(hay(ES_MIA))
     }
