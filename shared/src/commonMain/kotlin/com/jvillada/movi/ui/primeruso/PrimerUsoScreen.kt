@@ -380,7 +380,7 @@ private fun PasoBienvenida() {
     }
     Spacer(Modifier.height(Medida.dentroDeSeccion))
     Text(
-        "Son cinco pasos cortos. Puedes saltar cualquiera y hacerlo después desde «Primeros pasos».",
+        "Son unos pasos cortos. Puedes saltar cualquiera y hacerlo después desde «Primeros pasos».",
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
     )
