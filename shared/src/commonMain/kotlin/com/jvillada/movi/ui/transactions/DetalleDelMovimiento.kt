@@ -236,12 +236,14 @@ internal fun PreguntaDelTercero(pregunta: String, onAbrir: () -> Unit) {
     // Una pregunta pendiente es algo que Movi propone resolver: la superficie de la propuesta, con
     // una [Fila] del sistema adentro.
     Superficie(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_PREGUNTA_DEL_TERCERO),
+        modifier = Modifier.fillMaxWidth(),
         nivel = NivelDeSuperficie.Propuesta,
         relleno = RellenoDeSuperficie.Lista,
     ) {
         Fila(
             titulo = pregunta,
+            // El tag en la fila que se toca.
+            modifier = Modifier.testTag(TAG_PREGUNTA_DEL_TERCERO),
             inicio = { IconoEnCirculo(Icons.Rounded.Person, tono = TonoDeIcono.Aviso) },
             final = { Text("Responder", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca) },
             onClick = onAbrir,

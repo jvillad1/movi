@@ -77,8 +77,9 @@ class LoQueLlegaDelBancoEligeLaCuentaTest {
     fun un_sms_sin_ninguna_cuenta_que_sirva_no_cae_en_el_credito() {
         montarSms(cuentas = listOf(carro))
 
-        composeRule.onNodeWithText("Sin cuenta elegida").assertIsDisplayed()
-        composeRule.onNodeWithText("Elígela tú").assertIsDisplayed()
+        // Ola R4: «Confirma o ajusta» va debajo del aviso y de lo que Movi sugiere: se llega desplazando.
+        composeRule.onNodeWithText("Sin cuenta elegida").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Elígela tú").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Vehículo 4083").assertDoesNotExist()
     }
 
@@ -122,7 +123,7 @@ class LoQueLlegaDelBancoEligeLaCuentaTest {
     fun un_sms_de_un_banco_desconocido_avisa_que_la_cuenta_la_puso_movi() {
         montarSms(cuentas = todas, banco = "Falabella")
 
-        composeRule.onNodeWithText("La puso Movi").assertIsDisplayed()
+        composeRule.onNodeWithText("La puso Movi").performScrollTo().assertIsDisplayed()
     }
 
     // ── El extracto ─────────────────────────────────────────────────────────────

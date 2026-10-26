@@ -1710,7 +1710,8 @@ private fun Detail(
 ) {
     Fila(
         titulo = value,
-        subtitulo = if (hint != null) "$label · $hint" else label,
+        // El porqué, cuando lo puso Movi («La puso Movi», «Así lo anotaste 4 veces»); si no, qué es.
+        subtitulo = hint ?: label,
         modifier = Modifier.testTag(tagDeFilaDelSms(label)),
         inicio = {
             if (ok) IconoEnCirculo(Icons.Rounded.Check, tono = TonoDeIcono.Exito)
