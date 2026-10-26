@@ -15,6 +15,8 @@ import com.jvillada.movi.shared.model.MAX_DIAS_PARA_BANCO_MUDO
 import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.MAX_INICIOS_PROPIOS
 import com.jvillada.movi.shared.model.PasswordPolicy
+import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
+import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import io.ktor.http.HttpStatusCode
@@ -140,9 +142,16 @@ fun Route.userRoutes() {
                     "Son demasiados períodos con arranque propio (máximo $MAX_INICIOS_PROPIOS)",
                 )
             }
+            // La regla del fin de semana: uno de los valores de :core y ningún otro. Un valor que no
+            // existe se rechaza en vez de guardarse: leído después, caería callado a «ese día».
+            if (req.periodWeekendRule != null &&
+                SiElCorteCaeEnFinDeSemana.entries.none { it.name == req.periodWeekendRule }
+            ) {
+                return@put call.respond(HttpStatusCode.BadRequest, "Esa regla de fin de semana no existe")
+            }
             if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null &&
                 req.reminderLeadDays == null && req.smsAlertMuted == null && req.periodStarts == null &&
-                req.diasParaBancoMudo == null && req.cierrePorCorreo == null
+                req.diasParaBancoMudo == null && req.cierrePorCorreo == null && req.periodWeekendRule == null
             ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
             }
@@ -152,6 +161,7 @@ fun Route.userRoutes() {
                     trimmedName?.let { stmt[Users.name] = it }
                     req.avatarColor?.let { stmt[Users.avatarColor] = it }
                     req.periodCutoffDay?.let { stmt[Users.periodCutoffDay] = it }
+                    req.periodWeekendRule?.let { stmt[Users.periodWeekendRule] = it }
                     // Reemplaza el mapa entero, incluido el vacío: mandar `{}` es cómo se dice
                     // «ninguno arranca distinto». Ver [UpdateProfileRequest.periodStarts].
                     iniciosPedidos?.let {
@@ -276,6 +286,8 @@ private fun ResultRow.toProfile() = UserProfile(
     // pueda leer se trata igual que uno vacío: el perfil tiene que poder responderse siempre, y
     // un mapa roto no puede dejar al dueño sin app.
     periodStarts = this[Users.periodStarts]?.let { leerIniciosPropios(it) } ?: emptyMap(),
+    // Sin elegir = el corte no se corre en fin de semana, que es como se comportó Movi siempre.
+    periodWeekendRule = siElCorteCaeEnFinDeSemanaDe(this[Users.periodWeekendRule]).name,
     // Sin elegir = lo que el server tenga configurado, que a su vez cae al default de :core.
     reminderLeadDays = this[Users.reminderLeadDays] ?: ReminderConfig.leadDays(),
     // Sin tocar = no silenciado: el aviso de captura se muestra hasta que alguien pida callarlo.

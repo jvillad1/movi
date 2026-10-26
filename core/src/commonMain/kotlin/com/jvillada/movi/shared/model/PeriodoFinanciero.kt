@@ -1,11 +1,13 @@
 package com.jvillada.movi.shared.model
 
 import com.jvillada.movi.shared.time.AppTimeZone
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.number
+import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
@@ -77,6 +79,18 @@ data class PeriodSettings(
      * roto no puede hacer desaparecer movimientos de la vista ni partir la línea de tiempo en dos.
      */
     val iniciosPropios: Map<String, String> = emptyMap(),
+    /**
+     * **Qué pasa cuando el día de corte cae en fin de semana.** Ver [SiElCorteCaeEnFinDeSemana].
+     *
+     * El dueño (25-oct-2026): *«El pago siempre me lo hacen el 25 de cada mes, pero cuando el 25
+     * cae en fin de semana me lo hacen el viernes antes del 25»*. Antes eso se declaraba a mano mes
+     * por mes en [iniciosPropios]; con esta regla el período lo sabe solo, y [iniciosPropios] queda
+     * para lo que de verdad es una excepción (el salario que llegó un jueves sin razón).
+     *
+     * Por defecto [SiElCorteCaeEnFinDeSemana.ESE_DIA]: el comportamiento de siempre. Un usuario que
+     * no lo toque no ve ningún cambio.
+     */
+    val siCaeEnFinDeSemana: SiElCorteCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.ESE_DIA,
 ) {
     init {
         require(cutoffDay in 1..31) { "El día de corte va de 1 a 31" }
@@ -90,7 +104,55 @@ data class PeriodSettings(
      * del mes civil aunque el corte siga siendo 1, y quien lea solo `cutoffDay` para decidir
      * «esto es el mes de siempre» se saltearía la excepción.
      */
-    val esMesDeCalendario: Boolean get() = cutoffDay == 1 && iniciosPropios.isEmpty()
+    val esMesDeCalendario: Boolean
+        get() = cutoffDay == 1 && iniciosPropios.isEmpty() && siCaeEnFinDeSemana == SiElCorteCaeEnFinDeSemana.ESE_DIA
+}
+
+/**
+ * **Cuándo arranca el período si el día de corte cae sábado, domingo o festivo.** El banco no paga
+ * esos días: el salario del 25 que cae domingo entra el viernes antes (así le pasa al dueño) o el
+ * lunes después (así le pasa a otros). Un festivo de Colombia cuenta igual: el 25 de diciembre se
+ * paga el 24 (el dueño lo confirmó el 25-oct-2026). Ver [esDiaHabilEnColombia].
+ *
+ * Viaja como el nombre del valor (`UserProfile.periodWeekendRule`); un valor que no se conozca se lee
+ * como [ESE_DIA] (ver [siElCorteCaeEnFinDeSemanaDe]).
+ */
+@Serializable
+enum class SiElCorteCaeEnFinDeSemana {
+    /** El período arranca el día de corte aunque sea sábado o domingo. Lo de siempre. */
+    ESE_DIA,
+    /**
+     * El período arranca el día hábil anterior: un corte 25 que cae domingo arranca el viernes 23, y
+     * el 25 de diciembre (festivo) el 24.
+     */
+    DIA_HABIL_ANTERIOR,
+    /** El período arranca el día hábil siguiente: un corte 25 que cae sábado arranca el lunes 27. */
+    DIA_HABIL_SIGUIENTE,
+}
+
+/** El valor guardado, o [SiElCorteCaeEnFinDeSemana.ESE_DIA] si falta o no se entiende. */
+fun siElCorteCaeEnFinDeSemanaDe(nombre: String?): SiElCorteCaeEnFinDeSemana =
+    SiElCorteCaeEnFinDeSemana.entries.firstOrNull { it.name == nombre } ?: SiElCorteCaeEnFinDeSemana.ESE_DIA
+
+/**
+ * **El día de corte con la regla del fin de semana aplicada**: [fecha] si es día hábil o si la regla
+ * es [SiElCorteCaeEnFinDeSemana.ESE_DIA]; si no, el día hábil anterior o el siguiente, saltando
+ * sábados, domingos y festivos de Colombia (el lunes festivo después de un fin de semana corre el
+ * pago hasta el viernes).
+ *
+ * El corrimiento es de unos pocos días (cuatro en el peor caso, Semana Santa), y eso lo vuelve
+ * seguro: los arranques de dos períodos seguidos siguen a casi un mes de distancia, así que no
+ * puede quedar un día sin período ni uno en dos.
+ */
+fun corteCorrido(fecha: LocalDate, regla: SiElCorteCaeEnFinDeSemana): LocalDate {
+    val paso = when (regla) {
+        SiElCorteCaeEnFinDeSemana.ESE_DIA -> return fecha
+        SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR -> -1
+        SiElCorteCaeEnFinDeSemana.DIA_HABIL_SIGUIENTE -> 1
+    }
+    var dia = fecha
+    while (!esDiaHabilEnColombia(dia)) dia = dia.plus(paso, DateTimeUnit.DAY)
+    return dia
 }
 
 /**
@@ -126,11 +188,15 @@ private fun inicioDe(year: Int, month: Int, cutoffDay: Int): LocalDate =
     LocalDate(year, month, minOf(cutoffDay, diasDelMes(year, month)))
 
 /**
- * **El día en que arrancó un período**: el del corte, salvo que el dueño haya dicho otro.
+ * **El día en que arrancó un período**: el del corte —corrido si cae en fin de semana, ver
+ * [PeriodSettings.siCaeEnFinDeSemana]—, salvo que el dueño haya dicho otro.
  *
- * Es el único lugar donde la excepción de [PeriodSettings.iniciosPropios] se mira, y por eso todo
- * lo demás —la ventana, en qué período cae una fecha, el rango que se lee en pantalla— la respeta
- * sin saber que existe.
+ * Es el único lugar donde la excepción de [PeriodSettings.iniciosPropios] y la regla del fin de
+ * semana se miran, y por eso todo lo demás —la ventana, en qué período cae una fecha, el rango que
+ * se lee en pantalla, el día en que se espera el salario— las respeta sin saber que existen.
+ *
+ * **La excepción gana sobre la regla**: el salario de septiembre de 2026 entró el jueves 24 sin que
+ * el 25 fuera fin de semana, y ese arranque declarado a mano tiene que seguir valiendo.
  *
  * **Un inicio propio que no se entiende se ignora**, y son dos casos: una cadena que no es fecha, y
  * una fecha que cae fuera del mes en que ese período podría arrancar. Lo segundo importa más de lo
@@ -140,12 +206,14 @@ private fun inicioDe(year: Int, month: Int, cutoffDay: Int): LocalDate =
  */
 fun inicioDelPeriodo(periodo: PeriodoFinanciero, settings: PeriodSettings): LocalDate {
     val porCorte = inicioPorCorte(periodo, settings.cutoffDay)
+    val porLaRegla = corteCorrido(porCorte, settings.siCaeEnFinDeSemana)
     val declarado = settings.iniciosPropios[periodo.prefijo]
         ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-        ?: return porCorte
-    // El mes en el que ese período puede arrancar es el de `porCorte` y ningún otro.
+        ?: return porLaRegla
+    // El mes en el que ese período puede arrancar es el del corte sin correr y ningún otro: la
+    // regla del fin de semana no cambia qué excepciones son válidas.
     return if (declarado.year == porCorte.year && declarado.month == porCorte.month) declarado
-    else porCorte
+    else porLaRegla
 }
 
 /** El arranque que le tocaría por la regla del corte, sin mirar excepciones. */
@@ -189,13 +257,16 @@ fun periodoDe(epochMillis: Long, settings: PeriodSettings): PeriodoFinanciero {
     if (settings.esMesDeCalendario) return PeriodoFinanciero(fecha.year, fecha.month.number)
 
     val porElCorte = periodoPorElCorte(fecha, settings.cutoffDay)
-    if (settings.iniciosPropios.isEmpty()) return porElCorte
+    if (settings.iniciosPropios.isEmpty() && settings.siCaeEnFinDeSemana == SiElCorteCaeEnFinDeSemana.ESE_DIA) {
+        return porElCorte
+    }
 
-    // **Con inicios propios, el candidato del corte puede estar corrido.** Un período que arrancó
-    // antes se lleva días del anterior; uno que arrancó después se los devuelve. El desplazamiento
-    // no puede pasar de un mes —un inicio propio vive en el mismo mes que su arranque natural, ver
-    // [inicioDelPeriodo]— así que alcanza con mirar al vecino de cada lado y quedarse con el que de
-    // verdad contiene la fecha.
+    // **Con inicios propios o con el fin de semana corrido, el candidato del corte puede estar
+    // corrido.** Un período que arrancó antes se lleva días del anterior; uno que arrancó después
+    // se los devuelve. El desplazamiento no puede pasar de un mes —un inicio propio vive en el mismo
+    // mes que su arranque natural, ver [inicioDelPeriodo], y el fin de semana o el festivo corre
+    // unos pocos días— así que alcanza con mirar al vecino de cada lado y quedarse con el que de verdad
+    // contiene la fecha.
     //
     // Se pregunta por la VENTANA en vez de recalcular la regla: así esta función y [ventanaDe]
     // nunca pueden discrepar sobre dónde está un borde.
@@ -260,7 +331,53 @@ private val PREFIJO_DE_PERIODO = Regex("""^(\d{4})-(0[1-9]|1[0-2])$""")
  * distintos (el corte se acota a 1..31 igual que en todas las pantallas).
  */
 fun UserProfile.ajustesDelPeriodo(): PeriodSettings =
-    PeriodSettings(cutoffDay = periodCutoffDay.coerceIn(1, 31), iniciosPropios = periodStarts)
+    PeriodSettings(
+        cutoffDay = periodCutoffDay.coerceIn(1, 31),
+        iniciosPropios = periodStarts,
+        siCaeEnFinDeSemana = siElCorteCaeEnFinDeSemanaDe(periodWeekendRule),
+    )
+
+/**
+ * **El día en que se espera un ingreso recurrente que cae el día de corte**: el arranque del
+ * período que ese ingreso abre, con la regla del fin de semana y las excepciones a mano; cualquier
+ * otro vencimiento sale tal cual.
+ *
+ * Es el salario: el período arranca el día que entra, así que si el 25 cae domingo y el período
+ * arranca el viernes 23, el salario del 25 también se espera el viernes 23. Sin esto Movi
+ * preguntaría todo el fin de semana por un salario que ya llegó, o lo daría por atrasado un día
+ * que el banco no paga. No se pregunta por el nombre de la regla: un ingreso que cae justo el día
+ * del corte es el que abre el período, se llame como se llame.
+ *
+ * [vencimiento] es la ocurrencia por el día de la regla (el 25), la que se usa para sellarla; lo
+ * que devuelve es solo cuándo se espera.
+ */
+fun fechaEsperadaDelIngreso(
+    tipo: TransactionType,
+    diaDeLaRegla: Int,
+    vencimiento: LocalDate,
+    settings: PeriodSettings,
+): LocalDate {
+    if (tipo != TransactionType.INCOME || diaDeLaRegla != settings.cutoffDay) return vencimiento
+    val periodo = periodoPorElCorte(vencimiento, settings.cutoffDay)
+    // Solo si el vencimiento ES el arranque natural de ese período (con un corte 31 recortado al
+    // largo del mes, el 30 de abril también lo es); si no, la regla no abre ningún período.
+    if (inicioPorCorte(periodo, settings.cutoffDay) != vencimiento) return vencimiento
+    return inicioDelPeriodo(periodo, settings)
+}
+
+/**
+ * Lo mismo con fechas `"AAAA-MM-DD"`, para el server, que trabaja con `java.time` y no ve los tipos
+ * de `kotlinx-datetime`. Una cadena que no es fecha vuelve tal cual.
+ */
+fun fechaEsperadaDelIngreso(
+    tipo: TransactionType,
+    diaDeLaRegla: Int,
+    vencimientoIso: String,
+    settings: PeriodSettings,
+): String {
+    val vencimiento = runCatching { LocalDate.parse(vencimientoIso) }.getOrNull() ?: return vencimientoIso
+    return fechaEsperadaDelIngreso(tipo, diaDeLaRegla, vencimiento, settings).toString()
+}
 
 /**
  * Estos ajustes con el arranque de [periodo] declarado en [inicio] (ISO), o **quitado** si

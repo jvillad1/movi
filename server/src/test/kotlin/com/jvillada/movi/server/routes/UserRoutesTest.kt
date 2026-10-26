@@ -318,6 +318,29 @@ class UserRoutesTest {
         assertEquals("""{"2026-09":"2026-08-24"}""", dbPeriodStarts())
     }
 
+    /**
+     * **El fin de semana del corte**: por defecto «ese mismo día» (nadie ve un cambio), se elige
+     * desde Ajustes, y un valor que no existe se rechaza en vez de guardarse.
+     */
+    @Test
+    fun `PUT guarda la regla del fin de semana y el perfil la devuelve`() = testApplication {
+        wireApp()
+        // Leído como lo lee la app: el server no escribe un campo que vale su default.
+        suspend fun regla() = Json { ignoreUnknownKeys = true }
+            .decodeFromString(com.jvillada.movi.shared.model.UserProfile.serializer(), getProfile().bodyAsText())
+            .periodWeekendRule
+        assertEquals("ESE_DIA", regla())
+
+        assertEquals(HttpStatusCode.OK, putProfile("""{"periodWeekendRule":"DIA_HABIL_ANTERIOR"}""").status)
+        assertEquals("DIA_HABIL_ANTERIOR", regla())
+        // Y el server la usa para sus propias cuentas del período.
+        val ajustes = com.jvillada.movi.server.time.ajustesDePeriodoDe(userId)
+        assertEquals(com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR, ajustes.siCaeEnFinDeSemana)
+
+        assertEquals(HttpStatusCode.BadRequest, putProfile("""{"periodWeekendRule":"FERIADO"}""").status)
+        assertEquals("DIA_HABIL_ANTERIOR", regla())
+    }
+
     private fun dbPeriodStarts(): String? = transaction {
         Users.selectAll().where { Users.id eq userId }.single()[Users.periodStarts]
     }

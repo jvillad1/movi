@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.diaLegible
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
@@ -101,7 +102,13 @@ fun InicioDelPeriodoSheet(
     // solo Movimientos la pasa. Sin ella, esta hoja sigue siendo la de siempre.
     onVerPeriodos: (() -> Unit)? = null,
 ) {
+    // Dos «de siempre»: el día del corte a secas, que dice en qué mes se puede declarar un arranque
+    // (ver `inicioDelPeriodo`), y el que sale de la regla del fin de semana, que es el que el dueño
+    // ve como su día normal («arranca el 23» cuando el 25 cae domingo).
     val natural = remember(periodo, ajustes.cutoffDay) {
+        inicioDelPeriodo(periodo, PeriodSettings(cutoffDay = ajustes.cutoffDay))
+    }
+    val deSiempre = remember(periodo, ajustes.cutoffDay, ajustes.siCaeEnFinDeSemana) {
         inicioDelPeriodo(periodo, ajustes.copy(iniciosPropios = emptyMap()))
     }
     val actual = remember(periodo, ajustes) { inicioDelPeriodo(periodo, ajustes) }
@@ -134,7 +141,7 @@ fun InicioDelPeriodoSheet(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "Normalmente arranca el ${natural.dayOfMonth}. Si este mes tu sueldo entró " +
+                text = "Normalmente arranca el ${diaLegible(deSiempre)}. Si este mes tu sueldo entró " +
                     "antes o después, dilo aquí: el mes anterior se cierra solo ese mismo día.",
                 // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
                 style = Movi.textos.cuerpo,
@@ -204,7 +211,7 @@ fun InicioDelPeriodoSheet(
             if (periodo.prefijo in ajustes.iniciosPropios) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = if (saving) "Guardando…" else "Volver al día ${natural.dayOfMonth} de siempre",
+                    text = if (saving) "Guardando…" else "Volver al ${diaLegible(deSiempre)}, como siempre",
                     style = Movi.textos.apoyo,
                     fontWeight = FontWeight.Medium,
                     color = if (saving) Movi.colores.textoApagado else Movi.colores.marca,

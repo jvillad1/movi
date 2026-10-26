@@ -65,6 +65,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoActual
@@ -1079,8 +1080,13 @@ fun TransactionsScreen(
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
-    val ajustesDelPeriodo = remember(cutoffDay, iniciosPropios) {
-        PeriodSettings(cutoffDay = cutoffDay.coerceIn(1, 31), iniciosPropios = iniciosPropios)
+    val reglaDelFinDeSemana = perfilVigente?.periodWeekendRule
+    val ajustesDelPeriodo = remember(cutoffDay, iniciosPropios, reglaDelFinDeSemana) {
+        PeriodSettings(
+            cutoffDay = cutoffDay.coerceIn(1, 31),
+            iniciosPropios = iniciosPropios,
+            siCaeEnFinDeSemana = siElCorteCaeEnFinDeSemanaDe(reglaDelFinDeSemana),
+        )
     }
     val periodoDeHoy = remember(ajustesDelPeriodo) {
         periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)

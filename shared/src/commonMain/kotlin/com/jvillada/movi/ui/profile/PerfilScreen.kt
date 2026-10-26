@@ -42,8 +42,10 @@ import com.jvillada.movi.data.ResultadoDeHuella
 import com.jvillada.movi.data.motivoDeLaHuella
 import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.platform.PushOptIn
+import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.AtrasCierraEstaHoja
 import com.jvillada.movi.ui.Screen
@@ -227,7 +229,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                                     Text("Inicio del mes", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                                     Text(
                                         text = cutoff?.let { d ->
-                                            if (d == 1) "Mes de calendario" else "Cada día $d"
+                                            textoDelInicioDelMes(d, siElCorteCaeEnFinDeSemanaDe(profile?.periodWeekendRule))
                                         } ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
                                         style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
@@ -813,14 +815,19 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         AtrasCierraEstaHoja { showPeriodo = false; errorPeriodo = null }
         PeriodoSheet(
             cutoffActual = perfil.periodCutoffDay,
+            reglaActual = siElCorteCaeEnFinDeSemanaDe(perfil.periodWeekendRule),
             saving = guardandoPeriodo,
             error = errorPeriodo,
             onDismiss = { showPeriodo = false; errorPeriodo = null },
-            onSave = { dia ->
+            onSave = { dia, regla ->
                 guardandoPeriodo = true
                 errorPeriodo = null
                 alcancePeriodo.launch {
-                    runCatching { Repositories.wallets.updateUserProfile(UpdateProfileRequest(periodCutoffDay = dia)) }
+                    runCatching {
+                        Repositories.wallets.updateUserProfile(
+                            UpdateProfileRequest(periodCutoffDay = dia, periodWeekendRule = regla.name),
+                        )
+                    }
                         .onSuccess {
                             guardandoPeriodo = false
                             showPeriodo = false
@@ -836,6 +843,19 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
             },
         )
     }
+    }
+}
+
+/**
+ * Lo que dice la fila «Inicio del mes»: «Cada día 25 · o el día hábil anterior».
+ * Con corte 1 y sin regla sigue siendo «Mes de calendario».
+ */
+fun textoDelInicioDelMes(dia: Int, regla: SiElCorteCaeEnFinDeSemana): String {
+    val base = if (dia == 1 && regla == SiElCorteCaeEnFinDeSemana.ESE_DIA) "Mes de calendario" else "Cada día $dia"
+    return when (regla) {
+        SiElCorteCaeEnFinDeSemana.ESE_DIA -> base
+        SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR -> "$base · o el día hábil anterior"
+        SiElCorteCaeEnFinDeSemana.DIA_HABIL_SIGUIENTE -> "$base · o el día hábil siguiente"
     }
 }
 

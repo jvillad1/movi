@@ -16,6 +16,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,15 +28,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
+import com.jvillada.movi.shared.model.diaLegible
+import com.jvillada.movi.shared.model.inicioDelPeriodo
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.model.periodoSiguiente
+import com.jvillada.movi.shared.model.porQueNoEsHabil
 import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.CardRow
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import kotlinx.datetime.Clock
 
@@ -46,12 +57,17 @@ import kotlinx.datetime.Clock
  *
  * La hoja muestra en vivo qué período sería hoy con el día elegido — es la única forma de que
  * «26» signifique algo antes de guardarlo.
+ *
+ * Y debajo, **qué pasa cuando ese día cae en fin de semana o festivo** ([SiElCorteCaeEnFinDeSemana]):
+ * al dueño le pagan el día hábil anterior, a otros el siguiente. Antes eso se declaraba a mano mes por
+ * mes; con la regla el período lo sabe solo.
  */
 @Composable
 fun PeriodoSheet(
     cutoffActual: Int,
     onDismiss: () -> Unit,
-    onSave: (Int) -> Unit,
+    onSave: (Int, SiElCorteCaeEnFinDeSemana) -> Unit,
+    reglaActual: SiElCorteCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.ESE_DIA,
     saving: Boolean = false,
     error: String? = null,
 ) {
@@ -61,8 +77,10 @@ fun PeriodoSheet(
     // activo, así que un toque escribía 1 encima del 25 y le movía el mes entero. Con la clave,
     // el valor que llega manda; es el mismo patrón que ya usa `InicioDelPeriodoSheet`.
     var dia by remember(cutoffActual) { mutableStateOf(cutoffActual.coerceIn(1, 31)) }
-    val settings = remember(dia) { PeriodSettings(cutoffDay = dia) }
-    val hoy = remember(dia) { periodoDe(Clock.System.now().toEpochMilliseconds(), settings) }
+    var regla by remember(reglaActual) { mutableStateOf(reglaActual) }
+    val settings = remember(dia, regla) { PeriodSettings(cutoffDay = dia, siCaeEnFinDeSemana = regla) }
+    val hoy = remember(settings) { periodoDe(Clock.System.now().toEpochMilliseconds(), settings) }
+    val ejemplo = remember(settings, hoy) { proximoCorteCorrido(hoy, settings) }
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         // El contenido de la hoja se desplaza.
@@ -184,6 +202,49 @@ fun PeriodoSheet(
                 )
             }
 
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = SI_CAE_EN_FIN_DE_SEMANA,
+                style = Movi.textos.titulo,
+                color = Movi.colores.texto,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Movi.colores.tarjeta)
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+            ) {
+                SiElCorteCaeEnFinDeSemana.entries.forEachIndexed { i, opcion ->
+                    val elegida = opcion == regla
+                    CardRow(
+                        left = { Text(tituloDeLaRegla(opcion), style = Movi.textos.cuerpo, color = Movi.colores.texto) },
+                        right = {
+                            // El check en el color de la marca, como el tema en Ajustes.
+                            Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                                if (elegida) {
+                                    Icon(
+                                        Icons.Rounded.Check,
+                                        contentDescription = "Elegido",
+                                        tint = Movi.colores.marca,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
+                        },
+                        isLast = i == SiElCorteCaeEnFinDeSemana.entries.lastIndex,
+                        onClick = if (saving) null else ({ regla = opcion }),
+                        modifier = Modifier.semantics { selected = elegida },
+                    )
+                }
+            }
+            // El ejemplo concreto: «el 25 de octubre es domingo» dice más que la regla en abstracto.
+            if (ejemplo != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(text = ejemplo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+
             if (error != null) {
                 Spacer(Modifier.height(12.dp))
                 Text(text = error, style = Movi.textos.apoyo, color = Movi.colores.sale)
@@ -196,7 +257,7 @@ fun PeriodoSheet(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (saving) Movi.colores.tarjeta else Movi.colores.marca)
-                    .clickable(enabled = !saving) { onSave(dia) }
+                    .clickable(enabled = !saving) { onSave(dia, regla) }
                     .padding(vertical = 15.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -210,4 +271,36 @@ fun PeriodoSheet(
             Spacer(Modifier.height(28.dp))
         }
     }
+}
+
+/** El título de la elección, en la hoja y en la fila de Ajustes. */
+const val SI_CAE_EN_FIN_DE_SEMANA: String = "Si ese día cae en fin de semana o festivo"
+
+/** Cómo se dice cada regla. */
+fun tituloDeLaRegla(regla: SiElCorteCaeEnFinDeSemana): String = when (regla) {
+    SiElCorteCaeEnFinDeSemana.ESE_DIA -> "Empieza ese mismo día"
+    SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR -> "Empieza el día hábil anterior"
+    SiElCorteCaeEnFinDeSemana.DIA_HABIL_SIGUIENTE -> "Empieza el día hábil siguiente"
+}
+
+/**
+ * «Por ejemplo, el 25 de octubre es domingo: ese período empieza el 23 de octubre.» — el próximo corte (desde el
+ * período de [desde]) que la regla de [settings] corre, en el próximo año; `null` si la regla es
+ * «ese mismo día» o ninguno cae en fin de semana.
+ */
+fun proximoCorteCorrido(desde: PeriodoFinanciero, settings: PeriodSettings): String? {
+    if (settings.siCaeEnFinDeSemana == SiElCorteCaeEnFinDeSemana.ESE_DIA) return null
+    val sinCorrer = settings.copy(siCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.ESE_DIA, iniciosPropios = emptyMap())
+    val conLaRegla = settings.copy(iniciosPropios = emptyMap())
+    var periodo = desde
+    repeat(13) {
+        val natural = inicioDelPeriodo(periodo, sinCorrer)
+        val corrido = inicioDelPeriodo(periodo, conLaRegla)
+        if (natural != corrido) {
+            val nombreDelDia = porQueNoEsHabil(natural) ?: return null
+            return "Por ejemplo, el ${diaLegible(natural)} es $nombreDelDia: ese período empieza el ${diaLegible(corrido)}."
+        }
+        periodo = periodoSiguiente(periodo)
+    }
+    return null
 }

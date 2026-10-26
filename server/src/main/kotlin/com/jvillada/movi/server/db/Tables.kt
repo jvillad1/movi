@@ -36,6 +36,12 @@ object Users : Table("users") {
      */
     val periodStarts = text("period_starts").nullable()
     /**
+     * **Qué hace el período cuando el día de corte cae en fin de semana**: el nombre de un
+     * `SiElCorteCaeEnFinDeSemana` (:core). Nullable por el mismo motivo que [periodCutoffDay]; se lee
+     * como `ESE_DIA` —lo de siempre— cuando falta o no se entiende.
+     */
+    val periodWeekendRule = varchar("period_weekend_rule", 32).nullable()
+    /**
      * Con cuántos días de anticipación avisar un vencimiento.
      *
      * Antes solo existía como variable de entorno del server (`REMINDER_LEAD_DAYS`): global para

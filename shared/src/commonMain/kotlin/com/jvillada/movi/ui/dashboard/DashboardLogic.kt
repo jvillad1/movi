@@ -30,6 +30,7 @@ import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.UserProfile
@@ -1057,7 +1058,7 @@ internal fun DashboardData.conResumenDelInicio(s: DashboardSummary): DashboardDa
  * calendario, que es justo lo que dejó de hacer el resto de la app.
  */
 internal fun DashboardData.conElPerfil(perfil: UserProfile, ahora: Long): DashboardData {
-    val ajustes = PeriodSettings(perfil.periodCutoffDay, perfil.periodStarts)
+    val ajustes = perfil.ajustesDelPeriodo()
     return copy(ajustesDePeriodo = ajustes, periodoActual = periodoDe(ahora, ajustes))
 }
 

@@ -38,6 +38,7 @@ import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.group
@@ -160,8 +161,13 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
      * Lo que importa no es cuál de los dos calendarios es «el correcto» en abstracto, es que Movi
      * tenga UNO: el dueño lee estas fechas al lado de las de Movimientos y el Inicio.
      */
-    val ajustesDelPeriodo = remember(cutoffDay, iniciosPropios) {
-        PeriodSettings(cutoffDay = cutoffDay.coerceIn(1, 31), iniciosPropios = iniciosPropios)
+    val reglaDelFinDeSemana = perfilLeido.valor?.periodWeekendRule
+    val ajustesDelPeriodo = remember(cutoffDay, iniciosPropios, reglaDelFinDeSemana) {
+        PeriodSettings(
+            cutoffDay = cutoffDay.coerceIn(1, 31),
+            iniciosPropios = iniciosPropios,
+            siCaeEnFinDeSemana = siElCorteCaeEnFinDeSemanaDe(reglaDelFinDeSemana),
+        )
     }
     val periodoActual = remember(ajustesDelPeriodo) {
         periodoDe(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)

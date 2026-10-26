@@ -3,6 +3,7 @@ package com.jvillada.movi.avisos
 import com.jvillada.movi.data.apiBaseUrl
 import com.jvillada.movi.data.createHttpClient
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.repository.WalletRepositoryImpl
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
@@ -29,7 +30,7 @@ suspend fun leerPagosDelPeriodo(ahora: Long = System.currentTimeMillis()): List<
     try {
         val repo = WalletRepositoryImpl(cliente, apiBaseUrl)
         val perfil = repo.getUserProfile()
-        val ajustes = PeriodSettings(perfil.periodCutoffDay, perfil.periodStarts)
+        val ajustes = perfil.ajustesDelPeriodo()
         return checklistDelPeriodo(
             upcoming = repo.getUpcomingPayments(),
             ocurrencias = repo.getOccurrenceStates(),

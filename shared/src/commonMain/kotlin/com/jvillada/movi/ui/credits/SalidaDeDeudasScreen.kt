@@ -32,6 +32,7 @@ import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.DeudaParaSalir
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.TipoDeDeuda
 import com.jvillada.movi.shared.model.deudasParaSalir
 import com.jvillada.movi.shared.model.periodoDe
@@ -75,10 +76,7 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
     var abono by rememberSaveable { mutableStateOf<Long?>(null) }
     var editandoTarjeta by remember { mutableStateOf<CardSummary?>(null) }
 
-    val ajustes = PeriodSettings(
-        cutoffDay = (perfil.valor?.periodCutoffDay ?: 1).coerceIn(1, 31),
-        iniciosPropios = perfil.valor?.periodStarts ?: emptyMap(),
-    )
+    val ajustes = perfil.valor?.ajustesDelPeriodo() ?: PeriodSettings()
     val periodoActual = remember(ajustes) { periodoDe(Clock.System.now().toEpochMilliseconds(), ajustes) }
     val listas = creditos.valor?.let { c -> tarjetas.valor?.let { t -> c to t } }
     val deudas = remember(listas) { listas?.let { (c, t) -> deudasParaSalir(c, t) } }

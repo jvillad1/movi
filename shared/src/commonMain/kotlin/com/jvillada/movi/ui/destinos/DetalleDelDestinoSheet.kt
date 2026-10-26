@@ -32,6 +32,7 @@ import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MovimientosParaRenombrar
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.comoSeDice
 import com.jvillada.movi.shared.model.identificadoresDelDestino
@@ -108,7 +109,7 @@ fun DetalleDelDestinoSheet(
     LaunchedEffect(Unit) {
         if (periodo == null) {
             runCatching { Repositories.wallets.getUserProfile() }
-                .onSuccess { periodo = PeriodSettings(it.periodCutoffDay, it.periodStarts) }
+                .onSuccess { periodo = it.ajustesDelPeriodo() }
             if (periodo == null) periodo = PeriodSettings()
         }
     }
