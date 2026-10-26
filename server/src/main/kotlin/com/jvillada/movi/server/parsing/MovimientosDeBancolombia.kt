@@ -50,6 +50,12 @@ import kotlin.math.abs
  *   corte (a veces), moneda, valor y cuotas. Ahí el signo va al revés: sin «-» es un cobro (un gasto
  *   de la tarjeta) y con «-» un abono. Un cobro en dólares va en dólares, redondeado a la unidad. Es
  *   donde salen la cuota de manejo, los intereses y las suscripciones que no mandan SMS.
+ * - **El fondo de inversión** («Movimientos: Inversiones», la Fiducuenta) pone la fecha sola en su
+ *   renglón y cierra con unidades, valor de la unidad y valor en pesos: «19 Oct 2026 / Gravamen a
+ *   los / movimientos / financieros / 0,158864 -$ 7.728,00 -$ 7.728,00». El signo es el de una
+ *   cuenta. Trae los traslados, el 4x1000 y la retención en la fuente; **los rendimientos no son
+ *   filas** (se ven en el valor de la unidad), así que se cuadran con el saldo, como siempre. No
+ *   escribe el número del fondo.
  * - **Si algo no cuadra** (un movimiento sin valor, una fecha que no existe) se devuelve `null` y el
  *   extracto sigue el camino de siempre. Un movimiento con la fecha o el monto equivocados es peor
  *   que ninguno.
@@ -58,12 +64,17 @@ fun leerLosMovimientosDeBancolombia(texto: String): MovimientosDeBancolombia? {
     val plano = sinTildes(texto)
     if (!plano.contains("sucursal virtual personas")) return null
     val deTarjeta = plano.contains("movimientos: tarjetas de credito")
-    if (!deTarjeta && !plano.contains("movimientos: cuentas")) return null
+    val deUnFondo = plano.contains("movimientos: inversiones")
+    if (!deTarjeta && !deUnFondo && !plano.contains("movimientos: cuentas")) return null
 
     // El PDF real separa el «$» de la cifra con un espacio duro (U+00A0), que `\s` no reconoce.
     val lineas = texto.replace('\u00A0', ' ').lines().map { it.trim() }.filter { it.isNotEmpty() }
         .filterNot { sinTildes(it).startsWith("direccion ip") }
-    val numero = if (deTarjeta) {
+    val numero = if (deUnFondo) {
+        // La lista del fondo no escribe el número: la cuenta la encuentra la revisión por el nombre
+        // (ver [MovimientosDeBancolombia.deUnFondo]).
+        null
+    } else if (deTarjeta) {
         lineas.firstNotNullOfOrNull { TARJETA.find(it)?.groupValues?.get(1) }
     } else {
         lineas.firstNotNullOfOrNull { CUENTA.find(it)?.groupValues?.get(2) }?.filter { it.isDigit() }?.takeLast(4)
@@ -87,7 +98,13 @@ fun leerLosMovimientosDeBancolombia(texto: String): MovimientosDeBancolombia? {
             continue
         }
         val junto = renglones.joinToString(" ").trim()
-        if (deTarjeta) {
+        if (deUnFondo) {
+            // El último valor es el de pesos, con su signo; antes van las unidades y el valor de la
+            // unidad, que no son parte de la descripción.
+            val valor = VALOR_DE_FONDO.find(junto) ?: continue
+            val centavos = centavosDelExtracto(valor.groupValues[1] + valor.groupValues[2]) ?: return null
+            fila(fecha!!, junto.substring(0, valor.range.first), centavos, junto)?.let { filas += it }
+        } else if (deTarjeta) {
             val valor = VALOR_DE_TARJETA.find(junto) ?: continue
             val centavos = centavosDelExtracto(valor.groupValues[2] + valor.groupValues[3]) ?: return null
             // En la tarjeta un valor positivo es un cobro y uno con «-» un abono; la fecha de corte
@@ -102,11 +119,18 @@ fun leerLosMovimientosDeBancolombia(texto: String): MovimientosDeBancolombia? {
         fecha = null
     }
     if (fecha != null || filas.isEmpty()) return null
-    return MovimientosDeBancolombia(numero = numero, filas = filas)
+    return MovimientosDeBancolombia(numero = numero, filas = filas, deUnFondo = deUnFondo)
 }
 
-/** Lo que se leyó: los últimos cuatro de la cuenta (si estaban) y sus movimientos. */
-data class MovimientosDeBancolombia(val numero: String?, val filas: List<ParsedTransaction>)
+/**
+ * Lo que se leyó: los últimos cuatro de la cuenta (si estaban) y sus movimientos. [deUnFondo] es la
+ * lista de un fondo de inversión, que no escribe su número.
+ */
+data class MovimientosDeBancolombia(
+    val numero: String?,
+    val filas: List<ParsedTransaction>,
+    val deUnFondo: Boolean = false,
+)
 
 /**
  * Una fila de la lista. [centavos] con el signo de la plata de la cuenta: negativo es lo que salió
@@ -162,6 +186,12 @@ private val VALOR_DE_TARJETA = Regex("""\b(COP|USD)\s+(-?)\s*\$\s?(\d{1,3}(?:\.\
 
 /** La fecha de corte que la tarjeta pone después de la descripción («… 17 ago 2026»). */
 private val CORTE_AL_FINAL = Regex("""\s*\d{1,2}\s+[A-Za-zÁÉÍÓÚáéíóú]{3,10}\.?\s+\d{4}$""")
+
+/**
+ * El final de un movimiento del fondo: las unidades (o «--»), el valor de la unidad y el valor en
+ * pesos con su signo. «0,158864 -$ 7.728,00 -$ 7.728,00» o «-- $ 1.932.000,00 $ 1.932.000,00».
+ */
+private val VALOR_DE_FONDO = Regex("""(?:--|\d+(?:,\d+)?)\s+-?\$\s?\d{1,3}(?:\.\d{3})*,\d{2}\s+(-?)\$\s?(\d{1,3}(?:\.\d{3})*,\d{2})$""")
 
 /** «MASTER BLACK *3684»: los últimos cuatro de la tarjeta. */
 private val TARJETA = Regex("""^[A-Za-zÁÉÍÓÚáéíóú ]+\*(\d{4})$""")

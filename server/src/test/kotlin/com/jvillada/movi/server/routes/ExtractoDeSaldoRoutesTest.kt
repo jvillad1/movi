@@ -449,6 +449,27 @@ class ExtractoDeSaldoRoutesTest {
     }
 
     @Test
+    fun `la lista del fondo de inversion llega como Fiducuenta, para que la revision encuentre la cuenta`() = testApplication {
+        application { testModule() }
+        val fondo = """
+            Sucursal Virtual Personas
+            Movimientos: Inversiones
+            Fecha Descripción Número de unidades Valor unidad Valor en pesos
+            19 Oct 2026
+            Gravamen a los movimientos financieros
+            0,158864 -$ 7.728,00 -$ 7.728,00
+            19 Oct 2026
+            Retención en la fuente
+            0,001849 -$ 89,94 -$ 89,94
+        """.trimIndent()
+        val res = subir(fondo, conSaldos = false, nombre = "MovimientosTusInversionesBancolombia26Oct26.txt")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val r = json.decodeFromString(StatementParseResult.serializer(), res.bodyAsText())
+        assertEquals("Fiducuenta", r.bankName)
+        assertEquals(2, r.cargosDelBanco.size)
+    }
+
+    @Test
     fun `compartida como PDF, la lista de Bancolombia se reconoce sin preguntarle a la IA`() = testApplication {
         application { testModule() }
         val doc = subirDocumento(pdfConLineas(movimientosDeBancolombia.lines()))
