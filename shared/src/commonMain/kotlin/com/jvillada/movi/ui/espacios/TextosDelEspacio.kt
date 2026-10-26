@@ -96,3 +96,10 @@ fun sePuedeRepartir(evento: FinancialEvent): Boolean =
 
 /** El texto del error de una escritura en un espacio: lo que dijo el server, o que falta conexión. */
 const val ESPACIOS_SIN_CONEXION: String = "Para esto necesitas conexión"
+
+/** Lo más largo que guarda la nota de «Pagó otro» (la descripción del gasto en el server). */
+const val MAX_NOTA_PAGO_OTRO: Int = 200
+
+/** La descripción de un gasto que pagó otro: la nota escrita, o la categoría si no hay nota. */
+fun descripcionDelPagoOtro(nota: String, categoria: String): String =
+    nota.trim().ifBlank { categoria.trim() }.take(MAX_NOTA_PAGO_OTRO)

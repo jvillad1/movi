@@ -342,4 +342,27 @@ class EspacioRoutesTest {
         assertEquals("e_de_caro", liq.eventoId)
         assertTrue(detalle().propuestas.isEmpty())
     }
+
+    /**
+     * **Un apartado se consume con tu parte, no con el monto entero** (misma regla del dueño): el
+     * mercado de $240.000 repartido 50/50 baja el apartado «Casa» en $120.000.
+     */
+    @Test
+    fun `un gasto repartido consume del apartado solo tu parte`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_mercado", 240_000)
+        evento("e_almuerzo", 30_000)
+        assertEquals(
+            HttpStatusCode.Created,
+            post("/api/apartados", """{"id":"apt_casa","accountId":"$ahorros","proposito":"Casa","monto":1000000,"categoria":"Mercado","desde":1}""").status,
+        )
+        suspend fun restante(): Long = Json.parseToJsonElement(get("/api/apartados").bodyAsText()).let { lista ->
+            (lista as kotlinx.serialization.json.JsonArray).single().jsonObject["restante"]!!.jsonPrimitive.long
+        }
+        assertEquals(1_000_000L - 270_000L, restante(), "sin repartir, cuenta entero")
+
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado"}""")
+
+        assertEquals(1_000_000L - 120_000L - 30_000L, restante())
+    }
 }

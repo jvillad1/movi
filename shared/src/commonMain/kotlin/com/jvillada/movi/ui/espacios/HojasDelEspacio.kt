@@ -1,5 +1,17 @@
 package com.jvillada.movi.ui.espacios
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -64,6 +76,7 @@ import kotlinx.coroutines.launch
 const val TAG_REPARTIR: String = "espacios:repartir"
 const val TAG_GUARDAR_PAGO_OTRO: String = "espacios:guardar-pago-otro"
 const val TAG_CONFIRMAR_SALDADO: String = "espacios:confirmar-saldado"
+const val TAG_NOTA_PAGO_OTRO: String = "espacios:nota-pago-otro"
 
 /** El título de una hoja, igual en las tres. */
 @Composable
@@ -256,13 +269,20 @@ fun HojaSaldar(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onSaldado: () 
  * cuentas; tu parte sí es gasto tuyo, el día del gasto. El id se elige al abrir.
  */
 @Composable
-fun HojaPagoOtro(espacio: Espacio, onDismiss: () -> Unit, onGuardado: () -> Unit) {
+fun HojaPagoOtro(
+    espacio: Espacio,
+    onDismiss: () -> Unit,
+    onGuardado: () -> Unit,
+    /** La categoría con que abre (vacía: la elige el dueño). */
+    categoriaInicial: String = "",
+) {
     val coroutine = rememberCoroutineScope()
     val id = remember { newId("gde") }
     val otros = espacio.miembros.filter { it.id != MIEMBRO_YO }
     var quien by remember { mutableStateOf(otros.firstOrNull()?.id) }
     var monto by remember { mutableStateOf<Long?>(null) }
-    var categoria by remember { mutableStateOf("") }
+    var categoria by remember { mutableStateOf(categoriaInicial) }
+    var nota by remember { mutableStateOf("") }
     var trabajando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val pagador = quien
@@ -283,7 +303,7 @@ fun HojaPagoOtro(espacio: Espacio, onDismiss: () -> Unit, onGuardado: () -> Unit
                         pagadoPor = pagador,
                         monto = monto ?: 0L,
                         categoria = categoria.trim(),
-                        descripcion = categoria.trim(),
+                        descripcion = descripcionDelPagoOtro(nota, categoria),
                         fecha = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
                     ),
                 )
@@ -318,6 +338,13 @@ fun HojaPagoOtro(espacio: Espacio, onDismiss: () -> Unit, onGuardado: () -> Unit
                 label = "Categoría",
                 placeholder = "Mercado",
             )
+            Spacer(Modifier.height(Medida.dentroDeSeccion))
+            CampoDeNota(
+                valor = nota,
+                alCambiar = { nota = it.take(MAX_NOTA_PAGO_OTRO) },
+                ejemplo = "Nota (opcional): ${categoria.trim().ifBlank { "Mercado" }} del sábado",
+                habilitado = !trabajando,
+            )
             if (tuParte > 0L) {
                 Spacer(Modifier.height(EspacioDeDiseno.xs))
                 Text("Tu parte ${formatCOP(tuParte)}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -334,6 +361,34 @@ fun HojaPagoOtro(espacio: Espacio, onDismiss: () -> Unit, onGuardado: () -> Unit
             )
             Spacer(Modifier.height(Medida.entreSecciones))
         }
+    }
+}
+
+/** Un campo de texto de una línea, en la capa 2 y con los tokens del sistema. */
+@Composable
+private fun CampoDeNota(valor: String, alCambiar: (String) -> Unit, ejemplo: String, habilitado: Boolean) {
+    val forma = RoundedCornerShape(Radio.m)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(forma)
+            .background(Movi.colores.capa2)
+            .padding(horizontal = Medida.rellenoDeSuperficie, vertical = Medida.dentroDeSeccion),
+    ) {
+        if (valor.isEmpty()) {
+            Text(ejemplo, style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
+        }
+        val campo = rememberCampoConSeleccion(valor, alCambiar)
+        BasicTextField(
+            value = campo.valor,
+            onValueChange = campo::alCambiar,
+            textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
+            cursorBrush = SolidColor(Movi.colores.texto),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            singleLine = true,
+            enabled = habilitado,
+            modifier = Modifier.fillMaxWidth().testTag(TAG_NOTA_PAGO_OTRO).onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
+        )
     }
 }
 
