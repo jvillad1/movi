@@ -107,4 +107,60 @@ class MovimientosDeBancolombiaTest {
         assertNull(leerLosMovimientosDeBancolombia("Extracto de tarjeta de crédito\n07 sept 2026 COMPRA $ 1.000,00"))
         assertNull(leerLosMovimientosDeBancolombia("Sucursal Virtual Personas\nMovimientos: Inversiones\n07 Sep 2026"))
     }
+
+    // ── La tarjeta de crédito ──────────────────────────────────────────────
+
+    private val tarjeta = """
+        Sucursal Virtual Personas
+        Movimientos: Tarjetas de Crédito
+        Lunes, 7 de septiembre de 2026, 10:38 p. m.
+        JUAN EJEMPLO
+        Tarjeta de Crédito
+        MASTER EJEMPLO *1234
+        Fecha Descripción Fecha de corte Valor Cuotas
+        01 sept 2026 SUSCRIPCION* EJEMPLO USD $ 20,00 36
+        31 ago 2026 PLATAFORMA DE VIDEO COP $ 44.900,00 1
+        18 ago 2026 AJUSTE AUT INTERESES USD -$ 0,06 0
+        17 ago 2026 INTERESES CORRIENTES 17 ago 2026 USD $ 35,72 0
+        17 ago 2026 CUOTA DE MANEJO 17 ago 2026 COP $ 35.672,00 0
+        Dirección IP 1.2.3.4
+        Fecha Descripción Fecha de corte Valor Cuotas
+        04 sept 2026 ABONO WOMPI/PSE COP -
+        $ 9.000.000,00
+        0
+        19 ago 2026 AMPLIACION DE PLAZO COP 
+        $ 26.807.543,00
+        36
+    """.trimIndent()
+
+    @Test
+    fun `la tarjeta - un cobro es un gasto, un abono una entrada, y cada uno en su moneda`() {
+        val leido = assertNotNull(leerLosMovimientosDeBancolombia(tarjeta))
+        assertEquals("1234", leido.numero)
+        // 7 renglones con fecha; el ajuste de US$0,06 no se propone.
+        assertEquals(6, leido.filas.size)
+
+        val suscripcion = leido.filas[0]
+        assertEquals("USD", suscripcion.currency)
+        assertEquals(20L, suscripcion.amount)
+        assertEquals(TransactionType.EXPENSE, suscripcion.type)
+
+        val intereses = leido.filas[2]
+        assertEquals("INTERESES CORRIENTES", intereses.description, "la fecha de corte no es parte de la descripción")
+        assertEquals(36L, intereses.amount)
+        assertNotNull(cargoDelBanco(intereses.description, intereses.type))
+
+        val manejo = leido.filas[3]
+        assertEquals("COP", manejo.currency)
+        assertEquals(35_672L, manejo.amount)
+        assertNotNull(cargoDelBanco(manejo.description, manejo.type))
+
+        val abono = leido.filas[4]
+        assertEquals("2026-09-04", abono.date)
+        assertEquals(9_000_000L, abono.amount)
+        assertEquals(TransactionType.INCOME, abono.type)
+
+        assertEquals(26_807_543L, leido.filas[5].amount)
+        assertEquals(TransactionType.EXPENSE, leido.filas[5].type)
+    }
 }

@@ -9,10 +9,10 @@ import java.util.UUID
 import kotlin.math.abs
 
 /**
- * # Los movimientos de una cuenta de Bancolombia, leídos sin IA
+ * # Los movimientos de una cuenta o una tarjeta de Bancolombia, leídos sin IA
  *
- * Es la impresión de «Movimientos: Cuentas» de la Sucursal Virtual Personas: la lista que el dueño
- * descarga en PDF para conciliar. Medido el 25-oct-2026 en producción, de los 66 movimientos de
+ * Es la impresión de «Movimientos: Cuentas» (o «Movimientos: Tarjetas de Crédito») de la Sucursal
+ * Virtual Personas: la lista que el dueño descarga en PDF para conciliar. Medido el 25-oct-2026 en producción, de los 66 movimientos de
  * octubre que todavía entraron a mano, 26 eran cargos y abonos que ningún banco avisa (4x1000,
  * intereses, comisiones) y solo salen en esta lista. El lector con Claude los leía, pero la cuenta
  * de Anthropic está sin crédito a propósito; esto los lee sin gastar nada, y lo de después
@@ -45,19 +45,29 @@ import kotlin.math.abs
  *   peso, como lleva Movi la plata; un abono de $0,15 queda en $0 y no se propone.
  * - **El 4x1000, los intereses y las comisiones** no se categorizan acá: los reconoce
  *   `cargosDelExtracto` al conciliar, con la categoría del dueño, como a los del lector con Claude.
+ * - **La tarjeta de crédito** («Movimientos: Tarjetas de Crédito») tiene la misma forma con más
+ *   columnas: «17 ago 2026 CUOTA DE MANEJO 17 ago 2026 COP $ 35.672,00 0» — descripción, fecha de
+ *   corte (a veces), moneda, valor y cuotas. Ahí el signo va al revés: sin «-» es un cobro (un gasto
+ *   de la tarjeta) y con «-» un abono. Un cobro en dólares va en dólares, redondeado a la unidad. Es
+ *   donde salen la cuota de manejo, los intereses y las suscripciones que no mandan SMS.
  * - **Si algo no cuadra** (un movimiento sin valor, una fecha que no existe) se devuelve `null` y el
  *   extracto sigue el camino de siempre. Un movimiento con la fecha o el monto equivocados es peor
  *   que ninguno.
  */
 fun leerLosMovimientosDeBancolombia(texto: String): MovimientosDeBancolombia? {
     val plano = sinTildes(texto)
-    if (!plano.contains("sucursal virtual personas") || !plano.contains("movimientos: cuentas")) return null
+    if (!plano.contains("sucursal virtual personas")) return null
+    val deTarjeta = plano.contains("movimientos: tarjetas de credito")
+    if (!deTarjeta && !plano.contains("movimientos: cuentas")) return null
 
     // El PDF real separa el «$» de la cifra con un espacio duro (U+00A0), que `\s` no reconoce.
     val lineas = texto.replace('\u00A0', ' ').lines().map { it.trim() }.filter { it.isNotEmpty() }
         .filterNot { sinTildes(it).startsWith("direccion ip") }
-    val numero = lineas.firstNotNullOfOrNull { CUENTA.find(it)?.groupValues?.get(2) }
-        ?.filter { it.isDigit() }?.takeLast(4)
+    val numero = if (deTarjeta) {
+        lineas.firstNotNullOfOrNull { TARJETA.find(it)?.groupValues?.get(1) }
+    } else {
+        lineas.firstNotNullOfOrNull { CUENTA.find(it)?.groupValues?.get(2) }?.filter { it.isDigit() }?.takeLast(4)
+    }
 
     val filas = mutableListOf<ParsedTransaction>()
     var fecha: LocalDate? = null
@@ -77,9 +87,18 @@ fun leerLosMovimientosDeBancolombia(texto: String): MovimientosDeBancolombia? {
             continue
         }
         val junto = renglones.joinToString(" ").trim()
-        val valor = VALOR.find(junto) ?: continue
-        val centavos = centavosDelExtracto(valor.groupValues[1] + valor.groupValues[2]) ?: return null
-        fila(fecha!!, junto.substring(0, valor.range.first), centavos, junto)?.let { filas += it }
+        if (deTarjeta) {
+            val valor = VALOR_DE_TARJETA.find(junto) ?: continue
+            val centavos = centavosDelExtracto(valor.groupValues[2] + valor.groupValues[3]) ?: return null
+            // En la tarjeta un valor positivo es un cobro y uno con «-» un abono; la fecha de corte
+            // que sigue a la descripción no es parte de ella.
+            val crudo = CORTE_AL_FINAL.replace(junto.substring(0, valor.range.first).trim(), "")
+            fila(fecha!!, crudo, -centavos, junto, moneda = valor.groupValues[1])?.let { filas += it }
+        } else {
+            val valor = VALOR.find(junto) ?: continue
+            val centavos = centavosDelExtracto(valor.groupValues[1] + valor.groupValues[2]) ?: return null
+            fila(fecha!!, junto.substring(0, valor.range.first), centavos, junto)?.let { filas += it }
+        }
         fecha = null
     }
     if (fecha != null || filas.isEmpty()) return null
@@ -89,7 +108,12 @@ fun leerLosMovimientosDeBancolombia(texto: String): MovimientosDeBancolombia? {
 /** Lo que se leyó: los últimos cuatro de la cuenta (si estaban) y sus movimientos. */
 data class MovimientosDeBancolombia(val numero: String?, val filas: List<ParsedTransaction>)
 
-private fun fila(fecha: LocalDate, crudo: String, centavos: Long, texto: String): ParsedTransaction? {
+/**
+ * Una fila de la lista. [centavos] con el signo de la plata de la cuenta: negativo es lo que salió
+ * (un gasto), positivo lo que entró. [moneda] es la del movimiento: en la tarjeta, un cobro en dólares
+ * va en dólares, como lo lleva Movi en la cuenta «USD» de la tarjeta.
+ */
+private fun fila(fecha: LocalDate, crudo: String, centavos: Long, texto: String, moneda: String = "COP"): ParsedTransaction? {
     val pesos = pesosDe(abs(centavos))
     if (pesos == 0L) return null
     val descripcion = crudo.split(Regex("""\s+""")).filter { it.isNotEmpty() && !esReferencia(it) }
@@ -104,6 +128,7 @@ private fun fila(fecha: LocalDate, crudo: String, centavos: Long, texto: String)
         date = fecha.toString(),
         merchant = comercio,
         amount = pesos,
+        currency = moneda,
         type = tipo,
         category = categoriaProbablePorElNombre(descripcion) ?: SIN_CATEGORIA,
         description = descripcion,
@@ -128,6 +153,18 @@ private val FECHA = Regex("""^(\d{1,2})\s+([A-Za-zÁÉÍÓÚáéíóú]{3,10})\.
 
 /** El valor al final del movimiento: «-$ 1.932.000,00» o «$ 15,08». */
 private val VALOR = Regex("""(-?)\$\s?(\d{1,3}(?:\.\d{3})*,\d{2})$""")
+
+/**
+ * El valor al final de un movimiento de la tarjeta: la moneda, el signo, la cifra y las cuotas.
+ * «COP $ 35.672,00 0», «USD $ 20,00 36», o partido en renglones: «COP - $ 9.000.000,00 0».
+ */
+private val VALOR_DE_TARJETA = Regex("""\b(COP|USD)\s+(-?)\s*\$\s?(\d{1,3}(?:\.\d{3})*,\d{2})\s+\d{1,3}$""")
+
+/** La fecha de corte que la tarjeta pone después de la descripción («… 17 ago 2026»). */
+private val CORTE_AL_FINAL = Regex("""\s*\d{1,2}\s+[A-Za-zÁÉÍÓÚáéíóú]{3,10}\.?\s+\d{4}$""")
+
+/** «MASTER BLACK *3684»: los últimos cuatro de la tarjeta. */
+private val TARJETA = Regex("""^[A-Za-zÁÉÍÓÚáéíóú ]+\*(\d{4})$""")
 
 /** «Ahorros 029 - 550681 - 33» o «Corriente …»: el número de la cuenta. */
 private val CUENTA = Regex("""^(Ahorros|Corriente)\s+(\d[\d\s-]{5,}\d)$""", RegexOption.IGNORE_CASE)
