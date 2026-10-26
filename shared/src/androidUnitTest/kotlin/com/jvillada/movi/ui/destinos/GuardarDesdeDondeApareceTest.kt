@@ -212,7 +212,7 @@ class GuardarDesdeDondeApareceTest {
     fun `con un destino que ya conoce ese numero la fila no aparece`() {
         reconciliar(Repo(guardados = listOf(caro)))
 
-        esperar("Confirma o ajusta".uppercase(), "Confirma o ajusta")
+        esperar("Confirma o ajusta", "Confirma o ajusta")
         assertFalse(hayLaFila())
         assertFalse(hay("¿De quién es"))
     }
@@ -221,7 +221,7 @@ class GuardarDesdeDondeApareceTest {
     fun `el numero de una cuenta suya no se ofrece como cuenta de otro`() {
         reconciliar(Repo(parseo = leida.copy(identificadorDelDestino = "8133")))
 
-        esperar("Confirma o ajusta".uppercase(), "Confirma o ajusta")
+        esperar("Confirma o ajusta", "Confirma o ajusta")
         assertFalse(hayLaFila(), "ofreció guardar como ajena la cuenta ·8133, que es suya")
     }
 

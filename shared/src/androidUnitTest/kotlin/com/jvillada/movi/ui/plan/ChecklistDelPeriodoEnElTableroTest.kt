@@ -229,7 +229,7 @@ class ChecklistDelPeriodoEnElTableroTest {
     fun `el checklist del periodo encabeza el tablero, con su fecha y su monto`() {
         montar()
 
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
         composeRule.onNodeWithText("Falta por pagar · 1", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText(subtitulo, useUnmergedTree = true).assertIsDisplayed()
         // El monto va entero, no abreviado: es la lista donde se compara lo que se debe. Hay más de
@@ -345,7 +345,7 @@ class ChecklistDelPeriodoEnElTableroTest {
     @Test
     fun `la regla sale una sola vez y las otras listas ya no estan`() {
         montar()
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
 
         composeRule.onNodeWithText("Flujo libre", useUnmergedTree = true).assertIsDisplayed()
         for (seccion in listOf("PRÓXIMOS", "SIN CONFIRMAR", "YA OCURRIERON")) {

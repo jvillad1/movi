@@ -179,9 +179,9 @@ class TableroDeRecurrentesSoloTest {
         // vencimientos Y a las suscripciones): cuando está, todo lo demás ya llegó.
         esperarTexto("1 cobro · $44.900 al mes")
 
-        composeRule.onNodeWithText(TITULO_CHECKLIST_DEL_PERIODO.uppercase(), useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText(TITULO_CHECKLIST_DEL_PERIODO, useUnmergedTree = true).assertExists()
         composeRule.onAllNodesWithText("Arriendo", useUnmergedTree = true).onLast().assertExists()
-        composeRule.onNodeWithText(TITULO_COBROS_DETECTADOS.uppercase(), useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText(TITULO_COBROS_DETECTADOS, useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("Spotify", useUnmergedTree = true).assertExists()
         // «Gastos recurrentes» del «Flujo libre»: el arriendo más Netflix — la candidata no suma.
         composeRule.onNodeWithText("$1.844.900", useUnmergedTree = true).assertExists()
@@ -195,7 +195,7 @@ class TableroDeRecurrentesSoloTest {
 
         composeRule.onNodeWithText("Confirmar", useUnmergedTree = true).performClick()
 
-        esperarQueDesaparezca(TITULO_COBROS_DETECTADOS.uppercase())
+        esperarQueDesaparezca(TITULO_COBROS_DETECTADOS)
         assertEquals(SubStatus.CONFIRMED, actualizada?.status)
         // Confirmada, suma: la relectura la trae como activa.
         esperarTexto("2 cobros · $61.800 al mes")

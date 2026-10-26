@@ -82,7 +82,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.isAndroid
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
 import kotlinx.coroutines.launch
 
 /** El ancho máximo de una hoja centrada (mediano y expandido). */
@@ -106,7 +108,8 @@ const val TAG_PANEL_DE_HOJA = "marco-de-hoja-panel"
  * ventana.
  *
  * - **Compacto** (< 600 dp): **idéntico** a lo que cada hoja dibujaba: velo al 60 %, panel de ancho
- *   completo pegado abajo, esquinas de arriba de 28 dp y [SheetHandleWithClose]. Las pruebas de
+ *   completo pegado abajo, esquinas de arriba de `Radio.xl` (24; eran 28 hasta la ola R0) y
+ *   [SheetHandleWithClose]. Las pruebas de
  *   geometría (`HojaAgregarGeometriaTest` y compañía) miden con margen cero, y no se movieron.
  * - **Mediano y expandido**: el mismo velo y el panel **centrado**, de a lo sumo [anchoMaximo] de
  *   ancho y el [FRACCION_DE_ALTO_DE_HOJA_CENTRADA] del alto, con las cuatro esquinas redondeadas y
@@ -169,7 +172,7 @@ fun MarcoDeHoja(
     anchoMaximo: Dp = ANCHO_DE_HOJA,
     fraccionDeAltoMaximo: Float? = null,
     conCierre: Boolean = true,
-    relleno: PaddingValues = PaddingValues(horizontal = 20.dp),
+    relleno: PaddingValues = PaddingValues(horizontal = Medida.margenDePantalla),
     onEscape: (() -> Unit)? = null,
     onTecla: ((KeyEvent) -> Boolean)? = null,
     content: @Composable ColumnScope.() -> Unit,
@@ -512,7 +515,7 @@ private fun HojaDesdeAbajo(
                         enabled = dismissEnabled,
                         onDragStopped = { velocidad -> estado.soltar(velocidad, umbralDeVelocidad) },
                     )
-                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                    .clip(RoundedCornerShape(topStart = Radio.xl, topEnd = Radio.xl))
                     .background(Movi.colores.tarjeta)
                     .clickable(enabled = false) {}
                     .then(conTeclado)
@@ -642,7 +645,7 @@ private fun HojaCentrada(
         val fraccion = minOf(fraccionDeAltoMaximo ?: FRACCION_DE_ALTO_DE_HOJA_CENTRADA, FRACCION_DE_ALTO_DE_HOJA_CENTRADA)
         Column(
             modifier = Modifier
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = Medida.margenDePantalla)
                 .widthIn(max = anchoMaximo)
                 .fillMaxWidth()
                 .heightIn(max = maxHeight * fraccion)
@@ -655,7 +658,7 @@ private fun HojaCentrada(
                     scaleX = escala
                     scaleY = escala
                 }
-                .clip(RoundedCornerShape(28.dp))
+                .clip(RoundedCornerShape(Radio.xl))
                 .background(Movi.colores.tarjeta)
                 .clickable(enabled = false) {}
                 .padding(relleno)

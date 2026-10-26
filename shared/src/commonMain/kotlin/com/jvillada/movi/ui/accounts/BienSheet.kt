@@ -41,6 +41,7 @@ import com.jvillada.movi.shared.model.claseDeBien
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.normalizarBien
 import com.jvillada.movi.shared.model.problemaDelBien
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ConfirmacionEnLinea
 import com.jvillada.movi.ui.components.MarcoDeHoja
@@ -277,7 +278,7 @@ fun BienSheet(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(Movi.espacios.encabezado)
+                        .height(Medida.objetivoTactil)
                         .clip(RoundedCornerShape(Movi.formas.pleno))
                         .background(if (puedeGuardar) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
                         .clickable(enabled = puedeGuardar) { guardar() },

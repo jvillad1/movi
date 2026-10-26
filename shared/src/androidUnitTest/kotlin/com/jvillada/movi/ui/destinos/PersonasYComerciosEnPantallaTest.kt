@@ -264,8 +264,8 @@ class PersonasYComerciosEnPantallaTest {
     fun `los comercios van aparte de las personas`() {
         Repositories.sustitutoDePrueba = Repo(listOf(ana, hernan.copy(tipo = TipoDeTercero.COMERCIO, nombre = "Parqueadero")))
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { DestinosScreen(onNavigate = {}) } } }
-        esperar("COMERCIOS")
-        assertTrue(hay("PERSONAS"))
+        esperar("Comercios")
+        assertTrue(hay("Personas"))
     }
 
     // ── Andamio ─────────────────────────────────────────────────────────────────

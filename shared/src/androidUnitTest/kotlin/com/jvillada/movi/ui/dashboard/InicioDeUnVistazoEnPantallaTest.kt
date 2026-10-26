@@ -137,11 +137,11 @@ class InicioDeUnVistazoEnPantallaTest {
 
         // Una columna: todo alineado a la izquierda y en el orden de la definición.
         val hero = arriba(veredicto)
-        val preguntale = arriba("PREGÚNTALE A MOVI")
-        val patrimonio = arriba("TU PATRIMONIO")
+        val preguntale = arriba("Pregúntale a Movi")
+        val patrimonio = arriba("Tu patrimonio")
         assertTrue(hero < preguntale, "Pregúntale a Movi va debajo del hero")
         assertTrue(preguntale < patrimonio, "y el patrimonio más abajo")
-        assertEquals(izquierda("PREGÚNTALE A MOVI"), izquierda("TU PATRIMONIO"))
+        assertEquals(izquierda("Pregúntale a Movi"), izquierda("Tu patrimonio"))
         // El banner viejo no se pinta: la puerta a Movi AI está arriba.
         composeRule.onNodeWithText("Pregúntale a Movi AI", useUnmergedTree = true).assertDoesNotExist()
     }
@@ -152,13 +152,13 @@ class InicioDeUnVistazoEnPantallaTest {
         montar()
 
         val heroIzq = izquierda(veredicto)
-        val preguntaleIzq = izquierda("PREGÚNTALE A MOVI")
+        val preguntaleIzq = izquierda("Pregúntale a Movi")
         assertTrue(preguntaleIzq.value > heroIzq.value + 300f, "Pregúntale a Movi va en la columna derecha")
         // Las dos columnas arrancan arriba, a la misma altura (±el rótulo de sección).
-        assertTrue(arriba("PREGÚNTALE A MOVI") < arriba(veredicto), "la derecha no empieza debajo del hero")
+        assertTrue(arriba("Pregúntale a Movi") < arriba(veredicto), "la derecha no empieza debajo del hero")
         // El patrimonio también a la derecha; las categorías, a la izquierda debajo del hero.
-        assertEquals(izquierda("PREGÚNTALE A MOVI"), izquierda("TU PATRIMONIO"))
-        assertTrue(izquierda("EN QUÉ SE VA").value < preguntaleIzq.value)
+        assertEquals(izquierda("Pregúntale a Movi"), izquierda("Tu patrimonio"))
+        assertTrue(izquierda("En qué se va").value < preguntaleIzq.value)
     }
 
     /**
@@ -171,7 +171,7 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara()
 
         assertTrue(
-            izquierda("PREGÚNTALE A MOVI").value > izquierda(veredicto).value + 300f,
+            izquierda("Pregúntale a Movi").value > izquierda(veredicto).value + 300f,
             "Pregúntale a Movi va en la columna derecha",
         )
     }
@@ -185,8 +185,8 @@ class InicioDeUnVistazoEnPantallaTest {
     fun `a 768 dp en la cascara, una columna`() {
         montarEnLaCascara()
 
-        assertEquals(izquierda("PREGÚNTALE A MOVI"), izquierda("TU PATRIMONIO"))
-        assertTrue(arriba(veredicto) < arriba("PREGÚNTALE A MOVI"), "Pregúntale a Movi va debajo del hero")
+        assertEquals(izquierda("Pregúntale a Movi"), izquierda("Tu patrimonio"))
+        assertTrue(arriba(veredicto) < arriba("Pregúntale a Movi"), "Pregúntale a Movi va debajo del hero")
     }
 
     /** Un lugar para la guía de primeros pasos: lo que importa acá es dónde cae, no qué dice. */
@@ -207,12 +207,12 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara(header = guia)
 
         val laGuia = limitesDeLaGuia()
-        val derecha = izquierda("PREGÚNTALE A MOVI")
+        val derecha = izquierda("Pregúntale a Movi")
         assertEquals(216f, laGuia.left.value, 0.5f, "empieza en el borde izquierdo del panel, junto al rail")
         assertTrue(laGuia.right <= derecha, "no se mete en la columna derecha: ${laGuia.right} / $derecha")
         assertTrue(laGuia.bottom <= arriba(veredicto), "va arriba del hero")
         // La derecha arranca arriba, sin esperar a la guía.
-        assertTrue(arriba("PREGÚNTALE A MOVI") < laGuia.bottom, "la columna derecha no baja por la guía")
+        assertTrue(arriba("Pregúntale a Movi") < laGuia.bottom, "la columna derecha no baja por la guía")
     }
 
     /** En una columna la guía sigue como siempre: arriba de todo, con el ancho de la columna. */

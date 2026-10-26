@@ -187,7 +187,7 @@ class TercerosALaManoEnPantallaTest {
         esperar(tituloDeLosSugeridos(2))
         // 4-oct-2026: cerrado por defecto con algo guardado — antes tapaba la lista entera.
         assertFalse(hay("Empanadas"), "los sugeridos tapaban lo guardado")
-        assertTrue(hay("PERSONAS"), "las guardadas van por sección")
+        assertTrue(hay("Personas"), "las guardadas van por sección")
         assertTrue(hay("Caro"))
         tocar("Revisar")
         esperar("Empanadas")

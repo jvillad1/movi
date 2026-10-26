@@ -98,8 +98,8 @@ class ChecklistEnInicioTest {
         montar(conTresPagosYUnoMarcado())
 
         // El rótulo dejó de prometer «todos». MinSectionHeader lo pinta en mayúsculas.
-        composeRule.onNodeWithText("FALTA POR PAGAR", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("PAGOS DEL PERÍODO", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Falta por pagar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Pagos del período", useUnmergedTree = true).assertDoesNotExist()
 
         composeRule.onNodeWithText("Te faltan 2 de 3 pagos de este período", useUnmergedTree = true)
             .assertIsDisplayed()

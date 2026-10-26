@@ -121,7 +121,7 @@ class UnaSolaListaEnElTableroTest {
                 }
             }
         }
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
         esperarTexto("Falta por pagar · ")
     }
 
