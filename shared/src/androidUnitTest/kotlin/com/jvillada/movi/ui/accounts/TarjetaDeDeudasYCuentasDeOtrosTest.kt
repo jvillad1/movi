@@ -158,9 +158,8 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
         composeRule.waitForIdle()
 
         assertEquals(1, contarTag(TAG_TARJETA_DE_DEUDAS))
-        assertEquals(1, contarTag(TAG_TARJETA_DE_CUENTAS_DE_OTROS))
-        assertTrue(!hay("Deudas"), "el título de la tarjeta es parte de los datos, no del esqueleto")
-        assertTrue(!hay("Personas y comercios"))
+        assertTrue(!hay(CREDITOS_Y_TARJETAS), "la fila es parte de los datos, no del esqueleto")
+        assertTrue(!hay("Personas y comercios"), "ola R4: Personas y comercios ya no vive en Patrimonio")
         assertTrue(!hay("\$0"), "nada de cifras inventadas mientras cuelga la lectura")
     }
 
@@ -199,49 +198,31 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
     }
 
     /**
-     * 4-oct-2026: «Personas y comercios» en Patrimonio es una puerta secundaria y **sin cifra**:
-     * decía cuánto se les mandó este período con la letra de los saldos, en la pantalla de lo que es
-     * TUYO. Los nombres siguen, primero a quien más se le mandó.
+     * Ola R4: «Personas y comercios» salió de Patrimonio —lo que se les manda a otros no es tuyo—.
+     * Quedan dos puertas: la fila al final de Espacios y la ficha de Ajustes.
      */
     @Test
-    fun `Personas y comercios dice los nombres y ninguna cifra`() {
-        montar(destinos = { listOf(destino, mama, papa) })
+    fun `Personas y comercios ya no vive en Patrimonio`() {
+        montar(cuentas = { listOf(nu) }, destinos = { listOf(destino, mama, papa) })
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Personas y comercios", useUnmergedTree = true).assertExists()
-        assertTrue(!hay("Te deben"), "el nombre viejo se fue: no es plata que le deban")
-        assertTrue(!hay("Cuentas de otros"), "un solo nombre en toda la app")
-        // Primero a quien más se le mandó este período (Papá), después el resto.
-        composeRule.onNodeWithText("Papá, Caro y Mamá", useUnmergedTree = true).assertExists()
-        assertTrue(!hay("\$1.300.000"), "plata de otros no se muestra en Patrimonio")
-        assertTrue(!hay("este período"))
+        assertTrue(!hay("Personas y comercios"))
+        assertTrue(!hay("Papá, Caro y Mamá"))
+        assertTrue(!hay("Guarda a quién le envías plata"))
     }
 
+    /** De arriba abajo: las cuentas propias, Deudas, y al final las herramientas (el cuadre). */
     @Test
-    fun `Personas y comercios sin nadie guardado invita a guardar`() {
-        montar()
+    fun `Deudas va debajo de las cuentas y el cuadre al final`() {
+        montar(cuentas = { listOf(nu) }, creditos = { listOf(credito) })
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Guarda a quién le envías plata", useUnmergedTree = true).assertExists()
-    }
-
-    /**
-     * El pedido del 29-sep: que sea de fácil acceso. Va justo debajo de las cuentas propias y antes
-     * de «Cuadre de saldos» — no al fondo, debajo de Deudas, donde estaba.
-     */
-    @Test
-    fun `Personas y comercios va debajo de las cuentas propias y antes del cuadre`() {
-        montar(cuentas = { listOf(nu) }, destinos = { listOf(destino) })
-        composeRule.waitForIdle()
-
-        val cuentasDeOtros = composeRule.onNodeWithTag(TAG_TARJETA_DE_CUENTAS_DE_OTROS).fetchSemanticsNode().boundsInRoot
         val cuadre = composeRule.onNodeWithTag(TAG_TARJETA_DE_CUADRE).fetchSemanticsNode().boundsInRoot
         val deudas = composeRule.onNodeWithTag(TAG_TARJETA_DE_DEUDAS).fetchSemanticsNode().boundsInRoot
         val nuEnLaLista = composeRule.onAllNodesWithText("Nu", useUnmergedTree = true).fetchSemanticsNodes()
             .maxOf { it.boundsInRoot.bottom }
-        assertTrue(cuentasDeOtros.top >= nuEnLaLista, "debajo de las cuentas propias")
-        assertTrue(cuentasDeOtros.bottom <= cuadre.top, "antes del cuadre de saldos")
-        assertTrue(cuentasDeOtros.bottom <= deudas.top, "antes de Deudas")
+        assertTrue(deudas.top >= nuEnLaLista, "debajo de las cuentas propias")
+        assertTrue(deudas.bottom <= cuadre.top, "antes del cuadre de saldos")
     }
 
     // ── Tocar cada tarjeta navega a su pantalla ─────────────────────────────────
@@ -254,16 +235,6 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
         composeRule.onNodeWithTag(TAG_TARJETA_DE_DEUDAS, useUnmergedTree = true).performClick()
 
         assertEquals(Screen.Credits, navegoA)
-    }
-
-    @Test
-    fun `tocar Personas y comercios abre la pantalla`() {
-        montar(destinos = { listOf(destino) })
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithTag(TAG_TARJETA_DE_CUENTAS_DE_OTROS, useUnmergedTree = true).performClick()
-
-        assertEquals(Screen.Destinos(), navegoA)
     }
 
     // ── «Cuadrar» es la tarjeta «Cuadre de saldos», no una acción del encabezado ─────
@@ -310,7 +281,7 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
     // ── Error con reintento ───────────────────────────────────────────────────
 
     @Test
-    fun `si Creditos o Personas y comercios fallan, cada tarjeta dice que no pudo leer`() {
+    fun `si Creditos falla, Deudas dice que no pudo leer`() {
         montar(
             creditos = { throw ApiException(503) },
             destinos = { throw ApiException(503) },
@@ -318,7 +289,7 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
         composeRule.waitForIdle()
 
         assertTrue(hay("No pudimos cargar tus deudas"))
-        assertTrue(hay("No pudimos cargar tus personas y comercios"))
+        assertTrue(!hay("No pudimos cargar tus personas y comercios"), "Patrimonio ya no lee los terceros")
     }
 
     @Test
@@ -336,7 +307,7 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
         composeRule.waitForIdle()
 
         assertEquals(2, lecturasDeCreditos)
-        composeRule.onNodeWithText("Deudas", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText(CREDITOS_Y_TARJETAS, useUnmergedTree = true).assertExists()
     }
 
     // ── El alto de arriba no salta ───────────────────────────────────────────────

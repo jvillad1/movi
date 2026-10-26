@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.auth
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -230,7 +234,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             return@Column
         }
 
-        MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(Espacio.l)) {
+        Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
             Text("Correo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
             AuthField(
                 value = email,
@@ -270,51 +274,24 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             // el próximo arranque: acá vuelve a pedirlo cuando quiera.
             if (huella != null && SessionManager.huellaActivada && SessionManager.isLoggedIn) {
                 Spacer(Modifier.height(Espacio.s))
-                Text(
+                Boton(
                     if (pidiendoHuella) "Esperando tu huella…" else "Entrar con huella",
-                    style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium,
-                    color = if (pidiendoHuella) Movi.colores.textoMedio else Movi.colores.marca,
-                    modifier = Modifier.noRippleClickable { desbloquear() },
+                    onClick = { desbloquear() },
+                    variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !pidiendoHuella,
                 )
             }
 
             Spacer(Modifier.height(Espacio.s))
-            Text(
-                "¿Olvidaste tu contraseña?",
-                style = Movi.textos.cuerpo, color = Movi.colores.marca,
-                modifier = Modifier.noRippleClickable { requestReset() },
-            )
+            Boton("¿Olvidaste tu contraseña?", onClick = { requestReset() }, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
 
             Spacer(Modifier.height(Espacio.l))
-            Box(
-                modifier = Modifier.fillMaxWidth().height(Medida.objetivoTactil)
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(if (loading) Movi.colores.tarjeta else Movi.colores.marca)
-                    .noRippleClickable { submit() },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(Icono.m),
-                        color = Movi.colores.marca,
-                        strokeWidth = Medida.trazoDeCarga,
-                    )
-                } else {
-                    Text(
-                        "Entrar",
-                        style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
-                        color = Movi.colores.fondo,
-                    )
-                }
-            }
+            Boton("Entrar", onClick = { submit() }, cargando = loading, anchoCompleto = true)
         }
 
         Spacer(Modifier.height(Espacio.m))
-        Text(
-            "¿No tienes cuenta? Regístrate",
-            style = Movi.textos.cuerpo, color = Movi.colores.marca,
-            modifier = Modifier.noRippleClickable { onNavigate(Screen.Register) }
-        )
+        Boton("¿No tienes cuenta? Regístrate", onClick = { onNavigate(Screen.Register) }, variante = VarianteDeBoton.Fantasma)
     }
 }
 
@@ -395,11 +372,7 @@ private fun OfrecimientoDeHuella(
     onActivar: () -> Unit,
     onAhoraNo: () -> Unit,
 ) {
-    MinCard(
-        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(Espacio.l),
-    ) {
+    Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
         Text(
             "Entra con tu huella la próxima vez",
             style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
@@ -414,26 +387,8 @@ private fun OfrecimientoDeHuella(
         }
 
         Spacer(Modifier.height(Espacio.l))
-        Box(
-            modifier = Modifier.fillMaxWidth().height(Medida.objetivoTactil)
-                .clip(RoundedCornerShape(Radio.m))
-                .background(if (ocupado) Movi.colores.tarjeta else Movi.colores.marca)
-                .noRippleClickable(onActivar),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                if (ocupado) "Esperando tu huella…" else "Activar",
-                style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
-                color = if (ocupado) Movi.colores.textoMedio else Movi.colores.fondo,
-            )
-        }
-        Spacer(Modifier.height(Espacio.s))
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text(
-                "Ahora no",
-                style = Movi.textos.cuerpo, color = Movi.colores.textoMedio,
-                modifier = Modifier.noRippleClickable(onAhoraNo),
-            )
-        }
+        Boton(if (ocupado) "Esperando tu huella…" else "Activar", onClick = onActivar, habilitado = !ocupado, anchoCompleto = true)
+        Spacer(Modifier.height(Espacio.xs))
+        Boton("Ahora no", onClick = onAhoraNo, variante = VarianteDeBoton.Fantasma, anchoCompleto = true)
     }
 }

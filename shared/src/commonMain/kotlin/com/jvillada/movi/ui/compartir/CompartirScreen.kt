@@ -1,5 +1,21 @@
 package com.jvillada.movi.ui.compartir
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.Vacio
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
@@ -144,11 +160,16 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = Movi.espacios.amplio),
+                contentPadding = PaddingValues(
+                    start = Medida.margenDePantalla,
+                    end = Medida.margenDePantalla,
+                    top = Medida.dentroDeSeccion,
+                    bottom = Medida.botonFlotante + Medida.entreSecciones,
+                ),
             ) {
                 item {
                     QueVaAVer()
-                    Spacer(Modifier.height(Movi.espacios.amplio))
+                    Spacer(Modifier.height(Medida.entreSecciones))
                 }
 
                 item {
@@ -172,13 +193,13 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
                             onOtro = { recienCreado = null; copiado = false },
                         )
                     }
-                    Spacer(Modifier.height(Movi.espacios.seccion))
+                    Spacer(Modifier.height(Medida.entreSecciones))
                 }
 
                 item {
-                    MinSectionHeader(
-                        title = "Enlaces activos",
-                        count = if (enlaces.isNotEmpty() && !noSeLeyo) enlaces.size else null,
+                    Seccion(
+                        titulo = "Enlaces activos",
+                        conteo = if (enlaces.isNotEmpty() && !noSeLeyo) enlaces.size else null,
                     )
                     when {
                         noSeLeyo -> NoSePudoLeer(
@@ -189,20 +210,21 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
                         // «Crear enlace» de la sección de arriba ya está a la vista en esta misma
                         // pantalla, y repetirlo acá abajo le mostraba a quien recién llega dos
                         // botones idénticos al mismo tiempo.
-                        enlaces.isEmpty() && !cargando -> VacioQueEnsena(
+                        enlaces.isEmpty() && !cargando -> Vacio(
                             titulo = "No tienes enlaces activos",
                             detalle = "Los que crees aparecerán aquí hasta que venzan o los revoques.",
-                            modifier = Modifier.padding(horizontal = Movi.espacios.corto),
                         )
                     }
                 }
 
-                if (!noSeLeyo) items(enlaces, key = { it.id }) { enlace ->
-                    FilaDeEnlace(enlace, ahora, onRevocar = { porRevocar = enlace })
-                    Spacer(Modifier.height(Movi.espacios.corto))
+                if (!noSeLeyo && enlaces.isNotEmpty()) item {
+                    Superficie(relleno = RellenoDeSuperficie.Lista) {
+                        enlaces.forEachIndexed { i, enlace ->
+                            if (i > 0) Separador(SangriaDeSeparador.Margen)
+                            FilaDeEnlace(enlace, ahora, onRevocar = { porRevocar = enlace })
+                        }
+                    }
                 }
-
-                item { Spacer(Modifier.height(80.dp)) }
             }
         }
 
@@ -231,24 +253,23 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
 
 @Composable
 private fun QueVaAVer() {
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(Espacio.m)) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(QUE_ES_COMPARTIR, style = Movi.textos.cuerpo, color = Movi.colores.texto)
-        Spacer(Modifier.height(Movi.espacios.amplio))
-        Text("Lo que va a ver", style = Movi.textos.rotulo, color = Movi.colores.textoApagado)
-        Spacer(Modifier.height(Movi.espacios.corto))
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        Text("Lo que va a ver", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+        Spacer(Modifier.height(Espacio.xs))
         LO_QUE_VA_A_VER.forEach { renglon ->
-            Row(modifier = Modifier.padding(vertical = Movi.espacios.minimo)) {
+            Row(modifier = Modifier.padding(vertical = Espacio.xxs), horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 Icon(
                     Icons.Rounded.CheckCircle,
                     contentDescription = null,
                     tint = Movi.colores.entra,
-                    modifier = Modifier.size(Icono.s).padding(top = Espacio.xxs),
+                    modifier = Modifier.size(Icono.s),
                 )
-                Spacer(Modifier.width(Movi.espacios.corto))
                 Text(renglon, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
-        Spacer(Modifier.height(Movi.espacios.medio))
+        Spacer(Modifier.height(Espacio.s))
         Text(LO_QUE_NO_VA_A_VER, style = Movi.textos.apoyo, color = Movi.colores.texto)
     }
 }
@@ -261,39 +282,27 @@ private fun CrearEnlace(
     error: String?,
     onCrear: () -> Unit,
 ) {
-    Text(
-        "¿Por cuánto tiempo?",
-        style = Movi.textos.rotulo,
-        color = Movi.colores.textoApagado,
-        modifier = Modifier.padding(horizontal = Movi.espacios.corto),
-    )
-    Spacer(Modifier.height(Movi.espacios.corto))
-    Row(horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
+    Seccion(titulo = "¿Por cuánto tiempo?")
+    Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
         VIGENCIAS_DE_ENLACE.forEach { opcion ->
-            val elegida = opcion == dias
-            Text(
+            PildoraDeFiltro(
                 rotuloDeVigencia(opcion),
-                style = Movi.textos.cuerpo,
-                color = if (elegida) Movi.colores.sobreMarca else Movi.colores.textoMedio,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(Movi.formas.pleno))
-                    .background(if (elegida) Movi.colores.marca else Movi.colores.tarjeta)
-                    .border(Medida.trazo, if (elegida) Movi.colores.marca else Movi.colores.borde, RoundedCornerShape(Movi.formas.pleno))
-                    .clickable(enabled = !creando) { onDias(opcion) }
-                    .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.corto),
+                seleccionada = opcion == dias,
+                onClick = { if (!creando) onDias(opcion) },
             )
         }
     }
-    Spacer(Modifier.height(Movi.espacios.amplio))
-    BotonPrincipal(
-        texto = if (creando) "Creando…" else "Crear enlace",
-        icono = Icons.Rounded.Share,
-        habilitado = !creando,
+    Spacer(Modifier.height(Medida.dentroDeSeccion))
+    Boton(
+        texto = "Crear enlace",
         onClick = onCrear,
+        icono = Icons.Rounded.Share,
+        cargando = creando,
+        anchoCompleto = true,
     )
     error?.let {
-        Spacer(Modifier.height(Movi.espacios.corto))
-        Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(horizontal = Movi.espacios.corto))
+        Spacer(Modifier.height(Espacio.xs))
+        Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
     }
 }
 
@@ -307,110 +316,44 @@ private fun EnlaceListo(
     onCopiar: () -> Unit,
     onOtro: () -> Unit,
 ) {
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.High, padding = PaddingValues(Espacio.m)) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Text("Tu enlace está listo", style = Movi.textos.titulo, color = Movi.colores.texto)
-        Spacer(Modifier.height(Movi.espacios.minimo))
+        Spacer(Modifier.height(Espacio.xxs))
         Text("Vale ${rotuloDeVigencia(diasDelEnlace)}.", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        Spacer(Modifier.height(Movi.espacios.medio))
+        Spacer(Modifier.height(Espacio.s))
         // Seleccionable: si copiar falla por lo que sea, igual se puede marcar y copiar a mano.
         SelectionContainer {
-            Text(
-                url,
-                style = Movi.textos.monto,
-                color = Movi.colores.texto,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Movi.formas.normal))
-                    .background(Movi.colores.fondo)
-                    .padding(Movi.espacios.medio),
-            )
+            Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Capa2) {
+                Text(url, style = Movi.textos.monto, color = Movi.colores.texto)
+            }
         }
-        Spacer(Modifier.height(Movi.espacios.medio))
+        Spacer(Modifier.height(Espacio.s))
         if (abreLaHojaDelSistema) {
-            BotonPrincipal(texto = "Compartir", icono = Icons.Rounded.Share, habilitado = true, onClick = onCompartir)
-            Spacer(Modifier.height(Movi.espacios.corto))
-            BotonSecundario(texto = if (copiado) "Copiado" else "Copiar enlace", onClick = onCopiar)
-        } else {
-            BotonPrincipal(
-                texto = if (copiado) "Copiado" else "Copiar enlace",
-                icono = Icons.Rounded.ContentCopy,
-                habilitado = true,
+            Boton("Compartir", onClick = onCompartir, icono = Icons.Rounded.Share, anchoCompleto = true)
+            Spacer(Modifier.height(Espacio.xs))
+            Boton(
+                if (copiado) "Copiado" else "Copiar enlace",
                 onClick = onCopiar,
+                icono = Icons.Rounded.ContentCopy,
+                variante = VarianteDeBoton.Secundario,
+                anchoCompleto = true,
             )
+        } else {
+            Boton(if (copiado) "Copiado" else "Copiar enlace", onClick = onCopiar, icono = Icons.Rounded.ContentCopy, anchoCompleto = true)
         }
-        Spacer(Modifier.height(Movi.espacios.medio))
+        Spacer(Modifier.height(Espacio.s))
         Text(SE_COMPARTE_AHORA, style = Movi.textos.apoyo, color = Movi.colores.aviso)
-        Spacer(Modifier.height(Movi.espacios.corto))
-        Text(
-            "Crear otro enlace",
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.marca,
-            modifier = Modifier
-                .clip(RoundedCornerShape(Movi.formas.normal))
-                .clickable(onClick = onOtro)
-                .padding(vertical = Movi.espacios.corto),
-        )
+        Spacer(Modifier.height(Espacio.xs))
+        Boton("Crear otro enlace", onClick = onOtro, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
     }
 }
 
 @Composable
 private fun FilaDeEnlace(enlace: EnlaceCompartido, ahora: Long, onRevocar: () -> Unit) {
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(Movi.espacios.amplio)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Resumen · ${textoDeVencimiento(enlace.venceEn, ahora)}", style = Movi.textos.cuerpo, color = Movi.colores.texto)
-                Spacer(Modifier.height(Espacio.xxs))
-                Text(
-                    textoDeVistas(enlace.ultimaVista, enlace.vistas, ahora),
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                )
-            }
-            Text(
-                "Revocar",
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.sale,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(Movi.formas.normal))
-                    .clickable(onClick = onRevocar)
-                    .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
-            )
-        }
-    }
-}
-
-@Composable
-private fun BotonPrincipal(texto: String, icono: ImageVector, habilitado: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Movi.formas.amplia))
-            .background(Movi.colores.marca)
-            .clickable(enabled = habilitado, onClick = onClick)
-            .padding(vertical = Espacio.s),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icono, contentDescription = null, tint = Movi.colores.sobreMarca, modifier = Modifier.size(Icono.m))
-        Spacer(Modifier.width(Movi.espacios.corto))
-        Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.sobreMarca)
-    }
-}
-
-@Composable
-private fun BotonSecundario(texto: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Movi.formas.amplia))
-            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Movi.formas.amplia))
-            .clickable(onClick = onClick)
-            .padding(vertical = Espacio.s),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Rounded.ContentCopy, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.m))
-        Spacer(Modifier.width(Movi.espacios.corto))
-        Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.marca)
-    }
+    Fila(
+        titulo = "Resumen · ${textoDeVencimiento(enlace.venceEn, ahora)}",
+        subtitulo = textoDeVistas(enlace.ultimaVista, enlace.vistas, ahora),
+        inicio = { IconoEnCirculo(Icons.Rounded.Link, tono = TonoDeIcono.Info) },
+        final = { Boton("Revocar", onClick = onRevocar, variante = VarianteDeBoton.Peligro, tamano = TamanoDeBoton.S) },
+    )
 }

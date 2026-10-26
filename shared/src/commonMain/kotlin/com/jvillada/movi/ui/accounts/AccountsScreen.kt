@@ -54,6 +54,7 @@ import com.jvillada.movi.ui.components.RenglonConCifraEsqueleto
 import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
 import com.jvillada.movi.ui.components.SubirAlRetocarLaPestana
+import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import com.jvillada.movi.ui.components.saldoEnSuMoneda
 import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.components.toUserMessage
@@ -657,7 +658,7 @@ private fun LazyListScope.cuentasEsqueleto(forma: FormaDeCuentas?, conTarjeta: B
                 Superficie(relleno = RellenoDeSuperficie.Lista) {
                     repeat(filas) { i ->
                         if (i > 0) Separador()
-                        EsqueletoDeFila()
+                        Box(Modifier.testTag(TAG_FILA_DE_LISTA_ESQUELETO)) { EsqueletoDeFila() }
                     }
                 }
             }

@@ -46,16 +46,14 @@ fun RenglonDePersonasYComercios(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Superficie(
-        modifier = modifier.fillMaxWidth().testTag(TAG_ACCESO_A_PERSONAS_Y_COMERCIOS),
-        relleno = RellenoDeSuperficie.Lista,
-    ) {
+    Superficie(modifier = modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
         Fila(
             titulo = PERSONAS_Y_COMERCIOS,
             subtitulo = resumenDelAcceso(destinos),
             inicio = { IconoEnCirculo(Icons.Rounded.Groups, tono = TonoDeIcono.Info) },
             final = { Chevron() },
             onClick = onClick,
+            modifier = Modifier.testTag(TAG_ACCESO_A_PERSONAS_Y_COMERCIOS),
         )
     }
 }

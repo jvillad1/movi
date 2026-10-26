@@ -768,7 +768,7 @@ private fun LazyListScope.destinosEsqueleto() {
             Superficie(relleno = RellenoDeSuperficie.Lista) {
                 repeat(FICHAS_DE_DESTINO_ESQUELETO) { i ->
                     if (i > 0) Separador()
-                    EsqueletoDeFila(modifier = Modifier.testTag(TAG_FILA_DE_LISTA_ESQUELETO))
+                    Box(Modifier.testTag(TAG_FILA_DE_LISTA_ESQUELETO)) { EsqueletoDeFila() }
                 }
             }
         }

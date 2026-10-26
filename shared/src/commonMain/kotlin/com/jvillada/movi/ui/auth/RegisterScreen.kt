@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.auth
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,7 +85,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
         Text("Ingresa tus datos para empezar", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(Espacio.xxl))
 
-        MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(Espacio.l)) {
+        Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
             Text("Nombre", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
             AuthField(
                 value = name,
@@ -128,31 +131,10 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
             }
 
             Spacer(Modifier.height(Espacio.l))
-            Box(
-                modifier = Modifier.fillMaxWidth().height(Medida.objetivoTactil)
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(if (loading) Movi.colores.tarjeta else Movi.colores.marca)
-                    .noRippleClickable { submit() },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(Icono.m),
-                        color = Movi.colores.marca,
-                        strokeWidth = Medida.trazoDeCarga,
-                    )
-                } else {
-                    Text(
-                        "Crear cuenta",
-                        style = Movi.textos.titulo,
-                        color = Movi.colores.fondo,
-                    )
-                }
-            }
+            Boton("Crear cuenta", onClick = { submit() }, cargando = loading, anchoCompleto = true)
         }
 
         Spacer(Modifier.height(Espacio.m))
-        Text("¿Ya tienes cuenta? Entra", style = Movi.textos.cuerpo, color = Movi.colores.marca,
-            modifier = Modifier.noRippleClickable { onNavigate(Screen.Login) })
+        Boton("¿Ya tienes cuenta? Entra", onClick = { onNavigate(Screen.Login) }, variante = VarianteDeBoton.Fantasma)
     }
 }

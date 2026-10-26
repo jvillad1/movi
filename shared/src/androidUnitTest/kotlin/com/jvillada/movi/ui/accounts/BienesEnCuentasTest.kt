@@ -82,7 +82,7 @@ class BienesEnCuentasTest {
         }
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { AccountsScreen(onNavigate = {}) } } }
 
-        esperarTexto("BIENES")
+        esperarTexto("Bienes")
         esperarTexto("Casa Almendros")
         // Con o sin año según cuándo corra la prueba: lo que importa es que diga de cuándo es.
         esperarTexto("avalúo del 28 de agosto")

@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.auth
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
@@ -138,27 +140,14 @@ internal fun PuertaAlVolver(
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, textAlign = TextAlign.Center)
             }
             Spacer(Modifier.height(Espacio.xxl))
-            Box(
-                modifier = Modifier.fillMaxWidth().height(Medida.objetivoTactil)
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(if (pidiendo) Movi.colores.tarjeta else Movi.colores.marca)
-                    .clickable(role = Role.Button) { pedir() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    if (pidiendo) "Esperando tu huella…" else "Usar mi huella",
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
-                    color = if (pidiendo) Movi.colores.textoMedio else Movi.colores.sobreMarca,
-                )
-            }
-            Spacer(Modifier.height(Espacio.m))
-            Text(
-                "Entrar con mi contraseña",
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.marca,
-                modifier = Modifier.clickable(role = Role.Button, onClick = onConContrasena),
+            Boton(
+                if (pidiendo) "Esperando tu huella…" else "Usar mi huella",
+                onClick = { pedir() },
+                habilitado = !pidiendo,
+                anchoCompleto = true,
             )
+            Spacer(Modifier.height(Espacio.xs))
+            Boton("Entrar con mi contraseña", onClick = onConContrasena, variante = VarianteDeBoton.Fantasma)
         }
     }
 }

@@ -897,7 +897,7 @@ private fun LazyListScope.categoriasEsqueleto(filas: Int) {
     val total = filas.coerceIn(0, MAX_FILAS_DE_CATEGORIA_ESQUELETO)
     items(total) { i ->
         TramoDeLista(primera = i == 0, ultima = i == total - 1) {
-            EsqueletoDeFila(modifier = Modifier.testTag(TAG_FILA_DE_LISTA_ESQUELETO), conFinal = false)
+            Box(Modifier.testTag(TAG_FILA_DE_LISTA_ESQUELETO)) { EsqueletoDeFila(conFinal = false) }
         }
     }
 }
