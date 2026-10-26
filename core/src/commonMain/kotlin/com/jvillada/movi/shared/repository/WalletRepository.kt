@@ -751,6 +751,15 @@ interface WalletRepository {
     suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile
 
     /**
+     * `POST /api/users/me/primer-uso`: la guía «Primer uso» quedó terminada o descartada. El server
+     * la sella la primera vez y no la mueve después; devuelve el perfil.
+     */
+    suspend fun marcarPrimerUso(): UserProfile
+
+    /** `GET /api/correo-entrante/direccion`: a qué dirección reenviar los correos del banco. */
+    suspend fun getDireccionDeCorreo(): com.jvillada.movi.shared.model.DireccionDeCorreo
+
+    /**
      * `PUT /api/users/me/password`. Lanza [ApiException] con 403 si [ChangePasswordRequest.current]
      * no coincide, o 400 si [ChangePasswordRequest.new] no cumple [com.jvillada.movi.shared.model.PasswordPolicy]
      * — el servidor es la autoridad, la validación del cliente es solo cortesía.

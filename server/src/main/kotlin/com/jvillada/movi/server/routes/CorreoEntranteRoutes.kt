@@ -26,6 +26,8 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.sms.SmsDedupeIndex
 import com.jvillada.movi.server.sms.SmsKey
+// La respuesta de `/direccion` vive en :core: la app la lee (la guía «Primer uso», el paso del correo).
+import com.jvillada.movi.shared.model.DireccionDeCorreo
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.log
@@ -57,13 +59,6 @@ private data class RespuestaDelCorreo(
     val id: String? = null,
 )
 
-/** La dirección de reenvío de quien pregunta. Ver [direccionDeCorreoRoutes]. */
-@Serializable
-private data class DireccionDeCorreo(
-    val token: String,
-    val direccion: String? = null,
-    val configurado: Boolean,
-)
 
 /**
  * **Cuántos correos por minuto se aceptan con un mismo secreto.** Una bandeja bancaria manda unos

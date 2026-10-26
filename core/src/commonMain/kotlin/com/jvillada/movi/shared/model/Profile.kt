@@ -63,6 +63,45 @@ data class UserProfile(
      * `true` del lado del server.
      */
     val cierrePorCorreo: Boolean = true,
+    /**
+     * **Cuándo terminó (o descartó) la guía «Primer uso»**, en milisegundos; `null` = nunca. Lo
+     * escribe `POST /api/users/me/primer-uso` y vive en el server para que la guía no reaparezca
+     * en otro aparato. Ver [debeAbrirseLaGuiaDePrimerUso] para quién la ve.
+     */
+    val primerUsoEn: Long? = null,
+)
+
+/**
+ * **¿Se abre sola la guía «Primer uso»?** Solo si nunca se terminó ni se descartó
+ * ([UserProfile.primerUsoEn] `null`) **y** el usuario todavía no tiene ninguna cuenta de dinero.
+ *
+ * La segunda mitad es la que deja afuera a quien ya usa Movi sin tocar una sola fila: el dueño y
+ * cualquier cuenta vieja tienen cuentas, así que no ven la guía aunque su columna esté vacía. No
+ * hace falta una migración que la marque.
+ *
+ * [cuentas] `null` = todavía no se sabe (la lectura no contestó): no se abre. Mejor tarde que
+ * tapar el Inicio de alguien que sí tenía cuentas.
+ */
+fun debeAbrirseLaGuiaDePrimerUso(perfil: UserProfile?, cuentas: List<Account>?): Boolean {
+    if (perfil == null || cuentas == null) return false
+    if (perfil.primerUsoEn != null) return false
+    return cuentas.none { it.type in TIPOS_DE_CUENTA_DE_DINERO }
+}
+
+/** Los tipos que cuentan como «cuenta de dinero» para la guía: plata que se usa, no deuda ni inversión. */
+val TIPOS_DE_CUENTA_DE_DINERO: Set<AccountType> =
+    setOf(AccountType.SAVINGS, AccountType.CHECKING, AccountType.CASH)
+
+/**
+ * `GET /api/correo-entrante/direccion`: a qué dirección reenviar los correos del banco. [direccion]
+ * es `null` si el server no tiene configurada la base (`INBOUND_EMAIL_ADDRESS`); [configurado] dice
+ * si el correo entrante está encendido.
+ */
+@Serializable
+data class DireccionDeCorreo(
+    val token: String,
+    val direccion: String? = null,
+    val configurado: Boolean,
 )
 
 /**

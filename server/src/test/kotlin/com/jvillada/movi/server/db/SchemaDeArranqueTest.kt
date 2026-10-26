@@ -107,6 +107,8 @@ class SchemaDeArranqueTest {
         // El período que se cuenta solo — el resumen de cierre por correo, encendido o no. También lo
         // nombra `toProfile()`.
         "users" to "cierre_por_correo",
+        // La guía «Primer uso» terminada o descartada. También la nombra `toProfile()`.
+        "users" to "primer_uso_en",
     )
 
     /**

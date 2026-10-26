@@ -187,6 +187,13 @@ sealed class Screen {
      */
     data object PrimerosPasos : Screen()
     /**
+     * **«Primer uso»**: la guía por pasos de una cuenta nueva (período, cuentas, captura, pagos de
+     * cada mes). A pantalla completa y sin barra: se abre sola tras crear la cuenta, o desde el
+     * Inicio para quien todavía no tiene ninguna cuenta de dinero (ver
+     * `debeAbrirseLaGuiaDePrimerUso` en :core). Lo que se salte queda en [PrimerosPasos].
+     */
+    data object PrimerUso : Screen()
+    /**
      * **«Compartir»** — el enlace de solo lectura para un tercero (Caro, un asesor): crearlo,
      * mandarlo y revocarlo. Se llega desde **Más** (la puerta que no depende de nadie, como
      * [Destinos]) y desde el ícono de compartir del encabezado del **Inicio**, que es donde uno está

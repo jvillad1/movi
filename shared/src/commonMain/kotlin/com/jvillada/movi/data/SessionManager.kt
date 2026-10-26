@@ -405,6 +405,9 @@ object SessionManager {
         SaldosOcultosStore.clear()
         // Ola 5: y las búsquedas recientes de «Buscar» — «Caro», «colegio», «$27.500» son de quien se va.
         BusquedasRecientesStore.clear()
+        // Y si la guía de primer uso ya se revisó en esta sesión: el siguiente usuario puede no tener
+        // ninguna cuenta y tiene que verla.
+        com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.olvidar()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
         // logout explícito de Perfil, el forzado de seRechazoElToken tras un 401 de Movi, y tres

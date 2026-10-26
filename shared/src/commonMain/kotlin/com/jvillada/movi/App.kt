@@ -46,6 +46,7 @@ import com.jvillada.movi.platform.AjustarBarrasDelSistema
 import com.jvillada.movi.platform.BackHandlerEffect
 import com.jvillada.movi.data.ArranqueDeSesion
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.decidirArranque
 import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -84,6 +85,8 @@ import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.credits.SalidaDeDeudasScreen
 import com.jvillada.movi.ui.dashboard.DashboardScreen
 import com.jvillada.movi.ui.dashboard.PrimerosPasosScreen
+import com.jvillada.movi.ui.primeruso.PrimerUsoScreen
+import com.jvillada.movi.ui.primeruso.revisarLaGuiaDePrimerUso
 import com.jvillada.movi.ui.mas.MasScreen
 import com.jvillada.movi.ui.profile.BorrarLaCuentaScreen
 import com.jvillada.movi.ui.profile.PerfilScreen
@@ -286,6 +289,15 @@ fun App() {
                 papelesALeer = PapelesCompartidos.tomarTodos()
             }
 
+            // **La guía de primer uso, para quien no pasó por Registro** (en la web se crea la cuenta
+            // en el formulario HTML de `index.html`, que entra directo al Inicio) o para una cuenta
+            // vieja sin ninguna cuenta de dinero. Se pregunta una vez por sesión, al llegar al
+            // Inicio con sesión; ver [revisarLaGuiaDePrimerUso] para la regla.
+            LaunchedEffect(SessionManager.loggedIn, currentScreen) {
+                if (!SessionManager.loggedIn || currentScreen != Screen.Dashboard) return@LaunchedEffect
+                if (revisarLaGuiaDePrimerUso(Repositories.wallets)) navigate(Screen.PrimerUso)
+            }
+
             BackHandlerEffect(
                 enabled = hayAdondeVolver(pilaDeHojas, backStack),
                 onBack = goBack,
@@ -454,6 +466,7 @@ fun App() {
                 Screen.EditarInicio      -> EditarInicioScreen(navigate)
                 Screen.BorrarLaCuenta    -> BorrarLaCuentaScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
+                Screen.PrimerUso         -> PrimerUsoScreen(navigate)
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
                 is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, pantalla.smsId, abrirCategoria = pantalla.abrirCategoria)

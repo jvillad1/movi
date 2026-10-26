@@ -1334,6 +1334,12 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
+    override suspend fun marcarPrimerUso(): UserProfile =
+        client.post("$baseUrl/api/users/me/primer-uso").exigirExito().body()
+
+    override suspend fun getDireccionDeCorreo(): com.jvillada.movi.shared.model.DireccionDeCorreo =
+        client.get("$baseUrl/api/correo-entrante/direccion").exigirExito().body()
+
     override suspend fun changePassword(request: ChangePasswordRequest): String? {
         val response = client.put("$baseUrl/api/users/me/password") {
             contentType(ContentType.Application.Json)

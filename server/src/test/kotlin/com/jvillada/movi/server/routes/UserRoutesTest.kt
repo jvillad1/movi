@@ -250,6 +250,58 @@ class UserRoutesTest {
         assertEquals(true, transaction { Users.selectAll().where { Users.id eq userId }.single()[Users.cierrePorCorreo] })
     }
 
+    // ── La guía «Primer uso» ─────────────────────────────────────────────────
+
+    private suspend fun ApplicationTestBuilder.marcarPrimerUso(tokenDe: String = token) =
+        client.post("/api/users/me/primer-uso") { header(HttpHeaders.Authorization, "Bearer $tokenDe") }
+
+    private fun dbPrimerUso(de: String): Long? = transaction {
+        Users.selectAll().where { Users.id eq de }.single()[Users.primerUsoEn]
+    }
+
+    private fun primerUsoDe(cuerpo: String): Long? =
+        Json.parseToJsonElement(cuerpo).jsonObject["primerUsoEn"]?.jsonPrimitive?.content?.toLongOrNull()
+
+    @Test
+    fun `la guia de primer uso se marca una vez por usuario y no se mueve`() = testApplication {
+        wireApp()
+        // Sin tocar: el perfil no la trae (el Json del server no manda los nulos por defecto).
+        assertEquals(null, primerUsoDe(getProfile().bodyAsText()))
+
+        val primera = marcarPrimerUso()
+        assertEquals(HttpStatusCode.OK, primera.status)
+        val sellada = primerUsoDe(primera.bodyAsText())
+        assertTrue(sellada != null && sellada > 0, "el POST devuelve el perfil ya sellado")
+        assertEquals(sellada, dbPrimerUso(userId))
+        assertEquals(sellada, primerUsoDe(getProfile().bodyAsText()), "y el GET la lee")
+
+        // Otro aparato que también termina la guía no mueve la fecha.
+        Thread.sleep(5)
+        assertEquals(sellada, primerUsoDe(marcarPrimerUso().bodyAsText()))
+        assertEquals(sellada, dbPrimerUso(userId))
+    }
+
+    @Test
+    fun `marcar la guia de un usuario no toca la de otro`() = testApplication {
+        wireApp()
+        val otro = "user-b-profile"
+        transaction {
+            Users.insert {
+                it[id] = otro
+                it[email] = "b@profile.test"
+                it[name] = "Caro"
+                it[passwordHash] = BCrypt.withDefaults().hashToString(BCRYPT_COST, userPassword.toCharArray())
+            }
+        }
+        assertEquals(HttpStatusCode.OK, marcarPrimerUso(tokenFor(otro, "b@profile.test")).status)
+        assertTrue(dbPrimerUso(otro) != null, "la de B quedó sellada")
+        assertEquals(null, dbPrimerUso(userId), "la de A sigue sin tocar")
+        assertEquals(null, primerUsoDe(getProfile().bodyAsText()), "y A no la ve marcada")
+
+        marcarPrimerUso()
+        assertTrue(dbPrimerUso(userId) != null)
+    }
+
     private fun dbSmsAlertMuted(): Boolean? = transaction {
         Users.selectAll().where { Users.id eq userId }.single()[Users.smsAlertMuted]
     }
