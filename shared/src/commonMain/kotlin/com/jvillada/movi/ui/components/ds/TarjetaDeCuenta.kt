@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -61,7 +61,8 @@ fun coloresDeLaTarjetaDeCuenta(marca: Marca?, colores: ColoresDeMovi): ColoresDe
 
 /**
  * **La tarjeta de una cuenta** del carrusel «Tus cuentas» (camino 1): el color y la marca de su banco,
- * el nombre, el tipo («Ahorros», «Tarjeta») y el saldo en [VarianteDeCifra.Grande].
+ * el nombre (en hasta dos renglones: nunca «Bancolombia Ah…»), el tipo («Ahorros», «Tarjeta») junto al
+ * rótulo del saldo, y el saldo en [VarianteDeCifra.Grande], que se achica antes que recortarse.
  *
  * - Alto [Medida.altoDeTarjetaDeCuenta], radio [Radio.xl], relleno [Medida.rellenoDeSuperficie], sin
  *   borde: la marca es el color de la superficie.
@@ -97,7 +98,8 @@ fun TarjetaDeCuenta(
     CompositionLocalProvider(LocalColores provides colores) {
         Column(
             modifier = modifier
-                .height(Medida.altoDeTarjetaDeCuenta)
+                // Un mínimo, no un alto fijo: con la letra del sistema agrandada la tarjeta crece en vez de cortar.
+                .heightIn(min = Medida.altoDeTarjetaDeCuenta)
                 .clip(RoundedCornerShape(Radio.xl))
                 .background(colores.tarjeta)
                 .clickable(onClickLabel = "Ver $nombre", onClick = onClick)
@@ -110,18 +112,29 @@ fun TarjetaDeCuenta(
                 horizontalArrangement = Arrangement.spacedBy(Espacio.s),
             ) {
                 if (marca != null) MarcaInvertida(marca) else IconoEnCirculo(icono, tono = TonoDeIcono.Neutro)
+                // Dos renglones: «Bancolombia Ahorros» se lee entero (la revisión de la R1 vio
+                // «Bancolombia Ah…»). El «…» queda solo para un nombre que no entra ni en dos.
                 Text(
                     text = nombre,
                     style = Movi.textos.titulo,
                     color = colores.texto,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                Text(text = tipo, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = colores.textoMedio, maxLines = 1)
             }
             Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                Text(text = rotuloDelSaldo, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = colores.textoMedio)
+                // El tipo baja junto al rótulo del saldo, para dejarle el renglón de arriba al nombre.
+                Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    Text(
+                        text = rotuloDelSaldo,
+                        style = Movi.textos.apoyo,
+                        fontWeight = FontWeight.Medium,
+                        color = colores.textoMedio,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(text = tipo, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = colores.textoMedio, maxLines = 1)
+                }
                 Cifra(saldo, VarianteDeCifra.Grande, moneda = moneda)
             }
         }

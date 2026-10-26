@@ -54,8 +54,9 @@ class ContraElPeriodoPasadoEnPantallaTest {
             ),
         )
         composeRule.onAllNodesWithTag(TAG_FLECHA_CONTRA_EL_ANTERIOR, useUnmergedTree = true).assertCountEquals(2)
-        composeRule.onNodeWithText("↑", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("↓", useUnmergedTree = true).assertIsDisplayed()
+        // La flecha es un ícono chico (la frase entera es su descripción): no le quita lugar al monto.
+        composeRule.onNodeWithContentDescription("\$50.000 menos que a esta altura del período pasado", useUnmergedTree = true)
+            .assertIsDisplayed()
         composeRule.onNodeWithContentDescription("\$120.000 más que a esta altura del período pasado", useUnmergedTree = true)
             .assertIsDisplayed()
         composeRule.onNodeWithText("vs. período pasado", useUnmergedTree = true).assertIsDisplayed()

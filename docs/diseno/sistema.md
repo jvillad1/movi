@@ -181,7 +181,9 @@ Cifra(teQuedan, VarianteDeCifra.Heroe)
 
 **`TarjetaDeCuenta`** — la tarjeta de una cuenta del carrusel «Tus cuentas» (ola R1): el color y la
 marca de su banco (`MarcasConocidas`; la marca va invertida en un círculo), el nombre, el tipo y el
-saldo en `Cifra.Grande`. Alto `Medida.altoDeTarjetaDeCuenta`, radio `Radio.xl`, sin borde. Sin marca,
+saldo en `Cifra.Grande`. El nombre va en hasta dos renglones (nunca «Bancolombia Ah…») y el tipo baja
+junto al rótulo del saldo. Alto mínimo `Medida.altoDeTarjetaDeCuenta` (crece con la letra agrandada),
+radio `Radio.xl`, sin borde. Sin marca,
 la capa 2 y el ícono del tipo. En un carrusel ocupa `FRACCION_DE_TARJETA_DE_CUENTA` del ancho, para que
 la siguiente asome.
 ```kotlin
@@ -194,7 +196,10 @@ TarjetaDeCuenta(
 
 **`Widget`** y **`ParDeWidgets`** — un bloque compacto que **resume** una cifra que vive en otra
 pantalla y lleva allá (ola R1: «Falta por pagar» → Plan, «En qué se va» → su análisis). Es una
-`Superficie` tocable entera con su título y un detalle opcional. Dos van lado a lado y del mismo alto
+`Superficie` tocable entera con su título y un detalle opcional. **Un monto nunca se recorta**: en una
+fila de widget el monto va sin peso (se mide primero, entero) y lo que se achica es la barra o el nombre
+(el único que lleva «…»); lo vigila `NadaSeRecortaEnElInicioTest` a 360 y 390 dp, también con la letra
+agrandada. Dos van lado a lado y del mismo alto
 con `ParDeWidgets`; uno solo va a todo el ancho.
 ```kotlin
 ParDeWidgets(

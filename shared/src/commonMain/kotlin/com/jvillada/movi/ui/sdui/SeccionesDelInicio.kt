@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -13,6 +14,8 @@ import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Edit
@@ -22,6 +25,7 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
@@ -82,6 +87,7 @@ import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.pendientesPorRevisar
 import com.jvillada.movi.ui.dashboard.propuestasALaVista
 import com.jvillada.movi.ui.dashboard.propuestasDelInicio
+import com.jvillada.movi.shared.model.ContraElAnterior
 import com.jvillada.movi.shared.model.Tendencia
 import kotlinx.coroutines.launch
 
@@ -397,13 +403,21 @@ internal fun WidgetFaltaPorPagar(data: DashboardData, onNavigate: (Screen) -> Un
     }
 }
 
-/** Cuántas categorías lleva el widget de «En qué se va». */
-private const val CATEGORIAS_EN_EL_WIDGET = 4
+/**
+ * Cuántas categorías lleva el widget de «En qué se va»: las tres que más pesan. Es un resumen de media
+ * pantalla; la lista entera (y «Otras N categorías») está en «En qué se va», a un toque.
+ */
+private const val CATEGORIAS_EN_EL_WIDGET = 3
 
 /**
  * **«En qué se va»** compacto: las categorías que más pesan del período, con una barra chica sobre el
  * gasto total (`categoriasDelPeriodo`, la misma del análisis) y la flecha contra el período pasado.
  * Lleva a «En qué se va».
+ *
+ * **Un monto nunca se recorta** (revisión de la R1 a 390 px: se veía «Merca… ↑ $392.1»). Cada
+ * categoría va en dos renglones: arriba el ícono, el nombre (lo único que puede cortarse con «…») y la
+ * flecha como ícono chico; abajo la barra y el monto entero. El monto se mide primero y la barra se
+ * queda con lo que sobra, así que en un widget de media pantalla a 360 dp la cifra siempre entra.
  */
 @Composable
 internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, modifier: Modifier = Modifier) {
@@ -412,7 +426,7 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
         presupuestos = data.budgets.orEmpty(),
         cuantas = CATEGORIAS_EN_EL_WIDGET,
         gastoDelAnterior = data.gastoDelAnterior,
-    )
+    ).take(CATEGORIAS_EN_EL_WIDGET)
     Widget(
         titulo = "En qué se va",
         // Contra qué comparan las flechas, dicho una vez (cada flecha dice la frase entera al lector).
@@ -432,36 +446,48 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
                         color = Movi.colores.texto,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = Modifier.weight(1f),
                     )
-                    categoria.contraElAnterior?.let { flecha ->
-                        val descripcion = descripcionDeLaFlecha(flecha)
-                        Text(
-                            text = when (flecha.tendencia) {
-                                Tendencia.SUBE -> "↑"
-                                Tendencia.BAJA -> "↓"
-                                Tendencia.IGUAL -> "="
-                            },
-                            style = Movi.textos.apoyo,
-                            color = if (flecha.tendencia == Tendencia.BAJA) Movi.colores.entra else Movi.colores.textoMedio,
-                            modifier = Modifier
-                                .testTag(TAG_FLECHA_CONTRA_EL_ANTERIOR)
-                                .semantics { contentDescription = descripcion },
-                        )
-                    }
-                    Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
-                        Cifra(
-                            categoria.gastado,
-                            VarianteDeCifra.Chica,
-                            tono = if (categoria.superada) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
-                        )
-                    }
+                    categoria.contraElAnterior?.let { FlechaDelWidget(it) }
                 }
-                BarraDeProgreso(
-                    fraccion = categoria.fraccion,
-                    tono = if (categoria.superada) TonoDeBarra.Peligro else TonoDeBarra.Neutro,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    BarraDeProgreso(
+                        fraccion = categoria.fraccion,
+                        tono = if (categoria.superada) TonoDeBarra.Peligro else TonoDeBarra.Neutro,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // Sin peso: se mide primero, entera; la barra se queda con el resto.
+                    Cifra(
+                        categoria.gastado,
+                        VarianteDeCifra.Fila,
+                        tono = if (categoria.superada) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * La flecha «vs. período pasado» de una fila del widget: un ícono chico, no texto, para no quitarle
+ * lugar al monto. Gastar más no es una alarma (va en el color del texto); gastar menos va en `entra`.
+ * La frase entera es para el lector de pantalla.
+ */
+@Composable
+private fun FlechaDelWidget(flecha: ContraElAnterior) {
+    val descripcion = descripcionDeLaFlecha(flecha)
+    Icon(
+        imageVector = when (flecha.tendencia) {
+            Tendencia.SUBE -> Icons.Rounded.ArrowUpward
+            Tendencia.BAJA -> Icons.Rounded.ArrowDownward
+            Tendencia.IGUAL -> Icons.Rounded.Remove
+        },
+        contentDescription = descripcion,
+        tint = when (flecha.tendencia) {
+            Tendencia.SUBE -> Movi.colores.texto
+            Tendencia.BAJA -> Movi.colores.entra
+            Tendencia.IGUAL -> Movi.colores.textoApagado
+        },
+        modifier = Modifier.size(Icono.s).testTag(TAG_FLECHA_CONTRA_EL_ANTERIOR),
+    )
 }
