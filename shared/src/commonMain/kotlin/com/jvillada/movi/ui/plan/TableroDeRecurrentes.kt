@@ -62,6 +62,7 @@ import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.recurrentes.BajoLaFila
 import com.jvillada.movi.ui.recurrentes.MontoDeFila
+import com.jvillada.movi.ui.recurrentes.NumeroEnCirculo
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.NotificationsOff
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodo
@@ -1383,7 +1384,7 @@ private fun SeccionSuscripcionesActivas(
                 Fila(
                     titulo = item.sub.displayName,
                     subtitulo = contextoDeSuscripcionActiva(item, accountNames),
-                    inicio = { DiaEnCirculo(item.dayOfMonth) },
+                    inicio = { NumeroEnCirculo(item.dayOfMonth) },
                     final = { MontoDeFila(textoDelMontoDeSuscripcion(item.sub, conSigno = true)) },
                 )
                 BajoLaFila {
@@ -1423,16 +1424,6 @@ private fun SeccionSuscripcionesActivas(
     }
 }
 
-/** El día del cobro de una suscripción, en el círculo del inicio de su [Fila]. */
-@Composable
-private fun DiaEnCirculo(dia: Int) {
-    Box(
-        modifier = Modifier.size(Medida.avatar).clip(CircleShape).background(Movi.colores.capa2),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text = "$dia", style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-    }
-}
 
 /**
  * Una candidata «detectada · por confirmar», en el tablero de Plan · Pagos del mes.

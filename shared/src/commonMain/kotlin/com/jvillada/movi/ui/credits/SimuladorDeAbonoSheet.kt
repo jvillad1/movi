@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.theme.Radio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -65,9 +69,9 @@ fun SimuladorDeAbonoSheet(
     MarcoDeHoja(onDismiss = onDismiss) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             SectionLabel(TITULO_DEL_SIMULADOR)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -88,20 +92,19 @@ fun SimuladorDeAbonoSheet(
             // la plata sí es suya, retenida antes de que el sueldo llegue— y dos hipotecas que
             // gira Skandia, donde no. Ver [avisoDeQuienPagaLaCuota].
             credit.terms?.let { avisoDeQuienPagaLaCuota(it) }?.let { aviso ->
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(
                     aviso.texto,
                     style = Movi.textos.apoyo,
                     color = if (aviso.esAdvertencia) Movi.colores.aviso else Movi.colores.textoMedio,
-                    lineHeight = 16.sp,
                 )
             }
 
             if (sugeridos.isNotEmpty()) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
                 ) {
                     sugeridos.forEach { s ->
                         ChipDeMonto(
@@ -113,59 +116,53 @@ fun SimuladorDeAbonoSheet(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             MoneyField(
                 value = abono,
                 onValueChange = { abono = it },
                 placeholder = "Cuánto abonarías (COP)",
             )
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
             if (resultado == null) {
-                Text(PIDE_UN_MONTO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+                Text(PIDE_UN_MONTO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             } else {
                 Text(
                     resultado.titular,
                     style = Movi.textos.cuerpo,
                     fontWeight = FontWeight.Medium,
                     color = if (resultado.esAlerta) Movi.colores.sale else Movi.colores.texto,
-                    lineHeight = 19.sp,
                 )
                 resultado.detalle?.let {
-                    Spacer(Modifier.height(6.dp))
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+                    Spacer(Modifier.height(Espacio.xs))
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
             Hairline()
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             // Los TRES supuestos, y ninguno en letra más chica que el otro: el de la proyección
             // (la tasa y la cuota de hoy) lo arrastra toda esta pantalla; el del abono (que el
             // banco acorte el plazo y no la cuota) es propio de esta hoja y además es algo que
             // él tiene que pedir; y el de la estimación —que el interés que Movi calcula se
             // queda corto contra el extracto— es el único que habla de la cifra misma y no del
             // futuro. Ver [SUPUESTO_DE_LA_ESTIMACION].
-            Text(SUPUESTO_DEL_ABONO, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 15.sp)
-            Spacer(Modifier.height(6.dp))
-            Text(SUPUESTO_DE_LA_PROYECCION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 15.sp)
-            Spacer(Modifier.height(6.dp))
-            Text(SUPUESTO_DE_LA_ESTIMACION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 15.sp)
+            Text(SUPUESTO_DEL_ABONO, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+            Spacer(Modifier.height(Espacio.xs))
+            Text(SUPUESTO_DE_LA_PROYECCION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+            Spacer(Modifier.height(Espacio.xs))
+            Text(SUPUESTO_DE_LA_ESTIMACION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
         }
 
-        Spacer(Modifier.height(16.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Movi.colores.tarjeta)
-                .clickable(onClick = onDismiss)
-                .padding(vertical = 15.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("Cerrar", color = Movi.colores.texto, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium)
-        }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.m))
+        Boton(
+            texto = "Cerrar",
+            onClick = onDismiss,
+            variante = VarianteDeBoton.Secundario,
+            anchoCompleto = true,
+        )
+        Spacer(Modifier.height(Espacio.l))
     }
 }
 
@@ -182,9 +179,9 @@ private fun ChipDeMonto(etiqueta: String, seleccionado: Boolean, onClick: () -> 
         fontWeight = FontWeight.Medium,
         color = if (seleccionado) Movi.colores.fondo else Movi.colores.texto,
         modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(if (seleccionado) Movi.colores.texto else Movi.colores.tarjeta)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.xs),
     )
 }

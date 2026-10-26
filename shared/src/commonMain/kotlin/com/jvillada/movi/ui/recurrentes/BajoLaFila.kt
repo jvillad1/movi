@@ -1,6 +1,10 @@
 package com.jvillada.movi.ui.recurrentes
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -68,4 +72,20 @@ fun MontoDeFila(
         maxLines = 1,
         modifier = modifier.testTag(TAG_CIFRA),
     )
+}
+
+/**
+ * **Un número en el círculo del inicio de una fila**: el día del cobro de una suscripción, el orden
+ * de una deuda en el plan de salida. Mide [Medida.avatar], en la capa 2, con el número en `monto`.
+ */
+@Composable
+fun NumeroEnCirculo(numero: Int, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.layout.Box(
+        modifier = modifier
+            .size(Medida.avatar)
+            .background(Movi.colores.capa2, CircleShape),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        Text(text = "$numero", style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+    }
 }

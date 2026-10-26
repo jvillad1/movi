@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Movi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,14 +48,14 @@ fun RecurringOfferBar(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+    Box(modifier = modifier.fillMaxWidth().padding(horizontal = Espacio.m, vertical = Espacio.s)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(Radio.l))
                 .background(Movi.colores.tarjeta)
-                .border(1.dp, Movi.colores.borde, RoundedCornerShape(16.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.l))
+                .padding(horizontal = Espacio.m, vertical = Espacio.s),
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -60,7 +64,7 @@ fun RecurringOfferBar(
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(Espacio.xxs))
                     Text(
                         // Una sola línea de pregunta, corta: si necesita dos renglones para
                         // entenderse, ya es una interrupción y no un ofrecimiento.
@@ -77,18 +81,18 @@ fun RecurringOfferBar(
                     tint = Movi.colores.textoMedio,
                     modifier = Modifier
                         .clickable(onClick = onDismiss)
-                        .padding(start = 12.dp, top = 2.dp, bottom = 4.dp)
-                        .size(18.dp),
+                        .padding(start = Espacio.s, top = Espacio.xxs, bottom = Espacio.xxs)
+                        .size(Icono.m),
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Movi.colores.marca.copy(alpha = 0.16f))
+                        .clip(RoundedCornerShape(Radio.pill))
+                        .background(Movi.colores.lavado(Movi.colores.marca))
                         .clickable(onClick = onAccept)
-                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                        .padding(horizontal = Espacio.m, vertical = Espacio.xs),
                 ) {
                     Text(
                         text = "Sí, anótalo",

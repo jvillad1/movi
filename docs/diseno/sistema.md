@@ -47,6 +47,10 @@ Las reglas que se repiten tienen nombre propio (`Medida`), y se usa el nombre, n
 `Movi.espacios.*` sigue existiendo (lo nombra media app) y ahora sale de acá. **Con la R0 cambiaron en
 toda la app a la vez:** el margen de pantalla de 20 a 16 y la separación entre secciones de 32 a 24.
 
+**Ola R4b:** `Grafica` (en `Escalas.kt`) nombra las medidas de una gráfica dibujada a mano en un
+`Canvas` —`alto` 120, `margen` 6, `trazo` 2, `punto` 2,5, `aroDelPunto` 3,5, `puntoDestacado` 4—: la
+de «Tu plata, día a día» de Plan las tenía sueltas.
+
 ## 2. Radios e íconos
 
 | token | dp | para |
@@ -274,3 +278,32 @@ arriba:
 `SECCIONES_OPCIONALES` que el dueño prende en «Editar inicio». La barra Entró/Salió y el desglose de
 «Tu plata» salieron del héroe. ALERTS y el BANNER siguen al final de la definición solo para los APK
 viejos; este cliente no los pinta.
+
+## 11. Plan, Presupuestos, Tus períodos y Créditos (ola R4b)
+
+Plan es dueño de «¿cuánto puedo gastar y qué me falta pagar?», en este orden:
+
+| sección | componente | nota |
+|---|---|---|
+| Cuánto puedes gastar | `Seccion` + `Superficie`, barras con `BarraDeProgreso` | la versión completa del disponible vive acá |
+| Tus períodos | `Fila` en una `Superficie` de lista | lleva a la lista de períodos |
+| selector | «Pagos» · «Presupuestos» | era «Pagos del mes»: el período del dueño no es el mes |
+| Pagos del período | `Fila` + `Pildora` de estado (Pagado, Vencido, Por confirmar, Hoy, En N días, Falta) | «¿Ya pagaste…?» va en la superficie de las propuestas con `Boton` S |
+| Tu plata, día a día | `Seccion` + `Superficie` + `Grafica` | debajo de los pagos que la mueven |
+| Lo que se repite al mes, suscripciones | `Cifra.Grande`, `Fila` | |
+| Tus recordatorios no te van a llegar | `TarjetaDePropuesta`, al final | era un cartel en el medio de la lista |
+
+**Lo que cuelga de una fila** (`ui/recurrentes/BajoLaFila.kt`): una fila de Plan, de Créditos o de un
+período ofrece acciones («Anotar este pago», «Editar», «Ajustar saldo») o trae una línea más (la
+evidencia, la barra de un presupuesto). Va debajo de la `Fila`, con `BajoLaFila`: alineado con el
+texto de la fila (`SANGRIA_DEL_TEXTO_DE_LA_FILA` = margen + avatar + 12), nunca con una sangría
+propia. `MontoDeFila` es la letra de `Cifra.Fila` para un monto ya escrito (en dólares, «al año»), y
+`NumeroEnCirculo`, el inicio de una fila que se nombra por un número (el día de un cobro, el orden de
+una deuda).
+
+**El período en curso no repite Plan**: su detalle muestra cómo va (entró, salió, en qué se fue) y,
+en vez de sus pagos fijos y presupuestos, dos filas que llevan a Plan. Un período cerrado sí los
+pinta: mirar atrás es lo que contesta esa pantalla.
+
+Lo vigila `LasPantallasDePlanUsanElSistemaTest` (a 360 dp: secciones sin mayúsculas, filas de 56 o
+más, ninguna cifra recortada).

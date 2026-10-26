@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ConfirmacionEnLinea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -458,7 +462,7 @@ fun CreateRecurringRuleSheet(
         ) {
             // Title row: sheet title + optional delete action in edit mode
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.m),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -495,13 +499,13 @@ fun CreateRecurringRuleSheet(
                     ocupado = saving,
                     onConfirmar = { delete() },
                     onCancelar = { pidiendoBorrar = false },
-                    modifier = Modifier.padding(bottom = 18.dp),
+                    modifier = Modifier.padding(bottom = Espacio.m),
                 )
             }
 
             // --- NOMBRE ---
             SheetSectionLabel("NOMBRE")
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             SheetInputBox {
                 // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                 // [esAtajoDeSeleccionarTodo].
@@ -523,7 +527,7 @@ fun CreateRecurringRuleSheet(
                 )
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             // --- MONEDA ---
             // La única pregunta que decide dónde se guarda esto, y es una pregunta del mundo
@@ -534,10 +538,10 @@ fun CreateRecurringRuleSheet(
             // KDoc de [existingSub].
             if (!isEditMode) {
                 SheetSectionLabel("MONEDA")
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
                 ) {
                     SheetChip(
                         label = "Pesos",
@@ -566,7 +570,7 @@ fun CreateRecurringRuleSheet(
                         },
                     )
                 }
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(Espacio.m))
             }
 
             // --- CADA CUÁNTO --- (Ola 16)
@@ -579,10 +583,10 @@ fun CreateRecurringRuleSheet(
             // anual mal clasificado solo se puede arreglar acá.
             if (!isEditMode || editandoSuscripcion) {
                 SheetSectionLabel("CADA CUÁNTO")
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
                 ) {
                     SheetChip(
                         label = "Todos los meses",
@@ -605,7 +609,7 @@ fun CreateRecurringRuleSheet(
                         },
                     )
                 }
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(Espacio.m))
             }
 
             // --- MONTO ---
@@ -614,7 +618,7 @@ fun CreateRecurringRuleSheet(
             // que el dueño puede verificar y hacer nosotros la división es lo que impide
             // que quede guardada una cifra que no existe en ninguna parte del mundo real.
             SheetSectionLabel(if (esAnual) "MONTO DEL COBRO ANUAL" else "MONTO")
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             // V12: en Colombia "$20" se lee veinte pesos. Si el cobro es en dólares, el campo
             // lo dice mientras se escribe — igual que después lo dice la fila de la lista.
             MoneyField(
@@ -624,21 +628,21 @@ fun CreateRecurringRuleSheet(
                 placeholder = if (enDolares) "US$ 0" else "$ 0",
             )
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             // --- DÍA DEL MES ---
             // En un cobro anual esto es el día, pero Movi no guarda el MES: el modelo de
             // suscripciones tiene `dayOfMonth` y nada más. La consecuencia se dice abajo,
             // en la nota, en vez de dejar que el dueño la deduzca cuando el aviso no llegue.
             SheetSectionLabel("DÍA DEL MES")
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             DayOfMonthPicker(
                 selected = dayOfMonth,
                 enabled = !saving,
                 onPick = { dayOfMonth = it },
             )
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             // --- TIPO ---
             // Siempre visible, también cuando esto se va a guardar como suscripción. Ahí
@@ -647,10 +651,10 @@ fun CreateRecurringRuleSheet(
             // ingreso recurrente en dólares, o uno anual, no se puede registrar hoy — el
             // modelo de suscripciones es de cobros. Ver la nota de abajo.)
             SheetSectionLabel("TIPO")
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 SheetChip(
                     label = "Gasto",
@@ -665,7 +669,7 @@ fun CreateRecurringRuleSheet(
                 )
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             if (seGuardaComoSuscripcion) {
                 // No se ocultan los campos en silencio: esto se guarda como suscripción, y
@@ -677,9 +681,8 @@ fun CreateRecurringRuleSheet(
                             "y una suscripción es siempre un cobro.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.aviso,
-                        lineHeight = 17.sp,
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                 }
                 Text(
                     // Ola 17: la cuenta salió de esta lista de renuncias. Ya no se
@@ -690,20 +693,18 @@ fun CreateRecurringRuleSheet(
                         "sin categoría y sin recordatorio.",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 17.sp,
                 )
                 if (enDolares) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(
                         text = "Para el total del mes lo convertimos a pesos con la tasa de " +
                             "cambio más reciente que pudimos consultar.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 17.sp,
                     )
                 }
                 if (esAnual) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     // Las dos cosas que hay que decir de un cobro anual, y la segunda es la
                     // incómoda: hoy las suscripciones no alimentan «Próximos pagos» ni los
                     // recordatorios, así que el cobro del año que viene no le va a avisar a
@@ -714,7 +715,6 @@ fun CreateRecurringRuleSheet(
                             "cobro no te va a generar un recordatorio.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 17.sp,
                     )
                 }
             } else {
@@ -734,7 +734,7 @@ fun CreateRecurringRuleSheet(
                 )
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             // --- CUENTA (opcional) ---
             //
@@ -847,7 +847,7 @@ fun CreateRecurringRuleSheet(
                 // Solo en GASTO: una suscripción no tiene esta columna, y un ingreso no es algo
                 // que se «mande» a nadie (mismo criterio que `vaHaciaElDestino` en `:core`).
                 if (selectedType == TransactionType.EXPENSE) {
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(Espacio.m))
                     DestinoConocidoPickerField(
                         destinos = destinosConocidos,
                         selectedId = destinoConocidoId,
@@ -863,7 +863,7 @@ fun CreateRecurringRuleSheet(
                     )
                 }
 
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(Espacio.m))
 
                 // --- RECORDATORIO ---
                 // Una regla de INGRESO no genera recordatorio (el barrido solo mira gastos, ver
@@ -875,7 +875,7 @@ fun CreateRecurringRuleSheet(
                         onCheckedChange = { remindMe = it },
                         enabled = !saving,
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(Espacio.s))
                     CasillaDelDebitoAutomatico(
                         marcada = seDebitaSolo,
                         enabled = !saving,
@@ -890,14 +890,13 @@ fun CreateRecurringRuleSheet(
                             "ingreso no lleva aviso.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 17.sp,
                     )
                 }
             }
 
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.l))
 
         // El error del guardado va FIJO, junto al botón, y no dentro del área que
         // scrollea. En el caso Gasto —el que desborda— el contenido queda rodado hacia
@@ -909,33 +908,23 @@ fun CreateRecurringRuleSheet(
                 text = error!!,
                 style = Movi.textos.apoyo,
                 color = Movi.colores.sale,
-                modifier = Modifier.padding(bottom = 8.dp),
+                modifier = Modifier.padding(bottom = Espacio.xs),
             )
         }
 
         // --- CTA --- (fijo al pie, fuera del área que scrollea)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                .clickable(enabled = canSave) { save() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = when {
-                    saving       -> if (isEditMode) "Guardando…" else "Creando…"
-                    isEditMode   -> "Guardar cambios"
-                    else         -> "Crear recurrente"
-                },
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
-            )
-        }
+        Boton(
+            texto = when {
+                saving       -> if (isEditMode) "Guardando…" else "Creando…"
+                isEditMode   -> "Guardar cambios"
+                else         -> "Crear recurrente"
+            },
+            onClick = { save() },
+            habilitado = canSave,
+            anchoCompleto = true,
+        )
         if (!canSave && !saving && missingFieldMessage != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = missingFieldMessage,
                 style = Movi.textos.apoyo,
@@ -944,7 +933,7 @@ fun CreateRecurringRuleSheet(
             )
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(Espacio.s))
     }
 }
 
@@ -961,16 +950,16 @@ private fun CasillaDelDebitoAutomatico(marcada: Boolean, enabled: Boolean, onCam
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .clickable(enabled = enabled) { onCambiar() }
-            .padding(vertical = 4.dp),
+            .padding(vertical = Espacio.xxs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
         CasillaDeSeleccion(marcada = marcada)
         Column(modifier = Modifier.weight(1f)) {
             Text(TITULO_DEL_DEBITO_DE_LA_REGLA, style = Movi.textos.cuerpo, color = Movi.colores.texto)
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(Espacio.xxs))
             Text(
                 text = if (marcada) {
                     "El día que vence, Movi te lo deja listo en «Por revisar» para que confirmes si se " +
@@ -1040,15 +1029,15 @@ private fun AccountPickerField(
         mutableStateOf(cuentas.principales.isEmpty())
     }
     SheetSectionLabel("CUENTA (OPCIONAL)")
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Espacio.xs))
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
             .clickable(enabled = enabled && sePuedeElegir, onClick = onToggle)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1073,13 +1062,13 @@ private fun AccountPickerField(
         }
     }
     if (open && sePuedeElegir) {
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(Radio.m))
                 .background(Movi.colores.tarjeta)
-                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp)),
+                .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)),
         ) {
             AccountPickerRow(label = "Sin cuenta", selected = selectedId == null) { onPick(null) }
             val visibles = if (verTodas) cuentas.todas else cuentas.principales
@@ -1099,7 +1088,7 @@ private fun AccountPickerField(
                     cuantas = cuentas.otras.size,
                     uso = uso,
                     onToggle = { verTodas = !verTodas },
-                    modifier = Modifier.padding(horizontal = 14.dp),
+                    modifier = Modifier.padding(horizontal = Espacio.s),
                 )
             }
         }
@@ -1134,22 +1123,22 @@ internal fun DestinoConocidoPickerField(
     // por el mismo motivo que en `AccountPickerField`: quitarlo tiene que poder pedirse siempre.
     val sePuedeElegir = destinos.isNotEmpty() || selectedId != null
     SheetSectionLabel("PERSONA O COMERCIO (OPCIONAL)")
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Espacio.xs))
     Text(
         "Si esto es una transferencia a alguien que ya tienes guardado en «Personas y comercios», " +
             "asócialo: Movi va a reconocer el pago aunque el banco no repita este nombre.",
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
-        modifier = Modifier.padding(bottom = 8.dp),
+        modifier = Modifier.padding(bottom = Espacio.xs),
     )
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
             .clickable(enabled = enabled && sePuedeElegir, onClick = onToggle)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1173,13 +1162,13 @@ internal fun DestinoConocidoPickerField(
         }
     }
     if (open && sePuedeElegir) {
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(Radio.m))
                 .background(Movi.colores.tarjeta)
-                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp)),
+                .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)),
         ) {
             AccountPickerRow(label = "Ninguno", selected = selectedId == null) { onPick(null) }
             destinos.forEach { destino ->
@@ -1200,9 +1189,9 @@ private fun AccountPickerRow(label: String, selected: Boolean, onClick: () -> Un
         color = if (selected) Movi.colores.marca else Movi.colores.texto,
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (selected) Modifier.background(Movi.colores.marca.copy(alpha = 0.16f)) else Modifier)
+            .then(if (selected) Modifier.background(Movi.colores.lavado(Movi.colores.marca)) else Modifier)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     )
 }
 
@@ -1212,7 +1201,6 @@ private fun SheetSectionLabel(text: String) {
         text = text,
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
-        letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
     )
 }
@@ -1222,10 +1210,10 @@ private fun SheetInputBox(content: @Composable BoxScope.() -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
         content = content,
     )
 }
@@ -1240,13 +1228,13 @@ private fun RowScope.SheetChip(
     Box(
         modifier = Modifier
             .weight(1f)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .clip(RoundedCornerShape(Radio.m))
+            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
             .then(
-                if (!selected) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(10.dp)) else Modifier,
+                if (!selected) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)) else Modifier,
             )
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 12.dp),
+            .padding(vertical = Espacio.s),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -1308,12 +1296,12 @@ private fun DayOfMonthPicker(
         // del mismo ancho para que la última fila no se estire: una cuadrícula que cambia de paso
         // en la última línea se lee como otra cosa.
         for (fila in 0 until 5) {
-            if (fila > 0) Spacer(Modifier.height(6.dp))
+            if (fila > 0) Spacer(Modifier.height(Espacio.xs))
             // 4dp entre columnas y no 6: son seis huecos, y cada 2dp que se les saca va a parar
             // al ancho de la casilla, que es la dimensión que en un teléfono no sobra.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
             ) {
                 for (columna in 0 until 7) {
                     val dia = fila * 7 + columna + 1
@@ -1328,8 +1316,8 @@ private fun DayOfMonthPicker(
         // La nota de los meses cortos, SOLO cuando aplica (ver [diaCortoHint]). Va debajo de la
         // cuadrícula: arriba movería la cuadrícula misma bajo el dedo al elegir un 29, 30 o 31.
         diaCortoHint(selected)?.let { nota ->
-            Spacer(Modifier.height(8.dp))
-            Text(text = nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+            Spacer(Modifier.height(Espacio.xs))
+            Text(text = nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
     }
 }
@@ -1350,9 +1338,9 @@ private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPi
     Box(
         modifier = Modifier
             .weight(1f)
-            .height(44.dp)
-            .clip(RoundedCornerShape(9.dp))
-            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .height(Medida.objetivoTactil)
+            .clip(RoundedCornerShape(Radio.s))
+            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.capa2)
             .clickable(enabled = enabled) { onPick(day) },
         contentAlignment = Alignment.Center,
     ) {
