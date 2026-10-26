@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -50,9 +52,6 @@ import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
-import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
@@ -60,7 +59,12 @@ import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe
 import com.jvillada.movi.ui.fecha.MESES_DEL_ANIO
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
-import com.jvillada.movi.ui.recurrentes.ActionChip
+import com.jvillada.movi.theme.Grafica
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -184,10 +188,10 @@ internal fun SeccionCajaProyectada(
     cargando: Boolean,
     recarga: Int,
     onNavigate: (Screen) -> Unit,
-    /** El aire de arriba: en la columna del disponible separa de «Tus períodos»; en la lista, ya lo pone el selector. */
-    espacioArriba: androidx.compose.ui.unit.Dp = Movi.espacios.seccion,
-    /** El aire de abajo, solo cuando la sección se pinta (en la lista la sigue el tablero). */
-    espacioAbajo: androidx.compose.ui.unit.Dp = 0.dp,
+    /** El aire de arriba ([Medida.entreSecciones]): en la columna del disponible separa de «Tus períodos». */
+    aireArriba: Boolean = true,
+    /** El aire de abajo, solo cuando la sección se pinta: en la lista la sigue el resto del tablero. */
+    aireAbajo: Boolean = false,
 ) {
     var reintento by remember { mutableStateOf(0) }
     val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = recarga + reintento) {
@@ -202,41 +206,33 @@ internal fun SeccionCajaProyectada(
     // el título (un título sobre un hueco es una promesa que no se cumple).
     if (caja == null && !noSePudo && !(gastoLeido.actualizando || cargando)) return
 
-    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio).testTag(TAG_CAJA_PROYECTADA)) {
-        Spacer(Modifier.height(espacioArriba))
-        MinSectionHeader(
-            title = TITULO_CAJA_PROYECTADA,
+    Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).testTag(TAG_CAJA_PROYECTADA)) {
+        if (aireArriba) Spacer(Modifier.height(Medida.entreSecciones))
+        Seccion(
+            titulo = TITULO_CAJA_PROYECTADA,
             // No «¿De dónde sale?»: esa es la de la tarjeta de arriba, y dos iguales en la misma
             // pantalla no se distinguen. Acá lo que se abre son los supuestos.
-            action = if (verDeDondeSale) "Ocultar supuestos" else "¿Qué supone?",
-            onAction = { if (caja != null) verDeDondeSale = !verDeDondeSale },
+            accion = if (verDeDondeSale) "Ocultar supuestos" else "¿Qué supone?",
+            onAccion = { if (caja != null) verDeDondeSale = !verDeDondeSale },
         )
         when {
-            caja != null -> MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(Movi.espacios.amplio),
-            ) {
+            caja != null -> Superficie(modifier = Modifier.fillMaxWidth()) {
                 CuerpoDeLaCaja(caja, gasto, hoy, verDeDondeSale, onNavigate)
             }
             noSePudo ->
                 NoSePudoLeer("No pudimos proyectar tu plata", onReintentar = { reintento++ })
-            gastoLeido.actualizando || cargando -> MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(Movi.espacios.amplio),
-            ) {
+            gastoLeido.actualizando || cargando -> Superficie(modifier = Modifier.fillMaxWidth()) {
                 LineaEsqueleto(fraccionDelAncho = 0.8f, estilo = Movi.textos.cuerpo)
                 Spacer(Modifier.height(Movi.espacios.medio))
                 Spacer(Modifier.height(ALTO_DE_LA_GRAFICA))
             }
             else -> Unit
         }
-        Spacer(Modifier.height(espacioAbajo))
+        if (aireAbajo) Spacer(Modifier.height(Medida.entreSecciones))
     }
 }
 
-private val ALTO_DE_LA_GRAFICA = 120.dp
+private val ALTO_DE_LA_GRAFICA = Grafica.alto
 
 @Composable
 private fun CuerpoDeLaCaja(
@@ -285,7 +281,12 @@ private fun CuerpoDeLaCaja(
         Spacer(Modifier.height(Movi.espacios.corto))
         Text(falta, style = Movi.textos.apoyo, color = Movi.colores.aviso)
         Spacer(Modifier.height(Movi.espacios.corto))
-        ActionChip(label = "Cargar en Créditos", primary = false) { onNavigate(Screen.Credits) }
+        Boton(
+            texto = "Cargar en Créditos",
+            onClick = { onNavigate(Screen.Credits) },
+            variante = VarianteDeBoton.Secundario,
+            tamano = TamanoDeBoton.S,
+        )
     }
     if (verDeDondeSale) {
         Spacer(Modifier.height(Movi.espacios.corto))
@@ -365,8 +366,8 @@ private fun GraficaDeLaCaja(caja: CajaProyectada, elegido: Int?, alElegir: (Int?
         val rango = (tope - piso).toFloat().takeIf { it > 0f } ?: 1f
         val etiqueta = medidor.measure(cifraDelMasBajo, estiloDeLaCifra)
         // Arriba queda lugar para la cifra del día más justo cuando cae cerca del techo.
-        val arriba = 6.dp.toPx()
-        val abajo = 6.dp.toPx()
+        val arriba = Grafica.margen.toPx()
+        val abajo = Grafica.margen.toPx()
         val alto = size.height - arriba - abajo
         fun x(i: Int) = if (saldos.size == 1) size.width / 2 else size.width * i / (saldos.size - 1)
         fun y(v: Long) = arriba + alto * (tope - v).toFloat() / rango
@@ -375,14 +376,14 @@ private fun GraficaDeLaCaja(caja: CajaProyectada, elegido: Int?, alElegir: (Int?
                 color = cero,
                 start = Offset(0f, y(0L)),
                 end = Offset(size.width, y(0L)),
-                strokeWidth = 1.dp.toPx(),
+                strokeWidth = Medida.trazo.toPx(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
             )
         }
         elegido?.let { i ->
-            drawLine(guia, Offset(x(i), 0f), Offset(x(i), size.height), strokeWidth = 1.dp.toPx())
+            drawLine(guia, Offset(x(i), 0f), Offset(x(i), size.height), strokeWidth = Medida.trazo.toPx())
         }
-        val trazo = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val trazo = Stroke(width = Grafica.trazo.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         // Cada tramo con el color de su punta derecha: lo que baja de cero se ve rojo desde el día
         // en que cruza.
         saldos.indices.drop(1).forEach { i ->
@@ -395,19 +396,19 @@ private fun GraficaDeLaCaja(caja: CajaProyectada, elegido: Int?, alElegir: (Int?
         // Los pagos pendientes: un punto chico con aro, sobre la línea.
         conPago.forEach { i ->
             val c = Offset(x(i), y(saldos[i]))
-            drawCircle(fondo, radius = 3.5.dp.toPx(), center = c)
-            drawCircle(marcador, radius = 2.5.dp.toPx(), center = c)
+            drawCircle(fondo, radius = Grafica.aroDelPunto.toPx(), center = c)
+            drawCircle(marcador, radius = Grafica.punto.toPx(), center = c)
         }
-        elegido?.let { i -> drawCircle(linea, radius = 3.5.dp.toPx(), center = Offset(x(i), y(saldos[i]))) }
+        elegido?.let { i -> drawCircle(linea, radius = Grafica.aroDelPunto.toPx(), center = Offset(x(i), y(saldos[i]))) }
         // El día más justo: su punto y su cifra, encima del punto (o debajo, si no cabe arriba).
         val iBajo = caja.dias.indexOf(caja.diaMasBajo)
         val centro = Offset(x(iBajo), y(saldos[iBajo]))
-        drawCircle(punto, radius = 4.dp.toPx(), center = centro)
+        drawCircle(punto, radius = Grafica.puntoDestacado.toPx(), center = centro)
         val ancho = etiqueta.size.width.toFloat()
         val altoDeLaEtiqueta = etiqueta.size.height.toFloat()
         val izquierda = (centro.x - ancho / 2).coerceIn(0f, (size.width - ancho).coerceAtLeast(0f))
-        val encima = centro.y - 6.dp.toPx() - altoDeLaEtiqueta
-        val top = if (encima >= 0f) encima else centro.y + 6.dp.toPx()
+        val encima = centro.y - Grafica.margen.toPx() - altoDeLaEtiqueta
+        val top = if (encima >= 0f) encima else centro.y + Espacio.xs.toPx()
         drawText(etiqueta, topLeft = Offset(izquierda, top))
     }
 }

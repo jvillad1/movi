@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -42,13 +44,32 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.recurrentes.BajoLaFila
+import com.jvillada.movi.ui.recurrentes.MontoDeFila
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.NotificationsOff
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodo
 import com.jvillada.movi.ui.dashboard.pendientesDePeriodosAnteriores
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.ETIQUETA_MINIMOS_DE_TARJETA
 import com.jvillada.movi.ui.recurrentes.OrigenDeSuscripcion
 import com.jvillada.movi.ui.recurrentes.Recurrente
-import com.jvillada.movi.ui.recurrentes.ReminderWarningBanner
 import com.jvillada.movi.ui.recurrentes.ResumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.SeccionChecklistDelPeriodo
 import com.jvillada.movi.ui.recurrentes.avisoDeCandidataDuplicada
@@ -630,25 +651,15 @@ fun LazyListScope.tableroDeRecurrentes(
     ajustesDelPeriodo: PeriodSettings,
     accountNames: Map<String, String>,
     onNavigate: (Screen) -> Unit,
+    despuesDeLaLista: (LazyListScope.() -> Unit)? = null,
 ) {
     // ── Aviso: pediste recordatorios y no hay por dónde mandártelos ──────────
-    // Se muda con el resto: era la única pantalla que lo mostraba, y sacarla del menú
-    // lo habría dejado sin ningún lugar donde salir. No es hipotético — hoy no hay
-    // ninguna suscripción de push activa. Ver [shouldShowReminderWarning]: con
-    // `canales == null` («todavía no se sabe») NO se avisa nada.
-    if (shouldShowReminderWarning(estado.pushStatus, estado.pidieronRecordatorios, ReminderChannelsCache.canales)) {
-        item {
-            Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-                ReminderWarningBanner(
-                    pushStatus = estado.pushStatus,
-                    onEnable = {
-                        PushOptIn.enable()
-                        estado.pushRefreshTick++
-                    },
-                )
-            }
-        }
-    }
+    // Ola R4: era un cartel ámbar ARRIBA de la lista del período, en el medio de «¿qué me falta
+    // pagar?». Ahora es una propuesta al FINAL del segmento (ver [propuestaDeRecordatorios]): no
+    // es un pago, es una decisión sobre cómo avisar. No se muda a Perfil porque Perfil no sabe si
+    // hay recordatorios pedidos ni si el canal falta — lo sabe este tablero.
+    val avisarRecordatorios =
+        shouldShowReminderWarning(estado.pushStatus, estado.pidieronRecordatorios, ReminderChannelsCache.canales)
 
     // ── El vacío que enseña: nunca anotó un pago fijo ───────────────────────
     //
@@ -681,9 +692,11 @@ fun LazyListScope.tableroDeRecurrentes(
                     "te dice cuáles faltan y los marca solos cuando salen.",
                 accion = "Agregar un pago fijo",
                 onAccion = { estado.nuevoRecurrenteAbierto = true },
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones),
             )
         }
+        despuesDeLaLista?.invoke(this)
+        if (avisarRecordatorios) propuestaDeRecordatorios(estado, onNavigate)
         return
     }
 
@@ -770,11 +783,16 @@ fun LazyListScope.tableroDeRecurrentes(
                     }
                 },
                 onReintentar = { estado.recargar() },
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones),
                 planesDeCuotas = estado.planesDeCuotas,
             )
         }
     }
+
+    // ── Tu plata, día a día ─────────────────────────────────────────────────
+    // Ola R4: debajo de la lista del período —los pagos primero, y después cómo mueven tu plata—.
+    // La pone quien monta el tablero (Plan), con sus datos.
+    despuesDeLaLista?.invoke(this)
 
     // ── Cobros detectados · por confirmar ───────────────────────────────────
     // Debajo de la lista del período y con un rótulo que no habla de pagos: son candidatas a
@@ -782,9 +800,9 @@ fun LazyListScope.tableroDeRecurrentes(
     val candidatas = estado.candidatas
     if (candidatas.isNotEmpty()) {
         item {
-            Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-                MinSectionHeader(title = TITULO_COBROS_DETECTADOS, count = candidatas.size)
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones)) {
+                Seccion(titulo = TITULO_COBROS_DETECTADOS, conteo = candidatas.size)
+                Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                     candidatas.forEach { s ->
                         CandidataSuscripcionCard(
                             sub = s,
@@ -809,16 +827,16 @@ fun LazyListScope.tableroDeRecurrentes(
 
     // ── El resumen, abajo, pegado a lo que resume ───────────────────────────
     item {
-        Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+        Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones)) {
             // «Buscar cobros» va en este encabezado —que se pinta siempre con el tablero
             // a la vista— y no en el de las candidatas, que solo existe cuando ya hay
             // alguna. Ver [EstadoDelTableroDeRecurrentes.buscarCobros].
             // «Lo que se repite al mes» y no «Recurrentes»: son totales mensuales, no pagos del
             // período, y debajo de la lista del período el rótulo tiene que decir eso.
-            MinSectionHeader(
-                title = TITULO_LO_QUE_SE_REPITE,
-                action = if (estado.buscandoCobros) "Buscando…" else "Buscar cobros",
-                onAction = { estado.buscarCobros() },
+            Seccion(
+                titulo = TITULO_LO_QUE_SE_REPITE,
+                accion = if (estado.buscandoCobros) "Buscando…" else "Buscar cobros",
+                onAccion = { estado.buscarCobros() },
             )
             ResumenFlujoLibreCard(
                 // **Sin los vencimientos no hay cifra.** Las cuotas de los créditos
@@ -866,11 +884,51 @@ fun LazyListScope.tableroDeRecurrentes(
                     onEditar = { estado.suscripcionAEditar = it },
                     abierta = estado.suscripcionesAbiertas,
                     onAlternar = { estado.suscripcionesAbiertas = !estado.suscripcionesAbiertas },
-                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                    modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones),
                 )
             }
         }
+
+    if (avisarRecordatorios) propuestaDeRecordatorios(estado, onNavigate)
 }
+
+/**
+ * **«Tus recordatorios no te van a llegar»**, como propuesta (ola R4): pediste que te avisaran de un
+ * pago y no hay canal por donde. Con las notificaciones apagadas, Movi propone prenderlas; si el
+ * navegador las bloqueó no hay botón que lo arregle desde acá, y la propuesta lleva a Perfil, donde
+ * están los avisos. Ver [shouldShowReminderWarning] para cuándo sale.
+ */
+private fun LazyListScope.propuestaDeRecordatorios(
+    estado: EstadoDelTableroDeRecurrentes,
+    onNavigate: (Screen) -> Unit,
+) {
+    item(key = "propuesta-de-recordatorios") {
+        val bloqueadas = estado.pushStatus == "denied"
+        TarjetaDePropuesta(
+            icono = Icons.Rounded.NotificationsOff,
+            titulo = TITULO_RECORDATORIOS_SIN_CANAL,
+            cuerpo = if (bloqueadas) {
+                "Bloqueaste las notificaciones de Movi en el navegador. Reactívalas desde la configuración del sitio."
+            } else {
+                "Las notificaciones están apagadas y no hay otro canal para avisarte de un vencimiento."
+            },
+            tono = TonoDeIcono.Aviso,
+            accion = if (bloqueadas) "Ver tus avisos" else "Activar notificaciones",
+            onAccion = {
+                if (bloqueadas) {
+                    onNavigate(Screen.Profile)
+                } else {
+                    PushOptIn.enable()
+                    estado.pushRefreshTick++
+                }
+            },
+            modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones),
+        )
+    }
+}
+
+/** El título de la propuesta de los recordatorios sin canal. */
+const val TITULO_RECORDATORIOS_SIN_CANAL: String = "Tus recordatorios no te van a llegar"
 
 /**
  * **Las hojas que abren las filas del tablero.** Van afuera de la `LazyColumn` —en el `Box` de la
@@ -1007,17 +1065,14 @@ const val TAG_ESQUELETO_DEL_TABLERO: String = "esqueleto-del-tablero"
 fun LazyListScope.tableroDeRecurrentesEsqueleto() {
     listOf(6).forEach { filas ->
         item {
-            Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-                RotuloDeSeccionEsqueleto()
-                MinCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+            Column(modifier = Modifier.padding(bottom = Medida.entreSecciones)) {
+                Box(Modifier.padding(horizontal = Medida.margenDePantalla)) { RotuloDeSeccionEsqueleto() }
+                Superficie(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla),
+                    relleno = RellenoDeSuperficie.Lista,
                 ) {
-                    repeat(filas) { i ->
-                        Box(Modifier.testTag(TAG_ESQUELETO_DEL_TABLERO)) {
-                            FilaDeListaEsqueleto(isLast = i == filas - 1)
-                        }
+                    repeat(filas) {
+                        EsqueletoDeFila(modifier = Modifier.testTag(TAG_ESQUELETO_DEL_TABLERO))
                     }
                 }
             }
@@ -1072,57 +1127,48 @@ fun resumenPlegadoDeSuscripciones(cuantas: Int, totalMensual: Long): String {
 private fun ResumenFlujoLibreCard(
     cifras: ResumenRecurrentes?,
 ) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(20.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Text("Flujo libre", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         // **La cifra grande es [ResumenRecurrentes.disponible], no `flujoLibre`.** El mínimo de una
         // tarjeta no es un gasto del mes —eso sigue igual, ver `cuentaComoCompromisoMensual`— pero
         // es plata que hay que pagar sí o sí, y mientras el número grande la ignoraba el dueño leía
         // $601.574 libres sin saber que el mínimo de su Master Black son $1.843.014. Las dos
         // cifras se muestran; la que manda es la que ya descontó lo comprometido.
-        Text(
-            text = cifras?.let { formatCOP(it.disponible) } ?: "—",
-            // Sin estilo a propósito: cifra de una tarjeta, no de la pantalla; `cifra` (42) la infla y `titular` (19) la achica.
-            fontSize = 28.sp,
-            style = Movi.textos.monto,
-            color = Movi.colores.texto,
-            letterSpacing = (-1.1).sp,
-            lineHeight = 28.sp,
-        )
-        Spacer(Modifier.height(4.dp))
+        // La cifra de una tarjeta (ola R4: `Cifra.Grande`, la del sistema; antes 28 sp a mano).
+        if (cifras != null) {
+            Cifra(cifras.disponible, VarianteDeCifra.Grande)
+        } else {
+            Text(text = "—", style = Movi.textos.cifraDeTarjeta, color = Movi.colores.texto)
+        }
+        Spacer(Modifier.height(Espacio.xxs))
         Text(
             text = cifras?.let { subtituloDelFlujoLibre(it) } ?: "Ingresos recurrentes − Gastos recurrentes",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(Espacio.s))
         Hairline()
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
         Row(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("Ingresos recurrentes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(
                     text = cifras?.let { formatCOP(it.ingresos) } ?: "—",
                     style = Movi.textos.monto,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.entra,
-                    letterSpacing = (-0.3).sp,
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text("Gastos recurrentes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(
                     text = cifras?.let { formatCOP(it.gastos) } ?: "—",
                     style = Movi.textos.monto,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
-                    letterSpacing = (-0.3).sp,
                 )
             }
         }
@@ -1133,11 +1179,11 @@ private fun ResumenFlujoLibreCard(
         // es restarlo del disponible **con rótulo propio**, que además es lo único que le permite
         // verificar la resta contra su extracto.
         if (cifras != null && cifras.minimosDeTarjeta > 0L) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             Row(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(ETIQUETA_MINIMOS_DE_TARJETA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(
                         // El signo lo trae el formato, no un prefijo pegado afuera (F36): `formatCOP` ya sabe
                         // escribir un negativo, y duplicarlo daría «− −$…» el día que alguien pase otra cifra.
@@ -1145,18 +1191,16 @@ private fun ResumenFlujoLibreCard(
                         style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
-                        letterSpacing = (-0.3).sp,
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Libre sin las tarjetas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(
                         text = formatCOP(cifras.flujoLibre),
                         style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.textoMedio,
-                        letterSpacing = (-0.3).sp,
                     )
                 }
             }
@@ -1164,13 +1208,13 @@ private fun ResumenFlujoLibreCard(
         // Y cuando el mínimo no está cargado, la cifra grande deja de ser un hecho y se dice.
         // Ver [avisoDeMinimosQueFaltan].
         cifras?.let { avisoDeMinimosQueFaltan(it) }?.let { aviso ->
-            Spacer(Modifier.height(12.dp))
-            Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso, lineHeight = 15.sp)
+            Spacer(Modifier.height(Espacio.s))
+            Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso)
         }
         // Mismo criterio que la pantalla vieja: un total al que le faltan filas se dice, no se
         // disimula. Ver el KDoc de [ResumenRecurrentes.sinConvertir].
         if (cifras != null && cifras.sinConvertir > 0) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             Text(
                 text = if (cifras.sinConvertir == 1) {
                     "Este total no incluye 1 cobro en otra moneda: no pudimos convertirlo a pesos."
@@ -1180,16 +1224,14 @@ private fun ResumenFlujoLibreCard(
                 },
                 style = Movi.textos.apoyo,
                 color = Movi.colores.aviso,
-                lineHeight = 15.sp,
             )
         } else if (cifras != null && cifras.hayMonedaExtranjera) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             Text(
                 text = "Lo que te cobran en dólares entra al total convertido a pesos con la tasa " +
                     "de cambio más reciente que pudimos consultar.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
-                lineHeight = 15.sp,
             )
         }
         // Ola 16: la otra transformación que sufre una fila entre la lista de abajo y este total.
@@ -1200,13 +1242,12 @@ private fun ResumenFlujoLibreCard(
         // mal. Ver [ResumenRecurrentes.hayCobrosAnuales]: solo aparece si un cobro anual de
         // verdad entró al total.
         if (cifras != null && cifras.hayCobrosAnuales) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             Text(
                 text = "Lo que te cobran una vez al año entra repartido: dividimos el cobro en 12 " +
                     "para que este total sea lo que te cuesta cada mes.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
-                lineHeight = 15.sp,
             )
         }
         // La tercera diferencia entre la lista de abajo y este total, y la más cara: las cuotas
@@ -1228,14 +1269,13 @@ private fun ResumenFlujoLibreCard(
         // que distingue al aviso de la moneda sin convertir); es el alcance del total, como el
         // aviso del prorrateo de acá arriba.
         if (cifras != null && cifras.cuotasDeCredito > 0L) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             Text(
                 text = "Las cuotas de tus créditos entran en este total: ${formatCOP(cifras.cuotasDeCredito)} " +
                     "al mes. No contamos las que te descuentan de la nómina ni las que paga otra " +
                     "persona, porque esa plata no sale de tu bolsillo.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
-                lineHeight = 15.sp,
             )
         }
         // Y la cuota que se paga una sola vez, que es la otra mitad de decir la verdad sobre las
@@ -1244,7 +1284,7 @@ private fun ResumenFlujoLibreCard(
         // `sinConvertir`: es una fila que existe, vence y sale en la lista del período, y este total no la
         // suma a propósito. Ver [ResumenRecurrentes.pagosUnicosFuera].
         if (cifras != null && cifras.pagosUnicosFuera > 0) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             Text(
                 // Sin prometer dónde se ve: la lista del período solo muestra lo que vence en él,
                 // así que un pago único con fecha lejana no está ahí todavía, y el aviso depende
@@ -1259,7 +1299,6 @@ private fun ResumenFlujoLibreCard(
                 },
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
-                lineHeight = 15.sp,
             )
         }
     }
@@ -1316,156 +1355,82 @@ private fun SeccionSuscripcionesActivas(
 ) {
     if (activas.isEmpty()) return
     Column(modifier = modifier) {
-        MinSectionHeader(
-            title = "Suscripciones activas",
-            count = activas.size,
-            action = if (abierta) "Ocultar" else "Ver",
-            onAction = onAlternar,
+        Seccion(
+            titulo = "Suscripciones activas",
+            conteo = activas.size,
+            accion = if (abierta) "Ocultar" else "Ver",
+            onAccion = onAlternar,
         )
         if (!abierta) {
-            MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
-                onClick = onAlternar,
-            ) {
-                Text(
-                    text = resumenPlegadoDeSuscripciones(activas.size, totalMensual),
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.textoMedio,
+            // Plegada: una fila que dice lo que se mira de reojo —cuántas y cuánto al mes— y se
+            // abre al tocarla.
+            Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                Fila(
+                    titulo = resumenPlegadoDeSuscripciones(activas.size, totalMensual),
+                    final = { Chevron() },
+                    onClick = onAlternar,
                 )
             }
             return@Column
         }
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-        ) {
-            // Hairline en TODAS, la última incluida: ahora hay un pie que separar.
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            // Cada suscripción es una [Fila]: el día del cobro en el círculo, el nombre, con qué se
+            // paga y su monto (en SU moneda y con «al año» si es anual: ver
+            // [textoDelMontoDeSuscripcion]). Debajo, colgando de la fila, la nota del prorrateo y sus
+            // dos acciones — el mismo patrón de las filas de «Pagos del período».
             activas.forEach { item ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    Box(
-                        modifier = Modifier.size(36.dp).clip(CircleShape).background(Movi.colores.tarjeta),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "${item.dayOfMonth}",
-                            style = Movi.textos.monto,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = item.sub.displayName,
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                            letterSpacing = (-0.1).sp,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        // Con qué se paga y de dónde salió, en una sola línea de dos segmentos y
-                        // decidido en un solo lugar — ver [contextoDeSuscripcionActiva], que es
-                        // también quien se calla la cuenta cuando no hay ninguna que nombrar.
-                        Text(
-                            contextoDeSuscripcionActiva(item, accountNames),
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                        )
-                        // Y, solo en un cobro anual que SÍ suma, cuánto de él entra al total de
-                        // este mes: es lo que explica por qué el «Flujo libre» de arriba no es la
-                        // suma de los montos que se ven acá. Ver [notaDeProrrateo], que devuelve
-                        // null en todos los casos donde no hay nada que aclarar.
-                        notaDeProrrateo(item, usdToCop)?.let { nota ->
-                            Spacer(Modifier.height(2.dp))
-                            Text(nota, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-                        }
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            // En SU moneda, sin convertir, y con la periodicidad puesta: una
-                            // suscripción en dólares se lee "−US$12" y una anual "−$369.900 al
-                            // año". Solo el total de arriba pasa por la TRM, y lo dice. Ver
-                            // [textoDelMontoDeSuscripcion].
-                            text = textoDelMontoDeSuscripcion(item.sub, conSigno = true),
-                            style = Movi.textos.monto,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                            letterSpacing = (-0.3).sp,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        val guardando = item.sub.id in enVuelo
-                        // «Editar» antes que «Quitar», y en ese orden: es la acción que el dueño
-                        // va a querer casi siempre —un precio que subió, un día que se corrió— y
-                        // la que no destruye nada. Mientras hay una operación en vuelo las dos se
-                        // apagan: tocar «Editar» sobre una fila que se está quitando abriría una
-                        // hoja sobre algo que quizá ya no exista.
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(
-                                text = "Editar",
-                                style = Movi.textos.apoyo,
-                                color = if (guardando) Movi.colores.textoMedio else Movi.colores.marca,
-                                modifier = Modifier.clickable { if (!guardando) onEditar(item.sub) },
-                            )
-                            Text(
-                                text = if (guardando) "Quitando…" else "Quitar",
-                                style = Movi.textos.apoyo,
-                                color = if (guardando) Movi.colores.textoMedio else Movi.colores.sale,
-                                modifier = Modifier.clickable { if (!guardando) onQuitar(item.sub) },
-                            )
-                        }
-                    }
-                }
-                Hairline()
-            }
-            // ── El total, cerrando la lista que resume ──────────────────────────────
-            // Va al pie y no en el encabezado de sección: es la consecuencia de las filas de
-            // arriba, y leerlo después de verlas es lo que hace evidente que $369.900 al año no
-            // aportan $369.900 al mes. El encabezado además ya lleva el contador.
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        // «al mes» no es decoración: es lo único que distingue este número de la
-                        // suma de los montos que se ven arriba, que da otra cosa.
-                        text = "Total al mes",
-                        style = Movi.textos.monto,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                    )
-                    if (sinConvertir > 0) {
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = if (sinConvertir == 1) {
-                                "No incluye 1 cobro que no pudimos pasar a pesos."
-                            } else {
-                                "No incluye $sinConvertir cobros que no pudimos pasar a pesos."
-                            },
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.aviso,
-                            lineHeight = 15.sp,
-                        )
-                    }
-                }
-                Text(
-                    // Sin signo, igual que «Gastos recurrentes» en el card de arriba: los dos son
-                    // totales de gasto y se leen en la misma pantalla, uno debajo del otro.
-                    text = formatCOP(totalMensual),
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                    letterSpacing = (-0.3).sp,
+                val guardando = item.sub.id in enVuelo
+                Fila(
+                    titulo = item.sub.displayName,
+                    subtitulo = contextoDeSuscripcionActiva(item, accountNames),
+                    inicio = { DiaEnCirculo(item.dayOfMonth) },
+                    final = { MontoDeFila(textoDelMontoDeSuscripcion(item.sub, conSigno = true)) },
                 )
+                BajoLaFila {
+                    notaDeProrrateo(item, usdToCop)?.let { nota ->
+                        Text(nota, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                        Boton(
+                            texto = "Editar",
+                            onClick = { onEditar(item.sub) },
+                            variante = VarianteDeBoton.Secundario,
+                            tamano = TamanoDeBoton.S,
+                            habilitado = !guardando,
+                        )
+                        Boton(
+                            texto = if (guardando) "Quitando…" else "Quitar",
+                            onClick = { onQuitar(item.sub) },
+                            variante = VarianteDeBoton.Peligro,
+                            tamano = TamanoDeBoton.S,
+                            habilitado = !guardando,
+                        )
+                    }
+                }
+                Separador(SangriaDeSeparador.Ninguna)
             }
+            // El pie: lo que suman al mes, del MISMO resumen que armó el «Flujo libre» de arriba.
+            Fila(
+                titulo = "Total al mes",
+                subtitulo = when {
+                    sinConvertir == 1 -> "No incluye 1 cobro que no pudimos pasar a pesos."
+                    sinConvertir > 1 -> "No incluye $sinConvertir cobros que no pudimos pasar a pesos."
+                    else -> null
+                },
+                final = { Cifra(totalMensual) },
+            )
         }
+    }
+}
+
+/** El día del cobro de una suscripción, en el círculo del inicio de su [Fila]. */
+@Composable
+private fun DiaEnCirculo(dia: Int) {
+    Box(
+        modifier = Modifier.size(Medida.avatar).clip(CircleShape).background(Movi.colores.capa2),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = "$dia", style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
     }
 }
 
@@ -1488,72 +1453,47 @@ private fun CandidataSuscripcionCard(
     onConfirmar: () -> Unit,
     onDescartar: () -> Unit,
 ) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
-    ) {
+    // Una candidata es una propuesta de Movi («¿esto es una suscripción?»): va en la superficie de
+    // las propuestas, con el monto en su moneda y «Confirmar» / «No es» en botones chicos.
+    Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Propuesta) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(sub.displayName, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Text(
-                // Con su periodicidad, igual que la fila de una activa. Hoy el detector solo
-                // produce cobros mensuales (agrupa por mes, ver `detectSubscriptions`), así que
-                // acá esto no cambia nada — se usa la misma función igual, para que el día que
-                // una candidata pueda ser anual no haya un renderer al que se le olvidó.
-                text = textoDelMontoDeSuscripcion(sub),
-                style = Movi.textos.monto,
-                fontWeight = FontWeight.Medium,
+                sub.displayName,
+                style = Movi.textos.titulo,
                 color = Movi.colores.texto,
+                modifier = Modifier.weight(1f),
             )
+            MontoDeFila(textoDelMontoDeSuscripcion(sub))
         }
-        Text(
-            // Cuántos meses la vio, qué día cobra y —si Movi la pudo resolver— en qué cuenta vio
-            // el cargo. Esa última parte es la que vuelve reconocible un comercio cuyo nombre
-            // normalizado no le dice nada al dueño. Ver [contextoDeCandidata].
-            text = contextoDeCandidata(sub, accountNames),
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            modifier = Modifier.padding(top = 4.dp),
-        )
+        Spacer(Modifier.height(Espacio.xxs))
+        Text(text = contextoDeCandidata(sub, accountNames), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         if (aviso != null) {
-            Text(
-                text = aviso,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.aviso,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            Spacer(Modifier.height(Espacio.xxs))
+            Text(text = aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso)
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AccionCandidataChip(
-                label = when {
+        Spacer(Modifier.height(Espacio.s))
+        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+            Boton(
+                texto = when {
                     enVuelo -> "Guardando…"
                     aviso != null -> "Confirmar igual"
                     else -> "Confirmar"
                 },
-                primary = true,
-                habilitado = !enVuelo,
                 onClick = onConfirmar,
+                tamano = TamanoDeBoton.S,
+                habilitado = !enVuelo,
             )
-            AccionCandidataChip(label = "No es", primary = false, habilitado = !enVuelo, onClick = onDescartar)
+            Boton(
+                texto = "No es",
+                onClick = onDescartar,
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                habilitado = !enVuelo,
+            )
         }
-    }
-}
-
-/** Los botones «Confirmar» / «No es» de una candidata — mismo lenguaje que el de la hoja vieja. */
-@Composable
-private fun AccionCandidataChip(label: String, primary: Boolean, habilitado: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (primary) Movi.colores.texto else Movi.colores.tarjeta)
-            .clickable(enabled = habilitado, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) {
-        Text(label, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = if (primary) Movi.colores.fondo else Movi.colores.texto)
     }
 }

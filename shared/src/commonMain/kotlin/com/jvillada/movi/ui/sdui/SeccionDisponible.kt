@@ -31,7 +31,12 @@ import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.ds.BarraDeProgreso
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeBarra
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
@@ -124,21 +129,17 @@ internal fun TarjetaDelDisponible(
     val entrada = rememberProgresoDeEntrada("disponible", listo = disponible != null)
     var verDeDondeSale by rememberSaveable { mutableStateOf(false) }
 
-    Column(modifier = modifier.padding(horizontal = Movi.espacios.amplio)) {
+    Column(modifier = modifier.padding(horizontal = Medida.margenDePantalla)) {
         // El «¿De dónde sale?» está desde el primer cuadro, también cargando: es parte del alto del
         // encabezado (su letra es más alta que la del rótulo). Mientras carga no hace nada — no hay
         // de dónde, y si el toque quedara guardado la tarjeta llegaría ya abierta y más alta que
         // su esqueleto.
-        MinSectionHeader(
-            title = titulo,
-            action = if (verDeDondeSale) "Ocultar" else "¿De dónde sale?",
-            onAction = { if (disponible != null) verDeDondeSale = !verDeDondeSale },
+        Seccion(
+            titulo = titulo,
+            accion = if (verDeDondeSale) "Ocultar" else "¿De dónde sale?",
+            onAccion = { if (disponible != null) verDeDondeSale = !verDeDondeSale },
         )
-        MinCard(
-            modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_DISPONIBLE),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(Movi.espacios.amplio),
-        ) {
+        Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_DISPONIBLE)) {
             if (disponible == null) {
                 CuerpoDelDisponibleEsqueleto()
             } else {
@@ -205,7 +206,7 @@ private fun CuerpoDelDisponibleEsqueleto() {
         )
         BloqueEsqueleto(
             alto = altoDeUnRenglon(Movi.textos.titulo),
-            ancho = 88.dp,
+            ancho = Medida.avatar * 2,
             modifier = Modifier.testTag(TAG_ESQUELETO_DEL_DISPONIBLE),
         )
     }
@@ -223,7 +224,7 @@ private fun CuerpoDelDisponibleEsqueleto() {
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 Spacer(Modifier.height(Movi.espacios.minimo))
-                BloqueEsqueleto(alto = Movi.espacios.minimo + 2.dp)
+                BloqueEsqueleto(alto = Medida.altoDeBarraDeProgreso)
             }
         }
     }
@@ -276,36 +277,25 @@ private fun ColumnaDeVentana(
         )
         if (hayMargen) {
             Spacer(Modifier.height(Movi.espacios.minimo))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(Movi.espacios.minimo + 2.dp)
-                    .clip(RoundedCornerShape(Movi.formas.pleno))
-                    .background(Movi.colores.hilo)
-                    .testTag(TAG_BARRA_DE_VENTANA),
-            ) {
-                // Sin gasto no hay relleno: una barra vacía dice exactamente eso. Con algo gastado,
-                // un mínimo del 2 % para que se vea que hay algo.
-                val fraccion = ventana.fraccion
-                if (fraccion != null && ventana.gastado > 0L) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(fraccion.coerceIn(0.02f, 1f) * entrada.coerceIn(0f, 1f))
-                            .height(Movi.espacios.minimo + 2.dp)
-                            .clip(RoundedCornerShape(Movi.formas.pleno))
-                            .background(colorDelNivel(ventana.nivel)),
-                    )
-                }
+            // La barra del sistema: pista en la capa 3, relleno del nivel. Sin gasto no hay relleno
+            // (una barra vacía dice eso); con algo gastado, un mínimo del 2 % para que se vea.
+            val fraccion = ventana.fraccion
+            val relleno = if (fraccion != null && ventana.gastado > 0L) {
+                fraccion.coerceIn(0.02f, 1f) * entrada.coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+            Box(modifier = Modifier.fillMaxWidth().testTag(TAG_BARRA_DE_VENTANA)) {
+                BarraDeProgreso(fraccion = relleno, tono = tonoDelNivel(ventana.nivel))
             }
         }
     }
 }
 
-@Composable
-private fun colorDelNivel(nivel: NivelDelGasto): Color = when (nivel) {
-    NivelDelGasto.BIEN -> Movi.colores.marca
-    NivelDelGasto.CERCA -> Movi.colores.aviso
-    NivelDelGasto.PASADO -> Movi.colores.sale
+private fun tonoDelNivel(nivel: NivelDelGasto): TonoDeBarra = when (nivel) {
+    NivelDelGasto.BIEN -> TonoDeBarra.Marca
+    NivelDelGasto.CERCA -> TonoDeBarra.Aviso
+    NivelDelGasto.PASADO -> TonoDeBarra.Peligro
 }
 
 @Composable
