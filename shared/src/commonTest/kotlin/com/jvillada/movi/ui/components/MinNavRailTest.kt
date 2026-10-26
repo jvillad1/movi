@@ -16,12 +16,13 @@ import kotlin.test.assertEquals
 class MinNavRailTest {
 
     @Test
-    fun `las cuatro pestanas, en orden y con sus rotulos`() {
+    fun `las cinco pestanas, en orden y con sus rotulos`() {
+        // R3: Espacios entra entre Plan y Patrimonio.
         assertEquals(
-            listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.PATRIMONIO),
+            listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.ESPACIOS, NavTab.PATRIMONIO),
             destinosPrincipales.map { it.tab },
         )
-        assertEquals(listOf("Hoy", "Movimientos", "Plan", "Patrimonio"), destinosPrincipales.map { it.label })
+        assertEquals(listOf("Hoy", "Movimientos", "Plan", "Espacios", "Patrimonio"), destinosPrincipales.map { it.label })
     }
 
     @Test
@@ -41,9 +42,9 @@ class MinNavRailTest {
     // ── Movi AI en el rail ─────────────────────────────────────────────────────────────
 
     @Test
-    fun `el rail tiene las cuatro y Movi AI al final, la barra solo las cuatro`() {
+    fun `el rail tiene las cinco y Movi AI al final, la barra solo las cinco`() {
         assertEquals(
-            listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.PATRIMONIO, NavTab.MOVI_AI),
+            listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.ESPACIOS, NavTab.PATRIMONIO, NavTab.MOVI_AI),
             destinosDelRail.map { it.tab },
         )
         assertEquals(false, destinosPrincipales.any { it.tab == NavTab.MOVI_AI }, "la barra del teléfono no la lleva")
@@ -58,7 +59,7 @@ class MinNavRailTest {
         // El encabezado no cambia: en el teléfono el chat se abre desde Hoy y lleva flecha.
         assertEquals(null, navTabFor(Screen.AIChat()))
         // Y el resto resalta lo de siempre.
-        listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan(), Screen.Accounts, Screen.Mas).forEach {
+        listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan(), Screen.Espacios, Screen.Accounts, Screen.Mas).forEach {
             assertEquals(navTabFor(it), destinoResaltado(it), "$it")
         }
     }
