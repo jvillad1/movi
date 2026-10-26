@@ -17,6 +17,7 @@ import com.jvillada.movi.server.parsing.ContenidoDelPapel
 import com.jvillada.movi.server.parsing.LectorDePapeles
 import com.jvillada.movi.server.parsing.QueDiceElPapel
 import com.jvillada.movi.server.parsing.StatementParser
+import com.jvillada.movi.server.parsing.leerLosMovimientosDeBancolombia
 import com.jvillada.movi.server.parsing.leerUnExtractoDeSaldo
 import com.jvillada.movi.server.parsing.pareceUnExtracto
 import com.jvillada.movi.server.plugins.userId
@@ -287,7 +288,8 @@ private sealed interface Clasificado {
  *   Haiku — nunca el PDF entero;
  * - una hoja de cálculo o un CSV es un extracto (o un Famirios), sin preguntar;
  * - el extracto de Skandia o de la AFC de Davibank (si la app sabe mostrarlo) es un extracto, sin
- *   preguntar: se lee sin IA (ver `leerUnExtractoDeSaldo`).
+ *   preguntar: se lee sin IA (ver `leerUnExtractoDeSaldo`); lo mismo la lista de movimientos de una
+ *   cuenta de Bancolombia (ver `leerLosMovimientosDeBancolombia`).
  */
 private suspend fun clasificar(papel: PapelGuardado, conSaldos: Boolean = false): Clasificado {
     if (esImagenParaExtraer(papel.nombre, papel.mime, mimeEsConfiable = true)) {
@@ -315,6 +317,9 @@ private suspend fun clasificar(papel: PapelGuardado, conSaldos: Boolean = false)
     // El extracto de Skandia o de la AFC se reconoce por su texto, sin preguntarle a nadie: no
     // muestra movimientos, y Haiku diría «nada» de un papel que sí dice cuánto hay.
     if (conSaldos && leerUnExtractoDeSaldo(texto) != null) return Clasificado.Extracto
+    // Los movimientos de una cuenta de Bancolombia también: se leen sin IA (ver
+    // `leerLosMovimientosDeBancolombia`), y no hace falta preguntarle a Haiku qué son.
+    if (leerLosMovimientosDeBancolombia(texto) != null) return Clasificado.Extracto
     if (pareceUnExtracto(texto)) return Clasificado.Extracto
     return deLoQueDijo(preguntarQueEs(ContenidoDelPapel.Texto(texto)))
 }

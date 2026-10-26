@@ -416,6 +416,49 @@ class ExtractoDeSaldoRoutesTest {
         assertEquals(HttpStatusCode.UnprocessableEntity, viejo.status)
     }
 
+    // ── Los movimientos de una cuenta de Bancolombia, también sin IA ──────────
+
+    /** La lista de «Movimientos: Cuentas» de la Sucursal Virtual (cifras y comercios inventados). */
+    private val movimientosDeBancolombia = """
+        Sucursal Virtual Personas
+        Movimientos: Cuentas
+        Cuenta de Ahorros
+        Ahorros 012 - 345678 - 33
+        Fecha Descripción Referencia Valor
+        06 sept 2026 ABONO INTERESES AHORROS $ 15,08
+        05 sept 2026 COMPRA EN  DROGUERIA -$ 31.895,00
+        05 sept 2026 PAGO QR CAFETERIA 0091234567 -$ 12.500,00
+        31 ago 2026 IMPTO GOBIERNO 4X1000 -$ 4.615,85
+    """.trimIndent()
+
+    @Test
+    fun `la lista de movimientos de Bancolombia se concilia sin IA, con los cargos del banco aparte`() = testApplication {
+        application { testModule() }
+        // La droguería ya estaba anotada ese día: se empareja, no se propone de nuevo.
+        transaction { movimiento("ev-drogueria", ahorros, "EXPENSE", 31_895L, dia(2026, 9, 5), categoria = "Salud") }
+
+        val res = subir(movimientosDeBancolombia, conSaldos = false, nombre = "Ahorros_8133_movimientos_09_2026.txt")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val r = json.decodeFromString(StatementParseResult.serializer(), res.bodyAsText())
+        assertEquals("Bancolombia", r.bankName)
+        assertTrue("8133" in r.numerosDeCuenta, r.numerosDeCuenta.toString())
+        assertEquals(listOf("ev-drogueria"), r.matches.map { it.existingEventId })
+        assertEquals(3, r.newTransactions.size)
+        // El 4x1000 y los intereses llegan marcados como lo que el banco cobra o abona solo.
+        assertEquals(2, r.cargosDelBanco.size)
+    }
+
+    @Test
+    fun `compartida como PDF, la lista de Bancolombia se reconoce sin preguntarle a la IA`() = testApplication {
+        application { testModule() }
+        val doc = subirDocumento(pdfConLineas(movimientosDeBancolombia.lines()))
+
+        val res = client.post("/api/documents/$doc/leer") { header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}") }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val extracto = assertNotNull(json.decodeFromString(LecturaDelPapel.serializer(), res.bodyAsText()).extracto)
+        assertEquals(4, extracto.newTransactions.size)
+    }
+
     private suspend fun ApplicationTestBuilder.subirDocumento(contenido: ByteArray): String {
         val res = client.post("/api/documents") {
             header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}")
