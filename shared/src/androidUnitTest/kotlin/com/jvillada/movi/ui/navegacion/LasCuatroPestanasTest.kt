@@ -60,8 +60,9 @@ class LasCuatroPestanasTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val rotulos = listOf("Hoy", "Movimientos", "Plan", "Patrimonio")
-    private val loQueYaNoEsPestana = listOf("Más", "Inicio", "Movs", "Cuentas", "Créditos", "Presupuestos")
+    private val rotulos = listOf("Inicio", "Movimientos", "Plan", "Patrimonio")
+    // Ola R1: «Hoy» volvió a llamarse «Inicio»; lo que ya no es pestaña es «Hoy».
+    private val loQueYaNoEsPestana = listOf("Más", "Hoy", "Movs", "Cuentas", "Créditos", "Presupuestos")
 
     private var elegida: NavTab? = null
 

@@ -5,8 +5,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * La regla de la dirección B, que es fácil de romper sin darse cuenta: **la monoespaciada va SOLO
- * en la cifra protagonista.** Si mañana alguien agrega un octavo estilo y se olvida de ponerle
+ * La regla del camino 1 (ola R1), que es fácil de romper sin darse cuenta: **la monoespaciada va
+ * en las cifras de plata —la protagonista, la de tarjeta y el monto de una fila— y en nada más.** Si mañana alguien agrega un octavo estilo y se olvida de ponerle
  * familia en `conFamilias`, sale en la letra del sistema; si se la pone mal, una fila entera se ve
  * terminal otra vez. Las dos cosas las atrapa esto.
  *
@@ -30,13 +30,18 @@ class TipografiaTest {
         assertEquals(cifras, textos.cifraDeTarjeta.fontFamily)
     }
 
+    /** Ola R1: el monto de una fila también, para que toda cifra de la app sea de la misma familia. */
     @Test
-    fun `todo lo demas va en la de la interfaz, montos de fila incluidos`() {
+    fun `el monto de una fila tambien va en la de cifras`() {
+        assertEquals(cifras, textos.monto.fontFamily)
+    }
+
+    @Test
+    fun `todo lo demas va en la de la interfaz`() {
         mapOf(
             "titular" to textos.titular,
             "titulo" to textos.titulo,
             "cuerpo" to textos.cuerpo,
-            "monto" to textos.monto,
             "apoyo" to textos.apoyo,
             "rotulo" to textos.rotulo,
         ).forEach { (nombre, estilo) ->

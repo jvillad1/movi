@@ -43,6 +43,10 @@ import androidx.compose.runtime.remember
 import com.jvillada.movi.ui.ai.preguntasSugeridas
 import com.jvillada.movi.ui.ai.preguntasParaTocar
 import com.jvillada.movi.ui.sdui.SduiRenderer
+import com.jvillada.movi.shared.model.PreferenciasDelInicio
+import com.jvillada.movi.shared.model.ScreenDefinition
+import com.jvillada.movi.shared.model.ScreenSection
+import com.jvillada.movi.shared.model.inicioConPreferencias
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,7 +56,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * **El Inicio de un vistazo montado entero** (el renderer SDUI con la definición de la generación 8),
+ * **El Inicio montado entero** (el renderer SDUI con la definición de la generación 9, ola R1),
  * en un teléfono de 390 dp y en un escritorio de 1.400 dp.
  *
  * En `sdk = [34]` a propósito: en el SDK 24 de Robolectric el texto con interlineado mide ancho cero
@@ -87,13 +91,24 @@ class InicioDeUnVistazoEnPantallaTest {
 
     private var navegoA: Screen? = null
 
-    private fun montar(data: DashboardData = datos) {
+    /**
+     * Una definición de la generación 8, con «Pregúntale a Movi» y el patrimonio: el Editor de
+     * pantallas o la instantánea de un aparato la pueden traer, y sus secciones se siguen pintando.
+     */
+    private val deLaGeneracion8 = defaultDashboardDefinition().let { d ->
+        d.copy(
+            sections = listOf(d.sections.first(), ScreenSection(type = "PREGUNTALE_A_MOVI", title = "Pregúntale a Movi")) +
+                d.sections.drop(1) + ScreenSection(type = "PATRIMONIO", title = "Tu patrimonio"),
+        )
+    }
+
+    private fun montar(data: DashboardData = datos, definicion: ScreenDefinition = defaultDashboardDefinition()) {
         navegoA = null
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
                     SduiRenderer(
-                        definition = defaultDashboardDefinition(),
+                        definition = definicion,
                         data = data,
                         modifier = Modifier.fillMaxSize(),
                         onNavigate = { navegoA = it },
@@ -123,42 +138,48 @@ class InicioDeUnVistazoEnPantallaTest {
     private fun izquierda(texto: String): Dp =
         composeRule.onNodeWithText(texto, useUnmergedTree = true).getUnclippedBoundsInRoot().left
 
+    /**
+     * **Ola R1 (generación 9)**: en el teléfono una columna, en el orden del rediseño —el héroe, la
+     * cuadrícula de acciones, «Movi propone hoy», «Tus cuentas» y los widgets—. La barra Entró/Salió,
+     * «Para revisar» y el BANNER de Movi AI ya no se pintan.
+     */
     @Test
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
-    fun `en el telefono una columna, el hero y enseguida Preguntale a Movi`() {
+    fun `en el telefono una columna, en el orden del rediseño`() {
         montar()
 
         primero("\$558.350").assertIsDisplayed()
         composeRule.onNodeWithText(veredicto, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Entró", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Salió", useUnmergedTree = true).assertIsDisplayed()
-        // El hero ya no lista las cuentas ni el patrimonio: eso vive en «Tu patrimonio».
+        composeRule.onNodeWithText("Entró", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Salió", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Flujo del mes", useUnmergedTree = true).assertDoesNotExist()
 
-        // Una columna: todo alineado a la izquierda y en el orden de la definición.
         val hero = arriba(veredicto)
-        val preguntale = arriba("Pregúntale a Movi")
-        val patrimonio = arriba("Tu patrimonio")
-        assertTrue(hero < preguntale, "Pregúntale a Movi va debajo del hero")
-        assertTrue(preguntale < patrimonio, "y el patrimonio más abajo")
-        assertEquals(izquierda("Pregúntale a Movi"), izquierda("Tu patrimonio"))
-        // El banner viejo no se pinta: la puerta a Movi AI está arriba.
+        val acciones = arriba("Anotar gasto")
+        val propuestas = arriba("Movi propone hoy")
+        val cuentas = arriba("Tus cuentas")
+        val widgets = arriba(com.jvillada.movi.ui.sdui.TITULO_DE_LOS_WIDGETS)
+        assertTrue(hero < acciones, "la cuadrícula va debajo del héroe")
+        assertTrue(acciones < propuestas, "las propuestas debajo de la cuadrícula")
+        assertTrue(propuestas < cuentas, "las cuentas debajo de las propuestas")
+        assertTrue(cuentas < widgets, "y los widgets al final")
+        assertEquals(izquierda("Movi propone hoy"), izquierda("Tus cuentas"))
+        // Lo que quedó solo para los APK viejos no se pinta: ni «Para revisar» ni el banner.
         composeRule.onNodeWithText("Pregúntale a Movi AI", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Para revisar", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
     @Config(qualifiers = "w1400dp-h1200dp-mdpi")
-    fun `en escritorio dos columnas, Preguntale a Movi al lado del hero`() {
+    fun `en escritorio dos columnas, las cuentas y los widgets a la derecha`() {
         montar()
 
         val heroIzq = izquierda(veredicto)
-        val preguntaleIzq = izquierda("Pregúntale a Movi")
-        assertTrue(preguntaleIzq.value > heroIzq.value + 300f, "Pregúntale a Movi va en la columna derecha")
-        // Las dos columnas arrancan arriba, a la misma altura (±el rótulo de sección).
-        assertTrue(arriba("Pregúntale a Movi") < arriba(veredicto), "la derecha no empieza debajo del hero")
-        // El patrimonio también a la derecha; las categorías, a la izquierda debajo del hero.
-        assertEquals(izquierda("Pregúntale a Movi"), izquierda("Tu patrimonio"))
-        assertTrue(izquierda("En qué se va").value < preguntaleIzq.value)
+        val cuentasIzq = izquierda("Tus cuentas")
+        assertTrue(cuentasIzq.value > heroIzq.value + 300f, "las cuentas van en la columna derecha")
+        assertTrue(arriba("Tus cuentas") < arriba("Movi propone hoy"), "la derecha no empieza debajo del héroe")
+        assertEquals(cuentasIzq, izquierda(com.jvillada.movi.ui.sdui.TITULO_DE_LOS_WIDGETS))
+        assertTrue(izquierda("Movi propone hoy").value < cuentasIzq.value, "las propuestas a la izquierda")
     }
 
     /**
@@ -171,8 +192,8 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara()
 
         assertTrue(
-            izquierda("Pregúntale a Movi").value > izquierda(veredicto).value + 300f,
-            "Pregúntale a Movi va en la columna derecha",
+            izquierda("Tus cuentas").value > izquierda(veredicto).value + 300f,
+            "las cuentas van en la columna derecha",
         )
     }
 
@@ -185,8 +206,8 @@ class InicioDeUnVistazoEnPantallaTest {
     fun `a 768 dp en la cascara, una columna`() {
         montarEnLaCascara()
 
-        assertEquals(izquierda("Pregúntale a Movi"), izquierda("Tu patrimonio"))
-        assertTrue(arriba(veredicto) < arriba("Pregúntale a Movi"), "Pregúntale a Movi va debajo del hero")
+        assertEquals(izquierda("Movi propone hoy"), izquierda("Tus cuentas"))
+        assertTrue(arriba(veredicto) < arriba("Tus cuentas"), "las cuentas van debajo del héroe")
     }
 
     /** Un lugar para la guía de primeros pasos: lo que importa acá es dónde cae, no qué dice. */
@@ -207,12 +228,12 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara(header = guia)
 
         val laGuia = limitesDeLaGuia()
-        val derecha = izquierda("Pregúntale a Movi")
+        val derecha = izquierda("Tus cuentas")
         assertEquals(216f, laGuia.left.value, 0.5f, "empieza en el borde izquierdo del panel, junto al rail")
         assertTrue(laGuia.right <= derecha, "no se mete en la columna derecha: ${laGuia.right} / $derecha")
         assertTrue(laGuia.bottom <= arriba(veredicto), "va arriba del hero")
         // La derecha arranca arriba, sin esperar a la guía.
-        assertTrue(arriba("Pregúntale a Movi") < laGuia.bottom, "la columna derecha no baja por la guía")
+        assertTrue(arriba("Tus cuentas") < laGuia.bottom, "la columna derecha no baja por la guía")
     }
 
     /** En una columna la guía sigue como siempre: arriba de todo, con el ancho de la columna. */
@@ -254,7 +275,7 @@ class InicioDeUnVistazoEnPantallaTest {
     @Test
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
     fun `las preguntas y el campo abren el chat`() {
-        montar()
+        montar(definicion = deLaGeneracion8)
         // Ola 3: el chip dice la versión corta, y lo que se manda es la pregunta completa.
         val primera = preguntasParaTocar(datos).first()
         assertEquals(preguntasSugeridas(datos).first(), primera.texto)
@@ -274,7 +295,7 @@ class InicioDeUnVistazoEnPantallaTest {
     @Test
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
     fun `una de las tres de respaldo abre el chat con su id`() {
-        montar()
+        montar(definicion = deLaGeneracion8)
         val deRespaldo = preguntasParaTocar(datos).first { it.sugerida != null }
         composeRule.onNodeWithText(deRespaldo.corta, useUnmergedTree = true).performClick()
         assertEquals(Screen.AIChat(preguntaInicial = deRespaldo.texto, sugerida = deRespaldo.sugerida?.id), navegoA)
@@ -302,7 +323,9 @@ class InicioDeUnVistazoEnPantallaTest {
     @Test
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
     fun `el patrimonio honesto con sus tramos`() {
-        montar()
+        // Ola R1: el patrimonio ya no viene en el Inicio por defecto; quien lo prende en «Editar
+        // inicio» lo recibe en su definición.
+        montar(definicion = inicioConPreferencias(defaultDashboardDefinition(), PreferenciasDelInicio(visibles = listOf("PATRIMONIO"))))
         composeRule.onNodeWithText("Tienes", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Debes", useUnmergedTree = true).assertIsDisplayed()
         primero("\$2.191M").assertIsDisplayed()
@@ -328,26 +351,20 @@ class InicioDeUnVistazoEnPantallaTest {
     }
 
     /**
-     * **Toda la tarjeta de «Tu plata» lleva a un solo lugar, «Tus períodos».** Antes la cifra iba a
-     * Patrimonio y la línea del período a «Tus períodos», con dos toques pegados y sin seña de cuál era
-     * cuál. Patrimonio ya tiene su pestaña. Se toca la cifra, el veredicto y las cifras de la barra, y
-     * en ningún caso el destino es Patrimonio.
+     * **Todo el héroe lleva a un solo lugar, «Tus períodos».** Se toca la cifra y el veredicto, y en
+     * ningún caso el destino es Patrimonio (Patrimonio tiene su pestaña y el carrusel su «Ver todo»).
      */
     @Test
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
-    fun `la cifra, el veredicto y la barra de la tarjeta llevan a Tus periodos y no a Patrimonio`() {
+    fun `la cifra y el veredicto del heroe llevan a Tus periodos y no a Patrimonio`() {
         montar()
 
-        // «$558.350» también está en el tramo «Tu plata» del patrimonio, más abajo: el primero es el hero.
+        // «$558.350» también está en la tarjeta de la cuenta, más abajo: el primero es el héroe.
         primero("\$558.350").performClick()
         assertEquals(Screen.Periodos, navegoA)
 
         navegoA = null
         composeRule.onNodeWithText(veredicto, useUnmergedTree = true).performClick()
-        assertEquals(Screen.Periodos, navegoA)
-
-        navegoA = null
-        composeRule.onNodeWithText("Entró", useUnmergedTree = true).performClick()
         assertEquals(Screen.Periodos, navegoA)
     }
 
@@ -365,46 +382,20 @@ class InicioDeUnVistazoEnPantallaTest {
     }
 
     /**
-     * Ola T — el pedido del dueño: con más de una cuenta de «Tu plata», el chevron junto a la cifra
-     * despliega inline el saldo de cada cuenta (la MISMA lista que ya arma «Tu patrimonio»,
-     * [datosConDosCuentasDeTuPlata] suma igual que [datos]: $300.000 + $258.350 = $558.350, la
-     * cifra grande de siempre). Tocar el chevron es su propio toque — no navega — y se puede volver
-     * a plegar.
+     * Ola T pedía el desglose de «Tu plata» en el héroe. **Ola R1: el desglose salió del héroe** —las
+     * cuentas tienen su carrusel justo debajo, cada una con su saldo—, así que con dos cuentas el héroe
+     * no ofrece chevron, y cada cuenta aparece una sola vez, en su tarjeta.
      */
     @Test
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
-    fun `con mas de una cuenta el chevron despliega el detalle y la suma coincide con la cifra`() {
+    fun `con mas de una cuenta el heroe no desglosa, las cuentas estan en el carrusel`() {
         montar(datosConDosCuentasDeTuPlata)
 
-        // Antes de tocar el chevron, el desglose ya está SIEMPRE visible en «Tu patrimonio», más
-        // abajo — una sola aparición de cada monto todavía.
+        composeRule.onNodeWithContentDescription("Ver el detalle de tu plata", useUnmergedTree = true).assertDoesNotExist()
         assertEquals(1, cuantas("\$300.000"))
         assertEquals(1, cuantas("\$258.350"))
-
-        composeRule.onNodeWithContentDescription("Ver el detalle de tu plata", useUnmergedTree = true)
-            .assertIsDisplayed()
-            .performClick()
-
-        // Ahora también en el hero: una segunda aparición de cada monto.
-        composeRule.onNodeWithContentDescription("Ocultar el detalle de tu plata", useUnmergedTree = true)
-            .assertIsDisplayed()
-        assertEquals(2, cuantas("\$300.000"))
-        assertEquals(2, cuantas("\$258.350"))
-        // «Cuenta de ahorros» y «Nequi» también están en «Tu patrimonio», más abajo: el primero es
-        // el que acaba de aparecer en el hero.
-        primero("Cuenta de ahorros").assertIsDisplayed()
-        primero("Nequi").assertIsDisplayed()
-        // La cifra grande sigue siendo la misma: la suma de las dos filas de arriba.
+        assertEquals(1, cuantas("Nequi"))
         primero("\$558.350").assertIsDisplayed()
-
-        // Tocar el chevron no navega: es su propio nodo, no el de la tarjeta entera.
-        assertEquals(null, navegoA)
-
-        composeRule.onNodeWithContentDescription("Ocultar el detalle de tu plata", useUnmergedTree = true)
-            .performClick()
-        assertEquals(1, cuantas("\$300.000"), "se vuelve a plegar")
-        composeRule.onNodeWithContentDescription("Ver el detalle de tu plata", useUnmergedTree = true)
-            .assertIsDisplayed()
     }
 
     /**
@@ -419,8 +410,8 @@ class InicioDeUnVistazoEnPantallaTest {
         montar()
         composeRule.mainClock.advanceTimeByFrame()
         primero("\$0").assertIsDisplayed()
-        // «$558.350» ya está en otros lados (el tramo «Tu plata» del patrimonio, una pregunta
-        // sugerida), pero todavía no en el hero, que cuenta.
+        // «$558.350» ya está en otros lados (la tarjeta de la cuenta en el carrusel), pero todavía no
+        // en el héroe, que cuenta.
         val antes = cuantas("\$558.350")
 
         composeRule.mainClock.advanceTimeBy(DURACION_DE_LA_ENTRADA_MS.toLong() + 100L)

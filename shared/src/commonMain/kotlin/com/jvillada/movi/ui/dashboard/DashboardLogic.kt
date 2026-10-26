@@ -381,27 +381,23 @@ const val HERO_BALANCE_TITLE = "Tu plata"
 const val TAG_TARJETA_DEL_HERO: String = "tarjeta-del-hero"
 
 /**
- * Los cuatro tags de las piezas del esqueleto del hero (Task 7): además del alto total —que con
+ * Los tags de las piezas del esqueleto del héroe (Task 7): además del alto total —que con
  * `@GraphicsMode(NATIVE)` (ver el KDoc de [Esqueleto][com.jvillada.movi.ui.components.BloqueEsqueleto]
  * sobre el modo `LEGACY` de Robolectric) sí se puede comparar con fidelidad, pero solo prueba la
- * SUMA— esto prueba lo que la suma sola no alcanza a probar: que las CUATRO piezas están, ni una
- * de menos. Cada una puede probarse por separado sin acoplarse al texto real que reemplazan, y es
- * más barato que montar el hero entero dos veces.
+ * SUMA— esto prueba lo que la suma sola no alcanza a probar: que las piezas están, ni una de menos.
+ * Ola R1: son tres —la cifra, el detalle y el veredicto—; la barra y la fila de «Tu plata» salieron
+ * del héroe con sus esqueletos.
  */
 const val TAG_ESQUELETO_CIFRA_DEL_HERO: String = "esqueleto-cifra-del-hero"
 const val TAG_ESQUELETO_VEREDICTO_DEL_HERO: String = "esqueleto-veredicto-del-hero"
-const val TAG_ESQUELETO_BARRA_DEL_HERO: String = "esqueleto-barra-del-hero"
-const val TAG_ESQUELETO_FILA_DEL_HERO: String = "esqueleto-fila-del-hero"
 
 /**
- * Ola 1 · Movi avisa: las piezas nuevas del hero cuando abre con «Te quedan» ([teQuedanDelInicio]).
- * La cifra lleva su tag para que una prueba la lea sin confundirla con la columna «Período» de la
- * tarjeta Disponible, que dice el mismo número a propósito. «Tu plata» baja a una fila tocable.
+ * Ola 1 · Movi avisa: la cifra de «Te quedan» ([teQuedanDelInicio]) lleva su tag para que una prueba
+ * la lea sin confundirla con la columna «Período» de la tarjeta Disponible, que dice el mismo número
+ * a propósito.
  */
 const val TAG_CIFRA_TE_QUEDAN: String = "cifra-te-quedan"
-const val TAG_FILA_TU_PLATA_DEL_HERO: String = "fila-tu-plata-del-hero"
 const val TAG_ESQUELETO_DETALLE_DEL_HERO: String = "esqueleto-detalle-del-hero"
-const val TAG_ESQUELETO_TU_PLATA_DEL_HERO: String = "esqueleto-tu-plata-del-hero"
 
 /**
  * **¿Hay una carga del Inicio EN VUELO ahora mismo?** Lo provee `DashboardScreen`, con su propio
@@ -870,13 +866,22 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
     // `DASHBOARD_LAYOUT_VERSION`). Este cliente sí lo conoce: pintar los dos serían dos puertas al
     // mismo chat, una arriba y otra abajo.
     val hayPreguntale = renderizables.any { it.type == "PREGUNTALE_A_MOVI" }
+    // Generación 9 (ola R1): ALERTS y el BANNER se quedan al final de la lista solo para los APK
+    // viejos. Con «Movi propone hoy» en la definición, «Para revisar» sería lo mismo dicho dos veces;
+    // con la cuadrícula, el BANNER sería una segunda puerta a Movi AI.
+    val hayPropuestas = renderizables.any { it.type == "PROPUESTAS" }
+    val hayAcciones = renderizables.any { it.type == "ACCIONES" }
     return renderizables.filter { section ->
         when (section.type) {
+            // Fijos: la cuadrícula siempre; las propuestas siempre (sin nada, la línea tranquila); el
+            // carrusel mientras las cuentas no contestan (su esqueleto) o si hay alguna que mostrar.
+            "ACCIONES", "PROPUESTAS" -> true
+            "CUENTAS" -> data.accounts == null || !cuentasDelCarrusel(data.accounts).isNullOrEmpty()
             "UPCOMING_PAYMENTS" -> upcomingPaymentsWithin(data.upcoming.orEmpty()).isNotEmpty()
             // «Para revisar» se pinta con lo mismo que antes eran las alertas, más lo que el
             // checklist sabe de vencidos. Ver `cosasParaRevisar`: sin nada que sugerir, no ocupa
             // lugar.
-            "ALERTS" -> cosasParaRevisarDe(data).isNotEmpty() || anomaliasVisiblesDe(data).isNotEmpty()
+            "ALERTS" -> !hayPropuestas && (cosasParaRevisarDe(data).isNotEmpty() || anomaliasVisiblesDe(data).isNotEmpty())
             // Ola 3 · «Editar inicio»: «Para revisar» escondida deja esta línea en su lugar, y solo
             // ocupa lugar con algo urgente — lo urgente nunca desaparece del todo de Hoy.
             PARA_REVISAR_COMPACTO -> cosasParaRevisarDe(data).any { it.urgente }
@@ -889,11 +894,36 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             "PREGUNTALE_A_MOVI" -> true
             // Sin cuentas leídas no se afirma un patrimonio; sin nada que tener ni deber, no hay barra.
             "PATRIMONIO" -> patrimonioDelInicio(data) != null
-            "BANNER" -> !(hayPreguntale && esElBannerDeMoviAi(section))
+            "BANNER" -> !((hayPreguntale || hayAcciones) && esElBannerDeMoviAi(section))
             "QUICK_LINKS_WITH_TOTALS", "LINK_LIST", "CARD_ROW", "CARD_LIST" -> section.cards.isNotEmpty()
             else -> true
         }
     }
+}
+
+/** Los tipos que el Inicio pinta como widget compacto (ola R1): «Falta por pagar» y «En qué se va». */
+val TIPOS_DE_WIDGET: Set<String> = setOf("CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA")
+
+/**
+ * **Las secciones agrupadas en bloques**: cada una sola, salvo dos widgets ([TIPOS_DE_WIDGET])
+ * seguidos, que van juntos en un bloque —lado a lado, del mismo alto—. Un widget suelto va solo, a todo
+ * el ancho. Pura: la prueba el orden del Inicio sin montar la pantalla.
+ */
+fun bloquesDelInicio(secciones: List<ScreenSection>): List<List<ScreenSection>> {
+    val bloques = mutableListOf<List<ScreenSection>>()
+    var i = 0
+    while (i < secciones.size) {
+        val actual = secciones[i]
+        val siguiente = secciones.getOrNull(i + 1)
+        if (actual.type in TIPOS_DE_WIDGET && siguiente != null && siguiente.type in TIPOS_DE_WIDGET && siguiente.type != actual.type) {
+            bloques += listOf(actual, siguiente)
+            i += 2
+        } else {
+            bloques += listOf(actual)
+            i += 1
+        }
+    }
+    return bloques
 }
 
 /**

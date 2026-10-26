@@ -23,9 +23,10 @@ const val TAG_CIFRA: String = "ds-cifra"
  *
  * - [Heroe]: la cifra protagonista. **Una por pantalla, o ninguna.** Martian Mono a 42 sp, en un
  *   renglón; si no entra se achica hasta la de [Grande], y ahí para.
- * - [Grande]: la de una tarjeta de cuenta o un widget. Martian Mono a 24 sp.
- * - [Fila]: el monto al final de una [Fila]. La letra de la interfaz con cifras tabulares, para que
- *   la columna no baile.
+ * - [Grande]: la de una tarjeta de cuenta o un widget. Martian Mono a 24 sp, en un renglón; si no
+ *   entra (un widget de media pantalla) se achica hasta la de [Fila].
+ * - [Fila]: el monto al final de una [Fila]. Martian Mono a 12,5 sp con cifras tabulares (ola R1:
+ *   toda cifra de plata va en la misma familia), para que la columna no baile.
  * - [Chica]: un monto dentro de un subtítulo o un desglose.
  */
 enum class VarianteDeCifra { Heroe, Grande, Fila, Chica }
@@ -100,19 +101,22 @@ fun Cifra(
     val texto = textoDeLaCifra(monto, moneda, tono, LocalSaldosOcultos.current)
     val estilo = estiloDeLaCifra(variante, Movi.textos).copy(color = colorDeLaCifra(tono, Movi.colores))
     val conTag = modifier.testTag(TAG_CIFRA)
-    if (variante == VarianteDeCifra.Heroe) {
-        // Un renglón siempre: Martian Mono es ancha y a 42 sp «$8.550.000» se partía en un
-        // teléfono de 390 dp. Se achica hasta el tamaño de la cifra de tarjeta, no más.
+    // Un renglón siempre: Martian Mono es ancha y a 42 sp «$8.550.000» se partía en un teléfono de
+    // 390 dp. La héroe se achica hasta el tamaño de la cifra de tarjeta, no más; la grande (ola R1),
+    // hasta el de un monto de fila, porque va en un widget de media pantalla.
+    val piso = when (variante) {
+        VarianteDeCifra.Heroe -> Movi.textos.cifraDeTarjeta.fontSize
+        VarianteDeCifra.Grande -> Movi.textos.monto.fontSize
+        else -> null
+    }
+    if (piso != null) {
         BasicText(
             text = texto,
             modifier = conTag,
             style = estilo,
             maxLines = 1,
             softWrap = false,
-            autoSize = TextAutoSize.StepBased(
-                minFontSize = Movi.textos.cifraDeTarjeta.fontSize,
-                maxFontSize = estilo.fontSize,
-            ),
+            autoSize = TextAutoSize.StepBased(minFontSize = piso, maxFontSize = estilo.fontSize),
         )
     } else {
         BasicText(text = texto, modifier = conTag, style = estilo, maxLines = 1)

@@ -493,6 +493,9 @@ fun destinoDelTramo(tramo: TramoDelPatrimonio): Screen = if (tramo.esDeuda) Scre
  */
 val TIPOS_DE_LA_COLUMNA_DERECHA: Set<String> = setOf(
     "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "UPCOMING_PAYMENTS", "DISPONIBLE_DEL_PERIODO", "PATRIMONIO",
+    // Ola R1: a la izquierda va lo que se hace (el héroe, la cuadrícula, las propuestas); a la derecha
+    // lo que se mira (las cuentas y los dos widgets, que siguen juntos en su bloque).
+    "CUENTAS", "GASTO_POR_CATEGORIA",
 )
 
 /** Las secciones del Inicio repartidas en columnas. Con una sola, [derecha] va vacía. */

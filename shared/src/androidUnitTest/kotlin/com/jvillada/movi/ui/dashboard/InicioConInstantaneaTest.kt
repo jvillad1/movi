@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.dashboard
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
@@ -227,18 +228,20 @@ class InicioConInstantaneaTest {
     }
 
     /**
-     * Ola C: el Inicio se llama **«Hoy»** —el título del encabezado vive en el binario, no en la
-     * definición SDUI— y su avatar abre **Ajustes**, no Perfil.
+     * Ola R1: la pestaña se llama **«Inicio»** y el encabezado ya no es un título: es el saludo
+     * («Hola, …», del nombre del dueño) con el período. Su avatar sigue abriendo **Ajustes**.
      */
     @Test
-    fun `el encabezado dice Hoy y el avatar abre Ajustes`() {
+    fun `el encabezado saluda y el avatar abre Ajustes`() {
         var navegoA: Screen? = null
         composeRule.setContent { MoviTheme { DashboardScreen(onNavigate = { navegoA = it }) } }
         composeRule.waitForIdle()
 
-        assertEquals("Hoy", TITULO_DEL_HOY)
-        composeRule.onAllNodesWithText(TITULO_DEL_HOY, useUnmergedTree = true).onFirst().assertIsDisplayed()
-        assertEquals(0, cuantas("Inicio"))
+        assertEquals("Inicio", TITULO_DEL_HOY)
+        composeRule.onAllNodesWithText(saludoDelInicio(com.jvillada.movi.data.SessionManager.userName), useUnmergedTree = true)
+            .onFirst().assertIsDisplayed()
+        // «Compartir» salió del encabezado (vive en Ajustes).
+        assertEquals(0, composeRule.onAllNodesWithContentDescription("Compartir un resumen", useUnmergedTree = true).fetchSemanticsNodes().size)
 
         composeRule.onNodeWithText("J", useUnmergedTree = true).performClick()
         assertEquals(Screen.Mas, navegoA)

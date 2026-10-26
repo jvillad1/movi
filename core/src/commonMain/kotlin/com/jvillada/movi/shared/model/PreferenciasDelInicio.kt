@@ -32,14 +32,22 @@ data class PreferenciasDelInicio(
     /** Las secciones configurables que no quiere ver en Hoy. */
     val ocultas: List<String> = emptyList(),
     /**
+     * Las secciones **opcionales** que el dueño prendió (ver [SECCIONES_OPCIONALES]): no vienen en el
+     * Inicio de Movi y el server las agrega a la definición de quien las pide. Ola R1: «Disponible» y
+     * «Tu patrimonio» salieron del Inicio por defecto porque repetían Plan y Patrimonio.
+     *
+     * Con default vacío: un APK viejo no lo manda, y el server lo lee como «ninguna prendida».
+     */
+    val visibles: List<String> = emptyList(),
+    /**
      * **Solo en la respuesta**: las secciones configurables de la definición de Hoy, en el orden de
      * Movi. Es lo que la pantalla «Editar inicio» lista y lo que restaura «Volver al orden de Movi».
      * El server la ignora al guardar.
      */
     val ordenDeMovi: List<String> = emptyList(),
 ) {
-    /** Sin orden propio ni ocultas: es Hoy tal como lo arma Movi. */
-    val esLaDeMovi: Boolean get() = orden.isEmpty() && ocultas.isEmpty()
+    /** Sin orden propio, ocultas ni opcionales prendidas: es Hoy tal como lo arma Movi. */
+    val esLaDeMovi: Boolean get() = orden.isEmpty() && ocultas.isEmpty() && visibles.isEmpty()
 }
 
 /**
@@ -49,13 +57,27 @@ data class PreferenciasDelInicio(
  * solo cuando hacen falta.
  */
 val SECCIONES_CONFIGURABLES: Map<String, String> = linkedMapOf(
-    "PREGUNTALE_A_MOVI" to "Pregúntale a Movi",
+    // Ola R1 (generación 9): el carrusel de cuentas y los dos widgets compactos son lo que el dueño
+    // elige; la cuadrícula de acciones y «Movi propone hoy» van fijos debajo del héroe, como él.
+    "CUENTAS" to "Tus cuentas",
     "CHECKLIST_DEL_PERIODO" to "Falta por pagar",
-    "DISPONIBLE_DEL_PERIODO" to "Disponible",
     "GASTO_POR_CATEGORIA" to "En qué se va",
+    "DISPONIBLE_DEL_PERIODO" to "Disponible",
     "PATRIMONIO" to "Tu patrimonio",
-    "ALERTS" to "Para revisar",
+    // «Pregúntale a Movi» y «Para revisar» dejaron de ser configurables con la generación 9: el
+    // primero es una acción de la cuadrícula y el segundo es «Movi propone hoy», fijo debajo del
+    // héroe. ALERTS sigue en la definición solo para los APK viejos, y no se lista en «Editar inicio»
+    // porque este cliente no lo pinta. Una preferencia guardada que los nombre los pierde en
+    // [limpias], en silencio.
 )
+
+/**
+ * **Las secciones configurables que NO vienen en el Inicio de Movi** (ola R1): repetían una cifra que
+ * tiene su casa en otra pantalla —el disponible en Plan, el patrimonio en Patrimonio—, así que salieron
+ * del Inicio por defecto. Siguen en «Editar inicio»: el dueño que las prende las tiene en
+ * [PreferenciasDelInicio.visibles], y el server las agrega a su definición ([inicioConPreferencias]).
+ */
+val SECCIONES_OPCIONALES: List<String> = listOf("DISPONIBLE_DEL_PERIODO", "PATRIMONIO")
 
 /**
  * **«Para revisar», escondida, en una sola línea.** Lo urgente nunca desaparece del todo: si el
@@ -80,6 +102,7 @@ const val MAXIMO_DE_SECCIONES_EN_LA_PREFERENCIA: Int = 32
 fun PreferenciasDelInicio.limpias(): PreferenciasDelInicio = PreferenciasDelInicio(
     orden = orden.filter { it in SECCIONES_CONFIGURABLES }.distinct(),
     ocultas = ocultas.filter { it in SECCIONES_CONFIGURABLES }.distinct(),
+    visibles = visibles.filter { it in SECCIONES_OPCIONALES }.distinct(),
 )
 
 /**
@@ -108,6 +131,9 @@ fun <T> ordenarConPreferencias(items: List<T>, tipo: (T) -> String, orden: List<
  * **La definición de Hoy con la preferencia del dueño puesta.** La usa el server al servir
  * `GET /api/screens/dashboard`; es pura para que la prueben `:core` y las pantallas.
  *
+ * - Las opcionales que el dueño prendió ([PreferenciasDelInicio.visibles]) y que la definición no trae
+ *   se agregan justo después de la última sección configurable (antes de lo que queda solo para los
+ *   APK viejos), en el orden de [SECCIONES_OPCIONALES]. Ver [conLasOpcionales].
  * - El orden, con [ordenarConPreferencias].
  * - Las ocultas se sacan, salvo «Para revisar» (`ALERTS`), que se cambia por
  *   [PARA_REVISAR_COMPACTO] en el mismo lugar: lo urgente nunca desaparece del todo.
@@ -120,7 +146,7 @@ fun <T> ordenarConPreferencias(items: List<T>, tipo: (T) -> String, orden: List<
 fun inicioConPreferencias(def: ScreenDefinition, preferencias: PreferenciasDelInicio): ScreenDefinition {
     val limpias = preferencias.limpias()
     if (limpias.esLaDeMovi) return def
-    val ordenadas = ordenarConPreferencias(def.sections, { it.type }, limpias.orden)
+    val ordenadas = ordenarConPreferencias(conLasOpcionales(def.sections, limpias.visibles), { it.type }, limpias.orden)
     val secciones = ordenadas.mapNotNull { seccion ->
         when {
             seccion.type !in limpias.ocultas -> seccion
@@ -129,6 +155,21 @@ fun inicioConPreferencias(def: ScreenDefinition, preferencias: PreferenciasDelIn
         }
     }
     return def.copy(version = versionConPreferencias(def.version, limpias), sections = secciones)
+}
+
+/**
+ * [secciones] con las opcionales [visibles] que todavía no trae, agregadas después de la última
+ * sección configurable (o al final, si no hay ninguna). Una opcional que la definición ya trae —el
+ * Editor de pantallas la puso para todos— no se duplica.
+ */
+internal fun conLasOpcionales(secciones: List<ScreenSection>, visibles: List<String>): List<ScreenSection> {
+    val faltan = SECCIONES_OPCIONALES
+        .filter { it in visibles && secciones.none { s -> s.type == it } }
+        .map { ScreenSection(type = it, title = SECCIONES_CONFIGURABLES[it]) }
+    if (faltan.isEmpty()) return secciones
+    val despuesDe = secciones.indexOfLast { it.type in SECCIONES_CONFIGURABLES } + 1
+    val lugar = if (despuesDe == 0) secciones.size else despuesDe
+    return secciones.take(lugar) + faltan + secciones.drop(lugar)
 }
 
 /**
@@ -143,12 +184,18 @@ fun versionConPreferencias(versionGlobal: Int, preferencias: PreferenciasDelInic
     if (limpias.esLaDeMovi) return versionGlobal
     // Un hash de cadena escrito a mano (no `hashCode()`): tiene que dar lo mismo en cualquier
     // plataforma y en cualquier versión de Kotlin.
-    val huella = "$versionGlobal|${limpias.orden.joinToString(",")}|${limpias.ocultas.sorted().joinToString(",")}"
+    val huella = "$versionGlobal|${limpias.orden.joinToString(",")}|${limpias.ocultas.sorted().joinToString(",")}" +
+        // Sin opcionales, la huella es la de antes de la ola R1: la preferencia guardada de quien no
+        // prendió ninguna sigue dando la misma versión.
+        (if (limpias.visibles.isEmpty()) "" else "|+${limpias.visibles.sorted().joinToString(",")}")
     var h = 0
     for (c in huella) h = 31 * h + c.code
     return (h and 0x3FFF_FFFF) or 0x4000_0000
 }
 
-/** Las secciones configurables de [def], en su orden: lo que lista «Editar inicio». */
+/**
+ * Las secciones configurables de [def], en su orden: lo que lista «Editar inicio» (que agrega al final
+ * las [SECCIONES_OPCIONALES] que no vengan acá, apagadas).
+ */
 fun seccionesConfigurablesDe(def: ScreenDefinition): List<String> =
     def.sections.map { it.type }.filter { it in SECCIONES_CONFIGURABLES }.distinct()
