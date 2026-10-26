@@ -19,9 +19,8 @@ import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.Vacio
-import com.jvillada.movi.ui.transactions.MontoDeLaFila
-import com.jvillada.movi.ui.transactions.colorDelTono
-import com.jvillada.movi.ui.transactions.textoDelMontoConSigno
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.transactions.CifraDelMovimiento
 import com.jvillada.movi.ui.transactions.tonoDelEvento
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -336,16 +335,16 @@ private fun FilaDeResultado(
     alTocar: () -> Unit,
 ) {
     val hoy = remember { epochMillisToAppDate(ahoraEnMs()) }
-    // El monto como en Movimientos: el mismo signo, el mismo color (el azul de un traspaso
-    // incluido) y «Ocultar los saldos».
-    val (detalle, derecha) = when (resultado) {
+    // El monto como en Movimientos: la Cifra del sistema con el mismo signo y el mismo tono (el azul
+    // de un traspaso incluido) y «Ocultar los saldos».
+    val detalleYDerecha: Pair<String, (@Composable () -> Unit)?> = when (resultado) {
         is ResultadoDeBusqueda.Movimiento -> {
             val e = resultado.evento
             val cuenta = cuentas.firstOrNull { it.id == e.accountId }?.name
             val linea = listOfNotNull(e.category.takeIf { it.isNotBlank() }, etiquetaDeFecha(epochMillisToAppDate(e.timestamp), hoy), cuenta)
                 .joinToString(" · ")
             val tono = tonoDelEvento(e)
-            linea to (textoDelMontoConSigno(e, tono) to colorDelTono(tono, Movi.colores))
+            linea to @Composable { CifraDelMovimiento(e.amount, e.currency, tono) }
         }
         is ResultadoDeBusqueda.Comercio -> {
             val veces = when (resultado.enElPeriodo) {
@@ -353,7 +352,7 @@ private fun FilaDeResultado(
                 1 -> "1 vez este período"
                 else -> "${resultado.enElPeriodo} veces este período"
             }
-            veces to resultado.totalDelPeriodo.takeIf { it > 0 }?.let { formatMoney(it, resultado.moneda) to Movi.colores.texto }
+            veces to resultado.totalDelPeriodo.takeIf { it > 0 }?.let { total -> @Composable { Cifra(total, moneda = resultado.moneda) } }
         }
         is ResultadoDeBusqueda.Persona -> {
             val d = resultado.destinoConocido
@@ -361,9 +360,10 @@ private fun FilaDeResultado(
         }
         is ResultadoDeBusqueda.Categoria -> "Categoría" to null
         is ResultadoDeBusqueda.Cuenta -> resultado.cuenta.type.groupLabel to
-            (formatMoney(resultado.cuenta.balance, resultado.cuenta.currency) to Movi.colores.texto)
+            @Composable { Cifra(resultado.cuenta.balance, moneda = resultado.cuenta.currency) }
         is ResultadoDeBusqueda.Pantalla -> resultado.donde to null
     }
+    val (detalle, derecha) = detalleYDerecha
     Fila(
         titulo = resultado.titulo,
         subtitulo = detalle,
@@ -378,7 +378,7 @@ private fun FilaDeResultado(
                 is ResultadoDeBusqueda.Pantalla -> IconoEnCirculo(Icons.AutoMirrored.Rounded.KeyboardArrowRight, tono = TonoDeIcono.Neutro)
             }
         },
-        final = derecha?.let { (texto, color) -> { MontoDeLaFila(texto, color) } },
+        final = derecha,
         onClick = alTocar,
     )
 }

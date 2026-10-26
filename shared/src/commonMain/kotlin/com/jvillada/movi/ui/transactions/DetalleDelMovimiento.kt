@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,7 +52,6 @@ import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
-import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.categorias.colorDeCategoria
@@ -146,18 +143,13 @@ internal fun EncabezadoDelMovimiento(
     }
     Spacer(Modifier.height(Medida.dentroDeSeccion))
     val tono = tonoDelEvento(evento)
-    val monto = textoDelMontoConSigno(evento, tono)
-    // La cifra protagonista, con la letra de la héroe del sistema (`VarianteDeCifra.Heroe`): un
-    // renglón, y si no entra —millones en dólares con centavos en un teléfono de 360 dp— se achica
-    // hasta la de una tarjeta, como la [com.jvillada.movi.ui.components.ds.Cifra] héroe. No es esa
-    // misma porque lleva el azul de «entre cuentas» de un traspaso, que el sistema no tiene.
-    val estilo = estiloDeLaCifra(VarianteDeCifra.Heroe, Movi.textos)
-    BasicText(
-        monto,
-        style = estilo.copy(color = colorDelTono(tono, Movi.colores)),
-        maxLines = 1,
-        softWrap = false,
-        autoSize = TextAutoSize.StepBased(minFontSize = Movi.textos.cifraDeTarjeta.fontSize, maxFontSize = estilo.fontSize),
+    // La cifra protagonista: la héroe del sistema, en un renglón; si no entra —millones en dólares
+    // con centavos en un teléfono de 360 dp— se achica hasta la de una tarjeta.
+    CifraDelMovimiento(
+        monto = evento.amount,
+        moneda = evento.currency,
+        tono = tono,
+        variante = VarianteDeCifra.Heroe,
         modifier = Modifier.testTag(TAG_MONTO_DEL_MOVIMIENTO).clickable(onClick = onEditar),
     )
     Spacer(Modifier.height(Espacio.xxs))

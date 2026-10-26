@@ -173,10 +173,12 @@ TarjetaDePropuesta(
 
 **`Cifra`** — un monto: `Heroe` (una por pantalla), `Grande` (se achica hasta `Fila` si no entra, como
 la héroe hasta `Grande`), `Fila`, `Chica`; tono `Neutro`, `Ingreso`,
-`Alerta`, `Apagado`; signo y «Ocultar los saldos» incluidos.
+`Alerta`, `Apagado` y `EntreCuentas` (un traspaso: en `entreCuentas` y sin signo); signo y «Ocultar
+los saldos» incluidos.
 ```kotlin
 Cifra(-27_500)
 Cifra(4_500_000, tono = TonoDeCifra.Ingreso)        // +$4.500.000
+Cifra(500_000, tono = TonoDeCifra.EntreCuentas)     // $500.000, sin signo
 Cifra(teQuedan, VarianteDeCifra.Heroe)
 ```
 
@@ -285,10 +287,11 @@ viejos; este cliente no los pinta.
   comparación «Día a día» salió: es de Plan.
 - **«N por revisar» es una `TarjetaDePropuesta`**, como en «Movi propone hoy». «Personas y comercios»
   ya no está arriba de la lista.
-- **La fila de un movimiento es una `Fila`** (Movimientos, Por revisar, el detalle de una cuenta). Su
-  monto usa la letra de `Cifra` (`VarianteDeCifra.Fila`) con un tono que el sistema no tiene: el azul
-  de «entre cuentas» de un traspaso (`MontoDeLaFila`). El punto de «por confirmar» y el ícono de
-  repetición van junto al monto y dicen su nombre al lector de pantalla.
+- **La fila de un movimiento es una `Fila`** (Movimientos, Por revisar, Buscar, el detalle de una
+  cuenta) y **su monto es la `Cifra` del sistema** (`CifraDelMovimiento`): el gasto `Neutro` con «−»,
+  el ingreso `Ingreso` con «+», el traspaso `EntreCuentas` sin signo y lo que no movió plata
+  `Apagado` (`tonoDeCifraDelTono`). Ninguna fila elige su color a mano. El punto de «por confirmar» y
+  el ícono de repetición van junto al monto y dicen su nombre al lector de pantalla.
 - **Un aviso del banco se ve igual en todas partes** (`TarjetaDeAviso`, en `ui/sms/ElMismoPago.kt`):
   la superficie de la propuesta cuando pide decisión y la capa 1 cuando es historial, el estado en una
   `Pildora` en frase («Pendiente», «Confirmado»), lo que dijo el banco como cita y las acciones en

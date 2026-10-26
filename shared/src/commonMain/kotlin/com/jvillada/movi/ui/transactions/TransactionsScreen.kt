@@ -14,8 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
@@ -26,10 +24,11 @@ import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TAG_CIFRA
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.colorDeLaCifra
 import com.jvillada.movi.ui.components.ds.Vacio
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
-import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
@@ -1673,12 +1672,35 @@ fun TransactionsScreen(
  * Recibiendo la paleta es una función pura: la pantalla le pasa `Movi.colores` y la prueba le pasa
  * las dos paletas, así que ahora la distinción se verifica **en los dos temas**, no en uno.
  */
-fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color = when (tono) {
-    // Neutro, no `sale`: ver [TonoDelMonto.GASTO]. Lo distingue el signo «−».
-    TonoDelMonto.GASTO -> colores.texto
-    TonoDelMonto.INGRESO -> colores.entra
-    TonoDelMonto.ENTRE_CUENTAS -> colores.entreCuentas
-    TonoDelMonto.NEUTRO -> colores.textoApagado
+fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color =
+    colorDeLaCifra(tonoDeCifraDelTono(tono), colores)
+
+/**
+ * **El tono del sistema que le toca a cada tono de un movimiento** (ola R4): el gasto en el color del
+ * texto (lo distingue el «−»), el ingreso en `entra` con «+», el traspaso en `entreCuentas` y sin
+ * signo, y lo que no movió plata del bolsillo (la apertura, la pata huérfana) en gris. Así ninguna
+ * fila elige su color a mano: todas pintan con la [Cifra] del sistema.
+ */
+fun tonoDeCifraDelTono(tono: TonoDelMonto): TonoDeCifra = when (tono) {
+    TonoDelMonto.GASTO -> TonoDeCifra.Neutro
+    TonoDelMonto.INGRESO -> TonoDeCifra.Ingreso
+    TonoDelMonto.ENTRE_CUENTAS -> TonoDeCifra.EntreCuentas
+    TonoDelMonto.NEUTRO -> TonoDeCifra.Apagado
+}
+
+/** El monto con el signo que la [Cifra] tiene que pintar: negativo solo para un gasto. */
+fun montoParaLaCifra(tono: TonoDelMonto, monto: Long): Long = if (tono == TonoDelMonto.GASTO) -monto else monto
+
+/** **El monto de un movimiento**: la [Cifra] del sistema, en el tono y la moneda del movimiento. */
+@Composable
+internal fun CifraDelMovimiento(
+    monto: Long,
+    moneda: String,
+    tono: TonoDelMonto,
+    modifier: Modifier = Modifier,
+    variante: VarianteDeCifra = VarianteDeCifra.Fila,
+) {
+    Cifra(montoParaLaCifra(tono, monto), variante, modifier, tonoDeCifraDelTono(tono), moneda)
 }
 
 /**
@@ -1737,11 +1759,7 @@ private fun EncabezadoDelDia(
             }
         }
         Text(text = "Flujo del día", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
-        MontoDeLaFila(
-            texto = "${if (total > 0) "+" else ""}${formatCOP(total)}",
-            color = Movi.colores.texto,
-            estilo = estiloDeLaCifra(VarianteDeCifra.Chica, Movi.textos),
-        )
+        Cifra(total, VarianteDeCifra.Chica, tono = if (total > 0) TonoDeCifra.Ingreso else TonoDeCifra.Neutro)
         Icon(
             imageVector = if (plegado) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
             contentDescription = if (plegado) "Desplegar el día" else "Plegar el día",
@@ -1752,36 +1770,15 @@ private fun EncabezadoDelDia(
 }
 
 /**
- * **El monto de una fila de Movimientos**, con la letra de [Cifra] (`VarianteDeCifra.Fila`): Martian
- * Mono tabular, un renglón, el `testTag` de la cifra. No es la [Cifra] del sistema porque esta lista
- * tiene un tono que el sistema no: el azul de «entre cuentas» de un traspaso (ver [colorDelTono]), y
- * el texto ya llega armado con «Ocultar los saldos» ([textoDelMontoConSigno]).
- */
-@Composable
-internal fun MontoDeLaFila(
-    texto: String,
-    color: Color,
-    modifier: Modifier = Modifier,
-    estilo: TextStyle = estiloDeLaCifra(VarianteDeCifra.Fila, Movi.textos),
-) {
-    BasicText(
-        text = texto,
-        modifier = modifier.testTag(TAG_CIFRA),
-        style = estilo.copy(color = color),
-        maxLines = 1,
-        softWrap = false,
-    )
-}
-
-/**
  * Lo que va al final de una fila de movimiento: el punto de «por confirmar», el ícono de repetición
  * y el monto (con «Tu parte» debajo si el gasto se repartió). El punto y el ícono dicen su nombre al
  * lector de pantalla: el color nunca es la única pista.
  */
 @Composable
 private fun FinalDeLaFila(
-    texto: String,
-    color: Color,
+    monto: Long,
+    moneda: String,
+    tono: TonoDelMonto,
     porConfirmar: Boolean,
     esRecurrente: Boolean,
     tuParte: String? = null,
@@ -1802,7 +1799,7 @@ private fun FinalDeLaFila(
             )
         }
         Column(horizontalAlignment = Alignment.End) {
-            MontoDeLaFila(texto, color)
+            CifraDelMovimiento(monto, moneda, tono)
             if (tuParte != null) {
                 Text(
                     text = tuParte,
@@ -1850,9 +1847,11 @@ internal fun TransferRow(
         inicio = { IconoDeCategoria(TRANSFER_CATEGORY) },
         final = {
             FinalDeLaFila(
-                // En la moneda del movimiento: un traspaso de la Master Black USD no son pesos.
-                texto = textoDelMontoDeTraspaso(row, accountTypes),
-                color = colorDelTono(tonoDelRenglon(row, accountTypes), Movi.colores),
+                // En la moneda del movimiento: un traspaso de la Master Black USD no son pesos. Sin
+                // signo y en el azul de entre cuentas; el desembolso, en verde con «+».
+                monto = row.amount,
+                moneda = row.out.currency,
+                tono = tonoDelRenglon(row, accountTypes),
                 porConfirmar = false,
                 esRecurrente = esRecurrente,
             )
@@ -1937,8 +1936,9 @@ internal fun MovementSingleRow(
             final = {
                 FinalDeLaFila(
                     // En la moneda del movimiento: un cargo de US$20 en la tarjeta en dólares no son pesos.
-                    texto = textoDelMontoConSigno(tx, tono),
-                    color = colorDelTono(tono, Movi.colores),
+                    monto = tx.amount,
+                    moneda = tx.currency,
+                    tono = tono,
                     porConfirmar = tx.reconciliationStatus == ReconciliationStatus.UNCONFIRMED,
                     esRecurrente = esRecurrente,
                     // R3 · un gasto repartido: la plata salió entera (el monto), pero en tus gastos
