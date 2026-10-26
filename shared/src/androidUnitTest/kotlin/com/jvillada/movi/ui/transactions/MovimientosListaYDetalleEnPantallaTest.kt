@@ -380,8 +380,8 @@ class MovimientosListaYDetalleEnPantallaTest {
         val monto = composeRule.onNode(hasTestTag(TAG_MONTO_DEL_MOVIMIENTO) and enElPanel, useUnmergedTree = true)
             .fetchSemanticsNode().boundsInRoot
         val panel = limites(TAG_PANEL_DEL_MOVIMIENTO)
-        // Centrado en 720: (803 − 720) / 2 = 41.5 de aire, más los 20 de relleno del panel.
-        assertEquals(panel.left + 41.5f + 20f, monto.left, 1f)
+        // Centrado en 720: (803 − 720) / 2 = 41.5 de aire, más el margen de la pantalla (16, ola R4).
+        assertEquals(panel.left + 41.5f + 16f, monto.left, 1f)
     }
 
     /**
@@ -462,14 +462,14 @@ class MovimientosListaYDetalleEnPantallaTest {
         val celda = composeRule.onAllNodes(hasText("Mercado") and enElPanel, useUnmergedTree = true).onFirst()
         celda.performScrollTo()
         celda.performClick()
-        esperar { hayEnElPanel("¿Y LOS PARECIDOS?") }
+        esperar { hayEnElPanel("¿Y los parecidos?") }
         assertEquals(listOf("e1" to "Mercado"), repo.categoriasCambiadas)
 
         // Sin contestar: otra fila.
         elegir("Las Doce")
 
         esperar { filaConSubtitulo("Señor Gol", "Mercado · Bancolombia") }
-        assertTrue(!hayEnElPanel("¿Y LOS PARECIDOS?"))
+        assertTrue(!hayEnElPanel("¿Y los parecidos?"))
     }
 
     /** Revisión final, M-2: en el panel el selector de fecha se cierra al guardar, como en la hoja. */

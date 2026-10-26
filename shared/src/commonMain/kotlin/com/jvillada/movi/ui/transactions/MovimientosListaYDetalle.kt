@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
@@ -209,8 +210,8 @@ internal fun InvitacionAElegirUnMovimiento() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 32.dp)
-            .padding(top = 120.dp)
+            .padding(horizontal = Espacio.xxl)
+            .padding(top = Espacio.xxxl * 3)
             .testTag(TAG_INVITACION_A_ELEGIR_UN_MOVIMIENTO),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top,
@@ -222,7 +223,7 @@ internal fun InvitacionAElegirUnMovimiento() {
             color = Movi.colores.texto,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Text(
             text = DETALLE_DE_LA_INVITACION_A_ELEGIR,
             style = Movi.textos.cuerpo,

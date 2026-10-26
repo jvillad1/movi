@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.theme.Radio
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
@@ -32,7 +36,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Movimiento
@@ -112,12 +115,14 @@ internal fun FilaDeslizable(
                 modifier = Modifier
                     .matchParentSize()
                     .testTag(TAG_FONDO_DE_FILA_DESLIZADA)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(Radio.s))
+                    // Antes del umbral, la capa 2; pasado, el lavado de su color: «suelta y se hace».
                     .background(
-                        if (aLaIzquierda) Movi.colores.marca.copy(alpha = if (pasoElUmbral) 0.28f else 0.14f)
-                        else Movi.colores.entra.copy(alpha = if (pasoElUmbral) 0.28f else 0.14f),
+                        if (!pasoElUmbral) Movi.colores.capa2
+                        else if (aLaIzquierda) Movi.colores.lavado(Movi.colores.marca)
+                        else Movi.colores.lavado(Movi.colores.entra),
                     )
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = Medida.margenDePantalla),
                 horizontalArrangement = if (aLaIzquierda) Arrangement.End else Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -126,8 +131,8 @@ internal fun FilaDeslizable(
                 } else {
                     Triple(Icons.Rounded.Check, "Confirmar", Movi.colores.entra)
                 }
-                Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
+                Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(Icono.m))
+                Spacer(Modifier.width(Espacio.xs))
                 Text(rotulo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = color)
             }
         }

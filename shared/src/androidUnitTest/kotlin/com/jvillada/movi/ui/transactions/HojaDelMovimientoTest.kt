@@ -130,7 +130,7 @@ class HojaDelMovimientoTest {
         composeRule.onNodeWithTag(TAG_CHIP_DE_CATEGORIA, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNode(hasAnyAncestor(hasTestTag(TAG_CHIP_DE_CATEGORIA)) and hasText("Otros"), useUnmergedTree = true)
             .assertIsDisplayed()
-        composeRule.onAllNodesWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("¿Se repite todos los meses?", useUnmergedTree = true).assertCountEquals(0)
         composeRule.onAllNodesWithText("Sí, se repite todos los meses", useUnmergedTree = true).assertCountEquals(0)
         // Y el selector de categorías tampoco: se abre desde el chip o desde «Categoría».
         composeRule.onAllNodesWithTag(TAG_BUSCAR_CATEGORIA, useUnmergedTree = true).assertCountEquals(0)
@@ -147,7 +147,7 @@ class HojaDelMovimientoTest {
         composeRule.onNodeWithTag(TAG_MONTO_DEL_MOVIMIENTO, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Bancolombia", substring = true, useUnmergedTree = true).assertIsDisplayed()
         tocarAccion(AccionDelMovimiento.Nota)
-        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Monto, cuenta y concepto", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
     /** Anular sigue estando — en «Más», separado de lo que solo reclasifica. */
@@ -171,7 +171,8 @@ class HojaDelMovimientoTest {
         }
         montar()
         tocarAccion(AccionDelMovimiento.Mas)
-        composeRule.onAllNodes(hasClickAction() and hasText("Anular este movimiento"), useUnmergedTree = true)
+        // Ola R4: es un `Boton` del sistema; el toque es del botón, que funde su texto.
+        composeRule.onAllNodes(hasClickAction() and hasText("Anular este movimiento"))
             .onLast().performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         // Se abrió la hoja de anular de siempre, y su botón es el que anula.
@@ -267,7 +268,7 @@ class HojaDelMovimientoTest {
     fun laHojaOfreceMarcarloComoRecurrente() {
         montar()
         tocarAccion(AccionDelMovimiento.Repetir)
-        composeRule.onNodeWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("¿Se repite todos los meses?", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
     /**
@@ -314,7 +315,7 @@ class HojaDelMovimientoTest {
         montar(cuentas = emptyList())
         composeRule.onNodeWithTag(TAG_MONTO_DEL_MOVIMIENTO, useUnmergedTree = true).assertIsDisplayed()
         tocarAccion(AccionDelMovimiento.Nota)
-        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Monto, cuenta y concepto", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         tocarAccion(AccionDelMovimiento.Mas)
         composeRule.onNodeWithText("Anular este movimiento", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
@@ -338,7 +339,7 @@ class HojaDelMovimientoTest {
     @Test
     fun laMitadDeUnParTambienSePuedeAnular() {
         montar(event = pataDeUnaCuota)
-        composeRule.onNodeWithText("CUOTA DE CRÉDITO", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Cuota de crédito", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Anular este movimiento", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
@@ -378,8 +379,8 @@ class HojaDelMovimientoTest {
 
         // Ola 2b: la sección se abre desde su acción, «Nota».
         tocarAccion(AccionDelMovimiento.Nota)
-        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText("CONCEPTO", useUnmergedTree = true).assertExists("la sección no se abrió")
+        composeRule.onNodeWithText("Monto, cuenta y concepto", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Concepto", useUnmergedTree = true).assertExists("la sección no se abrió")
 
         // El campo editable, no el título de la hoja: los dos dicen «Hija».
         composeRule.onNode(hasSetTextAction() and hasText("Hija"), useUnmergedTree = true)
@@ -425,7 +426,7 @@ class HojaDelMovimientoTest {
         montar()
         tocarAccion(AccionDelMovimiento.Repetir)
 
-        composeRule.onNodeWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).performScrollTo()
+        composeRule.onNodeWithText("¿Se repite todos los meses?", useUnmergedTree = true).performScrollTo()
         composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Sí, se repite todos los meses")), useUnmergedTree = true)
             .onLast().performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
@@ -462,7 +463,7 @@ class HojaDelMovimientoTest {
         montar()
         tocarAccion(AccionDelMovimiento.Repetir)
 
-        composeRule.onNodeWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).performScrollTo()
+        composeRule.onNodeWithText("¿Se repite todos los meses?", useUnmergedTree = true).performScrollTo()
         composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Sí, se repite todos los meses")), useUnmergedTree = true)
             .onLast().performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
@@ -498,7 +499,7 @@ class HojaDelMovimientoTest {
             override suspend fun getEventOccurrenceMark(id: String): EventOccurrenceMark? = null
         }
         montar(gasto.copy(reconciliationStatus = ReconciliationStatus.UNCONFIRMED))
-        composeRule.onNodeWithText("POR CONFIRMAR", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Por confirmar", useUnmergedTree = true).assertExists()
         composeRule.onNode(hasClickAction() and hasAnyChild(hasText("Confirmar")), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { confirmado != null }
@@ -509,7 +510,7 @@ class HojaDelMovimientoTest {
     @Test
     fun unMovimientoConfirmadoNoOfreceConfirmar() {
         montar(gasto.copy(reconciliationStatus = ReconciliationStatus.RECONCILED))
-        assertEquals(0, composeRule.onAllNodesWithText("POR CONFIRMAR", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithText("Por confirmar", useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 
     /**
@@ -519,11 +520,11 @@ class HojaDelMovimientoTest {
     @Test
     fun tocarElNombreAbreElEditorDelConcepto() {
         montar()
-        assertEquals(0, composeRule.onAllNodesWithText("CONCEPTO", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithText("Concepto", useUnmergedTree = true).fetchSemanticsNodes().size)
         composeRule.onNode(hasClickAction() and hasAnyChild(hasText("Hija")), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("CONCEPTO", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Concepto", useUnmergedTree = true).assertExists()
     }
 }
 

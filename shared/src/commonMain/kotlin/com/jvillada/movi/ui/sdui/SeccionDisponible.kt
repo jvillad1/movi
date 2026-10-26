@@ -34,6 +34,9 @@ import kotlinx.datetime.LocalDate
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.BarraDeProgreso
+import com.jvillada.movi.ui.components.ds.Cifra as CifraDelSistema
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeBarra
@@ -152,19 +155,15 @@ internal fun TarjetaDelDisponible(
 @Composable
 private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale: Boolean, entrada: Float, conFrase: Boolean) {
     val frase = fraseDelDisponible(disponible)
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = "Disponible del período",
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.textoMedio,
-            modifier = Modifier.weight(1f),
-        )
-        Cifra(
-            formatMoneyCompact(disponible.disponible),
-            Movi.textos.titulo,
-            color = if (disponible.hayMargen) Movi.colores.texto else Movi.colores.sale,
-        )
-    }
+    // Ola R4b: la cifra principal es la `Cifra.Grande` del sistema, entera («$3.240.000», no «$3,2M»)
+    // y con «Ocultar los saldos» incluido; el rótulo va arriba, como en el camino 1. En rojo
+    // (`Alerta`) solo sin margen: gastar no es una alarma, pasarse sí.
+    Text(text = "Disponible del período", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+    CifraDelSistema(
+        disponible.disponible,
+        VarianteDeCifra.Grande,
+        tono = if (disponible.hayMargen) TonoDeCifra.Neutro else TonoDeCifra.Alerta,
+    )
     if (conFrase) {
         Spacer(Modifier.height(Movi.espacios.minimo))
         Text(text = frase.texto, style = Movi.textos.apoyo, color = colorDeLaFrase(frase.nivel))
@@ -197,19 +196,12 @@ private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale
  */
 @Composable
 private fun CuerpoDelDisponibleEsqueleto() {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = "Disponible del período",
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.textoMedio,
-            modifier = Modifier.weight(1f),
-        )
-        BloqueEsqueleto(
-            alto = altoDeUnRenglon(Movi.textos.titulo),
-            ancho = Medida.avatar * 2,
-            modifier = Modifier.testTag(TAG_ESQUELETO_DEL_DISPONIBLE),
-        )
-    }
+    Text(text = "Disponible del período", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+    BloqueEsqueleto(
+        alto = altoDeUnRenglon(Movi.textos.cifraDeTarjeta),
+        ancho = Medida.avatar * 4,
+        modifier = Modifier.testTag(TAG_ESQUELETO_DEL_DISPONIBLE),
+    )
     Spacer(Modifier.height(Movi.espacios.minimo))
     LineaEsqueleto(fraccionDelAncho = 0.75f, estilo = Movi.textos.apoyo)
     Spacer(Modifier.height(Movi.espacios.medio))

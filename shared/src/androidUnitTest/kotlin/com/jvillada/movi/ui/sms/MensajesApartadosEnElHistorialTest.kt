@@ -91,7 +91,7 @@ class MensajesApartadosEnElHistorialTest {
         }
 
         esperar { cuantos("Movi lo apartó: código de verificación") == 1 }
-        assertEquals(1, cuantos("APARTADO"))
+        assertEquals(1, cuantos("Apartado"))
         // Uno solo: el que ignoró el dueño se queda como él lo dejó.
         assertEquals(1, cuantos(ERA_UN_MOVIMIENTO))
         assertEquals(1, cuantos("Revisar"), "solo la compra pendiente")

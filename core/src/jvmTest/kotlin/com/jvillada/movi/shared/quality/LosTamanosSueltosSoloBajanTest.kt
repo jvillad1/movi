@@ -39,7 +39,7 @@ class LosTamanosSueltosSoloBajanTest {
 
     private companion object {
         /** Cuántos quedan. Bájalo cuando migres; nunca lo subas sin explicarlo en el PR. */
-        const val TOPE = 7
+        const val TOPE = 6
     }
 
     private val sueltos = Regex("""fontSize\s*=\s*[0-9]""")

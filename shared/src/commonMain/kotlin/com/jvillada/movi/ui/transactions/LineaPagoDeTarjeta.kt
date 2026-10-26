@@ -6,11 +6,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.formatCOP
 
@@ -83,7 +83,7 @@ const val TAG_PAGO_DE_TARJETA_EN_EL_DIA: String = "pago-de-tarjeta-en-el-dia"
 
 /**
  * La línea de contexto del pago de tarjeta del día, debajo del «Flujo del día» —ver
- * [textoPagoDeTarjetaEnElDia]. A diferencia de «Día a día» ([LineaDelDiaADiaEnElDia]), no reserva
+ * [textoPagoDeTarjetaEnElDia]. No reserva
  * alto cuando no hay nada que decir: el monto sale de movimientos que la pantalla ya tiene en
  * memoria, sin ninguna lectura en vuelo que pueda hacer saltar la lista al contestar.
  */
@@ -93,7 +93,7 @@ internal fun LineaPagoDeTarjetaEnElDia(texto: String) {
         text = texto,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp)
+            .padding(bottom = Espacio.xs)
             .testTag(TAG_PAGO_DE_TARJETA_EN_EL_DIA),
         style = Movi.textos.apoyo,
         color = Movi.colores.textoApagado,

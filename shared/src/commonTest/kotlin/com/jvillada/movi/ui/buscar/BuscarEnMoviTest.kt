@@ -158,4 +158,11 @@ class BuscarEnMoviTest {
         assertEquals(1, pestanaInicialDeAgregar(null, presetDeudaId = null, presetEsIngreso = true))
         assertEquals(0, pestanaInicialDeAgregar(null, presetDeudaId = null, presetEsIngreso = false))
     }
+
+    /** Ola R4: «Personas y comercios» vive en Espacios y Ajustes, no colgado de Movimientos. */
+    @Test
+    fun `Personas y comercios ya no se nombra desde Movimientos`() {
+        val personas = PANTALLAS_BUSCABLES.single { it.destino == com.jvillada.movi.ui.Screen.Destinos() }
+        kotlin.test.assertEquals("Espacios y Ajustes", personas.donde)
+    }
 }

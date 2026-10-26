@@ -177,7 +177,7 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
     fun la_pastilla_nueva_abre_el_selector_con_el_cursor_en_la_busqueda() {
         montar()
 
-        tocar("+ Nueva")
+        tocar("Nueva")
 
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed().assertIsFocused()
     }
