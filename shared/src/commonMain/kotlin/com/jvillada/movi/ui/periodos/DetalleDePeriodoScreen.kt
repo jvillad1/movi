@@ -83,7 +83,28 @@ import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
-import com.jvillada.movi.ui.components.MinSectionHeader
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.BarraDeProgreso
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.shared.model.EstadoDePresupuesto
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeBarra
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.recurrentes.BajoLaFila
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
+import androidx.compose.material.icons.rounded.Tune
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.formatCOP
@@ -374,9 +395,9 @@ private fun CuerpoDelDetalle(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(desplazamiento)
-                    .padding(horizontal = Movi.espacios.amplio)
-                    .padding(top = Movi.espacios.corto, bottom = 80.dp),
-                verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+                    .padding(horizontal = Medida.margenDePantalla)
+                    .padding(top = Espacio.xs, bottom = Medida.botonFlotante + Espacio.xl),
+                verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
             ) {
                 val detalle = estado.detalle
                 if (estado.noSePudoActualizar) NoSePudoActualizar(onReintentar = { estado.reintentar() })
@@ -426,21 +447,21 @@ private fun DetalleCargado(
     if (enDosColumnas) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.amplio),
+            horizontalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
             verticalAlignment = Alignment.Top,
         ) {
             Column(
                 modifier = Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DEL_DETALLE),
-                verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+                verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
             ) { SeccionesDeComoTeFue(detalle, estado) }
             Column(
                 modifier = Modifier.weight(1f).testTag(TAG_COLUMNA_DERECHA_DEL_DETALLE),
-                verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-            ) { SeccionesDeLoQueTeniaQuePasar(detalle, estado) }
+                verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
+            ) { SeccionesDeLoQueTeniaQuePasar(detalle, estado, onNavigate) }
         }
     } else {
         SeccionesDeComoTeFue(detalle, estado)
-        SeccionesDeLoQueTeniaQuePasar(detalle, estado)
+        SeccionesDeLoQueTeniaQuePasar(detalle, estado, onNavigate)
     }
     AccionesDelDetalle(detalle, estado, onNavigate)
 }
@@ -455,18 +476,65 @@ private fun SeccionesDeComoTeFue(detalle: DetalleDePeriodo, estado: EstadoDelDet
 }
 
 @Composable
-private fun SeccionesDeLoQueTeniaQuePasar(detalle: DetalleDePeriodo, estado: EstadoDelDetalleDePeriodo) {
-    PagosFijos(
-        pagos = detalle.pagosFijos,
-        enCurso = detalle.resumen.enCurso,
-        hoy = estado.hoyDeLasFilas,
-        onAgregar = { estado.nuevoPagoFijoAbierto = true },
-    )
-    if (detalle.presupuestos.isNotEmpty()) Presupuestos(detalle.presupuestos)
+private fun SeccionesDeLoQueTeniaQuePasar(
+    detalle: DetalleDePeriodo,
+    estado: EstadoDelDetalleDePeriodo,
+    onNavigate: (Screen) -> Unit,
+) {
+    // **El período en curso no repite Plan** (ola R4, «cada cifra tiene una casa»): sus pagos fijos y
+    // sus presupuestos son los de Plan, que es dueño de «¿qué me falta pagar?». Acá van dos filas que
+    // llevan allá. Un período cerrado sí los pinta: mirar atrás es lo que contesta esta pantalla.
+    if (detalle.resumen.enCurso) {
+        LoQueVaEnPlan(onNavigate)
+    } else {
+        PagosFijos(
+            pagos = detalle.pagosFijos,
+            enCurso = false,
+            hoy = estado.hoyDeLasFilas,
+            onAgregar = { estado.nuevoPagoFijoAbierto = true },
+        )
+        if (detalle.presupuestos.isNotEmpty()) Presupuestos(detalle.presupuestos)
+    }
     // Sin gastos no hay «más grandes»: el vacío de «En qué se fue» ya lo dice, y dos tarjetas
     // vacías seguidas contarían lo mismo dos veces.
     if (detalle.masGrandes.isNotEmpty()) {
         LosMasGrandes(detalle.masGrandes, onAbrir = { estado.movimientoAbierto = it })
+    }
+}
+
+/** El tag de la fila que lleva a Plan desde el detalle del período en curso. */
+const val TAG_PAGOS_DEL_PERIODO_EN_PLAN: String = "detalle-pagos-del-periodo-en-plan"
+
+/** El tag de la fila que lleva a Plan · Presupuestos desde el detalle del período en curso. */
+const val TAG_PRESUPUESTOS_EN_PLAN: String = "detalle-presupuestos-en-plan"
+
+/** El título de la sección que lleva a Plan desde el período en curso. */
+const val TITULO_ESTE_PERIODO_EN_PLAN: String = "Este período, en Plan"
+
+/** Las dos filas que llevan a Plan desde el período en curso (ver [SeccionesDeLoQueTeniaQuePasar]). */
+@Composable
+private fun LoQueVaEnPlan(onNavigate: (Screen) -> Unit) {
+    Column {
+        Seccion(titulo = TITULO_ESTE_PERIODO_EN_PLAN)
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            Fila(
+                titulo = TITULO_CHECKLIST_DEL_PERIODO,
+                subtitulo = "Lo que falta y lo que ya pagaste",
+                inicio = { IconoEnCirculo(Icons.Rounded.Schedule) },
+                final = { Chevron() },
+                onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
+                modifier = Modifier.testTag(TAG_PAGOS_DEL_PERIODO_EN_PLAN),
+            )
+            Separador(SangriaDeSeparador.ConInicio)
+            Fila(
+                titulo = "Presupuestos",
+                subtitulo = "Cuánto llevas de cada tope",
+                inicio = { IconoEnCirculo(Icons.Rounded.Tune) },
+                final = { Chevron() },
+                onClick = { onNavigate(Screen.Plan(SEGMENTO_PRESUPUESTOS)) },
+                modifier = Modifier.testTag(TAG_PRESUPUESTOS_EN_PLAN),
+            )
+        }
     }
 }
 
@@ -532,26 +600,22 @@ internal fun lineaDeTuPlata(detalle: DetalleDePeriodo): String? {
 @Composable
 private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
     val resumen = detalle.resumen
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         rangoDelResumen(resumen)?.let {
             Text(text = it, style = Movi.textos.cuerpo, color = Movi.colores.texto)
         }
         fraseDelInicioPropio(resumen, ajustes)?.let {
-            Spacer(Modifier.height(3.dp))
-            Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.marca, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(Espacio.xxs))
+            Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
         if (resumen.enCurso) {
-            Spacer(Modifier.height(3.dp))
-            Text(text = "En curso", style = Movi.textos.apoyo, color = Movi.colores.marca, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(Espacio.xs))
+            Pildora("En curso", TonoDePildora.Marca)
         }
         CifrasDelPeriodo(resumen)
         LineaDeCreditosDesembolsados(resumen)
         lineaDeTuPlata(detalle)?.let {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
     }
@@ -601,11 +665,7 @@ internal fun filasDeLoQueFalto(detalle: DetalleDePeriodo): List<String> {
 private fun DeDondeSalioLoQueFalto(detalle: DetalleDePeriodo) {
     val filas = filasDeLoQueFalto(detalle)
     if (filas.isEmpty()) return
-    MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO)) {
         Text(
             text = "De dónde salió lo que faltó",
             style = Movi.textos.cuerpo,
@@ -616,7 +676,7 @@ private fun DeDondeSalioLoQueFalto(detalle: DetalleDePeriodo) {
             Spacer(Modifier.height(Movi.espacios.corto))
             Text(text = fila, style = Movi.textos.cuerpo, color = Movi.colores.texto)
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Text(
             text = "Esta plata ya estaba en tus cuentas cuando Movi la conoció, así que no cuenta como " +
                 "ingreso.",
@@ -638,18 +698,14 @@ private fun EnQueSeFue(detalle: DetalleDePeriodo) {
         cuantas = Int.MAX_VALUE,
     )
     Column {
-        MinSectionHeader(title = "En qué se fue")
+        Seccion(titulo = "En qué se fue")
         if (categorias.isEmpty()) {
             VacioQueEnsena(
                 titulo = "Sin gastos en este período",
                 detalle = "Cuando haya gastos entre estas fechas, aquí vas a ver en qué categorías se fue tu plata.",
             )
         } else {
-            MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(Movi.espacios.margen),
-            ) {
+            Superficie(modifier = Modifier.fillMaxWidth()) {
                 categorias.forEachIndexed { i, categoria ->
                     FilaDeCategoria(categoria, entrada = 1f)
                     if (i < categorias.lastIndex) Spacer(Modifier.height(Movi.espacios.medio))
@@ -769,7 +825,7 @@ const val TEXTO_CON_DUDAS = "Con dudas: Movi encontró más de un movimiento que
 @Composable
 private fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: LocalDate?, onAgregar: () -> Unit) {
     Column {
-        MinSectionHeader(title = TITULO_CHECKLIST_DEL_PERIODO, count = pagos.size.takeIf { it > 0 })
+        Seccion(titulo = TITULO_CHECKLIST_DEL_PERIODO, conteo = pagos.size.takeIf { it > 0 })
         if (pagos.isEmpty()) {
             VacioQueEnsena(
                 titulo = "Sin pagos fijos en este período",
@@ -782,11 +838,7 @@ private fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: L
         }
         val grupos = gruposDePagosFijos(pagos, enCurso)
         val fila: @Composable (PagoFijoDelPeriodo) -> Unit = { FilaDePagoFijo(it, enCurso, hoy) }
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-        ) {
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             if (grupos.faltan.isNotEmpty() || grupos.pagados.isNotEmpty()) {
                 ResumenDeLaLista(
                     izquierda = tituloDeLoQueFalta(enCurso, ingresos = false) to totalDeLaRegla(grupos.faltan),
@@ -799,7 +851,6 @@ private fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: L
                 Triple(tituloDeLoQueFalta(enCurso, true), grupos.porCobrar, false),
                 Triple(TITULO_YA_RECIBISTE, grupos.recibidos, true),
             ).filter { it.second.isNotEmpty() }.forEach { (titulo, filas, listos) ->
-                Spacer(Modifier.height(Movi.espacios.amplio))
                 GrupoDePagos(
                     titulo = titulo,
                     icono = when {
@@ -818,7 +869,6 @@ private fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: L
                 )
             }
             if (grupos.sinConfirmar.isNotEmpty()) {
-                Spacer(Modifier.height(Movi.espacios.amplio))
                 GrupoDePagos(
                     titulo = TITULO_SIN_CONFIRMAR,
                     icono = Icons.AutoMirrored.Rounded.HelpOutline,
@@ -857,6 +907,13 @@ private fun FilaDePagoFijo(pago: PagoFijoDelPeriodo, enCurso: Boolean, hoy: Loca
             else -> Movi.colores.texto
         },
         evidencia = evidenciaDePagoFijo(pago),
+        pildora = when {
+            comoFila.pagado -> (if (pago.esIngreso) "Recibido" else "Pagado") to TonoDePildora.Exito
+            pago.estado == PAGO_FIJO_CON_DUDAS -> "Sin confirmar" to TonoDePildora.Aviso
+            !enCurso -> (if (pago.esIngreso) "No llegó" else "No se pagó") to TonoDePildora.Peligro
+            comoFila.vencido -> "Vencido" to TonoDePildora.Peligro
+            else -> "Falta" to TonoDePildora.Neutra
+        },
     )
 }
 
@@ -865,65 +922,41 @@ private fun FilaDePagoFijo(pago: PagoFijoDelPeriodo, enCurso: Boolean, hoy: Loca
 @Composable
 private fun Presupuestos(presupuestos: List<PresupuestoDelPeriodo>) {
     Column {
-        MinSectionHeader(title = "Presupuestos")
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        ) {
+        Seccion(titulo = "Presupuestos")
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             presupuestos.forEachIndexed { i, p ->
                 FilaDePresupuesto(p)
-                if (i < presupuestos.lastIndex) Spacer(Modifier.height(Movi.espacios.medio))
+                if (i < presupuestos.lastIndex) Separador(SangriaDeSeparador.ConInicio)
             }
         }
     }
 }
 
+/**
+ * Un presupuesto de un período cerrado: la misma fila de Presupuestos (ícono, nombre, «$X de $Y», y
+ * la barra con el semáforo colgando), sin toque — ya pasó.
+ */
 @Composable
 private fun FilaDePresupuesto(p: PresupuestoDelPeriodo) {
-    // El mismo semáforo que la tarjeta de Presupuestos.
-    val color = colorDelEstadoDePresupuesto(estadoDePresupuesto(p.gastado, p.limite))
+    val estadoDelTope = estadoDePresupuesto(p.gastado, p.limite)
     val fraccion = if (p.limite > 0) p.gastado.toFloat() / p.limite else 0f
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconoDeCategoria(p.category, tamano = TamanoDeIconoDeCategoria.Chico)
-            Spacer(Modifier.size(Movi.espacios.minimo))
-            Text(
-                text = p.category,
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.texto,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.size(Movi.espacios.corto))
-            Text(
-                text = "${formatCOP(p.gastado)} de ${formatCOP(p.limite)}",
-                style = Movi.textos.apoyo,
-                color = color,
-                fontWeight = FontWeight.Medium,
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(2.dp)
-                .clip(RoundedCornerShape(1.dp))
-                .background(Movi.colores.hilo),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(fraccion.coerceIn(0f, 1f))
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(color),
-            )
-        }
+    Fila(
+        titulo = p.category,
+        subtitulo = "${formatCOP(p.gastado)} de ${formatCOP(p.limite)}",
+        inicio = { IconoDeCategoria(p.category) },
+    )
+    BajoLaFila {
+        BarraDeProgreso(
+            fraccion = fraccion,
+            tono = when (estadoDelTope) {
+                EstadoDePresupuesto.EXCEDIDO_MUCHO -> TonoDeBarra.Peligro
+                EstadoDePresupuesto.DENTRO -> TonoDeBarra.Exito
+                else -> TonoDeBarra.Aviso
+            },
+        )
     }
 }
 
-// ── Pequeños que suman ───────────────────────────────────────────────────────
 
 /** El título de la sección de los gastos hormiga. */
 const val TITULO_PEQUENOS_QUE_SUMAN: String = "Pequeños que suman"
@@ -950,37 +983,20 @@ internal val PIE_DE_PEQUENOS_QUE_SUMAN: String =
 @Composable
 private fun PequenosQueSumanSeccion(grupos: List<PequenosQueSuman>) {
     Column {
-        MinSectionHeader(title = TITULO_PEQUENOS_QUE_SUMAN)
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(vertical = 4.dp),
-        ) {
+        Seccion(titulo = TITULO_PEQUENOS_QUE_SUMAN)
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             grupos.forEach { grupo ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag(TAG_PEQUENO_QUE_SUMA)
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = textoDePequenos(grupo),
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.texto,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.size(Movi.espacios.corto))
-                    Cifra(formatCOP(grupo.total), Movi.textos.monto, color = Movi.colores.texto)
-                }
+                Fila(
+                    titulo = textoDePequenos(grupo),
+                    final = { Cifra(grupo.total) },
+                    modifier = Modifier.testTag(TAG_PEQUENO_QUE_SUMA),
+                )
             }
             Text(
                 text = PIE_DE_PEQUENOS_QUE_SUMAN,
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
             )
         }
     }
@@ -991,38 +1007,17 @@ private fun PequenosQueSumanSeccion(grupos: List<PequenosQueSuman>) {
 @Composable
 private fun LosMasGrandes(eventos: List<FinancialEvent>, onAbrir: (FinancialEvent) -> Unit) {
     Column {
-        MinSectionHeader(title = "Los más grandes")
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(vertical = 4.dp),
-        ) {
+        Seccion(titulo = "Los más grandes")
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             eventos.forEach { evento ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag(TAG_GASTO_GRANDE)
-                        .clickable { onAbrir(evento) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = evento.description,
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.texto,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = diaLegible(epochMillisToAppDate(evento.timestamp)),
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoApagado,
-                        )
-                    }
-                    Spacer(Modifier.size(Movi.espacios.corto))
-                    Cifra(formatCOP(evento.amount), Movi.textos.monto, color = Movi.colores.texto)
-                }
+                Fila(
+                    titulo = evento.description,
+                    subtitulo = diaLegible(epochMillisToAppDate(evento.timestamp)),
+                    inicio = { IconoDeCategoria(evento.category) },
+                    final = { Cifra(evento.amount) },
+                    onClick = { onAbrir(evento) },
+                    modifier = Modifier.testTag(TAG_GASTO_GRANDE),
+                )
             }
         }
     }
@@ -1032,20 +1027,8 @@ private fun LosMasGrandes(eventos: List<FinancialEvent>, onAbrir: (FinancialEven
 
 @Composable
 private fun FilaDeAccion(texto: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    MinCard(
-        modifier = modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-        onClick = onClick,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(texto, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            ChevronRight()
-        }
+    Superficie(modifier = modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+        Fila(titulo = texto, final = { Chevron() }, onClick = onClick)
     }
 }
 
@@ -1062,11 +1045,7 @@ internal fun textoDeEmpezarHoy(periodo: PeriodoFinanciero, hoy: LocalDate): Stri
 
 @Composable
 private fun ConfirmarEmpezarHoy(periodo: PeriodoFinanciero, hoy: LocalDate, estado: EstadoDelDetalleDePeriodo) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = textoDeEmpezarHoy(periodo, hoy),
             style = Movi.textos.cuerpo,
@@ -1074,68 +1053,47 @@ private fun ConfirmarEmpezarHoy(periodo: PeriodoFinanciero, hoy: LocalDate, esta
             color = Movi.colores.texto,
         )
         estado.errorAlGuardar?.let {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
-        Spacer(Modifier.height(14.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp)
-                .testTag(TAG_CONFIRMAR_PERIODO_HOY)
-                .clip(RoundedCornerShape(999.dp))
-                .background(if (!estado.guardando) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                .clickable(enabled = !estado.guardando) { estado.confirmarEmpezarHoy() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = if (estado.guardando) "Guardando…" else "Empezar ${mesDe(periodoSiguiente(periodo))} hoy",
-                style = Movi.textos.cuerpo,
-                color = if (!estado.guardando) Movi.colores.marca else Movi.colores.textoApagado,
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = "Cancelar",
-            style = Movi.textos.apoyo,
-            fontWeight = FontWeight.Medium,
-            color = if (estado.guardando) Movi.colores.textoApagado else Movi.colores.textoMedio,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .clickable(enabled = !estado.guardando) { estado.confirmando = false },
+        Spacer(Modifier.height(Espacio.s))
+        Boton(
+            texto = if (estado.guardando) "Guardando…" else "Empezar ${mesDe(periodoSiguiente(periodo))} hoy",
+            onClick = { estado.confirmarEmpezarHoy() },
+            modifier = Modifier.testTag(TAG_CONFIRMAR_PERIODO_HOY),
+            habilitado = !estado.guardando,
+            anchoCompleto = true,
+        )
+        Spacer(Modifier.height(Espacio.xs))
+        Boton(
+            texto = "Cancelar",
+            onClick = { estado.confirmando = false },
+            variante = VarianteDeBoton.Fantasma,
+            habilitado = !estado.guardando,
+            anchoCompleto = true,
         )
     }
 }
-
-// ── Esqueleto ────────────────────────────────────────────────────────────────
 
 /** La forma del detalle mientras no llegó: la cabecera y una sección con tres categorías. */
 @Composable
 private fun DetalleEsqueleto() {
     Column(
         modifier = Modifier.fillMaxWidth().testTag(TAG_DETALLE_DE_PERIODO_ESQUELETO),
-        verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+        verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
     ) {
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(16.dp),
-        ) {
+        Superficie(modifier = Modifier.fillMaxWidth()) {
             LineaEsqueleto(fraccionDelAncho = 0.65f, estilo = Movi.textos.cuerpo)
             CifrasDelPeriodoEsqueleto()
         }
         Column {
             LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.titulo)
             Spacer(Modifier.height(Movi.espacios.corto))
-            MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(Movi.espacios.margen),
-            ) {
+            Superficie(modifier = Modifier.fillMaxWidth()) {
                 repeat(3) { i ->
                     LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.cuerpo)
-                    Spacer(Modifier.height(Movi.espacios.minimo + 2.dp))
-                    BloqueEsqueleto(alto = 6.dp)
+                    Spacer(Modifier.height(Espacio.xs))
+                    BloqueEsqueleto(alto = Medida.altoDeBarraDeProgreso)
                     if (i < 2) Spacer(Modifier.height(Movi.espacios.medio))
                 }
             }

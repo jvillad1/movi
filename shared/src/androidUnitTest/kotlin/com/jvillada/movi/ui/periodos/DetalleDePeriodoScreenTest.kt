@@ -37,6 +37,8 @@ import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.data.Lectura
@@ -181,24 +183,17 @@ class DetalleDePeriodoScreenTest {
         assertTrue(hay("Mercado"))
         assertTrue(hay(formatMoneyCompact(600_000L)))
 
-        // Pagos fijos: con los grupos y los textos de Plan. En el período en curso lo abierto
-        // «falta»; el listo con otro monto dice el real, con qué se sabe y lo que decía la regla.
-        assertTrue(hay("Pagos del período"))
-        assertTrue(hay(" · 3"), "el encabezado cuenta los tres pagos fijos")
-        assertTrue(hay("Falta por pagar · 2"))
-        assertTrue(hay("Ya pagaste · 1"))
-        assertTrue(hay(formatCOP(1_550_000L)))
-        assertTrue(hay("Con un movimiento de ${formatCOP(1_550_000L)} · la regla dice ${formatCOP(1_500_000L)}"))
-        assertTrue(hay("vence el 22 de octubre"), "el Celular todavía no vence (hoy es 20 de octubre)")
-        assertTrue(hay("venció hace 10 días"), "el Gimnasio venció el 10")
-        assertTrue(hay(TEXTO_CON_DUDAS))
+        // Ola R4: los pagos fijos y los presupuestos del período EN CURSO son los de Plan (su casa):
+        // acá van dos filas que llevan allá, y ninguna cifra ni grupo repetido.
+        assertTrue(hay(TITULO_ESTE_PERIODO_EN_PLAN))
+        assertTrue(hayTag(TAG_PAGOS_DEL_PERIODO_EN_PLAN))
+        assertTrue(hayTag(TAG_PRESUPUESTOS_EN_PLAN))
+        assertTrue(!hay("Falta por pagar · 2"), "el checklist del período en curso vive en Plan")
+        assertTrue(!hay("Ya pagaste · 1"))
+        assertTrue(!hay("${formatCOP(300_000L)} de ${formatCOP(250_000L)}"), "los presupuestos del período en curso viven en Plan")
         // El vocabulario viejo no queda en ningún lado.
         assertTrue(!hay("PAGOS FIJOS", substring = true))
         assertTrue(!hay("pendiente", substring = true))
-
-        // Presupuestos, gastado de límite.
-        assertTrue(hay("Presupuestos"))
-        assertTrue(hay("${formatCOP(300_000L)} de ${formatCOP(250_000L)}"))
 
         // Los más grandes.
         assertTrue(hay("Éxito Laureles"))
@@ -395,6 +390,17 @@ class DetalleDePeriodoScreenTest {
         assertTrue(!hayTag(TAG_EMPEZAR_PERIODO_HOY))
         // Sin el corte, la frase del arranque dice solo la fecha.
         assertTrue(hay("Este período empezó el 24 de septiembre"))
+    }
+
+    @Test
+    fun `en el periodo en curso, los pagos y los presupuestos llevan a Plan`() {
+        montar(ConDetalle(mapOf("2026-10" to octubre)), "2026-10")
+        esperarTexto(TITULO_ESTE_PERIODO_EN_PLAN)
+
+        composeRule.onNodeWithTag(TAG_PAGOS_DEL_PERIODO_EN_PLAN, useUnmergedTree = true).performScrollTo().performClick()
+        composeRule.onNodeWithTag(TAG_PRESUPUESTOS_EN_PLAN, useUnmergedTree = true).performScrollTo().performClick()
+
+        assertEquals(listOf<Screen>(Screen.Plan(SEGMENTO_PAGOS), Screen.Plan(SEGMENTO_PRESUPUESTOS)), navegado.toList())
     }
 
     @Test

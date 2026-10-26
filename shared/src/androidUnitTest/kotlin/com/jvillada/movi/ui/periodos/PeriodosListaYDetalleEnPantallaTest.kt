@@ -263,10 +263,10 @@ class PeriodosListaYDetalleEnPantallaTest {
         val derecha = limites(TAG_COLUMNA_DERECHA_DEL_DETALLE)
         assertTrue(derecha.left >= izquierda.right, "$izquierda / $derecha")
         assertEquals(izquierda.top, derecha.top, 0.5f)
-        // La cabecera del período a la izquierda; los pagos fijos, a la derecha.
-        val arriendo = composeRule.onAllNodesWithText("Arriendo", useUnmergedTree = true)
-            .fetchSemanticsNodes().single().boundsInRoot
-        assertTrue(arriendo.left >= derecha.left)
+        // La cabecera del período a la izquierda; lo que tenía que pasar, a la derecha. Ola R4: en el
+        // período en curso eso son las filas que llevan a Plan (sus pagos fijos viven allá).
+        val pagos = limites(TAG_PAGOS_DEL_PERIODO_EN_PLAN)
+        assertTrue(pagos.left >= derecha.left)
         // Las acciones van abajo, a lo ancho.
         val accion = limites(TAG_VER_MOVIMIENTOS_DEL_PERIODO)
         assertTrue(accion.top >= maxOf(izquierda.bottom, derecha.bottom))
