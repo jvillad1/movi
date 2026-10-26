@@ -107,7 +107,7 @@ class RevisionDelExtractoDeSaldoTest {
     fun `con duda, el duenio elige la cuenta antes de actualizar`() {
         montar(PropuestaDelExtractoDeSaldo(resumen, cuentaId = null, opciones = listOf(skandia, ahorros)))
 
-        assertTrue(hay("¿EN QUÉ CUENTA?"))
+        assertTrue(hay("¿En qué cuenta?"))
         assertTrue(hay("Elige la cuenta"))
         tocar(ACTUALIZAR_EL_SALDO)
         assertTrue(llamadas.isEmpty(), "sin cuenta elegida no hay nada que actualizar")

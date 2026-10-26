@@ -188,7 +188,7 @@ fun DeleteAccountSheet(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(50.dp)
+                        .height(Medida.objetivoTactil)
                         .clip(RoundedCornerShape(Radio.pill))
                         .background(Movi.colores.tarjeta)
                         .clickable(enabled = !deleting, onClick = onDismiss),
@@ -199,9 +199,9 @@ fun DeleteAccountSheet(
                 Box(
                     modifier = Modifier
                         .weight(1.4f)
-                        .height(50.dp)
+                        .height(Medida.objetivoTactil)
                         .clip(RoundedCornerShape(Radio.pill))
-                        .background(if (!deleting) Movi.colores.sale.copy(alpha = 0.14f) else Movi.colores.tarjeta)
+                        .background(if (!deleting) Movi.colores.lavado(Movi.colores.sale) else Movi.colores.tarjeta)
                         .clickable(enabled = !deleting) { doDelete() },
                     contentAlignment = Alignment.Center,
                 ) {

@@ -91,7 +91,7 @@ fun DiasDeAvisoSheet(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(46.dp)
+                            .height(Medida.objetivoTactil)
                             .clip(RoundedCornerShape(Radio.m))
                             .background(if (elegido) Movi.colores.marca else Movi.colores.tarjeta)
                             .clickable(enabled = !saving) { dias = d },

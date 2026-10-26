@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.profile
 
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -73,7 +74,7 @@ fun EditProfileSheet(
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            Text("Alias", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+            Text("Alias", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
             Spacer(Modifier.height(Espacio.xs))
             FieldBox(
                 placeholder = "Tu nombre",
@@ -83,7 +84,7 @@ fun EditProfileSheet(
             )
 
             Spacer(Modifier.height(Espacio.l))
-            Text("Color del avatar", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+            Text("Color del avatar", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
             Spacer(Modifier.height(Espacio.s))
             for (row in AvatarPalette.COLORS.chunked(4)) {
                 Row(
@@ -133,7 +134,7 @@ fun EditProfileSheet(
 private fun ColorSwatch(hex: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(Medida.avatarGrande)
             .clip(CircleShape)
             .background(avatarColorOrDefault(hex))
             .then(if (selected) Modifier.border(2.dp, Movi.colores.texto, CircleShape) else Modifier)

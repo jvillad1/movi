@@ -310,9 +310,9 @@ private fun BotonDeHoja(
     val activo = destacado && habilitado
     Box(
         modifier = modifier
-            .height(50.dp)
+            .height(Medida.objetivoTactil)
             .clip(RoundedCornerShape(Radio.pill))
-            .background(if (activo) colorDestacado.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .background(if (activo) Movi.colores.lavado(colorDestacado) else Movi.colores.tarjeta)
             .clickable(enabled = habilitado, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

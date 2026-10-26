@@ -272,9 +272,9 @@ fun CreateAccountSheet(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
+                .height(Medida.objetivoTactil)
                 .clip(RoundedCornerShape(Radio.pill))
-                .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                .background(if (canSave) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
                 .clickable(enabled = canSave) { save() },
             contentAlignment = Alignment.Center,
         ) {
@@ -316,7 +316,7 @@ private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit,
         modifier = Modifier
             .weight(1f)
             .clip(RoundedCornerShape(Radio.m))
-            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
             .then(
                 if (!selected) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)) else Modifier,
             )
@@ -364,7 +364,7 @@ private fun TypeCard(option: TypeOption, selected: Boolean, onClick: () -> Unit)
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Radio.m))
-            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
             .then(
                 if (!selected) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)) else Modifier,
             )

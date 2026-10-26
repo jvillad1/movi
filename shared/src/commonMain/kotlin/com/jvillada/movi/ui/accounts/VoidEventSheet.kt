@@ -189,7 +189,7 @@ fun VoidEventSheet(
                 Spacer(Modifier.height(Espacio.m))
                 Text(
                     text = "Al anular",
-                    style = Movi.textos.rotulo,
+                    style = Movi.textos.apoyo, fontWeight = FontWeight.Medium,
                     color = Movi.colores.textoMedio,
                 )
                 Spacer(Modifier.height(Espacio.s))
@@ -253,7 +253,7 @@ fun VoidEventSheet(
             // Reason label
             Text(
                 text = "MOTIVO (OPCIONAL)",
-                style = Movi.textos.rotulo,
+                style = Movi.textos.apoyo, fontWeight = FontWeight.Medium,
                 color = Movi.colores.textoMedio,
             )
             Spacer(Modifier.height(Espacio.xs))
@@ -293,9 +293,9 @@ fun VoidEventSheet(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
+                    .height(Medida.objetivoTactil)
                     .clip(RoundedCornerShape(Radio.pill))
-                    .background(if (!voiding) Movi.colores.sale.copy(alpha = 0.14f) else Movi.colores.tarjeta)
+                    .background(if (!voiding) Movi.colores.lavado(Movi.colores.sale) else Movi.colores.tarjeta)
                     .clickable(enabled = !voiding) { doVoid() },
                 contentAlignment = Alignment.Center,
             ) {

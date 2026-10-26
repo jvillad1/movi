@@ -2,6 +2,6 @@
 # Solo pueden bajar: cuando migres una pantalla, baja el número acá en el mismo cambio.
 # Para recontar: python3 scripts/auditoria-de-diseno.py --resumen
 
-dp_sueltos = 2579
-radios_con_numero = 245
+dp_sueltos = 1452
+radios_con_numero = 145
 colores_literales = 0

@@ -227,7 +227,7 @@ fun StatementReviewScreen(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .clip(RoundedCornerShape(Radio.s))
-                        .background((if (sinCuenta) Movi.colores.aviso else Movi.colores.marca).copy(alpha = 0.12f))
+                        .background(Movi.colores.lavado(if (sinCuenta) Movi.colores.aviso else Movi.colores.marca))
                         .padding(horizontal = Espacio.xs, vertical = Espacio.xxs),
                 )
                 Text(
@@ -276,7 +276,7 @@ fun StatementReviewScreen(
                 item {
                     Text(
                         "Posibles duplicados",
-                        style = Movi.textos.rotulo, color = Movi.colores.aviso,
+                        style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.aviso,
                         modifier = Modifier.padding(horizontal = Espacio.m, vertical = Espacio.xs),
                     )
                 }
@@ -344,7 +344,7 @@ fun StatementReviewScreen(
                     ) {
                         Text(
                             "Nuevas transacciones",
-                            style = Movi.textos.rotulo, color = Movi.colores.textoMedio,
+                            style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio,
                         )
                         val allSelected = filasNuevas.all { it.id in selectedIds }
                         Text(
@@ -368,7 +368,7 @@ fun StatementReviewScreen(
                 }
             }
 
-            item { Spacer(Modifier.height(80.dp)) }
+            item { Spacer(Modifier.height(Medida.botonFlotante + Medida.entreSecciones)) }
         }
 
         // Error message
@@ -439,7 +439,7 @@ private fun BloqueDeCargosDelBanco(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
         Text(
             "Cargos y abonos del banco ($cuantos)",
-            style = Movi.textos.rotulo, color = Movi.colores.textoMedio,
+            style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio,
         )
         Text(
             "Impuestos, comisiones e intereses que el banco cobra o abona solo. Destilda los que no quieras anotar.",
@@ -551,10 +551,10 @@ private fun ReconciliationCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
                 // Ola 2 #5 (F11): glifo escrito como texto → ícono Material (salía como ▯ en la web).
-                Icon(Icons.Rounded.Warning, contentDescription = null, tint = Movi.colores.aviso, modifier = Modifier.size(11.dp))
+                Icon(Icons.Rounded.Warning, contentDescription = null, tint = Movi.colores.aviso, modifier = Modifier.size(Icono.s))
                 Text(
                     "Posible duplicado",
-                    style = Movi.textos.rotulo, color = Movi.colores.aviso,
+                    style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.aviso,
                 )
             }
             val amtColor = if (match.parsed.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.texto
@@ -567,13 +567,13 @@ private fun ReconciliationCard(
 
         // Column headers
         Row(modifier = Modifier.fillMaxWidth()) {
-            Spacer(Modifier.width(80.dp))
+            Spacer(Modifier.width(ANCHO_DEL_ROTULO))
             Text(
-                "Manual", style = Movi.textos.rotulo, color = Movi.colores.marca,
+                "Manual", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.marca,
                 modifier = Modifier.weight(1f),
             )
             Text(
-                "Extracto", style = Movi.textos.rotulo, color = Movi.colores.entreCuentas,
+                "Extracto", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.entreCuentas,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -688,7 +688,7 @@ private fun FieldRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.width(80.dp))
+        Text(label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.width(ANCHO_DEL_ROTULO))
         FieldCell(
             value = manualValue,
             active = selected == FieldSource.MANUAL,
@@ -712,7 +712,7 @@ private fun FieldCell(
     modifier: Modifier = Modifier,
 ) {
     val borderColor = if (active) Movi.colores.marca else Color.Transparent
-    val bgColor = if (active) Movi.colores.marca.copy(alpha = 0.08f) else Movi.colores.tarjeta
+    val bgColor = if (active) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta
     Text(
         value,
         style = Movi.textos.apoyo,
@@ -725,3 +725,6 @@ private fun FieldCell(
             .padding(horizontal = Espacio.xs, vertical = Espacio.xs),
     )
 }
+
+/** El ancho de la columna de rótulos de la comparación («Movi», «Extracto»), para que las cifras queden alineadas. */
+private val ANCHO_DEL_ROTULO = Medida.avatar * 2

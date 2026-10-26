@@ -192,9 +192,9 @@ fun InicioDelPeriodoSheet(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(46.dp)
+                    .height(Medida.objetivoTactil)
                     .clip(RoundedCornerShape(Radio.pill))
-                    .background(if (!saving) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                    .background(if (!saving) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
                     .clickable(enabled = !saving) { onSave(elegido.toString()) },
                 contentAlignment = Alignment.Center,
             ) {

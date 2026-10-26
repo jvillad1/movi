@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.quickadd
 
+import com.jvillada.movi.ui.components.ds.Boton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
@@ -1809,22 +1811,7 @@ private fun EditorBody(
                 color = Movi.colores.textoMedio,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(Radio.pill))
-                    .background(Movi.colores.marca.copy(alpha = 0.16f))
-                    .clickable { onCreateAccount() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "+ Crear cuenta",
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.marca,
-                )
-            }
+            Boton("Crear cuenta", onClick = { onCreateAccount() }, icono = Icons.Rounded.Add, anchoCompleto = true)
         }
     } else {
         // Aquí había un botón de cámara que abría un «escáner de recibos» con un recibo INVENTADO
@@ -1843,7 +1830,7 @@ private fun EditorBody(
                     modifier = Modifier
                         .width(Medida.accionRapida)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(Radio.l))
+                        .clip(RoundedCornerShape(Radio.m))
                         .background(Movi.colores.capa2)
                         .clickable(enabled = !saving, onClickLabel = "Pagó otro") { onPagoOtro() }
                         .testTag(TAG_PAGO_OTRO_EN_AGREGAR),
@@ -1860,9 +1847,9 @@ private fun EditorBody(
             if (onSubirPapel != null) {
                 Box(
                     modifier = Modifier
-                        .size(56.dp, 54.dp)
-                        .clip(RoundedCornerShape(Radio.l))
-                        .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.l))
+                        .size(Medida.accionRapida, Medida.objetivoTactil)
+                        .clip(RoundedCornerShape(Radio.m))
+                        .background(Movi.colores.capa2)
                         .clickable(enabled = !saving) { onSubirPapel() }
                         .testTag(TAG_SUBIR_PAPEL_EN_AGREGAR),
                     contentAlignment = Alignment.Center,
@@ -1875,22 +1862,13 @@ private fun EditorBody(
                     )
                 }
             }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(Radio.pill))
-                    .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                    .clickable(enabled = canSave) { onSave() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (saving) "Guardando…" else "Guardar movimiento",
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
-                )
-            }
+            // Ola R4: el botón principal del sistema (48 de alto, radio M), como en toda la app.
+            Boton(
+                texto = if (saving) "Guardando…" else "Guardar movimiento",
+                onClick = { onSave() },
+                habilitado = canSave,
+                modifier = Modifier.weight(1f),
+            )
         }
         // Ola 8 · V2 — ESTE RENGLÓN SIEMPRE OCUPA SU LUGAR, DIGA ALGO O NO.
         //
@@ -2002,7 +1980,7 @@ private fun CategoriaChipsRow(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(Movi.formas.pleno))
-                    .background(if (activa) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
+                    .background(if (activa) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent)
                     .then(
                         if (!activa) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Movi.formas.pleno))
                         else Modifier,
@@ -2049,7 +2027,6 @@ internal fun AvisoDeCuentaRow(aviso: String?, reservado: Boolean) {
             Text(
                 text = aviso,
                 style = Movi.textos.apoyo,
-                lineHeight = 14.sp,
                 color = Movi.colores.textoApagado,
                 // Una sola línea, y con puntos suspensivos si no entra.
                 //
@@ -2321,7 +2298,7 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 .fillMaxWidth()
                 .height(Medida.objetivoTactil)
                 .clip(RoundedCornerShape(Radio.pill))
-                .background(Movi.colores.marca.copy(alpha = 0.16f))
+                .background(Movi.colores.lavado(Movi.colores.marca))
                 .clickable { onSave(value.text.trim()) },
             contentAlignment = Alignment.Center,
         ) {

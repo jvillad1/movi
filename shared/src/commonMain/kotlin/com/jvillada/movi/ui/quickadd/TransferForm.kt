@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.quickadd
 
+import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
@@ -916,19 +917,9 @@ internal fun TransferBody(
             // «Registrar pago» otra vez sobre un pago que ya está hecho.
             Column(modifier = Modifier.fillMaxWidth()) {
                 Spacer(Modifier.height(Espacio.m))
-                Text(avisoGuardado, style = Movi.textos.cuerpo, color = Movi.colores.texto, lineHeight = 20.sp)
+                Text(avisoGuardado, style = Movi.textos.cuerpo, color = Movi.colores.texto)
                 Spacer(Modifier.height(Espacio.l))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .clip(RoundedCornerShape(Radio.pill))
-                        .background(Movi.colores.marca.copy(alpha = 0.16f))
-                        .clickable { avisoDelDesglose = null; onSaved() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("Entendido", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
-                }
+                Boton("Entendido", onClick = { avisoDelDesglose = null; onSaved() }, anchoCompleto = true)
                 Spacer(Modifier.height(Espacio.m))
             }
         } else if (pickingDate) {
@@ -1215,7 +1206,6 @@ internal fun TransferBody(
                     if (interesEstimado != null) INTERES_ESTIMADO_AVISO else INTERES_SIN_TASA_AVISO,
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 17.sp,
                 )
                 Spacer(Modifier.height(Espacio.s))
             }
@@ -1231,7 +1221,6 @@ internal fun TransferBody(
                                 "Escribe el monto para ver cuánto de la cuota baja la deuda.",
                                 style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
-                                lineHeight = 17.sp,
                             )
                         // Mientras no se sepa, no se afirma nada. Un «este crédito no tiene tasa»
                         // sobre una carga a medias sería exactamente el número plausible y falso
@@ -1239,18 +1228,18 @@ internal fun TransferBody(
                         to.type == AccountType.LOAN && !terminosCargados ->
                             Text("Calculando cuánto baja la deuda…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                         to.type == AccountType.LOAN && falloCargarTerminos ->
-                            Text(SIN_CONDICIONES_PARA_EL_DESGLOSE, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+                            Text(SIN_CONDICIONES_PARA_EL_DESGLOSE, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                         // Un interés que no cabe en la cuota: se dice acá, al lado del campo y con
                         // las mismas palabras que contestaría el server, y el botón queda apagado.
                         // No se muestra un capital negativo ni se clampa en silencio.
                         errorDeInteres != null ->
-                            Text(errorDeInteres, style = Movi.textos.apoyo, color = Movi.colores.sale, lineHeight = 17.sp)
+                            Text(errorDeInteres, style = Movi.textos.apoyo, color = Movi.colores.sale)
                         // Nada de `return@Column` acá: un early return se llevaría por delante la
                         // fecha, la nota y el botón de Guardar. Los dos renglones son opcionales
                         // por separado.
                         else -> {
                             desglose?.let { d -> textoDelDesglose(d, to.currency) }?.let { renglon ->
-                                Text(renglon, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+                                Text(renglon, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                 Spacer(Modifier.height(Espacio.xs))
                             }
                             deudaDespuesDelPago(to, desglose)?.let { renglon ->
@@ -1304,26 +1293,16 @@ internal fun TransferBody(
         }
 
         Spacer(Modifier.height(Espacio.m))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .clip(RoundedCornerShape(Radio.pill))
-                .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                .clickable(enabled = canSave) { save() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = when {
-                    saving -> "Guardando…"
-                    esPago -> "Registrar pago"
-                    else -> "Guardar traspaso"
-                },
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
-            )
-        }
+        Boton(
+            texto = when {
+                saving -> "Guardando…"
+                esPago -> "Registrar pago"
+                else -> "Guardar traspaso"
+            },
+            onClick = { save() },
+            habilitado = canSave,
+            anchoCompleto = true,
+        )
 
         // Ola 8 · V2 (N4): este renglón vive DEBAJO del botón y aparecía/desaparecía al
         // escribir el monto, bajando el formulario entero ~40 dp en una hoja anclada abajo.
@@ -1420,7 +1399,7 @@ private fun GrupoDeCuentas(
     selectedId: String?,
     onPick: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+    Column {
         accounts.forEach { account ->
             CardRow(
                 left = {

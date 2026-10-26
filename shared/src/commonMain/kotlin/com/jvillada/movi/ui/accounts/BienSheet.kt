@@ -280,7 +280,7 @@ fun BienSheet(
                         .fillMaxWidth()
                         .height(Medida.objetivoTactil)
                         .clip(RoundedCornerShape(Movi.formas.pleno))
-                        .background(if (puedeGuardar) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                        .background(if (puedeGuardar) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
                         .clickable(enabled = puedeGuardar) { guardar() },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -361,7 +361,7 @@ private fun Opcion(texto: String, elegida: Boolean, modifier: Modifier, onClick:
     Box(
         modifier = modifier
             .clip(forma)
-            .background(if (elegida) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .background(if (elegida) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
             .then(if (!elegida) Modifier.border(Medida.trazo, Movi.colores.borde, forma) else Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.medio),

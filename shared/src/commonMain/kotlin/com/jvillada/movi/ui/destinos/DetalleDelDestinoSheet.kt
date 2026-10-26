@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.destinos
 
+import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -167,7 +168,7 @@ fun DetalleDelDestinoSheet(
             )
 
             Spacer(Modifier.height(Espacio.m))
-            Text("Este período", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+            Text("Este período", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
             Spacer(Modifier.height(Espacio.xs))
             Row(modifier = Modifier.fillMaxWidth().testTag(TAG_ESTE_PERIODO_DEL_TERCERO)) {
                 ColumnaDeCifra("Le enviaste", enviadoEstePeriodo, Modifier.weight(1f))
@@ -175,7 +176,7 @@ fun DetalleDelDestinoSheet(
             }
             if (porMotivo.isNotEmpty()) {
                 Spacer(Modifier.height(Espacio.s))
-                Text("Lo que le enviaste, por motivo", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+                Text("Lo que le enviaste, por motivo", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(Espacio.xs))
                 Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs), modifier = Modifier.testTag(TAG_POR_MOTIVO_DEL_TERCERO)) {
                     porMotivo.forEach { envio ->
@@ -205,9 +206,9 @@ fun DetalleDelDestinoSheet(
             if (porPeriodo.size > 1 || (porPeriodo.size == 1 && porPeriodo.single().periodo != enCurso)) {
                 Spacer(Modifier.height(Espacio.m))
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    Text("Por período", style = Movi.textos.rotulo, color = Movi.colores.textoMedio, modifier = Modifier.weight(1.4f))
-                    Text("Enviaste", style = Movi.textos.rotulo, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
-                    Text("Te envió", style = Movi.textos.rotulo, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                    Text("Por período", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, modifier = Modifier.weight(1.4f))
+                    Text("Enviaste", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                    Text("Te envió", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(Espacio.xs))
                 Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs), modifier = Modifier.testTag(TAG_POR_PERIODO_DEL_TERCERO)) {
@@ -238,7 +239,7 @@ fun DetalleDelDestinoSheet(
             Hairline()
             Spacer(Modifier.height(Espacio.s))
 
-            Text("Movimientos", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+            Text("Movimientos", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
             Spacer(Modifier.height(Espacio.xs))
             when {
                 error != null -> Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
@@ -383,14 +384,12 @@ private fun PonerleElNombre(
     var ocupado by remember(destino.id) { mutableStateOf(false) }
     var resultado by remember(destino.id) { mutableStateOf<String?>(null) }
 
-    MinCard(
+    Superficie(
         modifier = Modifier.fillMaxWidth().testTag(TAG_PONERLE_EL_NOMBRE),
-        variant = MinCardVariant.Default,
-        padding = PaddingValues(Espacio.s),
     ) {
         resultado?.let {
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            return@MinCard
+            return@Superficie
         }
         Text(textoDePonerleElNombre(n), style = Movi.textos.cuerpo, color = Movi.colores.texto)
         Text(

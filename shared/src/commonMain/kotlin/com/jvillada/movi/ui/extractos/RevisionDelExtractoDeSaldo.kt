@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.extractos
 
+import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Icono
@@ -99,10 +100,8 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
         Column(
             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espacio.m, vertical = Espacio.s),
         ) {
-            MinCard(
+            Superficie(
                 modifier = Modifier.fillMaxWidth().testTag(TAG_PROPUESTA_DEL_EXTRACTO_DE_SALDO),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(Espacio.m),
             ) {
                 Text(
                     nombreDelExtractoDeSaldo(resumen),
@@ -111,7 +110,7 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
                     color = Movi.colores.texto,
                 )
                 Spacer(Modifier.height(Espacio.s))
-                Text("El extracto dice", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+                Text("El extracto dice", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(Espacio.xs))
                 Text(
                     conCifrasOcultas(fraseDelExtractoDeSaldo(resumen, elegida)),
@@ -132,12 +131,12 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
                 when {
                     propuesta.opciones.isEmpty() -> Unit
                     propuesta.cuentaId != null && elegida != null -> {
-                        Text("En tu cuenta", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+                        Text("En tu cuenta", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
                         Spacer(Modifier.height(Espacio.xxs))
                         Text(elegida.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto)
                     }
                     else -> {
-                        Text("¿En qué cuenta?", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+                        Text("¿En qué cuenta?", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
                         Spacer(Modifier.height(Espacio.xxs))
                         propuesta.opciones.forEach { opcion ->
                             OpcionDeCuenta(
@@ -232,24 +231,14 @@ private fun OpcionDeCuenta(opcion: CuentaParaElSaldo, elegida: Boolean, habilita
     }
 }
 
+/** Ola R4: el [Boton][com.jvillada.movi.ui.components.ds.Boton] del sistema, principal o secundario. */
 @Composable
 private fun BotonDelSaldo(texto: String, principal: Boolean, habilitado: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(Radio.m))
-            .then(
-                if (principal) Modifier.background(if (habilitado) Movi.colores.texto else Movi.colores.textoApagado)
-                else Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)),
-            )
-            .clickable(enabled = habilitado, role = Role.Button, onClick = onClick)
-            .padding(vertical = Espacio.m),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            texto,
-            color = if (principal) Movi.colores.fondo else Movi.colores.texto,
-            style = Movi.textos.cuerpo,
-            maxLines = 1,
-        )
-    }
+    com.jvillada.movi.ui.components.ds.Boton(
+        texto = texto,
+        onClick = onClick,
+        modifier = modifier,
+        variante = if (principal) com.jvillada.movi.ui.components.ds.VarianteDeBoton.Principal else com.jvillada.movi.ui.components.ds.VarianteDeBoton.Secundario,
+        habilitado = habilitado,
+    )
 }

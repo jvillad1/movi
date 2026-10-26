@@ -175,7 +175,7 @@ fun CondicionDeCuentaSheet(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(50.dp)
+                        .height(Medida.objetivoTactil)
                         .clip(RoundedCornerShape(Radio.pill))
                         .background(Movi.colores.tarjeta)
                         .clickable(enabled = !guardando, onClick = onDismiss),
@@ -186,9 +186,9 @@ fun CondicionDeCuentaSheet(
                 Box(
                     modifier = Modifier
                         .weight(1.4f)
-                        .height(50.dp)
+                        .height(Medida.objetivoTactil)
                         .clip(RoundedCornerShape(Radio.pill))
-                        .background(if (cambio && !guardando) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                        .background(if (cambio && !guardando) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
                         .clickable(enabled = cambio && !guardando) { guardar() },
                     contentAlignment = Alignment.Center,
                 ) {
