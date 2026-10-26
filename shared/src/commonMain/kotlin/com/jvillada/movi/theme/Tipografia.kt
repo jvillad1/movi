@@ -71,13 +71,14 @@ internal fun familiaDeLasCifras(): FontFamily {
 }
 
 /**
- * Los siete estilos con su familia puesta. **Pura**, sin `@Composable`, para poder probarla.
+ * Los ocho estilos con su familia puesta. **Pura**, sin `@Composable`, para poder probarla.
  *
- * `cifra` va en la de cifras; los otros seis, en la de la interfaz. `monto` también en la de la
+ * `cifra` y `cifraDeTarjeta` van en la de cifras; los otros seis, en la de la interfaz. `monto` también en la de la
  * interfaz: es un monto en una fila, y ahí manda `tnum`, no la monoespaciada.
  */
 internal fun TextosDeMovi.conFamilias(interfaz: FontFamily, cifras: FontFamily): TextosDeMovi = copy(
     cifra = cifra.copy(fontFamily = cifras),
+    cifraDeTarjeta = cifraDeTarjeta.copy(fontFamily = cifras),
     titular = titular.copy(fontFamily = interfaz),
     titulo = titulo.copy(fontFamily = interfaz),
     cuerpo = cuerpo.copy(fontFamily = interfaz),
