@@ -11,7 +11,7 @@ import io.ktor.client.plugins.HttpCallValidator
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
-import io.ktor.http.HttpStatusCode
+import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import java.io.IOException
@@ -30,15 +30,11 @@ actual fun createHttpClient(): HttpClient = HttpClient(Android) {
     }
     install(HttpCallValidator) {
         validateResponse { response ->
-            // Ver `cuentaComoSesionVencida`: el 401 del propio login no es una sesión que
-            // venció — es una contraseña equivocada, y contarlo hacía que al tercer intento
-            // la app se cerrara sola encima de la persona.
-            if (response.status == HttpStatusCode.Unauthorized) {
-                if (cuentaComoSesionVencida(response.call.request.url.encodedPath)) {
-                    SessionManager.onUnauthorized()
-                }
-            } else if (response.status.value in 200..299) {
-                SessionManager.onAuthSuccess()
+            // Un 401 de Movi con el token guardado cierra la sesión; el del login, el de otro
+            // host o el de un pedido con el token de antes, no. Ver `laSesionTras`.
+            val tokenDelPedido = tokenDelEncabezado(response.call.request.headers[HttpHeaders.Authorization])
+            if (laSesionTras(response.status.value, response.call.request.url, tokenDelPedido, SessionManager.token) == LaSesionTras.SE_CERRO) {
+                SessionManager.seRechazoElToken(tokenDelPedido)
             }
         }
         handleResponseExceptionWithRequest { cause, _ ->

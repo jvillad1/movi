@@ -212,6 +212,19 @@ All dependency versions are centralized in `gradle/libs.versions.toml`. Add new 
   rechaza suelta, renombrar/unificar la protegen (igual que a `CUOTA_CATEGORY`), y Movi AI dice cuánto
   de los ingresos es deuda. El abono extraordinario sigue siendo un traspaso puro.
 - **El período arranca el día que pagan** (`:core` `PeriodoFinanciero.kt`): el corte (`users.period_cutoff_day`) se corre si cae sábado, domingo o festivo de Colombia (`FestivosDeColombia.kt`, calculados: Ley Emiliani + Semana Santa) según `users.period_weekend_rule` (`SiElCorteCaeEnFinDeSemana`: `ESE_DIA` por defecto, `DIA_HABIL_ANTERIOR` —el del dueño: el 25 domingo → viernes 23, el 25-dic → 24—, `DIA_HABIL_SIGUIENTE`; se elige en Ajustes → «Inicio del mes»), y las excepciones a mano de `users.period_starts` **ganan** sobre esa regla. Todo sale de `inicioDelPeriodo`; armar los ajustes desde un perfil es `UserProfile.ajustesDelPeriodo()` (server: `ajustesDePeriodoDe`), nunca `PeriodSettings(corte, inicios)` a mano. El ingreso recurrente del día de corte (el salario) se **espera** el día que arranca su período (`fechaEsperadaDelIngreso` / `fechaEsperada`): eso se muestra en «Próximos» y el checklist, pero el sello sigue siendo el mes del día de la regla.
+- **Un 401 de Movi cierra la sesión, al primero** (26-oct-2026, tras rotar `JWT_SECRET`: Android
+  pintaba el caché con el token muerto y la captura del banco fallaba callada). La regla vive en
+  `laSesionTras` (`:shared` `data/LaSesionRechazada.kt`): solo un 401 del host de Movi, fuera de
+  `/api/auth/`, de un pedido que llevaba **el token guardado**; sin red, un 5xx o un 403 la sesión
+  sigue (Movi funciona sin conexión con lo guardado). Ya no hay racha de «tres 401»: el server da
+  401 solo cuando el token no pasa. `SessionManager.seRechazoElToken` cierra como el logout y anota
+  `sesionRechazadaDe`, que el login dice («Tu sesión se cerró…», también el overlay de la web).
+  En Android, `MoviAplicacion` engancha `alRechazarseLaSesion` (UNA notificación «Movi dejó de
+  recibir los mensajes del banco» si la app no está a la vista) y `alEntrar` (la quita, sube
+  `CapturasPorSubir` con `SubirCapturasPorSubirWorker` y barre el inbox). `SmsSyncWorker` con un
+  401 o sin sesión rechazada-por-el-server **guarda** la captura en vez de descartarla (las
+  notificaciones del banco no se pueden volver a leer); lo de otra persona nunca se le sube a la
+  que entra.
 - **Las pruebas Robolectric arrancan con los `object` de la app en cero.** Todas las clases de
   `:shared:testDebugUnitTest` comparten un fork de JVM y un sandbox, así que el estado estático se
   filtraba de una clase a la siguiente (y ya hizo intermitente a una prueba que medía una pantalla).

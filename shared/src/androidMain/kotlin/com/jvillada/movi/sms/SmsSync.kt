@@ -77,7 +77,11 @@ sealed interface SmsSyncResult {
      */
     data class Success(val synced: Int?, val porRevisar: List<AvisoPorRevisar> = emptyList()) : SmsSyncResult
 
-    /** 401: el token venció (30 días, sin refresh). Quien llama decide qué mostrar. */
+    /**
+     * 401: el server rechazó el token (venció, se cerraron las sesiones, se rotó el secreto). Es
+     * definitivo —ver `laSesionTras`—: quien llama cierra la sesión con
+     * `SessionManager.seRechazoElToken` y guarda lo que no subió en [CapturasPorSubir].
+     */
     data object Unauthorized : SmsSyncResult
 
     /** 5xx — vale la pena reintentar. */
@@ -105,6 +109,17 @@ internal fun parsePorRevisar(body: String?): List<AvisoPorRevisar> =
     body?.let { runCatching { jsonDelSync.decodeFromString(RespuestaDelSync.serializer(), it).porRevisar }.getOrNull() }
         .orEmpty()
 
+/**
+ * Qué significa la respuesta del server. Sin red no llega acá: eso es [SmsSyncResult.Network] (una
+ * `IOException` en [postSmsSync]), y nunca cierra la sesión.
+ */
+internal fun resultadoDelSync(code: Int, body: String?): SmsSyncResult = when {
+    code in 200..299 -> SmsSyncResult.Success(parseSyncedCount(body), parsePorRevisar(body))
+    code == 401 -> SmsSyncResult.Unauthorized
+    code >= 500 -> SmsSyncResult.ServerError(code)
+    else -> SmsSyncResult.Rejected(code)
+}
+
 /** POST bloqueante — llamar SIEMPRE desde un hilo de IO. */
 fun postSmsSync(token: String, payload: String): SmsSyncResult = try {
     val conn = URL("$apiBaseUrl/api/sms/sync").openConnection() as HttpURLConnection
@@ -124,12 +139,7 @@ fun postSmsSync(token: String, payload: String): SmsSyncResult = try {
         } else {
             null
         }
-        when {
-            code in 200..299 -> SmsSyncResult.Success(parseSyncedCount(body), parsePorRevisar(body))
-            code == 401 -> SmsSyncResult.Unauthorized
-            code >= 500 -> SmsSyncResult.ServerError(code)
-            else -> SmsSyncResult.Rejected(code)
-        }
+        resultadoDelSync(code, body)
     } finally {
         conn.disconnect()
     }

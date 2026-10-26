@@ -16,8 +16,12 @@ const val ORIGEN_NOTIFICACION = "notificacion"
 /**
  * Sube UN mensaje capturado al endpoint idempotente /api/sms/sync (ver SmsSync.kt,
  * compartido con el backfill de la pantalla).
- * Sin token (deslogueado) → failure sin retry. IOException/5xx → retry con backoff.
- * 401 → la racha de SessionManager decide el logout; mientras la sesión viva, retry acotado.
+ * IOException/5xx → retry con backoff: sin red la sesión sigue y el mensaje espera.
+ * 401 → el server rechazó la sesión: se cierra (`SessionManager.seRechazoElToken`, que además
+ * avisa UNA vez con una notificación), el mensaje queda en [CapturasPorSubir] y sube cuando el
+ * dueño vuelve a entrar. Sin reintentos: con un token muerto, reintentar no arregla nada.
+ * Sin token → si la sesión la cerró el server, también se guarda; si el dueño salió a mano, se
+ * descarta como siempre.
  *
  * Lo usan los DOS sensores en tiempo real: `SmsRealtimeReceiver` (un SMS del banco) y
  * `EscuchaDeNotificaciones` (una notificación de una app del banco). Comparten Worker a propósito
@@ -30,27 +34,34 @@ const val ORIGEN_NOTIFICACION = "notificacion"
 class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val token = SessionManager.token
-        if (token.isNullOrBlank()) {
-            Log.w(TAG, "sin sesión — descartando SMS capturado")
-            return@withContext Result.failure()
-        }
         val id = inputData.getString("id") ?: return@withContext Result.failure()
         val sender = inputData.getString("sender").orEmpty()
         val body = inputData.getString("body").orEmpty()
         val ts = inputData.getLong("ts", System.currentTimeMillis())
         val deNotificacion = inputData.getString("origen") == ORIGEN_NOTIFICACION
 
+        fun guardarPara(dueno: String) = CapturasPorSubir.guardar(
+            applicationContext,
+            CapturasPorSubir.Captura(id, sender, body, ts, deNotificacion, dueno),
+        )
+
+        val token = SessionManager.token
+        if (token.isNullOrBlank()) {
+            val dueno = duenoDeLaCapturaSinSesion(SessionManager.sesionRechazadaDe)
+            if (dueno == null) {
+                Log.w(TAG, "sin sesión — descartando SMS capturado")
+                return@withContext Result.failure()
+            }
+            Log.w(TAG, "la sesión la cerró el server — la captura queda guardada para cuando vuelva")
+            guardarPara(dueno)
+            return@withContext Result.success()
+        }
+        val dueno = SessionManager.userId.orEmpty()
+
         val payload = buildSmsSyncPayload(listOf(captureItem(id, sender, body, ts)))
 
         when (val result = postSmsSync(token, payload)) {
             is SmsSyncResult.Success -> {
-                // Reset de la racha de 401: este camino sube por HttpURLConnection, no por
-                // el pipeline Ktor que llama onAuthSuccess() solo. Sin esto, dos 401s
-                // transitorios recuperados con semanas de distancia contarían como
-                // "consecutivos" y desloguearían por sorpresa — justo el perfil del
-                // teléfono-sensor que vive semanas sin abrir la app.
-                SessionManager.onAuthSuccess()
                 // Cada sensor escribe SU marca: ver el KDoc de la clase y el de
                 // AlmacenDeNotificaciones. Mezclarlas escondería la mudez del otro.
                 if (deNotificacion) {
@@ -73,22 +84,19 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 Result.success()
             }
             SmsSyncResult.Unauthorized -> {
-                // El token no pasó: puede ser vencimiento real (30 días, sin refresh) o un
-                // 401 transitorio. La racha de SessionManager (3 seguidos) decide si la
-                // sesión se cierra — un clear() directo acá deslogueaba al usuario de TODA
-                // la app por un solo 401 en background. La marca de authExpired queda para
-                // que la sección «Captura en este teléfono» pueda contar la pausa.
-                Log.w(TAG, "sync 401 — token rechazado; la racha decide el logout")
+                // El 26-oct (JWT_SECRET rotado) esto reintentaba y terminaba en failure(): la
+                // notificación del banco se perdía y nadie se enteraba. Un 401 de Movi es
+                // definitivo (ver `laSesionTras`): se cierra la sesión —lo que avisa UNA vez,
+                // con la notificación de `MoviAplicacion`— y la captura espera a su dueño.
+                Log.w(TAG, "sync 401 — el server rechazó la sesión; la captura queda guardada")
                 SmsFilterConfigStore.markAuthExpired(applicationContext)
-                SessionManager.onUnauthorized()
-                if (SessionManager.loggedIn && runAttemptCount < MAX_AUTH_ATTEMPTS) {
-                    // La sesión sobrevivió: reintentar para no perder ESTE SMS. Acotado
-                    // porque la racha vive en memoria — si WorkManager relanza el intento
-                    // en un proceso nuevo, el contador arranca de cero y sin tope este
-                    // 401 persistente reintentaría para siempre.
+                SessionManager.seRechazoElToken(token)
+                if (SessionManager.isLoggedIn) {
+                    // Entró de nuevo mientras esto subía: el reintento sale con el token nuevo.
                     Result.retry()
                 } else {
-                    Result.failure()
+                    guardarPara(dueno)
+                    Result.success()
                 }
             }
             is SmsSyncResult.ServerError -> Result.retry()
@@ -102,8 +110,5 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
 
     private companion object {
         const val TAG = "movi"
-
-        /** Tope de reintentos ante 401 con sesión viva — ver el comentario del branch. */
-        const val MAX_AUTH_ATTEMPTS = 5
     }
 }

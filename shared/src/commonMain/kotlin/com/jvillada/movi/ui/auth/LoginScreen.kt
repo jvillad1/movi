@@ -35,6 +35,8 @@ import com.jvillada.movi.data.ArranqueDeSesion
 import com.jvillada.movi.data.EXPLICACION_HUELLA
 import com.jvillada.movi.data.MENSAJE_SIN_REGISTRAR
 import com.jvillada.movi.data.PropositoDeHuella
+import com.jvillada.movi.data.avisoDeLaSesionRechazada
+import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.data.ResultadoDeHuella
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
@@ -58,7 +60,11 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var notice by remember { mutableStateOf<String?>(null) }
+    // Si llegó acá porque el server rechazó la sesión (y no porque salió), se le dice por qué: con
+    // el token muerto del 26-oct la app callaba y el dueño creía estar adentro.
+    var notice by remember {
+        mutableStateOf(avisoDeLaSesionRechazada(SessionManager.sesionRechazada, conCapturaDelBanco = isAndroid))
+    }
 
     // «Entrar con huella» — solo Android tiene lector; en iOS y la web esto es `null` y todo lo
     // que sigue queda apagado, sin una sola diferencia con la pantalla de antes.

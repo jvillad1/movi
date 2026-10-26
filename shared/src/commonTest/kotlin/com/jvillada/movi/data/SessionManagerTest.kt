@@ -121,16 +121,66 @@ class SessionManagerTest {
     }
 
     @Test
-    fun `tres 401 seguidos cierran la sesion, y un exito corta la racha`() {
+    fun `un token rechazado cierra la sesion al primer 401 y el login sabe por que`() {
+        // El 26-oct: JWT_SECRET rotado, y la app de Android siguió pintando el caché con un token
+        // muerto. Un 401 de Movi con el token guardado es definitivo — ver `laSesionTras`.
         SessionManager.save("tok_123", "usr_1", "Juan", "juan@correo.com")
-        SessionManager.onUnauthorized()
-        SessionManager.onUnauthorized()
-        SessionManager.onAuthSuccess()
-        SessionManager.onUnauthorized()
-        SessionManager.onUnauthorized()
-        assertTrue(SessionManager.isLoggedIn, "dos 401 tras un éxito no pueden cerrar la sesión")
+        SessionManager.seRechazoElToken("tok_123")
 
-        SessionManager.onUnauthorized()
         assertFalse(SessionManager.isLoggedIn)
+        assertFalse(SessionManager.loggedIn)
+        assertTrue(SessionManager.sesionRechazada)
+        assertEquals("usr_1", SessionManager.sesionRechazadaDe)
+    }
+
+    @Test
+    fun `el 401 de un pedido con el token de antes no cierra la sesion de ahora`() {
+        SessionManager.save("tok_nuevo", "usr_1", "Juan", "juan@correo.com")
+        SessionManager.seRechazoElToken("tok_viejo")
+        SessionManager.seRechazoElToken(null)
+
+        assertTrue(SessionManager.isLoggedIn)
+        assertFalse(SessionManager.sesionRechazada)
+    }
+
+    @Test
+    fun `entrar de nuevo apaga el aviso y avisa a la plataforma`() {
+        var entradas = 0
+        SessionManager.alEntrar = { entradas++ }
+        try {
+            SessionManager.save("tok_123", "usr_1", "Juan", "juan@correo.com")
+            assertEquals(0, entradas, "sin una sesión rechazada antes, no hay nada esperando")
+
+            SessionManager.seRechazoElToken("tok_123")
+            SessionManager.save("tok_456", "usr_1", "Juan", "juan@correo.com")
+
+            assertFalse(SessionManager.sesionRechazada)
+            assertEquals(1, entradas)
+        } finally {
+            SessionManager.alEntrar = null
+        }
+    }
+
+    @Test
+    fun `salir a mano no cuenta como sesion rechazada`() {
+        SessionManager.save("tok_123", "usr_1", "Juan", "juan@correo.com")
+        SessionManager.seRechazoElToken("tok_123")
+        SessionManager.clear()
+        assertFalse(SessionManager.sesionRechazada, "si el dueño salió, no hay nada que contarle")
+    }
+
+    @Test
+    fun `cerrar por el server avisa a la plataforma una vez`() {
+        var avisos = 0
+        SessionManager.alRechazarseLaSesion = { avisos++ }
+        try {
+            SessionManager.save("tok_123", "usr_1", "Juan", "juan@correo.com")
+            SessionManager.seRechazoElToken("tok_123")
+            // Los demás pedidos que vuelvan 401 con ese token ya no tienen sesión que cerrar.
+            SessionManager.seRechazoElToken("tok_123")
+            assertEquals(1, avisos)
+        } finally {
+            SessionManager.alRechazarseLaSesion = null
+        }
     }
 }

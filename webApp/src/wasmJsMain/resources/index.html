@@ -335,6 +335,11 @@
                     setTimeout(function () { document.getElementById('reset-password').focus(); }, 50);
                 } else if (!hasToken) {
                     overlay.classList.remove('hidden');
+                    // El server rechazó el token (lo anota `SessionManager.seRechazoElToken` antes
+                    // de recargar): se dice por qué se está acá, en vez de un login mudo.
+                    if (localStorage.getItem('sesion_rechazada_de') !== null) {
+                        err.textContent = 'Tu sesión se cerró. Entra de nuevo.';
+                    }
                     // focus password if email is already known, else email
                     setTimeout(function () { (remembered ? passEl : emailEl).focus(); }, 50);
                 }
@@ -363,6 +368,7 @@
                         localStorage.setItem('user_id', data.userId);
                         localStorage.setItem('user_email', data.email);
                         localStorage.setItem('user_name', data.name);
+                        localStorage.removeItem('sesion_rechazada_de');
                         // F1: solo se guarda el correo para la próxima vez si la persona lo
                         // pidió con la casilla; si no, se borra un recuerdo previo.
                         if (rememberEl && rememberEl.checked) {
@@ -555,6 +561,7 @@
                         localStorage.setItem('user_id', data.userId);
                         localStorage.setItem('user_email', data.email);
                         localStorage.setItem('user_name', data.name);
+                        localStorage.removeItem('sesion_rechazada_de');
                         localStorage.setItem('remembered_email', data.email);
                         // Misma recarga deliberada que el submit del login: es lo que hace que
                         // el navegador ofrezca guardar la contraseña recién creada.
