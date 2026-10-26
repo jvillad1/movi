@@ -40,7 +40,7 @@ class SmsBackfillWorker(context: Context, params: WorkerParameters) : CoroutineW
             is BackfillOutcome.Uploaded, BackfillOutcome.NothingFound -> Result.success()
             // Sin sesión y sin permiso no se arreglan reintentando: se arreglan en la pantalla.
             BackfillOutcome.NoSession, BackfillOutcome.NoPermission, BackfillOutcome.SessionExpired -> Result.success()
-            BackfillOutcome.AuthRetry, BackfillOutcome.Failed -> {
+            BackfillOutcome.Failed -> {
                 Log.w(TAG, "backfill periódico sin éxito ($resultado) — se reintenta")
                 Result.retry()
             }

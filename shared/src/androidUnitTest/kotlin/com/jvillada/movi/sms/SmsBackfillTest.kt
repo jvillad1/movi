@@ -46,14 +46,12 @@ class SmsBackfillFilterTest {
 class BackfillMessageTest {
 
     @Test
-    fun `un 401 que no cerro la sesion avisa sin mandar a loguearse de nuevo`() {
-        // M1: con la racha de SessionManager, un 401 suelto ya no desloguea. El mensaje
-        // no puede decir "vuelve a entrar" (la sesión sigue viva) ni culpar a la conexión.
-        val text = backfillMessage(BackfillOutcome.AuthRetry)
-        assertTrue("prueba de nuevo" in text, text)
-        assertFalse("vuelve a entrar" in text, text)
+    fun `un 401 cierra la sesion y el mensaje manda a entrar de nuevo`() {
+        // Desde el 26-oct un 401 de Movi es definitivo (ver `laSesionTras`): no hay «prueba de
+        // nuevo en un momento» que valga con un token muerto.
+        val text = backfillMessage(BackfillOutcome.SessionExpired)
+        assertTrue("vuelve a entrar" in text, text)
         assertFalse("conexión" in text, text)
-        assertTrue(isBackfillError(BackfillOutcome.AuthRetry))
     }
 
     @Test

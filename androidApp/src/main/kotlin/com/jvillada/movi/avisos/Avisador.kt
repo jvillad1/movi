@@ -44,6 +44,7 @@ object Avisador {
     private const val ID_BANCO_MUDO = 7103
     private const val ID_DEBITOS = 7104
     private const val ID_CIERRE = 7105
+    private const val ID_SESION_CERRADA = 7106
 
     /** Los `requestCode` de los botones de la notificación de un aviso: distintos del de tocarla. */
     private const val CODIGO_OTRA_CATEGORIA = 7111
@@ -211,6 +212,19 @@ object Avisador {
     /** Avisa lo que el banco debió cobrar solo (ver `textoDeDebitosAutomaticos`). Tocarla abre «Por revisar». */
     fun avisarDebitosAutomaticos(context: Context, texto: TextoDeAviso) {
         publicar(context, ID_DEBITOS, CANAL_DEBITOS, texto, ABRIR_POR_REVISAR, cuantos = maxOf(1, texto.lineas.size))
+    }
+
+    /**
+     * El server cerró la sesión: la captura del banco dejó de subir. Una sola notificación (mismo id:
+     * otro 401 la reemplaza, no la apila) que abre Movi —en el login, porque ya no hay sesión— y
+     * después de entrar, «Captura del banco». Se quita sola al entrar ([quitarSesionCerrada]).
+     */
+    fun avisarSesionCerrada(context: Context) {
+        publicar(context, ID_SESION_CERRADA, CANAL_CAPTURA, TEXTO_DE_LA_SESION_CERRADA, ABRIR_CAPTURA, cuantos = 1, silenciosa = sigueALaVista(context, ID_SESION_CERRADA))
+    }
+
+    fun quitarSesionCerrada(context: Context) {
+        runCatching { NotificationManagerCompat.from(context).cancel(ID_SESION_CERRADA) }
     }
 
     /** «Cerró tu período de septiembre»: tocarlo abre el detalle de ese período. */

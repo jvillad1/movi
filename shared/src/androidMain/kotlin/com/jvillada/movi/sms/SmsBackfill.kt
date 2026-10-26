@@ -59,10 +59,6 @@ object SmsBackfill {
         )
         when (val result = postSmsSync(token, payload)) {
             is SmsSyncResult.Success -> {
-                // Mismo reset que el Worker: fuera del pipeline Ktor nadie más corta la
-                // racha de 401, y una racha que no se corta convierte transitorios viejos
-                // en un logout "consecutivo".
-                SessionManager.onAuthSuccess()
                 // OJO: NO markLastCapture acá. Esa marca significa "el receiver en tiempo
                 // real anduvo" — es el indicador de que el sensor sigue mudo (token vencido,
                 // force-stop, hibernación). Si el backfill la pisara, una sincronización
@@ -78,18 +74,14 @@ object SmsBackfill {
                 BackfillOutcome.Uploaded(found = bank.size, synced = result.synced)
             }
             SmsSyncResult.Unauthorized -> {
-                // Mismo tratamiento que el Worker: la racha de SessionManager (3 seguidos)
-                // decide si la sesión se cierra — un clear() directo deslogueaba al usuario
-                // de toda la app por un solo 401. La marca queda para el aviso de pausa.
+                // El server rechazó la sesión: se cierra en el acto (ver `laSesionTras`) y el
+                // teléfono avisa una vez (`SessionManager.alRechazarseLaSesion`). Los SMS siguen en
+                // el inbox: el barrido que corre al volver a entrar los sube. La marca queda para
+                // el aviso de pausa de «Captura del banco».
                 SmsFilterConfigStore.markAuthExpired(context)
-                SessionManager.onUnauthorized()
-                if (SessionManager.loggedIn) {
-                    // La sesión sobrevivió al 401: no hay que volver a entrar (todavía).
-                    BackfillOutcome.AuthRetry
-                } else {
-                    // La racha se agotó: la app navega sola a LoginScreen.
-                    BackfillOutcome.SessionExpired
-                }
+                SessionManager.seRechazoElToken(token)
+                // Entró de nuevo mientras esto subía (otro token): que el reintento use el nuevo.
+                if (SessionManager.isLoggedIn) BackfillOutcome.Failed else BackfillOutcome.SessionExpired
             }
             else -> BackfillOutcome.Failed
         }
@@ -117,8 +109,6 @@ sealed interface BackfillOutcome {
     /** El usuario negó READ_SMS en el diálogo — el inbox no se puede leer. */
     data object NoPermission : BackfillOutcome
 
-    /** 401 que la racha todavía no convirtió en logout: la sesión sigue viva. */
-    data object AuthRetry : BackfillOutcome
     data object SessionExpired : BackfillOutcome
     data object Failed : BackfillOutcome
 }
@@ -140,7 +130,6 @@ internal fun backfillMessage(outcome: BackfillOutcome): String = when (outcome) 
     BackfillOutcome.NothingFound -> "No hay SMS bancarios en el teléfono desde el inicio de tu período anterior."
     BackfillOutcome.NoSession -> "Entra primero: sin sesión no se puede subir nada."
     BackfillOutcome.NoPermission -> "Sin el permiso de lectura de SMS no se puede recuperar el historial."
-    BackfillOutcome.AuthRetry -> "El servidor rechazó la sesión esta vez — prueba de nuevo en un momento."
     BackfillOutcome.SessionExpired -> "Sesión vencida — vuelve a entrar y prueba de nuevo."
     BackfillOutcome.Failed -> "No se pudo sincronizar. Revisa la conexión y prueba de nuevo."
 }

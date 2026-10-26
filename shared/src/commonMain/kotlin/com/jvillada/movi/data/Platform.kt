@@ -18,7 +18,7 @@ expect val isAndroid: Boolean
 
 /**
  * Se llama justo después de que una sesión termina (logout explícito o el logout forzado de
- * [SessionManager.onUnauthorized] tras 401s repetidos).
+ * [SessionManager.seRechazoElToken] tras un 401 de Movi).
  *
  * En Android/iOS es un no-op: Compose ya reacciona a `SessionManager.loggedIn` y navega sola a
  * [com.jvillada.movi.ui.Screen.Login].

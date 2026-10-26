@@ -234,6 +234,17 @@ fun textoDeBancosMudos(origenes: List<OrigenMudo>): TextoDeAviso? {
 fun huellaDeBancosMudos(origenes: List<OrigenMudo>): String =
     origenes.sortedBy { it.clave }.joinToString(",") { "${it.clave}@${it.ultima}" }
 
+/**
+ * **El server cerró la sesión del teléfono** (un 401 de Movi, ver `laSesionTras`). Lo que el dueño
+ * pierde no es la app —esa la ve al abrirla—, es la captura: los SMS y las notificaciones del banco
+ * dejan de subir. El 26-oct-2026 eso pasó en silencio; ahora suena una vez, y lo que llega mientras
+ * tanto se guarda en el teléfono y sube al entrar.
+ */
+val TEXTO_DE_LA_SESION_CERRADA = TextoDeAviso(
+    titulo = "Movi dejó de recibir los mensajes del banco",
+    texto = "Tu sesión se cerró. Entra de nuevo y lo que llegó mientras tanto sube solo.",
+)
+
 /** La hora del aviso de banco mudo, en Bogotá: después del de vencimientos, para no sonar juntos. */
 const val HORA_DEL_AVISO_DE_BANCO_MUDO: Int = 9
 

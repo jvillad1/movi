@@ -1,7 +1,12 @@
 package com.jvillada.movi.aplicacion
 
+import android.app.ActivityManager
 import android.app.Application
+import com.jvillada.movi.avisos.Avisador
 import com.jvillada.movi.data.SaldosOcultosStore
+import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.sms.SmsBackfillWorker
+import com.jvillada.movi.sms.SubirCapturasPorSubirWorker
 import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
 import com.jvillada.movi.widget.WidgetTeQuedan
 
@@ -21,5 +26,24 @@ class MoviAplicacion : Application() {
         // «Ocultar los saldos»: el widget pinta la misma cifra que el héroe, así que también se
         // tapa (o se destapa) en el acto.
         SaldosOcultosStore.alCambiar = { WidgetTeQuedan.pintarTodos(contexto) }
+        // El server cerró la sesión (ver `SessionManager.seRechazoElToken`). Con la app a la vista,
+        // el login ya lo dice; sin ella —un Worker subiendo un SMS a las 3 a. m.— nadie se entera,
+        // y eso es lo que pasó el 26-oct: la captura muda y el dueño creyendo que estaba adentro.
+        SessionManager.alRechazarseLaSesion = {
+            if (!seVeLaApp()) Avisador.avisarSesionCerrada(contexto)
+        }
+        // Volvió a entrar: se quita el aviso, sube lo que el banco mandó en la pausa y se barre el
+        // inbox por si algún SMS ni siquiera alcanzó a guardarse.
+        SessionManager.alEntrar = {
+            Avisador.quitarSesionCerrada(contexto)
+            SubirCapturasPorSubirWorker.encolar(contexto)
+            SmsBackfillWorker.barrerAhora(contexto)
+        }
     }
+
+    private fun seVeLaApp(): Boolean = runCatching {
+        ActivityManager.RunningAppProcessInfo()
+            .also { ActivityManager.getMyMemoryState(it) }
+            .importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+    }.getOrDefault(false)
 }

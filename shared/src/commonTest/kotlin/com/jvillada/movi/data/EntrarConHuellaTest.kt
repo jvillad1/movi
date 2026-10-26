@@ -162,10 +162,8 @@ class EntrarConHuellaTest {
         SessionManager.huellaActivada = true
         assertNotNull(SessionManager.token)
 
-        // Lo que hace el servidor cuando el token de 30 días ya caducó: 401, 401, 401.
-        SessionManager.onUnauthorized()
-        SessionManager.onUnauthorized()
-        SessionManager.onUnauthorized()
+        // Lo que hace el servidor cuando el token ya no vale (caducó, o se rotó el secreto): 401.
+        SessionManager.seRechazoElToken("tok_vencido")
 
         assertFalse(SessionManager.isLoggedIn)
         assertFalse(

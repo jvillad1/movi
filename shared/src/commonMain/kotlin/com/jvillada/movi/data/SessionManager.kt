@@ -40,6 +40,11 @@ private const val KEY_HUELLA = "entrar_con_huella"
 private const val KEY_BORRADO_PENDIENTE = "borrado_local_pendiente"
 private const val KEY_HUELLA_RECHAZADA = "entrar_con_huella_rechazada"
 
+// El id de quien perdió la sesión porque el SERVER rechazó su token (ver LaSesionRechazada.kt). No
+// es un secreto: un id. Sobrevive al cierre a propósito —es justamente para después: el login dice
+// por qué está ahí, y la captura del teléfono guarda lo que llegue para subirlo cuando vuelva.
+private const val KEY_SESION_RECHAZADA = "sesion_rechazada_de"
+
 /**
  * **El almacenamiento del dispositivo, que puede no existir.**
  *
@@ -151,11 +156,12 @@ private fun guardar(key: String, value: String?) {
 /**
  * **¿Este 401 significa «tu sesión venció»?**
  *
- * Los tres validadores HTTP (Android, iOS, wasm) le avisan a [SessionManager.onUnauthorized] de
- * CADA 401, y a los tres seguidos [SessionManager.clear] cierra la sesión. Eso está bien para un
- * token que caducó, y estaba mal para un pedido que **no lleva token ninguno**: el propio login.
+ Un 401 de Movi cierra la sesión (ver [laSesionTras] y [SessionManager.seRechazoElToken]). Eso
+ * está bien para un token que caducó, y estaba mal para un pedido que **no lleva token ninguno**:
+ * el propio login.
  *
- * Medido en el navegador: tres contraseñas equivocadas seguidas y, al tercer intento,
+ * Medido en el navegador, cuando la regla todavía era «tres 401 seguidos»: tres contraseñas
+ * equivocadas y, al tercer intento,
  * `clear()` → `reloadForLogout()` → la página se recarga sola. Los campos quedan vacíos y **no se
  * muestra ningún mensaje**: una pantalla en blanco sin explicación, justo cuando la persona ya
  * estaba dudando de su contraseña. No es un caso raro: equivocarse tres veces al escribir una
@@ -245,26 +251,49 @@ object SessionManager {
         get() = leer(KEY_BORRADO_PENDIENTE)
         set(v) = guardar(KEY_BORRADO_PENDIENTE, v)
 
-    private var consecutive401s = 0
-    private const val MAX_CONSECUTIVE_401S = 3
-
-    /** Call on every successful authenticated response to reset the 401 streak. */
-    fun onAuthSuccess() { consecutive401s = 0 }
+    /**
+     * **El server rechazó el token que llevaba un pedido** (un 401 de Movi, ver [laSesionTras]).
+     * Si ese token es el que está guardado, la sesión se cierra en el acto —igual que salir desde
+     * Perfil— y queda anotado que fue el server, para que el login diga por qué está ahí.
+     *
+     * Antes esto esperaba tres 401 seguidos, y con el token muerto tras la rotación del 26-oct la
+     * app de Android nunca cerró: pintaba el caché y callaba. Ver [laSesionTras] para por qué un
+     * solo 401 de Movi alcanza. Un error de red NO llega acá: sin conexión Movi sigue con lo suyo.
+     *
+     * Lo llaman los validadores HTTP de las tres plataformas y, en Android, los Workers que suben
+     * por `HttpURLConnection` (los SMS y las notificaciones del banco).
+     *
+     * Un pedido que salió con OTRO token (el de antes de volver a entrar) no cierra nada: la sesión
+     * de ahora no tiene la culpa.
+     */
+    fun seRechazoElToken(tokenDelPedido: String?) {
+        if (tokenDelPedido.isNullOrBlank() || tokenDelPedido != token) return
+        cerrar(rechazadaDe = userId.orEmpty())
+        runCatching { alRechazarseLaSesion?.invoke() }
+    }
 
     /**
-     * Call on every 401 response. Clears the session only after [MAX_CONSECUTIVE_401S]
-     * consecutive failures — avoids logging out on a single transient background-sync 401.
-     * Network errors (no connectivity) must NOT call this.
-     *
-     * **Ojo con quién lo llama.** Un 401 de cualquier ruta bajo `/api/auth/` NO es una sesión que venció: es la
-     * respuesta normal a una contraseña equivocada, y no hay sesión que cerrar porque todavía no
-     * empezó. Los validadores de las tres plataformas filtran esos pedidos con
-     * [cuentaComoSesionVencida] antes de llegar acá — ver el porqué completo allá.
+     * ¿La sesión la cerró el server (y no el dueño)? El login lo dice con
+     * [avisoDeLaSesionRechazada]. Se apaga al entrar de nuevo o al salir a mano.
      */
-    fun onUnauthorized() {
-        consecutive401s++
-        if (consecutive401s >= MAX_CONSECUTIVE_401S) clear()
-    }
+    val sesionRechazada: Boolean get() = leer(KEY_SESION_RECHAZADA) != null
+
+    /**
+     * De quién era la sesión que el server cerró (`""` si no se sabía), o `null` si no pasó. Lo usa
+     * Android para guardar la captura del banco mientras tanto y subirla solo si vuelve la MISMA
+     * persona — ver `CapturasPorSubir`.
+     */
+    val sesionRechazadaDe: String? get() = leer(KEY_SESION_RECHAZADA)
+
+    /**
+     * Lo que hace cada plataforma cuando el server cierra la sesión. En Android lo conecta la
+     * `Application` (no `MainActivity`): el cierre puede venir de un Worker, sin pantalla, y ahí
+     * hay que avisar con una notificación. Mismo patrón que `InstantaneaDelInicio.alCambiar`.
+     */
+    var alRechazarseLaSesion: (() -> Unit)? = null
+
+    /** Lo que hace cada plataforma al entrar (en Android, subir la captura que esperaba). */
+    var alEntrar: (() -> Unit)? = null
 
     fun save(token: String, userId: String, name: String, email: String) {
         this.token    = token
@@ -272,11 +301,23 @@ object SessionManager {
         this.userName = name
         this.userEmail = email
         this.rememberedEmail = email  // kept across clear() so the next login pre-fills it
-        consecutive401s = 0
         loggedIn = true
+        // Ya entró: el «tu sesión se cerró» del login dejó de ser cierto. `alEntrar` va después de
+        // apagarlo y lee [sesionRechazadaDe] antes: lo que se guardó en la pausa es de quien era.
+        val rechazadaDe = sesionRechazadaDe
+        guardar(KEY_SESION_RECHAZADA, null)
+        if (rechazadaDe != null) runCatching { alEntrar?.invoke() }
     }
 
-    fun clear() {
+    /** Salir: el logout de Perfil, borrar la cuenta. Ver [cerrar]. */
+    fun clear() = cerrar(rechazadaDe = null)
+
+    /**
+     * Cierra la sesión. [rechazadaDe] no es `null` solo cuando la cerró el server (ver
+     * [seRechazoElToken]): se anota ANTES de `loggedIn = false`, para que el login que eso abre ya
+     * sepa por qué está ahí. Un logout a mano lo borra: si el dueño salió, no hay nada que contar.
+     */
+    private fun cerrar(rechazadaDe: String?) {
         // PRIMERO, antes de borrar el token: soltar las notificaciones de este dispositivo.
         //
         // Salir no las soltaba, y no había forma de soltarlas desde la cuenta: el DELETE del
@@ -306,7 +347,7 @@ object SessionManager {
         // `runCatching` por lo mismo que el push de arriba: un logout siempre termina.
         userId?.let { uid -> runCatching { Repositories.olvidarDatosLocales(uid) } }
         // «Entrar con huella» se apaga al cerrar sesión. Sin esto, el token vencido dejaba un
-        // bucle: `clear()` también corre cuando el servidor contesta 401 tres veces seguidas, y
+        // bucle: la sesión también se cierra cuando el servidor rechaza el token, y
         // con el interruptor prendido el próximo arranque pediría el dedo para abrir una app que
         // igual iba a rebotar al login. Apagado, el arranque siguiente muestra el formulario
         // directo — que es lo único que puede funcionar con un token que ya no vale.
@@ -325,7 +366,6 @@ object SessionManager {
         if (leer(KEY_REMEMBER_PREF) == "0") {
             guardar(KEY_REMEMBERED_EMAIL, null)
         }
-        consecutive401s = 0
         // Lo que el Inicio tenía cacheado es de la sesión que se va: sin esto, en Android/iOS
         // (donde no se recarga la página) el próximo usuario vería por un instante el balance y
         // las alertas del anterior, y si alguna carga fallara en silencio, se quedarían.
@@ -367,7 +407,7 @@ object SessionManager {
         BusquedasRecientesStore.clear()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
-        // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres
+        // logout explícito de Perfil, el forzado de seRechazoElToken tras un 401 de Movi, y tres
         // llamadores más del lado Android— porque todos dejan a Compose sin sesión, y en la web
         // eso sin recargar es el segundo login de vuelta. En Android/iOS es un no-op.
         //
@@ -380,6 +420,7 @@ object SessionManager {
         // tick de JS y la recomposición de Compose en wasmJs espera al próximo frame, así que
         // entre una y otra no se pinta nada. Van en este orden por costumbre de dejar la
         // mutación de estado al final, no porque evite un parpadeo.
+        guardar(KEY_SESION_RECHAZADA, rechazadaDe)
         reloadForLogout()
         loggedIn = false
     }
