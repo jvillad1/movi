@@ -14,6 +14,7 @@ import com.jvillada.movi.theme.TextosDeMovi
 import com.jvillada.movi.ui.components.LocalSaldosOcultos
 import com.jvillada.movi.ui.components.PLATA_OCULTA
 import com.jvillada.movi.ui.components.signedMoneySinOcultar
+import kotlin.math.abs
 
 /** Tag estable de una [Cifra]. */
 const val TAG_CIFRA: String = "ds-cifra"
@@ -47,6 +48,13 @@ enum class TonoDeCifra {
 
     /** Una cifra de apoyo, en gris. */
     Apagado,
+
+    /**
+     * Plata que cambió de cuenta (un traspaso, la cuota o el pago de tarjeta que se ven como uno): en
+     * `entreCuentas` y **sin signo**, aunque llegue negativo. No entró ni salió del bolsillo; ponerle
+     * «+» o «−» sería elegir el punto de vista de una de las dos cuentas (ola R4).
+     */
+    EntreCuentas,
 }
 
 /** El estilo de una variante, en la escala de textos. Pura. */
@@ -63,6 +71,7 @@ fun colorDeLaCifra(tono: TonoDeCifra, colores: ColoresDeMovi): Color = when (ton
     TonoDeCifra.Ingreso -> colores.entra
     TonoDeCifra.Alerta -> colores.sale
     TonoDeCifra.Apagado -> colores.textoMedio
+    TonoDeCifra.EntreCuentas -> colores.entreCuentas
 }
 
 /**
@@ -72,6 +81,7 @@ fun colorDeLaCifra(tono: TonoDeCifra, colores: ColoresDeMovi): Color = when (ton
 fun textoDeLaCifra(monto: Long, moneda: String, tono: TonoDeCifra, ocultos: Boolean): String = when {
     ocultos -> PLATA_OCULTA
     tono == TonoDeCifra.Ingreso && monto > 0 -> "+" + signedMoneySinOcultar(monto, moneda)
+    tono == TonoDeCifra.EntreCuentas -> signedMoneySinOcultar(abs(monto), moneda)
     else -> signedMoneySinOcultar(monto, moneda)
 }
 
@@ -88,6 +98,7 @@ fun textoDeLaCifra(monto: Long, moneda: String, tono: TonoDeCifra, ocultos: Bool
  * Cifra(4_500_000, tono = TonoDeCifra.Ingreso)             // +$4.500.000, en verde
  * Cifra(tuPlata, VarianteDeCifra.Heroe)                    // la cifra de la pantalla
  * Cifra(181, moneda = "USD", variante = VarianteDeCifra.Chica)
+ * Cifra(500_000, tono = TonoDeCifra.EntreCuentas)          // $500.000, en el azul de un traspaso
  * ```
  */
 @Composable

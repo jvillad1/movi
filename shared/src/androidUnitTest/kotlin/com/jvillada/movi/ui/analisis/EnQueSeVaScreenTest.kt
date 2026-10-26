@@ -108,8 +108,13 @@ class EnQueSeVaScreenTest {
 
     /** El nombre de cada fila, en orden. */
     private fun nombresDeLasFilas(): List<String> =
-        composeRule.onAllNodesWithTag(TAG_NOMBRE_DE_LA_FILA, useUnmergedTree = true).fetchSemanticsNodes()
-            .map { nodo -> nodo.config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString("") { it.text } }
+        // Cada fila es una `Fila` del sistema: sus textos, fundidos, van en orden —el del avatar si
+        // lo tiene, el nombre, «32 % · 4 movimientos»…—; el nombre es el que va justo antes del %.
+        composeRule.onAllNodesWithTag(TAG_FILA_DEL_ANALISIS).fetchSemanticsNodes()
+            .map { nodo ->
+                val textos = nodo.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text }
+                textos[textos.indexOfFirst { " % · " in it } - 1]
+            }
 
     private fun hay(texto: String) =
         composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()

@@ -46,9 +46,10 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
+import com.jvillada.movi.ui.components.ds.TAG_ESQUELETO_DE_FILA
+import com.jvillada.movi.ui.transactions.TAG_FILA_DE_MOVIMIENTO_SUELTO
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.sdui.SduiRenderer
-import com.jvillada.movi.ui.transactions.TAG_FILA_DE_MOVIMIENTO_SUELTO
 import com.jvillada.movi.ui.transactions.TransactionsScreen
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.datetime.Clock
@@ -226,13 +227,17 @@ class IconoDeCategoriaEnLaAppTest {
         }
         composeRule.waitForIdle()
 
-        val xEsqueleto = composeRule.onAllNodesWithTag(TAG_TITULO_DE_FILA_ESQUELETO, useUnmergedTree = true)
+        // Ola R4: el esqueleto de Movimientos es `EsqueletoDeFila` y la fila real es la `Fila` del
+        // sistema: misma anatomía (margen, avatar de 40 y el mismo aire). Se mide dónde arranca cada
+        // fila; el texto arranca en el mismo lugar adentro de las dos.
+        val xEsqueleto = composeRule.onAllNodesWithTag(TAG_ESQUELETO_DE_FILA, useUnmergedTree = true)
             .onFirst().getUnclippedBoundsInRoot().left
 
         puerta.complete(listOf(dia))
         composeRule.waitForIdle()
 
-        val xReal = composeRule.onNodeWithText("Café", useUnmergedTree = true).getUnclippedBoundsInRoot().left
+        val xReal = composeRule.onAllNodesWithTag(TAG_FILA_DE_MOVIMIENTO_SUELTO, useUnmergedTree = true)
+            .onFirst().getUnclippedBoundsInRoot().left
 
         val diferencia = abs(xReal.value - xEsqueleto.value)
         assertTrue(

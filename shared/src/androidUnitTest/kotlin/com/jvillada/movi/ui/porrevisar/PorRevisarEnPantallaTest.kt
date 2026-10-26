@@ -178,7 +178,7 @@ class PorRevisarEnPantallaTest {
         esperarTexto("Compra Exito")
 
         composeRule.onNodeWithText("Compra Exito", useUnmergedTree = true).performClick()
-        esperarTexto("POR CONFIRMAR")
+        esperarTexto("Por confirmar")
         composeRule.onNode(hasClickAction() and hasAnyChild(hasText("Confirmar")), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { confirmado != null }
@@ -199,11 +199,11 @@ class PorRevisarEnPantallaTest {
         esperarTexto("Compra Exito")
 
         composeRule.onNodeWithText("Compra Exito", useUnmergedTree = true).performClick()
-        esperarTexto("POR CONFIRMAR")
+        esperarTexto("Por confirmar")
         composeRule.onNode(hasClickAction() and hasAnyChild(hasText("Confirmar")), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { confirmado != null }
-        composeRule.waitUntil(5_000) { !hay("POR CONFIRMAR") }
+        composeRule.waitUntil(5_000) { !hay("Por confirmar") }
         composeRule.waitForIdle()
 
         assertTrue("ya no está pendiente", !hay("Compra Exito"))
@@ -216,7 +216,7 @@ class PorRevisarEnPantallaTest {
         esperarTexto("1 pago de tarjeta sin marcar")
 
         composeRule.onNodeWithText("1 pago de tarjeta sin marcar", useUnmergedTree = true).performClick()
-        esperarTexto("PAGOS DE TARJETA SIN MARCAR")
+        esperarTexto("Pagos de tarjeta sin marcar")
         assertTrue(hay("Pago Nu"))
     }
 

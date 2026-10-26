@@ -18,6 +18,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalance
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.sms.PastillaDelPago
+import com.jvillada.movi.ui.sms.TarjetaDeAviso
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,8 +37,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
@@ -98,78 +104,38 @@ internal fun TarjetaDelDebitoAutomatico(
     }
 
     val montoValido = (monto ?: 0L) > 0L
-    MinCard(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp).testTag(TAG_TARJETA_DEL_DEBITO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
+    // La misma tarjeta que un aviso del banco (ola R4): la propuesta de Movi, con su estado y sus
+    // acciones en botones chicos del sistema.
+    TarjetaDeAviso(
+        titulo = NOTA_DEL_DEBITO_AUTOMATICO,
+        subtitulo = "Vence el ${fechaLegibleDelChecklist(debito.vence).ifEmpty { debito.vence }}",
+        modifier = Modifier.padding(bottom = Medida.dentroDeSeccion).testTag(TAG_TARJETA_DEL_DEBITO),
+        inicio = { IconoEnCirculo(Icons.Rounded.AccountBalance, tono = TonoDeIcono.Aviso) },
+        estado = "Por confirmar" to TonoDePildora.Aviso,
+        acciones = {
+            PastillaDelPago(
+                if (trabajando) "Anotando…" else SI_SE_COBRO,
+                principal = true,
+                habilitada = !trabajando && montoValido,
+            ) {
+                val elMonto = monto ?: return@PastillaDelPago
+                hacer { confirmarElDebitoAutomatico(debito, elMonto) }
+            }
+            if (!cambiando) {
+                PastillaDelPago(CAMBIAR_MONTO, habilitada = !trabajando) { cambiando = true }
+            }
+            PastillaDelPago(NO_SE_COBRO, habilitada = !trabajando) {
+                hacer { Repositories.wallets.descartarDebitoAutomatico(debito.ruleId, debito.periodo) }
+            }
+        },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                NOTA_DEL_DEBITO_AUTOMATICO.uppercase(),
-                style = Movi.textos.rotulo.copy(letterSpacing = 0.8.sp),
-                color = Movi.colores.aviso,
-                modifier = Modifier.weight(1f),
-            )
-            Text("Vence el ${fechaLegibleDelChecklist(debito.vence).ifEmpty { debito.vence }}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(conCifrasOcultas(textoDelDebitoAutomatico(debito)), style = Movi.textos.cuerpo, color = Movi.colores.texto, lineHeight = 20.sp)
-        Spacer(Modifier.height(4.dp))
+        Text(conCifrasOcultas(textoDelDebitoAutomatico(debito)), style = Movi.textos.cuerpo, color = Movi.colores.texto)
         Text(
             "El banco no avisa cuando la cobra. Movi no la anota hasta que confirmes.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )
-        if (cambiando) {
-            Spacer(Modifier.height(10.dp))
-            MoneyField(monto, { monto = it }, label = "Lo que cobró el banco")
-        }
-        error?.let {
-            Spacer(Modifier.height(8.dp))
-            Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Pastilla(
-                if (trabajando) "Anotando…" else SI_SE_COBRO,
-                principal = true,
-                habilitada = !trabajando && montoValido,
-            ) {
-                val elMonto = monto ?: return@Pastilla
-                hacer { confirmarElDebitoAutomatico(debito, elMonto) }
-            }
-            if (!cambiando) {
-                Pastilla(CAMBIAR_MONTO, habilitada = !trabajando) { cambiando = true }
-            }
-            Pastilla(NO_SE_COBRO, habilitada = !trabajando) {
-                hacer { Repositories.wallets.descartarDebitoAutomatico(debito.ruleId, debito.periodo) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Pastilla(texto: String, habilitada: Boolean, principal: Boolean = false, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .then(
-                if (principal) Modifier.background(if (habilitada) Movi.colores.texto else Movi.colores.textoApagado)
-                else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp)),
-            )
-            .clickable(enabled = habilitada, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        Text(
-            texto,
-            style = Movi.textos.apoyo,
-            color = if (principal) Movi.colores.fondo else Movi.colores.texto,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-        )
+        if (cambiando) MoneyField(monto, { monto = it }, label = "Lo que cobró el banco")
+        error?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
     }
 }
