@@ -203,8 +203,8 @@ class DocumentosScreenTest {
 
         tocarBotonQueEnvuelveTexto("Reintentar")
 
-        // «Importaciones» se pinta en mayúsculas (MinSectionHeader hace `.uppercase()`); lo que
-        // de verdad importa es que la fila de la importación llegó.
+        // El título «Importaciones» ya estaba antes del error; lo que de verdad importa es que la
+        // fila de la importación llegó.
         esperarTexto("BANCOLOMBIA")
         // Y el aviso de error ya no está — no se puede afirmar «no pude leer» y a la vez
         // mostrar la lista que sí llegó.
@@ -231,7 +231,7 @@ class DocumentosScreenTest {
         // documentos — y «Importaciones» es el único camino a «Deshacer importación».
         montarConRepo(SinDocumentosConUnaImportacion())
         esperarTexto("Aquí se guardan tus extractos")
-        esperarTexto("IMPORTACIONES")
+        esperarTexto("Importaciones")
         esperarTexto("BANCOLOMBIA")
 
         composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText("BANCOLOMBIA", substring = true)), useUnmergedTree = true)

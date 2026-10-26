@@ -106,7 +106,7 @@ class TableroDeRecurrentesVacioTest {
         assertTrue(!hay("\$0"), "ningún \$0 presentado como un hecho para quien no anotó nada")
         assertTrue(!hay("Este período no tiene pagos anotados"), "el vacío único reemplaza al del checklist")
         assertTrue(!hay("Nada vence en los próximos días"), "el vacío único reemplaza al de Próximos")
-        assertTrue(!hay(TITULO_CHECKLIST_DEL_PERIODO.uppercase()))
+        assertTrue(!hay(TITULO_CHECKLIST_DEL_PERIODO))
     }
 
     @Test
@@ -128,7 +128,7 @@ class TableroDeRecurrentesVacioTest {
         esperarTexto("Spotify")
 
         assertTrue(!hay("Aquí van tus pagos fijos"), "con una candidata ya hay algo que revisar")
-        assertTrue(hay(TITULO_COBROS_DETECTADOS.uppercase()))
+        assertTrue(hay(TITULO_COBROS_DETECTADOS))
     }
 
     /**

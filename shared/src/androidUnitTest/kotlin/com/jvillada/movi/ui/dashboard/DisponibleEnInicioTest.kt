@@ -142,7 +142,7 @@ class DisponibleEnInicioTest {
         // $10M de ingresos menos $3,1M de arriendo = $6,9M. Hoy se gastaron $150.000.
         montar(datos(ingresos = 10_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-21" to 150_000L)))
 
-        composeRule.onNodeWithText("DISPONIBLE", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Disponible", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("\$6,9M", useUnmergedTree = true).assertIsDisplayed()
         // Ola 3 · Hoy en una mirada: la frase «Te quedan $6,8M para 4 días · meta diaria $222.580»
         // ya no va en la sección de Hoy: la dice el héroe, con la misma cuenta

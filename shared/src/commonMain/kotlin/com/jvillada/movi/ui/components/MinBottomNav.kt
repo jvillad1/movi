@@ -23,7 +23,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 
@@ -109,7 +108,7 @@ fun MinBottomNav(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp),
+                .height(Medida.altoDeBarraDePestanas),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -120,19 +119,19 @@ fun MinBottomNav(
                 alTocar = { onTabSelected(NavTab.ADD) },
                 alElegirAtajo = onAtajo,
                 modifier = Modifier
-                    .size(52.dp)
-                    .shadow(6.dp, CircleShape)
+                    .size(Medida.botonFlotante)
+                    .shadow(Espacio.xs, CircleShape)
                     .clip(CircleShape)
                     .background(Movi.colores.marca),
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Add,
                     contentDescription = "Agregar",
-                    // Era un `Color(0xFF1A1040)` escrito a mano acá, el único lugar de la app que
-                    // lo decía. Ese valor ES el rol `sobreMarca`, y ahora se llama así: da 8,47:1
+                    // Era un lila oscuro escrito a mano acá, el único lugar de la app que lo
+                    // decía. Ese valor ES el rol `sobreMarca`, y ahora se llama así: da 8,47:1
                     // contra el lavanda, y la prueba de contraste no deja que baje.
                     tint = Movi.colores.sobreMarca,
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(Icono.l),
                 )
             }
 
@@ -152,28 +151,28 @@ private fun NavItem(
     val isActive = tab == active
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
         modifier = Modifier
             .clickable { onTabSelected(tab) }
-            .padding(horizontal = 4.dp, vertical = 8.dp),
+            .padding(horizontal = Espacio.xxs, vertical = Espacio.xs),
     ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .clip(RoundedCornerShape(Movi.formas.pleno))
-                // La píldora del activo era un morado sólido propio (`Movi.colores.marca.copy(alpha = 0.16f)`), un
-                // color que existía solo para esto. Ahora es la MARCA lavada: el sistema tiene un
-                // lavanda, no dos, y el ícono encima va del mismo lavanda a plena fuerza.
+                // La píldora del activo era un morado sólido propio, un color que existía solo para
+                // esto. Es la MARCA lavada: el sistema tiene un lavanda, no dos, y el ícono encima va
+                // del mismo lavanda a plena fuerza. 44 × 28, como la del camino 1.
                 .background(
-                    if (isActive) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent,
+                    if (isActive) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent,
                 )
-                .padding(horizontal = 14.dp, vertical = 3.dp),
+                .padding(horizontal = Espacio.s, vertical = Espacio.xxs),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
                 tint = if (isActive) Movi.colores.marca else Movi.colores.textoApagado,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(Icono.m),
             )
         }
         Text(

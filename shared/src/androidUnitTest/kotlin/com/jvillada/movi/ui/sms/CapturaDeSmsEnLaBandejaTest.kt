@@ -135,7 +135,7 @@ class CapturaDeSmsEnLaBandejaTest {
 
         // Con la sección de captura ya pintada (el rótulo va en mayúsculas), la pantalla
         // terminó de componer y el aviso, si fuera a aparecer, ya estaría.
-        esperarTexto("CAPTURA EN ESTE TELÉFONO")
+        esperarTexto("Captura en este teléfono")
         composeRule.onNodeWithText("NUNCA HA LLEGADO UN MENSAJE", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("ÚLTIMO MENSAJE RECIBIDO", useUnmergedTree = true).assertDoesNotExist()
     }
@@ -175,9 +175,9 @@ class CapturaDeSmsEnLaBandejaTest {
         )
         montar()
 
-        esperarTexto("HISTORIAL")
+        esperarTexto("Historial")
         composeRule.onNodeWithText("Captura del banco", useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText("CAPTURA EN ESTE TELÉFONO", substring = true, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Captura en este teléfono", substring = true, useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("CONFIRMADO", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("PENDIENTE", useUnmergedTree = true).assertExists()
         // Ya no cuenta pendientes en el encabezado: eso lo dice «Por revisar».

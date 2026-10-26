@@ -3,11 +3,9 @@ package com.jvillada.movi.ui.components
 import com.jvillada.movi.data.SaldosOcultosStore
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
@@ -27,6 +25,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.SuperficieConRellenoLibre
 
 /**
  * Las tres alturas de tarjeta que **ya no son tres colores**.
@@ -34,59 +35,67 @@ import com.jvillada.movi.theme.*
  * Eran `#191B20`, `#1D1F25` y `#22252B`: tres grises a 1,10 · 1,15 · 1,23 de contraste contra el
  * fondo, o sea tres planos separados por casi nada, que en un teléfono al sol no se distinguen.
  *
- * Ahora las tres pintan `Movi.colores.tarjeta` y la que necesita despegarse suma **borde**. Es la
- * decisión de la dirección B: en una paleta de poco contraste la profundidad la dan la superficie
- * y el borde juntos, no la superficie sola. Un borde a 1,27:1 se ve; un gris a 1,05 de distancia
- * del anterior, no.
- *
  * El enum sobrevive porque lo nombran 69 llamadas, y en los hechos ya era uno solo: [Elevated] en
  * 60, [Default] en 8 y [High] en **una**.
+ *
+ * **Ola R0:** `MinCard` delega en `Superficie` (`ui/components/ds/`). [Default] y [Elevated] son la
+ * capa 1; [High], que antes era la misma superficie con un borde, es la capa 2 — superficies por
+ * capas, sin bordes duros.
  */
 enum class MinCardVariant {
-    /** Lo normal. Sin borde. */
+    /** Lo normal: la capa 1. */
     Default,
 
     /** Lo normal también. Se conserva porque es el default histórico y lo dicen 60 llamadas. */
     Elevated,
 
-    /** La que va ENCIMA de otra tarjeta: misma superficie, con borde para despegarse. */
+    /** La que va ENCIMA de otra tarjeta: la capa 2. */
     High,
 }
 
+/**
+ * **La tarjeta de siempre, que ahora es una [com.jvillada.movi.ui.components.ds.Superficie].**
+ *
+ * Una pantalla nueva usa `Superficie` directamente, con un `RellenoDeSuperficie` en vez de un
+ * [padding] suelto: la auditoría de la ola R0 contó 27 rellenos distintos pasados acá. Este
+ * componente queda para no romper sus 148 llamadas mientras se migran; el default del relleno ya
+ * es el del sistema (`Medida.rellenoDeSuperficie`, 16).
+ */
 @Composable
 fun MinCard(
     modifier: Modifier = Modifier,
     variant: MinCardVariant = MinCardVariant.Elevated,
-    padding: PaddingValues = PaddingValues(Movi.espacios.margen),
+    padding: PaddingValues = PaddingValues(Medida.rellenoDeSuperficie),
     onClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val forma = RoundedCornerShape(Movi.formas.amplia)
-    val baseModifier = modifier
-        .clip(forma)
-        .background(Movi.colores.tarjeta)
-        .then(
-            if (variant == MinCardVariant.High) {
-                Modifier.border(1.dp, Movi.colores.borde, forma)
-            } else {
-                Modifier
-            },
-        )
-        .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
-        .padding(padding)
-    Column(modifier = baseModifier, content = content)
+    SuperficieConRellenoLibre(
+        modifier = modifier,
+        nivel = if (variant == MinCardVariant.High) NivelDeSuperficie.Capa2 else NivelDeSuperficie.Capa1,
+        relleno = padding,
+        onClick = onClick,
+        onClickLabel = onClickLabel,
+        contenido = content,
+    )
 }
 
 @Composable
 fun Hairline(insetStart: Dp = 0.dp, insetEnd: Dp = 0.dp) {
     HorizontalDivider(
         modifier = Modifier.padding(start = insetStart, end = insetEnd),
-        thickness = 1.dp,
+        thickness = Medida.trazo,
         color = Movi.colores.hilo,
     )
 }
 
+/**
+ * **El título de una sección, que ahora es [com.jvillada.movi.ui.components.ds.Seccion].**
+ *
+ * Ola R0: era un rótulo en mayúsculas (10,5 sp, espaciado 1,7) con 8 dp de sangría; ahora es el
+ * título de sección del camino 1 —en minúsculas como se escribe, en `titulo`, alineado con lo que
+ * titula—, igual en las 70 llamadas. Una pantalla nueva llama a `Seccion` directamente.
+ */
 @Composable
 fun MinSectionHeader(
     title: String,
@@ -94,38 +103,7 @@ fun MinSectionHeader(
     action: String? = null,
     onAction: (() -> Unit)? = null,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = Movi.espacios.corto, end = Movi.espacios.corto, bottom = Movi.espacios.medio),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row {
-            // El rótulo del sistema espacia 1,7.sp contra los 0,5 de antes. En mayúsculas el
-            // espaciado no es adorno: sin él las versales se leen como una palabra apretada.
-            Text(
-                text = title.uppercase(),
-                style = Movi.textos.rotulo,
-                color = Movi.colores.textoMedio,
-            )
-            if (count != null) {
-                Text(
-                    text = " · $count",
-                    style = Movi.textos.rotulo,
-                    color = Movi.colores.textoApagado,
-                )
-            }
-        }
-        if (action != null) {
-            Text(
-                text = action,
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.marca,
-                modifier = if (onAction != null) Modifier.clickable(onClick = onAction) else Modifier,
-            )
-        }
-    }
+    Seccion(titulo = title, conteo = count, accion = action, onAccion = onAction)
 }
 
 @Composable

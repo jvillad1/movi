@@ -104,7 +104,7 @@ class SuscripcionAnualEnElTableroTest {
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
-        esperarTexto("SUSCRIPCIONES ACTIVAS")
+        esperarTexto("Suscripciones activas")
         // La sección arranca plegada (ver `SuscripcionesPlegablesTest`); todo lo que esta clase
         // afirma es sobre las FILAS, así que se abre una vez acá.
         composeRule.onNodeWithText("Ver", useUnmergedTree = true).performClick()

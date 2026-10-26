@@ -102,11 +102,11 @@ internal object PaginaCompartida {
 @font-face { font-family: 'Space Grotesk'; src: url('$FUENTES/space_grotesk_semibold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
 @font-face { font-family: 'Martian Mono'; src: url('$FUENTES/martian_mono_medium.ttf') format('truetype'); font-weight: 500 600; font-display: swap; }
 :root {
-  --fondo: #07090C; --tarjeta: #161D25; --borde: #26303B; --hilo: #1C242D;
+  --fondo: #08090D; --tarjeta: #191B25; --borde: #2E3242; --hilo: #21242E;
   --texto: #EAEEF2; --texto-medio: #B4BEC9; --texto-apagado: #95A0AD;
   --marca: #B9A0FF; --entra: #7FD4A8; --sale: #F08A7C; --neutro: #4A5763;
-  --margen: 20px; --amplio: 16px; --medio: 12px; --corto: 8px; --seccion: 32px;
-  --forma-amplia: 16px; --forma-normal: 11px;
+  --margen: 16px; --amplio: 16px; --medio: 12px; --corto: 8px; --seccion: 24px;
+  --forma-amplia: 16px; --forma-normal: 12px;
   --letra: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --cifras: 'Martian Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   color-scheme: dark;
@@ -214,7 +214,7 @@ footer { margin-top: var(--seccion); text-align: center; color: var(--texto-apag
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#07090C" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#08090D" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#E9ECF1" media="(prefers-color-scheme: light)">
 <title>Resumen compartido · Movi</title>
 <style>

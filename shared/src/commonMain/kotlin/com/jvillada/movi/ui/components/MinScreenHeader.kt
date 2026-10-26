@@ -1,25 +1,8 @@
 package com.jvillada.movi.ui.components
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.ds.Encabezado
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.navTabFor
@@ -65,7 +48,11 @@ fun leadingFor(screen: Screen, onNavigate: (Screen) -> Unit, fallback: Screen): 
  * F60: el encabezado único de TODAS las pantallas. Antes cada una armaba su propio Row
  * (26.sp acá, 17.sp allá, flecha `ArrowBack` o `ArrowBackIosNew`, con o sin avatar…) y el
  * dueño lo notó. Un solo componente: leading a la izquierda, título con el MISMO rótulo que
- * el menú, acción propia a la derecha si la hay, y una Hairline debajo.
+ * el menú y acción propia a la derecha si la hay.
+ *
+ * **Ola R0:** delega en [com.jvillada.movi.ui.components.ds.Encabezado], que le pone el alto
+ * (`Medida.altoDeEncabezado`, 56), los márgenes (`Medida.margenDePantalla`, 16) y la flecha en un
+ * área de toque de 48. Ya no lleva la línea de abajo: superficies por capas, sin bordes duros.
  *
  * @param subtitle línea secundaria opcional (p.ej. «3 nuevas · 2 coincidencias» al revisar un extracto).
  * @param action   slot a la derecha (NewItemButton, lupa, campana…); null si la pantalla no
@@ -78,54 +65,14 @@ fun MinScreenHeader(
     subtitle: String? = null,
     action: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    // La flecha lleva 11.dp de padding alrededor (área tocable ≈44dp); el padding horizontal
-    // del Row se reduce en la misma medida para que el título no se corra respecto del avatar.
-    val backInset = if (leading is HeaderLeading.Back) 11.dp else 0.dp
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = Movi.espacios.margen - backInset, end = Movi.espacios.margen)
-            .padding(top = Movi.espacios.corto, bottom = Movi.espacios.medio),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-    ) {
-        when (leading) {
-            is HeaderLeading.Avatar -> AvatarButton(onClick = { leading.onNavigate(Screen.Mas) })
-            is HeaderLeading.Back -> {
-                val goBack = LocalGoBack.current
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Volver",
-                    tint = Movi.colores.texto,
-                    modifier = Modifier
-                        .clickable { goBack(leading.fallback) }
-                        .padding(11.dp)
-                        .size(22.dp),
-                )
-            }
-            HeaderLeading.Ninguno -> Unit
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            // `titular` es 19.sp contra los 17 de antes, y semibold contra medium. El título de
-            // la pantalla es el ancla de toda la jerarquía: si no gana, no hay jerarquía.
-            Text(
-                text = title,
-                style = Movi.textos.titular,
-                color = Movi.colores.texto,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        if (action != null) action()
-    }
-    Hairline()
+    val goBack = LocalGoBack.current
+    Encabezado(
+        titulo = title,
+        subtitulo = subtitle,
+        onVolver = (leading as? HeaderLeading.Back)?.let { back -> { goBack(back.fallback) } },
+        inicio = (leading as? HeaderLeading.Avatar)?.let { avatar ->
+            { AvatarButton(onClick = { avatar.onNavigate(Screen.Mas) }) }
+        },
+        acciones = action,
+    )
 }

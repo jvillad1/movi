@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.dashboard
 
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import com.jvillada.movi.ui.components.ds.TAG_SECCION
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -143,8 +147,18 @@ class EditarInicioEnPantallaTest {
     private fun hayTexto(texto: String) =
         composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
-    private fun arriba(texto: String): Dp =
-        composeRule.onNodeWithText(texto, useUnmergedTree = true).getUnclippedBoundsInRoot().top
+    /**
+     * El título de la sección [texto] en Hoy. Desde la ola R0 los títulos de sección se escriben
+     * como el rótulo de su fila en el editor («Disponible»), así que se buscan por `TAG_SECCION`.
+     */
+    private fun seccion(texto: String) = composeRule.onAllNodes(
+        hasTestTag(TAG_SECCION) and hasAnyDescendant(hasText(texto)),
+        useUnmergedTree = true,
+    )
+
+    private fun haySeccion(texto: String) = seccion(texto).fetchSemanticsNodes().isNotEmpty()
+
+    private fun arriba(texto: String): Dp = seccion(texto)[0].getUnclippedBoundsInRoot().top
 
     private fun tocar(rotulo: String) = composeRule.onNodeWithContentDescription(rotulo, useUnmergedTree = true).performClick()
 
@@ -161,7 +175,7 @@ class EditarInicioEnPantallaTest {
         composeRule.onNodeWithContentDescription(rotuloDeMostrar("Disponible"), useUnmergedTree = true).assertIsOff()
         // Lo demás sigue: el héroe y la sección de al lado.
         assertTrue(hayTag(TAG_TARJETA_DEL_HERO))
-        assertTrue(hayTexto("EN QUÉ SE VA"))
+        assertTrue(hayTexto("En qué se va"))
         // Hoy quedó donde Hoy la busca al volver: la memoria y el aparato.
         composeRule.waitUntil(5_000) { ScreenDefCache.dashboard?.sections?.none { it.type == "DISPONIBLE_DEL_PERIODO" } == true }
         assertEquals(ScreenDefCache.dashboard, InstantaneaDelInicio.delAparato.definicion("u1"))
@@ -170,13 +184,13 @@ class EditarInicioEnPantallaTest {
     @Test
     fun `subir En que se va la pone antes en Hoy y en la lista`() {
         montar()
-        assertTrue(arriba("DISPONIBLE") < arriba("EN QUÉ SE VA"), "en el orden de Movi, el disponible va antes")
+        assertTrue(arriba("Disponible") < arriba("En qué se va"), "en el orden de Movi, el disponible va antes")
 
         tocar(rotuloDeSubir("En qué se va"))
         composeRule.waitUntil(5_000) { server.guardada.orden.isNotEmpty() }
         composeRule.waitForIdle()
 
-        assertTrue(arriba("EN QUÉ SE VA") < arriba("DISPONIBLE"), "subida, «En qué se va» va antes del disponible")
+        assertTrue(arriba("En qué se va") < arriba("Disponible"), "subida, «En qué se va» va antes del disponible")
         // La lista del editor dice el mismo orden que Hoy.
         val filaGasto = composeRule.onNodeWithTag(tagDeLaFilaDelEditor("GASTO_POR_CATEGORIA"), useUnmergedTree = true).getUnclippedBoundsInRoot().top
         val filaDisponible = composeRule.onNodeWithTag(tagDeLaFilaDelEditor("DISPONIBLE_DEL_PERIODO"), useUnmergedTree = true).getUnclippedBoundsInRoot().top
@@ -198,7 +212,7 @@ class EditarInicioEnPantallaTest {
         composeRule.waitForIdle()
 
         assertEquals(porDefecto, server.hoyServido.value, "Hoy vuelve a ser el de Movi, con su versión")
-        assertTrue(arriba("DISPONIBLE") < arriba("EN QUÉ SE VA"))
+        assertTrue(arriba("Disponible") < arriba("En qué se va"))
         composeRule.onNodeWithContentDescription(rotuloDeMostrar("Tu patrimonio"), useUnmergedTree = true).assertIsOn()
     }
 
@@ -206,20 +220,20 @@ class EditarInicioEnPantallaTest {
     fun `con Para revisar oculta y algo urgente aparece la linea compacta`() {
         val data = datos(pendingSms = 12)
         montar(data)
-        assertTrue(hayTexto("PARA REVISAR"), "antes, la sección entera")
+        assertTrue(haySeccion("Para revisar"), "antes, la sección entera")
 
         tocar(rotuloDeMostrar("Para revisar"))
         composeRule.waitUntil(5_000) { hayTag(TAG_PARA_REVISAR_COMPACTO) }
 
         assertEquals(PARA_REVISAR_COMPACTO, server.hoyServido.value.sections.single { it.type == PARA_REVISAR_COMPACTO }.type)
-        assertTrue(!hayTexto("PARA REVISAR"), "la sección se fue…")
+        assertTrue(!haySeccion("Para revisar"), "la sección se fue…")
         val cuantas = cosasParaRevisarDe(data).size + anomaliasVisiblesDe(data).size
         assertTrue(hayTexto(textoDeParaRevisarCompacto(cuantas)), "…y queda una línea con cuántas cosas hay")
         assertTrue(hayTexto(PARA_REVISAR_ESCONDIDA), "el editor dice qué pasa con lo urgente")
 
         // Tocarla la abre ahí mismo.
         composeRule.onNodeWithTag(TAG_PARA_REVISAR_COMPACTO).performClick()
-        composeRule.waitUntil(5_000) { hayTexto("PARA REVISAR") }
+        composeRule.waitUntil(5_000) { haySeccion("Para revisar") }
     }
 
     @Test
@@ -241,6 +255,6 @@ class EditarInicioEnPantallaTest {
         composeRule.waitForIdle()
         assertTrue(cosasParaRevisarDe(data).isNotEmpty() && cosasParaRevisarDe(data).none { it.urgente })
         assertTrue(!hayTag(TAG_PARA_REVISAR_COMPACTO))
-        assertTrue(!hayTexto("PARA REVISAR"))
+        assertTrue(!hayTexto("Para revisar"))
     }
 }

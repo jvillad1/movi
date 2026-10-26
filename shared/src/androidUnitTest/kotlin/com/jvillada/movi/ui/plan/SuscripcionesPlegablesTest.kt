@@ -91,7 +91,7 @@ class SuscripcionesPlegablesTest {
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
-        esperarTexto("SUSCRIPCIONES ACTIVAS")
+        esperarTexto("Suscripciones activas")
     }
 
     @After

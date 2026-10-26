@@ -19,7 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,11 +33,15 @@ import com.jvillada.movi.ui.ai.TITULO_LO_QUE_MOVI_SABE
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
 import com.jvillada.movi.ui.profile.BORRAR_MI_CUENTA
 
+/**
+ * Una ficha de Ajustes. [color] es una clave del catálogo de colores de categoría
+ * (`COLORES_DEL_CATALOGO`): el ícono va en ese color sobre su círculo, en los dos temas. Ola R0:
+ * eran nueve pares de colores escritos a mano, pensados solo para el tema oscuro.
+ */
 private data class MasItem(
     val label: String,
     val icon: ImageVector,
-    val tint: Color,
-    val bg: Color,
+    val color: String,
     val screen: Screen,
 )
 
@@ -53,28 +56,28 @@ private data class MasItem(
 private val items = listOf(
     // F40: "Análisis" no analizaba — era un índice con cifras, y eso ahora es el Inicio. Perfil va
     // primero: es lo que el avatar abría hasta la ola C, y quien lo toca por costumbre lo busca.
-    MasItem("Perfil",       Icons.Rounded.ManageAccounts,   Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Profile),
+    MasItem("Perfil",       Icons.Rounded.ManageAccounts,   "azul", Screen.Profile),
     // Ola 10: la única puerta a «Categorías» (además del acceso de cada campo de categoría).
-    MasItem("Categorías",   Icons.AutoMirrored.Rounded.Label, Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Categorias),
+    MasItem("Categorías",   Icons.AutoMirrored.Rounded.Label, "verde", Screen.Categorias),
     // Ola 18: los papeles. Ola B, tarea 7: absorbió a «Extractos» — el importador archiva ahí
     // lo que pasa por él, y ahora también «Importar movimientos» vive en cada fila de acá.
-    MasItem("Documentos",   Icons.Rounded.Folder,           Color(0xFFB3C8FF), Color(0x1AB3C8FF), Screen.Documentos),
+    MasItem("Documentos",   Icons.Rounded.Folder,           "azul", Screen.Documentos),
     // Ola V: una puerta secundaria a «Personas y comercios» (la principal es Movimientos desde el
     // 4-oct-2026), con el mismo nombre que el título de la pantalla.
-    MasItem(PERSONAS_Y_COMERCIOS, Icons.Rounded.Groups,     Color(0xFFFFCC80), Color(0x24FFCC80), Screen.Destinos()),
+    MasItem(PERSONAS_Y_COMERCIOS, Icons.Rounded.Groups,     "naranja", Screen.Destinos()),
     // Compartir con un tercero: el enlace de solo lectura para Caro o un asesor. Tiene además un
     // ícono en el encabezado del Hoy. El rótulo es el título de la pantalla, como en toda ficha.
-    MasItem("Compartir",    Icons.Rounded.Share,            Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Compartir),
-    MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat()),
+    MasItem("Compartir",    Icons.Rounded.Share,            "verde", Screen.Compartir),
+    MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      "violeta", Screen.AIChat()),
     // Ola 3: lo que Movi AI recuerda de ti, para verlo, corregirlo y borrarlo. Junto al asistente.
-    MasItem(TITULO_LO_QUE_MOVI_SABE, Icons.Rounded.Psychology, Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.LoQueMoviSabe),
+    MasItem(TITULO_LO_QUE_MOVI_SABE, Icons.Rounded.Psychology, "violeta", Screen.LoQueMoviSabe),
     // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú). Ola C: lo
     // pendiente se mudó a «Por revisar» (Movimientos) y acá quedó la configuración de la captura y
     // el historial — «Captura del banco» en Android, «Mensajes del banco» donde no hay captura.
-    MasItem(tituloDeCapturaDelBanco, Icons.Rounded.Sms,           Color(0xFF81D4FA), Color(0x2481D4FA), Screen.CapturaDelBanco),
+    MasItem(tituloDeCapturaDelBanco, Icons.Rounded.Sms,           "celeste", Screen.CapturaDelBanco),
     // Ola 14: la guía de arranque, que se apaga sola en el Inicio y hasta acá no tenía forma de
     // volver a abrirse. Solo se ofrece mientras le quede algo por tildar (ver [MasScreen]).
-    MasItem("Primeros pasos", Icons.Rounded.Checklist,      Color(0xFFFFD479), Color(0x24FFD479), Screen.PrimerosPasos),
+    MasItem("Primeros pasos", Icons.Rounded.Checklist,      "ambar", Screen.PrimerosPasos),
     // Ola B, tarea 7: «Metas» y «Extractos» salieron del mosaico. Ninguna de las dos pantallas se
     // borró —siguen ahí, solo sin puerta— así que no hay nada que restaurar si el dueño las extraña.
 )
@@ -157,12 +160,12 @@ private fun MasCard(item: MasItem, onNavigate: (Screen) -> Unit) {
             modifier = Modifier
                 .size(44.dp)
                 .clip(RoundedCornerShape(Movi.formas.normal))
-                .background(item.bg),
+                .background(Movi.colores.circuloDeCategoria(item.color)),
         ) {
             Icon(
                 imageVector = item.icon,
                 contentDescription = item.label,
-                tint = item.tint,
+                tint = Movi.colores.categoria(item.color),
                 modifier = Modifier.size(24.dp),
             )
         }

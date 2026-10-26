@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 
 /**
@@ -207,18 +208,19 @@ fun RenglonConCifraEsqueleto(
 }
 
 /**
- * El encabezado de una sección que todavía no llegó, con la forma de [MinSectionHeader]: mismos
- * rellenos y el alto de `Movi.textos.rotulo`. No dice «PRÉSTAMOS · 12» porque ni el título ni la
- * cuenta se saben todavía — un título sin sus filas ya es una afirmación («tienes préstamos»).
+ * El encabezado de una sección que todavía no llegó, con la forma de `ds.Seccion` (y por lo tanto
+ * de [MinSectionHeader]): sin sangría, el alto de `Movi.textos.titulo` y `Medida.dentroDeSeccion`
+ * debajo. No dice «Préstamos · 12» porque ni el título ni la cuenta se saben todavía — un título
+ * sin sus filas ya es una afirmación («tienes préstamos»).
  */
 @Composable
 fun RotuloDeSeccionEsqueleto(fraccionDelAncho: Float = 0.3f) {
     Box(
         Modifier
             .fillMaxWidth()
-            .padding(start = Movi.espacios.corto, end = Movi.espacios.corto, bottom = Movi.espacios.medio),
+            .padding(bottom = Medida.dentroDeSeccion),
     ) {
-        LineaEsqueleto(fraccionDelAncho = fraccionDelAncho, estilo = Movi.textos.rotulo)
+        LineaEsqueleto(fraccionDelAncho = fraccionDelAncho, estilo = Movi.textos.titulo)
     }
 }
 

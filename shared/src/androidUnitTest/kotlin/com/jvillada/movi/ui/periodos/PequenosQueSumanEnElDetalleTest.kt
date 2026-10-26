@@ -58,7 +58,7 @@ class PequenosQueSumanEnElDetalleTest {
                 }
             }
         }
-        composeRule.waitUntil(timeoutMillis = 5_000) { hay("EN QUÉ SE FUE") }
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("En qué se fue") }
     }
 
     @After
@@ -82,7 +82,7 @@ class PequenosQueSumanEnElDetalleTest {
                 ),
             ),
         )
-        assertTrue(hay("PEQUEÑOS QUE SUMAN"))
+        assertTrue(hay("Pequeños que suman"))
         assertEquals(2, filas())
         assertTrue(hay("27 compras en Juan Valdez"))
         assertTrue(hay("9 gastos chicos de Transporte"))
@@ -93,7 +93,7 @@ class PequenosQueSumanEnElDetalleTest {
     @Test
     fun `sin grupos que importen la seccion no aparece`() {
         montar(septiembre)
-        assertTrue(!hay("PEQUEÑOS QUE SUMAN"))
+        assertTrue(!hay("Pequeños que suman"))
         assertEquals(0, filas())
     }
 }

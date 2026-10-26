@@ -24,6 +24,12 @@ class TipografiaTest {
         assertEquals(cifras, textos.cifra.fontFamily)
     }
 
+    /** Ola R0: la cifra de una tarjeta de cuenta es la otra que va en Martian Mono. */
+    @Test
+    fun `la cifra de tarjeta tambien va en la de cifras`() {
+        assertEquals(cifras, textos.cifraDeTarjeta.fontFamily)
+    }
+
     @Test
     fun `todo lo demas va en la de la interfaz, montos de fila incluidos`() {
         mapOf(

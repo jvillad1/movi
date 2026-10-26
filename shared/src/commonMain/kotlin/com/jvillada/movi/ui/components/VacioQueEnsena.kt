@@ -17,7 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 
 /** Tag estable: encuentra cualquier vacío que enseña en una prueba sin acoplarse al texto. */
@@ -63,7 +64,7 @@ fun VacioQueEnsena(
     MinCard(
         modifier = modifier.fillMaxWidth().testTag(TAG_VACIO_QUE_ENSENA),
         variant = MinCardVariant.Elevated,
-        padding = PaddingValues(32.dp),
+        padding = PaddingValues(Espacio.xxl),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -72,8 +73,8 @@ fun VacioQueEnsena(
             if (icono != null) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .background(Movi.colores.marca.copy(alpha = 0.16f), CircleShape),
+                        .size(Medida.avatarGrande)
+                        .background(Movi.colores.lavado(Movi.colores.marca), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(icono, contentDescription = null, tint = Movi.colores.marca)

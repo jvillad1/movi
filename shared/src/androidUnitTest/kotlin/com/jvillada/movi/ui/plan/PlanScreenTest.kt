@@ -241,7 +241,7 @@ class PlanScreenTest {
 
     private fun contarTag(tag: String): Int = composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().size
 
-    private val tituloDelChecklist = TITULO_CHECKLIST_DEL_PERIODO.uppercase()
+    private val tituloDelChecklist = TITULO_CHECKLIST_DEL_PERIODO
 
     @Test
     fun `por defecto entra a Pagos del mes y pinta el tablero`() {

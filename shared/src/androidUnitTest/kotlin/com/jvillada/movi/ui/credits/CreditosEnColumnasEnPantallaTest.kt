@@ -215,9 +215,9 @@ class CreditosEnColumnasEnPantallaTest {
         assertTrue(limitesDelTexto("Libre inversión 9695").right <= izquierda.right + 0.5f)
         assertTrue(limitesDelTexto("Vehículo 4411").left >= derecha.left - 0.5f)
         assertTrue(limitesDelTexto("Libranza 7788").right <= izquierda.right + 0.5f)
-        assertEquals(1, composeRule.onAllNodesWithText("PRÉSTAMOS", substring = true, useUnmergedTree = true)
+        assertEquals(1, composeRule.onAllNodesWithText("Préstamos", substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes().size, "un solo título para el grupo")
-        assertTrue(!hay("TARJETAS"))
+        assertTrue(!hay("Tarjetas"))
     }
 
     /** Mientras carga, el resumen esqueleto ya va a lo ancho: al llegar no cambia de lugar ni de ancho. */
