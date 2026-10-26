@@ -207,7 +207,7 @@ class HojaQueSeMueveTest {
     fun `guardando, con el velo apagado, la barra de pestanas tampoco recibe toques`() {
         montarEnLaCascara(dismissEnabled = false)
         val plan = composeRule.onAllNodesWithText("Plan", useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
-        val hoy = composeRule.onAllNodesWithText("Hoy", useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
+        val hoy = composeRule.onAllNodesWithText("Inicio", useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
         composeRule.onRoot().performTouchInput {
             click(plan.center)
             click(hoy.center)
