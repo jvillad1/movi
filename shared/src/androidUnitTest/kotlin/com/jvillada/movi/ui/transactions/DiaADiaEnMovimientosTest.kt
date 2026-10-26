@@ -68,14 +68,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * # «Día a día» en Movimientos
+ * # «Día a día» ya no está en Movimientos (ola R4)
  *
- * Debajo del «Flujo del día», cuánto gastaste ese día de lo que podías (la meta diaria del
- * Disponible de Plan). Solo en los días del período en curso; sin meta, o con el período cerrado a
- * la vista, no se dibuja nada. Montado como en la app: teléfono de 390 dp con la escala de letra
- * ×1,12.
- *
- * El período arranca hace unos días y los ingresos se eligen para que la meta sea justo $40.000.
+ * Hasta la R4, debajo del «Flujo del día» iba cuánto se gastó ese día de lo que se podía (la meta
+ * diaria del Disponible de Plan). Esa comparación es de Plan —«¿cuánto puedo gastar?»—, así que
+ * Movimientos la soltó: el encabezado de cada día es un renglón (la fecha y el flujo) y la pantalla ya
+ * no pide el resumen del Inicio para armarla. Montado como en la app: teléfono de 390 dp con la escala
+ * de letra ×1,12.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -192,257 +191,33 @@ class DiaADiaEnMovimientosTest {
     private fun hay(texto: String): Boolean =
         composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
-    private fun lineas(): List<SemanticsNodeInteraction> {
-        val n = composeRule.onAllNodesWithTag(TAG_DIA_A_DIA, useUnmergedTree = true).fetchSemanticsNodes().size
-        return (0 until n).map { composeRule.onAllNodesWithTag(TAG_DIA_A_DIA, useUnmergedTree = true)[it] }
-    }
-
-    private fun descripciones(): List<String> = lineas().map {
-        it.fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString("").orEmpty()
-    }
-
-    private fun tops(): List<Float> {
-        val n = composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA, useUnmergedTree = true).fetchSemanticsNodes().size
-        return (0 until n).map {
-            composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA, useUnmergedTree = true)[it]
-                .fetchSemanticsNode().boundsInRoot.top
-        }
-    }
-
     @Test
-    fun `en el periodo en curso cada dia dice cuanto gasto de la meta y el pasado, cuanto se paso`() {
+    fun `Movimientos ya no dice el dia a dia, que es de Plan`() {
         montar()
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Cena de ayer") }
-        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
+        composeRule.waitForIdle()
 
-        assertEquals(
-            listOf(
-                "Día a día: \$0 de \$40.000",
-                "Día a día: \$60.000 de \$40.000 · te pasaste \$20.000",
-                "Día a día: \$10.000 de \$40.000",
-            ),
-            descripciones(),
-        )
-        assertTrue(!hay("Pan del período anterior"), "el día del período cerrado ni siquiera está en la lista")
-        // M1: el día del arriendo tuvo un flujo de −$510.000, pero la línea cuenta el gasto VARIABLE.
-        assertTrue(hay("Arriendo del mes"))
-        // A 390 dp con la letra ×1,12 la más larga entra en UNA línea: ninguna se corta ni se parte.
-        val altos = lineas().map { it.fetchSemanticsNode().boundsInRoot.height }.toSet()
-        assertEquals(1, altos.size, "las tres líneas miden lo mismo (una sola línea): $altos")
+        assertTrue(composeRule.onAllNodesWithText("Día a día", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithText("te pasaste", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        // El día sigue diciendo su flujo, en un renglón.
+        assertTrue(hay("Flujo del día"))
     }
 
     @Test
-    fun `lo pasado va en el rojo de la plata que sale y el resto en el tono apagado`() {
+    fun `Movimientos no pide el resumen del Inicio para armar la lista`() {
         montar()
-        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Cena de ayer") }
+        composeRule.waitForIdle()
 
-        fun spans(i: Int) = lineas()[i].fetchSemanticsNode().config
-            .getOrNull(SemanticsProperties.Text)!!.first().let { texto ->
-                texto.spanStyles.associate { texto.text.substring(it.start, it.end) to it.item.color }
-            }
-        val pasada = spans(1)
-        assertEquals(colorDeSale, pasada["te pasaste \$20.000"])
-        val dentro = spans(2)
-        assertEquals(colorApagado, dentro["Día a día: \$10.000 de \$40.000"])
-        assertTrue(dentro.values.none { it == colorDeSale })
+        assertEquals(0, pedidosDelResumen)
     }
 
     @Test
-    fun `con un periodo cerrado a la vista no se dibuja ninguna linea`() {
+    fun `con un periodo cerrado a la vista la lista es la de siempre`() {
         montar(periodoInicial = periodoAnterior(periodo).prefijo)
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Pan del período anterior") }
         composeRule.waitForIdle()
 
-        assertEquals(0, lineas().size)
-    }
-
-    @Test
-    fun `si no llega el disponible no se dice nada y la lista es la de siempre`() {
-        resumenDelInicio = { error("sin red") }
-        montar()
-        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Cena de ayer") }
-        composeRule.waitForIdle()
-
-        assertEquals(0, lineas().size)
-        assertTrue(!hay("Actualizando…"), "una lectura de adorno no anuncia que actualiza")
-        assertTrue(!hay("No pudimos actualizar", ), "ni que falló")
-    }
-
-    @Test
-    fun `sin margen que dividir tampoco se dibuja nada`() {
-        ingresosDelPeriodo = 0L
-        montar()
-        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Cena de ayer") }
-        composeRule.waitForIdle()
-
-        assertEquals(0, lineas().size)
-    }
-
-    /**
-     * Mientras la meta viaja se reserva el alto de la línea: cuando llega, los días de abajo no se
-     * mueven ni un píxel.
-     */
-    @Test
-    fun `la linea llega sin empujar la lista`() {
-        val puerta = CompletableDeferred<DashboardSummary>()
-        resumenDelInicio = { puerta.await() }
-        montar()
-        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Cena de ayer") }
-        composeRule.waitForIdle()
-        assertEquals(0, lineas().size, "todavía no llegó")
-        val antes = tops()
-        assertEquals(3, antes.size)
-
-        puerta.complete(DashboardSummary(gastoVariablePorDia = mapOf(ayer.toString() to 60_000L, anteayer.toString() to 10_000L)))
-        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
-        composeRule.waitForIdle()
-
-        assertEquals(antes, tops(), "el alto ya estaba reservado")
-    }
-
-    /**
-     * Ir a otra pantalla y volver no vuelve a esconder la línea: la meta se recuerda como el resto
-     * de las lecturas (ver `CacheDeLecturas`) y al primer cuadro ya está, con la lectura nueva
-     * todavía en vuelo.
-     */
-    @Test
-    fun `al volver a Movimientos la linea ya esta al primer cuadro`() {
-        montar()
-        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
-        composeRule.waitForIdle()
-        enPantalla = false
-        composeRule.waitForIdle()
-
-        val puerta = CompletableDeferred<DashboardSummary>()
-        resumenDelInicio = { puerta.await() }
-        enPantalla = true
-        composeRule.waitForIdle()
-
-        assertEquals(3, lineas().size, "lo último que se vio ya está a la vista")
-        assertTrue(hay("Cena de ayer"))
-        puerta.complete(DashboardSummary(gastoVariablePorDia = mapOf(ayer.toString() to 60_000L, anteayer.toString() to 10_000L)))
-        composeRule.waitForIdle()
-        assertEquals(3, lineas().size)
-    }
-
-    /**
-     * Sin margen (los fijos se llevan todo) la línea no existe, y **ir y volver no mueve la lista**:
-     * con lo recordado a la vista ya se sabe que no hay línea, así que no se reserva un renglón que
-     * la relectura tenga que recoger al contestar.
-     */
-    @Test
-    fun `sin margen, volver a Movimientos no mueve la lista ni al contestar la relectura`() {
-        ingresosDelPeriodo = 0L
-        montar()
-        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Cena de ayer") }
-        composeRule.waitForIdle()
-        val primera = tops()
-        assertEquals(3, primera.size)
-        enPantalla = false
-        composeRule.waitForIdle()
-
-        // Lo recordado ya no cuenta como reciente: la segunda visita relee, y esa relectura viaja.
-        LecturaDelDiaADia.olvidar()
-        val puerta = CompletableDeferred<DashboardSummary>()
-        resumenDelInicio = { puerta.await() }
-        enPantalla = true
-        composeRule.waitForIdle()
-        assertEquals(primera, tops(), "con la relectura en vuelo la lista ya está donde va")
-
-        puerta.complete(DashboardSummary())
-        composeRule.waitForIdle()
-        assertEquals(primera, tops(), "y al contestar tampoco se mueve")
-        assertEquals(0, lineas().size)
-    }
-
-    private fun irYVolver() {
-        enPantalla = false
-        composeRule.waitForIdle()
-        enPantalla = true
-        composeRule.waitForIdle()
-    }
-
-    @Test
-    fun `dos visitas seguidas piden el resumen una sola vez`() {
-        montar()
-        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
-        composeRule.waitForIdle()
-        assertEquals(1, pedidosDelResumen)
-
-        irYVolver()
-
-        assertEquals(1, pedidosDelResumen, "lo reciente no se vuelve a pedir")
-        assertEquals(3, lineas().size)
-    }
-
-    @Test
-    fun `una escritura propia entre visitas obliga a leer otra vez`() {
-        montar()
-        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
-        composeRule.waitForIdle()
-        enPantalla = false
-        composeRule.waitForIdle()
-        runBlocking { Repositories.wallets.voidEvent("e2", null) }
-
-        enPantalla = true
-        composeRule.waitForIdle()
-
-        assertEquals(2, pedidosDelResumen, "la escritura volvió viejo lo recordado")
-    }
-
-    @Test
-    fun `el Reintentar vuelve a pedir aunque haya algo reciente`() {
-        montar()
-        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
-        composeRule.waitForIdle()
-        assertEquals(3, lineas().size)
-        val leidas = pedidosDelResumen
-
-        // Lo reciente no se pide: el mismo pedido de `datosParaElDiaADia` con `forzar` sí.
-        runBlocking {
-            datosParaElDiaADia(
-                perfil = repositorio.getUserProfile(), ahora = ahora, tick = 0, forzar = true,
-                periodoVigente = periodo.prefijo,
-            )
-        }
-        assertEquals(leidas + 1, pedidosDelResumen)
-    }
-
-    /** Lo que el Inicio dejó fresco en [DashboardDataCache] alcanza: cero pedidos del resumen. */
-    @Test
-    fun `con el Inicio fresco no se pide nada`() {
-        DashboardDataCache.data = DashboardData(
-            summary = FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = diasDelPeriodo * meta, egresos = 0),
-            upcoming = emptyList(),
-            ocurrencias = emptyList(),
-            gastoVariablePorDia = mapOf(ayer.toString() to 60_000L, anteayer.toString() to 10_000L),
-            ajustesDePeriodo = ajustes,
-            periodoActual = periodo,
-        )
-        DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
-        DashboardDataCache.tickDeLaCarga = 0
-
-        montar()
-        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
-        composeRule.waitForIdle()
-
-        assertEquals(0, pedidosDelResumen)
-        assertEquals("Día a día: \$60.000 de \$40.000 · te pasaste \$20.000", descripciones()[1])
-    }
-
-    /** Plan ya leyó la tarjeta del Disponible: ir de Plan a Movimientos no repite `/api/dashboard/summary`. */
-    @Test
-    fun `de Plan a Movimientos no se vuelve a pedir el resumen`() {
-        enPlan = true
-        montar()
-        composeRule.waitForIdle()
-        assertEquals(1, pedidosDelResumen, "Plan lo lee una vez")
-
-        enPlan = false
-        composeRule.waitUntil(timeoutMillis = 5_000) { lineas().size == 3 }
-        composeRule.waitForIdle()
-
-        assertEquals(1, pedidosDelResumen, "Movimientos usa lo que Plan dejó")
-        assertEquals(3, lineas().size)
+        assertTrue(composeRule.onAllNodesWithText("Día a día", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 }

@@ -14,7 +14,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CreditCard
+import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.Vacio
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,7 +48,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.rememberLectura
@@ -44,15 +62,9 @@ import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.components.ChevronRight
-import com.jvillada.movi.ui.components.FilaDeListaEsqueleto
-import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.HeaderLeading
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
-import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.NoSePudoActualizar
 import com.jvillada.movi.ui.components.ActualizandoEnLaCabecera
@@ -104,16 +116,20 @@ const val TAG_SUBIR_PAPEL_EN_LA_BANDEJA: String = "subir-papel-en-la-bandeja"
 const val TAG_AVISO_DE_CAPTURA_EN_LA_BANDEJA: String = "aviso-de-captura-en-la-bandeja"
 
 /**
- * **El renglón de Movimientos que abre la bandeja**: «N por revisar», con la suma de las tres
+ * **La propuesta de Movimientos que abre la bandeja**: «N por revisar», con la suma de las tres
  * fuentes (ver [cuantosPorRevisar]). Reemplaza a los avisos sueltos que había antes —uno por los
- * movimientos que entraron solos, otro por los pagos de tarjeta— y tiene la misma forma que ellos:
- * una tarjeta baja con el texto y la flecha.
+ * movimientos que entraron solos, otro por los pagos de tarjeta—. Ola R4: es una
+ * [TarjetaDePropuesta], la misma forma que «Movi propone hoy» del Inicio, porque es lo mismo: algo
+ * que llegó solo y espera que el dueño decida.
  */
 @Composable
 fun RenglonPorRevisar(cuantos: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    FilaQueLleva(
-        texto = textoDePorRevisar(cuantos),
-        onClick = onClick,
+    TarjetaDePropuesta(
+        icono = Icons.Rounded.Inbox,
+        titulo = textoDePorRevisar(cuantos),
+        cuerpo = "Avisos y movimientos por confirmar",
+        accion = "Revisar",
+        onAccion = onClick,
         modifier = modifier.testTag(TAG_RENGLON_POR_REVISAR),
     )
 }
@@ -294,18 +310,18 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             leading = HeaderLeading.Back(fallback = Screen.Transactions()),
             action = {
                 if (actualizandoConAlgoALaVista) ActualizandoEnLaCabecera()
-                Icon(
-                    Icons.Rounded.Refresh,
-                    contentDescription = "Actualizar",
-                    tint = Movi.colores.textoMedio,
-                    modifier = Modifier.size(20.dp).clickable { recarga++ },
-                )
+                BotonDeIcono(Icons.Rounded.Refresh, "Actualizar", onClick = { recarga++ })
             },
         )
 
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp),
+            contentPadding = PaddingValues(
+                start = Medida.margenDePantalla,
+                end = Medida.margenDePantalla,
+                top = Medida.dentroDeSeccion,
+                bottom = Medida.botonFlotante + Medida.margenDePantalla,
+            ),
         ) {
             if (cargando) {
                 item { EsqueletoDePorRevisar() }
@@ -314,7 +330,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
 
             if (noSePudoActualizar) {
                 item {
-                    NoSePudoActualizar(onReintentar = { recarga++ }, modifier = Modifier.padding(bottom = 16.dp))
+                    NoSePudoActualizar(onReintentar = { recarga++ }, modifier = Modifier.padding(bottom = Medida.entreSecciones))
                 }
             }
 
@@ -323,9 +339,10 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             item {
                 FilaQueLleva(
                     texto = "Subir comprobante o extracto",
-                    detalle = "Una captura, un recibo o un PDF del banco: Movi lo lee y lo deja aquí para que lo revises.",
+                    detalle = "Movi lo lee y lo deja aquí",
+                    icono = Icons.Rounded.UploadFile,
                     onClick = elegirPapel,
-                    modifier = Modifier.padding(bottom = 16.dp).testTag(TAG_SUBIR_PAPEL_EN_LA_BANDEJA),
+                    modifier = Modifier.padding(bottom = Medida.entreSecciones).testTag(TAG_SUBIR_PAPEL_EN_LA_BANDEJA),
                 )
             }
 
@@ -333,10 +350,11 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 item {
                     FilaQueLleva(
                         texto = aviso,
-                        detalle = "Toca para ver cómo está la captura.",
+                        detalle = "Toca para ver cómo está la captura",
+                        icono = Icons.Rounded.WarningAmber,
                         esAlerta = true,
                         onClick = { onNavigate(Screen.CapturaDelBanco) },
-                        modifier = Modifier.padding(bottom = 16.dp).testTag(TAG_AVISO_DE_CAPTURA_EN_LA_BANDEJA),
+                        modifier = Modifier.padding(bottom = Medida.entreSecciones).testTag(TAG_AVISO_DE_CAPTURA_EN_LA_BANDEJA),
                     )
                 }
             }
@@ -379,7 +397,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             if (bandejaAlDia(mensajes, dias, candidatos, debitos)) {
                 if (celebrar) {
                     item(key = "celebracion") {
-                        MomentoDeCelebracion(FRASE_DE_LA_BANDEJA_AL_DIA, Modifier.padding(bottom = 8.dp))
+                        MomentoDeCelebracion(FRASE_DE_LA_BANDEJA_AL_DIA, Modifier.padding(bottom = Espacio.xs))
                     }
                 }
                 item { TodoAlDia() }
@@ -403,7 +421,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     item { SeccionQueNoSeLeyo("No pudimos revisar lo que el banco cobra solo") { recarga++ } }
                 }
             } else if (debitos.isNotEmpty()) {
-                item { MinSectionHeader(title = TITULO_DE_LOS_DEBITOS, count = debitos.size) }
+                item { Seccion(titulo = TITULO_DE_LOS_DEBITOS, conteo = debitos.size) }
                 debitos.forEach { debito ->
                     item(key = "debito-${debito.clave}") {
                         TarjetaDelDebitoAutomatico(debito, onResuelto = {
@@ -412,7 +430,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                         })
                     }
                 }
-                item { Spacer(Modifier.height(14.dp)) }
+                item { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
             }
 
             // ── Mensajes del banco ────────────────────────────────────────────────
@@ -422,9 +440,9 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 // Uno por pago: los avisos del mismo pago van en una sola tarjeta.
                 val pendientes = pagosPorRevisar(mensajes)
                 if (pendientes.isNotEmpty()) {
-                    item { MinSectionHeader(title = "Mensajes del banco", count = pendientes.size) }
+                    item { Seccion(titulo = "Mensajes del banco", conteo = pendientes.size) }
                     errorDeUnPago?.let { error ->
-                        item { Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(bottom = 10.dp)) }
+                        item { Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(bottom = Medida.dentroDeSeccion)) }
                     }
                     pendientes.forEach { sms ->
                         val grupoId = sms.grupoId
@@ -434,6 +452,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                 val ids = avisos.map { it.id }
                                 val pendientesDelPago = avisos.filter { it.state == SMS_STATE_PENDING }.map { it.id }
                                 TarjetaDelMismoPago(
+                                    modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
                                     avisos = avisos,
                                     trabajando = pagoEnCurso == grupoId,
                                     onRevisar = { revisarEnReconciliar(sms.id) },
@@ -496,7 +515,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                             )
                         }
                     }
-                    item { Spacer(Modifier.height(14.dp)) }
+                    item { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
                 }
             }
 
@@ -509,19 +528,15 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 val renglones = renglonesQueEntraronSolos(dias)
                 if (renglones.isNotEmpty()) {
                     item {
-                        MinSectionHeader(title = "Entraron solos", count = renglones.size)
+                        Seccion(titulo = "Entraron solos", conteo = renglones.size)
                         Text(
                             "Llegaron por SMS, por un extracto o por una foto. Hasta confirmarlos no cuentan en " +
                                 "tus gastos ni ingresos: tócalos para revisar el monto y la categoría.",
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
-                            modifier = Modifier.padding(horizontal = Movi.espacios.corto).padding(bottom = 10.dp),
+                            modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
                         )
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                        ) {
+                        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                             renglones.forEachIndexed { i, renglon ->
                                 when (renglon) {
                                     is MovementRow.Transfer -> TransferRow(
@@ -546,10 +561,10 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                         )
                                     }
                                 }
-                                if (i < renglones.size - 1) Hairline()
+                                if (i < renglones.size - 1) Separador()
                             }
                         }
-                        Spacer(Modifier.height(24.dp))
+                        Spacer(Modifier.height(Medida.entreSecciones))
                     }
                 }
             }
@@ -559,13 +574,14 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 item { SeccionQueNoSeLeyo("No pudimos cargar los pagos de tarjeta") { recarga++ } }
             } else if (candidatos.isNotEmpty()) {
                 item {
-                    MinSectionHeader(title = "Pagos de tarjeta", count = candidatos.size)
+                    Seccion(titulo = "Pagos de tarjeta", conteo = candidatos.size)
                     // Abre una lista donde cada uno se confirma por separado (ver
                     // CardPaymentCandidatesSheet) — nunca se marcan todos de una.
                     FilaQueLleva(
                         texto = if (candidatos.size == 1) "1 pago de tarjeta sin marcar"
                         else "${candidatos.size} pagos de tarjeta sin marcar",
-                        detalle = "Marcarlos evita contar la misma plata dos veces.",
+                        detalle = "Marcarlos evita contar la misma plata dos veces",
+                        icono = Icons.Rounded.CreditCard,
                         onClick = { viendoCandidatos = true },
                     )
                 }
@@ -599,50 +615,34 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
 }
 
 /**
- * Una tarjeta baja que lleva a otro lado: el texto, opcionalmente una línea de apoyo, y la flecha.
- * Es la forma de los avisos que Movimientos tenía arriba de su lista, y la usan el renglón «N por
- * revisar», el aviso de la captura y la entrada a los pagos de tarjeta.
+ * Una fila que lleva a otro lado: una [Fila] del sistema en su superficie, con su ícono, el texto,
+ * una línea de apoyo y la flecha. La usan «Subir comprobante o extracto», el aviso de la captura y la
+ * entrada a los pagos de tarjeta.
  */
 @Composable
 private fun FilaQueLleva(
     texto: String,
     onClick: () -> Unit,
+    icono: ImageVector,
     modifier: Modifier = Modifier,
     detalle: String? = null,
     esAlerta: Boolean = false,
 ) {
-    MinCard(
-        modifier = modifier.fillMaxWidth(),
-        variant = MinCardVariant.Default,
-        padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        onClick = onClick,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = texto,
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
-                    color = if (esAlerta) Movi.colores.aviso else Movi.colores.texto,
-                )
-                detalle?.let {
-                    Spacer(Modifier.height(2.dp))
-                    Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
-            }
-            ChevronRight()
-        }
+    Superficie(modifier = modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+        Fila(
+            titulo = texto,
+            subtitulo = detalle,
+            inicio = { IconoEnCirculo(icono, tono = if (esAlerta) TonoDeIcono.Aviso else TonoDeIcono.Marca) },
+            final = { Chevron() },
+            onClick = onClick,
+        )
     }
 }
 
 /** Una fuente que no contestó: se dice en el lugar de su sección, con su «Reintentar». */
 @Composable
 private fun SeccionQueNoSeLeyo(texto: String, onReintentar: () -> Unit) {
-    NoSePudoLeer(texto, onReintentar = onReintentar, modifier = Modifier.padding(bottom = 16.dp))
+    NoSePudoLeer(texto, onReintentar = onReintentar, modifier = Modifier.padding(bottom = Medida.entreSecciones))
 }
 
 /** Lo que dice la celebración cuando el dueño deja la bandeja vacía. */
@@ -655,20 +655,12 @@ const val FRASE_DE_LA_BANDEJA_AL_DIA = "¡Listo! Revisaste todo lo que había."
  */
 @Composable
 private fun TodoAlDia() {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(top = 72.dp).padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(TODO_AL_DIA, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-        Text(
-            "Aquí caen los mensajes del banco, los movimientos que entran solos y los pagos de tarjeta " +
-                "que Movi reconoce, hasta que los revises.",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            textAlign = TextAlign.Center,
-        )
-    }
+    Vacio(
+        titulo = TODO_AL_DIA,
+        detalle = "Aquí caen los mensajes del banco, los movimientos que entran solos y los pagos de tarjeta " +
+            "que Movi reconoce, hasta que los revises.",
+        modifier = Modifier.padding(top = Espacio.xxl),
+    )
 }
 
 /**
@@ -695,7 +687,7 @@ private fun VacioDeLaCapturaEnLaBandeja(onNavigate: (Screen) -> Unit) {
         },
         accion = "Configurar la captura",
         onAccion = { onNavigate(Screen.CapturaDelBanco) },
-        modifier = Modifier.padding(top = 16.dp),
+        modifier = Modifier.padding(top = Medida.entreSecciones),
     )
 }
 
@@ -708,16 +700,10 @@ private fun VacioDeLaCapturaEnLaBandeja(onNavigate: (Screen) -> Unit) {
 private fun EsqueletoDePorRevisar() {
     Column(modifier = Modifier.testTag(TAG_ESQUELETO_DE_POR_REVISAR)) {
         RotuloDeSeccionEsqueleto()
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-        ) {
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             repeat(3) { i ->
-                FilaDeListaEsqueleto(
-                    isLast = i == 2,
-                    diametroIconoAlFrente = TamanoDeIconoDeCategoria.Normal.circulo,
-                )
+                EsqueletoDeFila()
+                if (i < 2) Separador()
             }
         }
     }

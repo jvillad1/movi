@@ -1,5 +1,18 @@
 package com.jvillada.movi.ui.transactions
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.Icon
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.ui.components.MinCard
@@ -73,47 +85,21 @@ fun SelectorDeCuentaDeDeuda(
     val deudas = cuentasDeDeuda(cuentas)
     if (deudas.isEmpty()) return
     Column(modifier = modifier) {
-        MinSectionHeader(title = "¿A cuál crédito o tarjeta corresponde?")
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Default,
-            padding = PaddingValues(vertical = 4.dp),
-        ) {
+        Seccion(titulo = "¿A cuál crédito o tarjeta corresponde?")
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             Column {
                 deudas.forEachIndexed { index, cuenta ->
                     val on = cuenta.id == seleccionada?.id
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSeleccionar(if (on) null else cuenta) }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(18.dp)
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(if (on) Movi.colores.texto else Color.Transparent)
-                                .border(1.dp, if (on) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(999.dp)),
-                        )
-                        Text(
-                            textoDeCuentaDeDeuda(cuenta),
-                            style = Movi.textos.cuerpo,
-                            fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
-                            color = Movi.colores.texto,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    if (index != deudas.lastIndex) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 44.dp)
-                                .background(Movi.colores.hilo)
-                                .size(width = 0.dp, height = 1.dp),
-                        )
-                    }
+                    // Una fila del sistema; la elegida lleva el ícono de listo (y lo dice: `selected`).
+                    Fila(
+                        titulo = textoDeCuentaDeDeuda(cuenta),
+                        modifier = Modifier.semantics { selected = on },
+                        final = if (on) {
+                            { Icon(Icons.Rounded.Check, contentDescription = "Elegida", tint = Movi.colores.marca, modifier = Modifier.size(Icono.m)) }
+                        } else null,
+                        onClick = { onSeleccionar(if (on) null else cuenta) },
+                    )
+                    if (index != deudas.lastIndex) Separador(SangriaDeSeparador.Margen)
                 }
             }
         }
@@ -121,7 +107,7 @@ fun SelectorDeCuentaDeDeuda(
             "Es opcional: si no eliges ninguna, el movimiento queda como un gasto suelto.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
-            modifier = Modifier.padding(top = 6.dp, start = 4.dp),
+            modifier = Modifier.padding(top = Espacio.xs),
         )
     }
 }

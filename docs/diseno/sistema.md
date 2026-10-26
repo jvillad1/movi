@@ -274,3 +274,22 @@ arriba:
 `SECCIONES_OPCIONALES` que el dueño prende en «Editar inicio». La barra Entró/Salió y el desglose de
 «Tu plata» salieron del héroe. ALERTS y el BANNER siguen al final de la definición solo para los APK
 viejos; este cliente no los pinta.
+
+## 11. Movimientos y los avisos (ola R4a)
+
+- **Una sola búsqueda.** La lupa de Movimientos abre «Buscar». Lo que otra pantalla pide filtrar (un
+  comercio tocado en Buscar, «En este comercio», una categoría de «En qué se va») llega como un
+  `PildoraDeFiltro` elegido con su ×, al lado de los filtros de tipo.
+- **El día en un renglón**: la fecha como se escribe («Hoy», «23 de agosto») con el estilo de `Seccion`
+  y el flujo del día a la derecha; todo el renglón pliega el día (alto `Medida.objetivoTactil`). La
+  comparación «Día a día» salió: es de Plan.
+- **«N por revisar» es una `TarjetaDePropuesta`**, como en «Movi propone hoy». «Personas y comercios»
+  ya no está arriba de la lista.
+- **La fila de un movimiento es una `Fila`** (Movimientos, Por revisar, el detalle de una cuenta). Su
+  monto usa la letra de `Cifra` (`VarianteDeCifra.Fila`) con un tono que el sistema no tiene: el azul
+  de «entre cuentas» de un traspaso (`MontoDeLaFila`). El punto de «por confirmar» y el ícono de
+  repetición van junto al monto y dicen su nombre al lector de pantalla.
+- **Un aviso del banco se ve igual en todas partes** (`TarjetaDeAviso`, en `ui/sms/ElMismoPago.kt`):
+  la superficie de la propuesta cuando pide decisión y la capa 1 cuando es historial, el estado en una
+  `Pildora` en frase («Pendiente», «Confirmado»), lo que dijo el banco como cita y las acciones en
+  `Boton` chicos. La usan Por revisar, Captura del banco, Reconciliar y los débitos automáticos.

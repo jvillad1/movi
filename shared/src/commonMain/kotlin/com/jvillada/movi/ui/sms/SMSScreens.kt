@@ -21,7 +21,27 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.QuestionMark
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -517,76 +537,61 @@ internal fun TarjetaDeMensajeDelBanco(
     trabajando: Boolean = false,
 ) {
     val apartado = loApartoMovi(sms)
-    MinCard(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            // Ola 2a: la marca del comercio que nombra el aviso o, si no nombra ninguno, la del
-            // banco que lo mandó. Sin marca, nada: el origen escrito al lado ya lo dice.
-            val marca = remember(sms.text, sms.bank) { marcaDelAviso(sms.text, sms.bank) }
-            if (marca != null) CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea)
-            // Con tope y en un renglón: «Comprobante · transferencia de septiembre.png» (Ola 2) se
-            // comía el ancho entero y la fecha quedaba en un dígito suelto. Un código de SMS o
-            // «Notificación · Nu» ni se acercan al tope.
-            Text(
-                sms.bank,
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 170.dp),
-            )
-            StatusDot(Movi.colores.textoApagado, 2.dp)
-            // La fecha se lleva lo que sobra: el banco y el estado son lo que se busca con la
-            // vista. En palabras («Hoy, 8:10 a. m.») y no el «2026-09-29 08:10» guardado
-            // (revisión del 29-sep); si no entra en un renglón, baja a un segundo en vez de
-            // cortarse justo en la hora.
-            Text(
-                fechaCortaDeSms(sms.time, hoyEnAppZone()),
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            val (label, color) = when {
-                apartado -> "APARTADO" to Movi.colores.textoMedio
-                else -> when (sms.state) {
-                SMS_STATE_PENDING -> "PENDIENTE" to Movi.colores.aviso
-                SMS_STATE_CONFIRMED -> "CONFIRMADO" to Movi.colores.entra
-                SMS_STATE_IGNORED -> "IGNORADO" to Movi.colores.textoMedio
-                else -> sms.state.uppercase() to Movi.colores.textoMedio
+    val pendiente = sms.state == SMS_STATE_PENDING
+    val estado = when {
+        apartado -> "Apartado" to TonoDePildora.Neutra
+        else -> when (sms.state) {
+            SMS_STATE_PENDING -> "Pendiente" to TonoDePildora.Aviso
+            SMS_STATE_CONFIRMED -> "Confirmado" to TonoDePildora.Exito
+            SMS_STATE_IGNORED -> "Ignorado" to TonoDePildora.Neutra
+            else -> sms.state.lowercase().replaceFirstChar { it.uppercase() } to TonoDePildora.Neutra
+        }
+    }
+    val confirmable = pendiente && entendido != null && onConfirmar != null
+    // Ola 2a: la marca del comercio que nombra el aviso o, si no nombra ninguno, la del banco que
+    // lo mandó. Sin marca, el ícono de los avisos.
+    val marca = remember(sms.text, sms.bank) { marcaDelAviso(sms.text, sms.bank) }
+    TarjetaDeAviso(
+        // El banco (o «Comprobante · transferencia.png»), en un renglón; la fecha en palabras
+        // («Hoy, 8:10 a. m.») y no el «2026-09-29 08:10» guardado.
+        titulo = sms.bank,
+        subtitulo = fechaCortaDeSms(sms.time, hoyEnAppZone()),
+        modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
+        inicio = marca?.let { m -> { CirculoDeMarca(m, tamano = TamanoDeAvatar.Fila) } },
+        estado = estado,
+        pideDecision = pendiente,
+        acciones = when {
+            // La bandeja que se vacía sola: «Confirmar» solo cuando Movi ya tiene todo (ver
+            // `loQueMoviEntendio`).
+            confirmable -> {
+                {
+                    PastillaDelPago(
+                        CONFIRMAR_EN_LA_FILA, principal = true, habilitada = !trabajando, onClick = onConfirmar!!,
+                        modifier = Modifier.testTag(TAG_CONFIRMAR_EN_LA_FILA),
+                    )
+                    PastillaDelPago("Revisar", habilitada = !trabajando, onClick = onRevisar)
+                    onIgnorar?.let { PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = it) }
                 }
             }
-            // Un renglón siempre. Con el espaciado completo de `rotulo` (1,7 sp),
-            // «CONFIRMADO» no entraba al lado de la fecha: primero se partía en
-            // «CONFIRMAD» con la «O» abajo, y sin partirse le comía los minutos a la
-            // hora. Visto en la web a 390 dp. A 0,8 sp entran los dos; en un teléfono más
-            // angosto la fecha es la que cede.
-            Text(
-                label,
-                style = Movi.textos.rotulo.copy(letterSpacing = 0.8.sp),
-                color = color,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
+            // Con dudas, «Revisar» es el principal; «Ignorar» va siempre en la bandeja.
+            pendiente -> {
+                {
+                    PastillaDelPago("Revisar", principal = true, habilitada = !trabajando, onClick = onRevisar)
+                    onIgnorar?.let { PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = it) }
+                }
+            }
+            apartado && onEraUnMovimiento != null -> {
+                { PastillaDelPago(ERA_UN_MOVIMIENTO, habilitada = true, onClick = onEraUnMovimiento) }
+            }
+            else -> null
+        },
+        pie = pie,
+    ) {
         // Antes de aprobar, que se sepa que otro aviso parece el mismo pago: dos avisos de un pago
         // aprobados por separado son dos movimientos.
-        if (sms.state == SMS_STATE_PENDING && sms.parecidoA != null) {
-            Spacer(Modifier.height(8.dp))
-            LineaDelMismoPago(parecidoA)
-        }
+        if (pendiente && sms.parecidoA != null) LineaDelMismoPago(parecidoA)
         // Por qué no está en «Por revisar»: lo apartó Movi, no él.
         textoDelApartado(sms)?.let { porQue ->
-            Spacer(Modifier.height(8.dp))
             Text(
                 porQue,
                 style = Movi.textos.apoyo,
@@ -594,77 +599,9 @@ internal fun TarjetaDeMensajeDelBanco(
                 modifier = Modifier.testTag(TAG_MOTIVO_DEL_APARTADO),
             )
         }
-        Spacer(Modifier.height(10.dp))
-        Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
-            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Movi.colores.hilo))
-            Text(resaltadoDelTextoDelBanco(sms.text), style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace, lineHeight = 17.sp, modifier = Modifier.padding(start = 12.dp))
-        }
-        Spacer(Modifier.height(14.dp))
-        Hairline()
-        Spacer(Modifier.height(12.dp))
-        val confirmable = sms.state == SMS_STATE_PENDING && entendido != null && onConfirmar != null
-        if (confirmable) {
-            // La bandeja que se vacía sola: lo que Movi va a anotar y, debajo, las acciones de la
-            // fila. «Confirmar» solo cuando Movi ya tiene todo (ver `loQueMoviEntendio`).
-            LineaDeLoEntendido(entendido!!)
-            Spacer(Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PastillaDelPago(
-                    CONFIRMAR_EN_LA_FILA, principal = true, habilitada = !trabajando, onClick = onConfirmar!!,
-                    modifier = Modifier.testTag(TAG_CONFIRMAR_EN_LA_FILA),
-                )
-                PastillaDelPago("Revisar", habilitada = !trabajando, onClick = onRevisar)
-                onIgnorar?.let { PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = it) }
-            }
-        } else if (sms.state == SMS_STATE_PENDING && onIgnorar != null) {
-            // Con dudas, «Revisar» sigue siendo el principal; «Ignorar» va siempre en la fila. En el
-            // mismo renglón que lo que entendió Movi, para que la tarjeta no crezca.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(sms.det, style = Movi.textos.cuerpo, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
-                PastillaDelPago("Revisar", principal = true, habilitada = !trabajando, onClick = onRevisar)
-                PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = onIgnorar)
-            }
-        } else Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(sms.det, style = Movi.textos.cuerpo, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
-            if (sms.state == SMS_STATE_PENDING) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
-                        .clickable(onClick = onRevisar)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    Text("Revisar", style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
-                }
-            } else if (apartado && onEraUnMovimiento != null) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
-                        .clickable(role = Role.Button, onClick = onEraUnMovimiento)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    Text(ERA_UN_MOVIMIENTO, style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
-                }
-            }
-        }
-        if (pie != null) {
-            Spacer(Modifier.height(12.dp))
-            Hairline()
-            Spacer(Modifier.height(12.dp))
-            pie()
-        }
+        LoQueDiceElBanco(sms.text)
+        if (confirmable) LineaDeLoEntendido(entendido!!)
+        else Text(sms.det, style = Movi.textos.cuerpo, color = Movi.colores.texto)
     }
 }
 
@@ -1203,530 +1140,416 @@ fun SMSReconcileScreen(
             title = "Reconciliar movimiento",
             leading = HeaderLeading.Back(fallback = Screen.PorRevisar),
         )
-        Spacer(Modifier.height(14.dp))
 
+        // Ola R4: de lo más importante a lo menos —el aviso, lo que hay que saber antes (de antes de
+        // la cuenta, ya anotado), lo que Movi propone y los datos para ajustar—, cada bloque con su
+        // [Seccion] y [Medida.entreSecciones] entre uno y otro.
+        val pendiente = currentSms == null || currentSms.state == SMS_STATE_PENDING
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            contentPadding = PaddingValues(
+                start = Medida.margenDePantalla,
+                end = Medida.margenDePantalla,
+                top = Medida.dentroDeSeccion,
+                bottom = Medida.margenDePantalla,
+            ),
+            verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
         ) {
-            item {
-                // «Un pago, una tarjeta»: los avisos del mismo pago, cada uno con «Este es otro pago».
+            // ── El aviso, con la misma tarjeta que en «Por revisar» ──────────────────────────
+            item(key = "aviso") {
                 if (pagoActual != null) {
-                    MinSectionHeader(title = "El mismo pago, avisado ${pagoActual.miembros.size} veces")
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth().testTag(TAG_AVISOS_DEL_PAGO_EN_RECONCILIAR),
-                        variant = MinCardVariant.Default,
-                        padding = PaddingValues(18.dp),
+                    // «Un pago, una tarjeta»: los avisos del mismo pago, cada uno con «Este es otro pago».
+                    TarjetaDeAviso(
+                        titulo = "El mismo pago, avisado ${pagoActual.miembros.size} veces",
+                        subtitulo = canalesDelMismoPago(pagoActual.miembros),
+                        modifier = Modifier.testTag(TAG_AVISOS_DEL_PAGO_EN_RECONCILIAR),
+                        pideDecision = pendiente,
                     ) {
                         if (yaAnotadoCon != null) {
                             Text(avisoYaAnotado(yaAnotadoCon), style = Movi.textos.cuerpo, color = Movi.colores.aviso)
-                            Spacer(Modifier.height(12.dp))
                         }
                         pagoActual.miembros.forEachIndexed { i, aviso ->
-                            if (i > 0) {
-                                Spacer(Modifier.height(12.dp))
-                                Hairline()
-                                Spacer(Modifier.height(12.dp))
-                            }
+                            if (i > 0) Separador(SangriaDeSeparador.Ninguna)
                             TextoDelAviso(aviso) {
                                 // El confirmado ya es el movimiento: no se saca de acá.
                                 if (aviso.state == SMS_STATE_PENDING) {
-                                    Text(
-                                        ESTE_ES_OTRO_PAGO,
-                                        style = Movi.textos.apoyo,
-                                        color = Movi.colores.marca,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier
-                                            .clickable(enabled = !working, role = Role.Button) { esOtroPago(aviso.id) }
-                                            .padding(start = 8.dp, top = 2.dp, bottom = 2.dp),
+                                    Boton(
+                                        texto = ESTE_ES_OTRO_PAGO,
+                                        onClick = { esOtroPago(aviso.id) },
+                                        variante = VarianteDeBoton.Fantasma,
+                                        tamano = TamanoDeBoton.S,
+                                        habilitado = !working,
                                     )
                                 }
                             }
                         }
                     }
-                    Spacer(Modifier.height(14.dp))
-                }
-                // Arriba de todo: antes de mirar el resto, que sepa que otro aviso parece este mismo pago.
-                if (pagoActual == null && currentSms?.state == SMS_STATE_PENDING && currentSms.parecidoA != null) {
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+                } else {
+                    val elSms = sms
+                    TarjetaDeAviso(
+                        // El origen en su renglón: «Comprobante · transferencia.png» (Ola 2) no entraba
+                        // al lado del tipo y la fecha.
+                        titulo = elSms?.bank ?: if (esComprobante) "Lo que Movi leyó del papel" else "Aviso del banco",
+                        subtitulo = elSms?.let { "${if (esComprobante) "Comprobante" else "SMS"} · ${fechaLegibleDeSms(it.time)}" },
+                        pideDecision = pendiente,
                     ) {
-                        LineaDelMismoPago(otroAviso)
-                    }
-                    Spacer(Modifier.height(14.dp))
-                }
-                if (pagoActual == null) MinSectionHeader(title = if (esComprobante) "Lo que Movi leyó del papel" else "SMS recibido")
-                if (pagoActual == null) MinCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = MinCardVariant.Default,
-                    padding = PaddingValues(18.dp),
-                ) {
-                    if (sms == null) {
-                        Text("Cargando…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                    } else {
-                        // El origen en su propio renglón: «Comprobante · transferencia.png» (Ola 2) no
-                        // entraba al lado del tipo y la fecha, y los dejaba en una letra por renglón.
-                        Text(
-                            sms!!.bank,
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(if (esComprobante) "COMPROBANTE" else "SMS", color = Movi.colores.textoMedio, style = Movi.textos.rotulo)
-                            StatusDot(Movi.colores.textoApagado, 2.dp)
-                            Text(fechaLegibleDeSms(sms!!.time), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
-                            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Movi.colores.hilo))
-                            Text(
-                                "\"${sms!!.text}\"",
-                                color = Movi.colores.textoMedio,
-                                style = Movi.textos.cuerpo,
-                                modifier = Modifier.padding(start = 12.dp),
-                            )
+                        if (elSms == null) {
+                            Text("Cargando…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                        } else {
+                            // Antes de mirar el resto, que sepa que otro aviso parece este mismo pago.
+                            if (elSms.state == SMS_STATE_PENDING && elSms.parecidoA != null) LineaDelMismoPago(otroAviso)
+                            LoQueDiceElBanco(elSms.text)
                         }
                     }
                 }
+            }
 
-                antesDeLaCuenta?.let { inicio ->
-                    Spacer(Modifier.height(14.dp))
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(18.dp),
-                    ) {
-                        Text(
-                            "Este mensaje es de antes de que empezaras a llevar «${resolvedAccount?.name}» en Movi (desde el ${fechaEnPalabras(inicio, hoyEnAppZone())}).",
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.aviso,
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "Esa plata ya está dentro del saldo con el que arrancó la cuenta. Si lo confirmas, se cuenta dos veces.",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            "Ignorar este mensaje",
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.marca,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(Movi.colores.marca.copy(alpha = 0.16f))
-                                .clickable(enabled = !working) { ignore() }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                        )
-                    }
+            // ── De antes de que la cuenta arrancara en Movi: confirmarlo lo contaría dos veces ──
+            antesDeLaCuenta?.let { inicio ->
+                item(key = "antes-de-la-cuenta") {
+                    TarjetaDePropuesta(
+                        icono = Icons.Rounded.History,
+                        tono = TonoDeIcono.Aviso,
+                        titulo = "Este mensaje es de antes de que empezaras a llevar «${resolvedAccount?.name}» en Movi (desde el ${fechaEnPalabras(inicio, hoyEnAppZone())}).",
+                        cuerpo = "Esa plata ya está dentro del saldo con el que arrancó la cuenta. Si lo confirmas, se cuenta dos veces.",
+                        accion = "Ignorar este mensaje",
+                        onAccion = { if (!working) ignore() },
+                    )
                 }
+            }
 
-                val yaAnotados = coincidencias.orEmpty()
-                if (yaAnotados.isNotEmpty()) {
-                    Spacer(Modifier.height(14.dp))
-                    MinSectionHeader(title = "¿Ya lo anotaste?")
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(18.dp),
-                    ) {
+            // ── ¿Ya lo anotaste? ───────────────────────────────────────────────────────────
+            val yaAnotados = coincidencias.orEmpty()
+            if (yaAnotados.isNotEmpty()) {
+                item(key = "ya-anotado") {
+                    Column {
+                        Seccion(titulo = "¿Ya lo anotaste?")
                         Text(
                             if (yaAnotados.size == 1) "Encontramos un movimiento igual. Si es este, no se crea otro."
                             else "Encontramos movimientos iguales. Si es uno de estos, no se crea otro.",
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
-                            lineHeight = 17.sp,
+                            modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
                         )
-                        yaAnotados.forEach { ev ->
-                            Spacer(Modifier.height(12.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(ev.description, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                                    Text(
-                                        "${etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoyEnAppZone())} · ${formatMoney(ev.amount, ev.currency)}",
-                                        style = Movi.textos.apoyo,
-                                        color = Movi.colores.textoMedio,
-                                    )
-                                }
-                                Text(
-                                    "Es este",
-                                    style = Movi.textos.cuerpo,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Movi.colores.marca,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(Movi.colores.marca.copy(alpha = 0.16f))
-                                        .clickable(enabled = !working) { esElQueYaEstaba(ev.id) }
-                                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                            yaAnotados.forEachIndexed { i, ev ->
+                                if (i > 0) Separador(SangriaDeSeparador.Margen)
+                                Fila(
+                                    titulo = ev.description,
+                                    subtitulo = "${etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoyEnAppZone())} · ${formatMoney(ev.amount, ev.currency)}",
+                                    final = {
+                                        Boton(
+                                            texto = "Es este",
+                                            onClick = { esElQueYaEstaba(ev.id) },
+                                            variante = VarianteDeBoton.Secundario,
+                                            tamano = TamanoDeBoton.S,
+                                            habilitado = !working,
+                                        )
+                                    },
                                 )
                             }
                         }
                     }
                 }
+            }
 
-                // «Son 2 pagos: Hipoteca Papá $2.228.152 + Libranza Papá $2.051.848», o repartir a mano.
-                val elReparto = reparto
-                if (elReparto != null && yaAnotadoCon == null && (currentSms == null || currentSms.state == SMS_STATE_PENDING)) {
+            // «Son 2 pagos: Hipoteca Papá $2.228.152 + Libranza Papá $2.051.848», o repartir a mano.
+            val elReparto = reparto
+            if (elReparto != null && yaAnotadoCon == null && pendiente) {
+                item(key = "reparto") {
                     TarjetaDelReparto(
                         propuesta = elReparto,
                         habilitado = !working && resolvedAccount != null,
                         onRepartir = { elegidos, recordar -> repartir(elegidos, recordar) },
                     )
                 }
+            }
 
-                Spacer(Modifier.height(14.dp))
-                MinSectionHeader(title = if (yaAnotados.isNotEmpty()) "O anótalo como nuevo" else "Movi sugiere")
-                MinCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(20.dp),
-                ) {
-                    val loQueTrae = sinLeer
-                    if (parsed == null && loQueTrae != null) {
-                        Text(
-                            text = textoDeAnotarloIgual(loQueTrae),
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.texto,
-                        )
-                    } else if (parsed == null) {
-                        Text(
-                            text = noSePudoLeer ?: "Leyendo el mensaje…",
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.textoMedio,
-                        )
-                    } else {
-                        val p = parsed!!
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(comercio ?: p.merchant, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.2).sp)
-                                Text(
-                                    "${(selectedCategory ?: p.category).ifBlank { "Elige la categoría" }} · ${resolvedAccount?.name ?: "Elige la cuenta"}",
-                                    style = Movi.textos.apoyo,
-                                    color = Movi.colores.textoMedio,
-                                    modifier = Modifier.padding(top = 3.dp),
+            // ── Lo que Movi propone anotar ───────────────────────────────────────────────────
+            item(key = "sugiere") {
+                Column {
+                    Seccion(titulo = if (yaAnotados.isNotEmpty()) "O anótalo como nuevo" else "Movi sugiere")
+                    Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Propuesta) {
+                        val loQueTrae = sinLeer
+                        if (parsed == null && loQueTrae != null) {
+                            Text(text = textoDeAnotarloIgual(loQueTrae), style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                        } else if (parsed == null) {
+                            Text(text = noSePudoLeer ?: "Leyendo el mensaje…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                        } else {
+                            val p = parsed!!
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(comercio ?: p.merchant, style = Movi.textos.titulo, color = Movi.colores.texto)
+                                    Text(
+                                        "${(selectedCategory ?: p.category).ifBlank { "Elige la categoría" }} · ${resolvedAccount?.name ?: "Elige la cuenta"}",
+                                        style = Movi.textos.apoyo,
+                                        color = Movi.colores.textoMedio,
+                                    )
+                                }
+                                // Ola 2a: el gasto en el color del texto; el ingreso en verde y con «+».
+                                Cifra(
+                                    monto = if (p.type == TransactionType.EXPENSE) -p.amount.roundToLong() else p.amount.roundToLong(),
+                                    tono = if (p.type == TransactionType.EXPENSE) TonoDeCifra.Neutro else TonoDeCifra.Ingreso,
+                                    moneda = p.currency,
                                 )
                             }
-                            val sign = if (p.type == TransactionType.EXPENSE) "−" else "+"
-                            // Ola 2a: el gasto en el color del texto; el signo «−» ya lo dice.
-                            val color = if (p.type == TransactionType.EXPENSE) Movi.colores.texto else Movi.colores.entra
-                            Text(
-                                "$sign${formatMoney(p.amount.roundToLong(), p.currency)}",
-                                style = Movi.textos.monto,
-                                fontWeight = FontWeight.Medium,
-                                color = color,
-                                letterSpacing = (-0.4).sp,
+                            // Arreglo 1 de la ingesta: lo que se va a crear, antes de confirmar.
+                            LasDosPatasEnElResumen(
+                                propuestas = lasDosPatas,
+                                pideDestino = pideDestino || pideOrigen,
+                                destino = if (pideOrigen) origenDeLasPatas else destinoDeLasPatas,
+                                esAvance = esUnAvanceDeLaTarjeta(p, categoriaActual, resolvedAccount),
+                                eligiendo = eligiendoDestino,
+                                habilitado = !working && pendiente,
+                                onCambiar = { eligiendoDestino = !eligiendoDestino },
+                                elegibles = destinosElegibles(accounts, resolvedAccount),
+                                onElegir = { cuenta ->
+                                    if (pideOrigen) origenElegidoId = cuenta.id else destinoElegidoId = cuenta.id
+                                    eligiendoDestino = false
+                                },
+                                entrante = pideOrigen,
                             )
                         }
-                        // Arreglo 1 de la ingesta: lo que se va a crear, antes de confirmar.
-                        LasDosPatasEnElResumen(
-                            propuestas = lasDosPatas,
-                            pideDestino = pideDestino || pideOrigen,
-                            destino = if (pideOrigen) origenDeLasPatas else destinoDeLasPatas,
-                            esAvance = esUnAvanceDeLaTarjeta(p, categoriaActual, resolvedAccount),
-                            eligiendo = eligiendoDestino,
-                            habilitado = !working && (currentSms == null || currentSms.state == SMS_STATE_PENDING),
-                            onCambiar = { eligiendoDestino = !eligiendoDestino },
-                            elegibles = destinosElegibles(accounts, resolvedAccount),
-                            onElegir = { cuenta ->
-                                if (pideOrigen) origenElegidoId = cuenta.id else destinoElegidoId = cuenta.id
-                                eligiendoDestino = false
-                            },
-                            entrante = pideOrigen,
-                        )
+                    }
+                    // «¿De quién es la cuenta ·0756? Guardar como…» — solo con un identificador que
+                    // ninguna cuenta guardada conoce, y solo mientras el aviso espera una decisión.
+                    val leidoParaGuardar = parsed
+                    if (identificador != null && leidoParaGuardar != null && pendiente &&
+                        destinosParaGuardar.ofrece(identificador, accounts)
+                    ) {
+                        Superficie(modifier = Modifier.fillMaxWidth().padding(top = Medida.dentroDeSeccion)) {
+                            FilaGuardarElDestino(
+                                identificador = identificador,
+                                nombreSugerido = nombreParaLaFila(identificador, leidoParaGuardar.merchant),
+                                textoDelAviso = sms?.text,
+                                destinos = destinosParaGuardar.guardados.orEmpty(),
+                                onGuardado = { guardado ->
+                                    destinosParaGuardar.alGuardar(guardado)
+                                    // El movimiento se propone con ese nombre: «Transferencia a Caro»
+                                    // (o «de Caro»; un comercio, a secas). Lo que él ya escribió en
+                                    // «Comercio» es suyo y no se pisa (la regla de `NombreDelTercero.kt`).
+                                    if (comercioEditado.isNullOrBlank()) {
+                                        textoConElNombreDelTercero(leidoParaGuardar.merchant, guardado, leidoParaGuardar.type)
+                                            ?.let { comercioEditado = it }
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    // «Anotarlo igual»: el monto y gasto o ingreso. Lo demás son las filas de siempre.
+                    val leidaIgual = parsed
+                    val trae = sinLeer
+                    if (anotandoIgual && leidaIgual != null && trae != null) {
+                        Superficie(modifier = Modifier.fillMaxWidth().padding(top = Medida.dentroDeSeccion)) {
+                            FormularioDeAnotarloIgual(
+                                monto = leidaIgual.amount.roundToLong().takeIf { it > 0 },
+                                moneda = leidaIgual.currency,
+                                tipo = leidaIgual.type,
+                                habilitado = !working && pendiente,
+                                onMonto = { nuevo -> parsed = leidaIgual.copy(amount = (nuevo ?: 0L).toDouble()) },
+                                onTipo = { nuevo ->
+                                    if (nuevo != leidaIgual.type) {
+                                        parsed = leidaIgual.copy(type = nuevo)
+                                        // La categoría de un gasto no es la de un ingreso: vuelve la
+                                        // propuesta si es de ese lado, y si no, a elegir.
+                                        selectedCategory = trae.categoria?.takeIf { nuevo == trae.tipo }
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
+            }
 
-                // «¿De quién es la cuenta ·0756? Guardar como…» — solo con un identificador que
-                // ninguna cuenta guardada conoce, y solo mientras el aviso espera una decisión.
-                val leidoParaGuardar = parsed
-                if (identificador != null && leidoParaGuardar != null &&
-                    (currentSms == null || currentSms.state == SMS_STATE_PENDING) &&
-                    destinosParaGuardar.ofrece(identificador, accounts)
-                ) {
-                    Spacer(Modifier.height(8.dp))
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Default,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
-                    ) {
-                        FilaGuardarElDestino(
-                            identificador = identificador,
-                            nombreSugerido = nombreParaLaFila(identificador, leidoParaGuardar.merchant),
-                            textoDelAviso = sms?.text,
-                            destinos = destinosParaGuardar.guardados.orEmpty(),
-                            onGuardado = { guardado ->
-                                destinosParaGuardar.alGuardar(guardado)
-                                // El movimiento se propone con ese nombre: «Transferencia a Caro»
-                                // (o «de Caro», si la plata llegó; un comercio, a secas). Lo que él
-                                // ya haya escrito en «Comercio» es suyo y no se pisa, y lo que propuso
-                                // la memoria con un nombre suyo tampoco (la regla de `NombreDelTercero.kt`).
-                                if (comercioEditado.isNullOrBlank()) {
-                                    textoConElNombreDelTercero(leidoParaGuardar.merchant, guardado, leidoParaGuardar.type)
-                                        ?.let { comercioEditado = it }
+            // ── Confirma o ajusta ────────────────────────────────────────────────────────────
+            item(key = "ajusta") {
+                Column {
+                    Seccion(titulo = "Confirma o ajusta")
+                    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                        val leido = parsed
+                        if (leido == null) {
+                            Detail(ok = false, label = "Comercio", value = "—")
+                        } else {
+                            ComercioQueSeEdita(
+                                leido = leido.merchant,
+                                valor = comercioEditado ?: leido.merchant,
+                                enabled = !working && pendiente,
+                                onCambio = { comercioEditado = it },
+                            )
+                        }
+                        Separador()
+                        Detail(
+                            ok = resolvedAccount != null,
+                            label = "Cuenta",
+                            value = resolvedAccount?.name ?: "Sin cuenta elegida",
+                            // Lo que Movi haya adivinado se dice acá, antes de guardar: un SMS no trae
+                            // la cuenta escrita, la pone la app, y eso hay que confesarlo.
+                            hint = if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI) {
+                                parsed?.cuentaSugeridaPor ?: avisoDeLaCuentaDelBanco(cuentaDelSms.origen)
+                            } else avisoDeLaCuentaDelBanco(cuentaDelSms.origen),
+                            action = if (eligiendoCuenta) "Cerrar" else "Cambiar",
+                            onClick = { eligiendoCuenta = !eligiendoCuenta },
+                        )
+                        // El selector, en el mismo lugar donde antes había un dato de solo lectura:
+                        // cuando ninguna cuenta califica —o Movi eligió mal— este es el camino.
+                        if (eligiendoCuenta) {
+                            ListaDeCuentasElegibles(
+                                // `conservar` sostiene una elección hecha desde «Ver todas».
+                                cuentas = cuentasPara(accounts, usoDeCuenta, conservar = resolvedAccount?.id),
+                                uso = usoDeCuenta,
+                                selectedId = resolvedAccount?.id,
+                                onPick = { id ->
+                                    cuentaElegida = id
+                                    eligiendoCuenta = false
+                                },
+                                modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
+                            )
+                        }
+                        Separador()
+                        if (anotandoIgual && currentSms != null) {
+                            // La fecha del aviso: es la del movimiento, como en cualquier confirmación.
+                            Detail(ok = true, label = "Fecha", value = fechaLegibleDeSms(currentSms.time))
+                            Separador()
+                        }
+                        Detail(
+                            ok = selectedCategory != null,
+                            label = "Categoría",
+                            value = selectedCategory ?: "—",
+                            // De dónde salió la propuesta: «Así lo anotaste 4 veces». Se calla en
+                            // cuanto él elige otra — ya no está explicando lo que se ve.
+                            hint = parsed?.aprendidoDe?.takeIf { selectedCategory == parsed?.category },
+                            action = if (parsed == null) null else if (eligiendoCategoria) "Cerrar" else "Cambiar",
+                            onClick = if (parsed == null) null else {
+                                {
+                                    pedidosDeFoco = 0
+                                    eligiendoCategoria = !eligiendoCategoria
                                 }
                             },
                         )
                     }
-                }
 
-                // «Anotarlo igual»: el monto y gasto o ingreso. Lo demás son las filas de siempre.
-                val leidaIgual = parsed
-                val trae = sinLeer
-                if (anotandoIgual && leidaIgual != null && trae != null) {
-                    Spacer(Modifier.height(14.dp))
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Default,
-                        padding = PaddingValues(18.dp),
-                    ) {
-                        FormularioDeAnotarloIgual(
-                            monto = leidaIgual.amount.roundToLong().takeIf { it > 0 },
-                            moneda = leidaIgual.currency,
-                            tipo = leidaIgual.type,
-                            habilitado = !working && (currentSms == null || currentSms.state == SMS_STATE_PENDING),
-                            onMonto = { nuevo -> parsed = leidaIgual.copy(amount = (nuevo ?: 0L).toDouble()) },
-                            onTipo = { nuevo ->
-                                if (nuevo != leidaIgual.type) {
-                                    parsed = leidaIgual.copy(type = nuevo)
-                                    // La categoría de un gasto no es la de un ingreso: vuelve la propuesta
-                                    // si es de ese lado, y si no, a elegir.
-                                    selectedCategory = trae.categoria?.takeIf { nuevo == trae.tipo }
-                                }
-                            },
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(14.dp))
-                MinSectionHeader(title = "Confirma o ajusta")
-                MinCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                ) {
-                    val leido = parsed
-                    if (leido == null) {
-                        Detail(ok = false, label = "Comercio", value = "—")
-                    } else {
-                        ComercioQueSeEdita(
-                            leido = leido.merchant,
-                            valor = comercioEditado ?: leido.merchant,
-                            enabled = !working && (currentSms == null || currentSms.state == SMS_STATE_PENDING),
-                            onCambio = { comercioEditado = it },
-                        )
-                    }
-                    Hairline()
-                    Detail(
-                        ok = resolvedAccount != null,
-                        label = "Cuenta",
-                        value = resolvedAccount?.name ?: "Sin cuenta elegida",
-                        // Lo que Movi haya adivinado se dice acá, antes de guardar. Un SMS no
-                        // trae la cuenta escrita: la pone la app, y eso hay que confesarlo en la
-                        // pantalla y no descubrirlo después en Movimientos.
-                        hint = if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI) {
-                            parsed?.cuentaSugeridaPor ?: avisoDeLaCuentaDelBanco(cuentaDelSms.origen)
-                        } else avisoDeLaCuentaDelBanco(cuentaDelSms.origen),
-                        action = if (eligiendoCuenta) "Cerrar" else "Cambiar",
-                        onClick = { eligiendoCuenta = !eligiendoCuenta },
-                    )
-                    Hairline()
-                    if (anotandoIgual && currentSms != null) {
-                        // La fecha del aviso: es la del movimiento, como en cualquier confirmación.
-                        Detail(ok = true, label = "Fecha", value = fechaLegibleDeSms(currentSms.time))
-                        Hairline()
-                    }
-                    Detail(
-                        ok = selectedCategory != null,
-                        label = "Categoría",
-                        value = selectedCategory ?: "—",
-                        // De dónde salió la propuesta: «Así lo anotaste 4 veces». Una sugerencia
-                        // que se explica se puede rechazar; una que no, solo se obedece. Se calla
-                        // en cuanto él elige otra — ya no está explicando lo que se ve.
-                        hint = parsed?.aprendidoDe?.takeIf { selectedCategory == parsed?.category },
-                        // Ola L: antes esta fila era de solo lectura y las pastillas de abajo eran
-                        // el único camino — sin forma de ver todas ni de crear una nueva.
-                        action = if (parsed == null) null else if (eligiendoCategoria) "Cerrar" else "Cambiar",
-                        onClick = if (parsed == null) null else {
-                            {
-                                pedidosDeFoco = 0
-                                eligiendoCategoria = !eligiendoCategoria
-                            }
-                        },
-                        isLast = true,
-                    )
-                }
-
-                if (eligiendoCategoria) {
-                    // Se dispara una sola vez al abrirse (la clave es el booleano): sin esto, cada
-                    // letra tecleada en la búsqueda de adentro recompondría este bloque y saltaría
-                    // el scroll una y otra vez debajo del dedo.
-                    LaunchedEffect(eligiendoCategoria) {
-                        categoriaBringIntoViewRequester.bringIntoView()
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    MinCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .bringIntoViewRequester(categoriaBringIntoViewRequester),
-                        variant = MinCardVariant.Default,
-                        padding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
-                    ) {
-                        SelectorDeCategoria(
-                            elegida = selectedCategory ?: "",
-                            onElegir = {
-                                selectedCategory = it
-                                eligiendoCategoria = false
-                            },
-                            tipo = parsed?.type,
-                            usadas = UsedCategoriesCache.used,
-                            prefs = UsedCategoriesCache.prefs,
-                            usos = UsedCategoriesCache.usosRecientes,
-                            pedidosDeFoco = pedidosDeFoco,
-                        )
-                    }
-                }
-
-                // El selector, en el mismo lugar donde antes había un dato de solo lectura. Es lo
-                // que hace que el criterio nuevo no sea un callejón: cuando ninguna cuenta califica
-                // —o cuando Movi eligió mal— este es el camino hacia adelante.
-                if (eligiendoCuenta) {
-                    Spacer(Modifier.height(8.dp))
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Default,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 4.dp),
-                    ) {
-                        ListaDeCuentasElegibles(
-                            // `conservar` es lo que sostiene una elección hecha desde el «Ver
-                            // todas»: sin él, la cuenta que el dueño acaba de sacar de ahí se
-                            // escondería sola al reabrir el selector.
-                            cuentas = cuentasPara(accounts, usoDeCuenta, conservar = resolvedAccount?.id),
-                            uso = usoDeCuenta,
-                            selectedId = resolvedAccount?.id,
-                            onPick = { id ->
-                                cuentaElegida = id
-                                eligiendoCuenta = false
-                            },
-                        )
-                    }
-                }
-
-                // Sin la lectura no se sabe de qué lado es el movimiento (gasto o ingreso): las
-                // pastillas, «Cambiar» y «+ Nueva» esperan a que llegue.
-                if (parsed != null && categoryOptions.isNotEmpty()) {
-                    Spacer(Modifier.height(14.dp))
-                    // **Rueda en horizontal, no se parte ni se corta.** Son hasta doce pastillas, y a
-                    // 375 dp —el ancho con el que se usa la PWA desde el teléfono— no entran: en un
-                    // `Row` común la última quedaba cortada contra el margen, ilegible y sin forma de
-                    // tocarla. Las pastillas son el atajo (la propuesta de Movi, lo que él más usa);
-                    // la fila «Categoría» de arriba tiene «Cambiar» para el selector completo y
-                    // «+ Nueva», el primero de la fila, para crear una.
-                    //
-                    // `horizontalScroll` y no un `FlowRow` porque es el patrón que este repo ya
-                    // tiene para una fila de pastillas —Movimientos y Categorías hacen exactamente
-                    // esto— y una tercera forma de resolver el mismo problema es justo lo que esta
-                    // ola vino a sacar del código.
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        // «+ Nueva», PRIMERA de la fila y no al final: detrás de doce pastillas
-                        // quedaba varias pantallas a la derecha y nadie la veía. Es la puerta a
-                        // crear una categoría: abre el selector de siempre con el cursor en la
-                        // búsqueda, donde «Crear "…"» hace el resto.
-                        Box(
+                    if (eligiendoCategoria) {
+                        // Se dispara una sola vez al abrirse (la clave es el booleano): sin esto, cada
+                        // letra de la búsqueda recompondría este bloque y saltaría el scroll.
+                        LaunchedEffect(eligiendoCategoria) {
+                            categoriaBringIntoViewRequester.bringIntoView()
+                        }
+                        Superficie(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .border(1.dp, Movi.colores.marca, RoundedCornerShape(999.dp))
-                                .clickable(role = Role.Button) {
+                                .fillMaxWidth()
+                                .padding(top = Medida.dentroDeSeccion)
+                                .bringIntoViewRequester(categoriaBringIntoViewRequester),
+                        ) {
+                            SelectorDeCategoria(
+                                elegida = selectedCategory ?: "",
+                                onElegir = {
+                                    selectedCategory = it
+                                    eligiendoCategoria = false
+                                },
+                                tipo = parsed?.type,
+                                usadas = UsedCategoriesCache.used,
+                                prefs = UsedCategoriesCache.prefs,
+                                usos = UsedCategoriesCache.usosRecientes,
+                                pedidosDeFoco = pedidosDeFoco,
+                            )
+                        }
+                    }
+
+                    // Sin la lectura no se sabe de qué lado es el movimiento (gasto o ingreso): las
+                    // pastillas, «Cambiar» y «+ Nueva» esperan a que llegue.
+                    if (parsed != null && categoryOptions.isNotEmpty()) {
+                        // **Rueda en horizontal, no se parte ni se corta**: son hasta doce y a 375 dp
+                        // no entran. Los filtros del sistema, como en Movimientos y Categorías.
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = Medida.dentroDeSeccion)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                        ) {
+                            // «+ Nueva», PRIMERA de la fila: detrás de doce pastillas nadie la veía.
+                            // Abre el selector con el cursor en la búsqueda, donde «Crear "…"» crea.
+                            PildoraDeFiltro(
+                                texto = "Nueva",
+                                seleccionada = false,
+                                icono = Icons.Rounded.Add,
+                                onClick = {
                                     pedidosDeFoco += 1
                                     eligiendoCategoria = true
-                                }
-                                .testTag(TAG_PASTILLA_NUEVA_CATEGORIA)
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                        ) {
-                            Text("+ Nueva", style = Movi.textos.apoyo, color = Movi.colores.marca, fontWeight = FontWeight.Medium)
-                        }
-                        categoryOptions.forEach { opt ->
-                            val on = opt == selectedCategory
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(if (on) Movi.colores.texto else Color.Transparent)
-                                    .then(if (!on) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp)) else Modifier)
-                                    .clickable(role = Role.Button) { selectedCategory = opt }
-                                    .testTag(tagDePastillaDeCategoriaDelSms(opt))
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                            ) {
-                                Text(opt, style = Movi.textos.apoyo, color = if (on) Movi.colores.fondo else Movi.colores.texto, fontWeight = FontWeight.Medium)
+                                },
+                                modifier = Modifier.testTag(TAG_PASTILLA_NUEVA_CATEGORIA),
+                            )
+                            categoryOptions.forEach { opt ->
+                                PildoraDeFiltro(
+                                    texto = opt,
+                                    seleccionada = opt == selectedCategory,
+                                    onClick = { selectedCategory = opt },
+                                    modifier = Modifier.testTag(tagDePastillaDeCategoriaDelSms(opt)),
+                                )
                             }
                         }
                     }
-                }
 
-                // Ola Y: opcional, y solo con esas dos categorías sobre un gasto — ver
-                // `ofreceVincularDeuda`. Debajo de las pastillas de categoría, porque depende de
-                // cuál quedó elegida.
-                // Un traspaso sin la cuenta a la que fue la plata: por qué todavía no se puede. Con la
-                // cuenta, lo que se va a crear ya lo dice la tarjeta de resumen.
-                if (categoriaActual == TRANSFER_CATEGORY && parsed != null && lasDosPatas == null) {
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        if (pideOrigen) AVISO_DEL_TRASPASO_QUE_ENTRA else avisoDelTraspaso(null, resolvedAccount),
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                    )
-                }
+                    // Un traspaso sin la cuenta a la que fue la plata: por qué todavía no se puede.
+                    if (categoriaActual == TRANSFER_CATEGORY && parsed != null && lasDosPatas == null) {
+                        Text(
+                            if (pideOrigen) AVISO_DEL_TRASPASO_QUE_ENTRA else avisoDelTraspaso(null, resolvedAccount),
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                            modifier = Modifier.padding(top = Medida.dentroDeSeccion),
+                        )
+                    }
 
-                if (ofreceVinculo) {
-                    Spacer(Modifier.height(14.dp))
-                    SelectorDeCuentaDeDeuda(
-                        cuentas = accounts,
-                        seleccionada = cuentaDeDeudaElegida,
-                        onSeleccionar = { deudaTocadaAMano = true; cuentaDeDeudaElegida = it },
-                    )
-                }
+                    // Ola Y: opcional, y solo con esas dos categorías sobre un gasto — ver
+                    // `ofreceVincularDeuda`. Debajo de las pastillas, porque depende de cuál quedó.
+                    if (ofreceVinculo) {
+                        Box(Modifier.padding(top = Medida.dentroDeSeccion)) {
+                            SelectorDeCuentaDeDeuda(
+                                cuentas = accounts,
+                                seleccionada = cuentaDeDeudaElegida,
+                                onSeleccionar = { deudaTocadaAMano = true; cuentaDeDeudaElegida = it },
+                            )
+                        }
+                    }
 
-                // Pagar una tarjeta en otra moneda (hueco de #439): el aviso dice lo que salió de la
-                // cuenta; cuánto bajó la deuda lo dice el banco. Sin la tasa del día el server no lo
-                // inventa y lo pide: este es el lugar donde escribirlo.
-                val pagoEntreMonedas = lasDosPatas?.takeIf { pideElMontoEnLaMonedaDeLaDeuda(it) }
-                if (pagoEntreMonedas != null) {
-                    Spacer(Modifier.height(14.dp))
-                    MoneyField(
-                        value = montoEnLaDeuda,
-                        onValueChange = { montoEnLaDeuda = it },
-                        label = rotuloDelMontoEnLaDeuda(pagoEntreMonedas.destino.currency),
-                        placeholder = simboloDeMoneda(pagoEntreMonedas.destino.currency) + " 0",
-                        prefix = simboloDeMoneda(pagoEntreMonedas.destino.currency),
-                        modifier = Modifier.testTag(TAG_MONTO_EN_LA_MONEDA_DE_LA_DEUDA),
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(AYUDA_DEL_MONTO_EN_LA_DEUDA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
+                    // Pagar una tarjeta en otra moneda (hueco de #439): cuánto bajó la deuda lo dice
+                    // el banco. Sin la tasa del día el server no lo inventa y lo pide.
+                    val pagoEntreMonedas = lasDosPatas?.takeIf { pideElMontoEnLaMonedaDeLaDeuda(it) }
+                    if (pagoEntreMonedas != null) {
+                        Column(
+                            modifier = Modifier.padding(top = Medida.dentroDeSeccion),
+                            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+                        ) {
+                            MoneyField(
+                                value = montoEnLaDeuda,
+                                onValueChange = { montoEnLaDeuda = it },
+                                label = rotuloDelMontoEnLaDeuda(pagoEntreMonedas.destino.currency),
+                                placeholder = simboloDeMoneda(pagoEntreMonedas.destino.currency) + " 0",
+                                prefix = simboloDeMoneda(pagoEntreMonedas.destino.currency),
+                                modifier = Modifier.testTag(TAG_MONTO_EN_LA_MONEDA_DE_LA_DEUDA),
+                            )
+                            Text(AYUDA_DEL_MONTO_EN_LA_DEUDA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        }
+                    }
 
-                if (error != null) {
-                    Spacer(Modifier.height(10.dp))
-                    Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
+                    if (error != null) {
+                        Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(top = Medida.dentroDeSeccion))
+                    }
 
-                // Ola 2 #1: red de seguridad — si la pila de navegación rota trae de vuelta a
-                // este detalle ya resuelto (confirmado o ignorado), no se puede reconfirmar.
-                if (currentSms != null && currentSms.state != SMS_STATE_PENDING) {
-                    Spacer(Modifier.height(10.dp))
-                    Text(textoDelAvisoYaResuelto(currentSms), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    // Ola 2 #1: red de seguridad — si la pila de navegación rota trae de vuelta a
+                    // este detalle ya resuelto (confirmado o ignorado), no se puede reconfirmar.
+                    if (currentSms != null && currentSms.state != SMS_STATE_PENDING) {
+                        Text(
+                            textoDelAvisoYaResuelto(currentSms),
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                            modifier = Modifier.padding(top = Medida.dentroDeSeccion),
+                        )
+                    }
                 }
             }
         }
@@ -1734,19 +1557,20 @@ fun SMSReconcileScreen(
         val alreadyResolved = currentSms != null && currentSms.state != SMS_STATE_PENDING
         // Junto al botón, que es donde se mira cuando no prende: por qué todavía no, o que la
         // revisión falló y se puede reintentar.
+        val alrededorDeLosBotones = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.xs)
         if (!alreadyResolved && yaAnotadoCon == null) {
             if (coincidencias == null && !noSePudoRevisar) {
                 Text(
                     "Revisando si ya está anotado…",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                    modifier = alrededorDeLosBotones,
                 )
             } else if (noSePudoRevisar) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                    modifier = alrededorDeLosBotones.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
                 ) {
                     Text(
                         "No pudimos revisar si ya estaba anotado",
@@ -1759,20 +1583,17 @@ fun SMSReconcileScreen(
             }
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(50.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(14.dp))
-                    .clickable(enabled = !working && !alreadyResolved) { ignore() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Ignorar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            }
+            Boton(
+                texto = "Ignorar",
+                onClick = { ignore() },
+                modifier = Modifier.weight(1f),
+                variante = VarianteDeBoton.Secundario,
+                habilitado = !working && !alreadyResolved,
+                anchoCompleto = true,
+            )
             // Hasta que la revisión de «¿ya lo anotaste?» conteste, no se anota. Si falló, se puede,
             // pero con un segundo toque que dice lo que hace.
             val revisionContesto = coincidencias != null || noSePudoRevisar
@@ -1788,38 +1609,29 @@ fun SMSReconcileScreen(
                         categoriaParaAnotar != null && (parsed?.amount ?: 0.0) > 0.0
                     )
                 )
-            Box(
-                modifier = Modifier
-                    .weight(1.7f)
-                    .height(50.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (canConfirm) Movi.colores.texto else Movi.colores.tarjeta)
-                    .clickable(enabled = canConfirm) {
-                        when {
-                            ofreceAnotarloIgual -> sinLeer?.let { trae ->
-                                parsed = trae.comoLectura()
-                                selectedCategory = trae.categoria
-                                anotandoIgual = true
-                            }
-                            soloCerrar -> cerrarElPago()
-                            else -> confirm()
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
+            Boton(
+                texto = when {
+                    working -> "Guardando…"
+                    soloCerrar -> "Cerrar los avisos"
+                    ofreceAnotarloIgual -> ANOTARLO_IGUAL
+                    anotarSinRevisar -> "Anotar de todas formas"
+                    else -> "Confirmar"
+                },
+                onClick = {
                     when {
-                        working -> "Guardando…"
-                        soloCerrar -> "Cerrar los avisos"
-                        ofreceAnotarloIgual -> ANOTARLO_IGUAL
-                        anotarSinRevisar -> "Anotar de todas formas"
-                        else -> "Confirmar"
-                    },
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
-                    color = if (canConfirm) Movi.colores.fondo else Movi.colores.textoApagado,
-                )
-            }
+                        ofreceAnotarloIgual -> sinLeer?.let { trae ->
+                            parsed = trae.comoLectura()
+                            selectedCategory = trae.categoria
+                            anotandoIgual = true
+                        }
+                        soloCerrar -> cerrarElPago()
+                        else -> confirm()
+                    }
+                },
+                modifier = Modifier.weight(1.7f),
+                habilitado = canConfirm,
+                anchoCompleto = true,
+            )
         }
     }
 }
@@ -1830,8 +1642,9 @@ fun SMSReconcileScreen(
  * Movimientos. Lo que quede escrito es el concepto y el comercio del movimiento; vacío vuelve al
  * leído, que se muestra de guía mientras tanto.
  *
- * El campo es el mismo del concepto en la hoja del movimiento ([rememberCampoConSeleccion], con
- * ⌘A en la web), con el tope de la columna.
+ * Tiene la anatomía de una [Fila] (el estado al inicio, el rótulo y el valor, «Editar» al final),
+ * con el campo en el lugar del valor: el mismo del concepto en la hoja del movimiento
+ * ([rememberCampoConSeleccion], con ⌘A en la web), con el tope de la columna.
  */
 @Composable
 private fun ComercioQueSeEdita(
@@ -1845,51 +1658,44 @@ private fun ComercioQueSeEdita(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = Medida.altoDeFilaDoble)
             .clickable(enabled = enabled) { foco.requestFocus() }
-            .padding(vertical = 14.dp),
+            .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
-        Box(
-            modifier = Modifier
-                .size(18.dp)
-                .clip(CircleShape)
-                .background(Movi.colores.entra.copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(12.dp))
-        }
+        IconoEnCirculo(Icons.Rounded.Check, tono = TonoDeIcono.Exito)
         Column(modifier = Modifier.weight(1f)) {
-            Text("COMERCIO", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)
+            Text("Comercio", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             val campo = rememberCampoConSeleccion(valor) { onCambio(it.take(MAX_CONCEPTO_LENGTH)) }
             BasicTextField(
                 value = campo.valor,
                 onValueChange = campo::alCambiar,
                 enabled = enabled,
                 cursorBrush = SolidColor(Movi.colores.texto),
-                textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto, letterSpacing = (-0.1).sp),
+                textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 2.dp)
                     .focusRequester(foco)
                     .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                 decorationBox = { inner ->
                     if (valor.isEmpty()) {
-                        Text(leido, style = Movi.textos.cuerpo, color = Movi.colores.textoApagado)
+                        Text(leido, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     }
                     inner()
                 },
             )
         }
-        Text("Editar", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        Text("Editar", style = Movi.textos.cuerpo, color = Movi.colores.marca)
     }
 }
 
 /**
- * Una fila del resumen «Confirma o ajusta».
+ * Una fila del resumen «Confirma o ajusta»: una [Fila] del sistema con el estado al inicio (listo, o
+ * falta decidir), el valor de título y el rótulo de subtítulo —con el porqué cuando lo puso Movi—.
  *
- * @param hint el renglón chiquito de abajo: por qué ese valor está puesto, cuando lo puso Movi.
+ * @param hint por qué ese valor está puesto, cuando lo puso Movi.
  * @param action el texto de la derecha que invita a tocar («Cambiar» / «Cerrar»). Va junto con
  *   [onClick]: una fila que se puede tocar y no lo dice es una fila que nadie toca.
  */
@@ -1898,45 +1704,21 @@ private fun Detail(
     ok: Boolean,
     label: String,
     value: String,
-    isLast: Boolean = false,
     hint: String? = null,
     action: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(tagDeFilaDelSms(label))
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(18.dp)
-                .clip(CircleShape)
-                .background(if (ok) Movi.colores.entra.copy(alpha = 0.16f) else Movi.colores.aviso.copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (ok) {
-                Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(12.dp))
-            } else {
-                // Sin estilo a propósito: el «?» hace de ícono (como el ✓ de 12 dp) dentro del círculo de 18 dp.
-                Text("?", fontSize = 10.sp, color = Movi.colores.aviso, fontWeight = FontWeight.Bold)
-            }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label.uppercase(), style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)
-            Text(value, style = Movi.textos.cuerpo, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.padding(top = 2.dp))
-            if (hint != null) {
-                Text(hint, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = 2.dp))
-            }
-        }
-        if (action != null) {
-            Text(action, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        }
-    }
+    Fila(
+        titulo = value,
+        subtitulo = if (hint != null) "$label · $hint" else label,
+        modifier = Modifier.testTag(tagDeFilaDelSms(label)),
+        inicio = {
+            if (ok) IconoEnCirculo(Icons.Rounded.Check, tono = TonoDeIcono.Exito)
+            else IconoEnCirculo(Icons.Rounded.QuestionMark, tono = TonoDeIcono.Aviso)
+        },
+        final = action?.let { texto -> { Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.marca) } },
+        onClick = onClick,
+    )
 }
 
 private fun formatThousands(amount: Long): String {

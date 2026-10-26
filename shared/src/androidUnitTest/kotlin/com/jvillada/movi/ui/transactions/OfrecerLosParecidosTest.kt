@@ -169,7 +169,7 @@ class OfrecerLosParecidosTest {
 
         elegir("Comida")
 
-        composeRule.onAllNodesWithText("¿Y LOS PARECIDOS?", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("¿Y los parecidos?", useUnmergedTree = true).assertCountEquals(0)
         assertNotNull(cambiado)
     }
 
@@ -182,7 +182,7 @@ class OfrecerLosParecidosTest {
 
         elegir("Comida")
 
-        composeRule.onAllNodesWithText("¿Y LOS PARECIDOS?", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("¿Y los parecidos?", useUnmergedTree = true).assertCountEquals(0)
         assertNotNull(cambiado)
     }
 

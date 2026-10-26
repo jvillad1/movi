@@ -109,7 +109,7 @@ class MovimientosPlegablesTest {
         composeRule.onNodeWithText("Flujo del día", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Las Doce", useUnmergedTree = true).assertIsDisplayed()
 
-        composeRule.onNode(hasText("HOY"), useUnmergedTree = true).performClick()
+        composeRule.onNode(hasText("Hoy"), useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertDoesNotExist()
@@ -122,11 +122,11 @@ class MovimientosPlegablesTest {
 
     @Test
     fun `volver a tocar el encabezado despliega el dia`() {
-        composeRule.onNode(hasText("HOY"), useUnmergedTree = true).performClick()
+        composeRule.onNode(hasText("Hoy"), useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertDoesNotExist()
 
-        composeRule.onNode(hasText("HOY"), useUnmergedTree = true).performClick()
+        composeRule.onNode(hasText("Hoy"), useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertIsDisplayed()

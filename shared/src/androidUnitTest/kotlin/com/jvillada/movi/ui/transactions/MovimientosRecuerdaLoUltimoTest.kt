@@ -26,7 +26,7 @@ import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
-import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
+import com.jvillada.movi.ui.components.ds.TAG_ESQUELETO_DE_FILA
 import com.jvillada.movi.ui.components.TEXTO_ACTUALIZANDO
 import com.jvillada.movi.ui.components.TEXTO_NO_PUDIMOS_ACTUALIZAR
 import kotlinx.coroutines.CompletableDeferred
@@ -105,7 +105,7 @@ class MovimientosRecuerdaLoUltimoTest {
         composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes().size
 
     private fun filasEsqueleto(): Int =
-        composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size
+        composeRule.onAllNodesWithTag(TAG_ESQUELETO_DE_FILA).fetchSemanticsNodes().size
 
     /** Primera visita completa, salir, y dejar la próxima lectura de eventos como diga [siguiente]. */
     private fun primeraVisitaYSalir(siguiente: suspend () -> List<EventDay>) {

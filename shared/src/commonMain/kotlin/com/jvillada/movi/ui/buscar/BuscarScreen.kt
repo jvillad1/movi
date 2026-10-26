@@ -1,30 +1,41 @@
 package com.jvillada.movi.ui.buscar
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.Vacio
+import com.jvillada.movi.ui.transactions.MontoDeLaFila
+import com.jvillada.movi.ui.transactions.colorDelTono
+import com.jvillada.movi.ui.transactions.textoDelMontoConSigno
+import com.jvillada.movi.ui.transactions.tonoDelEvento
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.History
@@ -45,13 +56,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.BusquedasRecientesStore
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Repositories
@@ -60,7 +67,6 @@ import com.jvillada.movi.data.ahoraEnMs
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.shared.model.periodoActual
@@ -73,7 +79,6 @@ import com.jvillada.movi.ui.components.AvatarDeLaCuenta
 import com.jvillada.movi.ui.components.AvatarDelComercio
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
-import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
@@ -148,7 +153,6 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
             MinScreenHeader(title = TITULO_DE_BUSCAR, leading = HeaderLeading.Back(Screen.Dashboard))
-            Spacer(Modifier.height(12.dp))
             CampoDeBuscar(consulta = consulta, alCambiar = { consulta = it }, alBuscar = anotar)
             ChipsDeBuscar(
                 filtros = filtros,
@@ -158,8 +162,11 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
             )
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(top = Medida.dentroDeSeccion, bottom = Medida.entreSecciones),
             ) {
+                // Los títulos y los textos sueltos van con el margen de la pantalla; las filas traen
+                // el suyo (ver [Fila]), así su toque cubre todo el ancho.
+                val conMargen = Modifier.padding(horizontal = Medida.margenDePantalla)
                 if (consulta.isBlank()) {
                     val recientes = BusquedasRecientesStore.recientes
                     if (recientes.isEmpty()) {
@@ -168,36 +175,41 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
                                 "Busca movimientos, comercios, personas, categorías, cuentas o pantallas. Un número busca el monto exacto.",
                                 style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                                modifier = conMargen,
                             )
                         }
                     } else {
-                        item(key = "recientes-titulo") { MinSectionHeader(title = "Recientes") }
+                        item(key = "recientes-titulo") { Seccion(titulo = "Recientes", modifier = conMargen) }
                         items(recientes, key = { "reciente-$it" }) { reciente ->
                             FilaReciente(reciente, alElegir = { consulta = reciente }, alQuitar = { BusquedasRecientesStore.quitar(reciente) })
                         }
                     }
                 } else if (grupos.isEmpty()) {
                     item(key = "nada") {
-                        Text(
-                            if (eventos.valor == null && eventos.actualizando) "Buscando…" else "No encontramos nada con «${consulta.trim()}».",
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.textoMedio,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
-                        )
+                        if (eventos.valor == null && eventos.actualizando) {
+                            Text("Buscando…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, modifier = conMargen)
+                        } else {
+                            Vacio(
+                                titulo = "No encontramos nada con «${consulta.trim()}»",
+                                detalle = "Prueba con otra palabra, o con el monto exacto.",
+                                modifier = conMargen.padding(top = Espacio.xxl),
+                            )
+                        }
                     }
                 } else {
-                    grupos.forEach { grupo ->
+                    grupos.forEachIndexed { i, grupo ->
                         item(key = "grupo-${grupo.tipo}") {
-                            Spacer(Modifier.height(8.dp))
-                            MinSectionHeader(title = grupo.tipo.titulo, count = grupo.resultados.size)
+                            Seccion(
+                                titulo = grupo.tipo.titulo,
+                                conteo = grupo.resultados.size,
+                                modifier = conMargen.padding(top = if (i == 0) Espacio.xxs else Medida.entreSecciones),
+                            )
                         }
                         items(grupo.resultados, key = { it.clave }) { resultado ->
                             FilaDeResultado(resultado, cuentas = datos.cuentas, alTocar = { alTocar(resultado) })
                         }
                     }
                 }
-                item(key = "pie") { Spacer(Modifier.height(24.dp)) }
             }
         }
     }
@@ -216,22 +228,23 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
 private fun CampoDeBuscar(consulta: String, alCambiar: (String) -> Unit, alBuscar: () -> Unit) {
     val foco = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
+    // El campo de la búsqueda: una superficie de la capa 1 (sin borde), del alto de un toque.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 12.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = Medida.margenDePantalla)
+            .padding(top = Espacio.xxs, bottom = Medida.dentroDeSeccion)
+            .heightIn(min = Medida.objetivoTactil)
+            .clip(RoundedCornerShape(Radio.m))
+            .background(Movi.colores.capa1)
+            .padding(horizontal = Espacio.s),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
-        Icon(Icons.Rounded.Search, contentDescription = null, tint = Movi.colores.textoApagado, modifier = Modifier.size(16.dp))
+        Icon(Icons.Rounded.Search, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(Icono.m))
         Box(modifier = Modifier.weight(1f)) {
             if (consulta.isEmpty()) {
-                Text("Movimientos, comercios, personas, pantallas…", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
+                Text("Movimientos, comercios, personas, pantallas…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, maxLines = 1)
             }
             val campo = rememberCampoConSeleccion(consulta, alCambiar)
             BasicTextField(
@@ -247,40 +260,12 @@ private fun CampoDeBuscar(consulta: String, alCambiar: (String) -> Unit, alBusca
             )
         }
         if (consulta.isNotEmpty()) {
-            Icon(
-                Icons.Rounded.Close,
-                contentDescription = "Borrar la búsqueda",
-                tint = Movi.colores.textoMedio,
-                modifier = Modifier.size(16.dp).clickable { alCambiar("") },
-            )
+            BotonDeIcono(Icons.Rounded.Close, "Borrar la búsqueda", onClick = { alCambiar("") })
         }
     }
 }
 
-@Composable
-private fun Chip(texto: String, activo: Boolean, alTocar: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (activo) Movi.colores.tarjeta else Color.Transparent)
-            .then(if (!activo) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(8.dp)) else Modifier)
-            .clickable(onClick = alTocar)
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        if (activo) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(14.dp))
-        Text(
-            texto,
-            style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
-            color = if (activo) Movi.colores.texto else Movi.colores.textoMedio,
-            maxLines = 1,
-        )
-    }
-}
-
-/** «Gastos» · «Ingresos» · «Este período» · la cuenta. Tocar un chip activo lo apaga. */
+/** «Gastos» · «Ingresos» · «Este período» · la cuenta. Tocar un filtro activo lo apaga. */
 @Composable
 private fun ChipsDeBuscar(
     filtros: FiltrosDeBusqueda,
@@ -293,29 +278,28 @@ private fun ChipsDeBuscar(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = Medida.margenDePantalla),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
-        Chip(FiltroDeTipo.GASTOS.rotulo, filtros.tipo == FiltroDeTipo.GASTOS) {
+        PildoraDeFiltro(FiltroDeTipo.GASTOS.rotulo, filtros.tipo == FiltroDeTipo.GASTOS, onClick = {
             alCambiar(filtros.copy(tipo = if (filtros.tipo == FiltroDeTipo.GASTOS) FiltroDeTipo.TODO else FiltroDeTipo.GASTOS))
-        }
-        Chip(FiltroDeTipo.INGRESOS.rotulo, filtros.tipo == FiltroDeTipo.INGRESOS) {
+        })
+        PildoraDeFiltro(FiltroDeTipo.INGRESOS.rotulo, filtros.tipo == FiltroDeTipo.INGRESOS, onClick = {
             alCambiar(filtros.copy(tipo = if (filtros.tipo == FiltroDeTipo.INGRESOS) FiltroDeTipo.TODO else FiltroDeTipo.INGRESOS))
-        }
+        })
         if (hayPeriodo) {
-            Chip(if (filtros.soloEstePeriodo) "Este período" else "Todo", filtros.soloEstePeriodo) {
+            PildoraDeFiltro(if (filtros.soloEstePeriodo) "Este período" else "Todo", filtros.soloEstePeriodo, onClick = {
                 alCambiar(filtros.copy(soloEstePeriodo = !filtros.soloEstePeriodo))
-            }
+            })
         }
         if (cuentas.isNotEmpty()) {
             Box {
                 val elegida = cuentas.firstOrNull { it.first == filtros.cuentaId }?.second
-                Chip(elegida ?: "Cuenta", elegida != null) { eligiendoCuenta = true }
+                PildoraDeFiltro(elegida ?: "Cuenta", elegida != null, onClick = { eligiendoCuenta = true })
                 DropdownMenu(
                     expanded = eligiendoCuenta,
                     onDismissRequest = { eligiendoCuenta = false },
-                    containerColor = Movi.colores.tarjeta,
+                    containerColor = Movi.colores.capa1,
                 ) {
                     DropdownMenuItem(
                         text = { Text("Todas las cuentas", style = Movi.textos.cuerpo, color = Movi.colores.texto) },
@@ -335,26 +319,16 @@ private fun ChipsDeBuscar(
 
 @Composable
 private fun FilaReciente(texto: String, alElegir: () -> Unit, alQuitar: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(TAG_RECIENTE_DE_BUSCAR + texto)
-            .clickable(onClick = alElegir)
-            .padding(horizontal = 4.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(Icons.Rounded.History, contentDescription = null, tint = Movi.colores.textoApagado, modifier = Modifier.size(18.dp))
-        Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.texto, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Icon(
-            Icons.Rounded.Close,
-            contentDescription = "Quitar «$texto» de las recientes",
-            tint = Movi.colores.textoApagado,
-            modifier = Modifier.size(16.dp).clickable(onClick = alQuitar),
-        )
-    }
+    Fila(
+        titulo = texto,
+        modifier = Modifier.testTag(TAG_RECIENTE_DE_BUSCAR + texto),
+        inicio = { IconoEnCirculo(Icons.Rounded.History, tono = TonoDeIcono.Neutro) },
+        final = { BotonDeIcono(Icons.Rounded.Close, "Quitar «$texto» de las recientes", onClick = alQuitar) },
+        onClick = alElegir,
+    )
 }
 
+/** Un resultado: una [Fila] del sistema con el avatar de lo que es, su detalle y su cifra si la tiene. */
 @Composable
 private fun FilaDeResultado(
     resultado: ResultadoDeBusqueda,
@@ -362,14 +336,16 @@ private fun FilaDeResultado(
     alTocar: () -> Unit,
 ) {
     val hoy = remember { epochMillisToAppDate(ahoraEnMs()) }
+    // El monto como en Movimientos: el mismo signo, el mismo color (el azul de un traspaso
+    // incluido) y «Ocultar los saldos».
     val (detalle, derecha) = when (resultado) {
         is ResultadoDeBusqueda.Movimiento -> {
             val e = resultado.evento
             val cuenta = cuentas.firstOrNull { it.id == e.accountId }?.name
             val linea = listOfNotNull(e.category.takeIf { it.isNotBlank() }, etiquetaDeFecha(epochMillisToAppDate(e.timestamp), hoy), cuenta)
                 .joinToString(" · ")
-            val signo = if (e.type == TransactionType.INCOME) "+" else ""
-            linea to (signo + formatMoney(e.amount, e.currency))
+            val tono = tonoDelEvento(e)
+            linea to (textoDelMontoConSigno(e, tono) to colorDelTono(tono, Movi.colores))
         }
         is ResultadoDeBusqueda.Comercio -> {
             val veces = when (resultado.enElPeriodo) {
@@ -377,48 +353,32 @@ private fun FilaDeResultado(
                 1 -> "1 vez este período"
                 else -> "${resultado.enElPeriodo} veces este período"
             }
-            veces to resultado.totalDelPeriodo.takeIf { it > 0 }?.let { formatMoney(it, resultado.moneda) }
+            veces to resultado.totalDelPeriodo.takeIf { it > 0 }?.let { formatMoney(it, resultado.moneda) to Movi.colores.texto }
         }
         is ResultadoDeBusqueda.Persona -> {
             val d = resultado.destinoConocido
             (d.deQuien?.takeIf { it.isNotBlank() } ?: if (d.tipo?.name == "COMERCIO") "Comercio" else "Persona") to null
         }
         is ResultadoDeBusqueda.Categoria -> "Categoría" to null
-        is ResultadoDeBusqueda.Cuenta -> resultado.cuenta.type.groupLabel to formatMoney(resultado.cuenta.balance, resultado.cuenta.currency)
+        is ResultadoDeBusqueda.Cuenta -> resultado.cuenta.type.groupLabel to
+            (formatMoney(resultado.cuenta.balance, resultado.cuenta.currency) to Movi.colores.texto)
         is ResultadoDeBusqueda.Pantalla -> resultado.donde to null
     }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(TAG_RESULTADO_DE_BUSCAR + resultado.clave)
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = alTocar)
-            .padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        when (resultado) {
-            is ResultadoDeBusqueda.Movimiento -> AvatarDelComercio(resultado.evento)
-            is ResultadoDeBusqueda.Comercio -> AvatarDelComercio(resultado.ejemplo)
-            is ResultadoDeBusqueda.Categoria -> IconoDeCategoria(resultado.nombre)
-            is ResultadoDeBusqueda.Cuenta -> AvatarDeLaCuenta(resultado.cuenta)
-            is ResultadoDeBusqueda.Persona -> CirculoConIcono { Icon(Icons.Rounded.Groups, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(18.dp)) }
-            is ResultadoDeBusqueda.Pantalla -> CirculoConIcono { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(18.dp)) }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(resultado.titulo, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        if (derecha != null) {
-            Text(derecha, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun CirculoConIcono(contenido: @Composable () -> Unit) {
-    Box(
-        modifier = Modifier.size(36.dp).background(Movi.colores.tarjeta, CircleShape).border(1.dp, Movi.colores.borde, CircleShape),
-        contentAlignment = Alignment.Center,
-    ) { contenido() }
+    Fila(
+        titulo = resultado.titulo,
+        subtitulo = detalle,
+        modifier = Modifier.testTag(TAG_RESULTADO_DE_BUSCAR + resultado.clave),
+        inicio = {
+            when (resultado) {
+                is ResultadoDeBusqueda.Movimiento -> AvatarDelComercio(resultado.evento)
+                is ResultadoDeBusqueda.Comercio -> AvatarDelComercio(resultado.ejemplo)
+                is ResultadoDeBusqueda.Categoria -> IconoDeCategoria(resultado.nombre)
+                is ResultadoDeBusqueda.Cuenta -> AvatarDeLaCuenta(resultado.cuenta)
+                is ResultadoDeBusqueda.Persona -> IconoEnCirculo(Icons.Rounded.Groups, tono = TonoDeIcono.Neutro)
+                is ResultadoDeBusqueda.Pantalla -> IconoEnCirculo(Icons.AutoMirrored.Rounded.KeyboardArrowRight, tono = TonoDeIcono.Neutro)
+            }
+        },
+        final = derecha?.let { (texto, color) -> { MontoDeLaFila(texto, color) } },
+        onClick = alTocar,
+    )
 }
