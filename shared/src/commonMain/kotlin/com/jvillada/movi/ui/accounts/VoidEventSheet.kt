@@ -150,7 +150,7 @@ fun VoidEventSheet(
             MinCard(
                 modifier = Modifier.fillMaxWidth(),
                 variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                padding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.s),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -163,20 +163,19 @@ fun VoidEventSheet(
                             style = Movi.textos.cuerpo,
                             color = Movi.colores.texto,
                         )
-                        Spacer(Modifier.height(3.dp))
+                        Spacer(Modifier.height(Espacio.xxs))
                         Text(
                             text = "${event.category} · ${event.source.name}",
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                         )
                     }
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(Espacio.s))
                     Text(
                         text = signedAmount,
                         style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
-                        letterSpacing = (-0.3).sp,
                     )
                 }
             }
@@ -187,16 +186,16 @@ fun VoidEventSheet(
             // hoja decía. En un par simétrico eso alcanza y esta sección no aparece: un aviso
             // de más sobre algo que no cambia enseña a ignorarlos.
             if (loQuePasa.isNotEmpty()) {
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(Espacio.m))
                 Text(
-                    text = "AL ANULAR",
-                    style = Movi.textos.rotulo,
+                    text = "Al anular",
+                    style = Movi.textos.apoyo, fontWeight = FontWeight.Medium,
                     color = Movi.colores.textoMedio,
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.s))
                 loQuePasa.forEach { efecto ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.xs),
                         verticalAlignment = Alignment.Top,
                     ) {
                         // Ícono y no un «✓» de texto: en wasm la fuente del canvas no trae ese
@@ -206,9 +205,9 @@ fun VoidEventSheet(
                             imageVector = Icons.Rounded.Check,
                             contentDescription = null,
                             tint = Movi.colores.textoMedio,
-                            modifier = Modifier.size(15.dp),
+                            modifier = Modifier.size(Icono.s),
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(Espacio.xs))
                         Text(
                             text = textoDeLoQuePasa(
                                 efecto,
@@ -220,7 +219,7 @@ fun VoidEventSheet(
                         )
                     }
                 }
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 // Sin esta frase, dos números distintos sobre un solo pago se leen como un
                 // error de la app.
                 Text(
@@ -241,7 +240,7 @@ fun VoidEventSheet(
                 else -> null
             }
             if (avisoDeLaEspera != null) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(
                     text = avisoDeLaEspera,
                     style = Movi.textos.apoyo,
@@ -249,24 +248,24 @@ fun VoidEventSheet(
                 )
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             // Reason label
             Text(
                 text = "MOTIVO (OPCIONAL)",
-                style = Movi.textos.rotulo,
+                style = Movi.textos.apoyo, fontWeight = FontWeight.Medium,
                 color = Movi.colores.textoMedio,
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
 
             // Reason input
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(Movi.colores.tarjeta)
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                    .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
             ) {
                 // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                 // [esAtajoDeSeleccionarTodo].
@@ -288,15 +287,15 @@ fun VoidEventSheet(
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Espacio.l))
 
             // CTA
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (!voiding) Movi.colores.sale.copy(alpha = 0.14f) else Movi.colores.tarjeta)
+                    .height(Medida.objetivoTactil)
+                    .clip(RoundedCornerShape(Radio.pill))
+                    .background(if (!voiding) Movi.colores.lavado(Movi.colores.sale) else Movi.colores.tarjeta)
                     .clickable(enabled = !voiding) { doVoid() },
                 contentAlignment = Alignment.Center,
             ) {
@@ -308,7 +307,7 @@ fun VoidEventSheet(
                 )
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
         }
         // El error de anular, **fuera del área que se desplaza**. Estaba pintado adentro, entre
         // el motivo y el botón: con la sección de «al anular» y el teclado abierto en un

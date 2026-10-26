@@ -75,7 +75,7 @@ class LaFichaPorMotivoTest {
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag(TAG_POR_MOTIVO_DEL_TERCERO, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        assertEquals(1, cuantos("LO QUE LE ENVIASTE, POR MOTIVO"))
+        assertEquals(1, cuantos("Lo que le enviaste, por motivo"))
         assertEquals(1, cuantos("Mercado (2)"))
         assertEquals(1, cuantos("Cuota de crédito"))
         assertEquals(1, cuantos("Tía"))

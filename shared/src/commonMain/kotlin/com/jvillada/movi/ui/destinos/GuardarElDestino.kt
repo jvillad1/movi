@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.destinos
 
+import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -286,7 +287,7 @@ internal fun FilaGuardarElDestino(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
             Text(
                 preguntaDeLaFila(identificador, propuesto, seSumaA.takeIf { !abierta }),
@@ -320,35 +321,35 @@ internal fun FilaGuardarElDestino(
             }
         }
         if (error != null && !abierta) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
         if (!abierta) {
             // La lista de los ya guardados, abierta desde la fila cerrada: elegir uno le suma este
             // dato y el server le pone su nombre a los movimientos en el mismo paso.
             if (eligiendoTercero) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(ELIGE_A_QUIEN, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 ListaDeTerceros(destinos, enabled = !guardando, modifier = Modifier.testTag(TAG_TERCEROS_QUE_YA_TENGO)) { sumarA(it) }
             }
             return@Column
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(Espacio.s))
         FieldBox("Nombre. Ej: Ana", nombre, { nombre = it })
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         if (seSumaA != null) {
             Text(
                 "Se agrega a «${seSumaA.nombre}», que ya tienes guardada.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
         }
         if (error != null) {
             Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
         }
         BotonDeGuardar(
             texto = if (guardando) "Guardando…" else GUARDAR,
@@ -358,19 +359,19 @@ internal fun FilaGuardarElDestino(
         )
         // Lo primero que falta — no un botón gris sin explicación.
         if (loQueFalta != null && !guardando) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(loQueFalta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
 
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Spacer(Modifier.height(Espacio.s))
+        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.m), verticalAlignment = Alignment.CenterVertically) {
             if (destinos.isNotEmpty()) {
                 Enlace(YA_LO_TENGO_GUARDADO, { eligiendoTercero = !eligiendoTercero }, enabled = !guardando)
             }
             Enlace(ES_MIA, { marcarComoMia() }, enabled = !guardando)
         }
         if (eligiendoTercero) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
             ListaDeTerceros(destinos, enabled = !guardando, modifier = Modifier.testTag(TAG_TERCEROS_QUE_YA_TENGO)) { sumarA(it) }
         }
     }
@@ -440,7 +441,7 @@ internal fun FilaDelTercero(
     Row(
         modifier = modifier.fillMaxWidth().testTag(TAG_FILA_DEL_TERCERO),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         Text(
             if (recienGuardado) "«${tercero.nombre}» quedó en $PERSONAS_Y_COMERCIOS. Este movimiento ya cuenta ahí."

@@ -64,7 +64,7 @@ class NavStackTest {
 
     @Test
     fun `back sin historial con fallback distinto para pantallas de primer nivel`() {
-        val result = NavStack.back(listOf(Screen.Goals), fallback = Screen.Dashboard)
+        val result = NavStack.back(listOf(Screen.Compartir), fallback = Screen.Dashboard)
         assertIs<NavStack.BackResult.Fallback>(result)
         assertEquals(Screen.Dashboard, (result as NavStack.BackResult.Fallback).screen)
     }
@@ -145,8 +145,8 @@ class NavStackTest {
         Screen.SalidaDeDeudas to NavTab.PATRIMONIO,
         Screen.CuadreDeSaldos to NavTab.PATRIMONIO,
         // 4-oct-2026: «Personas y comercios» se abre desde Movimientos (a quién le mandaste plata).
-        Screen.Destinos() to NavTab.MOVIMIENTOS,
-        Screen.Destinos(abrir = "dst_1") to NavTab.MOVIMIENTOS,
+        Screen.Destinos() to NavTab.ESPACIOS,
+        Screen.Destinos(abrir = "dst_1") to NavTab.ESPACIOS,
         Screen.AccountDetail("acc-1", AccountGroup.DINERO) to NavTab.PATRIMONIO,
         Screen.AccountDetail("acc-2", AccountGroup.INVERSION) to NavTab.PATRIMONIO,
         Screen.AccountDetail("acc-3", AccountGroup.DEUDA) to NavTab.PATRIMONIO,
@@ -162,8 +162,6 @@ class NavStackTest {
         Screen.AIChat() to null,
         Screen.CapturaDelBanco to null,
         Screen.PrimerosPasos to null,
-        Screen.Goals to null,
-        Screen.Extractos to null,
         // Sin navegación: autenticación y flujos a pantalla completa.
         Screen.Login to null,
         Screen.Register to null,

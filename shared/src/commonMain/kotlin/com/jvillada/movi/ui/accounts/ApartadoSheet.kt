@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.accounts
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -157,7 +160,7 @@ fun ApartadoSheet(
                 style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )
             Text(
                 text = "La plata sigue en ${account.name}, pero deja de contar en «Tu plata» y en " +
@@ -168,15 +171,15 @@ fun ApartadoSheet(
             )
 
             if (confirmandoQuitar && existente != null) {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(Espacio.l))
                 Text(
                     text = "¿Quitar «${existente.proposito}»? La plata vuelve a «Tu plata».",
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.texto,
                 )
                 MensajeDeError(error)
-                Spacer(Modifier.height(20.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(Modifier.height(Espacio.l))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                     BotonDeHoja("Cancelar", habilitado = !trabajando, destacado = false, modifier = Modifier.weight(1f)) {
                         confirmandoQuitar = false
                         error = null
@@ -189,19 +192,19 @@ fun ApartadoSheet(
                         modifier = Modifier.weight(1.4f),
                     ) { quitar() }
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(Espacio.xl))
                 return@Column
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
             RotuloDeLaHoja("¿Para qué?")
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(Movi.colores.tarjeta)
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                    .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
             ) {
                 if (proposito.isEmpty()) {
                     Text("Colegio nov-dic", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
@@ -219,14 +222,14 @@ fun ApartadoSheet(
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
             MoneyField(
                 value = monto,
                 onValueChange = { monto = it },
                 label = "Monto",
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
             CategoryField(
                 value = categoria,
                 onValueChange = { categoria = it },
@@ -253,15 +256,15 @@ fun ApartadoSheet(
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.marca,
                     modifier = Modifier
-                        .padding(top = 6.dp)
+                        .padding(top = Espacio.xs)
                         .clickable(enabled = !trabajando, role = Role.Button) { categoria = "" },
                 )
             }
 
             MensajeDeError(error)
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Espacio.l))
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 if (existente != null) {
                     BotonDeHoja("Quitar", habilitado = !trabajando, destacado = false, modifier = Modifier.weight(1f)) {
                         confirmandoQuitar = true
@@ -277,7 +280,7 @@ fun ApartadoSheet(
                     modifier = Modifier.weight(1.4f),
                 ) { guardar() }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Espacio.xl))
         }
     }
 }
@@ -285,13 +288,13 @@ fun ApartadoSheet(
 @Composable
 private fun RotuloDeLaHoja(texto: String) {
     Text(texto, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(Espacio.xs))
 }
 
 @Composable
 private fun MensajeDeError(error: String?) {
     if (error == null) return
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(Espacio.s))
     Text(text = error, style = Movi.textos.apoyo, color = Movi.colores.sale)
 }
 
@@ -307,9 +310,9 @@ private fun BotonDeHoja(
     val activo = destacado && habilitado
     Box(
         modifier = modifier
-            .height(50.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(if (activo) colorDestacado.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .height(Medida.objetivoTactil)
+            .clip(RoundedCornerShape(Radio.pill))
+            .background(if (activo) Movi.colores.lavado(colorDestacado) else Movi.colores.tarjeta)
             .clickable(enabled = habilitado, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

@@ -1,5 +1,13 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.shared.model.inicioDeLaCuentaSiElSmsEsAnterior
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlin.math.roundToLong
@@ -25,23 +33,16 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.QuestionMark
-import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
-import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
-import com.jvillada.movi.ui.components.ds.Seccion
-import com.jvillada.movi.ui.components.ds.Separador
-import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.TonoDePildora
-import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -202,26 +203,20 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
         MinScreenHeader(
             title = tituloDeCapturaDelBanco,
             leading = HeaderLeading.Back(fallback = Screen.Mas),
-            action = {
-                Icon(
-                    Icons.Rounded.Refresh,
-                    contentDescription = "Actualizar",
-                    tint = Movi.colores.textoMedio,
-                    modifier = Modifier.size(20.dp).clickableSimple { refreshKey++ },
-                )
-            },
+            action = { BotonDeIcono(Icons.Rounded.Refresh, "Actualizar", onClick = { refreshKey++ }) },
         )
 
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 80.dp),
+            contentPadding = PaddingValues(
+                start = Medida.margenDePantalla,
+                end = Medida.margenDePantalla,
+                top = Medida.dentroDeSeccion,
+                bottom = Medida.botonFlotante + Medida.entreSecciones,
+            ),
         ) {
             item {
-                MinCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(18.dp),
-                ) {
+                Superficie(modifier = Modifier.fillMaxWidth()) {
                     // **El hecho primero, y en todas las plataformas.**
                     //
                     // Acá decía "AUTO-LECTURA ACTIVA" en cuanto el permiso estuviera concedido,
@@ -237,21 +232,15 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                     // llegó nada», y afirmarlo por una lectura caída sería el mismo error al
                     // revés.
                     aviso?.let { hecho ->
+                        // Ola R4: el rótulo en frase, no en mayúsculas («Nunca ha llegado un mensaje»).
                         Text(
-                            hecho.rotulo,
-                            style = Movi.textos.apoyo,
-                            color = if (hecho.esAlerta) Movi.colores.aviso else Movi.colores.textoMedio,
-                            letterSpacing = 1.4.sp,
-                            fontWeight = FontWeight.Medium,
+                            enFrase(hecho.rotulo),
+                            style = Movi.textos.titulo,
+                            color = if (hecho.esAlerta) Movi.colores.aviso else Movi.colores.texto,
                         )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            hecho.detalle,
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.texto,
-                            lineHeight = 19.sp,
-                        )
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(Espacio.xxs))
+                        Text(hecho.detalle, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                        Spacer(Modifier.height(Espacio.s))
                     }
                     // Y recién después, lo que depende de dónde estés parado. «Este dispositivo
                     // no puede leer SMS» y «nunca llegó nada» son dos afirmaciones distintas: la
@@ -264,7 +253,6 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                                 "En este teléfono falta el permiso de mensajes: se otorga en la sección de abajo.",
                                 style = Movi.textos.apoyo,
                                 color = Movi.colores.aviso,
-                                lineHeight = 18.sp,
                             )
                         }
                     } else {
@@ -272,7 +260,6 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                             "Este dispositivo no puede leer mensajes: eso lo hace un teléfono Android con Movi instalado. Aquí queda el historial de lo que llegó; lo pendiente se revisa en «Por revisar», desde Movimientos.",
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
-                            lineHeight = 18.sp,
                         )
                     }
 
@@ -281,23 +268,22 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                     // en el caso que genera la alerta — si ya llegó algo, no hay nada que callar.
                     if (aviso?.esAlerta == true) {
                         silenciada?.let { silencioActual ->
-                            Spacer(Modifier.height(12.dp))
-                            Hairline()
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(Espacio.s))
+                            Separador(SangriaDeSeparador.Ninguna)
+                            Spacer(Modifier.height(Espacio.s))
                             if (silencioActual) {
                                 Text(
                                     "Este aviso no se muestra en Hoy ni en Por revisar.",
                                     style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                 )
-                                Spacer(Modifier.height(6.dp))
+                                Spacer(Modifier.height(Espacio.xs))
                             }
-                            Text(
-                                if (silencioActual) "Volver a avisarme en Hoy y en Por revisar" else "No me avises de esto en Hoy ni en Por revisar",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.texto,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.clickableSimple {
+                            Boton(
+                                if (silencioActual) VOLVER_A_AVISARME else SILENCIAR_ESTE_AVISO,
+                                variante = VarianteDeBoton.Secundario,
+                                tamano = TamanoDeBoton.S,
+                                onClick = {
                                     val nuevo = !silencioActual
                                     silenciada = nuevo
                                     coroutine.launch {
@@ -330,7 +316,7 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                             dias,
                         )
                     }.orEmpty()
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(Medida.entreSecciones))
                     AjusteDeBancoMudo(
                         dias = dias,
                         mudos = mudos,
@@ -352,8 +338,8 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                 // que lo que no matchea nunca sale del teléfono.
                 SmsSensorSetupSection(onSynced = { refreshKey++ })
 
-                Spacer(Modifier.height(14.dp))
-                MinSectionHeader(title = "Historial", count = if (smsItems == null) null else mensajes.size)
+                Spacer(Modifier.height(Medida.entreSecciones))
+                Seccion(titulo = "Historial", conteo = if (smsItems == null) null else mensajes.size)
                 if (smsItems == null && !leyendo) {
                     NoSePudoLeer("No pudimos cargar tus mensajes", onReintentar = { refreshKey++ })
                 }
@@ -385,6 +371,12 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
     }
 }
 
+/** Calla el aviso de «nunca llegó nada» en Hoy y en Por revisar. */
+const val SILENCIAR_ESTE_AVISO: String = "Silenciar este aviso"
+
+/** Lo contrario de [SILENCIAR_ESTE_AVISO]. */
+const val VOLVER_A_AVISARME: String = "Volver a avisarme"
+
 /** El botón que devuelve a «Por revisar» lo que Movi apartó solo. */
 const val ERA_UN_MOVIMIENTO: String = "Era un movimiento"
 
@@ -408,39 +400,28 @@ internal fun textoDeDiasDeBancoMudo(dias: Int): String = when {
  */
 @Composable
 private fun AjusteDeBancoMudo(dias: Int, mudos: List<OrigenMudo>, onCambio: (Int) -> Unit) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_AJUSTE_DE_BANCO_MUDO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
-    ) {
-        Text(
-            "AVISARME SI UN BANCO SE CALLA",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            letterSpacing = 1.4.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Spacer(Modifier.height(8.dp))
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_AJUSTE_DE_BANCO_MUDO)) {
+        Text("Avisarme si un banco se calla", style = Movi.textos.titulo, color = Movi.colores.texto)
+        Spacer(Modifier.height(Espacio.xs))
         mudos.forEach { mudo ->
             Text(conPuntoFinalDelAviso(textoDeOrigenMudo(mudo)), style = Movi.textos.cuerpo, color = Movi.colores.aviso)
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
         }
         Text(
             if (dias <= 0) "Movi no te avisa si un banco deja de mandar mensajes, avisos o correos."
             else "Si un banco que te avisaba siempre lleva ${textoDeDiasDeBancoMudo(dias)} sin mandar nada, Movi te lo dice en Hoy.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
-            lineHeight = 18.sp,
         )
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Spacer(Modifier.height(Espacio.s))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
             BotonDeDias("−", habilitado = dias > 0) { onCambio(dias - 1) }
             Text(
                 textoDeDiasDeBancoMudo(dias),
                 style = Movi.textos.cuerpo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                modifier = Modifier.widthIn(min = 64.dp),
+                modifier = Modifier.widthIn(min = Medida.altoDeFilaDoble),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             BotonDeDias("+", habilitado = dias < MAX_DIAS_PARA_BANCO_MUDO) { onCambio(dias + 1) }
@@ -451,19 +432,14 @@ private fun AjusteDeBancoMudo(dias: Int, mudos: List<OrigenMudo>, onCambio: (Int
 /** El texto de la regla termina sin punto («… Revisa la captura»); en una tarjeta va con él. */
 private fun conPuntoFinalDelAviso(texto: String): String = if (texto.endsWith(".")) texto else "$texto."
 
+/** «−» y «+» de los días: el [Boton] chico secundario del sistema (su toque llega a 48). */
 @Composable
 private fun BotonDeDias(texto: String, habilitado: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .border(1.dp, Movi.colores.borde, CircleShape)
-            .clickable(enabled = habilitado, role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(texto, style = Movi.textos.titulo, color = if (habilitado) Movi.colores.texto else Movi.colores.textoApagado)
-    }
+    Boton(texto, onClick = onClick, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S, habilitado = habilitado)
 }
+
+/** «NUNCA HA LLEGADO UN MENSAJE» → «Nunca ha llegado un mensaje»: un rótulo, en frase (ola R4). */
+internal fun enFrase(texto: String): String = texto.lowercase().replaceFirstChar { it.uppercase() }.replace("movi", "Movi")
 
 /** «$386.902», «$1,300,000», «$4.000.000»: el mismo par de formatos que ya reconoce `amountRegex`
  * de `SmsRoutes.kt` (punto O coma como separador de miles), pero anclado al `$` porque acá solo

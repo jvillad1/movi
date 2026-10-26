@@ -205,7 +205,7 @@ class DocumentosScreenTest {
 
         // El título «Importaciones» ya estaba antes del error; lo que de verdad importa es que la
         // fila de la importación llegó.
-        esperarTexto("BANCOLOMBIA")
+        esperarTexto("Bancolombia")
         // Y el aviso de error ya no está — no se puede afirmar «no pude leer» y a la vez
         // mostrar la lista que sí llegó.
         composeRule.onAllNodesWithText("No pude cargar el historial de importaciones", useUnmergedTree = true)
@@ -232,9 +232,9 @@ class DocumentosScreenTest {
         montarConRepo(SinDocumentosConUnaImportacion())
         esperarTexto("Aquí se guardan tus extractos")
         esperarTexto("Importaciones")
-        esperarTexto("BANCOLOMBIA")
+        esperarTexto("Bancolombia")
 
-        composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText("BANCOLOMBIA", substring = true)), useUnmergedTree = true)
+        composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText("Bancolombia", substring = true)), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         assertEquals(Screen.ImportDetail("imp1"), navegado.single())

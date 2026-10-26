@@ -99,8 +99,8 @@ class ApartadosEnLaCuentaTest {
         Repositories.sustitutoDePrueba = ConNu()
         detalle()
 
-        esperarTexto("Colegio nov-dic · \$8.000.000")
-        esperarTexto("Libre · \$217.464")
+        esperarTexto("Colegio nov-dic"); esperarTexto("\$8.000.000")
+        esperarTexto("Libre"); esperarTexto("\$217.464")
         esperarTexto("Se descuenta con los gastos de Hija")
         esperarTexto("Apartar plata")
         // El saldo de la cuenta sigue cuadrando con el banco al peso.
@@ -120,7 +120,7 @@ class ApartadosEnLaCuentaTest {
         detalle()
 
         esperarTexto("Apartar plata")
-        assertTrue(!hay("Libre ·"), "sin apartados no hay nada libre que decir")
+        assertTrue(!hay("Libre"), "sin apartados no hay nada libre que decir")
         tocar("Apartar plata")
         esperarTexto("¿Para qué?")
         esperarTexto("Se descuenta con los gastos de")
@@ -136,7 +136,7 @@ class ApartadosEnLaCuentaTest {
         esperarTexto("Colegio nov-dic")
 
         tocar("Guardar")
-        esperarTexto("Colegio nov-dic · \$8.000.000")
+        esperarTexto("Colegio nov-dic"); esperarTexto("\$8.000.000")
 
         assertEquals(2, intentos.size)
         assertEquals(intentos[0].id, intentos[1].id, "reintentar no puede crear otro apartado")
@@ -147,7 +147,7 @@ class ApartadosEnLaCuentaTest {
         assertEquals(8_000_000L, enviado.monto)
         assertEquals(null, enviado.categoria)
         assertEquals(0L, enviado.desde, "uno nuevo deja que el server ponga desde cuándo cuenta")
-        esperarTexto("Libre · \$217.464")
+        esperarTexto("Libre"); esperarTexto("\$217.464")
     }
 
     @Test
@@ -161,8 +161,8 @@ class ApartadosEnLaCuentaTest {
         }
         detalle()
 
-        esperarTexto("Colegio nov-dic · \$8.000.000")
-        tocar("Colegio nov-dic · \$8.000.000")
+        esperarTexto("Colegio nov-dic"); esperarTexto("\$8.000.000")
+        tocar("Colegio nov-dic")
         esperarTexto("¿Para qué?")
         tocar("Quitar")
         esperarTexto("¿Quitar «Colegio nov-dic»?")
@@ -171,7 +171,7 @@ class ApartadosEnLaCuentaTest {
         tocar("Quitar")
         composeRule.waitUntil(timeoutMillis = 5_000) { quitados.isNotEmpty() }
         assertEquals(listOf("apt_colegio"), quitados)
-        composeRule.waitUntil(timeoutMillis = 5_000) { !hay("Libre ·") }
+        composeRule.waitUntil(timeoutMillis = 5_000) { !hay("Libre") }
     }
 
     @Test
@@ -180,7 +180,7 @@ class ApartadosEnLaCuentaTest {
         Repositories.sustitutoDePrueba = ConNu(cuenta = tarjeta)
         detalle(AccountGroup.DEUDA)
 
-        esperarTexto("DEUDA ACTUAL")
+        esperarTexto("Deuda actual")
         composeRule.waitForIdle()
         assertTrue(!hay("Apartar plata"))
         assertTrue(!hay("Colegio nov-dic"))

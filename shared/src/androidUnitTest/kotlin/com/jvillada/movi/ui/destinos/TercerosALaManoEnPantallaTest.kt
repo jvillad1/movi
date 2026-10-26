@@ -249,7 +249,7 @@ class TercerosALaManoEnPantallaTest {
         montar(Repo(sugeridos = emptyList()))
         esperar("Caro")
         composeRule.onAllNodesWithText("Caro", useUnmergedTree = true).onFirst().performClick()
-        esperar("ESTE PERÍODO")
+        esperar("Este período")
         // En una línea, debajo del nombre: qué es y cómo lo reconoce Movi.
         assertTrue(hay("Persona · ·1111 · llave @caro.prueba · Carolina Prueba Salazar · esposa"))
 

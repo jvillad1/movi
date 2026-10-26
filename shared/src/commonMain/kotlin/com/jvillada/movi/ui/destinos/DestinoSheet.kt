@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.destinos
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -190,7 +192,7 @@ fun DestinoSheet(
                 .testTag(TAG_HOJA_DEL_TERCERO),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.m),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -217,47 +219,47 @@ fun DestinoSheet(
                     ocupado = guardando,
                     onConfirmar = { hacer { Repositories.wallets.deleteDestino(existente.id); onGuardado() } },
                     onCancelar = { pidiendoBorrar = false },
-                    modifier = Modifier.padding(bottom = 18.dp),
+                    modifier = Modifier.padding(bottom = Espacio.m),
                 )
             }
 
-            SectionLabel("NOMBRE")
-            Spacer(Modifier.height(8.dp))
+            SectionLabel("Nombre")
+            Spacer(Modifier.height(Espacio.xs))
             FieldBox("Ej: Ana, Cancha El Gol", nombre, { nombre = it })
 
             if (!editando) {
-                Spacer(Modifier.height(18.dp))
-                SectionLabel("NÚMERO O LLAVE")
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.m))
+                SectionLabel("Número o llave")
+                Spacer(Modifier.height(Espacio.xs))
                 // Se acepta pegado como lo mandó el banco («*00012345678», con guiones o espacios):
                 // Movi se queda con lo que identifica y dice qué entendió.
                 FieldBox("Ej: *00012345678, 3001234567 o @usuario", escrito, { escrito = it; leidoAlReves = false })
                 if (identificador != null) {
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     LoQueEntendio(identificador, puedeDarseVuelta = leido?.let(::otraLecturaDe) != null) { leidoAlReves = !leidoAlReves }
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
             LineaDelTipo(tipo, enabled = !guardando) { tipoElegido = it }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Espacio.s))
             // La nota (`deQuien`) casi nunca hace falta: el nombre ya dice de quién es.
             if (conNota) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 SectionLabel("NOTA (OPCIONAL)")
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 FieldBox("Ej: esposa, papá", deQuien, { deQuien = it })
             } else {
                 Enlace(AGREGAR_UNA_NOTA, { conNota = true }, enabled = !guardando)
             }
 
             if (error != null) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
             BotonDeGuardar(
                 texto = when {
                     guardando -> "Guardando…"
@@ -269,7 +271,7 @@ fun DestinoSheet(
             )
             // Lo PRIMERO que falta, no un botón gris sin explicación.
             if (!sePuedeGuardar && !guardando && loQueFalta != null) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(
                     text = loQueFalta,
                     style = Movi.textos.apoyo,
@@ -280,9 +282,9 @@ fun DestinoSheet(
 
             val base = actual
             if (editando && base != null) {
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(Espacio.l))
                 Hairline()
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.m))
                 ComoLoReconoceMovi(
                     destino = base,
                     ocupado = guardando,
@@ -292,9 +294,9 @@ fun DestinoSheet(
                 )
 
                 if (otros.isNotEmpty()) {
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(Espacio.l))
                     Hairline()
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(Espacio.m))
                     val elegido = unirCon
                     when {
                         elegido != null -> ConfirmacionEnLinea(
@@ -309,14 +311,14 @@ fun DestinoSheet(
                         !eligiendoConQuienUnir -> Enlace(ES_LA_MISMA_QUE_OTRA, { eligiendoConQuienUnir = true }, enabled = !guardando)
                         else -> {
                             Text("¿Con cuál la unes?", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(Espacio.xxs))
                             ListaDeTerceros(otros, enabled = !guardando, modifier = Modifier.testTag(TAG_UNIR_CON)) { unirCon = it }
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
         }
     }
 }
@@ -347,7 +349,7 @@ const val ES_LA_MISMA_QUE_OTRA: String = "Es la misma que otra ficha: unirlas"
  */
 @Composable
 internal fun LoQueEntendio(identificador: IdentificadorDelDestino, puedeDarseVuelta: Boolean, onDarVuelta: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
         Text(comoLoEntiendeMovi(identificador), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         if (puedeDarseVuelta) {
             Enlace(
@@ -366,7 +368,7 @@ internal fun LoQueEntendio(identificador: IdentificadorDelDestino, puedeDarseVue
 internal fun LineaDelTipo(tipo: TipoDeTercero, enabled: Boolean, onCambiar: (TipoDeTercero) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
         modifier = Modifier.testTag(TAG_LINEA_DEL_TIPO),
     ) {
         Text(
@@ -408,9 +410,9 @@ private fun ComoLoReconoceMovi(
     val propia = nuevo?.takeIf { it.tipo == TipoDeIdentificador.NUMERO }?.let { cuentaPropiaConEseNumero(it.valor, cuentas) }
     val rechazo = nuevo?.let(::rechazoDelIdentificador) ?: propia?.let { mensajeDeNumeroPropio(it.name) }
 
-    SectionLabel("CÓMO LO RECONOCE MOVI")
-    Spacer(Modifier.height(6.dp))
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag(TAG_COMO_LO_RECONOCE)) {
+    SectionLabel("Cómo lo reconoce Movi")
+    Spacer(Modifier.height(Espacio.xs))
+    Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs), modifier = Modifier.testTag(TAG_COMO_LO_RECONOCE)) {
         ids.forEach { id ->
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -421,21 +423,21 @@ private fun ComoLoReconoceMovi(
             }
         }
     }
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(Espacio.xs))
     if (!agregando) {
         Enlace(AGREGAR_UN_IDENTIFICADOR, { agregando = true }, enabled = !ocupado)
     } else {
         FieldBox("Número o llave", escrito, { escrito = it; alReves = false })
         if (nuevo != null) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
             LoQueEntendio(nuevo, puedeDarseVuelta = leido?.let(::otraLecturaDe) != null) { alReves = !alReves }
         }
         if (rechazo != null) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(Espacio.xxs))
             Text(rechazo, style = Movi.textos.apoyo, color = if (propia != null) Movi.colores.sale else Movi.colores.textoMedio)
         }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Spacer(Modifier.height(Espacio.xs))
+        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
             Pastilla(
                 "Agregar",
                 { nuevo?.let { onAgregar(it); agregando = false; escrito = "" } },
@@ -468,14 +470,14 @@ internal fun ListaDeTerceros(
     modifier: Modifier = Modifier,
     onElegir: (DestinoConocido) -> Unit,
 ) {
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
         terceros.sortedBy { normalizarParaBuscar(it.nombre) }.forEach { tercero ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .clickable(enabled = enabled, role = Role.Button) { onElegir(tercero) }
-                    .padding(vertical = 8.dp, horizontal = 4.dp),
+                    .padding(vertical = Espacio.xs, horizontal = Espacio.xxs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(tercero.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
@@ -496,7 +498,7 @@ internal fun BotonDeGuardar(texto: String, habilitado: Boolean, onClick: () -> U
         modifier = Modifier
             .fillMaxWidth()
             .height(alto.dp)
-            .clip(RoundedCornerShape(999.dp))
+            .clip(RoundedCornerShape(Radio.pill))
             // Sólido, como «Confirmar» en Reconciliar: el tonal de antes (marca al 16 %) se leía como un
             // botón apagado aun habilitado (auditoría de Personas y comercios, 4-oct-2026).
             .background(if (habilitado) Movi.colores.texto else Movi.colores.tarjeta)

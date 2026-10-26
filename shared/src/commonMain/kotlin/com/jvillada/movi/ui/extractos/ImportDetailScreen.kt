@@ -1,5 +1,16 @@
 package com.jvillada.movi.ui.extractos
 
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.LocalGoBack
@@ -69,11 +80,11 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
             title = "Detalle de importación",
             leading = HeaderLeading.Back(fallback = Screen.Documentos),
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
 
         when {
             loading -> LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla),
                 color = Movi.colores.marca,
                 trackColor = Movi.colores.tarjeta,
             )
@@ -81,23 +92,21 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
                 error!!,
                 style = Movi.textos.cuerpo, color = Movi.colores.sale,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                modifier = Modifier.fillMaxWidth().padding(Espacio.l),
             )
             detail != null -> {
                 errorDeDeshacer?.let {
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(horizontal = 20.dp))
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(horizontal = Medida.margenDePantalla))
                 }
                 // **Deshacer el importe entero.** Antes un extracto importado en la cuenta equivocada
                 // solo se arreglaba anulando fila por fila.
-                Text(
+                Boton(
                     "Deshacer este importe",
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.sale,
-                    modifier = Modifier
-                        .padding(horizontal = 20.dp)
-                        .clickable(enabled = !deshaciendo) { pidiendoDeshacer = true }
-                        .padding(vertical = 8.dp),
+                    onClick = { pidiendoDeshacer = true },
+                    variante = VarianteDeBoton.Peligro,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !deshaciendo,
+                    modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
                 )
                 ImportDetailContent(detail = detail!!)
             }
@@ -128,11 +137,11 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
 private fun ImportDetailContent(detail: StatementImportDetail) {
     val imp = detail.import
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = Espacio.l),
+        verticalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         item(key = "header") {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(Espacio.xxs))
             ImportSummaryHeader(imp)
         }
 
@@ -142,49 +151,32 @@ private fun ImportDetailContent(detail: StatementImportDetail) {
                     "No se encontraron movimientos",
                     style = Movi.textos.cuerpo, color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = Espacio.xxl),
                 )
             }
         } else {
             item(key = "section-label") {
-                Text(
-                    "MOVIMIENTOS",
-                    style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
-                    letterSpacing = 0.8.sp,
-                )
+                Seccion(titulo = "Movimientos", conteo = detail.events.size)
             }
             item(key = "events-card") {
-                MinCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                ) {
+                Superficie(relleno = RellenoDeSuperficie.Lista) {
                     detail.events.forEachIndexed { i, event ->
+                        if (i > 0) Separador(SangriaDeSeparador.Margen)
                         ImportEventRow(event)
-                        if (i < detail.events.size - 1) Hairline()
                     }
                 }
             }
         }
 
-        item(key = "bottom-spacer") { Spacer(Modifier.height(24.dp)) }
+        item(key = "bottom-spacer") { Spacer(Modifier.height(Espacio.xl)) }
     }
 }
 
 @Composable
 private fun ImportSummaryHeader(imp: StatementImport) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Movi.colores.tarjeta)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            "${imp.bankName.uppercase()} · ${imp.period.uppercase()}",
-            style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.8.sp,
-        )
+    Superficie(modifier = Modifier.fillMaxWidth()) {
+        Text("${imp.bankName} · ${imp.period}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        Spacer(Modifier.height(Espacio.xs))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -194,51 +186,27 @@ private fun ImportSummaryHeader(imp: StatementImport) {
                 "${imp.importedCount} importadas · ${imp.reconciledCount} reconciliadas",
                 style = Movi.textos.cuerpo, fontWeight = FontWeight.SemiBold, color = Movi.colores.texto,
             )
-            Text(
-                epochToShortDate(imp.importedAt),
-                style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
-            )
+            Text(epochToShortDate(imp.importedAt), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
     }
 }
 
+/** Un movimiento del importe: una [Fila] del sistema con la categoría y la fecha, y su [Cifra]. */
 @Composable
 private fun ImportEventRow(event: FinancialEvent) {
     val isIncome = event.type == TransactionType.INCOME
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                event.description.ifBlank { event.merchant ?: "Sin descripción" },
-                style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto,
-            )
-            Spacer(Modifier.height(2.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(event.category, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                StatusDot(Movi.colores.textoApagado, 2.dp)
-                Text(
-                    epochToShortDate(event.timestamp),
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                )
-            }
-        }
-        Text(
-            text = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}",
-            style = Movi.textos.monto,
-            fontWeight = FontWeight.Medium,
+    Fila(
+        titulo = event.description.ifBlank { event.merchant ?: "Sin descripción" },
+        subtitulo = "${event.category} · ${epochToShortDate(event.timestamp)}",
+        final = {
             // Ola 2a: el gasto en el color del texto; el signo «−» ya lo dice.
-            color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
-        )
-    }
+            Cifra(
+                if (isIncome) event.amount else -event.amount,
+                moneda = event.currency,
+                tono = if (isIncome) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
+            )
+        },
+    )
 }
 
 // «Hoy», «23 de agosto»: en palabras, como el resto de la app, y no el ISO de la fecha.

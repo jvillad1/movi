@@ -103,7 +103,7 @@ fun PeriodoSheet(
                 text = "¿Qué día empieza tu mes?",
                 style = Movi.textos.titulo,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.xs),
             )
             Text(
                 text = "Movi cuenta tus ingresos, gastos y presupuestos sobre esta ventana. " +
@@ -112,30 +112,30 @@ fun PeriodoSheet(
                 style = Movi.textos.cuerpo,
                 fontWeight = FontWeight.Normal,
                 color = Movi.colores.textoMedio,
-                modifier = Modifier.padding(bottom = 16.dp),
+                modifier = Modifier.padding(bottom = Espacio.m),
             )
 
             // La consecuencia, en vivo: sin esto «26» es un número sin significado.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(Movi.colores.tarjeta)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = Espacio.m, vertical = Espacio.s),
             ) {
                 Text(
                     text = "Hoy estarías en ${nombreDe(hoy)}",
                     style = Movi.textos.titulo,
                     color = Movi.colores.texto,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 Text(
                     text = rangoLegibleDe(hoy, settings) ?: "Del 1 al último día del mes",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                 )
                 if (settings.esMesDeCalendario) {
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(
                         text = "Es el mes de calendario, como viene por defecto.",
                         style = Movi.textos.apoyo,
@@ -144,7 +144,7 @@ fun PeriodoSheet(
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             // Cinco filas de siete, no un `LazyVerticalGrid`.
             //
@@ -166,13 +166,13 @@ fun PeriodoSheet(
             (1..31).chunked(7).forEach { fila ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
                 ) {
                     fila.forEach { d ->
                         val elegido = d == dia
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(Medida.avatar)
                                 .clip(CircleShape)
                                 .background(if (elegido) Movi.colores.marca else Movi.colores.tarjeta)
                                 .clickable(enabled = !saving) { dia = d },
@@ -188,13 +188,13 @@ fun PeriodoSheet(
                         }
                     }
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
             }
 
             // Un 29, 30 o 31 no existe en todos los meses. Se dice ANTES de guardar, porque es la
             // duda que aparece justo al tocar ese número.
             if (dia > 28) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(
                     text = "En los meses que no tienen día $dia, el corte cae el último día del mes.",
                     style = Movi.textos.apoyo,
@@ -202,19 +202,19 @@ fun PeriodoSheet(
                 )
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
             Text(
                 text = SI_CAE_EN_FIN_DE_SEMANA,
                 style = Movi.textos.titulo,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(bottom = 6.dp),
+                modifier = Modifier.padding(bottom = Espacio.xs),
             )
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(Movi.colores.tarjeta)
-                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                    .padding(horizontal = Espacio.m, vertical = Espacio.xxs),
             ) {
                 SiElCorteCaeEnFinDeSemana.entries.forEachIndexed { i, opcion ->
                     val elegida = opcion == regla
@@ -222,13 +222,13 @@ fun PeriodoSheet(
                         left = { Text(tituloDeLaRegla(opcion), style = Movi.textos.cuerpo, color = Movi.colores.texto) },
                         right = {
                             // El check en el color de la marca, como el tema en Ajustes.
-                            Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.size(Icono.l), contentAlignment = Alignment.Center) {
                                 if (elegida) {
                                     Icon(
                                         Icons.Rounded.Check,
                                         contentDescription = "Elegido",
                                         tint = Movi.colores.marca,
-                                        modifier = Modifier.size(20.dp),
+                                        modifier = Modifier.size(Icono.m),
                                     )
                                 }
                             }
@@ -241,24 +241,24 @@ fun PeriodoSheet(
             }
             // El ejemplo concreto: «el 25 de octubre es domingo» dice más que la regla en abstracto.
             if (ejemplo != null) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(text = ejemplo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
 
             if (error != null) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(text = error, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Espacio.l))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(if (saving) Movi.colores.tarjeta else Movi.colores.marca)
                     .clickable(enabled = !saving) { onSave(dia, regla) }
-                    .padding(vertical = 15.dp),
+                    .padding(vertical = Espacio.m),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -268,7 +268,7 @@ fun PeriodoSheet(
                 )
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(Espacio.xl))
         }
     }
 }

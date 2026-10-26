@@ -25,7 +25,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.rememberLectura
+import com.jvillada.movi.ui.destinos.RenglonDePersonasYComercios
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.DetalleDelEspacio
 import com.jvillada.movi.shared.model.Espacio
@@ -94,6 +97,9 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
     var lectura by remember { mutableStateOf<LecturaDeEspacios?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var creando by remember { mutableStateOf(false) }
+    // Los nombres de «Personas y comercios», para el subtítulo de su fila. Lo recordado al primer
+    // cuadro, como en todas partes; si falla, la fila invita a guardar (no afirma nada de plata).
+    val destinos = rememberLectura(ClaveDeLectura.Destinos, reintento = reintento) { Repositories.wallets.getDestinos() }
 
     LaunchedEffect(refresco, reintento) {
         error = null
@@ -143,6 +149,10 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
                 else -> ListaDeEspacios(actual.detalles, onAbrir = { onNavigate(Screen.Espacio(it)) })
             }
             if (actual != null && actual.queOtroPaga.isNotEmpty()) LoQuePagaOtraPersona(actual.queOtroPaga)
+            // Ola R4: la casa de los terceros. Al final, siempre: lo que tienes con los demás que no
+            // está en un espacio (Caro, tu papá, los comercios). Una de las dos puertas que quedan
+            // (la otra es Ajustes); ver [RenglonDePersonasYComercios].
+            RenglonDePersonasYComercios(destinos = destinos.valor, onClick = { onNavigate(Screen.Destinos()) })
         }
     }
 

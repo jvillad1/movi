@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasAnyChild
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -54,8 +57,10 @@ class LoQueMoviSabeScreenTest {
     private fun hay(texto: String) =
         composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
+    // Ola R4: el texto vive dentro de un `Boton` del sistema; el toque es del botón.
     private fun tocar(texto: String) =
-        composeRule.onNodeWithText(texto, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNode(hasClickAction() and hasAnyChild(hasText(texto)), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
 
     @Test
     fun `sin recuerdos explica como se llena`() {

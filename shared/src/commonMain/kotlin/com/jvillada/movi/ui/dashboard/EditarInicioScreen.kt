@@ -1,5 +1,14 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +69,7 @@ import com.jvillada.movi.ui.components.BotonReintentar
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinCard
+import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
@@ -224,11 +234,10 @@ fun EditarInicioScreen(onNavigate: (Screen) -> Unit) {
                 Spacer(Modifier.height(Movi.espacios.medio))
                 val actual = preferencias
                 when {
-                    actual == null && fallo -> Column(verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
-                        Text("No pude cargar cómo tienes Inicio.", style = Movi.textos.cuerpo, color = Movi.colores.texto)
-                        BotonReintentar(onReintentar = { intento++ })
+                    actual == null && fallo -> NoSePudoLeer("No pude cargar cómo tienes Inicio.", onReintentar = { intento++ })
+                    actual == null -> Superficie(relleno = RellenoDeSuperficie.Lista) {
+                        repeat(4) { EsqueletoDeFila(conInicio = false) }
                     }
-                    actual == null -> Text("Cargando…", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
                     else -> EditorDelInicio(
                         preferencias = actual,
                         noSeGuardo = noSeGuardo,
@@ -248,14 +257,10 @@ internal fun EditorDelInicio(
     onCambiar: (PreferenciasDelInicio) -> Unit,
 ) {
     val secciones = seccionesDelEditor(preferencias)
-    MinSectionHeader(title = "Secciones de Inicio")
+    Seccion(titulo = "Secciones de Inicio")
     Text(EL_HEROE_VA_PRIMERO, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-    Spacer(Modifier.height(Movi.espacios.corto))
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
-    ) {
+    Spacer(Modifier.height(Espacio.xs))
+    Superficie(relleno = RellenoDeSuperficie.Lista) {
         secciones.forEachIndexed { i, seccion ->
             FilaDelEditor(
                 seccion = seccion,
@@ -265,7 +270,7 @@ internal fun EditorDelInicio(
                 onBajar = { onCambiar(preferencias.moviendo(seccion.tipo, +1)) },
                 onMostrar = { onCambiar(preferencias.mostrando(seccion.tipo, it)) },
             )
-            if (i < secciones.lastIndex) Hairline()
+            if (i < secciones.lastIndex) Separador(SangriaDeSeparador.Margen)
         }
     }
     if (noSeGuardo) {
@@ -276,22 +281,14 @@ internal fun EditorDelInicio(
             color = Movi.colores.sale,
         )
     }
-    Spacer(Modifier.height(Movi.espacios.margen))
+    Spacer(Modifier.height(Medida.dentroDeSeccion))
     val esLaDeMovi = preferencias.limpias().esLaDeMovi
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(Movi.formas.pleno))
-            .clickable(enabled = !esLaDeMovi, role = Role.Button) { onCambiar(preferencias.deMovi()) }
-            .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            VOLVER_AL_ORDEN_DE_MOVI,
-            style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
-            color = if (esLaDeMovi) Movi.colores.textoApagado else Movi.colores.marca,
-        )
-    }
+    Boton(
+        VOLVER_AL_ORDEN_DE_MOVI,
+        onClick = { onCambiar(preferencias.deMovi()) },
+        variante = VarianteDeBoton.Fantasma,
+        habilitado = !esLaDeMovi,
+    )
 }
 
 @Composable
@@ -303,38 +300,30 @@ private fun FilaDelEditor(
     onBajar: () -> Unit,
     onMostrar: (Boolean) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().testTag(tagDeLaFilaDelEditor(seccion.tipo))) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = Movi.espacios.minimo),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    seccion.nombre,
-                    style = Movi.textos.titulo,
-                    color = if (seccion.visible) Movi.colores.texto else Movi.colores.textoApagado,
+    // Ola R4: una [Fila] del sistema; las flechas y el interruptor van en su final.
+    Fila(
+        titulo = seccion.nombre,
+        subtitulo = if (!seccion.visible && seccion.tipo == "ALERTS") PARA_REVISAR_ESCONDIDA else null,
+        final = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Flecha(Icons.Rounded.KeyboardArrowUp, rotuloDeSubir(seccion.nombre), puedeSubir, onSubir)
+                Flecha(Icons.Rounded.KeyboardArrowDown, rotuloDeBajar(seccion.nombre), puedeBajar, onBajar)
+                Switch(
+                    checked = seccion.visible,
+                    onCheckedChange = onMostrar,
+                    modifier = Modifier.semantics { contentDescription = rotuloDeMostrar(seccion.nombre) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Movi.colores.sobreMarca,
+                        checkedTrackColor = Movi.colores.marca,
+                        uncheckedThumbColor = Movi.colores.textoApagado,
+                        uncheckedTrackColor = Movi.colores.tarjeta,
+                        uncheckedBorderColor = Movi.colores.borde,
+                    ),
                 )
-                if (!seccion.visible && seccion.tipo == "ALERTS") {
-                    Text(PARA_REVISAR_ESCONDIDA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
             }
-            Flecha(Icons.Rounded.KeyboardArrowUp, rotuloDeSubir(seccion.nombre), puedeSubir, onSubir)
-            Flecha(Icons.Rounded.KeyboardArrowDown, rotuloDeBajar(seccion.nombre), puedeBajar, onBajar)
-            Spacer(Modifier.size(Movi.espacios.minimo))
-            Switch(
-                checked = seccion.visible,
-                onCheckedChange = onMostrar,
-                modifier = Modifier.semantics { contentDescription = rotuloDeMostrar(seccion.nombre) },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Movi.colores.sobreMarca,
-                    checkedTrackColor = Movi.colores.marca,
-                    uncheckedThumbColor = Movi.colores.textoApagado,
-                    uncheckedTrackColor = Movi.colores.tarjeta,
-                    uncheckedBorderColor = Movi.colores.borde,
-                ),
-            )
-        }
-    }
+        },
+        modifier = Modifier.testTag(tagDeLaFilaDelEditor(seccion.tipo)),
+    )
 }
 
 /** Una flecha de 44 dp de blanco para el dedo; apagada en el borde de la lista. */

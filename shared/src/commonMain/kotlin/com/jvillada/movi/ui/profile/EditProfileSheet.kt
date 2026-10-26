@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.profile
 
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -73,8 +74,8 @@ fun EditProfileSheet(
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            Text("ALIAS", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(8.dp))
+            Text("Alias", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+            Spacer(Modifier.height(Espacio.xs))
             FieldBox(
                 placeholder = "Tu nombre",
                 value = name,
@@ -82,41 +83,41 @@ fun EditProfileSheet(
                 keyboardType = KeyboardType.Text,
             )
 
-            Spacer(Modifier.height(20.dp))
-            Text("COLOR DEL AVATAR", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Espacio.l))
+            Text("Color del avatar", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+            Spacer(Modifier.height(Espacio.s))
             for (row in AvatarPalette.COLORS.chunked(4)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
                 ) {
                     for (hex in row) {
                         ColorSwatch(hex = hex, selected = hex == color, onClick = { color = hex })
                     }
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
             }
 
             error?.let {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Espacio.m))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(Radio.m))
                 .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
                 .clickable(enabled = canSave) { save() }
-                .padding(vertical = 15.dp),
+                .padding(vertical = Espacio.m),
             contentAlignment = Alignment.Center,
         ) {
             Text(if (saving) "Guardando…" else "Guardar", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
         }
         if (!canSave && !saving && missingFieldMessage != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = missingFieldMessage,
                 style = Movi.textos.apoyo,
@@ -125,7 +126,7 @@ fun EditProfileSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.l))
     }
 }
 
@@ -133,7 +134,7 @@ fun EditProfileSheet(
 private fun ColorSwatch(hex: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(Medida.avatarGrande)
             .clip(CircleShape)
             .background(avatarColorOrDefault(hex))
             .then(if (selected) Modifier.border(2.dp, Movi.colores.texto, CircleShape) else Modifier)
@@ -141,7 +142,7 @@ private fun ColorSwatch(hex: String, selected: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         if (selected) {
-            Icon(Icons.Rounded.Check, contentDescription = "Elegido", tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(Icons.Rounded.Check, contentDescription = "Elegido", tint = Color.White, modifier = Modifier.size(Icono.m))
         }
     }
 }

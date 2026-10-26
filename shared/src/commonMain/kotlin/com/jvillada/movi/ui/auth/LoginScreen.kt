@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.auth
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -185,14 +189,14 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(Movi.colores.fondo).padding(24.dp),
+        modifier = Modifier.fillMaxSize().background(Movi.colores.fondo).padding(Espacio.xl),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // Tamaño suelto a propósito: es el logotipo de la entrada, no un título; `titular` (19) lo apaga y `cifra` es para montos.
         Text("Movi", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Movi.colores.texto)
         Text("Finanzas personales", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(Espacio.xxxl))
 
         if (ofreciendo) {
             // Ya entró: lo único que falta es si quiere que la próxima vez sea con la huella.
@@ -230,8 +234,8 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             return@Column
         }
 
-        MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
-            Text("Correo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+        Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
+            Text("Correo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
             AuthField(
                 value = email,
                 onChange = { email = it },
@@ -242,8 +246,8 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 ),
                 keyboardActions = KeyboardActions(onNext = { passwordFocus.requestFocus() }),
             )
-            Spacer(Modifier.height(16.dp))
-            Text("Contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+            Spacer(Modifier.height(Espacio.m))
+            Text("Contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
             AuthField(
                 value = password,
                 onChange = { password = it },
@@ -258,63 +262,36 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             )
 
             error?.let {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
             notice?.let {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
 
             // El reintento. Cancelar el prompt no deja al dueño encerrado en el formulario hasta
             // el próximo arranque: acá vuelve a pedirlo cuando quiera.
             if (huella != null && SessionManager.huellaActivada && SessionManager.isLoggedIn) {
-                Spacer(Modifier.height(12.dp))
-                Text(
+                Spacer(Modifier.height(Espacio.s))
+                Boton(
                     if (pidiendoHuella) "Esperando tu huella…" else "Entrar con huella",
-                    style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium,
-                    color = if (pidiendoHuella) Movi.colores.textoMedio else Movi.colores.marca,
-                    modifier = Modifier.noRippleClickable { desbloquear() },
+                    onClick = { desbloquear() },
+                    variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !pidiendoHuella,
                 )
             }
 
-            Spacer(Modifier.height(12.dp))
-            Text(
-                "¿Olvidaste tu contraseña?",
-                style = Movi.textos.cuerpo, color = Movi.colores.marca,
-                modifier = Modifier.noRippleClickable { requestReset() },
-            )
+            Spacer(Modifier.height(Espacio.s))
+            Boton("¿Olvidaste tu contraseña?", onClick = { requestReset() }, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
 
-            Spacer(Modifier.height(20.dp))
-            Box(
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (loading) Movi.colores.tarjeta else Movi.colores.marca)
-                    .noRippleClickable { submit() },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Movi.colores.marca,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Text(
-                        "Entrar",
-                        style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
-                        color = Movi.colores.fondo,
-                    )
-                }
-            }
+            Spacer(Modifier.height(Espacio.l))
+            Boton("Entrar", onClick = { submit() }, cargando = loading, anchoCompleto = true)
         }
 
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "¿No tienes cuenta? Regístrate",
-            style = Movi.textos.cuerpo, color = Movi.colores.marca,
-            modifier = Modifier.noRippleClickable { onNavigate(Screen.Register) }
-        )
+        Spacer(Modifier.height(Espacio.m))
+        Boton("¿No tienes cuenta? Regístrate", onClick = { onNavigate(Screen.Register) }, variante = VarianteDeBoton.Fantasma)
     }
 }
 
@@ -343,8 +320,8 @@ internal fun AuthField(
         keyboardActions = keyboardActions,
         decorationBox = { inner ->
             Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                    .background(Movi.colores.tarjeta).padding(horizontal = 12.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radio.s))
+                    .background(Movi.colores.tarjeta).padding(horizontal = Espacio.s, vertical = Espacio.s),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(modifier = Modifier.weight(1f)) {
@@ -352,7 +329,7 @@ internal fun AuthField(
                     inner()
                 }
                 if (isPassword) {
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Espacio.xs))
                     Icon(
                         // `Rounded`, como el resto de la app: 33 íconos distintos en 63 usos. Estos dos
                         // eran los ÚNICOS `Outlined` del repo, y por eso se leían como de otro juego
@@ -361,7 +338,7 @@ internal fun AuthField(
                         imageVector = if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                         contentDescription = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña",
                         tint = Movi.colores.textoMedio,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(Icono.m)
                             .noRippleClickable { passwordVisible = !passwordVisible },
                     )
                 }
@@ -395,45 +372,23 @@ private fun OfrecimientoDeHuella(
     onActivar: () -> Unit,
     onAhoraNo: () -> Unit,
 ) {
-    MinCard(
-        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(20.dp),
-    ) {
+    Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
         Text(
             "Entra con tu huella la próxima vez",
             style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
             color = Movi.colores.texto,
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Text(EXPLICACION_HUELLA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
 
         aviso?.let {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
 
-        Spacer(Modifier.height(20.dp))
-        Box(
-            modifier = Modifier.fillMaxWidth().height(48.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (ocupado) Movi.colores.tarjeta else Movi.colores.marca)
-                .noRippleClickable(onActivar),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                if (ocupado) "Esperando tu huella…" else "Activar",
-                style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
-                color = if (ocupado) Movi.colores.textoMedio else Movi.colores.fondo,
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text(
-                "Ahora no",
-                style = Movi.textos.cuerpo, color = Movi.colores.textoMedio,
-                modifier = Modifier.noRippleClickable(onAhoraNo),
-            )
-        }
+        Spacer(Modifier.height(Espacio.l))
+        Boton(if (ocupado) "Esperando tu huella…" else "Activar", onClick = onActivar, habilitado = !ocupado, anchoCompleto = true)
+        Spacer(Modifier.height(Espacio.xs))
+        Boton("Ahora no", onClick = onAhoraNo, variante = VarianteDeBoton.Fantasma, anchoCompleto = true)
     }
 }

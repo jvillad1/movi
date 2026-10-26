@@ -321,7 +321,7 @@ class EsqueletoDeMovimientosTest {
         composeRule.onNodeWithText("Crear una cuenta primero", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("NOMBRE", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Nombre", useUnmergedTree = true).assertIsDisplayed()
     }
 
     /**

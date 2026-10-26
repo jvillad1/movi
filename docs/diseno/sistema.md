@@ -132,7 +132,8 @@ Seccion(titulo = "Tarjetas", conteo = 3, accion = "Ver todo", onAccion = ::verTo
 
 **`Fila`** — la fila de lista de toda la app: `inicio` (avatar de comercio, `IconoEnCirculo`, persona),
 `titulo`, `subtitulo?`, `final` (`Cifra`, `Pildora` o `Chevron`). 56 / 64 de alto mínimo, 16 a los
-lados, toque de borde a borde. Va directo sobre el fondo o en una `Superficie` con relleno `Lista`.
+lados, toque de borde a borde. El título va en hasta dos renglones antes del «…» (la fila crece) y el
+subtítulo en uno; el final se mide primero, así que un monto nunca se recorta. Va directo sobre el fondo o en una `Superficie` con relleno `Lista`.
 ```kotlin
 Fila(
     titulo = "Rappi · Las Doce", subtitulo = "Restaurantes · Nu",
@@ -329,3 +330,33 @@ pinta: mirar atrás es lo que contesta esa pantalla.
 
 Lo vigila `LasPantallasDePlanUsanElSistemaTest` (a 360 dp: secciones sin mayúsculas, filas de 56 o
 más, ninguna cifra recortada).
+
+## 13. Ola R4c: Patrimonio, Ajustes y lo que cuelga de ellos
+
+Patrimonio, Detalle de cuenta, Cuadre de saldos, Personas y comercios, Ajustes, Perfil, Categorías,
+Documentos, Captura del banco, Compartir, Movi AI, Agregar, la entrada, Editar inicio y Primeros pasos
+pasaron al sistema. Lo que se decidió y vale para las que vengan:
+
+| pantalla | qué pregunta contesta | qué se fue o se movió |
+|---|---|---|
+| Patrimonio | ¿cuánto tengo y cuánto debo? | los subtotales de cada grupo («DINERO · 5 · $20,9M»): repetían la resta de la tarjeta de arriba; «Personas y comercios» (no es tuyo) |
+| Personas y comercios | ¿a quién le mandé plata? | de cuatro puertas quedan dos: la fila al final de **Espacios** y la ficha de **Ajustes** |
+| Ajustes | ¿dónde se ajusta X? | las fichas son la `CuadriculaDeAcciones` del Inicio; sin color propio por ficha |
+| Metas, Extractos | — | **borradas**; los destinos SDUI `goals` y `extractos` llevan a Patrimonio y a Documentos |
+
+- **Grupos de cuentas**: `Seccion(titulo, conteo)` + `Superficie(relleno = Lista)` con una `Fila` por
+  cuenta; el inicio es la marca del banco (`AvatarDeLaCuenta`), el final la `Cifra` en la moneda de la
+  cuenta. Un grupo vacío no se pinta.
+- **Una lista perezosa sobre una superficie** (Categorías, cientos de filas): cada fila es un tramo de
+  la superficie —la primera redondea arriba, la última abajo, `Separador` entre ellas—, para no
+  componer la lista entera dentro de una sola `Superficie`.
+- **Lo que una fila no alcanza a decir** (el alcance de la huella, para qué es el correo del cierre)
+  va debajo de la superficie como nota, en `apoyo`, alineada con el texto de la fila. La fila no crece
+  a tres renglones.
+- **Los rótulos en frase**: «Patrimonio neto», «Saldo actual», «Lo que dice el banco», nunca en
+  mayúsculas ni con espaciado de letra. Un rótulo de `:core` que llega en mayúsculas se pasa a frase al
+  pintarlo (`enFrase`).
+- **Una propuesta de Movi en otra pantalla** (el saldo que dijo el aviso, en Cuadre) es una
+  `TarjetaDePropuesta`, igual que en el Inicio.
+- **Botones de una tarjeta**: `Boton` tamaño `S` (Personas y comercios, Lo que Movi sabe, Movi AI); los
+  de pie de hoja, `Boton` `M` a todo el ancho; «Borrar», «Revocar», «Cerrar sesión» en `Peligro`.

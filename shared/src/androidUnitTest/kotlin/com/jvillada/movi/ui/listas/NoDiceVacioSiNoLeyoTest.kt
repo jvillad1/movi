@@ -19,12 +19,10 @@ import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.EventDay
-import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
-import com.jvillada.movi.ui.goals.MetasScreen
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.ui.sms.CapturaDelBancoScreen
 import com.jvillada.movi.ui.documentos.DocumentosScreen
@@ -96,17 +94,6 @@ class NoDiceVacioSiNoLeyoTest {
         assertTrue(!hay("No pudimos cargar"))
     }
 
-    @Test
-    fun `Metas sin respuesta no dice que no hay metas`() {
-        montar(object : RepositorioDePruebaDeMovimientos() {
-            override suspend fun getGoals(): List<Goal> = throw caida
-            override suspend fun getAccounts(): List<Account> = emptyList()
-        }) { MetasScreen(onNavigate = {}) }
-
-        esperar("No pudimos cargar tus metas")
-        assertTrue(!hay("Aún no hay metas"))
-        assertTrue(!hay("Nueva meta"))
-    }
 
     @Test
     fun `Presupuestos sin respuesta no dice gastado cero ni ofrece crear`() {

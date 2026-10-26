@@ -99,7 +99,7 @@ fun CondicionDeCuentaSheet(
                 style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )
 
             // Qué hace, dicho con las dos consecuencias que tiene y sin ninguna más: es
@@ -116,15 +116,15 @@ fun CondicionDeCuentaSheet(
                 color = Movi.colores.textoMedio,
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(Movi.colores.tarjeta)
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                    .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
             ) {
                 if (texto.isEmpty()) {
                     Text("Vivienda", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
@@ -150,7 +150,7 @@ fun CondicionDeCuentaSheet(
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = if (account.condicionadaA != null) {
                     "Déjalo vacío para quitar la condición."
@@ -162,21 +162,21 @@ fun CondicionDeCuentaSheet(
             )
 
             if (error != null) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Espacio.l))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(50.dp)
-                        .clip(RoundedCornerShape(999.dp))
+                        .height(Medida.objetivoTactil)
+                        .clip(RoundedCornerShape(Radio.pill))
                         .background(Movi.colores.tarjeta)
                         .clickable(enabled = !guardando, onClick = onDismiss),
                     contentAlignment = Alignment.Center,
@@ -186,9 +186,9 @@ fun CondicionDeCuentaSheet(
                 Box(
                     modifier = Modifier
                         .weight(1.4f)
-                        .height(50.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (cambio && !guardando) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                        .height(Medida.objetivoTactil)
+                        .clip(RoundedCornerShape(Radio.pill))
+                        .background(if (cambio && !guardando) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
                         .clickable(enabled = cambio && !guardando) { guardar() },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -201,7 +201,7 @@ fun CondicionDeCuentaSheet(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Espacio.xl))
         }
     }
 }
