@@ -110,7 +110,7 @@ class CargosDelBancoEnLaRevisionTest {
         // Dos ya anotados destildados: se anotan el IVA y los intereses.
         composeRule.onNodeWithText("Anotar los 2").assertIsDisplayed()
         // La compra sigue en su sección; el botón de siempre cuenta la compra y los dos cargos nuevos.
-        composeRule.onNodeWithText("NUEVAS TRANSACCIONES").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Nuevas transacciones").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Importar 3 seleccionadas").assertIsDisplayed()
     }
 

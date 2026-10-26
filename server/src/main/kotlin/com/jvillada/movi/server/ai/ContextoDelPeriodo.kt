@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
+import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Credits
@@ -246,8 +248,20 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 val tipo = tipoDeCuenta[fila[Events.accountId]]
                 tipo == null || isCashFlow(tipo, TransactionType.valueOf(fila[Events.type]), fila[Events.category])
             }
+        // R3 · solo tu parte (ver `montoContado` en :core): lo que salda un espacio no es ingreso ni
+        // gasto, un gasto repartido cuenta sin la parte ajena y tu parte de lo que pagó otro suma.
+        val compartido = loCompartidoDelUsuario(uid)
+        val saldan = compartido.indice.saldaPorEvento
+        val delPeriodoContado = delPeriodo.filterNot { it[Events.id] in saldan }
+        fun contado(fila: org.jetbrains.exposed.sql.ResultRow): Long {
+            val monto = fila[Events.amount]
+            if (fila[Events.type] != TransactionType.EXPENSE.name) return monto
+            return (monto - (compartido.indice.parteAjenaPorEvento[fila[Events.id]] ?: 0L)).coerceIn(0L, monto)
+        }
+        val deOtros = compartido.tuParteDeOtros
+            .filter { it.timestamp >= ventana.startMillis && it.timestamp < ventana.endMillisExclusive }
 
-        val ingresos = delPeriodo
+        val ingresos = delPeriodoContado
             .filter { it[Events.type] == TransactionType.INCOME.name }
             .sumOf { it[Events.amount] }
         // La pata del crédito del desembolso es un EXPENSE en una cuenta LOAN y `isCashFlow` ya la
@@ -255,13 +269,17 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
         val creditosDesembolsados = delPeriodo
             .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.category] == DESEMBOLSO_CATEGORY }
             .sumOf { it[Events.amount] }
-        val gastoPorCategoria = delPeriodo
-            .filter { it[Events.type] == TransactionType.EXPENSE.name }
-            .groupBy { it[Events.category] }
-            .mapValues { (_, filas) -> filas.sumOf { it[Events.amount] } }
+        val gastoPorCategoria = (
+            delPeriodoContado
+                .filter { it[Events.type] == TransactionType.EXPENSE.name }
+                .map { it[Events.category] to contado(it) } +
+                deOtros.map { it.category to montoContado(it) }
+            )
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, montos) -> montos.sum() }
         val nombreDeCuenta = Accounts.selectAll().where { Accounts.userId eq uid }
             .associate { it[Accounts.id] to it[Accounts.name] }
-        val gastos = delPeriodo
+        val gastos = delPeriodoContado
             .filter { it[Events.type] == TransactionType.EXPENSE.name }
             .map { fila ->
                 GastoDelPeriodo(
@@ -269,7 +287,15 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                     nombre = fila[Events.description],
                     categoria = fila[Events.category],
                     cuenta = nombreDeCuenta[fila[Events.accountId]] ?: "otra cuenta",
-                    monto = fila[Events.amount],
+                    monto = contado(fila),
+                )
+            } + deOtros.map { e ->
+                GastoDelPeriodo(
+                    fecha = epochMillisToAppDateString(e.timestamp),
+                    nombre = e.description,
+                    categoria = e.category,
+                    cuenta = "tu parte de un gasto compartido",
+                    monto = montoContado(e),
                 )
             }
 

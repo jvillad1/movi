@@ -4,7 +4,8 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.PreferenciasDelInicio
 import com.jvillada.movi.shared.model.PreguntaSugerida
-import com.jvillada.movi.shared.model.SECCIONES_CONFIGURABLES
+import com.jvillada.movi.shared.model.defaultDashboardDefinition
+import com.jvillada.movi.shared.model.seccionesConfigurablesDe
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.ui.ai.PREGUNTAS_PARA_TOCAR_DE_RESPALDO
 import com.jvillada.movi.ui.ai.SenalesParaPreguntar
@@ -88,33 +89,56 @@ class HoyEnUnaMiradaTest {
 
     // ── «Editar inicio» ──────────────────────────────────────────────────────
 
-    private val deMovi = PreferenciasDelInicio(ordenDeMovi = SECCIONES_CONFIGURABLES.keys.toList())
+    /** Lo que manda el server: las configurables de la definición de Movi (generación 9). */
+    private val deMovi = PreferenciasDelInicio(ordenDeMovi = seccionesConfigurablesDe(defaultDashboardDefinition()))
 
     @Test
-    fun `la lista del editor sigue el orden elegido y marca las ocultas`() {
-        assertEquals(SECCIONES_CONFIGURABLES.keys.toList(), seccionesDelEditor(deMovi).map { it.tipo })
-        assertTrue(seccionesDelEditor(deMovi).all { it.visible })
+    fun `la lista del editor sigue el orden elegido, marca las ocultas y apaga las opcionales`() {
+        // Ola R1: las del Inicio de Movi, y al final las opcionales que no trae, apagadas.
+        assertEquals(
+            listOf("CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "DISPONIBLE_DEL_PERIODO", "PATRIMONIO"),
+            seccionesDelEditor(deMovi).map { it.tipo },
+        )
+        assertEquals(listOf(true, true, true, false, false), seccionesDelEditor(deMovi).map { it.visible })
         assertEquals("Disponible", seccionesDelEditor(deMovi).first { it.tipo == "DISPONIBLE_DEL_PERIODO" }.nombre)
 
-        val oculta = deMovi.mostrando("DISPONIBLE_DEL_PERIODO", false)
-        assertEquals(listOf("DISPONIBLE_DEL_PERIODO"), oculta.ocultas)
-        assertEquals(false, seccionesDelEditor(oculta).first { it.tipo == "DISPONIBLE_DEL_PERIODO" }.visible)
-        assertEquals(emptyList(), oculta.mostrando("DISPONIBLE_DEL_PERIODO", true).ocultas)
+        val oculta = deMovi.mostrando("CUENTAS", false)
+        assertEquals(listOf("CUENTAS"), oculta.ocultas)
+        assertEquals(false, seccionesDelEditor(oculta).first { it.tipo == "CUENTAS" }.visible)
+        assertEquals(emptyList(), oculta.mostrando("CUENTAS", true).ocultas)
+
+        // Prender una opcional la anota en `visibles`, no en `ocultas`.
+        val conDisponible = deMovi.mostrando("DISPONIBLE_DEL_PERIODO", true)
+        assertEquals(listOf("DISPONIBLE_DEL_PERIODO"), conDisponible.visibles)
+        assertEquals(emptyList(), conDisponible.ocultas)
+        assertEquals(true, seccionesDelEditor(conDisponible).first { it.tipo == "DISPONIBLE_DEL_PERIODO" }.visible)
+        assertEquals(emptyList(), conDisponible.mostrando("DISPONIBLE_DEL_PERIODO", false).visibles)
+    }
+
+    /**
+     * Si el Editor de pantallas puso una opcional en el Inicio de todos (viene en `ordenDeMovi`), se
+     * esconde como cualquier otra: en `ocultas`.
+     */
+    @Test
+    fun `una opcional que ya viene en el Inicio de Movi se esconde como las demas`() {
+        val conPatrimonioGlobal = PreferenciasDelInicio(ordenDeMovi = deMovi.ordenDeMovi + "PATRIMONIO")
+        assertEquals(true, seccionesDelEditor(conPatrimonioGlobal).first { it.tipo == "PATRIMONIO" }.visible)
+        assertEquals(listOf("PATRIMONIO"), conPatrimonioGlobal.mostrando("PATRIMONIO", false).ocultas)
     }
 
     @Test
     fun `subir y bajar, sin efecto en los bordes, y volver a mano es el orden de Movi`() {
         val subida = deMovi.moviendo("GASTO_POR_CATEGORIA", -1)
         assertEquals(
-            listOf("PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "DISPONIBLE_DEL_PERIODO", "PATRIMONIO", "ALERTS"),
+            listOf("CUENTAS", "GASTO_POR_CATEGORIA", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "PATRIMONIO"),
             seccionesDelEditor(subida).map { it.tipo },
         )
-        assertEquals(deMovi, deMovi.moviendo("PREGUNTALE_A_MOVI", -1), "la primera no sube")
-        assertEquals(deMovi, deMovi.moviendo("ALERTS", +1), "la última no baja")
+        assertEquals(deMovi, deMovi.moviendo("CUENTAS", -1), "la primera no sube")
+        assertEquals(deMovi, deMovi.moviendo("PATRIMONIO", +1), "la última no baja")
         // Bajarla de nuevo deja el orden de Movi: la preferencia deja de nombrarlo.
         assertEquals(emptyList(), subida.moviendo("GASTO_POR_CATEGORIA", +1).orden)
 
-        val todo = subida.mostrando("PATRIMONIO", false)
+        val todo = subida.mostrando("PATRIMONIO", true).mostrando("CUENTAS", false)
         assertEquals(deMovi, todo.deMovi())
     }
 }

@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
+import com.jvillada.movi.shared.model.conLoCompartido
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Budgets
@@ -607,9 +609,10 @@ private fun Transaction.losMasGrandes(
         .take(MAX_MAS_GRANDES)
         .map { it.id }
     if (ids.isEmpty()) return emptyList()
+    val compartido = loCompartidoDelUsuario(uid).indice
     val porId = Events.selectAll()
         .where { (Events.userId eq uid) and (Events.id inList ids) }
-        .associate { it[Events.id] to it.toFinancialEvent().withCashFlowFlag(tipos) }
+        .associate { it[Events.id] to it.toFinancialEvent().withCashFlowFlag(tipos).conLoCompartido(compartido) }
     return ids.mapNotNull { porId[it] }
 }
 

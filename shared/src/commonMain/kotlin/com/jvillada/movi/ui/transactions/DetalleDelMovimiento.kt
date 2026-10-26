@@ -1,7 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,10 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,10 +38,20 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.categorias.colorDeCategoria
@@ -115,13 +124,13 @@ internal fun EncabezadoDelMovimiento(
     val cuenta = cuentas.firstOrNull { it.id == evento.accountId }?.name
     val linea = remember(evento.timestamp, cuenta, hoy) { lineaDeCuandoYDonde(evento, cuenta, hoy) }
     Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onEditar),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radio.m)).clickable(onClick = onEditar),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         Box(modifier = Modifier.size(TamanoDeAvatar.Encabezado.circulo), contentAlignment = Alignment.Center) {
             AvatarDelComercio(evento, tamano = TamanoDeAvatar.Encabezado)
         }
-        Spacer(Modifier.width(12.dp))
         Text(
             evento.description,
             style = Movi.textos.titulo,
@@ -132,23 +141,18 @@ internal fun EncabezadoDelMovimiento(
             modifier = Modifier.weight(1f),
         )
     }
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(Medida.dentroDeSeccion))
     val tono = tonoDelEvento(evento)
-    val monto = textoDelMontoConSigno(evento, tono)
-    // La cifra protagonista, en `cifra` (42 sp). Una cifra larga —millones en dólares con
-    // centavos— baja a tres cuartos de la misma `cifra` (~32 sp) para no salirse en un teléfono de
-    // 360 dp. Derivada de la escala y no un tamaño suelto: si `cifra` cambia, esta la sigue.
-    val cifra = Movi.textos.cifra
-    val estilo = if (monto.length > 12) cifra.copy(fontSize = cifra.fontSize * 0.76f, lineHeight = cifra.lineHeight * 0.78f) else cifra
-    Text(
-        monto,
-        style = estilo,
-        color = colorDelTono(tono, Movi.colores),
-        maxLines = 1,
-        softWrap = false,
+    // La cifra protagonista: la héroe del sistema, en un renglón; si no entra —millones en dólares
+    // con centavos en un teléfono de 360 dp— se achica hasta la de una tarjeta.
+    CifraDelMovimiento(
+        monto = evento.amount,
+        moneda = evento.currency,
+        tono = tono,
+        variante = VarianteDeCifra.Heroe,
         modifier = Modifier.testTag(TAG_MONTO_DEL_MOVIMIENTO).clickable(onClick = onEditar),
     )
-    Spacer(Modifier.height(4.dp))
+    Spacer(Modifier.height(Espacio.xxs))
     Text(linea, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
 }
 
@@ -167,13 +171,13 @@ internal fun ChipDeCategoria(
     Row(
         modifier = Modifier
             .testTag(TAG_CHIP_DE_CATEGORIA)
-            .clip(RoundedCornerShape(Movi.formas.pleno))
-            .background(color.copy(alpha = 0.12f))
-            .border(1.dp, color.copy(alpha = 0.28f), RoundedCornerShape(Movi.formas.pleno))
+            .heightIn(min = Medida.altoChico)
+            .clip(RoundedCornerShape(Radio.pill))
+            .background(Movi.colores.lavado(color))
             .clickable(enabled = habilitado, role = Role.Button, onClickLabel = "Cambiar la categoría", onClick = onClick)
-            .padding(start = 4.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+            .padding(start = Espacio.xxs, end = Espacio.s),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
         IconoDeCategoria(nombre, tamano = TamanoDeIconoDeCategoria.Chico)
         Text(nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -181,7 +185,7 @@ internal fun ChipDeCategoria(
             imageVector = if (abierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
             contentDescription = null,
             tint = Movi.colores.textoMedio,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(Icono.s),
         )
     }
 }
@@ -193,9 +197,9 @@ internal fun LineaEnEsteComercio(resumen: EnEsteComercio, onVer: (() -> Unit)?) 
         modifier = Modifier
             .fillMaxWidth()
             .testTag(TAG_EN_ESTE_COMERCIO)
-            .clip(RoundedCornerShape(10.dp))
-            .then(if (onVer != null) Modifier.clickable(onClick = onVer) else Modifier)
-            .padding(vertical = 6.dp),
+            .heightIn(min = Medida.objetivoTactil)
+            .clip(RoundedCornerShape(Radio.m))
+            .then(if (onVer != null) Modifier.clickable(onClick = onVer) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -206,7 +210,7 @@ internal fun LineaEnEsteComercio(resumen: EnEsteComercio, onVer: (() -> Unit)?) 
         )
         if (onVer != null) {
             Text("Ver", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
-            Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))
+            Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
         }
     }
 }
@@ -221,29 +225,21 @@ const val TAG_PREGUNTA_DEL_TERCERO: String = "pregunta-del-tercero"
  */
 @Composable
 internal fun PreguntaDelTercero(pregunta: String, onAbrir: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(TAG_PREGUNTA_DEL_TERCERO)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Movi.colores.aviso.copy(alpha = 0.10f))
-            .border(1.dp, Movi.colores.aviso.copy(alpha = 0.28f), RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button, onClick = onAbrir)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    // Una pregunta pendiente es algo que Movi propone resolver: la superficie de la propuesta, con
+    // una [Fila] del sistema adentro.
+    Superficie(
+        modifier = Modifier.fillMaxWidth(),
+        nivel = NivelDeSuperficie.Propuesta,
+        relleno = RellenoDeSuperficie.Lista,
     ) {
-        Icon(Icons.Rounded.Person, contentDescription = null, tint = Movi.colores.aviso, modifier = Modifier.size(18.dp))
-        Text(
-            pregunta,
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.texto,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+        Fila(
+            titulo = pregunta,
+            // El tag en la fila que se toca.
+            modifier = Modifier.testTag(TAG_PREGUNTA_DEL_TERCERO),
+            inicio = { IconoEnCirculo(Icons.Rounded.Person, tono = TonoDeIcono.Aviso) },
+            final = { Text("Responder", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca) },
+            onClick = onAbrir,
         )
-        Text("Responder", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
-        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -264,27 +260,28 @@ internal fun FilaDeAcciones(
                 modifier = Modifier
                     .weight(1f)
                     .testTag(tagDeAccionDelMovimiento(accion))
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .clickable(role = Role.Tab) { onElegir(accion) }
                     .semantics { selected = elegida }
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = Espacio.xxs),
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
             ) {
+                // El círculo de una acción: la capa 2 sin elegir, el lavado de la marca elegida. Sin
+                // bordes (superficies por capas).
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .background(if (elegida) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.fondo, CircleShape)
-                        .border(1.dp, if (elegida) Movi.colores.marca.copy(alpha = 0.4f) else Movi.colores.hilo, CircleShape),
+                        .size(Medida.avatar)
+                        .background(if (elegida) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.capa2, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = accion.icono,
                         contentDescription = null,
                         tint = if (elegida) Movi.colores.marca else Movi.colores.texto,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(Icono.m),
                     )
                 }
-                Spacer(Modifier.height(4.dp))
                 Text(
                     accion.rotulo,
                     style = Movi.textos.apoyo,

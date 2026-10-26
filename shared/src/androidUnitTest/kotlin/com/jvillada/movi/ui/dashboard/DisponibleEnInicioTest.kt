@@ -142,8 +142,9 @@ class DisponibleEnInicioTest {
         // $10M de ingresos menos $3,1M de arriendo = $6,9M. Hoy se gastaron $150.000.
         montar(datos(ingresos = 10_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-21" to 150_000L)))
 
-        composeRule.onNodeWithText("DISPONIBLE", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("\$6,9M", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Disponible", useUnmergedTree = true).assertIsDisplayed()
+        // Ola R4b: la cifra principal es la `Cifra.Grande` del sistema, entera.
+        composeRule.onNodeWithText("\$6.900.000", useUnmergedTree = true).assertIsDisplayed()
         // Ola 3 · Hoy en una mirada: la frase «Te quedan $6,8M para 4 días · meta diaria $222.580»
         // ya no va en la sección de Hoy: la dice el héroe, con la misma cuenta
         // (`TeQuedanEnHoyEnPantallaTest`). La frase sigue en Plan; la regla, en `fraseDelDisponible`.
@@ -225,7 +226,7 @@ class DisponibleEnInicioTest {
                 .copy(plataDelDisponible = PlataDelDisponible(1_386_694, 33_930_447, 500_000)),
         )
 
-        composeRule.onNodeWithText("\$31,7M", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("\$31.717.141", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("¿De dónde sale?", useUnmergedTree = true).performClick()
         composeRule.onNodeWithText("Tenías \$1,4M el 25 · entraron \$33,9M", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Guardaste \$500.000 · fijos \$3,1M", useUnmergedTree = true).assertIsDisplayed()

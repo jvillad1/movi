@@ -241,5 +241,6 @@ const val THIRD_PARTY_PAYMENT_CATEGORY = "Pago de un tercero"
 fun aporteAlFlujoDelDia(evento: FinancialEvent): Long = when {
     evento.currency != "COP" || !evento.countsAsCashFlow -> 0L
     evento.type == TransactionType.INCOME -> evento.amount
-    else -> -evento.amount
+    // Solo tu parte de un gasto repartido (R3, ver [montoContado]).
+    else -> -montoContado(evento)
 }

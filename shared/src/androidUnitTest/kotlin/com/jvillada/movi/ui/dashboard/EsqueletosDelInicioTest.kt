@@ -21,6 +21,8 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.model.ScreenDefinition
+import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.theme.MoviTheme
@@ -29,6 +31,7 @@ import com.jvillada.movi.ui.ai.PREGUNTAS_PARA_TOCAR_DE_RESPALDO
 import com.jvillada.movi.ui.ai.preguntasParaTocar
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.sdui.TAG_FILA_ESQUELETO_PREGUNTA
+import com.jvillada.movi.ui.sdui.TAG_VEREDICTO_DEL_HERO
 import kotlinx.datetime.Clock
 import org.junit.Rule
 import org.junit.Test
@@ -101,13 +104,17 @@ class EsqueletosDelInicioTest {
     )
 
     /** Monta el hero (y el resto del Inicio) con [data], marcando una carga en vuelo si [cargando]. */
-    private fun montarHero(data: DashboardData, cargando: Boolean) {
+    private fun montarHero(
+        data: DashboardData,
+        cargando: Boolean,
+        definicion: ScreenDefinition = defaultDashboardDefinition(),
+    ) {
         composeRule.setContent {
             MoviTheme {
                 CompositionLocalProvider(LocalCargandoElInicio provides cargando) {
                     Box(Modifier.fillMaxSize()) {
                         SduiRenderer(
-                            definition = defaultDashboardDefinition(),
+                            definition = definicion,
                             data = data,
                             modifier = Modifier.fillMaxSize(),
                             onNavigate = {},
@@ -159,15 +166,14 @@ class EsqueletosDelInicioTest {
         }
         composeRule.waitForIdle()
 
-        // Las piezas del esqueleto están, ni una de menos.
+        // Las piezas del esqueleto están, ni una de menos (ola R1: rótulo, cifra, detalle y veredicto;
+        // la barra y la fila de «Tu plata» salieron del héroe).
         assertEquals(1, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
         assertEquals(1, contarTag(TAG_ESQUELETO_DETALLE_DEL_HERO))
-        assertEquals(1, contarTag(TAG_ESQUELETO_TU_PLATA_DEL_HERO))
+        assertEquals(1, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
         // Y el lado cargado abre con «Te quedan», no con «Tu plata» de cifra grande.
         assertEquals(1, contarTag(TAG_CIFRA_TE_QUEDAN))
-        assertEquals(2, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
-        assertEquals(1, contarTag(TAG_ESQUELETO_BARRA_DEL_HERO))
-        assertEquals(2, contarTag(TAG_ESQUELETO_FILA_DEL_HERO))
+        assertEquals(1, contarTag(TAG_VEREDICTO_DEL_HERO))
 
         val tarjetas = composeRule.onAllNodesWithTag(TAG_TARJETA_DEL_HERO)
         val altoCargando = tarjetas[0].getUnclippedBoundsInRoot().height
@@ -182,14 +188,12 @@ class EsqueletosDelInicioTest {
     }
 
     /**
-     * **Fix round 1**, reescrita en la Ola 1. Las cuentas llegan antes que el resto: «Tu plata» ya
-     * es real (en su fila, debajo de la cifra grande), pero la cifra grande —«Te quedan»— sigue de
-     * esqueleto hasta que lleguen sus lecturas, y el veredicto, la barra y la fila también. Mostrar
-     * «Tu plata» arriba y cambiarla por otra cifra un segundo después sería un salto, y dos
-     * respuestas a la misma pregunta.
+     * **Fix round 1**, reescrita en la ola R1. Las cuentas llegan antes que el resto: la cifra grande
+     * —«Te quedan»— sigue de esqueleto hasta que lleguen sus lecturas, y el veredicto también. «Tu
+     * plata» ya no está en el héroe: la cuenta que llegó se ve en el carrusel «Tus cuentas».
      */
     @Test
-    fun `con cuentas pero sin resumen, Tu plata es real y la cifra grande sigue esqueleto`() {
+    fun `con cuentas pero sin resumen, la cifra grande sigue esqueleto y la cuenta ya está en el carrusel`() {
         val soloCuentas = DashboardData(
             accounts = listOf(Account(id = "a1", name = "Ahorros", type = AccountType.SAVINGS, balance = 500_000)),
         )
@@ -197,16 +201,13 @@ class EsqueletosDelInicioTest {
 
         assertEquals(1, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
         assertEquals(1, contarTag(TAG_ESQUELETO_DETALLE_DEL_HERO))
-        assertEquals(0, contarTag(TAG_ESQUELETO_TU_PLATA_DEL_HERO))
-        assertEquals(2, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
-        assertEquals(1, contarTag(TAG_ESQUELETO_BARRA_DEL_HERO))
-        assertEquals(2, contarTag(TAG_ESQUELETO_FILA_DEL_HERO))
+        assertEquals(1, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
         composeRule.onAllNodesWithText("\$500.000", useUnmergedTree = true).onFirst().assertIsDisplayed()
     }
 
-    /** Fix round 1, el caso reverso: resumen SÍ, cuentas NO. */
+    /** Fix round 1, el caso reverso: resumen SÍ, cuentas NO. El veredicto es real; la cifra, esqueleto. */
     @Test
-    fun `con resumen pero sin cuentas, el veredicto y la barra son reales y la cifra sigue esqueleto`() {
+    fun `con resumen pero sin cuentas, el veredicto es real y la cifra sigue esqueleto`() {
         val soloResumen = DashboardData(
             summary = FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 10_000_000, egresos = 15_000_000),
         )
@@ -214,10 +215,10 @@ class EsqueletosDelInicioTest {
 
         assertEquals(1, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
         assertEquals(0, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
-        assertEquals(0, contarTag(TAG_ESQUELETO_BARRA_DEL_HERO))
-        assertEquals(0, contarTag(TAG_ESQUELETO_FILA_DEL_HERO))
-        composeRule.onNodeWithText("Entró", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Salió", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(1, contarTag(TAG_VEREDICTO_DEL_HERO))
+        // La barra Entró/Salió salió del Inicio (vive en Plan y en «Tus períodos»).
+        composeRule.onNodeWithText("Entró", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Salió", useUnmergedTree = true).assertDoesNotExist()
     }
 
     /**
@@ -228,12 +229,10 @@ class EsqueletosDelInicioTest {
      */
     @Test
     fun `sin datos y sin carga en vuelo, no hay esqueleto — el guion de antes de Task 7`() {
-        montarHero(DashboardData(), cargando = false)
 
+        montarHero(DashboardData(), cargando = false, definicion = conPreguntale)
         assertEquals(0, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
         assertEquals(0, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
-        assertEquals(0, contarTag(TAG_ESQUELETO_BARRA_DEL_HERO))
-        assertEquals(0, contarTag(TAG_ESQUELETO_FILA_DEL_HERO))
         assertEquals(0, contarTag(TAG_FILA_ESQUELETO_PREGUNTA))
         composeRule.onNodeWithText("—", useUnmergedTree = true).assertIsDisplayed()
         // Ola 3 · Hoy en una mirada: el chip dice la versión corta de cada una (la completa es la
@@ -244,18 +243,12 @@ class EsqueletosDelInicioTest {
     }
 
     /**
-     * **Fix round 1, punto 6.** Mientras el perfil (de donde sale el período) todavía no
-     * contestó Y hay una carga en vuelo, se reserva una línea esqueleto arriba de la cifra —si
-     * no, el rango del período aparece de golpe cuando el perfil contesta y empuja todo lo demás
-     * un renglón hacia abajo. Acá se verifica indirectamente: comparando el alto del hero con
-     * período reservado (`DashboardData()`, cargando) contra uno SIN esa línea (con período real
-     * puesto, misma carga en vuelo) — el primero tiene que ser más alto por, aproximadamente, una
-     * línea de `Movi.textos.apoyo`.
+     * **Fix round 1, punto 6**, reescrita en la ola R1. El período ya no va en el héroe —lo dice el
+     * encabezado, debajo del saludo—, así que saber el período no mueve el héroe: mide lo mismo con
+     * el perfil en camino que con el período ya sabido.
      */
     @Test
-    fun `sin periodo y con carga en vuelo, se reserva una linea arriba de la cifra`() {
-        // Dos heros en una sola composición, misma carga en vuelo, la única diferencia es si el
-        // período ya se sabe — no se puede llamar `setContent` dos veces en la misma prueba.
+    fun `el periodo no mueve el heroe, porque vive en el encabezado`() {
         composeRule.setContent {
             MoviTheme {
                 CompositionLocalProvider(LocalCargandoElInicio provides true) {
@@ -283,20 +276,22 @@ class EsqueletosDelInicioTest {
         composeRule.waitForIdle()
 
         val tarjetas = composeRule.onAllNodesWithTag(TAG_TARJETA_DEL_HERO)
-        val altoSinPeriodoTodavia = tarjetas[0].getUnclippedBoundsInRoot().height
-        val altoConPeriodoYaSabido = tarjetas[1].getUnclippedBoundsInRoot().height
+        val diferencia = abs(tarjetas[0].getUnclippedBoundsInRoot().height.value - tarjetas[1].getUnclippedBoundsInRoot().height.value)
+        assertTrue(diferencia <= 1f, "el héroe cambió $diferencia dp al saberse el período")
+    }
 
-        assertTrue(
-            altoSinPeriodoTodavia.value > altoConPeriodoYaSabido.value,
-            "Sin período reservó ${altoSinPeriodoTodavia.value} dp; con período real, " +
-                "${altoConPeriodoYaSabido.value} dp — el primero tiene que ser más alto (la línea " +
-                "reservada), no igual ni más bajo.",
-        )
+    /**
+     * «Pregúntale a Movi» salió del Inicio por defecto (es una acción de la cuadrícula), pero una
+     * definición de la generación 8 —la del Editor de pantallas, o la instantánea de un aparato— la
+     * puede traer todavía, y se sigue pintando con sus esqueletos.
+     */
+    private val conPreguntale = defaultDashboardDefinition().let { d ->
+        d.copy(sections = listOf(d.sections.first(), ScreenSection(type = "PREGUNTALE_A_MOVI", title = "Pregúntale a Movi")) + d.sections.drop(1))
     }
 
     @Test
     fun `sin cuentas ni resumen, Preguntale a Movi muestra tres esqueletos y no las preguntas de respaldo`() {
-        montarHero(DashboardData(), cargando = true)
+        montarHero(DashboardData(), cargando = true, definicion = conPreguntale)
 
         assertEquals(3, contarTag(TAG_FILA_ESQUELETO_PREGUNTA))
         // El relleno genérico (`PREGUNTAS_DE_RESPALDO`) es justamente lo que el esqueleto tiene que
@@ -313,7 +308,7 @@ class EsqueletosDelInicioTest {
 
     @Test
     fun `con cuentas y resumen, Preguntale a Movi muestra las preguntas y no el esqueleto`() {
-        montarHero(datosCargados, cargando = false)
+        montarHero(datosCargados, cargando = false, definicion = conPreguntale)
 
         assertEquals(0, contarTag(TAG_FILA_ESQUELETO_PREGUNTA))
         // Ola 3: el chip dice la versión corta (ver `PreguntaParaTocar.corta`).
@@ -335,11 +330,7 @@ class EsqueletosDelInicioTest {
 
         composeRule.onNodeWithText("\$0", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Aquí vas a ver tu plata", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText(
-            "Crea la cuenta donde te llega la plata y Movi te muestra cuánto tienes, cuánto " +
-                "entra y cuánto sale en tu período.",
-            useUnmergedTree = true,
-        ).assertIsDisplayed()
+        composeRule.onNodeWithText(com.jvillada.movi.ui.sdui.DETALLE_DEL_HEROE_VACIO, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Crear mi primera cuenta", useUnmergedTree = true).assertIsDisplayed()
     }
 

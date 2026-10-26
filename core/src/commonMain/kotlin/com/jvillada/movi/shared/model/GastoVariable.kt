@@ -51,7 +51,7 @@ fun cuentaComoGastoVariable(evento: FinancialEvent): Boolean =
  */
 fun parteVariable(evento: FinancialEvent, parteFija: Map<String, Long>): Long =
     if (!cuentaComoGastoVariable(evento)) 0L
-    else (evento.amount - (parteFija[evento.id] ?: 0L)).coerceAtLeast(0L)
+    else (montoContado(evento) - (parteFija[evento.id] ?: 0L)).coerceAtLeast(0L)
 
 /**
  * **El gasto variable de cada día**, `"YYYY-MM-DD"` → pesos.

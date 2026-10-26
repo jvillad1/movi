@@ -38,21 +38,33 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PlanDelCredito
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.ui.components.Celebracion
-import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.MomentoDeCelebracion
 import com.jvillada.movi.ui.components.rememberVibrador
-import com.jvillada.movi.ui.components.Hairline
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
-import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoney
@@ -213,10 +225,10 @@ fun SeccionChecklistDelPeriodo(
     )
 
     Column(modifier = modifier) {
-        MinSectionHeader(
-            title = TITULO_CHECKLIST_DEL_PERIODO,
+        Seccion(
+            titulo = TITULO_CHECKLIST_DEL_PERIODO,
             // Cuántos pagos fijos tiene ESTE período — lo de períodos anteriores no cuenta acá.
-            count = if (pudoLeer && !cargando && checklist.isNotEmpty()) checklist.size else null,
+            conteo = if (pudoLeer && !cargando && checklist.isNotEmpty()) checklist.size else null,
         )
         when {
             cargando -> Unit
@@ -224,33 +236,25 @@ fun SeccionChecklistDelPeriodo(
                 texto = "No se pudieron leer los pagos de este período",
                 onReintentar = onReintentar,
             )
-            checklist.isEmpty() && anteriores.isEmpty() -> MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-            ) {
+            checklist.isEmpty() && anteriores.isEmpty() -> Superficie(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "Este período no tiene pagos anotados",
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
                 )
             }
-            else -> MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
-            ) {
+            else -> Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                 val filas = FilasDelChecklist(marcando, descartadas, acciones, planesDeCuotas, onAbrir)
                 if (celebrar) {
-                    MomentoDeCelebracion(FRASE_DEL_CHECKLIST_COMPLETO)
-                    Spacer(Modifier.height(Movi.espacios.corto))
+                    Box(Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
+                        MomentoDeCelebracion(FRASE_DEL_CHECKLIST_COMPLETO)
+                    }
                 }
                 if (checklist.isNotEmpty()) {
                     ResumenDeLaLista(
                         izquierda = TITULO_FALTA_POR_PAGAR to faltaPorPagar(checklist),
                         derecha = TITULO_YA_PAGASTE to yaPagadoEnElPeriodo(checklist),
                     )
-                    Spacer(Modifier.height(Movi.espacios.amplio))
                     GrupoDePagos(
                         titulo = TITULO_FALTA_POR_PAGAR,
                         icono = Icons.Rounded.Schedule,
@@ -276,12 +280,11 @@ fun SeccionChecklistDelPeriodo(
                         text = "Este período no tiene pagos anotados",
                         style = Movi.textos.cuerpo,
                         color = Movi.colores.textoMedio,
+                        modifier = Modifier.padding(Medida.rellenoDeSuperficie),
                     )
                 }
                 if (anteriores.isNotEmpty()) {
-                    Spacer(Modifier.height(Movi.espacios.amplio))
-                    Hairline()
-                    Spacer(Modifier.height(Movi.espacios.amplio))
+                    Separador(SangriaDeSeparador.Ninguna)
                     GrupoDePagos(
                         titulo = tituloDeLosAnteriores(anteriores),
                         icono = Icons.Rounded.History,
@@ -348,7 +351,6 @@ private fun OtroGrupo(
     fila: @Composable (PagoDelPeriodo) -> Unit,
 ) {
     if (filas.isEmpty()) return
-    Spacer(Modifier.height(Movi.espacios.amplio))
     GrupoDePagos(titulo = titulo, icono = icono, colorDelIcono = colorDelIcono, total = total, filas = filas, fila = fila)
 }
 
@@ -358,14 +360,20 @@ private fun OtroGrupo(
  */
 @Composable
 internal fun ResumenDeLaLista(izquierda: Pair<String, Long>, derecha: Pair<String, Long>) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Medida.margenDePantalla)
+            .padding(top = Espacio.s, bottom = Espacio.xs),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+    ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(izquierda.first, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            Cifra(formatCOP(izquierda.second), Movi.textos.titulo, color = Movi.colores.texto)
+            Cifra(izquierda.second, VarianteDeCifra.Grande)
         }
         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
             Text(derecha.first, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            Cifra(formatCOP(derecha.second), Movi.textos.titulo, color = Movi.colores.texto)
+            Cifra(derecha.second, VarianteDeCifra.Grande)
         }
     }
 }
@@ -394,12 +402,17 @@ internal fun <T> GrupoDePagos(
     fila: @Composable (T) -> Unit,
 ) {
     if (filas.isEmpty() && vacio == null) return
+    // El rótulo del grupo: ícono, «Falta por pagar · 3» y el total. Va con el margen de la pantalla
+    // porque las filas de abajo son [Fila]s, que traen el suyo.
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Medida.margenDePantalla)
+            .padding(top = Espacio.s, bottom = Espacio.xxs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
-        Icon(icono, contentDescription = null, tint = colorDelIcono, modifier = Modifier.size(16.dp))
+        Icon(icono, contentDescription = null, tint = colorDelIcono, modifier = Modifier.size(Icono.s))
         Text(
             text = if (filas.isEmpty()) titulo else "$titulo · ${filas.size}",
             style = Movi.textos.cuerpo,
@@ -407,26 +420,36 @@ internal fun <T> GrupoDePagos(
             color = Movi.colores.texto,
             modifier = Modifier.weight(1f),
         )
-        if (total != null && total > 0) {
-            Cifra(formatCOP(total), Movi.textos.monto, color = Movi.colores.texto)
-        }
+        if (total != null && total > 0) Cifra(total)
     }
     if (explicacion != null) {
-        Spacer(Modifier.height(2.dp))
-        Text(explicacion, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 16.sp)
+        Text(
+            explicacion,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
+        )
     }
     if (filas.isEmpty()) {
-        Spacer(Modifier.height(Movi.espacios.corto))
-        Text(text = vacio.orEmpty(), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+        Text(
+            text = vacio.orEmpty(),
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.xs, bottom = Espacio.s),
+        )
         return
     }
     filas.forEachIndexed { i, item ->
         fila(item)
-        if (i < filas.lastIndex) Hairline(insetStart = 32.dp)
+        if (i < filas.lastIndex) Separador(SangriaDeSeparador.ConInicio)
     }
     if (pie != null) {
-        Spacer(Modifier.height(Movi.espacios.corto))
-        Text(text = pie, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, lineHeight = 16.sp)
+        Text(
+            text = pie,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoApagado,
+            modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s),
+        )
     }
 }
 
@@ -459,74 +482,68 @@ internal fun FilaDePagoDelPeriodo(
     montoChico: Boolean = false,
     onAbrir: (() -> Unit)? = null,
     etiquetaDeAbrir: String? = null,
-    debajo: @Composable ColumnScope.() -> Unit = {},
+    pildora: Pair<String, TonoDePildora>? = null,
+    debajo: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir)
-                    else Modifier,
-                ),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-        ) {
-            IconoDeEstadoDelPago(estado, esIngreso)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = nombre,
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
-                    // Lo pagado baja de tono en vez de tacharse: un texto tachado en una lista de
-                    // plata se lee como «anulado», que en Movi significa otra cosa.
-                    color = if (estado == EstadoVisualDelPago.PAGADO) Movi.colores.textoMedio else Movi.colores.texto,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+    // Ola R4: la fila del sistema. El ícono de estado en el inicio, el nombre y la fecha, y al final
+    // el monto con su píldora de estado («Vencido», «Pagado», «Por confirmar»): el color nunca es la
+    // única pista. La evidencia y las acciones cuelgan debajo ([BajoLaFila]).
+    Fila(
+        titulo = nombre,
+        subtitulo = fecha.takeIf { it.isNotEmpty() },
+        inicio = { IconoDeEstadoDelPago(estado, esIngreso) },
+        final = {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+                MontoDeFila(
+                    monto,
+                    color = colorDelMonto,
+                    variante = if (montoChico) VarianteDeCifra.Chica else VarianteDeCifra.Fila,
                 )
-                if (fecha.isNotEmpty()) {
-                    Text(
-                        text = fecha,
-                        style = Movi.textos.apoyo,
-                        color = when (estado) {
-                            EstadoVisualDelPago.VENCIDO, EstadoVisualDelPago.NO_SE_PAGO -> Movi.colores.sale
-                            else -> Movi.colores.textoApagado
-                        },
-                        lineHeight = 16.sp,
-                    )
-                }
-                if (evidencia != null) {
-                    Text(
-                        text = evidencia,
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                        lineHeight = 16.sp,
-                    )
-                }
+                if (pildora != null) Pildora(pildora.first, pildora.second)
             }
-            Cifra(
-                monto,
-                if (montoChico) Movi.textos.apoyo else Movi.textos.monto,
-                color = colorDelMonto,
-            )
+        },
+        onClick = onAbrir,
+        onClickLabel = etiquetaDeAbrir,
+    )
+    if (evidencia != null || debajo != null) {
+        BajoLaFila {
+            if (evidencia != null) {
+                Text(text = evidencia, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+            debajo?.invoke(this)
         }
-        Column(modifier = Modifier.fillMaxWidth().padding(start = 32.dp), content = debajo)
     }
 }
 
 /**
- * El ícono de estado: círculo vacío = falta, check = pagado, alerta en rojo = vencido (o, en un
+ * El ícono de estado, en un círculo: vacío = falta, check = pagado, alerta = vencido (o, en un
  * período cerrado, no se pagó). Con descripción: para un lector de pantalla el color no existe.
  */
 @Composable
 private fun IconoDeEstadoDelPago(estado: EstadoVisualDelPago, esIngreso: Boolean) {
-    val (icono, color, descripcion) = when (estado) {
-        EstadoVisualDelPago.FALTA -> Triple(Icons.Rounded.RadioButtonUnchecked, Movi.colores.textoApagado, if (esIngreso) "Por cobrar" else "Falta")
-        EstadoVisualDelPago.VENCIDO -> Triple(Icons.Rounded.ErrorOutline, Movi.colores.sale, "Vencido")
-        EstadoVisualDelPago.PAGADO -> Triple(Icons.Rounded.CheckCircle, Movi.colores.entra, if (esIngreso) "Recibido" else "Pagado")
-        EstadoVisualDelPago.NO_SE_PAGO -> Triple(Icons.Rounded.HighlightOff, Movi.colores.sale, if (esIngreso) "No llegó" else "No se pagó")
+    val (icono, tono, descripcion) = when (estado) {
+        EstadoVisualDelPago.FALTA -> Triple(Icons.Rounded.RadioButtonUnchecked, TonoDeIcono.Neutro, if (esIngreso) "Por cobrar" else "Falta")
+        EstadoVisualDelPago.VENCIDO -> Triple(Icons.Rounded.ErrorOutline, TonoDeIcono.Peligro, "Vencido")
+        EstadoVisualDelPago.PAGADO -> Triple(Icons.Rounded.CheckCircle, TonoDeIcono.Exito, if (esIngreso) "Recibido" else "Pagado")
+        EstadoVisualDelPago.NO_SE_PAGO -> Triple(Icons.Rounded.HighlightOff, TonoDeIcono.Peligro, if (esIngreso) "No llegó" else "No se pagó")
     }
-    Icon(icono, contentDescription = descripcion, tint = color, modifier = Modifier.padding(top = 1.dp).size(20.dp))
+    IconoEnCirculo(icono, tono = tono, modifier = Modifier.semantics { contentDescription = descripcion })
+}
+
+/**
+ * **La píldora de estado de una fila del checklist** (ola R4): lo que el dueño mira primero —si ya
+ * está, si se pasó, si Movi pregunta— en palabras y con el tono del sistema. Pura, para probarla.
+ *
+ * @param conPropuesta si Movi tiene un movimiento para preguntar «¿fue este?».
+ */
+internal fun pildoraDeLaFila(pago: PagoDelPeriodo, conPropuesta: Boolean): Pair<String, TonoDePildora> = when {
+    pago.pagado -> (if (pago.esIngreso) "Recibido" else "Pagado") to TonoDePildora.Exito
+    conPropuesta -> "Por confirmar" to TonoDePildora.Marca
+    pago.vencido -> (if (pago.esIngreso) "Atrasado" else "Vencido") to TonoDePildora.Peligro
+    pago.diasParaVencer == 0 -> "Hoy" to TonoDePildora.Aviso
+    pago.diasParaVencer == 1 -> "Mañana" to TonoDePildora.Aviso
+    pago.diasParaVencer in 2..3 -> "En ${pago.diasParaVencer} días" to TonoDePildora.Aviso
+    else -> (if (pago.esIngreso) "Por cobrar" else "Falta") to TonoDePildora.Neutra
 }
 
 /**
@@ -595,15 +612,39 @@ private fun FilaDelChecklistCompleto(
         evidencia = evidenciaDeLaFila(pago),
         onAbrir = onAbrir,
         etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
-    ) {
-        // **Lo que Movi estima que trae esta cuota.** No va con el color de vencido: es una
-        // cuenta sobre el crédito, no un aviso sobre la fecha.
-        if (estimacion != null && !enVuelo) {
-            Spacer(Modifier.height(4.dp))
-            Text(text = estimacion, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 16.sp)
-        }
-        LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones)
-    }
+        pildora = pildoraDeLaFila(pago, conPropuesta = pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null),
+        debajo = if ((estimacion != null && !enVuelo) || hayQueOfrecer(pago)) {
+            {
+                // **Lo que Movi estima que trae esta cuota.** No va con el color de vencido: es una
+                // cuenta sobre el crédito, no un aviso sobre la fecha.
+                if (estimacion != null && !enVuelo) {
+                    Text(text = estimacion, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                }
+                LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones)
+            }
+        } else {
+            null
+        },
+    )
+}
+
+/**
+ * Si la fila tiene algo que ofrecer debajo. Una fila sin nada no deja ni un hueco: la mayoría son
+ * cuotas que el movimiento ya probó.
+ */
+private fun hayQueOfrecer(pago: PagoDelPeriodo): Boolean = when (pago.estado) {
+    // Una fila que todavía no vence SÍ ofrece algo: anotar el pago. Ver [LoQueOfreceLaFila].
+    EstadoDeLaFila.AUN_NO_VENCE -> true
+    // La cuota de un crédito y el pago de una tarjeta no discuten: ahí el movimiento MOVIÓ la
+    // deuda, y lo único que revierte eso es borrarlo.
+    //
+    // **`automatica` va primero**: lo que Movi empareja solo viaja también con `derivado = true`
+    // (no hay sello que borrar), así que mirar solo `derivado` le quitaba el «No fue este» justo
+    // a la fila que Movi dedujo y puede haber deducido mal. Y un sello del dueño con movimiento
+    // (`eventId`, no derivado) también lo ofrece: es el «Deshacer» de lo que era «Ya
+    // ocurrieron», que además guarda el rechazo para que no se vuelva a proponer.
+    EstadoDeLaFila.LISTO -> pago.automatica || (pago.eventId != null && !pago.derivado)
+    else -> true
 }
 
 /**
@@ -617,24 +658,8 @@ private fun LoQueOfreceLaFila(
     enVuelo: Boolean,
     acciones: AccionesDelChecklist,
 ) {
-    // Una fila sin nada que ofrecer no deja ni un hueco: la mayoría son cuotas que el movimiento
-    // ya probó.
-    val hayQueOfrecer = when (pago.estado) {
-        // Una fila que todavía no vence SÍ ofrece algo: anotar el pago. Ver la rama de abajo.
-        EstadoDeLaFila.AUN_NO_VENCE -> true
-        // La cuota de un crédito y el pago de una tarjeta no discuten: ahí el movimiento MOVIÓ la
-        // deuda, y lo único que revierte eso es borrarlo.
-        //
-        // **`automatica` va primero**: lo que Movi empareja solo viaja también con `derivado = true`
-        // (no hay sello que borrar), así que mirar solo `derivado` le quitaba el «No fue este» justo
-        // a la fila que Movi dedujo y puede haber deducido mal. Y un sello del dueño con movimiento
-        // (`eventId`, no derivado) también lo ofrece: es el «Deshacer» de lo que era «Ya
-        // ocurrieron», que además guarda el rechazo para que no se vuelva a proponer.
-        EstadoDeLaFila.LISTO -> pago.automatica || (pago.eventId != null && !pago.derivado)
-        else -> true
-    }
-    if (!hayQueOfrecer) return
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+    if (!hayQueOfrecer(pago)) return
+    Column(modifier = Modifier.fillMaxWidth()) {
         when (pago.estado) {
             EstadoDeLaFila.LISTO -> AccionesDeLaFila(
                 acciones = listOf(
@@ -654,23 +679,22 @@ private fun LoQueOfreceLaFila(
             )
             // Con candidatos se pregunta; sin ninguno (o con todos rechazados en esta sesión) la
             // fila cae a la misma salida que una que nunca tuvo: anotar el movimiento que falta.
+            // La pregunta es una propuesta de Movi: va en la superficie de las propuestas (la de
+            // «Movi propone hoy» del Inicio), con su píldora y sus dos botones del sistema.
             EstadoDeLaFila.CON_DUDAS -> if (propuesta != null) {
-                Text(
-                    text = preguntaDeLaFila(pago),
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                )
-                Spacer(Modifier.height(4.dp))
-                PropuestaDeMovimiento(
-                    propuesta = propuesta,
-                    // Se mudó de «Próximos» con la propuesta: sin él, un movimiento de otro monto
-                    // se confirmaba a ciegas. En una tarjeta (saldo) o en otra moneda no se compara.
-                    aviso = avisoDeMontoDistinto(pago.monto, pago.montoEsSaldo, propuesta),
-                    enVuelo = enVuelo,
-                    onConfirmar = { acciones.onConfirmar(pago, propuesta.id) },
-                    onDescartar = { acciones.onNoFueEste(pago, propuesta.id) },
-                )
+                Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Propuesta) {
+                    Text(text = preguntaDeLaFila(pago), style = Movi.textos.titulo, color = Movi.colores.texto)
+                    Spacer(Modifier.height(Espacio.xs))
+                    PropuestaDeMovimiento(
+                        propuesta = propuesta,
+                        // Se mudó de «Próximos» con la propuesta: sin él, un movimiento de otro monto
+                        // se confirmaba a ciegas. En una tarjeta (saldo) o en otra moneda no se compara.
+                        aviso = avisoDeMontoDistinto(pago.monto, pago.montoEsSaldo, propuesta),
+                        enVuelo = enVuelo,
+                        onConfirmar = { acciones.onConfirmar(pago, propuesta.id) },
+                        onDescartar = { acciones.onNoFueEste(pago, propuesta.id) },
+                    )
+                }
             } else {
                 SinMovimiento(pago, enVuelo, acciones)
             }
@@ -699,9 +723,8 @@ private fun SinMovimiento(pago: PagoDelPeriodo, enVuelo: Boolean, acciones: Acci
         text = if (pago.esIngreso) TEXTO_SIN_MOVIMIENTO_DE_INGRESO else TEXTO_SIN_MOVIMIENTO,
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
-        lineHeight = 16.sp,
     )
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Espacio.xs))
     AccionesDeLaFila(
         acciones = listOf(
             AccionDeOcurrencia(etiquetaDeAnotar(pago.esIngreso), primary = true) { acciones.onAnotarMovimiento(pago) },
@@ -733,15 +756,15 @@ const val TEXTO_SIN_MOVIMIENTO_DE_INGRESO = "Movi no encontró el movimiento de 
 fun CasillaDeChecklist(marcada: Boolean, apagada: Boolean = false) {
     Box(
         modifier = Modifier
-            .size(20.dp)
-            .clip(RoundedCornerShape(Movi.formas.minima))
-            .background(if (marcada) Movi.colores.entra.copy(alpha = 0.18f) else Movi.colores.tarjeta)
+            .size(Icono.m)
+            .clip(RoundedCornerShape(Radio.s))
+            .background(if (marcada) Movi.colores.lavado(Movi.colores.entra) else Movi.colores.tarjeta)
             .then(
                 if (marcada) Modifier
                 else Modifier.border(
-                    1.dp,
+                    Medida.trazo,
                     if (apagada) Movi.colores.hilo else Movi.colores.borde,
-                    RoundedCornerShape(Movi.formas.minima),
+                    RoundedCornerShape(Radio.s),
                 ),
             ),
         contentAlignment = Alignment.Center,
@@ -753,7 +776,7 @@ fun CasillaDeChecklist(marcada: Boolean, apagada: Boolean = false) {
                 Icons.Rounded.Check,
                 contentDescription = "Pagado",
                 tint = Movi.colores.entra,
-                modifier = Modifier.size(14.dp),
+                modifier = Modifier.size(Icono.s),
             )
         }
     }

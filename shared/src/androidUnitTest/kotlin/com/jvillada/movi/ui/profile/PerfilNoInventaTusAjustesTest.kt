@@ -48,7 +48,7 @@ import kotlin.test.assertTrue
  * sola, que es donde vivía el `remember` sin clave.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(qualifiers = "w411dp-h731dp-xhdpi")
+@Config(qualifiers = "w411dp-h2000dp-xhdpi")
 class PerfilNoInventaTusAjustesTest {
 
     @get:Rule val composeRule = createComposeRule()

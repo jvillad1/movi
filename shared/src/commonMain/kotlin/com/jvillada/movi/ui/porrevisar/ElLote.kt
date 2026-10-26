@@ -10,12 +10,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MinCard
@@ -72,65 +76,55 @@ internal fun TarjetaDelLote(
     onConfirmar: () -> Unit,
     onCerrar: () -> Unit,
 ) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp).testTag(TAG_LOTE_DE_LA_BANDEJA),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
+    // Lo que Movi propone hacer de una vez: la superficie de la propuesta (ola R4).
+    Superficie(
+        modifier = Modifier.fillMaxWidth().padding(bottom = Medida.entreSecciones).testTag(TAG_LOTE_DE_LA_BANDEJA),
+        nivel = NivelDeSuperficie.Propuesta,
     ) {
-        when (estado) {
-            is EstadoDelLote.Terminado -> {
-                Text(
-                    estado.texto,
-                    style = Movi.textos.cuerpo,
-                    color = if (estado.quedaron) Movi.colores.aviso else Movi.colores.texto,
-                    lineHeight = 19.sp,
-                )
-                Spacer(Modifier.height(10.dp))
-                PastillaDelPago("Listo", habilitada = true, onClick = onCerrar)
-            }
-            is EstadoDelLote.Anotando -> {
-                Text(tituloDelLote(estado.de), style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                Spacer(Modifier.height(6.dp))
-                Text("Anotando ${estado.hechos} de ${estado.de}…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            }
-            EstadoDelLote.Cerrado, EstadoDelLote.Preguntando -> {
-                Text(tituloDelLote(lote.size), style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    "Los que ya tienen monto, cuenta y categoría, sin nada que revisar. Los demás se quedan.",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    lineHeight = 17.sp,
-                )
-                Spacer(Modifier.height(10.dp))
-                lote.forEachIndexed { i, anotacion ->
-                    if (i > 0) {
-                        Spacer(Modifier.height(8.dp))
-                        Hairline()
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    Column {
-                        Text(
-                            anotacion.leido.merchant,
-                            style = Movi.textos.apoyo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.texto,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(anotacion.linea, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    }
+        Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+            when (estado) {
+                is EstadoDelLote.Terminado -> {
+                    Text(
+                        estado.texto,
+                        style = Movi.textos.cuerpo,
+                        color = if (estado.quedaron) Movi.colores.aviso else Movi.colores.texto,
+                    )
+                    PastillaDelPago("Listo", habilitada = true, onClick = onCerrar)
                 }
-                Spacer(Modifier.height(12.dp))
-                if (estado == EstadoDelLote.Preguntando) {
-                    Text(preguntaDelLote(lote.size), style = Movi.textos.cuerpo, color = Movi.colores.texto)
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PastillaDelPago(SI_ANOTAR_EL_LOTE, principal = true, habilitada = habilitado && lote.isNotEmpty(), onClick = onConfirmar)
-                        PastillaDelPago("Cancelar", habilitada = true, onClick = onCancelar)
+                is EstadoDelLote.Anotando -> {
+                    Text(tituloDelLote(estado.de), style = Movi.textos.titulo, color = Movi.colores.texto)
+                    Text("Anotando ${estado.hechos} de ${estado.de}…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                }
+                EstadoDelLote.Cerrado, EstadoDelLote.Preguntando -> {
+                    Text(tituloDelLote(lote.size), style = Movi.textos.titulo, color = Movi.colores.texto)
+                    Text(
+                        "Los que ya tienen monto, cuenta y categoría, sin nada que revisar. Los demás se quedan.",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                    )
+                    lote.forEachIndexed { i, anotacion ->
+                        if (i > 0) Separador(SangriaDeSeparador.Ninguna)
+                        Column {
+                            Text(
+                                anotacion.leido.merchant,
+                                style = Movi.textos.apoyo,
+                                fontWeight = FontWeight.Medium,
+                                color = Movi.colores.texto,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(anotacion.linea, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        }
                     }
-                } else {
-                    PastillaDelPago(botonDelLote(lote.size), principal = true, habilitada = habilitado && lote.isNotEmpty(), onClick = onPedir)
+                    if (estado == EstadoDelLote.Preguntando) {
+                        Text(preguntaDelLote(lote.size), style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                            PastillaDelPago(SI_ANOTAR_EL_LOTE, principal = true, habilitada = habilitado && lote.isNotEmpty(), onClick = onConfirmar)
+                            PastillaDelPago("Cancelar", habilitada = true, onClick = onCancelar)
+                        }
+                    } else {
+                        PastillaDelPago(botonDelLote(lote.size), principal = true, habilitada = habilitado && lote.isNotEmpty(), onClick = onPedir)
+                    }
                 }
             }
         }

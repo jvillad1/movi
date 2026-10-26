@@ -20,6 +20,8 @@ import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
+import com.jvillada.movi.shared.model.inicioConPreferencias
+import com.jvillada.movi.shared.model.PreferenciasDelInicio
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.components.anchoMaximoDeLaPantalla
@@ -407,16 +409,24 @@ class InicioDeUnVistazoTest {
     // ── Qué se pinta ─────────────────────────────────────────────────────────
 
     @Test
-    fun `el banner de Movi AI se esconde solo cuando esta Preguntale a Movi`() {
+    fun `el banner de Movi AI se esconde cuando hay otra puerta al chat`() {
+        // Generación 9: la cuadrícula trae «Preguntar a Movi», así que el BANNER no se pinta.
         val nueva = visibleSections(defaultDashboardDefinition(), DashboardData()).map { it.type }
-        assertTrue("PREGUNTALE_A_MOVI" in nueva)
+        assertTrue("ACCIONES" in nueva)
         assertTrue("BANNER" !in nueva, "dos puertas al mismo chat")
 
-        // Una fila guardada de la generación 7 (el server todavía sin desplegar): el cliente nuevo
-        // pinta el banner, que es la única puerta a Movi AI que trae esa definición.
+        // Una fila guardada de la generación 8 (sin cuadrícula, con «Pregúntale a Movi»): tampoco.
+        val generacion8 = ScreenDefinition(
+            "dashboard", 8,
+            listOf(ScreenSection(type = "HERO_BALANCE"), ScreenSection(type = "PREGUNTALE_A_MOVI")) +
+                defaultDashboardDefinition().sections.filter { it.type == "BANNER" },
+        )
+        assertTrue("BANNER" !in visibleSections(generacion8, DashboardData()).map { it.type })
+
+        // Una de la generación 7 (el server todavía sin desplegar): el banner es la única puerta.
         val generacion7 = ScreenDefinition(
             "dashboard", 7,
-            defaultDashboardDefinition().sections.filter { it.type != "PREGUNTALE_A_MOVI" && it.type != "PATRIMONIO" },
+            defaultDashboardDefinition().sections.filter { it.type in listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "ALERTS", "BANNER") },
         )
         assertTrue("BANNER" in visibleSections(generacion7, DashboardData()).map { it.type })
 
@@ -431,43 +441,49 @@ class InicioDeUnVistazoTest {
         assertEquals(1, visibleSections(conOtroAviso, DashboardData()).count { it.type == "BANNER" })
     }
 
+    /** Con «Movi propone hoy» en la definición, «Para revisar» sería lo mismo dicho dos veces. */
     @Test
-    fun `la tarjeta del patrimonio aparece cuando hay cuentas`() {
-        val sinCuentas = visibleSections(defaultDashboardDefinition(), DashboardData()).map { it.type }
+    fun `Para revisar se pinta solo sin Movi propone hoy`() {
+        val conAvisos = DashboardData(pendingSms = 3)
+        assertTrue("ALERTS" !in visibleSections(defaultDashboardDefinition(), conAvisos).map { it.type })
+        val sinPropuestas = defaultDashboardDefinition().let { d -> d.copy(sections = d.sections.filter { it.type != "PROPUESTAS" }) }
+        assertTrue("ALERTS" in visibleSections(sinPropuestas, conAvisos).map { it.type })
+    }
+
+    @Test
+    fun `la tarjeta del patrimonio aparece cuando hay cuentas, si el dueno la prendio`() {
+        val conPatrimonio = inicioConPreferencias(defaultDashboardDefinition(), PreferenciasDelInicio(visibles = listOf("PATRIMONIO")))
+        val sinCuentas = visibleSections(conPatrimonio, DashboardData()).map { it.type }
         assertTrue("PATRIMONIO" !in sinCuentas)
         val conCuentas = DashboardData(
             accounts = listOf(Account(id = "a1", name = "Nu", type = AccountType.SAVINGS, balance = 700_000)),
         )
-        assertTrue("PATRIMONIO" in visibleSections(defaultDashboardDefinition(), conCuentas).map { it.type })
+        assertTrue("PATRIMONIO" in visibleSections(conPatrimonio, conCuentas).map { it.type })
+        // Por defecto no viene: repetía Patrimonio.
+        assertTrue("PATRIMONIO" !in visibleSections(defaultDashboardDefinition(), conCuentas).map { it.type })
     }
 
     // ── Dos columnas en escritorio ───────────────────────────────────────────
 
-    private val todas = defaultDashboardDefinition().sections.filter { it.type != "BANNER" }
+    private val todas = defaultDashboardDefinition().sections.filter { it.type != "BANNER" && it.type != "ALERTS" }
 
     @Test
     fun `en el telefono una columna en el orden de la definicion`() {
         val c = columnasDelInicio(todas, 390.dp)
         assertFalse(c.sonDos)
         assertEquals(
-            listOf(
-                "HERO_BALANCE", "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO",
-                "GASTO_POR_CATEGORIA", "PATRIMONIO", "ALERTS",
-            ),
+            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"),
             c.izquierda.map { it.type },
         )
         assertFalse(columnasDelInicio(todas, 899.dp).sonDos, "por debajo de 900 dp sigue siendo una columna")
     }
 
     @Test
-    fun `en escritorio dos columnas, estado a la izquierda y lo que viene a la derecha`() {
+    fun `en escritorio dos columnas, lo que se hace a la izquierda y lo que se mira a la derecha`() {
         val c = columnasDelInicio(todas, 1_400.dp)
         assertTrue(c.sonDos)
-        assertEquals(listOf("HERO_BALANCE", "GASTO_POR_CATEGORIA", "ALERTS"), c.izquierda.map { it.type })
-        assertEquals(
-            listOf("PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "PATRIMONIO"),
-            c.derecha.map { it.type },
-        )
+        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS"), c.izquierda.map { it.type })
+        assertEquals(listOf("CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"), c.derecha.map { it.type })
         assertTrue(columnasDelInicio(todas, 900.dp).sonDos, "desde 900 dp, dos")
     }
 

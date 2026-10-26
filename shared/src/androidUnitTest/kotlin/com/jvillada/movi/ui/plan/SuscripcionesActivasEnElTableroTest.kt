@@ -161,7 +161,7 @@ class SuscripcionesActivasEnElTableroTest {
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { TableroDeRecurrentesDePrueba(ajustesDelPeriodo = PeriodSettings(), onNavigate = {}) } }
         }
-        esperarTexto("SUSCRIPCIONES ACTIVAS")
+        esperarTexto("Suscripciones activas")
         // La sección **arranca plegada** desde que el dueño pidió que no ocupara la pantalla
         // entera («que suscripciones sea una opción de filtro o de menú colapsable dentro de
         // recurrentes»). Todo lo que esta clase afirma es sobre las FILAS, así que se abre acá una

@@ -160,7 +160,7 @@ class DestinosScreenTest {
 
         composeRule.onAllNodesWithText("Caro", useUnmergedTree = true).onFirst().performClick()
 
-        esperarTexto("ESTE PERÍODO")
+        esperarTexto("Este período")
         esperarTexto("Le enviaste")
         esperarTexto("Cuota de Cotrafa 5413")
         esperarTexto("Persona · ·0756 · esposa")

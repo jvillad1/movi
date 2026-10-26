@@ -126,7 +126,6 @@ sealed class Screen {
      * desde Créditos (Patrimonio → Deudas) y marca Patrimonio, como Créditos.
      */
     data object SalidaDeDeudas : Screen()
-    data object Goals : Screen()
     /**
      * Presupuestos suelto. Ola C: su cuerpo es el mismo que el segmento «Presupuestos» de [Plan]
      * (ver `rememberEstadoDePresupuestos`), y todas las puertas que llevaban acá —el destino SDUI
@@ -164,10 +163,9 @@ sealed class Screen {
      * No vive dentro de `Screen.Accounts` **a propósito**: `Screen.Accounts` lista la plata del
      * dueño, y la cuenta de otra persona no es su plata.
      *
-     * **La puerta principal es Movimientos** (4-oct-2026, ver `RenglonDePersonasYComercios`): es
-     * donde se piensa «¿a quién le mandé plata?», y el dueño pidió un acceso «muy fácil de
-     * encontrar». Por eso marca la pestaña Movimientos ([navTabFor]). Siguen las puertas de
-     * Patrimonio (sin cifra: no es plata suya) y de Ajustes, y la alerta de Hoy.
+     * **Dos puertas** (ola R4): la fila al final de **Espacios** (ver `RenglonDePersonasYComercios`)
+     * —lo que tienes con los demás— y la ficha de Ajustes, más la alerta de Hoy. Por eso marca la
+     * pestaña Espacios ([navTabFor]). Antes la principal era Movimientos y había otra en Patrimonio.
      *
      * [abrir] es el id de un tercero cuya ficha se abre al llegar: lo pide «Ver su ficha» desde el
      * detalle de un movimiento. [sugeridos] = llegar con lo que Movi encontró ya abierto: lo pide la
@@ -178,7 +176,8 @@ sealed class Screen {
 
     /**
      * «Documentos» — los papeles del dueño guardados en Movi (extractos, nóminas, contratos).
-     * Ficha de Más, junto a «Extractos»: el importador archiva ahí lo que pasa por él.
+     * Ficha de Ajustes: el importador archiva ahí lo que pasa por él, y su sección «Importaciones»
+     * es la casa del historial que antes tenía «Extractos» (borrada en la R4; `"extractos"` lleva acá).
      */
     data object Documentos : Screen()
     /**
@@ -255,7 +254,6 @@ sealed class Screen {
         val abrirCategoria: Boolean = false,
     ) : Screen()
     data object Mas : Screen()
-    data object Extractos : Screen()
     data object Accounts : Screen()
     /**
      * Detalle de una cuenta. Lleva el grupo de la cuenta además del id porque la navegación
@@ -299,6 +297,18 @@ sealed class Screen {
      * nombre en Hoy. [periodo] es el prefijo («2026-10») con el que arranca; `null` es el de hoy.
      */
     data class EnQueSeVa(val periodo: String? = null) : Screen()
+
+    /**
+     * **Espacios** (R3): lo grupal con casa propia —«Casa con Caro»—, su saldo de quién le debe a
+     * quién y lo que paga otra persona. Raíz de su pestaña.
+     */
+    data object Espacios : Screen()
+
+    /**
+     * Un espacio: quién puso qué, el saldo con «Marcar como saldado», lo que Movi propone vincular y
+     * la lista de sus gastos. [pagoOtro] abre de entrada la hoja «Pagó otro» (viene de Agregar).
+     */
+    data class Espacio(val id: String, val pagoOtro: Boolean = false) : Screen()
 }
 
 /**
@@ -322,9 +332,10 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Dashboard, Screen.Buscar, is Screen.EnQueSeVa -> NavTab.HOY
     // «Por revisar» y el detalle de un mensaje se abren desde Movimientos (su renglón «N por
     // revisar»): marcan esa pestaña, no Ajustes.
-    is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile, is Screen.Destinos -> NavTab.MOVIMIENTOS
+    is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile -> NavTab.MOVIMIENTOS
     is Screen.Plan, Screen.Budgets, Screen.Periodos, is Screen.DetalleDePeriodo -> NavTab.PLAN
     Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos -> NavTab.PATRIMONIO
+    Screen.Espacios, is Screen.Espacio, is Screen.Destinos -> NavTab.ESPACIOS
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse. Hoy las dos (Cuentas y Créditos) son Patrimonio.
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))
@@ -339,7 +350,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
  * entrar a Perfil dejaría al dueño sin forma de saltar a Movimientos que no sea volver dos veces.
  */
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
-    Screen.Mas, Screen.Profile, Screen.Goals, Screen.Extractos, is Screen.AIChat,
+    Screen.Mas, Screen.Profile, is Screen.AIChat,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos,
     Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio -> true
     else -> false
@@ -387,6 +398,7 @@ fun screenForTab(tab: NavTab): Screen = when (tab) {
     NavTab.ADD -> Screen.QuickAdd()
     NavTab.PLAN -> Screen.Plan()
     NavTab.PATRIMONIO -> Screen.Accounts
+    NavTab.ESPACIOS -> Screen.Espacios
     NavTab.MOVI_AI -> Screen.AIChat()
 }
 
@@ -486,7 +498,7 @@ object NavStack {
     fun esRaizDePestana(screen: Screen): Boolean = screen in RAICES_DE_PESTANA
 
     private val RAICES_DE_PESTANA: List<Screen> =
-        listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.PATRIMONIO).map(::screenForTab)
+        listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.ESPACIOS, NavTab.PATRIMONIO).map(::screenForTab)
 
     /**
      * **Saltar entre pestañas no apila historial** (Ola 1 · «Que Movi se sienta viva»).

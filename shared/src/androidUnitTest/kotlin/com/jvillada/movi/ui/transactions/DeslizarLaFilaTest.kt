@@ -186,7 +186,8 @@ class DeslizarLaFilaTest {
         composeRule.waitForIdle()
 
         assertTrue(!hayTag(TAG_PANEL_DE_HOJA), "la hoja se cerró")
-        composeRule.onNode(hasSetTextAction() and hasText("Rappi"), useUnmergedTree = true).assertExists()
+        // Ola R4: la búsqueda que pide «En este comercio» se ve como un chip con su × (la lupa abre Buscar).
+        composeRule.onNode(hasTestTag(TAG_CHIP_DE_LA_BUSQUEDA) and hasText("Rappi", substring = true)).assertExists()
         assertTrue(composeRule.onAllNodesWithText("Carnes y Legumbres Santa Elena", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 }

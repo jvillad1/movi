@@ -1,5 +1,11 @@
 package com.jvillada.movi.ui.sms
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AVANCE_DE_TARJETA_CATEGORY
@@ -28,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.CuentaDelBanco
 import com.jvillada.movi.ui.components.Hairline
@@ -258,9 +263,7 @@ internal fun LasDosPatasEnElResumen(
     entrante: Boolean = false,
 ) {
     if (propuestas == null && !pideDestino) return
-    Spacer(Modifier.height(12.dp))
-    Hairline()
-    Spacer(Modifier.height(12.dp))
+    Separador(SangriaDeSeparador.Ninguna, Modifier.padding(vertical = Espacio.s))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             propuestas?.resumen ?: if (entrante) FALTA_LA_CUENTA_DE_ORIGEN else faltaLaCuentaDeDestino(esAvance),
@@ -277,12 +280,14 @@ internal fun LasDosPatasEnElResumen(
                 modifier = Modifier
                     .clickable(enabled = habilitado, role = Role.Button) { onCambiar() }
                     .testTag(TAG_CAMBIAR_EL_DESTINO)
-                    .padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
+                    .heightIn(min = Medida.objetivoTactil)
+                    .padding(start = Espacio.s)
+                    .wrapContentHeight(),
             )
         }
     }
     if (pideDestino && eligiendo) {
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(Espacio.xs))
         elegibles.forEach { cuenta ->
             val esLaElegida = cuenta.id == destino?.id
             Text(
@@ -294,7 +299,8 @@ internal fun LasDosPatasEnElResumen(
                     .fillMaxWidth()
                     .clickable(enabled = habilitado, role = Role.Button) { onElegir(cuenta) }
                     .testTag(tagDelDestinoElegible(cuenta.id))
-                    .padding(vertical = 10.dp),
+                    .heightIn(min = Medida.objetivoTactil)
+                    .wrapContentHeight(),
             )
         }
     }

@@ -1,22 +1,22 @@
 package com.jvillada.movi.ui.sms
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,21 +25,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.fechaCortaDeSms
 import com.jvillada.movi.shared.model.horaLegibleDeSms
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
-import com.jvillada.movi.ui.components.Hairline
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 
 /**
@@ -75,7 +82,6 @@ internal fun LineaDelMismoPago(otro: SmsMessage?, modifier: Modifier = Modifier)
         avisoDelMismoPago(otro),
         style = Movi.textos.apoyo,
         color = Movi.colores.aviso,
-        lineHeight = 17.sp,
         modifier = modifier,
     )
 }
@@ -201,71 +207,19 @@ internal fun TarjetaDelMismoPago(
      */
     entendido: String? = null,
     onConfirmar: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     var abiertos by remember { mutableStateOf(false) }
     val yaAnotadoCon = avisos.firstNotNullOfOrNull { it.yaAnotadoCon }?.let { id -> avisos.firstOrNull { it.id == id } }
     val anotado = yaAnotadoCon != null || avisos.any { it.state == SMS_STATE_CONFIRMED }
     val primero = avisos.first()
-    MinCard(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp).testTag(TAG_TARJETA_DEL_MISMO_PAGO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                tituloDelMismoPago(avisos.size),
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                fechaCortaDeSms(primero.time, hoyEnAppZone()),
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                maxLines = 1,
-            )
-        }
-        Spacer(Modifier.height(2.dp))
-        Text(canalesDelMismoPago(avisos), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        if (anotado) {
-            Spacer(Modifier.height(8.dp))
-            Text(avisoYaAnotado(yaAnotadoCon), style = Movi.textos.apoyo, color = Movi.colores.aviso, lineHeight = 17.sp)
-        }
-        Spacer(Modifier.height(10.dp))
-        // El texto del primero siempre; los demás, plegados: dicen lo mismo con otras palabras.
-        TextoDelAviso(primero)
-        if (abiertos) {
-            avisos.drop(1).forEach { aviso ->
-                Spacer(Modifier.height(10.dp))
-                TextoDelAviso(aviso)
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            if (abiertos) "Ocultar los otros avisos" else "Ver los ${avisos.size} avisos",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.marca,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.clickable(role = Role.Button) { abiertos = !abiertos }.padding(vertical = 4.dp),
-        )
-        Spacer(Modifier.height(10.dp))
-        Hairline()
-        Spacer(Modifier.height(12.dp))
-        val confirmable = !anotado && entendido != null && onConfirmar != null
-        if (confirmable) {
-            LineaDeLoEntendido(entendido!!)
-            Spacer(Modifier.height(10.dp))
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    val confirmable = !anotado && entendido != null && onConfirmar != null
+    TarjetaDeAviso(
+        titulo = tituloDelMismoPago(avisos.size),
+        subtitulo = "${canalesDelMismoPago(avisos)} · ${fechaCortaDeSms(primero.time, hoyEnAppZone())}",
+        modifier = modifier.testTag(TAG_TARJETA_DEL_MISMO_PAGO),
+        estado = if (anotado) "Ya anotado" to TonoDePildora.Exito else "Pendiente" to TonoDePildora.Aviso,
+        acciones = {
             if (anotado) {
                 PastillaDelPago("Cerrar", principal = true, habilitada = !trabajando, onClick = onCerrar)
             } else if (confirmable) {
@@ -280,6 +234,90 @@ internal fun TarjetaDelMismoPago(
                 PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = onIgnorar)
             }
             PastillaDelPago(NO_SON_EL_MISMO_PAGO, habilitada = !trabajando, onClick = onNoSonElMismoPago)
+        },
+    ) {
+        if (anotado) Text(avisoYaAnotado(yaAnotadoCon), style = Movi.textos.apoyo, color = Movi.colores.aviso)
+        // El texto del primero siempre; los demás, plegados: dicen lo mismo con otras palabras.
+        TextoDelAviso(primero)
+        if (abiertos) avisos.drop(1).forEach { aviso -> TextoDelAviso(aviso) }
+        Boton(
+            texto = if (abiertos) "Ocultar los otros avisos" else "Ver los ${avisos.size} avisos",
+            onClick = { abiertos = !abiertos },
+            variante = VarianteDeBoton.Fantasma,
+            tamano = TamanoDeBoton.S,
+        )
+        if (confirmable) LineaDeLoEntendido(entendido!!)
+    }
+}
+
+/**
+ * **Un aviso del banco que espera una decisión, con la forma de una propuesta de Movi** (ola R4):
+ * la superficie de la propuesta ([NivelDeSuperficie.Propuesta]) cuando pide algo, la capa 1 cuando
+ * ya es historial; arriba el inicio (la marca, o el ícono de los avisos), el título, el subtítulo
+ * (por dónde y cuándo llegó) y el estado en una [Pildora]; en el medio lo que dice el banco; abajo
+ * las acciones en botones chicos. La usan la bandeja «Por revisar», «Captura del banco» y
+ * Reconciliar, para que un aviso se vea igual en todas partes —y como las propuestas del Inicio—.
+ */
+@Composable
+internal fun TarjetaDeAviso(
+    titulo: String,
+    subtitulo: String?,
+    modifier: Modifier = Modifier,
+    inicio: (@Composable () -> Unit)? = null,
+    estado: Pair<String, TonoDePildora>? = null,
+    pideDecision: Boolean = true,
+    acciones: (@Composable RowScope.() -> Unit)? = null,
+    pie: (@Composable () -> Unit)? = null,
+    contenido: @Composable ColumnScope.() -> Unit,
+) {
+    Superficie(
+        modifier = modifier.fillMaxWidth(),
+        nivel = if (pideDecision) NivelDeSuperficie.Propuesta else NivelDeSuperficie.Capa1,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+        ) {
+            inicio?.invoke() ?: IconoEnCirculo(Icons.Rounded.Inbox, tono = if (pideDecision) TonoDeIcono.Marca else TonoDeIcono.Neutro)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    titulo,
+                    style = Movi.textos.titulo,
+                    color = Movi.colores.texto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (subtitulo != null) {
+                    Text(
+                        subtitulo,
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (estado != null) Pildora(estado.first, estado.second)
+        }
+        Column(
+            modifier = Modifier.padding(top = Medida.dentroDeSeccion),
+            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+            content = contenido,
+        )
+        if (acciones != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(top = Medida.dentroDeSeccion),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                content = acciones,
+            )
+        }
+        if (pie != null) {
+            Separador(SangriaDeSeparador.Ninguna, Modifier.padding(vertical = Medida.dentroDeSeccion))
+            pie()
         }
     }
 }
@@ -287,31 +325,43 @@ internal fun TarjetaDelMismoPago(
 /** Un aviso dentro de la tarjeta: por dónde y cuándo llegó, y su texto con lo importante en negrita. */
 @Composable
 internal fun TextoDelAviso(aviso: SmsMessage, accion: (@Composable () -> Unit)? = null) {
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "${canalLegibleDelAviso(aviso.bank)} · ${horaLegibleDeSms(aviso.time) ?: aviso.time}",
-                style = Movi.textos.rotulo.copy(letterSpacing = 0.8.sp),
+                style = Movi.textos.apoyo,
+                fontWeight = FontWeight.Medium,
                 color = Movi.colores.textoMedio,
                 modifier = Modifier.weight(1f),
             )
             accion?.invoke()
         }
-        Spacer(Modifier.height(4.dp))
-        Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
-            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Movi.colores.hilo))
-            Text(
-                resaltadoDelTextoDelBanco(aviso.text),
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                fontFamily = FontFamily.Monospace,
-                lineHeight = 17.sp,
-                modifier = Modifier.padding(start = 12.dp),
-            )
-        }
+        LoQueDiceElBanco(aviso.text)
     }
 }
 
+/**
+ * **Lo que dijo el banco, tal cual**, con lo importante en negrita ([resaltadoDelTextoDelBanco]) y
+ * una raya a la izquierda que lo marca como cita. En la letra monoespaciada: es un dato crudo.
+ */
+@Composable
+internal fun LoQueDiceElBanco(texto: String, modifier: Modifier = Modifier) {
+    Row(modifier = modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Box(modifier = Modifier.width(Medida.trazo).fillMaxHeight().background(Movi.colores.hilo))
+        Text(
+            resaltadoDelTextoDelBanco(texto),
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(start = Espacio.s),
+        )
+    }
+}
+
+/**
+ * Un botón de una tarjeta de aviso: un [Boton] chico del sistema. [principal] es la acción que se
+ * espera («Confirmar», «Revisar»); el resto va en la capa 2.
+ */
 @Composable
 internal fun PastillaDelPago(
     texto: String,
@@ -320,24 +370,14 @@ internal fun PastillaDelPago(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .then(
-                if (principal) Modifier.background(Movi.colores.texto)
-                else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp)),
-            )
-            .clickable(enabled = habilitada, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        Text(
-            texto,
-            style = Movi.textos.apoyo,
-            color = if (principal) Movi.colores.fondo else Movi.colores.texto,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-        )
-    }
+    Boton(
+        texto = texto,
+        onClick = onClick,
+        modifier = modifier,
+        variante = if (principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
+        tamano = TamanoDeBoton.S,
+        habilitado = habilitada,
+    )
 }
 
 // ── La bandeja que se vacía sola ───────────────────────────────────────────────────────────────

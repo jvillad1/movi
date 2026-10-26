@@ -25,7 +25,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
-import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
+import com.jvillada.movi.ui.components.ds.TAG_ESQUELETO_DE_FILA
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.datetime.Clock
 import org.junit.After
@@ -113,7 +113,7 @@ class EsqueletoDeMovimientosTest {
         composeRule.mainClock.advanceTimeByFrame()
 
         assertEquals(3, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
-        assertEquals(7, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(7, composeRule.onAllNodesWithTag(TAG_ESQUELETO_DE_FILA).fetchSemanticsNodes().size)
     }
 
     @Test
@@ -124,14 +124,14 @@ class EsqueletoDeMovimientosTest {
         }
         composeRule.waitForIdle()
         assertEquals(3, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
-        assertEquals(7, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(7, composeRule.onAllNodesWithTag(TAG_ESQUELETO_DE_FILA).fetchSemanticsNodes().size)
 
         val (_, dia) = eventoDeHoy()
         puerta.complete(listOf(dia))
         composeRule.waitForIdle()
 
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
-        assertEquals(0, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_ESQUELETO_DE_FILA).fetchSemanticsNodes().size)
         composeRule.onNodeWithText("Almuerzo", useUnmergedTree = true).assertIsDisplayed()
     }
 
@@ -293,7 +293,7 @@ class EsqueletoDeMovimientosTest {
 
         composeRule.onNodeWithText("Sin movimientos aún", substring = true, useUnmergedTree = true).assertIsDisplayed()
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
-        assertEquals(0, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_ESQUELETO_DE_FILA).fetchSemanticsNodes().size)
     }
 
     // ── Ola D, Task 1: el mismo vacío, dibujado con VacioQueEnsena ──────────────────────────
@@ -321,7 +321,7 @@ class EsqueletoDeMovimientosTest {
         composeRule.onNodeWithText("Crear una cuenta primero", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("NOMBRE", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Nombre", useUnmergedTree = true).assertIsDisplayed()
     }
 
     /**

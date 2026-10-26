@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.dashboard
 
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import com.jvillada.movi.ui.components.ds.TAG_SECCION
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +35,10 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PreferenciasDelInicio
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ScreenDefinition
+import com.jvillada.movi.shared.model.ScreenSection
+import com.jvillada.movi.ui.sdui.TAG_CARRUSEL_DE_CUENTAS
+import com.jvillada.movi.ui.sdui.TAG_PROPUESTAS_DEL_INICIO
+import com.jvillada.movi.ui.sdui.TAG_TARJETA_EN_QUE_SE_VA
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.inicioConPreferencias
 import com.jvillada.movi.shared.model.limpias
@@ -128,7 +136,7 @@ class EditarInicioEnPantallaTest {
                 }
             }
         }
-        composeRule.waitUntil(5_000) { hayTag(tagDeLaFilaDelEditor("ALERTS")) }
+        composeRule.waitUntil(5_000) { hayTag(tagDeLaFilaDelEditor("CUENTAS")) }
     }
 
     @After
@@ -143,46 +151,80 @@ class EditarInicioEnPantallaTest {
     private fun hayTexto(texto: String) =
         composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
-    private fun arriba(texto: String): Dp =
-        composeRule.onNodeWithText(texto, useUnmergedTree = true).getUnclippedBoundsInRoot().top
+    /**
+     * El título de la sección [texto] en Hoy. Desde la ola R0 los títulos de sección se escriben
+     * como el rótulo de su fila en el editor («Disponible»), así que se buscan por `TAG_SECCION`.
+     */
+    private fun seccion(texto: String) = composeRule.onAllNodes(
+        hasTestTag(TAG_SECCION) and hasAnyDescendant(hasText(texto)),
+        useUnmergedTree = true,
+    )
+
+    private fun haySeccion(texto: String) = seccion(texto).fetchSemanticsNodes().isNotEmpty()
+
+    private fun arriba(texto: String): Dp = seccion(texto)[0].getUnclippedBoundsInRoot().top
 
     private fun tocar(rotulo: String) = composeRule.onNodeWithContentDescription(rotulo, useUnmergedTree = true).performClick()
 
+    private fun arribaDelTag(tag: String): Dp =
+        composeRule.onAllNodesWithTag(tag, useUnmergedTree = true)[0].getUnclippedBoundsInRoot().top
+
+    /**
+     * Ola R1: «Disponible» salió del Inicio por defecto (repetía Plan), pero sigue en «Editar inicio»,
+     * apagado. Prenderlo lo agrega: el server lo pone en la definición de quien lo pide.
+     */
     @Test
-    fun `ocultar Disponible lo saca de Hoy`() {
+    fun `prender Disponible lo agrega al Inicio`() {
         montar()
-        assertTrue(hayTag(TAG_TARJETA_DEL_DISPONIBLE), "antes, Hoy muestra el disponible")
-        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Disponible"), useUnmergedTree = true).assertIsOn()
+        assertTrue(!hayTag(TAG_TARJETA_DEL_DISPONIBLE), "por defecto el Inicio no trae el disponible")
+        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Disponible"), useUnmergedTree = true).assertIsOff()
 
         tocar(rotuloDeMostrar("Disponible"))
-        composeRule.waitUntil(5_000) { !hayTag(TAG_TARJETA_DEL_DISPONIBLE) }
+        composeRule.waitUntil(5_000) { hayTag(TAG_TARJETA_DEL_DISPONIBLE) }
 
-        assertEquals(listOf("DISPONIBLE_DEL_PERIODO"), server.guardada.ocultas)
-        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Disponible"), useUnmergedTree = true).assertIsOff()
-        // Lo demás sigue: el héroe y la sección de al lado.
-        assertTrue(hayTag(TAG_TARJETA_DEL_HERO))
-        assertTrue(hayTexto("EN QUÉ SE VA"))
-        // Hoy quedó donde Hoy la busca al volver: la memoria y el aparato.
-        composeRule.waitUntil(5_000) { ScreenDefCache.dashboard?.sections?.none { it.type == "DISPONIBLE_DEL_PERIODO" } == true }
+        assertEquals(listOf("DISPONIBLE_DEL_PERIODO"), server.guardada.visibles)
+        assertEquals(emptyList(), server.guardada.ocultas)
+        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Disponible"), useUnmergedTree = true).assertIsOn()
+        // El Inicio quedó donde lo busca al volver: la memoria y el aparato.
+        composeRule.waitUntil(5_000) { ScreenDefCache.dashboard?.sections?.any { it.type == "DISPONIBLE_DEL_PERIODO" } == true }
         assertEquals(ScreenDefCache.dashboard, InstantaneaDelInicio.delAparato.definicion("u1"))
     }
 
     @Test
-    fun `subir En que se va la pone antes en Hoy y en la lista`() {
+    fun `ocultar Tus cuentas lo saca del Inicio`() {
         montar()
-        assertTrue(arriba("DISPONIBLE") < arriba("EN QUÉ SE VA"), "en el orden de Movi, el disponible va antes")
+        assertTrue(hayTag(TAG_CARRUSEL_DE_CUENTAS), "antes, el Inicio muestra el carrusel")
+        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Tus cuentas"), useUnmergedTree = true).assertIsOn()
+
+        tocar(rotuloDeMostrar("Tus cuentas"))
+        composeRule.waitUntil(5_000) { !hayTag(TAG_CARRUSEL_DE_CUENTAS) }
+
+        assertEquals(listOf("CUENTAS"), server.guardada.ocultas)
+        // Lo demás sigue: el héroe, la cuadrícula y las propuestas.
+        assertTrue(hayTag(TAG_TARJETA_DEL_HERO))
+        assertTrue(hayTag(TAG_PROPUESTAS_DEL_INICIO))
+        assertTrue(hayTag(TAG_TARJETA_EN_QUE_SE_VA))
+    }
+
+    @Test
+    fun `subir En que se va la pone antes que las cuentas en el Inicio y en la lista`() {
+        montar()
+        assertTrue(arribaDelTag(TAG_CARRUSEL_DE_CUENTAS) < arribaDelTag(TAG_TARJETA_EN_QUE_SE_VA), "en el orden de Movi, las cuentas van antes")
 
         tocar(rotuloDeSubir("En qué se va"))
         composeRule.waitUntil(5_000) { server.guardada.orden.isNotEmpty() }
         composeRule.waitForIdle()
+        tocar(rotuloDeSubir("En qué se va"))
+        composeRule.waitUntil(5_000) { server.guardada.orden.firstOrNull() == "GASTO_POR_CATEGORIA" }
+        composeRule.waitForIdle()
 
-        assertTrue(arriba("EN QUÉ SE VA") < arriba("DISPONIBLE"), "subida, «En qué se va» va antes del disponible")
-        // La lista del editor dice el mismo orden que Hoy.
+        assertTrue(arribaDelTag(TAG_TARJETA_EN_QUE_SE_VA) < arribaDelTag(TAG_CARRUSEL_DE_CUENTAS), "subida, «En qué se va» va antes de las cuentas")
+        // La lista del editor dice el mismo orden que el Inicio.
         val filaGasto = composeRule.onNodeWithTag(tagDeLaFilaDelEditor("GASTO_POR_CATEGORIA"), useUnmergedTree = true).getUnclippedBoundsInRoot().top
-        val filaDisponible = composeRule.onNodeWithTag(tagDeLaFilaDelEditor("DISPONIBLE_DEL_PERIODO"), useUnmergedTree = true).getUnclippedBoundsInRoot().top
-        assertTrue(filaGasto < filaDisponible)
-        // El héroe no se mueve: sigue primero.
-        assertEquals("HERO_BALANCE", server.hoyServido.value.sections.first().type)
+        val filaCuentas = composeRule.onNodeWithTag(tagDeLaFilaDelEditor("CUENTAS"), useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        assertTrue(filaGasto < filaCuentas)
+        // Lo fijo no se mueve: el héroe, la cuadrícula y las propuestas siguen arriba.
+        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS"), server.hoyServido.value.sections.take(3).map { it.type })
     }
 
     @Test
@@ -191,46 +233,45 @@ class EditarInicioEnPantallaTest {
         tocar(rotuloDeSubir("En qué se va"))
         composeRule.waitUntil(5_000) { server.guardada.orden.isNotEmpty() }
         tocar(rotuloDeMostrar("Tu patrimonio"))
-        composeRule.waitUntil(5_000) { server.guardada.ocultas.isNotEmpty() }
+        composeRule.waitUntil(5_000) { server.guardada.visibles.isNotEmpty() }
 
         composeRule.onNodeWithText(VOLVER_AL_ORDEN_DE_MOVI, useUnmergedTree = true).performClick()
         composeRule.waitUntil(5_000) { server.guardada.esLaDeMovi }
         composeRule.waitForIdle()
 
-        assertEquals(porDefecto, server.hoyServido.value, "Hoy vuelve a ser el de Movi, con su versión")
-        assertTrue(arriba("DISPONIBLE") < arriba("EN QUÉ SE VA"))
-        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Tu patrimonio"), useUnmergedTree = true).assertIsOn()
+        assertEquals(porDefecto, server.hoyServido.value, "el Inicio vuelve a ser el de Movi, con su versión")
+        assertTrue(arribaDelTag(TAG_CARRUSEL_DE_CUENTAS) < arribaDelTag(TAG_TARJETA_EN_QUE_SE_VA))
+        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Tu patrimonio"), useUnmergedTree = true).assertIsOff()
     }
 
+    /**
+     * Ola R1: «Para revisar» dejó de ser una sección configurable —lo que pide decisión está en «Movi
+     * propone hoy», fijo debajo del héroe—, así que el editor ya no la lista, y lo urgente se ve igual.
+     */
     @Test
-    fun `con Para revisar oculta y algo urgente aparece la linea compacta`() {
-        val data = datos(pendingSms = 12)
-        montar(data)
-        assertTrue(hayTexto("PARA REVISAR"), "antes, la sección entera")
-
-        tocar(rotuloDeMostrar("Para revisar"))
-        composeRule.waitUntil(5_000) { hayTag(TAG_PARA_REVISAR_COMPACTO) }
-
-        assertEquals(PARA_REVISAR_COMPACTO, server.hoyServido.value.sections.single { it.type == PARA_REVISAR_COMPACTO }.type)
-        assertTrue(!hayTexto("PARA REVISAR"), "la sección se fue…")
-        val cuantas = cosasParaRevisarDe(data).size + anomaliasVisiblesDe(data).size
-        assertTrue(hayTexto(textoDeParaRevisarCompacto(cuantas)), "…y queda una línea con cuántas cosas hay")
-        assertTrue(hayTexto(PARA_REVISAR_ESCONDIDA), "el editor dice qué pasa con lo urgente")
-
-        // Tocarla la abre ahí mismo.
-        composeRule.onNodeWithTag(TAG_PARA_REVISAR_COMPACTO).performClick()
-        composeRule.waitUntil(5_000) { hayTexto("PARA REVISAR") }
+    fun `Para revisar ya no se configura, lo urgente esta en Movi propone hoy`() {
+        montar(datos(pendingSms = 12))
+        assertTrue(!hayTag(tagDeLaFilaDelEditor("ALERTS")))
+        assertTrue(!haySeccion("Para revisar"))
+        assertTrue(hayTexto("Llegaron 12 avisos del banco"))
     }
 
+    /**
+     * Una definición vieja que todavía trae la línea compacta de «Para revisar» (un tipo personal que
+     * un server anterior armaba): sin nada urgente, no ocupa lugar.
+     */
     @Test
-    fun `con Para revisar oculta y nada urgente no ocupa lugar`() {
+    fun `con Para revisar compacta y nada urgente no ocupa lugar`() {
         // Dos mensajes por confirmar: es una sugerencia, no algo urgente.
         val data = datos(pendingSms = 2)
+        val conCompacta = porDefecto.copy(sections = porDefecto.sections.map {
+            if (it.type == "ALERTS") ScreenSection(type = PARA_REVISAR_COMPACTO, title = it.title) else it
+        })
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
                     SduiRenderer(
-                        definition = inicioConPreferencias(porDefecto, PreferenciasDelInicio(ocultas = listOf("ALERTS"))),
+                        definition = conCompacta,
                         data = data,
                         modifier = Modifier.fillMaxSize(),
                         onNavigate = {},
@@ -241,6 +282,6 @@ class EditarInicioEnPantallaTest {
         composeRule.waitForIdle()
         assertTrue(cosasParaRevisarDe(data).isNotEmpty() && cosasParaRevisarDe(data).none { it.urgente })
         assertTrue(!hayTag(TAG_PARA_REVISAR_COMPACTO))
-        assertTrue(!hayTexto("PARA REVISAR"))
+        assertTrue(!hayTexto("Para revisar"))
     }
 }

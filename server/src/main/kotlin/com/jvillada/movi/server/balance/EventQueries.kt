@@ -7,7 +7,9 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.conLoCompartido
 import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
@@ -39,11 +41,14 @@ fun Transaction.loadNonVoidedEventsIn(uid: String, accountId: String? = null): L
         .map { it[VoidEvents.originalEventId] }
         .toSet()
     val types = accountTypesFor(uid)
+    // R3 · lo que dicen los espacios (la parte ajena de un gasto repartido, lo que salda): derivado
+    // al leer, como `countsAsCashFlow`. Ver `conLoCompartido` en :core.
+    val compartido = loCompartidoDelUsuario(uid).indice
     val accountFilter = if (accountId != null) Events.accountId eq accountId else Op.TRUE
     return Events.selectAll()
         .where { (Events.userId eq uid) and accountFilter }
         .filterNot { it[Events.id] in voided }
-        .map { it.toFinancialEvent().withCashFlowFlag(types) }
+        .map { it.toFinancialEvent().withCashFlowFlag(types).conLoCompartido(compartido) }
 }
 
 /**

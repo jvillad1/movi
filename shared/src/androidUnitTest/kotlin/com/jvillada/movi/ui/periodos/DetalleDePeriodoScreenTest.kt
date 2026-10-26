@@ -37,6 +37,8 @@ import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.data.Lectura
@@ -166,7 +168,7 @@ class DetalleDePeriodoScreenTest {
     @Test
     fun `el periodo en curso pinta todas sus secciones con los datos del server`() {
         montar(ConDetalle(mapOf("2026-10" to octubre)), "2026-10")
-        esperarTexto("LOS MÁS GRANDES")
+        esperarTexto("Los más grandes")
 
         // Arriba: rango, el arranque propio contra el día de siempre, cifras y Tu plata «hoy».
         assertTrue(hay("Octubre 2026"))
@@ -177,28 +179,21 @@ class DetalleDePeriodoScreenTest {
         assertTrue(hay("Tu plata: ${formatMoneyCompact(5_000_000L)} al empezar → ${formatMoneyCompact(11_500_000L)} hoy"))
 
         // En qué se fue.
-        assertTrue(hay("EN QUÉ SE FUE"))
+        assertTrue(hay("En qué se fue"))
         assertTrue(hay("Mercado"))
         assertTrue(hay(formatMoneyCompact(600_000L)))
 
-        // Pagos fijos: con los grupos y los textos de Plan. En el período en curso lo abierto
-        // «falta»; el listo con otro monto dice el real, con qué se sabe y lo que decía la regla.
-        assertTrue(hay("PAGOS DEL PERÍODO"))
-        assertTrue(hay(" · 3"), "el encabezado cuenta los tres pagos fijos")
-        assertTrue(hay("Falta por pagar · 2"))
-        assertTrue(hay("Ya pagaste · 1"))
-        assertTrue(hay(formatCOP(1_550_000L)))
-        assertTrue(hay("Con un movimiento de ${formatCOP(1_550_000L)} · la regla dice ${formatCOP(1_500_000L)}"))
-        assertTrue(hay("vence el 22 de octubre"), "el Celular todavía no vence (hoy es 20 de octubre)")
-        assertTrue(hay("venció hace 10 días"), "el Gimnasio venció el 10")
-        assertTrue(hay(TEXTO_CON_DUDAS))
+        // Ola R4: los pagos fijos y los presupuestos del período EN CURSO son los de Plan (su casa):
+        // acá van dos filas que llevan allá, y ninguna cifra ni grupo repetido.
+        assertTrue(hay(TITULO_ESTE_PERIODO_EN_PLAN))
+        assertTrue(hayTag(TAG_PAGOS_DEL_PERIODO_EN_PLAN))
+        assertTrue(hayTag(TAG_PRESUPUESTOS_EN_PLAN))
+        assertTrue(!hay("Falta por pagar · 2"), "el checklist del período en curso vive en Plan")
+        assertTrue(!hay("Ya pagaste · 1"))
+        assertTrue(!hay("${formatCOP(300_000L)} de ${formatCOP(250_000L)}"), "los presupuestos del período en curso viven en Plan")
         // El vocabulario viejo no queda en ningún lado.
         assertTrue(!hay("PAGOS FIJOS", substring = true))
         assertTrue(!hay("pendiente", substring = true))
-
-        // Presupuestos, gastado de límite.
-        assertTrue(hay("PRESUPUESTOS"))
-        assertTrue(hay("${formatCOP(300_000L)} de ${formatCOP(250_000L)}"))
 
         // Los más grandes.
         assertTrue(hay("Éxito Laureles"))
@@ -227,7 +222,7 @@ class DetalleDePeriodoScreenTest {
             ),
         )
         montar(ConDetalle(mapOf("2026-09" to cerrado)), "2026-09")
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
 
         assertTrue(hay("No se pagó · 2"))
         assertTrue(hay("Ya pagaste · 1"))
@@ -242,7 +237,7 @@ class DetalleDePeriodoScreenTest {
     @Test
     fun `el periodo en curso ofrece empezar uno nuevo hoy`() {
         montar(ConDetalle(mapOf("2026-10" to octubre)), "2026-10")
-        esperarTexto("LOS MÁS GRANDES")
+        esperarTexto("Los más grandes")
         assertTrue(hayTag(TAG_EMPEZAR_PERIODO_HOY))
     }
 
@@ -250,7 +245,7 @@ class DetalleDePeriodoScreenTest {
     fun `un periodo pasado no ofrece empezar hoy, y sus vacios ensenan`() {
         montar(ConDetalle(mapOf("2026-09" to septiembre)), "2026-09")
         esperarTexto("Septiembre 2026")
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
 
         assertTrue(!hayTag(TAG_EMPEZAR_PERIODO_HOY))
         assertTrue(hayTag(TAG_VER_MOVIMIENTOS_DEL_PERIODO))
@@ -260,8 +255,8 @@ class DetalleDePeriodoScreenTest {
         assertTrue(hay("Agregar un pago fijo"))
         assertTrue(hay("al cerrar", substring = true))
         // Sin presupuestos ni gastos grandes, esas secciones no aparecen (los rótulos van en versales).
-        assertTrue(!hay("PRESUPUESTOS"))
-        assertTrue(!hay("LOS MÁS GRANDES"))
+        assertTrue(!hay("Presupuestos"))
+        assertTrue(!hay("Los más grandes"))
     }
 
     @Test
@@ -280,7 +275,7 @@ class DetalleDePeriodoScreenTest {
             }
         }
         montar(repo, "2026-10")
-        esperarTexto("LOS MÁS GRANDES")
+        esperarTexto("Los más grandes")
 
         composeRule.onNodeWithTag(TAG_EMPEZAR_PERIODO_HOY, useUnmergedTree = true).performScrollTo().performClick()
         composeRule.waitForIdle()
@@ -323,7 +318,7 @@ class DetalleDePeriodoScreenTest {
             override suspend fun getUserProfile(): UserProfile = if (otroAparatoEscribio) conDiciembre else perfil
         }
         montar(repo, "2026-10")
-        esperarTexto("LOS MÁS GRANDES")
+        esperarTexto("Los más grandes")
 
         composeRule.onNodeWithTag(TAG_EMPEZAR_PERIODO_HOY, useUnmergedTree = true).performScrollTo().performClick()
         composeRule.waitForIdle()
@@ -346,7 +341,7 @@ class DetalleDePeriodoScreenTest {
             }
         }
         montar(repo, "2026-10")
-        esperarTexto("LOS MÁS GRANDES")
+        esperarTexto("Los más grandes")
 
         composeRule.onNodeWithTag(TAG_EMPEZAR_PERIODO_HOY, useUnmergedTree = true).performScrollTo().performClick()
         composeRule.waitForIdle()
@@ -384,17 +379,28 @@ class DetalleDePeriodoScreenTest {
     fun `si hoy no es un arranque valido para el siguiente, la accion no aparece`() {
         // El 26 de septiembre ya es octubre, pero noviembre solo puede arrancar en octubre.
         montar(ConDetalle(mapOf("2026-10" to octubre)), "2026-10", hoy = LocalDate(2026, 9, 26))
-        esperarTexto("LOS MÁS GRANDES")
+        esperarTexto("Los más grandes")
         assertTrue(!hayTag(TAG_EMPEZAR_PERIODO_HOY))
     }
 
     @Test
     fun `sin el perfil no se sabe si hoy vale, y la accion no aparece`() {
         montar(ConDetalle(mapOf("2026-10" to octubre), perfilQueContesta = null), "2026-10")
-        esperarTexto("LOS MÁS GRANDES")
+        esperarTexto("Los más grandes")
         assertTrue(!hayTag(TAG_EMPEZAR_PERIODO_HOY))
         // Sin el corte, la frase del arranque dice solo la fecha.
         assertTrue(hay("Este período empezó el 24 de septiembre"))
+    }
+
+    @Test
+    fun `en el periodo en curso, los pagos y los presupuestos llevan a Plan`() {
+        montar(ConDetalle(mapOf("2026-10" to octubre)), "2026-10")
+        esperarTexto(TITULO_ESTE_PERIODO_EN_PLAN)
+
+        composeRule.onNodeWithTag(TAG_PAGOS_DEL_PERIODO_EN_PLAN, useUnmergedTree = true).performScrollTo().performClick()
+        composeRule.onNodeWithTag(TAG_PRESUPUESTOS_EN_PLAN, useUnmergedTree = true).performScrollTo().performClick()
+
+        assertEquals(listOf<Screen>(Screen.Plan(SEGMENTO_PAGOS), Screen.Plan(SEGMENTO_PRESUPUESTOS)), navegado.toList())
     }
 
     @Test
@@ -436,7 +442,7 @@ class DetalleDePeriodoScreenTest {
         falla = false
         composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText("Reintentar")), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
-        esperarTexto("LOS MÁS GRANDES")
+        esperarTexto("Los más grandes")
         assertTrue(!hay("No pudimos cargar este período"))
     }
 
@@ -459,7 +465,7 @@ class DetalleDePeriodoScreenTest {
     @Test
     fun `si salio mas de lo que entro, la tarjeta dice de donde salio lo que falto`() {
         montar(ConDetalle(mapOf("2026-09" to septiembreQueFalto)), "2026-09")
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
 
         assertTrue(hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(hay("De dónde salió lo que faltó"))
@@ -498,7 +504,7 @@ class DetalleDePeriodoScreenTest {
     fun `si entro lo mismo o mas de lo que salio, la tarjeta no aparece aunque haya fuentes`() {
         val alDia = septiembreQueFalto.copy(resumen = septiembreQueFalto.resumen.copy(entradas = 34_000_000L))
         montar(ConDetalle(mapOf("2026-09" to alDia)), "2026-09")
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
 
         assertTrue(!hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(!hay("De dónde salió lo que faltó"))
@@ -509,7 +515,7 @@ class DetalleDePeriodoScreenTest {
     @Test
     fun `el encabezado dice cuanto de lo que entro son creditos desembolsados`() {
         montar(ConDetalle(mapOf("2026-09" to septiembreQueFalto)), "2026-09")
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
         assertTrue(hayTag(TAG_INCLUYE_CREDITOS))
         assertTrue(hay("Incluye \$10M de créditos desembolsados."))
     }
@@ -518,14 +524,14 @@ class DetalleDePeriodoScreenTest {
     fun `sin creditos el encabezado no dice nada de creditos`() {
         val sinCreditos = septiembreQueFalto.copy(resumen = septiembreQueFalto.resumen.copy(creditosRecibidos = 0))
         montar(ConDetalle(mapOf("2026-09" to sinCreditos)), "2026-09")
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
         assertTrue(!hayTag(TAG_INCLUYE_CREDITOS))
     }
 
     @Test
     fun `sin fuentes la tarjeta no aparece`() {
         montar(ConDetalle(mapOf("2026-09" to septiembreQueFalto.copy(fuentesQueNoSonIngreso = emptyList()))), "2026-09")
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
 
         assertTrue(!hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(!hay("De dónde salió lo que faltó"))
@@ -536,7 +542,7 @@ class DetalleDePeriodoScreenTest {
     fun `con solo fuentes que esta version no conoce la tarjeta no aparece`() {
         val raras = listOf(FuenteDePlata("HERENCIA", 5_000_000L, listOf("La tía")))
         montar(ConDetalle(mapOf("2026-09" to septiembreQueFalto.copy(fuentesQueNoSonIngreso = raras))), "2026-09")
-        esperarTexto("PAGOS DEL PERÍODO")
+        esperarTexto("Pagos del período")
 
         assertTrue(!hayTag(TAG_DE_DONDE_SALIO_LO_QUE_FALTO))
         assertTrue(!hay("La tía", substring = true))
@@ -579,7 +585,7 @@ class DetalleDePeriodoScreenTest {
         assertTrue(!hay("Sin gastos en este período"))
 
         llega.complete(octubre)
-        esperarTexto("LOS MÁS GRANDES")
+        esperarTexto("Los más grandes")
         assertTrue(!hayTag(TAG_DETALLE_DE_PERIODO_ESQUELETO))
     }
 }

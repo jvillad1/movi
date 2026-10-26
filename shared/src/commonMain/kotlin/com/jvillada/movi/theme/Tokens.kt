@@ -5,9 +5,9 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
@@ -89,10 +89,30 @@ import androidx.compose.ui.unit.sp
  */
 @Immutable
 data class ColoresDeMovi(
-    /** El lienzo de la app. */
+    /** El lienzo de la app: la capa 0. */
     val fondo: Color,
-    /** Un plano por encima del fondo: tarjetas, hojas, filas agrupadas. */
+    /**
+     * Un plano por encima del fondo: tarjetas, hojas, filas agrupadas. **Es la capa 1** (ver
+     * [capa1]): se sigue llamando así porque lo nombran cientos de llamadas.
+     */
     val tarjeta: Color,
+    /**
+     * **La capa 2**: lo que va encima de una tarjeta o se distingue del fondo sin ser una tarjeta —
+     * chips y filtros sin elegir, campos, botones secundarios, una superficie anidada—. Ver
+     * «Superficies por capas» en `docs/diseno/sistema.md`.
+     */
+    val capa2: Color,
+    /**
+     * **La capa 3**: la pista de una barra de progreso, lo apretado, una tercera altura. Se lee texto
+     * encima (la prueba de contraste lo mide), pero es raro que lo lleve.
+     */
+    val capa3: Color,
+    /**
+     * **La superficie de una propuesta de Movi**: una tarjeta con un tinte de la marca. Es la única
+     * superficie con color; dice «esto lo propone Movi, tú decides» sin necesitar un rótulo. No es
+     * un color de acción: el botón de adentro sí lo es.
+     */
+    val propuesta: Color,
     /** El borde que de verdad separa los planos. Ver el KDoc de [COLORES_OSCUROS]. */
     val borde: Color,
     /** El separador entre filas de una misma tarjeta. */
@@ -121,6 +141,13 @@ data class ColoresDeMovi(
     val neutro: Color,
     /** Los diez colores con los que se pinta una categoría. Ver [ColoresDeCategoria]. */
     val categorias: ColoresDeCategoria,
+    /**
+     * **Cuánto color lleva un lavado** (ver [lavado]). Más alto en oscuro que en claro, por lo
+     * mismo que [ColoresDeCategoria.alfaDelCirculo]: el 16 % que en oscuro apenas se nota, en
+     * claro le come el contraste al texto de encima (el `sale` sobre su lavado en la propuesta caía
+     * a 4,35:1).
+     */
+    val alfaDelLavado: Float,
 ) {
     /**
      * El color de una categoría **por su clave** (`"naranja"`, `"ambar"`…): el del ícono, y el de
@@ -131,6 +158,21 @@ data class ColoresDeMovi(
 
     /** El círculo que va detrás del ícono de esa categoría: el mismo color, con alfa bajo. */
     fun circuloDeCategoria(clave: String?): Color = categorias.circulo(clave)
+
+    /**
+     * **El fondo lavado de un color**: la píldora de la pestaña activa, una píldora de estado, el
+     * círculo de un ícono de marca, el botón de peligro. Antes era `marca.copy(alpha = 0.16f)`
+     * escrito a mano en cada lugar. Encima va el mismo color entero, y `ContrasteDeLosTokensTest`
+     * mide que se lea.
+     */
+    fun lavado(color: Color): Color = color.copy(alpha = alfaDelLavado)
+
+    /**
+     * **La capa 1, con el nombre del sistema de capas.** Es [tarjeta] y nada más: un solo valor con
+     * dos nombres, para que no puedan separarse. Las superficies nuevas (`ui/components/ds/`) dicen
+     * `capa1`; lo existente sigue diciendo `tarjeta`.
+     */
+    val capa1: Color get() = tarjeta
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -272,6 +314,15 @@ val CATEGORIAS_CLARAS = ColoresDeCategoria(
 /**
  * El tema oscuro, que es el de todos los días.
  *
+ * ## Ola R0 (26-oct-2026): las capas del camino 1
+ *
+ * El rediseño eligió «Noche premium»: superficies por capas, casi sin bordes. La referencia era
+ * `#0A0B10 / #12141C / #1A1D28 / #232737`, y **la prueba de contraste la rechazó**: la capa 1 daba
+ * 1,07:1 contra el fondo, más plana que el 1,15:1 que Movi exige desde que existe este archivo. Se
+ * bajó el fondo a `#08090D` y se subió cada capa lo justo: 1,16 · 1,12 · 1,15 entre capas
+ * consecutivas. La propuesta es la marca al 10 % sobre el fondo, como en la maqueta. El hue pasó del
+ * azul petróleo de antes al neutro violáceo del camino 1; el borde y el hilo lo siguieron.
+ *
  * **La tarjeta está en `#161D25` y no en algo más oscuro por una medición.** La primera versión de
  * esta paleta la puso en `#0D1116`, que da 1,05:1 contra el fondo — o sea **más plana que el
  * 1,15:1 que ya tenía Movi**. Subirla a `#161D25` la lleva a 1,17:1, y el borde a 1,49:1 termina de
@@ -282,10 +333,13 @@ val CATEGORIAS_CLARAS = ColoresDeCategoria(
  * alcanza.
  */
 val COLORES_OSCUROS = ColoresDeMovi(
-    fondo         = Color(0xFF07090C),
-    tarjeta       = Color(0xFF161D25),
-    borde         = Color(0xFF26303B),
-    hilo          = Color(0xFF1C242D),
+    fondo         = Color(0xFF08090D),
+    tarjeta       = Color(0xFF191B25),
+    capa2         = Color(0xFF222530),
+    capa3         = Color(0xFF2B2F3D),
+    propuesta     = Color(0xFF1D1A31),
+    borde         = Color(0xFF2E3242),
+    hilo          = Color(0xFF21242E),
     texto         = Color(0xFFEAEEF2),
     textoMedio    = Color(0xFFB4BEC9),
     textoApagado  = Color(0xFF95A0AD),
@@ -298,6 +352,7 @@ val COLORES_OSCUROS = ColoresDeMovi(
     entreCuentas  = Color(0xFF8FB8E8),
     neutro        = Color(0xFF4A5763),
     categorias    = CATEGORIAS_OSCURAS,
+    alfaDelLavado = 0.16f,
 )
 
 /**
@@ -311,7 +366,15 @@ val COLORES_OSCUROS = ColoresDeMovi(
  * **acento**, y por eso pudieron sumar modo oscuro sin rediseñar nada. Una identidad construida
  * sobre un color saturado de fondo no se puede invertir; una construida sobre neutros sí.
  *
- * ## Cuatro valores que los puso la prueba, no el ojo
+ * ## Las capas en claro (ola R0)
+
+La misma lógica que en oscuro, al revés en luminancia: la capa 1 es el blanco de siempre y cada capa
+de arriba se distingue de la anterior por un paso de gris (1,10 y 1,13), lo justo para que **todo
+texto del sistema siga pasando 4,5:1 sobre la capa 3** —con un gris más marcado el apagado caía a
+4,43—. La propuesta es un blanco lavanda: en claro el tinte es lo que la separa (1,10:1 contra el
+fondo), porque más saturada el texto apagado deja de leerse encima.
+
+## Cuatro valores que los puso la prueba, no el ojo
  *
  * `ContrasteDeLosTokensTest` rechazó la primera versión de este tema y por eso el fondo es más
  * oscuro de lo que uno elegiría mirando:
@@ -328,6 +391,9 @@ val COLORES_OSCUROS = ColoresDeMovi(
 val COLORES_CLAROS = ColoresDeMovi(
     fondo         = Color(0xFFE9ECF1),
     tarjeta       = Color(0xFFFFFFFF),
+    capa2         = Color(0xFFF2F4F7),
+    capa3         = Color(0xFFE3E7EC),
+    propuesta     = Color(0xFFF8F5FF),
     borde         = Color(0xFFCCD3DC),
     hilo          = Color(0xFFDDE2E9),
     texto         = Color(0xFF0D1218),
@@ -342,6 +408,7 @@ val COLORES_CLAROS = ColoresDeMovi(
     entreCuentas  = Color(0xFF1F5B96),
     neutro        = Color(0xFF98A3AE),
     categorias    = CATEGORIAS_CLARAS,
+    alfaDelLavado = 0.10f,
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -351,26 +418,30 @@ val COLORES_CLAROS = ColoresDeMovi(
 /**
  * La escala de espaciado. **Siete pasos**, contra los 55 valores distintos que hay hoy.
  *
+ * **Desde la ola R0 son nombres viejos de la escala nueva** ([Espacio] y [Medida], en `Escalas.kt`):
+ * los nombra media app y se quedan, pero sus valores salen de allá. Dos cambiaron con la R0, en toda
+ * la app a la vez: el margen de 20 a 16 y la separación entre secciones de 32 a 24 (camino 1).
+ *
  * No es una progresión geométrica pura porque la interfaz no la necesita: los cuatro primeros pasos
  * viven dentro de una fila o una tarjeta, y los tres últimos separan bloques. Ahí es donde de
  * verdad hace falta resolución.
  */
 @Immutable
 data class EspaciosDeMovi(
-    /** Entre un ícono y su rótulo, entre dos líneas de la misma fila. */
-    val minimo: Dp = 4.dp,
-    /** Entre elementos hermanos apretados: chips, puntos de leyenda. */
-    val corto: Dp = 8.dp,
-    /** El respiro de adentro de una fila. */
-    val medio: Dp = 12.dp,
-    /** El relleno de una tarjeta, y la separación entre tarjetas hermanas. */
-    val amplio: Dp = 16.dp,
-    /** El margen lateral de una pantalla. */
-    val margen: Dp = 20.dp,
-    /** Entre dos secciones que hablan de cosas distintas. */
-    val seccion: Dp = 32.dp,
-    /** Debajo de la barra de estado, antes del encabezado. */
-    val encabezado: Dp = 52.dp,
+    /** Entre un ícono y su rótulo, entre dos líneas de la misma fila. [Espacio.xxs]. */
+    val minimo: Dp = Espacio.xxs,
+    /** Entre elementos hermanos apretados: chips, puntos de leyenda. [Espacio.xs]. */
+    val corto: Dp = Espacio.xs,
+    /** El respiro de adentro de una fila. [Espacio.s]. */
+    val medio: Dp = Espacio.s,
+    /** El relleno de una tarjeta, y la separación entre tarjetas hermanas. [Espacio.m]. */
+    val amplio: Dp = Espacio.m,
+    /** El margen lateral de una pantalla: [Medida.margenDePantalla] (era 20; desde la R0, 16). */
+    val margen: Dp = Medida.margenDePantalla,
+    /** Entre dos secciones que hablan de cosas distintas: [Medida.entreSecciones] (era 32; ahora 24). */
+    val seccion: Dp = Medida.entreSecciones,
+    /** El alto del encabezado de una pantalla: [Medida.altoDeEncabezado] (era 52; ahora 56). */
+    val encabezado: Dp = Medida.altoDeEncabezado,
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -380,20 +451,25 @@ data class EspaciosDeMovi(
 /**
  * Los radios de esquina. **Cuatro**, contra los 13 que hay hoy.
  *
+ * **Desde la ola R0 salen de [Radio]** (`Escalas.kt`): 6 → 8 y 11 → 12, para quedar en la grilla de
+ * 4, y se sumó [hoja] (24).
+ *
  * [pleno] es 999.dp a propósito y no un porcentaje: en Compose un `RoundedCornerShape` con un radio
  * mayor que la mitad del lado se recorta al lado, así que 999 siempre da la píldora completa sin
  * tener que saber el alto.
  */
 @Immutable
 data class FormasDeMovi(
-    /** Cuadraditos: puntos de leyenda, muestras de color, chips chicos. */
-    val minima: Dp = 6.dp,
-    /** Lo habitual: filas, tarjetas, campos. */
-    val normal: Dp = 11.dp,
-    /** Contenedores grandes: hojas, tarjetas destacadas. */
-    val amplia: Dp = 16.dp,
-    /** Píldoras y círculos. */
-    val pleno: Dp = 999.dp,
+    /** Cuadraditos: puntos de leyenda, muestras de color, chips chicos. [Radio.s] (era 6). */
+    val minima: Dp = Radio.s,
+    /** Lo habitual: filas destacadas, botones, campos. [Radio.m] (era 11). */
+    val normal: Dp = Radio.m,
+    /** Superficies: tarjetas, listas agrupadas. [Radio.l]. */
+    val amplia: Dp = Radio.l,
+    /** Hojas y tarjetas de cuenta. [Radio.xl] (las hojas tenían 28 a mano). */
+    val hoja: Dp = Radio.xl,
+    /** Píldoras y círculos. [Radio.pill]. */
+    val pleno: Dp = Radio.pill,
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -401,7 +477,8 @@ data class FormasDeMovi(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Los siete estilos de texto, contra los 25 tamaños sueltos que hay hoy.
+ * Los siete estilos de texto, contra los 25 tamaños sueltos que hay hoy — y desde la ola R0 un
+ * octavo, [cifraDeTarjeta], el único que el camino 1 necesitaba y no estaba.
  *
  * ### Las cifras van tabulares, no monoespaciadas
  *
@@ -430,6 +507,18 @@ data class TextosDeMovi(
         letterSpacing = (-0.9).sp,
         fontFeatureSettings = "tnum",
     ),
+    /**
+     * **La cifra de una tarjeta de cuenta** (camino 1): el saldo dentro de la tarjeta de color de un
+     * banco, la cifra de un widget. Martian Mono como [cifra], a 24 sp — el piso al que se achica
+     * la cifra héroe antes de dejar de ser protagonista (`CifraProtagonista`, `ds.Cifra`).
+     */
+    val cifraDeTarjeta: TextStyle = TextStyle(
+        fontSize = 24.sp,
+        lineHeight = 30.sp,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = (-0.6).sp,
+        fontFeatureSettings = "tnum",
+    ),
     /** El título de una pantalla. */
     val titular: TextStyle = TextStyle(
         fontSize = 19.sp,
@@ -450,12 +539,24 @@ data class TextosDeMovi(
         lineHeight = 18.sp,
         fontWeight = FontWeight.Medium,
     ),
-    /** Un monto en una fila. Tabular, para que la columna no baile. */
+    /**
+     * Un monto en una fila. Tabular, para que la columna no baile.
+     *
+     * **Ola R1: en Martian Mono, como la cifra héroe y la de tarjeta.** El camino 1 pone toda cifra de
+     * plata en la misma familia —las de las filas, las propuestas y los widgets también—, así un monto
+     * se reconoce como monto en cualquier pantalla. Un punto más chico que el cuerpo (12,5 contra
+     * 13,5): la monoespaciada es más ancha y a igual tamaño se ve más grande que el texto de al lado.
+     */
     val monto: TextStyle = TextStyle(
-        fontSize = 13.5.sp,
+        fontSize = 12.5.sp,
         lineHeight = 18.sp,
         fontWeight = FontWeight.Normal,
+        letterSpacing = (-0.3).sp,
         fontFeatureSettings = "tnum",
+        // Sin recorte: un renglón de monto mide su `lineHeight` (18) con cualquier fuente. Martian
+        // Mono a 12,5 sp es más baja que Space Grotesk a 13,5, y con el recorte de siempre cada fila
+        // con un monto se achicaba unos dp — lo que miden los esqueletos y el alto del MoneyField.
+        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
     ),
     /** El subtítulo de una fila, que dice algo que no está en ninguna otra parte. */
     val apoyo: TextStyle = TextStyle(

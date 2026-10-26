@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.theme.Radio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -69,9 +73,9 @@ fun CreditBalanceSheet(
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             SectionLabel("AJUSTAR SALDO")
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -86,7 +90,7 @@ fun CreditBalanceSheet(
                     color = Movi.colores.texto,
                 )
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
 
             MoneyField(
                 value = target,
@@ -94,7 +98,7 @@ fun CreditBalanceSheet(
                 placeholder = "Deuda real según el banco (COP)",
             )
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = when {
                     overCap        -> "Saldo fuera de rango — revisa el monto."
@@ -106,7 +110,7 @@ fun CreditBalanceSheet(
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 "Queda como un movimiento visible en la cuenta, no como un número editado a mano.",
                 style = Movi.textos.apoyo,
@@ -114,27 +118,18 @@ fun CreditBalanceSheet(
             )
 
             error?.let {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
-                .clickable(enabled = canSave) { adjust() }
-                .padding(vertical = 15.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                if (saving) "Registrando…" else "Registrar ajuste",
-                color = Movi.colores.fondo,
-                style = Movi.textos.cuerpo,
-            )
-        }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.m))
+        Boton(
+            texto = if (saving) "Registrando…" else "Registrar ajuste",
+            onClick = { adjust() },
+            habilitado = canSave,
+            anchoCompleto = true,
+        )
+        Spacer(Modifier.height(Espacio.l))
     }
 }

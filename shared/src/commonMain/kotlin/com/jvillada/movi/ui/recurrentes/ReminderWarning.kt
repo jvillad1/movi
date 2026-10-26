@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
@@ -206,11 +209,11 @@ fun ReminderOptInField(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(Radio.m))
                 .clickable(enabled = enabled) { onCheckedChange(!checked) }
-                .padding(vertical = 4.dp),
+                .padding(vertical = Espacio.xxs),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
             CasillaDeSeleccion(marcada = checked)
             Column(modifier = Modifier.weight(1f)) {
@@ -219,7 +222,7 @@ fun ReminderOptInField(
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.texto,
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 // Con la casilla marcada, una línea por cosa que se sabe (ver
                 // [reminderDeliveryLines]): cuándo se avisa y —cuando el server lo dijo— por
                 // dónde. Con la casilla desmarcada no hay nada que prometer.
@@ -227,7 +230,7 @@ fun ReminderOptInField(
                     if (checked) reminderDeliveryLines(canales, diasEfectivos)
                     else listOf("No te vamos a avisar de este pago.")
                 lineas.forEachIndexed { i, linea ->
-                    if (i > 0) Spacer(Modifier.height(2.dp))
+                    if (i > 0) Spacer(Modifier.height(Espacio.xxs))
                     Text(
                         text = linea,
                         style = Movi.textos.apoyo,
@@ -238,7 +241,7 @@ fun ReminderOptInField(
         }
 
         if (shouldShowReminderOptInWarning(pushStatus, checked, canales)) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Espacio.xs))
             ReminderWarningBanner(
                 pushStatus = pushStatus,
                 onEnable = {
@@ -276,16 +279,12 @@ fun ReminderWarningBanner(
 ) {
     val denied = pushStatus == "denied"
     val optIn = source == ReminderWarningSource.OPT_IN_CHECKBOX
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier
-                    .padding(top = 3.dp)
-                    .size(8.dp)
+                    .padding(top = Espacio.xxs)
+                    .size(Espacio.xs)
                     .clip(CircleShape)
                     .background(Movi.colores.aviso),
             )
@@ -295,7 +294,7 @@ fun ReminderWarningBanner(
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.texto,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 Text(
                     text = when {
                         denied && optIn ->
@@ -311,7 +310,7 @@ fun ReminderWarningBanner(
                     color = Movi.colores.textoMedio,
                 )
                 if (!denied) {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(
                         text = "Activar notificaciones",
                         style = Movi.textos.cuerpo,

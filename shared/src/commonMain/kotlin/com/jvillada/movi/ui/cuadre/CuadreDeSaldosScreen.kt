@@ -1,5 +1,13 @@
 package com.jvillada.movi.ui.cuadre
 
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.Vacio
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -176,30 +184,26 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
             )
 
             if (noSeLeyo) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
                 NoSePudoLeer(
                     "No pudimos cargar tus cuentas",
                     onReintentar = { loadKey++ },
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = Espacio.m),
                 )
             }
 
             if (!noSeLeyo) LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+                contentPadding = PaddingValues(start = Espacio.m, end = Espacio.m, top = Espacio.s, bottom = Espacio.xl),
             ) {
                 item {
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(18.dp),
-                    ) {
+                    Superficie(modifier = Modifier.fillMaxWidth()) {
                         Text(QUE_ES_EL_CUADRE, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     }
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(Medida.entreSecciones))
                     // Reemplaza al «Todavía no tienes cuentas…» de siempre.
                     if (cuentas.isEmpty() && !cargando) {
-                        VacioQueEnsena(
+                        Vacio(
                             titulo = "Todavía no hay nada que cuadrar",
                             detalle = "El cuadre compara el saldo de cada cuenta de Dinero o Inversión con el " +
                                 "que te dice tu banco. Crea una cuenta para empezar.",
@@ -211,12 +215,7 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
                 // Lo que dijo el banco en un aviso, primero: ya trae la cifra, solo falta el sí.
                 if (propuestas.isNotEmpty()) {
                     item {
-                        Text(
-                            "LO QUE DIJO EL BANCO",
-                            style = Movi.textos.rotulo,
-                            color = Movi.colores.textoMedio,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
+                        Seccion(titulo = "Lo que dijo el banco")
                     }
                     items(propuestas, key = { "aviso-" + it.avisoId }) { propuesta ->
                         TarjetaDelSaldoDelAviso(
@@ -227,15 +226,10 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
                                 loadKey++
                             },
                         )
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(Espacio.s))
                     }
                     item {
-                        Text(
-                            "O ESCRIBE TÚ EL SALDO",
-                            style = Movi.textos.rotulo,
-                            color = Movi.colores.textoMedio,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-                        )
+                        Seccion(titulo = "O escribe tú el saldo", modifier = Modifier.padding(top = Medida.entreSecciones - Espacio.s))
                     }
                 }
                 // Ola B, tarea 9: antes de la primera lectura buena, la pantalla quedaba en
@@ -254,43 +248,35 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
                             habilitado = !guardando,
                             onEscribir = { escrito[cuenta.id] = it },
                         )
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(Espacio.s))
                     }
                 }
                 item {
                     resultado?.let {
                         Text(it, style = Movi.textos.apoyo, color = Movi.colores.entra)
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                     }
                     error?.let {
                         Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                     }
                 }
             }
 
             if (!noSeLeyo && cuentas.isNotEmpty()) {
-                Box(
+                Boton(
+                    texto = when {
+                        guardando -> "Anotando…"
+                        pendientes.size > 1 -> "Anotar ${pendientes.size} ajustes"
+                        else -> "Anotar el ajuste"
+                    },
+                    onClick = { anotar() },
+                    habilitado = sePuedeAnotar,
+                    anchoCompleto = true,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 20.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (sePuedeAnotar) Movi.colores.texto else Movi.colores.textoApagado)
-                        .clickable(enabled = sePuedeAnotar) { anotar() }
-                        .padding(vertical = 15.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = when {
-                            guardando -> "Anotando…"
-                            pendientes.size > 1 -> "Anotar ${pendientes.size} ajustes"
-                            else -> "Anotar el ajuste"
-                        },
-                        color = Movi.colores.fondo,
-                        style = Movi.textos.cuerpo,
-                    )
-                }
+                        .padding(horizontal = Medida.margenDePantalla)
+                        .padding(bottom = Medida.margenDePantalla),
+                )
             }
         }
 
@@ -325,11 +311,7 @@ private fun FilaDeCuadre(
 ) {
     val (enMovi, moneda) = saldoQueCreeMovi(cuenta)
     val diferencia = diferenciaDelCuadre(enMovi, escrito)
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -348,31 +330,25 @@ private fun FilaDeCuadre(
                     // En ámbar cuando lleva demasiado sin cuadrarse: es el mismo dato que dispara
                     // el aviso del Inicio, dicho acá en el único lugar donde se puede resolver.
                     color = if (estaSinCuadrar(cuenta, ahora)) Movi.colores.aviso else Movi.colores.textoMedio,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier.padding(top = Espacio.xxs),
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("Movi dice", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                Text(
-                    formatMoney(enMovi, moneda),
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
+                Cifra(enMovi, moneda = moneda, modifier = Modifier.padding(top = Espacio.xxs))
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
         MoneyField(
             value = escrito,
             onValueChange = { if (habilitado) onEscribir(it) },
-            label = "LO QUE DICE EL BANCO",
+            label = "Lo que dice el banco",
             placeholder = "Sin cuadrar",
             // El símbolo de la moneda de la cuenta: en Colombia «$20» se lee veinte pesos, así que
             // una cuenta en dólares con el símbolo del peso invitaría a escribir otra cifra.
             prefix = if (moneda == "COP") "$" else "US$",
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Text(
             text = when {
                 escrito != null && escrito > MAX_ACCOUNT_BALANCE_COP -> "Saldo fuera de rango — revisa el monto."
@@ -385,7 +361,7 @@ private fun FilaDeCuadre(
             cuenta.type.groupLabel,
             style = Movi.textos.apoyo,
             color = Movi.colores.textoApagado,
-            modifier = Modifier.padding(top = 6.dp),
+            modifier = Modifier.padding(top = Espacio.xs),
         )
     }
 }
@@ -403,17 +379,13 @@ private const val FILAS_DE_CUADRE_ESQUELETO = 3
 private fun LazyListScope.cuadreEsqueleto() {
     items(FILAS_DE_CUADRE_ESQUELETO) {
         FilaDeCuadreEsqueleto()
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
     }
 }
 
 @Composable
 private fun FilaDeCuadreEsqueleto() {
-    MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_LISTA_ESQUELETO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_LISTA_ESQUELETO)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -425,24 +397,24 @@ private fun FilaDeCuadreEsqueleto() {
                     estilo = Movi.textos.titulo,
                     modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
             }
             Column(horizontalAlignment = Alignment.End) {
                 BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 64.dp)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.monto), ancho = 96.dp)
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
         // El campo «LO QUE DICE EL BANCO»: un bloque a todo el ancho, sin abrir el teclado que un
         // `MoneyField` de verdad ofrecería. Fix round 1: el alto sale de `altoDeMoneyFieldConRotulo`
         // —los mismos tokens que arma el campo real, no un número puesto a ojo— para que no se
         // desalinee en silencio si `Movi.textos.apoyo`/`.monto` cambian.
         BloqueEsqueleto(alto = altoDeMoneyFieldConRotulo())
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         LineaEsqueleto(fraccionDelAncho = 0.85f, estilo = Movi.textos.apoyo)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(Espacio.xs))
         LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.apoyo)
     }
 }

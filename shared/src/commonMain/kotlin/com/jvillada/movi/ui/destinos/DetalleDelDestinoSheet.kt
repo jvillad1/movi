@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.destinos
 
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -146,7 +148,7 @@ fun DetalleDelDestinoSheet(
                 .testTag(TAG_FICHA_DEL_TERCERO),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.xxs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(actual.nombre, style = Movi.textos.titulo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
@@ -165,18 +167,18 @@ fun DetalleDelDestinoSheet(
                 color = Movi.colores.textoMedio,
             )
 
-            Spacer(Modifier.height(18.dp))
-            Text("ESTE PERÍODO", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.m))
+            Text("Este período", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+            Spacer(Modifier.height(Espacio.xs))
             Row(modifier = Modifier.fillMaxWidth().testTag(TAG_ESTE_PERIODO_DEL_TERCERO)) {
                 ColumnaDeCifra("Le enviaste", enviadoEstePeriodo, Modifier.weight(1f))
                 ColumnaDeCifra("Te envió", recibidoEstePeriodo, Modifier.weight(1f), entra = true)
             }
             if (porMotivo.isNotEmpty()) {
-                Spacer(Modifier.height(14.dp))
-                Text("LO QUE LE ENVIASTE, POR MOTIVO", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-                Spacer(Modifier.height(6.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.testTag(TAG_POR_MOTIVO_DEL_TERCERO)) {
+                Spacer(Modifier.height(Espacio.s))
+                Text("Lo que le enviaste, por motivo", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(Espacio.xs))
+                Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs), modifier = Modifier.testTag(TAG_POR_MOTIVO_DEL_TERCERO)) {
                     porMotivo.forEach { envio ->
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Text(
@@ -192,7 +194,7 @@ fun DetalleDelDestinoSheet(
             }
 
             renombrables?.takeIf { it.movimientos.isNotEmpty() }?.let { r ->
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(Espacio.m))
                 PonerleElNombre(
                     destino = actual,
                     renombrables = r,
@@ -202,14 +204,14 @@ fun DetalleDelDestinoSheet(
 
             // Período por período: solo si hay más de uno que mostrar — con uno solo, ya lo dijo arriba.
             if (porPeriodo.size > 1 || (porPeriodo.size == 1 && porPeriodo.single().periodo != enCurso)) {
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(Espacio.m))
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    Text("POR PERÍODO", style = Movi.textos.rotulo, color = Movi.colores.textoMedio, modifier = Modifier.weight(1.4f))
-                    Text("ENVIASTE", style = Movi.textos.rotulo, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
-                    Text("TE ENVIÓ", style = Movi.textos.rotulo, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                    Text("Por período", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, modifier = Modifier.weight(1.4f))
+                    Text("Enviaste", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                    Text("Te envió", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
                 }
-                Spacer(Modifier.height(6.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.testTag(TAG_POR_PERIODO_DEL_TERCERO)) {
+                Spacer(Modifier.height(Espacio.xs))
+                Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs), modifier = Modifier.testTag(TAG_POR_PERIODO_DEL_TERCERO)) {
                     porPeriodo.forEach { p ->
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Text(
@@ -229,28 +231,28 @@ fun DetalleDelDestinoSheet(
             }
 
             totalesEnUnaLinea(actual)?.let { linea ->
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(linea, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
             Hairline()
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
 
-            Text("MOVIMIENTOS", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(8.dp))
+            Text("Movimientos", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+            Spacer(Modifier.height(Espacio.xs))
             when {
                 error != null -> Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 todos == null -> Text("Cargando…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                 todos.isEmpty() -> Text(NADA_TODAVIA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                else -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                else -> Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
                     todos.forEach { ev ->
                         val entro = ev.type == TransactionType.INCOME
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .then(if (onAbrirMovimiento != null) Modifier.clickable { onAbrirMovimiento(ev) } else Modifier)
-                                .padding(vertical = 6.dp)
+                                .padding(vertical = Espacio.xs)
                                 .testTag(TAG_MOVIMIENTO_DEL_TERCERO + ":" + ev.id),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -262,7 +264,7 @@ fun DetalleDelDestinoSheet(
                                     color = Movi.colores.textoMedio,
                                 )
                             }
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(Espacio.xs))
                             Text(
                                 (if (entro) "+" else "") + formatMoney(ev.amount, ev.currency),
                                 style = Movi.textos.monto,
@@ -274,9 +276,9 @@ fun DetalleDelDestinoSheet(
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
             Text(COMO_SE_CUENTAN, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Espacio.l))
         }
     }
 }
@@ -326,7 +328,7 @@ internal fun totalesEnUnaLinea(destino: DestinoConocido): String? {
 private fun ColumnaDeCifra(rotulo: String, totales: Map<String, Long>, modifier: Modifier, entra: Boolean = false) {
     Column(modifier = modifier) {
         Text(rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(Espacio.xxs))
         val conPlata = totales.filterValues { it != 0L }
         if (conPlata.isEmpty()) {
             Text("Nada", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
@@ -382,14 +384,12 @@ private fun PonerleElNombre(
     var ocupado by remember(destino.id) { mutableStateOf(false) }
     var resultado by remember(destino.id) { mutableStateOf<String?>(null) }
 
-    MinCard(
+    Superficie(
         modifier = Modifier.fillMaxWidth().testTag(TAG_PONERLE_EL_NOMBRE),
-        variant = MinCardVariant.Default,
-        padding = PaddingValues(14.dp),
     ) {
         resultado?.let {
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            return@MinCard
+            return@Superficie
         }
         Text(textoDePonerleElNombre(n), style = Movi.textos.cuerpo, color = Movi.colores.texto)
         Text(
@@ -398,7 +398,7 @@ private fun PonerleElNombre(
             color = Movi.colores.textoApagado,
             maxLines = 2,
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         if (!confirmando) {
             Pastilla("Ponerle el nombre", { confirmando = true }, principal = true)
         } else {
@@ -409,8 +409,8 @@ private fun PonerleElNombre(
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(Espacio.xs))
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 Pastilla(
                     if (ocupado) "Cambiando…" else "Sí, cambiar $n",
                     {

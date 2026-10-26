@@ -16,10 +16,10 @@ import org.jetbrains.compose.resources.Font
 /**
  * # La letra de Movi
  *
- * **Space Grotesk lleva la interfaz. Martian Mono aparece solo en la cifra protagonista.** Es la
- * decisión de la dirección B, escrita en el tablero del sistema: a 42 sp el ancho de una
- * monoespaciada es carácter; en una fila de una lista sería estorbo, y ahí alcanza con las cifras
- * tabulares que Space Grotesk ya trae.
+ * **Space Grotesk lleva la interfaz. Martian Mono lleva las cifras de plata.** La dirección B la
+ * dejaba solo en la cifra protagonista; el camino 1 del rediseño (ola R1, 26-oct-2026) la lleva
+ * también al monto de una fila, de una propuesta y de un widget, para que toda cifra de la app se vea
+ * de la misma familia.
  *
  * ### Por qué fuente propia
  *
@@ -71,17 +71,19 @@ internal fun familiaDeLasCifras(): FontFamily {
 }
 
 /**
- * Los siete estilos con su familia puesta. **Pura**, sin `@Composable`, para poder probarla.
+ * Los ocho estilos con su familia puesta. **Pura**, sin `@Composable`, para poder probarla.
  *
- * `cifra` va en la de cifras; los otros seis, en la de la interfaz. `monto` también en la de la
- * interfaz: es un monto en una fila, y ahí manda `tnum`, no la monoespaciada.
+ * `cifra`, `cifraDeTarjeta` y `monto` van en la de cifras; los otros cinco, en la de la interfaz. Ola R1:
+ * `monto` pasó a Martian Mono —el camino 1 pone toda cifra de plata en la misma familia, también la de
+ * una fila—; antes iba en la de la interfaz con `tnum`.
  */
 internal fun TextosDeMovi.conFamilias(interfaz: FontFamily, cifras: FontFamily): TextosDeMovi = copy(
     cifra = cifra.copy(fontFamily = cifras),
+    cifraDeTarjeta = cifraDeTarjeta.copy(fontFamily = cifras),
     titular = titular.copy(fontFamily = interfaz),
     titulo = titulo.copy(fontFamily = interfaz),
     cuerpo = cuerpo.copy(fontFamily = interfaz),
-    monto = monto.copy(fontFamily = interfaz),
+    monto = monto.copy(fontFamily = cifras),
     apoyo = apoyo.copy(fontFamily = interfaz),
     rotulo = rotulo.copy(fontFamily = interfaz),
 )

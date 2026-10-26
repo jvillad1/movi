@@ -1,5 +1,13 @@
 package com.jvillada.movi.ui.categorias
 
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +30,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -293,8 +304,8 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = Espacio.m, vertical = Espacio.s),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 CategoryFilter.entries.forEach { f ->
                     if (f == CategoryFilter.ESCONDIDAS && escondidas == 0) return@forEach
@@ -310,7 +321,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
             CampoDeBusqueda(
                 valor = busqueda,
                 onValorCambia = { busqueda = it },
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.padding(horizontal = Espacio.m),
             )
 
             if (error != null) {
@@ -318,7 +329,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     error!!,
                     style = Movi.textos.apoyo,
                     color = Movi.colores.sale,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = Espacio.l, vertical = Espacio.s),
                 )
             }
             if (confirmacion != null) {
@@ -326,14 +337,15 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     confirmacion!!,
                     style = Movi.textos.apoyo,
                     color = Movi.colores.entra,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = Espacio.l, vertical = Espacio.s),
                 )
             }
 
+            // Ola R4: una sola lista de [Fila]s del sistema sobre una [Superficie], en vez de una
+            // tarjeta suelta por categoría. Cada fila trae su margen; lo demás, el de la pantalla.
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(top = Espacio.xs, bottom = Medida.botonFlotante + Medida.entreSecciones),
             ) {
                 if (loading && !leidas) {
                     // Ola B, tarea 9: antes de la primera lectura buena la pantalla quedaba en
@@ -346,7 +358,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                         NoSePudoLeer(
                             "No pudimos cargar tus categorías",
                             onReintentar = { scope.launch { loading = true; recargar(); loading = false } },
-                            modifier = Modifier.padding(top = 16.dp),
+                            modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.m),
                         )
                     }
                 } else if (visibles.isEmpty() && !loading) {
@@ -356,12 +368,12 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                             else "Nada por aquí todavía.",
                             style = Movi.textos.cuerpo,
                             color = Movi.colores.textoMedio,
-                            modifier = Modifier.padding(vertical = 24.dp),
+                            modifier = Modifier.padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xl),
                         )
                     }
                 }
-                items(visibles, key = { it.name }) { categoria ->
-                    FilaDeCategoria(categoria) {
+                itemsIndexed(visibles, key = { _, it -> it.name }) { i, categoria ->
+                    FilaDeCategoria(categoria, primera = i == 0, ultima = i == visibles.lastIndex) {
                         // Abrir otra categoría es empezar otra cosa: el «Listo: …» de la anterior
                         // ya no describe lo que está pasando y se iba quedando indefinidamente.
                         confirmacion = null
@@ -377,8 +389,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                                 "iniciales y ajustes; no se editan.",
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoApagado,
-                            lineHeight = 15.sp,
-                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                            modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s, bottom = Espacio.xxs),
                         )
                     }
                 }
@@ -608,7 +619,7 @@ private fun TarjetaDeOrden(cantidad: Int, onRevisar: () -> Unit, onRenglones: (I
             .padding(start = Movi.espacios.amplio, top = Movi.espacios.medio, end = Movi.espacios.amplio)
             .clip(forma)
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, forma)
+            .border(Medida.trazo, Movi.colores.borde, forma)
             .clickable(onClick = onRevisar)
             .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.amplio),
         verticalAlignment = Alignment.CenterVertically,
@@ -651,7 +662,7 @@ private fun TarjetaDeOrdenEsqueleto(renglones: Int) {
             .padding(start = Movi.espacios.amplio, top = Movi.espacios.medio, end = Movi.espacios.amplio)
             .clip(forma)
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, forma)
+            .border(Medida.trazo, Movi.colores.borde, forma)
             .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.amplio),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
@@ -762,10 +773,10 @@ private fun Pastilla(texto: String, activa: Boolean, onClick: () -> Unit) {
         fontWeight = FontWeight.Medium,
         color = if (activa) Movi.colores.fondo else Movi.colores.textoMedio,
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
+            .clip(RoundedCornerShape(Radio.pill))
             .background(if (activa) Movi.colores.marca else Movi.colores.tarjeta)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.xs),
     )
 }
 
@@ -774,10 +785,10 @@ private fun CampoDeBusqueda(valor: String, onValorCambia: (String) -> Unit, modi
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 11.dp),
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     ) {
         // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
         val campo = rememberCampoConSeleccion(valor, onValorCambia)
@@ -818,51 +829,42 @@ fun tagDeFilaDeCategoria(nombre: String): String = "categoria:fila:$nombre"
  * fila **a la escala por defecto**, no un alto que esta fila pueda superar.
  */
 @Composable
-private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
-    Row(
+private fun FilaDeCategoria(categoria: CategoryUsage, primera: Boolean, ultima: Boolean, onClick: () -> Unit) {
+    // La superficie de la lista, partida por fila (la lista es perezosa): la primera redondea
+    // arriba, la última abajo, y entre ellas va el separador del sistema.
+    TramoDeLista(primera = primera, ultima = ultima) {
+        Fila(
+            titulo = categoria.name,
+            subtitulo = resumenDeUsoCorto(categoria),
+            inicio = { IconoDeCategoria(categoria.name) },
+            final = cifraDelMes(categoria)?.let { cifra ->
+                { Text(cifra, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, maxLines = 1) }
+            },
+            onClick = onClick,
+            modifier = Modifier.testTag(tagDeFilaDeCategoria(categoria.name)),
+        )
+    }
+}
+
+/**
+ * Un tramo de una lista sobre una superficie, cuando la lista es perezosa y no cabe en una sola
+ * [Superficie]: el color de la capa 1, los bordes redondeados solo arriba en la primera y abajo en
+ * la última, y el [Separador] entre una fila y la siguiente. Visto entero, es una [Superficie] con
+ * relleno `Lista`.
+ */
+@Composable
+private fun TramoDeLista(primera: Boolean, ultima: Boolean, contenido: @Composable () -> Unit) {
+    val arriba = if (primera) CornerSize(Radio.l) else ZeroCornerSize
+    val abajo = if (ultima) CornerSize(Radio.l) else ZeroCornerSize
+    val forma = RoundedCornerShape(topStart = arriba, topEnd = arriba, bottomStart = abajo, bottomEnd = abajo)
+    Column(
         modifier = Modifier
-            .testTag(tagDeFilaDeCategoria(categoria.name))
-            .fillMaxWidth()
-            .heightIn(min = ALTO_DE_FILA_DE_CATEGORIA)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Movi.colores.tarjeta)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = Medida.margenDePantalla)
+            .clip(forma)
+            .background(Movi.colores.capa1),
     ) {
-        IconoDeCategoria(categoria.name)
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = categoria.name,
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = if (categoria.hidden) Movi.colores.textoMedio else Movi.colores.texto,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                cifraDelMes(categoria)?.let {
-                    Text(
-                        text = it,
-                        style = Movi.textos.apoyo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Text(
-                text = resumenDeUsoCorto(categoria),
-                color = Movi.colores.textoMedio,
-                style = Movi.textos.apoyo,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
+        if (!primera) Separador()
+        contenido()
     }
 }
 
@@ -872,7 +874,7 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
  * [FilaDeCategoria], fix round 1. `internal` y no `private`: la tarea 9 arma un esqueleto que
  * tiene que medir esto, y que lo importe de acá es menos frágil que duplicar el número.
  */
-internal val ALTO_DE_FILA_DE_CATEGORIA = 60.dp
+internal val ALTO_DE_FILA_DE_CATEGORIA = Medida.altoDeFilaDoble
 
 /** Cuántas filas pinta [categoriasEsqueleto] mientras la lista no llegó ni una vez y no hay forma recordada. */
 private const val FILAS_DE_CATEGORIA_ESQUELETO = 6
@@ -892,28 +894,10 @@ private const val MAX_FILAS_DE_CATEGORIA_ESQUELETO = 60
  * o [FILAS_DE_CATEGORIA_ESQUELETO] la primera vez.
  */
 private fun LazyListScope.categoriasEsqueleto(filas: Int) {
-    items(filas.coerceIn(0, MAX_FILAS_DE_CATEGORIA_ESQUELETO)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = ALTO_DE_FILA_DE_CATEGORIA)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .testTag(TAG_FILA_DE_LISTA_ESQUELETO),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            CirculoEsqueleto(TamanoDeIconoDeCategoria.Normal.circulo)
-            Column(modifier = Modifier.weight(1f)) {
-                LineaEsqueleto(
-                    fraccionDelAncho = 0.5f,
-                    estilo = Movi.textos.titulo,
-                    modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
-                )
-                Spacer(Modifier.height(2.dp))
-                LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.apoyo)
-            }
+    val total = filas.coerceIn(0, MAX_FILAS_DE_CATEGORIA_ESQUELETO)
+    items(total) { i ->
+        TramoDeLista(primera = i == 0, ultima = i == total - 1) {
+            Box(Modifier.testTag(TAG_FILA_DE_LISTA_ESQUELETO)) { EsqueletoDeFila(conFinal = false) }
         }
     }
 }
@@ -953,20 +937,20 @@ private fun HojaDetalle(
                 style = Movi.textos.titular,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = Espacio.xxs),
             )
             Text(
                 resumenDeUso(categoria),
                 color = Movi.colores.textoMedio,
                 style = Movi.textos.apoyo,
-                modifier = Modifier.padding(top = 6.dp),
+                modifier = Modifier.padding(top = Espacio.xs),
             )
             resumenDelMes(categoria)?.let {
                 Text(
                     it,
                     color = Movi.colores.textoMedio,
                     style = Movi.textos.apoyo,
-                    modifier = Modifier.padding(top = 3.dp),
+                    modifier = Modifier.padding(top = Espacio.xxs),
                 )
             }
             // El tipo se dice acá y no en la fila (Ola B · tarea 5) — y solo cuando ayuda: «Sin
@@ -976,7 +960,7 @@ private fun HojaDetalle(
                     it,
                     color = Movi.colores.textoMedio,
                     style = Movi.textos.apoyo,
-                    modifier = Modifier.padding(top = 3.dp),
+                    modifier = Modifier.padding(top = Espacio.xxs),
                 )
             }
 
@@ -989,14 +973,13 @@ private fun HojaDetalle(
 
             // ── Tipo ──────────────────────────────────────────────────────────
             Text(
-                "TIPO",
+                "Tipo",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 fontWeight = FontWeight.Medium,
-                letterSpacing = 0.4.sp,
-                modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                modifier = Modifier.padding(top = Espacio.l, bottom = Espacio.xs),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs), modifier = Modifier.fillMaxWidth()) {
                 val opciones = listOf(
                     null,
                     TransactionType.EXPENSE.name,
@@ -1020,10 +1003,10 @@ private fun HojaDetalle(
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(top = Espacio.xs),
             )
 
-            Column(modifier = Modifier.padding(top = 20.dp, bottom = 20.dp)) {
+            Column(modifier = Modifier.padding(top = Espacio.l, bottom = Espacio.l)) {
                 Hairline()
                 if (nombreSostieneReglasDePlata(categoria.name)) {
                     // La cuota y el desembolso de un crédito cuentan por su nombre exacto: el
@@ -1033,7 +1016,7 @@ private fun HojaDetalle(
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         lineHeight = 15.sp,
-                        modifier = Modifier.padding(vertical = 12.dp),
+                        modifier = Modifier.padding(vertical = Espacio.s),
                     )
                     Hairline()
                 } else {
@@ -1052,7 +1035,7 @@ private fun HojaDetalle(
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                             lineHeight = 15.sp,
-                            modifier = Modifier.padding(vertical = 12.dp),
+                            modifier = Modifier.padding(vertical = Espacio.s),
                         )
                         Hairline()
                     }
@@ -1096,8 +1079,8 @@ private fun SeccionApariencia(
     val apariencia = remember(categoria.name, categoria.icono, categoria.color) {
         aparienciaDe(categoria.name, CategoryPref(icono = categoria.icono, color = categoria.color))
     }
-    Column(modifier = Modifier.padding(top = 20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(modifier = Modifier.padding(top = Espacio.l)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
             IconoDeCategoria(apariencia = apariencia)
             Text(
                 "${rotuloDeIcono(apariencia.icono)} · ${rotuloDeColor(apariencia.color)}",
@@ -1107,24 +1090,22 @@ private fun SeccionApariencia(
         }
 
         Text(
-            "ÍCONO",
+            "Ícono",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             fontWeight = FontWeight.Medium,
-            letterSpacing = 0.4.sp,
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+            modifier = Modifier.padding(top = Espacio.m, bottom = Espacio.xs),
         )
         CuadriculaDeApariencia(ICONOS_DEL_CATALOGO) { item, modifier ->
             CeldaDeIcono(item = item, elegido = item.clave == apariencia.icono, onClick = { onElegirIcono(item.clave) }, modifier = modifier)
         }
 
         Text(
-            "COLOR",
+            "Color",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             fontWeight = FontWeight.Medium,
-            letterSpacing = 0.4.sp,
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+            modifier = Modifier.padding(top = Espacio.m, bottom = Espacio.xs),
         )
         // Fila que se desplaza y no la misma cuadrícula que el ícono: un círculo sin rótulo no
         // necesita el ancho de celda de 80 dp que pide un ícono con dos renglones de texto debajo
@@ -1147,7 +1128,7 @@ private fun SeccionApariencia(
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.marca,
                 modifier = Modifier
-                    .padding(top = 12.dp)
+                    .padding(top = Espacio.s)
                     .clickable(onClick = onVolverAlDeMovi),
             )
         }
@@ -1244,7 +1225,7 @@ private fun CeldaDeColor(item: ColorDelCatalogo, elegido: Boolean, onClick: () -
             .then(if (elegido) Modifier.border(2.dp, Movi.colores.texto, forma) else Modifier)
             .selectable(selected = elegido, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = item.rotulo }
-            .padding(3.dp),
+            .padding(Espacio.xxs),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -1264,7 +1245,6 @@ private fun OpcionDeTipo(texto: String, activa: Boolean, modifier: Modifier = Mo
         // 390 dp de ancho «Automático» se cortaba en «Automáti…» — un rótulo cortado en el
         // control que decide el tipo de la categoría es justo donde no se puede adivinar.
         style = Movi.textos.apoyo,
-        letterSpacing = (-0.1).sp,
         fontWeight = FontWeight.Medium,
         color = if (activa) Movi.colores.fondo else Movi.colores.textoMedio,
         maxLines = 1,
@@ -1272,10 +1252,10 @@ private fun OpcionDeTipo(texto: String, activa: Boolean, modifier: Modifier = Mo
         overflow = TextOverflow.Ellipsis,
         textAlign = TextAlign.Center,
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(if (activa) Movi.colores.marca else Movi.colores.tarjeta)
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 2.dp),
+            .padding(vertical = Espacio.s, horizontal = Espacio.xxs),
     )
 }
 
@@ -1285,10 +1265,10 @@ private fun AccionDeHoja(titulo: String, detalle: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 13.dp),
+            .padding(vertical = Espacio.s),
     ) {
         Text(titulo, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-        Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 15.sp, modifier = Modifier.padding(top = 3.dp))
+        Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 15.sp, modifier = Modifier.padding(top = Espacio.xxs))
     }
 }
 
@@ -1322,15 +1302,15 @@ private fun HojaRenombrar(
                 style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(Movi.colores.tarjeta)
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                    .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
             ) {
                 // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                 // [esAtajoDeSeleccionarTodo]. Acá pesa más que en otros campos: el nombre llega
@@ -1363,7 +1343,7 @@ private fun HojaRenombrar(
                 style = Movi.textos.apoyo,
                 color = if (colision?.reserved == true) Movi.colores.sale else Movi.colores.textoMedio,
                 lineHeight = 15.sp,
-                modifier = Modifier.padding(top = 10.dp),
+                modifier = Modifier.padding(top = Espacio.s),
             )
 
             MensajeDeErrorDeHoja(error)
@@ -1419,7 +1399,7 @@ private fun HojaUnificar(
                 style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
+                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )
             CampoDeBusqueda(valor = busqueda, onValorCambia = { busqueda = it })
             Column(
@@ -1427,7 +1407,7 @@ private fun HojaUnificar(
                     .fillMaxWidth()
                     .heightIn(max = 260.dp)
                     .verticalScroll(rememberScrollState())
-                    .padding(top = 8.dp),
+                    .padding(top = Espacio.xs),
             ) {
                 candidatas.forEach { c ->
                     Row(
@@ -1435,26 +1415,26 @@ private fun HojaUnificar(
                             .testTag(tagDeCandidataDeUnificar(c.name))
                             .fillMaxWidth()
                             .clickable(enabled = !guardando) { elegida = c }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = Espacio.s),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(c.name, style = Movi.textos.cuerpo, color = Movi.colores.texto)
                             Text(resumenDeUso(c), color = Movi.colores.textoApagado, style = Movi.textos.apoyo)
                         }
                         if (elegida?.name == c.name) {
-                            Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
                         }
                     }
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Movi.colores.hilo))
+                    Box(modifier = Modifier.fillMaxWidth().height(Medida.trazo).background(Movi.colores.hilo))
                 }
                 if (candidatas.isEmpty()) {
                     Text(
                         "No hay otra categoría con ese nombre.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        modifier = Modifier.padding(vertical = 16.dp),
+                        modifier = Modifier.padding(vertical = Espacio.m),
                     )
                 }
             }
@@ -1465,7 +1445,7 @@ private fun HojaUnificar(
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
-                modifier = Modifier.padding(top = 10.dp),
+                modifier = Modifier.padding(top = Espacio.s),
             )
             MensajeDeErrorDeHoja(error)
             BotonDeHoja(
@@ -1486,7 +1466,7 @@ private fun MensajeDeErrorDeHoja(error: String?) {
         style = Movi.textos.apoyo,
         color = Movi.colores.sale,
         lineHeight = 17.sp,
-        modifier = Modifier.padding(top = 10.dp),
+        modifier = Modifier.padding(top = Espacio.s),
     )
 }
 
@@ -1501,11 +1481,11 @@ private fun BotonDeHoja(texto: String, habilitado: Boolean, onClick: () -> Unit)
         overflow = TextOverflow.Ellipsis,
         textAlign = TextAlign.Center,
         modifier = Modifier
-            .padding(top = 18.dp, bottom = 24.dp)
+            .padding(top = Espacio.m, bottom = Espacio.xl)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(if (habilitado) Movi.colores.marca else Movi.colores.tarjeta)
             .clickable(enabled = habilitado, onClick = onClick)
-            .padding(vertical = 15.dp, horizontal = 16.dp),
+            .padding(vertical = Espacio.m, horizontal = Espacio.m),
     )
 }

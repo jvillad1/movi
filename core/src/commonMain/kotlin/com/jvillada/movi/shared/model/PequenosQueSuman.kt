@@ -74,7 +74,7 @@ fun pequenosQueSuman(gastos: List<FinancialEvent>): List<PequenosQueSuman> {
     val chicos = gastos.filter {
         it.type == TransactionType.EXPENSE &&
             it.currency == "COP" &&
-            it.amount in 1..GASTO_CHICO_HASTA &&
+            montoContado(it) in 1..GASTO_CHICO_HASTA &&
             it.category !in QUE_NO_ES_CONSUMO
     }
     if (chicos.size < VECES_PARA_SUMAR) return emptyList()
@@ -86,7 +86,7 @@ fun pequenosQueSuman(gastos: List<FinancialEvent>): List<PequenosQueSuman> {
     val enUnComercio = gruposDeComercio.values.flatten().map { it.id }.toSet()
 
     val deComercio = gruposDeComercio.values.map { grupo ->
-        PequenosQueSuman(nombreDelComercio(grupo), porComercio = true, veces = grupo.size, total = grupo.sumOf { it.amount })
+        PequenosQueSuman(nombreDelComercio(grupo), porComercio = true, veces = grupo.size, total = grupo.sumOf { montoContado(it) })
     }
     val deCategoria = chicos
         .filterNot { it.id in enUnComercio }
@@ -94,7 +94,7 @@ fun pequenosQueSuman(gastos: List<FinancialEvent>): List<PequenosQueSuman> {
         .groupBy { it.category }
         .filterValues { it.size >= VECES_PARA_SUMAR }
         .map { (categoria, grupo) ->
-            PequenosQueSuman(categoria, porComercio = false, veces = grupo.size, total = grupo.sumOf { it.amount })
+            PequenosQueSuman(categoria, porComercio = false, veces = grupo.size, total = grupo.sumOf { montoContado(it) })
         }
 
     return (deComercio + deCategoria)

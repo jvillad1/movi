@@ -29,6 +29,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -40,6 +41,9 @@ import kotlin.test.assertTrue
  * una lectura de esta visita caída.
  */
 @RunWith(RobolectricTestRunner::class)
+// Ola R4: los avisos son tarjetas de propuesta, más altas; en la pantalla de 470 dp por defecto
+// «Entraron solos» quedaba debajo del borde y la lista perezosa no la componía.
+@Config(qualifiers = "w411dp-h1200dp-xhdpi")
 class PorRevisarRecuerdaLoUltimoTest {
 
     @get:Rule val composeRule = createComposeRule()

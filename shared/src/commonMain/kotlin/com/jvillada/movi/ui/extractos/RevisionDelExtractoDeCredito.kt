@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.extractos
 
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.conCifrasOcultas
 
 import androidx.compose.foundation.background
@@ -78,12 +82,10 @@ internal fun RevisionDelExtractoDeCredito(propuesta: PropuestaDelExtractoDeCredi
             subtitle = "Extracto de un crédito",
         )
         Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espacio.m, vertical = Espacio.s),
         ) {
-            MinCard(
+            Superficie(
                 modifier = Modifier.fillMaxWidth().testTag(TAG_PROPUESTA_DEL_EXTRACTO_DE_CREDITO),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(18.dp),
             ) {
                 Text(
                     propuesta.cuentaNombre ?: "Crédito ·${propuesta.resumen.numero?.takeLast(4) ?: "sin número"}",
@@ -91,19 +93,19 @@ internal fun RevisionDelExtractoDeCredito(propuesta: PropuestaDelExtractoDeCredi
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                 )
-                Spacer(Modifier.height(10.dp))
-                Text("EL EXTRACTO DICE", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.s))
+                Text("El extracto dice", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(Espacio.xs))
                 renglonesDelExtractoDeCredito(propuesta).forEach { renglon ->
                     Text(
                         conCifrasOcultas("· $renglon"),
                         style = Movi.textos.cuerpo,
                         color = Movi.colores.texto,
                         lineHeight = 20.sp,
-                        modifier = Modifier.padding(vertical = 2.dp),
+                        modifier = Modifier.padding(vertical = Espacio.xxs),
                     )
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(
                     when {
                         propuesta.cuentaId == null ->
@@ -117,14 +119,14 @@ internal fun RevisionDelExtractoDeCredito(propuesta: PropuestaDelExtractoDeCredi
                     color = if (hecho) Movi.colores.entra else Movi.colores.textoMedio,
                 )
                 error?.let {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
             }
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.m).padding(bottom = Espacio.l),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
         ) {
             Boton(if (hecho) "Volver" else "Ahora no", principal = false, habilitado = !trabajando, modifier = Modifier.weight(1f)) {
                 goBack(Screen.Credits)
@@ -151,24 +153,14 @@ internal fun RevisionDelExtractoDeCredito(propuesta: PropuestaDelExtractoDeCredi
     }
 }
 
+/** Ola R4: el [Boton][com.jvillada.movi.ui.components.ds.Boton] del sistema, principal o secundario. */
 @Composable
 private fun Boton(texto: String, principal: Boolean, habilitado: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .then(
-                if (principal) Modifier.background(if (habilitado) Movi.colores.texto else Movi.colores.textoApagado)
-                else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(14.dp)),
-            )
-            .clickable(enabled = habilitado, role = Role.Button, onClick = onClick)
-            .padding(vertical = 15.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            texto,
-            color = if (principal) Movi.colores.fondo else Movi.colores.texto,
-            style = Movi.textos.cuerpo,
-            maxLines = 1,
-        )
-    }
+    com.jvillada.movi.ui.components.ds.Boton(
+        texto = texto,
+        onClick = onClick,
+        modifier = modifier,
+        variante = if (principal) com.jvillada.movi.ui.components.ds.VarianteDeBoton.Principal else com.jvillada.movi.ui.components.ds.VarianteDeBoton.Secundario,
+        habilitado = habilitado,
+    )
 }

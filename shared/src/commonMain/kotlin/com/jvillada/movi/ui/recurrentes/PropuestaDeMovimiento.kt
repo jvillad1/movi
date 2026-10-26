@@ -1,25 +1,20 @@
 package com.jvillada.movi.ui.recurrentes
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.formatMoney
 
 /**
@@ -59,33 +54,22 @@ internal fun PropuestaDeMovimiento(
     // el monto quedaba pegado al texto — dos datos distintos leyéndose como uno.
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
         verticalAlignment = Alignment.Top,
     ) {
         Text(
             text = descripcionPropuesta(propuesta),
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
-            lineHeight = 16.sp,
             modifier = Modifier.weight(1f),
         )
-        Text(
-            text = formatMoney(propuesta.amount, propuesta.currency),
-            style = Movi.textos.monto,
-            color = Movi.colores.texto,
-            lineHeight = 16.sp,
-        )
+        MontoDeFila(formatMoney(propuesta.amount, propuesta.currency))
     }
     if (aviso != null) {
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = aviso,
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            lineHeight = 15.sp,
-        )
+        Spacer(Modifier.height(Espacio.xxs))
+        Text(text = aviso, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
     }
-    Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(Espacio.s))
     AccionesDeLaFila(
         acciones = listOf(
             AccionDeOcurrencia(ETIQUETA_SI_FUE_ESTE, primary = true, onClick = onConfirmar),
@@ -122,7 +106,7 @@ internal data class AccionDeOcurrencia(
  */
 @Composable
 internal fun AccionesDeLaFila(acciones: List<AccionDeOcurrencia>, enVuelo: Boolean) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
         acciones.forEachIndexed { i, accion ->
             val etiqueta = if (enVuelo && i == 0) "Guardando…" else accion.label
             ActionChip(label = etiqueta, primary = accion.primary) {
@@ -132,16 +116,17 @@ internal fun AccionesDeLaFila(acciones: List<AccionDeOcurrencia>, enVuelo: Boole
     }
 }
 
-/** Los botones chicos de esta familia — «Sí, fue este», «Confirmar», «No es». */
+/**
+ * Los botones chicos de esta familia — «Sí, fue este», «Confirmar», «No es». Ola R4: son el [Boton]
+ * del sistema en tamaño [TamanoDeBoton.S] (36 de alto, 48 de toque): el principal lleno de marca, el
+ * otro en la capa 2. Antes eran cajitas de 10 dp de radio con el texto invertido.
+ */
 @Composable
 internal fun ActionChip(label: String, primary: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (primary) Movi.colores.texto else Movi.colores.tarjeta)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) {
-        Text(label, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = if (primary) Movi.colores.fondo else Movi.colores.texto)
-    }
+    Boton(
+        texto = label,
+        onClick = onClick,
+        variante = if (primary) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
+        tamano = TamanoDeBoton.S,
+    )
 }

@@ -163,4 +163,62 @@ class MovimientosDeBancolombiaTest {
         assertEquals(26_807_543L, leido.filas[5].amount)
         assertEquals(TransactionType.EXPENSE, leido.filas[5].type)
     }
+
+    // ── El fondo de inversión ──────────────────────────────────────────────
+
+    private val fondo = """
+        Sucursal Virtual Personas
+        Movimientos: Inversiones
+        Lunes, 26 de octubre de 2026, 1:20 a. m.
+        JUAN EJEMPLO
+        Fecha Descripción Número de unidades Valor unidad Valor en pesos
+        19 Oct 2026
+        Gravamen a los 
+        movimientos 
+        financieros
+        0,158864 -$ 7.728,00 -$ 7.728,00
+        19 Oct 2026
+        Traslado hacia cuenta 
+        de ahorros
+        39,716000 -$ 1.932.000,00 -$ 1.932.000,00
+        19 Oct 2026
+        Retención en la fuente
+        0,001849 -$ 89,94 -$ 89,94
+        Dirección IP 1.2.3.4
+        Fecha Descripción Número de unidades Valor unidad Valor en pesos
+        28 Sep 2026
+        Traslado desde cuenta 
+        de ahorros
+        82,596034 $ 4.000.000,00 $ 4.000.000,00
+        07 Sep 2026
+        Traslado desde cuenta 
+        de ahorros
+        -- $ 1.932.000,00 $ 1.932.000,00
+    """.trimIndent()
+
+    @Test
+    fun `el fondo - traslados, 4x1000 y retencion, sin las unidades en la descripcion`() {
+        val leido = assertNotNull(leerLosMovimientosDeBancolombia(fondo))
+        assertEquals(true, leido.deUnFondo)
+        assertNull(leido.numero)
+        assertEquals(5, leido.filas.size)
+
+        val gmf = leido.filas[0]
+        assertEquals("2026-10-19", gmf.date)
+        assertEquals("Gravamen a los movimientos financieros", gmf.description)
+        assertEquals(7_728L, gmf.amount)
+        assertEquals(TransactionType.EXPENSE, gmf.type)
+        assertNotNull(cargoDelBanco(gmf.description, gmf.type))
+
+        val retencion = leido.filas[2]
+        assertEquals(90L, retencion.amount)
+        assertNotNull(cargoDelBanco(retencion.description, retencion.type))
+
+        val entrada = leido.filas[3]
+        assertEquals("Traslado desde cuenta de ahorros", entrada.description)
+        assertEquals(4_000_000L, entrada.amount)
+        assertEquals(TransactionType.INCOME, entrada.type)
+        // Sin unidades («--»), como el primer traslado de la cuenta.
+        assertEquals(1_932_000L, leido.filas[4].amount)
+    }
 }

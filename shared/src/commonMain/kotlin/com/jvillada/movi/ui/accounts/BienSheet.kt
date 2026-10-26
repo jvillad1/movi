@@ -41,6 +41,7 @@ import com.jvillada.movi.shared.model.claseDeBien
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.normalizarBien
 import com.jvillada.movi.shared.model.problemaDelBien
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ConfirmacionEnLinea
 import com.jvillada.movi.ui.components.MarcoDeHoja
@@ -172,12 +173,12 @@ fun BienSheet(
             )
 
             Spacer(Modifier.height(Movi.espacios.margen))
-            Rotulo("NOMBRE")
+            Rotulo("Nombre")
             Spacer(Modifier.height(Movi.espacios.corto))
             CampoDeTexto(nombre, onCambio = { nombre = it }, placeholder = "Ej: Casa Almendros")
 
             Spacer(Modifier.height(Movi.espacios.margen))
-            Rotulo("QUÉ ES")
+            Rotulo("Qué es")
             Spacer(Modifier.height(Movi.espacios.corto))
             Row(horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
                 ClaseDeBien.entries.forEach { opcion ->
@@ -191,12 +192,12 @@ fun BienSheet(
             }
 
             Spacer(Modifier.height(Movi.espacios.margen))
-            Rotulo("CUÁNTO VALE")
+            Rotulo("Cuánto vale")
             Spacer(Modifier.height(Movi.espacios.corto))
             MoneyField(value = valor, onValueChange = { valor = it })
 
             Spacer(Modifier.height(Movi.espacios.margen))
-            Rotulo("DE CUÁNDO ES ESE VALOR")
+            Rotulo("De cuándo es ese valor")
             Spacer(Modifier.height(Movi.espacios.corto))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -277,9 +278,9 @@ fun BienSheet(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(Movi.espacios.encabezado)
+                        .height(Medida.objetivoTactil)
                         .clip(RoundedCornerShape(Movi.formas.pleno))
-                        .background(if (puedeGuardar) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                        .background(if (puedeGuardar) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
                         .clickable(enabled = puedeGuardar) { guardar() },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -323,7 +324,6 @@ private fun Rotulo(texto: String) {
         text = texto,
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
-        letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
     )
 }
@@ -334,7 +334,7 @@ private fun CampoDeTexto(valor: String, onCambio: (String) -> Unit, placeholder:
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Movi.formas.normal))
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.normal))
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Movi.formas.normal))
             .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.medio),
     ) {
         // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
@@ -361,8 +361,8 @@ private fun Opcion(texto: String, elegida: Boolean, modifier: Modifier, onClick:
     Box(
         modifier = modifier
             .clip(forma)
-            .background(if (elegida) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-            .then(if (!elegida) Modifier.border(1.dp, Movi.colores.borde, forma) else Modifier)
+            .background(if (elegida) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
+            .then(if (!elegida) Modifier.border(Medida.trazo, Movi.colores.borde, forma) else Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.medio),
         contentAlignment = Alignment.CenterStart,

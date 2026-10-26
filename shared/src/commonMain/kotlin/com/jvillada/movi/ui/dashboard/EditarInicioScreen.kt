@@ -1,5 +1,14 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,15 +50,18 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.PreferenciasDelInicio
 import com.jvillada.movi.shared.model.SECCIONES_CONFIGURABLES
+import com.jvillada.movi.shared.model.SECCIONES_OPCIONALES
 import com.jvillada.movi.shared.model.limpias
 import com.jvillada.movi.shared.model.ordenarConPreferencias
 import com.jvillada.movi.shared.model.renderableSections
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ANCHO_DE_UNA_COLUMNA
@@ -57,6 +69,7 @@ import com.jvillada.movi.ui.components.BotonReintentar
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinCard
+import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
@@ -85,7 +98,7 @@ import kotlinx.coroutines.flow.filterNotNull
 
 internal const val TITULO_EDITAR_INICIO = "Editar inicio"
 internal const val VOLVER_AL_ORDEN_DE_MOVI = "Volver al orden de Movi"
-internal const val EL_HEROE_VA_PRIMERO = "«Te quedan» va siempre primero."
+internal const val EL_HEROE_VA_PRIMERO = "«Te quedan», las acciones y «Movi propone hoy» van siempre arriba."
 internal const val PARA_REVISAR_ESCONDIDA =
     "Escondida: si hay algo urgente, Hoy te lo dice en una sola línea."
 
@@ -93,7 +106,7 @@ internal const val PARA_REVISAR_ESCONDIDA =
 internal fun tagDeLaFilaDelEditor(tipo: String): String = "editar-inicio-$tipo"
 
 /** «Mostrar «Disponible» en Hoy»: lo que dice el interruptor de cada fila al lector de pantalla. */
-internal fun rotuloDeMostrar(nombre: String): String = "Mostrar «$nombre» en Hoy"
+internal fun rotuloDeMostrar(nombre: String): String = "Mostrar «$nombre» en Inicio"
 internal fun rotuloDeSubir(nombre: String): String = "Subir «$nombre»"
 internal fun rotuloDeBajar(nombre: String): String = "Bajar «$nombre»"
 
@@ -109,13 +122,24 @@ data class SeccionDelEditor(val tipo: String, val nombre: String, val visible: B
  */
 fun seccionesDelEditor(preferencias: PreferenciasDelInicio): List<SeccionDelEditor> {
     val limpias = preferencias.limpias()
+    val deMovi = deLaDefinicion(preferencias)
     return ordenarConPreferencias(baseDelEditor(preferencias), { it }, limpias.orden).map { tipo ->
-        SeccionDelEditor(tipo, SECCIONES_CONFIGURABLES[tipo] ?: tipo, tipo !in limpias.ocultas)
+        // Ola R1: una opcional que el Inicio de Movi no trae (Disponible, Tu patrimonio) se ve solo si
+        // el dueño la prendió; lo demás, salvo que la haya escondido.
+        val visible = if (tipo in deMovi) tipo !in limpias.ocultas else tipo in limpias.visibles
+        SeccionDelEditor(tipo, SECCIONES_CONFIGURABLES[tipo] ?: tipo, visible)
     }
 }
 
-private fun baseDelEditor(preferencias: PreferenciasDelInicio): List<String> =
-    preferencias.ordenDeMovi.ifEmpty { SECCIONES_CONFIGURABLES.keys.toList() }
+/** Las configurables que trae el Inicio de Movi: `ordenDeMovi`, o las que no son opcionales. */
+private fun deLaDefinicion(preferencias: PreferenciasDelInicio): List<String> =
+    preferencias.ordenDeMovi.ifEmpty { SECCIONES_CONFIGURABLES.keys.filter { it !in SECCIONES_OPCIONALES } }
+
+/** Lo que lista el editor: las del Inicio de Movi y, al final, las opcionales que no trae. */
+private fun baseDelEditor(preferencias: PreferenciasDelInicio): List<String> {
+    val deMovi = deLaDefinicion(preferencias)
+    return deMovi + SECCIONES_OPCIONALES.filter { it !in deMovi }
+}
 
 /**
  * [tipo] un lugar más arriba ([hacia] = −1) o más abajo (+1). Sin efecto en los bordes. Si el orden
@@ -132,9 +156,16 @@ fun PreferenciasDelInicio.moviendo(tipo: String, hacia: Int): PreferenciasDelIni
     return copy(orden = if (lista == baseDelEditor(this)) emptyList() else lista)
 }
 
-/** [tipo] visible o escondida en Hoy. */
+/**
+ * [tipo] visible o escondida en el Inicio. Una opcional que el Inicio de Movi no trae se prende y se
+ * apaga en [PreferenciasDelInicio.visibles]; las demás se esconden en [PreferenciasDelInicio.ocultas].
+ */
 fun PreferenciasDelInicio.mostrando(tipo: String, visible: Boolean): PreferenciasDelInicio =
-    copy(ocultas = if (visible) ocultas - tipo else (ocultas + tipo).distinct())
+    if (tipo in SECCIONES_OPCIONALES && tipo !in deLaDefinicion(this)) {
+        copy(visibles = if (visible) (visibles + tipo).distinct() else visibles - tipo)
+    } else {
+        copy(ocultas = if (visible) ocultas - tipo else (ocultas + tipo).distinct())
+    }
 
 /** «Volver al orden de Movi»: sin orden propio ni ocultas. */
 fun PreferenciasDelInicio.deMovi(): PreferenciasDelInicio = PreferenciasDelInicio(ordenDeMovi = ordenDeMovi)
@@ -196,18 +227,17 @@ fun EditarInicioScreen(onNavigate: (Screen) -> Unit) {
         ) {
             Column(modifier = Modifier.fillMaxWidth().widthIn(max = ANCHO_DE_UNA_COLUMNA)) {
                 Text(
-                    "Elige qué ves en Hoy y en qué orden. Se guarda solo, y vale en todos tus aparatos.",
+                    "Elige qué ves en Inicio y en qué orden. Se guarda solo, y vale en todos tus aparatos.",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                 )
                 Spacer(Modifier.height(Movi.espacios.medio))
                 val actual = preferencias
                 when {
-                    actual == null && fallo -> Column(verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
-                        Text("No pude cargar cómo tienes Hoy.", style = Movi.textos.cuerpo, color = Movi.colores.texto)
-                        BotonReintentar(onReintentar = { intento++ })
+                    actual == null && fallo -> NoSePudoLeer("No pude cargar cómo tienes Inicio.", onReintentar = { intento++ })
+                    actual == null -> Superficie(relleno = RellenoDeSuperficie.Lista) {
+                        repeat(4) { EsqueletoDeFila(conInicio = false) }
                     }
-                    actual == null -> Text("Cargando…", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
                     else -> EditorDelInicio(
                         preferencias = actual,
                         noSeGuardo = noSeGuardo,
@@ -227,14 +257,10 @@ internal fun EditorDelInicio(
     onCambiar: (PreferenciasDelInicio) -> Unit,
 ) {
     val secciones = seccionesDelEditor(preferencias)
-    MinSectionHeader(title = "Secciones de Hoy")
+    Seccion(titulo = "Secciones de Inicio")
     Text(EL_HEROE_VA_PRIMERO, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-    Spacer(Modifier.height(Movi.espacios.corto))
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
-    ) {
+    Spacer(Modifier.height(Espacio.xs))
+    Superficie(relleno = RellenoDeSuperficie.Lista) {
         secciones.forEachIndexed { i, seccion ->
             FilaDelEditor(
                 seccion = seccion,
@@ -244,7 +270,7 @@ internal fun EditorDelInicio(
                 onBajar = { onCambiar(preferencias.moviendo(seccion.tipo, +1)) },
                 onMostrar = { onCambiar(preferencias.mostrando(seccion.tipo, it)) },
             )
-            if (i < secciones.lastIndex) Hairline()
+            if (i < secciones.lastIndex) Separador(SangriaDeSeparador.Margen)
         }
     }
     if (noSeGuardo) {
@@ -255,22 +281,14 @@ internal fun EditorDelInicio(
             color = Movi.colores.sale,
         )
     }
-    Spacer(Modifier.height(Movi.espacios.margen))
+    Spacer(Modifier.height(Medida.dentroDeSeccion))
     val esLaDeMovi = preferencias.limpias().esLaDeMovi
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(Movi.formas.pleno))
-            .clickable(enabled = !esLaDeMovi, role = Role.Button) { onCambiar(preferencias.deMovi()) }
-            .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            VOLVER_AL_ORDEN_DE_MOVI,
-            style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
-            color = if (esLaDeMovi) Movi.colores.textoApagado else Movi.colores.marca,
-        )
-    }
+    Boton(
+        VOLVER_AL_ORDEN_DE_MOVI,
+        onClick = { onCambiar(preferencias.deMovi()) },
+        variante = VarianteDeBoton.Fantasma,
+        habilitado = !esLaDeMovi,
+    )
 }
 
 @Composable
@@ -282,38 +300,30 @@ private fun FilaDelEditor(
     onBajar: () -> Unit,
     onMostrar: (Boolean) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().testTag(tagDeLaFilaDelEditor(seccion.tipo))) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = Movi.espacios.minimo),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    seccion.nombre,
-                    style = Movi.textos.titulo,
-                    color = if (seccion.visible) Movi.colores.texto else Movi.colores.textoApagado,
+    // Ola R4: una [Fila] del sistema; las flechas y el interruptor van en su final.
+    Fila(
+        titulo = seccion.nombre,
+        subtitulo = if (!seccion.visible && seccion.tipo == "ALERTS") PARA_REVISAR_ESCONDIDA else null,
+        final = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Flecha(Icons.Rounded.KeyboardArrowUp, rotuloDeSubir(seccion.nombre), puedeSubir, onSubir)
+                Flecha(Icons.Rounded.KeyboardArrowDown, rotuloDeBajar(seccion.nombre), puedeBajar, onBajar)
+                Switch(
+                    checked = seccion.visible,
+                    onCheckedChange = onMostrar,
+                    modifier = Modifier.semantics { contentDescription = rotuloDeMostrar(seccion.nombre) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Movi.colores.sobreMarca,
+                        checkedTrackColor = Movi.colores.marca,
+                        uncheckedThumbColor = Movi.colores.textoApagado,
+                        uncheckedTrackColor = Movi.colores.tarjeta,
+                        uncheckedBorderColor = Movi.colores.borde,
+                    ),
                 )
-                if (!seccion.visible && seccion.tipo == "ALERTS") {
-                    Text(PARA_REVISAR_ESCONDIDA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
             }
-            Flecha(Icons.Rounded.KeyboardArrowUp, rotuloDeSubir(seccion.nombre), puedeSubir, onSubir)
-            Flecha(Icons.Rounded.KeyboardArrowDown, rotuloDeBajar(seccion.nombre), puedeBajar, onBajar)
-            Spacer(Modifier.size(Movi.espacios.minimo))
-            Switch(
-                checked = seccion.visible,
-                onCheckedChange = onMostrar,
-                modifier = Modifier.semantics { contentDescription = rotuloDeMostrar(seccion.nombre) },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Movi.colores.sobreMarca,
-                    checkedTrackColor = Movi.colores.marca,
-                    uncheckedThumbColor = Movi.colores.textoApagado,
-                    uncheckedTrackColor = Movi.colores.tarjeta,
-                    uncheckedBorderColor = Movi.colores.borde,
-                ),
-            )
-        }
-    }
+        },
+        modifier = Modifier.testTag(tagDeLaFilaDelEditor(seccion.tipo)),
+    )
 }
 
 /** Una flecha de 44 dp de blanco para el dedo; apagada en el borde de la lista. */
@@ -326,7 +336,7 @@ private fun Flecha(
 ) {
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(Medida.objetivoTactil)
             .clip(CircleShape)
             .clickable(enabled = habilitada, role = Role.Button, onClickLabel = rotulo, onClick = onClick)
             .semantics { contentDescription = rotulo },
@@ -336,7 +346,7 @@ private fun Flecha(
             icono,
             contentDescription = null,
             tint = if (habilitada) Movi.colores.texto else Movi.colores.hilo,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(Icono.l),
         )
     }
 }
@@ -357,7 +367,7 @@ internal fun BotonEditarInicio(onClick: () -> Unit) {
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Rounded.Tune, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Tune, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(Icono.m))
         Spacer(Modifier.size(Movi.espacios.corto))
         Text(TITULO_EDITAR_INICIO, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
     }

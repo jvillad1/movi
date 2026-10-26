@@ -33,9 +33,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * **«Cerró tu período» en Hoy**, con el Inicio montado entero: la tarjeta sale arriba con la frase del
- * resumen, tocarla abre el detalle del período cerrado, y «Ya lo vi» la saca en el mismo toque y le
- * avisa al server. Sin cierre (204), no hay tarjeta.
+ * **«Cerró tu período» en el Inicio**, montado entero. Ola R1: es una tarjeta de «Movi propone hoy»
+ * con la frase del resumen; «Ver el período» abre el detalle del período cerrado, y «Ya lo vi» la saca
+ * en el mismo toque y le avisa al server. Sin cierre (204), no hay tarjeta.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w390dp-h2400dp-xhdpi")
@@ -81,7 +81,7 @@ class CierreEnHoyTest {
     }
 
     private fun tarjetas(): Int =
-        composeRule.onAllNodesWithTag(TAG_TARJETA_DE_CIERRE, useUnmergedTree = true).fetchSemanticsNodes().size
+        composeRule.onAllNodesWithText("Resumen de septiembre 2026", useUnmergedTree = true).fetchSemanticsNodes().size
 
     private fun hay(texto: String): Boolean =
         composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
@@ -91,8 +91,9 @@ class CierreEnHoyTest {
         entrar(septiembre)
         assertEquals(1, tarjetas())
         assertTrue(hay("Cerró tu período: entró \$22.500.000, salió \$18.200.000"))
-        assertTrue(hay("Te quedaron \$420.000 del disponible"))
-        assertTrue(hay("Contra agosto"))
+        // Va en el feed de propuestas, no suelta arriba de todo.
+        assertEquals(1, composeRule.onAllNodesWithTag(com.jvillada.movi.ui.components.ds.TAG_TARJETA_DE_PROPUESTA, useUnmergedTree = true)
+            .fetchSemanticsNodes().size)
         composeRule.onNodeWithText("Ver el período", useUnmergedTree = true).performClick()
         assertEquals(Screen.DetalleDePeriodo("2026-09"), navegado.last())
     }

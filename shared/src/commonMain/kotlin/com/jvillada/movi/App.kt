@@ -84,8 +84,6 @@ import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.credits.SalidaDeDeudasScreen
 import com.jvillada.movi.ui.dashboard.DashboardScreen
 import com.jvillada.movi.ui.dashboard.PrimerosPasosScreen
-import com.jvillada.movi.ui.goals.MetasScreen
-import com.jvillada.movi.ui.extractos.ExtractosScreen
 import com.jvillada.movi.ui.mas.MasScreen
 import com.jvillada.movi.ui.profile.BorrarLaCuentaScreen
 import com.jvillada.movi.ui.profile.PerfilScreen
@@ -446,7 +444,6 @@ fun App() {
                 is Screen.AIChat         -> AIChatScreen(navigate, preguntaInicial = pantalla.preguntaInicial, sugeridaInicial = pantalla.sugerida)
                 Screen.Credits           -> CreditosScreen(navigate)
                 Screen.SalidaDeDeudas    -> SalidaDeDeudasScreen(navigate)
-                Screen.Goals             -> MetasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)
                 is Screen.Plan           -> PlanScreen(navigate, segmento = pantalla.segmento)
                 Screen.Categorias        -> CategoriasScreen(navigate)
@@ -461,8 +458,9 @@ fun App() {
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
                 is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, pantalla.smsId, abrirCategoria = pantalla.abrirCategoria)
                 Screen.Mas               -> MasScreen(navigate)
-                Screen.Extractos         -> ExtractosScreen(navigate)
                 Screen.Accounts         -> AccountsScreen(navigate)
+                Screen.Espacios         -> com.jvillada.movi.ui.espacios.EspaciosScreen(navigate)
+                is Screen.Espacio       -> com.jvillada.movi.ui.espacios.EspacioScreen(pantalla.id, pagoOtro = pantalla.pagoOtro)
                 Screen.CuadreDeSaldos   -> CuadreDeSaldosScreen(navigate)
                 is Screen.AccountDetail -> AccountDetailScreen(
                     onNavigate = navigate,

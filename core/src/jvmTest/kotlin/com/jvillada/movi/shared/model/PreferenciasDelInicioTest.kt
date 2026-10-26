@@ -24,47 +24,80 @@ class PreferenciasDelInicioTest {
     }
 
     @Test
-    fun `el orden elegido se aplica y el héroe sigue primero`() {
-        val elegido = PreferenciasDelInicio(
-            orden = listOf("GASTO_POR_CATEGORIA", "PATRIMONIO", "DISPONIBLE_DEL_PERIODO", "ALERTS", "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO"),
-        )
+    fun `el orden elegido se aplica y el héroe, las acciones y las propuestas siguen arriba`() {
+        val elegido = PreferenciasDelInicio(orden = listOf("GASTO_POR_CATEGORIA", "CUENTAS", "CHECKLIST_DEL_PERIODO"))
         val hoy = inicioConPreferencias(porDefecto, elegido)
         assertEquals(
             listOf(
-                "HERO_BALANCE", "GASTO_POR_CATEGORIA", "PATRIMONIO", "DISPONIBLE_DEL_PERIODO", "ALERTS",
-                "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "BANNER",
+                "HERO_BALANCE", "ACCIONES", "PROPUESTAS", "GASTO_POR_CATEGORIA", "CUENTAS", "CHECKLIST_DEL_PERIODO",
+                "ALERTS", "BANNER",
             ),
             tipos(hoy),
         )
-        // Nombrar al héroe no lo mueve: no es configurable.
-        val conHeroe = inicioConPreferencias(porDefecto, elegido.copy(orden = listOf("PATRIMONIO", "HERO_BALANCE")))
-        assertEquals("HERO_BALANCE", tipos(conHeroe).first())
+        // Nombrar al héroe o a las propuestas no los mueve: no son configurables.
+        val conFijos = inicioConPreferencias(porDefecto, elegido.copy(orden = listOf("PROPUESTAS", "CUENTAS", "HERO_BALANCE")))
+        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS"), tipos(conFijos).take(3))
     }
 
     @Test
-    fun `las ocultas salen, y Para revisar deja su línea compacta en el mismo lugar`() {
-        val hoy = inicioConPreferencias(porDefecto, PreferenciasDelInicio(ocultas = listOf("DISPONIBLE_DEL_PERIODO", "ALERTS")))
+    fun `las ocultas salen, y lo que ya no es configurable no se puede esconder`() {
+        val hoy = inicioConPreferencias(porDefecto, PreferenciasDelInicio(ocultas = listOf("CUENTAS", "ALERTS", "PROPUESTAS")))
         assertEquals(
-            listOf("HERO_BALANCE", "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "PATRIMONIO", PARA_REVISAR_COMPACTO, "BANNER"),
+            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
             tipos(hoy),
         )
-        // El tipo personal se pinta en este cliente…
-        assertTrue(renderableSections(hoy).any { it.type == PARA_REVISAR_COMPACTO })
-        // …y un APK anterior (sin el tipo en su taxonomía) no ve ni «Para revisar» ni la línea.
-        val tiposDeUnApkViejo = ScreenTaxonomy.SECTION_TYPES
-        assertTrue(hoy.sections.filter { it.type in tiposDeUnApkViejo }.none { it.type == "ALERTS" || it.type == PARA_REVISAR_COMPACTO })
-        // Nunca va en la definición global: el Editor de pantallas no lo conoce.
+        // La línea compacta de «Para revisar» sigue siendo un tipo personal: se pinta si llega, y
+        // nunca va en la definición global (el Editor de pantallas no la conoce).
+        val conCompacta = porDefecto.copy(sections = porDefecto.sections + ScreenSection(type = PARA_REVISAR_COMPACTO))
+        assertTrue(renderableSections(conCompacta).any { it.type == PARA_REVISAR_COMPACTO })
         assertTrue(PARA_REVISAR_COMPACTO !in ScreenTaxonomy.SECTION_TYPES)
+    }
+
+    /**
+     * Ola R1: «Disponible» y «Tu patrimonio» salieron del Inicio por defecto (repetían Plan y
+     * Patrimonio), pero el dueño las puede prender. El server las agrega después de la última sección
+     * configurable —antes de lo que queda solo para los APK viejos—, y el orden elegido las mueve como
+     * a cualquier otra.
+     */
+    @Test
+    fun `una opcional prendida se agrega después de los widgets y se puede mover`() {
+        assertTrue(SECCIONES_OPCIONALES.none { it in tipos(porDefecto) }, "no vienen en el Inicio de Movi")
+        val conDisponible = inicioConPreferencias(porDefecto, PreferenciasDelInicio(visibles = listOf("DISPONIBLE_DEL_PERIODO")))
+        assertEquals(
+            listOf(
+                "HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA",
+                "DISPONIBLE_DEL_PERIODO", "ALERTS", "BANNER",
+            ),
+            tipos(conDisponible),
+        )
+        assertEquals("Disponible", conDisponible.sections.first { it.type == "DISPONIBLE_DEL_PERIODO" }.title)
+        val lasDosArriba = inicioConPreferencias(
+            porDefecto,
+            PreferenciasDelInicio(
+                visibles = listOf("PATRIMONIO", "DISPONIBLE_DEL_PERIODO"),
+                orden = listOf("PATRIMONIO", "CUENTAS", "DISPONIBLE_DEL_PERIODO", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"),
+            ),
+        )
+        assertEquals(
+            listOf(
+                "HERO_BALANCE", "ACCIONES", "PROPUESTAS", "PATRIMONIO", "CUENTAS", "DISPONIBLE_DEL_PERIODO",
+                "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER",
+            ),
+            tipos(lasDosArriba),
+        )
+        // Una opcional que la definición ya trae (el Editor de pantallas la puso para todos) no se duplica.
+        val conPatrimonioGlobal = porDefecto.copy(sections = porDefecto.sections + ScreenSection(type = "PATRIMONIO"))
+        assertEquals(1, tipos(inicioConPreferencias(conPatrimonioGlobal, PreferenciasDelInicio(visibles = listOf("PATRIMONIO")))).count { it == "PATRIMONIO" })
     }
 
     @Test
     fun `una sección que la preferencia no nombra queda en su lugar por defecto`() {
-        // El dueño eligió su orden cuando Hoy no tenía «Tu patrimonio»; después Movi la agregó.
-        val elegido = PreferenciasDelInicio(orden = listOf("ALERTS", "GASTO_POR_CATEGORIA", "DISPONIBLE_DEL_PERIODO", "CHECKLIST_DEL_PERIODO", "PREGUNTALE_A_MOVI"))
+        // El dueño eligió su orden cuando Hoy no tenía el carrusel de cuentas; después Movi lo agregó.
+        val elegido = PreferenciasDelInicio(orden = listOf("GASTO_POR_CATEGORIA", "CHECKLIST_DEL_PERIODO"))
         val hoy = inicioConPreferencias(porDefecto, elegido)
-        // PATRIMONIO conserva su lugar (el sexto), y las nombradas se reparten los demás lugares.
+        // CUENTAS conserva su lugar, y las nombradas se reparten los demás lugares.
         assertEquals(
-            listOf("HERO_BALANCE", "ALERTS", "GASTO_POR_CATEGORIA", "DISPONIBLE_DEL_PERIODO", "CHECKLIST_DEL_PERIODO", "PATRIMONIO", "PREGUNTALE_A_MOVI", "BANNER"),
+            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "GASTO_POR_CATEGORIA", "CHECKLIST_DEL_PERIODO", "ALERTS", "BANNER"),
             tipos(hoy),
         )
         // Lo mismo con un tipo del Editor que la preferencia nunca nombra.
@@ -84,25 +117,32 @@ class PreferenciasDelInicioTest {
         assertTrue(va >= 0x4000_0000, "nunca choca con una versión global")
         assertEquals(porDefecto.version, versionConPreferencias(porDefecto.version, PreferenciasDelInicio()))
         assertEquals(va, inicioConPreferencias(porDefecto, a).version)
+        // Prender una opcional también la cambia, y sin opcionales la huella es la de antes de la R1.
+        val conOpcional = a.copy(visibles = listOf("PATRIMONIO"))
+        assertNotEquals(va, versionConPreferencias(porDefecto.version, conOpcional))
+        assertNotEquals(porDefecto.version, versionConPreferencias(porDefecto.version, PreferenciasDelInicio(visibles = listOf("PATRIMONIO"))))
     }
 
     @Test
     fun `limpias saca lo que no es configurable y los repetidos`() {
         val sucia = PreferenciasDelInicio(
-            orden = listOf("PATRIMONIO", "PATRIMONIO", "HERO_BALANCE", "BANNER", "ALERTS"),
-            ocultas = listOf("ALERTS", "ALERTS", "NO_EXISTE"),
-            ordenDeMovi = listOf("ALERTS"),
+            orden = listOf("PATRIMONIO", "PATRIMONIO", "HERO_BALANCE", "BANNER", "ALERTS", "CUENTAS"),
+            ocultas = listOf("CUENTAS", "CUENTAS", "NO_EXISTE", "PREGUNTALE_A_MOVI"),
+            visibles = listOf("PATRIMONIO", "CUENTAS", "PATRIMONIO"),
+            ordenDeMovi = listOf("CUENTAS"),
         )
-        assertEquals(PreferenciasDelInicio(orden = listOf("PATRIMONIO", "ALERTS"), ocultas = listOf("ALERTS")), sucia.limpias())
+        assertEquals(
+            PreferenciasDelInicio(orden = listOf("PATRIMONIO", "CUENTAS"), ocultas = listOf("CUENTAS"), visibles = listOf("PATRIMONIO")),
+            sucia.limpias(),
+        )
     }
 
     @Test
-    fun `las configurables son las seis de la revisión y existen en el Hoy por defecto`() {
-        assertEquals(
-            listOf("PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "GASTO_POR_CATEGORIA", "PATRIMONIO", "ALERTS"),
-            seccionesConfigurablesDe(porDefecto),
-        )
-        assertEquals(SECCIONES_CONFIGURABLES.keys.toList(), seccionesConfigurablesDe(porDefecto))
-        assertTrue("HERO_BALANCE" !in SECCIONES_CONFIGURABLES)
+    fun `las configurables son las del rediseño, y las que no son opcionales vienen en el Inicio por defecto`() {
+        assertEquals(listOf("CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"), seccionesConfigurablesDe(porDefecto))
+        assertEquals(SECCIONES_CONFIGURABLES.keys.toList() - SECCIONES_OPCIONALES.toSet(), seccionesConfigurablesDe(porDefecto))
+        assertTrue(SECCIONES_OPCIONALES.all { it in SECCIONES_CONFIGURABLES })
+        // Lo fijo arriba no se configura: el héroe, la cuadrícula y las propuestas.
+        assertTrue(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS").none { it in SECCIONES_CONFIGURABLES })
     }
 }

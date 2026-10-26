@@ -74,7 +74,7 @@ fun DiasDeAvisoSheet(
                 text = "¿Con cuánta anticipación te avisamos?",
                 style = Movi.textos.titulo,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.xs),
             )
             Text(
                 text = reminderLeadHint(dias),
@@ -82,17 +82,17 @@ fun DiasDeAvisoSheet(
                 style = Movi.textos.cuerpo,
                 fontWeight = FontWeight.Normal,
                 color = Movi.colores.textoMedio,
-                modifier = Modifier.padding(bottom = 18.dp),
+                modifier = Modifier.padding(bottom = Espacio.m),
             )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs), modifier = Modifier.fillMaxWidth()) {
                 listOf(0, 1, 2, 3, 5, 7).forEach { d ->
                     val elegido = d == dias
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .height(Medida.objetivoTactil)
+                            .clip(RoundedCornerShape(Radio.m))
                             .background(if (elegido) Movi.colores.marca else Movi.colores.tarjeta)
                             .clickable(enabled = !saving) { dias = d },
                         contentAlignment = Alignment.Center,
@@ -108,19 +108,19 @@ fun DiasDeAvisoSheet(
             }
 
             if (error != null) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(text = error, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Espacio.l))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(if (saving) Movi.colores.tarjeta else Movi.colores.marca)
                     .clickable(enabled = !saving) { onSave(dias) }
-                    .padding(vertical = 15.dp),
+                    .padding(vertical = Espacio.m),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -130,7 +130,7 @@ fun DiasDeAvisoSheet(
                 )
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(Espacio.xl))
         }
     }
 }

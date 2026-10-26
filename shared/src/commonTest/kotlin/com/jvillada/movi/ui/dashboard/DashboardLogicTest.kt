@@ -815,8 +815,12 @@ class DashboardLogicTest {
         //
         // Generación 8: Movi AI es «Pregúntale a Movi», segundo y no último, y el BANNER —que la
         // definición conserva para los APK viejos— no se pinta: serían dos puertas al mismo chat.
+        //
+        // Generación 9 (ola R1): sin datos se pintan el héroe, la cuadrícula, «Movi propone hoy» (que
+        // sin lecturas no afirma «nada por decidir») y el lugar del carrusel mientras las cuentas no
+        // contestan. Ni «Para revisar» ni el BANNER: los dos quedan solo para los APK viejos.
         val visible = visibleSections(defaultDashboardDefinition(), DashboardData())
-        assertEquals(listOf("HERO_BALANCE", "PREGUNTALE_A_MOVI"), visible.map { it.type })
+        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS"), visible.map { it.type })
     }
 
     /**
@@ -835,7 +839,7 @@ class DashboardLogicTest {
         )
         val visible = visibleSections(defaultDashboardDefinition(), conCosas)
         assertEquals(
-            listOf("HERO_BALANCE", "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS"),
+            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"),
             visible.map { it.type },
         )
     }

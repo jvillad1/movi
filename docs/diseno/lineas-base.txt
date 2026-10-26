@@ -1,0 +1,8 @@
+# Las líneas base de LosValoresSueltosSoloBajanTest (core/src/jvmTest/.../quality/).
+# Solo pueden bajar: cuando migres una pantalla, baja el número acá en el mismo cambio.
+# Para recontar: python3 scripts/auditoria-de-diseno.py --resumen
+
+dp_sueltos = 282
+radios_con_numero = 26
+colores_literales = 0
+# fontSize sueltos (LosTamanosSueltosSoloBajanTest): 3

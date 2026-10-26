@@ -54,7 +54,7 @@ fun MinNavRail(
             .background(Movi.colores.tarjeta)
             .windowInsetsPadding(barrasDelSistemaDelRail)
             .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.margen),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
     ) {
         Text(
             "movi",
@@ -63,14 +63,14 @@ fun MinNavRail(
             fontWeight = FontWeight.Bold,
             color = Movi.colores.marca,
             letterSpacing = 1.5.sp,
-            modifier = Modifier.padding(start = 12.dp, bottom = 16.dp),
+            modifier = Modifier.padding(start = Espacio.s, bottom = Espacio.m),
         )
 
         destinosDelRail.forEach { dest ->
             RailItem(dest.tab, dest.label, dest.icon, active, onTabSelected)
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
 
         // Primary action — mirrors the bottom-nav center FAB (y sus atajos, Ola 5).
         BotonDeAgregarConAtajos(
@@ -78,23 +78,24 @@ fun MinNavRail(
             alElegirAtajo = onAtajo,
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(999.dp))
+                .clip(RoundedCornerShape(Radio.pill))
                 .background(Movi.colores.marca),
         ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = Movi.espacios.amplio, vertical = 10.dp),
+                .height(Medida.objetivoTactil)
+                .padding(horizontal = Espacio.m),
         ) {
-            // El mismo `Color(0xFF1A1040)` a mano que estaba en la barra del teléfono, repetido
-            // dos veces más acá. Tres copias de un color sin nombre: ahora es `sobreMarca`.
+            // El mismo lila oscuro a mano que estaba en la barra del teléfono, repetido dos veces
+            // más acá. Tres copias de un color sin nombre: ahora es `sobreMarca`.
             Icon(
                 imageVector = Icons.Rounded.Add,
                 contentDescription = "Agregar",
                 tint = Movi.colores.sobreMarca,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(Icono.m),
             )
             Text(
                 "Agregar",
@@ -143,13 +144,13 @@ private fun RailCompacto(
             .width(ANCHO_DEL_RAIL_COMPACTO)
             .padding(vertical = Movi.espacios.margen),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
     ) {
         BotonDeAgregarConAtajos(
             alTocar = { onTabSelected(NavTab.ADD) },
             alElegirAtajo = onAtajo,
             modifier = Modifier
-                .size(52.dp)
+                .size(Medida.botonFlotante)
                 .clip(CircleShape)
                 .background(Movi.colores.marca),
         ) {
@@ -157,10 +158,10 @@ private fun RailCompacto(
                 imageVector = Icons.Rounded.Add,
                 contentDescription = "Agregar",
                 tint = Movi.colores.sobreMarca,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(Icono.l),
             )
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
         destinosDelRail.forEach { dest ->
             RailCompactoItem(dest, active, onTabSelected)
         }
@@ -172,7 +173,7 @@ private fun RailCompactoItem(dest: DestinoPrincipal, active: NavTab?, onTabSelec
     val isActive = dest.tab == active
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onTabSelected(dest.tab) }
@@ -184,20 +185,20 @@ private fun RailCompactoItem(dest: DestinoPrincipal, active: NavTab?, onTabSelec
                 selected = isActive
                 onClick { onTabSelected(dest.tab); true }
             }
-            .padding(horizontal = RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO, vertical = 8.dp),
+            .padding(horizontal = RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO, vertical = Espacio.xs),
     ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .clip(RoundedCornerShape(Movi.formas.pleno))
-                .background(if (isActive) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
-                .padding(horizontal = 14.dp, vertical = 3.dp),
+                .background(if (isActive) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent)
+                .padding(horizontal = Espacio.s, vertical = Espacio.xxs),
         ) {
             Icon(
                 imageVector = dest.icon,
                 contentDescription = null,
                 tint = if (isActive) Movi.colores.marca else Movi.colores.textoApagado,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(Icono.m),
             )
         }
         RotuloDelRailCompacto(dest.rotuloCorto, isActive)
@@ -241,19 +242,20 @@ private fun RailItem(
     val isActive = tab == active
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(Movi.formas.normal))
-            .background(if (isActive) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
+            .heightIn(min = Medida.objetivoTactil)
+            .clip(RoundedCornerShape(Radio.m))
+            .background(if (isActive) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent)
             .clickable { onTabSelected(tab) }
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = Espacio.s),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = if (isActive) Movi.colores.marca else Movi.colores.textoApagado,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(Icono.m),
         )
         Text(
             text = label,

@@ -1,5 +1,14 @@
 package com.jvillada.movi.ui.profile
 
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -157,18 +166,12 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
             )
 
             // 1 — Antes, la descarga: después ya no hay de dónde sacarla.
-            MinSectionHeader(title = "Antes, descarga tus datos")
-            MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-            ) {
-                CardRow(
-                    left = { Text(DESCARGAR_TUS_DATOS, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
-                    sub = errorDatos ?: if (bajandoDatos) "Preparando el archivo…" else
-                        "Un ZIP con tus cuentas, movimientos, créditos y mensajes del banco, en CSV y JSON",
-                    showChevron = true,
-                    isLast = true,
+            Seccion(titulo = "Antes, descarga tus datos")
+            Superficie(relleno = RellenoDeSuperficie.Lista) {
+                Fila(
+                    titulo = DESCARGAR_TUS_DATOS,
+                    subtitulo = if (bajandoDatos) "Preparando el archivo…" else "Un ZIP en CSV y JSON",
+                    final = { Chevron() },
                     onClick = {
                         if (!bajandoDatos) {
                             bajandoDatos = true
@@ -188,15 +191,14 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
                     },
                 )
             }
+            errorDatos?.let {
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(top = Espacio.xs))
+            }
 
             // 2 — Qué se borra, entero.
-            Spacer(Modifier.height(Movi.espacios.margen))
-            MinSectionHeader(title = "Qué se borra")
-            MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(Movi.espacios.amplio),
-            ) {
+            Spacer(Modifier.height(Medida.entreSecciones))
+            Seccion(titulo = "Qué se borra")
+            Superficie(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
                     LO_QUE_SE_BORRA.forEach { linea ->
                         Row(horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
@@ -213,9 +215,9 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
             }
 
             // 3 — La contraseña y la palabra.
-            Spacer(Modifier.height(Movi.espacios.margen))
-            MinSectionHeader(title = "Confirma que eres tú")
-            Text("Tu contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+            Spacer(Modifier.height(Medida.entreSecciones))
+            Seccion(titulo = "Confirma que eres tú")
+            Text("Tu contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
             AuthField(
                 value = contrasena,
                 onChange = { contrasena = it; error = null },
@@ -229,7 +231,7 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
                 "Escribe $PALABRA_PARA_BORRAR_LA_CUENTA para confirmar",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
-                modifier = Modifier.padding(bottom = 6.dp),
+                modifier = Modifier.padding(bottom = Espacio.xs),
             )
             AuthField(
                 value = confirmacion,
@@ -245,23 +247,14 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
             }
 
             Spacer(Modifier.height(Movi.espacios.margen))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Movi.formas.pleno))
-                    .background(if (sePuede) Movi.colores.sale else Movi.colores.tarjeta)
-                    .clickable(enabled = sePuede, role = Role.Button, onClick = ::borrar)
-                    .testTag(TAG_BOTON_BORRAR)
-                    .padding(vertical = 15.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    if (borrando) "Borrando…" else BORRAR_PARA_SIEMPRE,
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (sePuede) Movi.colores.fondo else Movi.colores.textoApagado,
-                )
-            }
+            Boton(
+                if (borrando) "Borrando…" else BORRAR_PARA_SIEMPRE,
+                onClick = ::borrar,
+                variante = VarianteDeBoton.Peligro,
+                habilitado = sePuede,
+                anchoCompleto = true,
+                modifier = Modifier.testTag(TAG_BOTON_BORRAR),
+            )
             Spacer(Modifier.height(Movi.espacios.seccion))
         }
     }

@@ -79,7 +79,7 @@ private val OPCION_BIEN = TypeOption(
  *
  * **Las otras hojas ancladas abajo y sin `verticalScroll`**, contadas con grep sobre los 16
  * sitios que llaman a `SheetHandleWithClose` (2026-08-27) y confirmadas una por una:
- * [com.jvillada.movi.ui.goals.GoalSheet] (:122), [VoidEventSheet] (:76), [DeleteAccountSheet]
+ * la de metas (borrada en la R4), [VoidEventSheet] (:76), [DeleteAccountSheet]
  * (:83), la hoja de presupuesto de `PresupuestosScreen:440`, la de «¿qué deuda?» de
  * `CreditosScreen:359` y `NotificationsPanel:52` — seis además de esta, y ninguna se midió acá.
  * (`CreditBalanceSheet` figuró en esa lista por error: **ya se desplaza**, `:88`.)
@@ -182,15 +182,15 @@ fun CreateAccountSheet(
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         // --- NOMBRE ---
-        SectionLabel("NOMBRE")
-        Spacer(Modifier.height(8.dp))
+        SectionLabel("Nombre")
+        Spacer(Modifier.height(Espacio.xs))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(Radio.m))
                 .background(Movi.colores.tarjeta)
-                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                .padding(horizontal = 14.dp, vertical = 14.dp),
+                .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+                .padding(horizontal = Espacio.s, vertical = Espacio.s),
         ) {
             // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
             // [esAtajoDeSeleccionarTodo].
@@ -212,14 +212,14 @@ fun CreateAccountSheet(
             )
         }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(Espacio.m))
 
         // --- TIPO ---
-        SectionLabel("TIPO")
-        Spacer(Modifier.height(8.dp))
+        SectionLabel("Tipo")
+        Spacer(Modifier.height(Espacio.xs))
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
             TYPE_OPTIONS.forEach { option ->
                 TypeCard(
@@ -237,7 +237,7 @@ fun CreateAccountSheet(
                 TypeCard(option = OPCION_BIEN, selected = false, onClick = { onElegirBien(name.trim()) })
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         // F52: nota, no botón — Créditos vive en Más, no acá.
         Text(
             text = "¿Tarjetas o préstamos? Se cargan en Créditos",
@@ -245,11 +245,11 @@ fun CreateAccountSheet(
             color = Movi.colores.textoMedio,
         )
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(Espacio.m))
 
         // --- SALDO INICIAL --- (ya no hay tipo de deuda en este selector, ver F51/F52)
-        SectionLabel("SALDO INICIAL")
-        Spacer(Modifier.height(8.dp))
+        SectionLabel("Saldo inicial")
+        Spacer(Modifier.height(Espacio.xs))
         MoneyField(
             value = initialBalance,
             onValueChange = { initialBalance = it },
@@ -258,7 +258,7 @@ fun CreateAccountSheet(
 
         // Inline error display
         if (error != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = error!!,
                 style = Movi.textos.apoyo,
@@ -266,15 +266,15 @@ fun CreateAccountSheet(
             )
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.l))
 
         // --- CTA ---
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+                .height(Medida.objetivoTactil)
+                .clip(RoundedCornerShape(Radio.pill))
+                .background(if (canSave) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
                 .clickable(enabled = canSave) { save() },
             contentAlignment = Alignment.Center,
         ) {
@@ -286,7 +286,7 @@ fun CreateAccountSheet(
             )
         }
         if (!canSave && !saving && missingFieldMessage != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = missingFieldMessage,
                 style = Movi.textos.apoyo,
@@ -295,7 +295,7 @@ fun CreateAccountSheet(
             )
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(Espacio.s))
     }
 }
 
@@ -305,7 +305,6 @@ private fun SectionLabel(text: String) {
         text = text,
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
-        letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
     )
 }
@@ -316,25 +315,25 @@ private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit,
     Box(
         modifier = Modifier
             .weight(1f)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .clip(RoundedCornerShape(Radio.m))
+            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
             .then(
-                if (!selected) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(10.dp)) else Modifier,
+                if (!selected) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)) else Modifier,
             )
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
+            .padding(vertical = Espacio.s),
         contentAlignment = Alignment.Center,
     ) {
         if (icon != null) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(Icono.s),
                 )
                 Text(
                     text = label,
@@ -364,23 +363,23 @@ private fun TypeCard(option: TypeOption, selected: Boolean, onClick: () -> Unit)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .clip(RoundedCornerShape(Radio.m))
+            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
             .then(
-                if (!selected) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp)) else Modifier,
+                if (!selected) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)) else Modifier,
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
             Icon(
                 imageVector = option.icon,
                 contentDescription = null,
                 tint = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(Icono.m),
             )
             Text(
                 text = option.label,
@@ -389,7 +388,7 @@ private fun TypeCard(option: TypeOption, selected: Boolean, onClick: () -> Unit)
                 color = if (selected) Movi.colores.marca else Movi.colores.texto,
             )
         }
-        Spacer(Modifier.height(3.dp))
+        Spacer(Modifier.height(Espacio.xxs))
         Text(
             text = option.description,
             style = Movi.textos.apoyo,

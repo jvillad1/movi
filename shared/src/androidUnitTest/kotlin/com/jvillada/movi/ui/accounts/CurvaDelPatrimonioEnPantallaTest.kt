@@ -86,7 +86,7 @@ class CurvaDelPatrimonioEnPantallaTest {
     fun `sin historia no hay curva y la tarjeta sigue entera`() {
         montar { HistoriaDelPatrimonio() }
         assertEquals(0, curvas())
-        assertTrue(hay("PATRIMONIO NETO"))
+        assertTrue(hay("Patrimonio neto"))
         assertTrue(!hay(CON_LA_TRM_DE_HOY))
     }
 
@@ -100,7 +100,7 @@ class CurvaDelPatrimonioEnPantallaTest {
     fun `si la historia no se puede leer, Patrimonio no se rompe`() {
         montar { error("sin red") }
         assertEquals(0, curvas())
-        assertTrue(hay("PATRIMONIO NETO"))
+        assertTrue(hay("Patrimonio neto"))
         assertTrue(hay("Nu"))
     }
 }

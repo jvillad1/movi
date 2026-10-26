@@ -90,10 +90,30 @@ class ContrasteDeLosTokensTest {
 
     private val TEXTO_AA = 4.5
     private val PLANOS_MINIMO = 1.15
+
+    /**
+     * **Ola R0: el paso mínimo entre dos capas consecutivas** (capa 1 → 2 → 3). Más bajo que
+     * [PLANOS_MINIMO] porque una capa 2 vive casi siempre DENTRO de una capa 1 —un chip en una
+     * tarjeta— y no compite con el fondo; la referencia del camino 1 daba 1,09 y 1,13. Elegido, no
+     * medido en usuarios: es el piso debajo del cual dos capas ya no se leen como dos.
+     */
+    private val PASO_ENTRE_CAPAS = 1.08
     private val BORDE_MINIMO = 1.25
     private val GRAFICO_AA = 3.0
 
     private val temas = listOf("oscuro" to COLORES_OSCUROS, "claro" to COLORES_CLAROS)
+
+    /**
+     * Todo lo que puede ir debajo de un texto. Ola R0: además del fondo y la tarjeta (la capa 1), las
+     * capas 2 y 3 y la superficie de propuesta — un monto puede caer en cualquiera.
+     */
+    private fun superficiesDe(c: ColoresDeMovi) = listOf(
+        "fondo" to c.fondo,
+        "tarjeta (capa 1)" to c.tarjeta,
+        "capa 2" to c.capa2,
+        "capa 3" to c.capa3,
+        "propuesta" to c.propuesta,
+    )
 
     /** Los tres niveles de texto y cada color que aparece como monto. */
     private fun textosDe(c: ColoresDeMovi) = listOf(
@@ -118,11 +138,11 @@ class ContrasteDeLosTokensTest {
      * evitar.
      */
     @Test
-    fun `cada texto pasa AA sobre el fondo y sobre la tarjeta, en los dos temas`() {
+    fun `cada texto pasa AA sobre el fondo y sobre cada capa, en los dos temas`() {
         val fallas = mutableListOf<String>()
         for ((tema, c) in temas) {
             for ((nombre, color) in textosDe(c)) {
-                for ((dondeNombre, donde) in listOf("fondo" to c.fondo, "tarjeta" to c.tarjeta)) {
+                for ((dondeNombre, donde) in superficiesDe(c)) {
                     val r = contraste(color, donde)
                     if (r < TEXTO_AA) {
                         fallas += "  $tema · «$nombre» sobre $dondeNombre: ${r.legible()}:1 " +
@@ -173,6 +193,76 @@ class ContrasteDeLosTokensTest {
                     "actual de Movi ya logra ${PLANOS_MINIMO.legible()}:1",
             )
         }
+    }
+
+    /**
+     * **Ola R0: las capas se escalonan.** Cada capa se despega de la de abajo al menos
+     * [PASO_ENTRE_CAPAS], así que una capa 2 sobre una capa 1 se ve sin borde —es la promesa del
+     * camino 1, «superficies por capas, sin bordes duros»—. Y la capa 1 sigue siendo la tarjeta: un
+     * solo valor con dos nombres.
+     */
+    @Test
+    fun `las capas se escalonan, en los dos temas`() {
+        val fallas = mutableListOf<String>()
+        for ((tema, c) in temas) {
+            if (c.capa1 != c.tarjeta) fallas += "  $tema · la capa 1 no es la tarjeta"
+            for ((nombre, arriba, abajo) in listOf(
+                Triple("capa 2 sobre capa 1", c.capa2, c.capa1),
+                Triple("capa 3 sobre capa 2", c.capa3, c.capa2),
+            )) {
+                val r = contraste(arriba, abajo)
+                if (r < PASO_ENTRE_CAPAS) {
+                    fallas += "  $tema · $nombre: ${r.legible()}:1 (mínimo ${PASO_ENTRE_CAPAS.legible()})"
+                }
+            }
+        }
+        if (fallas.isNotEmpty()) fail("Hay capas que no se distinguen:\n" + fallas.joinToString("\n"))
+    }
+
+    /**
+     * **La propuesta de Movi se ve como otra cosa.** Va sobre el fondo, así que tiene que despegarse
+     * de él al menos un paso entre capas; y no puede ser ninguna de las capas, o el tinte de la marca
+     * —lo único que la distingue— no estaría.
+     */
+    @Test
+    fun `la superficie de propuesta se despega del fondo y no es ninguna capa`() {
+        for ((tema, c) in temas) {
+            val r = contraste(c.propuesta, c.fondo)
+            assertTrue(
+                r >= PASO_ENTRE_CAPAS,
+                "En el tema $tema la propuesta da ${r.legible()}:1 contra el fondo " +
+                    "(mínimo ${PASO_ENTRE_CAPAS.legible()})",
+            )
+            assertTrue(
+                c.propuesta !in listOf(c.fondo, c.capa1, c.capa2, c.capa3),
+                "En el tema $tema la propuesta es igual a una capa",
+            )
+        }
+    }
+
+    /**
+     * **Un color de estado sobre su propio lavado** (`ColoresDeMovi.lavado`, compuesto sobre una capa):
+     * es como se dibuja una píldora de estado y el botón de peligro de `ui/components/ds/`. Es
+     * texto, así que 4,5:1.
+     */
+    @Test
+    fun `cada color de estado se lee sobre su lavado, en los dos temas`() {
+        val fallas = mutableListOf<String>()
+        for ((tema, c) in temas) {
+            for ((nombre, color) in listOf(
+                "marca" to c.marca, "entra" to c.entra, "sale" to c.sale,
+                "aviso" to c.aviso, "entre cuentas" to c.entreCuentas, "capital" to c.capital,
+            )) {
+                for ((dondeNombre, donde) in listOf("capa 1" to c.capa1, "capa 2" to c.capa2, "propuesta" to c.propuesta)) {
+                    val lavado = c.lavado(color).compositeOver(donde)
+                    val r = contraste(color, lavado)
+                    if (r < TEXTO_AA) {
+                        fallas += "  $tema · «$nombre» sobre su lavado en $dondeNombre: ${r.legible()}:1"
+                    }
+                }
+            }
+        }
+        if (fallas.isNotEmpty()) fail("Hay estados que no se leen sobre su lavado:\n" + fallas.joinToString("\n"))
     }
 
     /**

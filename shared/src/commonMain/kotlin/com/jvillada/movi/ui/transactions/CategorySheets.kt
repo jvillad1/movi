@@ -23,8 +23,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -72,6 +70,12 @@ import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.fecha.timestampParaFecha
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.shared.model.marcaDe
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
 import com.jvillada.movi.ui.recurrentes.claveDeNombre
@@ -116,7 +120,7 @@ private fun MarcoDelMovimiento(
 ) {
     when (lugar) {
         LugarDelMovimiento.Hoja -> BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = dismissEnabled, content = content)
-        LugarDelMovimiento.Panel -> Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        LugarDelMovimiento.Panel -> Column(modifier = Modifier.fillMaxSize().padding(horizontal = Medida.margenDePantalla)) {
             SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled, conManija = false)
             content()
         }
@@ -125,13 +129,9 @@ private fun MarcoDelMovimiento(
 
 @Composable
 private fun SheetLabel(text: String) {
-    Text(
-        text = text,
-        style = Movi.textos.apoyo,
-        fontWeight = FontWeight.Medium,
-        color = Movi.colores.textoMedio,
-        letterSpacing = 0.5.sp,
-    )
+    // Ola R4: el título de una parte de la hoja es un [Seccion] del sistema —en frase, nunca en
+    // mayúsculas— y trae su aire de abajo.
+    Seccion(titulo = text)
 }
 
 @Composable
@@ -157,9 +157,11 @@ private fun CategoryRow(
             .clickable(enabled = enabled, onClick = onClick)
             // El check dibujado no dice nada por sí solo: la fila declara que está elegida.
             .semantics { this.selected = selected }
-            .padding(vertical = if (compacto) 7.dp else 14.dp),
+            // El alto de una fila del sistema; la compacta, el del objetivo táctil.
+            .heightIn(min = if (compacto) Medida.objetivoTactil else Medida.altoDeFila)
+            .padding(vertical = Espacio.xxs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         // Task 3 (Ola B): reemplaza el ícono genérico de etiqueta por el de la categoría —
         // resuelto por `aparienciaDe`, el mismo que ya pinta Movimientos y el Inicio — así que la
@@ -168,10 +170,10 @@ private fun CategoryRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(name, style = Movi.textos.titulo, color = Movi.colores.texto)
             if (subtitle != null) {
-                Text(subtitle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 15.sp)
+                Text(subtitle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
-        if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))
+        if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
     }
 }
 
@@ -532,17 +534,16 @@ internal fun ContenidoDelMovimiento(
                 // renglón de Movimientos, que desde esta ola dice «Cuota de crédito».
                 SheetLabel(
                     when (event.category) {
-                        CUOTA_CATEGORY -> "CUOTA DE CRÉDITO"
-                        CARD_PAYMENT_CATEGORY -> "PAGO DE TARJETA"
-                        DESEMBOLSO_CATEGORY -> "DESEMBOLSO DE CRÉDITO"
-                        else -> "TRASPASO"
+                        CUOTA_CATEGORY -> "Cuota de crédito"
+                        CARD_PAYMENT_CATEGORY -> "Pago de tarjeta"
+                        DESEMBOLSO_CATEGORY -> "Desembolso de crédito"
+                        else -> "Traspaso"
                     },
                 )
-                Spacer(Modifier.height(8.dp))
                 NombreQueSeEdita(event.description) { edicionAbierta = true }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.m))
                 // El texto de «traspaso» dice «no es un gasto ni un ingreso», y un desembolso SÍ es
                 // plata que entró: para él se dice lo suyo.
                 Text(
@@ -551,9 +552,9 @@ internal fun ContenidoDelMovimiento(
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
                 )
-                Spacer(Modifier.height(20.dp))
-                Hairline()
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.l))
+                Separador(SangriaDeSeparador.Ninguna)
+                Spacer(Modifier.height(Espacio.m))
                 // El MONTO y el CONCEPTO de una pata sí se corrigen, por el mismo argumento con
                 // el que la fecha ya se corregía acá: el monto de un par es UN hecho con dos
                 // anotaciones, y el server lo cascadea a las dos por `transferId`. Lo que no se
@@ -567,9 +568,9 @@ internal fun ContenidoDelMovimiento(
                     abierto = edicionAbierta,
                     onAbiertoChange = { edicionAbierta = it },
                 )
-                Spacer(Modifier.height(20.dp))
-                Hairline()
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.l))
+                Separador(SangriaDeSeparador.Ninguna)
+                Spacer(Modifier.height(Espacio.m))
                 // La FECHA de un traspaso sí se puede corregir, aunque su categoría no: no hay
                 // ninguna contabilidad que romper —las dos patas se mueven juntas, el server
                 // cascadea por `transferId`— y sin esto un traspaso mal fechado seguiría sin
@@ -594,7 +595,7 @@ internal fun ContenidoDelMovimiento(
                 // par anulado. Lo que se anula, y por cuánto en cada cuenta, lo dice la hoja de
                 // anular ([loQuePasaAlAnular]).
                 SeccionDeAnular(onAnular, habilitado = true)
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(Espacio.xl))
             }
             BarraDeError(errorDeEdicion)
         }
@@ -624,35 +625,25 @@ internal fun ContenidoDelMovimiento(
     if (isOpeningBalance(event)) {
         MarcoDelMovimiento(lugar, onDismiss = onDismiss, dismissEnabled = true) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                SheetLabel("SALDO INICIAL")
-                Spacer(Modifier.height(8.dp))
+                SheetLabel("Saldo inicial")
                 Text(event.description, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                Spacer(Modifier.height(16.dp))
-                Text(OPENING_BALANCE_EXPLAINER, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, lineHeight = 19.sp)
+                Spacer(Modifier.height(Espacio.m))
+                Text(OPENING_BALANCE_EXPLAINER, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                 if (onVerCuenta != null) {
-                    Spacer(Modifier.height(16.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Movi.colores.marca.copy(alpha = 0.16f))
-                            .clickable(onClick = onVerCuenta),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            "Ver la cuenta",
-                            style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
-                            color = Movi.colores.marca,
-                        )
-                    }
+                    Spacer(Modifier.height(Espacio.m))
+                    Boton(
+                        texto = "Ver la cuenta",
+                        onClick = onVerCuenta,
+                        variante = VarianteDeBoton.Principal,
+                        habilitado = true,
+                        anchoCompleto = true,
+                    )
                 }
-                Spacer(Modifier.height(20.dp))
-                Hairline()
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.l))
+                Separador(SangriaDeSeparador.Ninguna)
+                Spacer(Modifier.height(Espacio.m))
                 SeccionDeFecha(event = event, onFechaCambiada = onEventChanged)
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(Espacio.xl))
             }
         }
         return
@@ -670,27 +661,25 @@ internal fun ContenidoDelMovimiento(
         }
         MarcoDelMovimiento(lugar, onDismiss = terminar, dismissEnabled = !saving) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                SheetLabel("¿Y LOS PARECIDOS?")
-                Spacer(Modifier.height(8.dp))
+                SheetLabel("¿Y los parecidos?")
                 Text(
                     tituloDeLaOferta(o),
                     style = Movi.textos.titulo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(
                     "Movi los reconoce como el mismo lugar. Cámbialos también y no tienes que abrirlos uno por uno.",
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 19.sp,
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.m))
                 // Se listan todos los que se van a mover, con la categoría que tienen hoy: una
                 // confirmación sobre cifras propias que no deja ver qué cambia no es una
                 // confirmación. Por eso el lote está topeado (ver MAXIMO_DE_PARECIDOS).
                 o.otros.forEach { otro ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = Espacio.xs)) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(otro.description, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
@@ -706,35 +695,23 @@ internal fun ContenidoDelMovimiento(
                         )
                     }
                 }
-                Spacer(Modifier.height(18.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Movi.colores.marca)
-                        .clickable(enabled = !saving) { aplicarElLote(o) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        if (saving) "Cambiando…" else "Sí, ponlos en «${o.categoria}»",
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.sobreMarca,
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .clickable(enabled = !saving) { terminar() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("No, solo este", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(Espacio.m))
+                Boton(
+                    texto = if (saving) "Cambiando…" else "Sí, ponlos en «${o.categoria}»",
+                    onClick = { aplicarElLote(o) },
+                    variante = VarianteDeBoton.Secundario,
+                    habilitado = !saving,
+                    anchoCompleto = true,
+                )
+                Spacer(Modifier.height(Espacio.xs))
+                Boton(
+                    texto = "No, solo este",
+                    onClick = { terminar() },
+                    variante = VarianteDeBoton.Fantasma,
+                    habilitado = !saving,
+                    anchoCompleto = true,
+                )
+                Spacer(Modifier.height(Espacio.l))
             }
             BarraDeError(error)
         }
@@ -780,7 +757,7 @@ internal fun ContenidoDelMovimiento(
                 cuentas = cuentas,
                 onEditar = { accion = AccionDelMovimiento.Nota },
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
             ChipDeCategoria(
                 nombre = event.category,
                 abierto = accion == AccionDelMovimiento.Categoria,
@@ -788,13 +765,16 @@ internal fun ContenidoDelMovimiento(
                 onClick = { alternar(AccionDelMovimiento.Categoria) },
             )
             if (enEsteComercio != null) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 LineaEnEsteComercio(enEsteComercio, onVer = onVerElComercio?.let { ver -> { ver(enEsteComercio.busqueda) } })
             }
+            // R3 · «Repartir»: un gasto propio pasa a un espacio y cuenta solo tu parte. Solo si el
+            // dueño tiene algún espacio (o ya está repartido); ver [FilaDeRepartir].
+            com.jvillada.movi.ui.espacios.FilaDeRepartir(evento = event, onCambiado = onEventChanged)
             // Lo que espera una decisión no se esconde detrás de una acción: confirmarlo es lo que
             // el dueño vino a hacer cuando abre un aviso pendiente.
             if (event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Espacio.m))
                 PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
             }
             // «¿De quién es la cuenta ·0756?» también es una pregunta pendiente: se ve al abrir, en
@@ -802,7 +782,7 @@ internal fun ContenidoDelMovimiento(
             // tiene guardada). Tocarla abre «Tercero». Con el tercero ya conocido no se ve nada acá.
             // Con «Tercero» abierto se calla: la fila completa ya está debajo.
             if (ofreceGuardarElTercero && aQuienFue != null && accion != AccionDelMovimiento.Tercero) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 PreguntaDelTercero(
                     pregunta = preguntaDelDestino(aQuienFue),
                     onAbrir = { accion = AccionDelMovimiento.Tercero },
@@ -811,23 +791,21 @@ internal fun ContenidoDelMovimiento(
             // Ola 15 · la pata huérfana se explica sola, acá y no en la fila: la fila no tiene
             // lugar, y esta hoja es donde el dueño llega justo cuando se pregunta qué es.
             if (isOrphanedTransferLeg(event)) {
-                Spacer(Modifier.height(16.dp))
-                SheetLabel("ERA UN TRASPASO")
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.m))
+                SheetLabel("Era un traspaso")
                 Text(ORPHANED_LEG_EXPLAINER, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
             FilaDeAcciones(acciones = acciones, abierta = accion, onElegir = ::alternar)
 
             // ── La sección abierta, debajo de la fila. Cada una guarda como siempre. ──
             Column(modifier = Modifier.fillMaxWidth().animateContentSize(Movimiento.alEntrar(reducido))) {
                 when (accion) {
                     AccionDelMovimiento.Categoria -> {
-                        Spacer(Modifier.height(12.dp))
-                        Hairline()
-                        Spacer(Modifier.height(12.dp))
-                        SheetLabel("CATEGORÍA · ${event.category}")
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(Espacio.s))
+                        Separador(SangriaDeSeparador.Ninguna)
+                        Spacer(Modifier.height(Espacio.s))
+                        SheetLabel("Categoría · ${event.category}")
                         // Ola N: la fila de texto con la categoría actual queda SOLO cuando la
                         // cuadrícula no tiene ninguna celda para marcar: una categoría escondida, o
                         // importada de un extracto y fuera de cualquier catálogo. Sin esta fila esos
@@ -845,7 +823,7 @@ internal fun ContenidoDelMovimiento(
                         }
                         if (!laActualTieneCeldaPropia) {
                             CategoryRow(name = event.category, selected = true, enabled = false, onClick = {}, compacto = true)
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(Espacio.xs))
                         }
                         // Ola L · **Una sola forma de elegir categoría**: la cuadrícula de siempre,
                         // con la búsqueda arriba y las frecuentes primero, solo las del tipo del
@@ -869,9 +847,9 @@ internal fun ContenidoDelMovimiento(
                         // siempre ([puedeMarcarsePagoDeTarjeta]); sigue fuera de la cuadrícula
                         // porque es reservada (nada reservado se ofrece ahí).
                         if (event.category != CARD_PAYMENT_CATEGORY && puedeMarcarsePagoDeTarjeta(event.type, categoryPrefs)) {
-                            Spacer(Modifier.height(6.dp))
-                            Hairline()
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(Espacio.xs))
+                            Separador(SangriaDeSeparador.Ninguna)
+                            Spacer(Modifier.height(Espacio.xs))
                             CategoryRow(
                                 name = CARD_PAYMENT_CATEGORY,
                                 selected = false,
@@ -881,13 +859,13 @@ internal fun ContenidoDelMovimiento(
                                 compacto = true,
                             )
                         }
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(Espacio.xxs))
                         EnlaceAdministrarCategorias()
                     }
                     AccionDelMovimiento.Nota -> {
-                        Spacer(Modifier.height(12.dp))
-                        Hairline()
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(Espacio.s))
+                        Separador(SangriaDeSeparador.Ninguna)
+                        Spacer(Modifier.height(Espacio.s))
                         // El monto, la cuenta y el concepto: la misma sección, ya abierta (tocar la
                         // acción ES pedir el editor). «Cerrar» la vuelve a plegar.
                         SeccionDelMovimiento(
@@ -900,9 +878,9 @@ internal fun ContenidoDelMovimiento(
                         )
                     }
                     AccionDelMovimiento.Fecha -> {
-                        Spacer(Modifier.height(12.dp))
-                        Hairline()
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(Espacio.s))
+                        Separador(SangriaDeSeparador.Ninguna)
+                        Spacer(Modifier.height(Espacio.s))
                         SeccionDeFecha(
                             event = event,
                             onFechaCambiada = { accion = null; onEventChanged(it) },
@@ -910,9 +888,9 @@ internal fun ContenidoDelMovimiento(
                         )
                     }
                     AccionDelMovimiento.Repetir -> if (ofreceRepetir && onMarcarComoRecurrente != null) {
-                        Spacer(Modifier.height(12.dp))
-                        Hairline()
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(Espacio.s))
+                        Separador(SangriaDeSeparador.Ninguna)
+                        Spacer(Modifier.height(Espacio.s))
                         SeccionEstoSeRepite(
                             event = event,
                             onError = { errorDeEdicion = it },
@@ -923,15 +901,15 @@ internal fun ContenidoDelMovimiento(
                     }
                     AccionDelMovimiento.Tercero -> {
                         if (tercero != null) {
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(Espacio.s))
                             FilaDelTercero(
                                 tercero = tercero,
                                 recienGuardado = destinoGuardadoAca != null,
                             )
                         } else if (aQuienFue != null && ofreceGuardarElTercero) {
-                            Spacer(Modifier.height(12.dp))
-                            Hairline()
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(Espacio.s))
+                            Separador(SangriaDeSeparador.Ninguna)
+                            Spacer(Modifier.height(Espacio.s))
                             // Guardarla no toca este movimiento: desde ahí «Cuentas de otros» lo
                             // cuenta, porque el texto del banco no se reescribe nunca.
                             FilaGuardarElDestino(
@@ -957,20 +935,20 @@ internal fun ContenidoDelMovimiento(
                         // categorías de deuda sobre un gasto que todavía no es la mitad de un
                         // traspaso — ver `ofreceVincularDeuda`.
                         if (ofreceVincular) {
-                            Spacer(Modifier.height(12.dp))
-                            Hairline()
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(Espacio.s))
+                            Separador(SangriaDeSeparador.Ninguna)
+                            Spacer(Modifier.height(Espacio.s))
                             SelectorDeCuentaDeDeuda(
                                 cuentas = cuentas,
                                 seleccionada = null,
                                 onSeleccionar = { it?.let(::vincular) },
                             )
                             if (vinculando) {
-                                Spacer(Modifier.height(6.dp))
+                                Spacer(Modifier.height(Espacio.xs))
                                 Text("Vinculando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                             }
                             errorDeVinculo?.let {
-                                Spacer(Modifier.height(6.dp))
+                                Spacer(Modifier.height(Espacio.xs))
                                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                             }
                         }
@@ -981,14 +959,14 @@ internal fun ContenidoDelMovimiento(
             }
 
             if (saving) {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text("Guardando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
             error?.let {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Espacio.l))
         }
         BarraDeError(errorDeEdicion)
     }
@@ -1008,20 +986,17 @@ internal fun ContenidoDelMovimiento(
 @Composable
 private fun SeccionDeAnular(onAnular: (() -> Unit)?, habilitado: Boolean) {
     if (onAnular == null) return
-    Spacer(Modifier.height(20.dp))
-    Hairline()
-    Spacer(Modifier.height(8.dp))
-    Text(
-        text = "Anular este movimiento",
-        style = Movi.textos.cuerpo,
-        fontWeight = FontWeight.Medium,
-        color = Movi.colores.sale,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = habilitado) { onAnular() }
-            .padding(vertical = 12.dp),
+    Spacer(Modifier.height(Espacio.l))
+    Separador(SangriaDeSeparador.Ninguna)
+    Spacer(Modifier.height(Espacio.xs))
+    Boton(
+        texto = "Anular este movimiento",
+        onClick = onAnular,
+        variante = VarianteDeBoton.Peligro,
+        habilitado = habilitado,
+        anchoCompleto = true,
     )
+    Spacer(Modifier.height(Espacio.xs))
     // «Anular», no «borrar»: el movimiento no se pierde, deja de contar. Decirlo acá evita que
     // alguien no lo toque por miedo a perder el registro.
     Text(
@@ -1091,16 +1066,14 @@ fun CardPaymentCandidatesSheet(
 
     BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = savingId == null) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            SheetLabel("PAGOS DE TARJETA SIN MARCAR")
-            Spacer(Modifier.height(8.dp))
+            SheetLabel("Pagos de tarjeta sin marcar")
             Text(
                 "Marcarlos como \"$CARD_PAYMENT_CATEGORY\" evita contar esta plata dos veces: " +
                     "ya se contó como gasto el día que se compró con la tarjeta.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
-                lineHeight = 17.sp,
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
 
             if (remaining.isEmpty()) {
                 Text("Ya no quedan pagos por confirmar.", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
@@ -1108,7 +1081,7 @@ fun CardPaymentCandidatesSheet(
 
             remaining.forEachIndexed { i, event ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = Medida.altoDeFilaDoble).padding(vertical = Espacio.xs),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
@@ -1119,57 +1092,42 @@ fun CardPaymentCandidatesSheet(
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
                         )
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(Espacio.xxs))
                         Text("hoy: ${event.category}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     }
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Espacio.xs))
                     Text(
                         formatCOP(event.amount),
                         style = Movi.textos.monto,
                         color = Movi.colores.texto,
-                        modifier = Modifier.padding(end = 10.dp),
+                        modifier = Modifier.padding(end = Espacio.xs),
                     )
                     val isSavingThis = savingId == event.id
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .border(1.dp, Movi.colores.borde, RoundedCornerShape(10.dp))
-                                .clickable(enabled = savingId == null) { dismiss(event) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                        ) {
-                            Text(
-                                if (isSavingThis) "…" else "No es",
-                                color = Movi.colores.textoMedio,
-                                style = Movi.textos.apoyo,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (isSavingThis) Movi.colores.textoApagado else Movi.colores.texto)
-                                .clickable(enabled = savingId == null) { confirm(event) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                        ) {
-                            Text(
-                                if (isSavingThis) "Marcando…" else "Marcar",
-                                color = Movi.colores.fondo,
-                                style = Movi.textos.apoyo,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
+                    Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                        Boton(
+                            texto = if (isSavingThis) "…" else "No es",
+                            onClick = { dismiss(event) },
+                            variante = VarianteDeBoton.Secundario,
+                            tamano = TamanoDeBoton.S,
+                            habilitado = savingId == null,
+                        )
+                        Boton(
+                            texto = if (isSavingThis) "Marcando…" else "Marcar",
+                            onClick = { confirm(event) },
+                            tamano = TamanoDeBoton.S,
+                            habilitado = savingId == null,
+                        )
                     }
                 }
-                if (i < remaining.size - 1) Hairline()
+                if (i < remaining.size - 1) Separador(SangriaDeSeparador.Ninguna)
             }
 
             error?.let {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Espacio.l))
         }
     }
 }
@@ -1225,7 +1183,7 @@ private fun NombreQueSeEdita(nombre: String, evento: FinancialEvent? = null, onE
         val marca = remember(evento?.merchant, evento?.description) { evento?.let(::marcaDe) }
         if (marca != null) {
             CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea)
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(Espacio.s))
         }
         Text(
             nombre,
@@ -1248,23 +1206,17 @@ private fun PorConfirmar(event: FinancialEvent, onError: (String?) -> Unit, onCo
     if (event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED) return
     val coroutine = rememberCoroutineScope()
     var confirmando by remember(event.id) { mutableStateOf(false) }
-    SheetLabel("POR CONFIRMAR")
-    Spacer(Modifier.height(6.dp))
+    SheetLabel("Por confirmar")
     Text(
         "Entró solo y todavía no cuenta en tus gastos ni ingresos. Revisa el monto, la categoría y el " +
             "nombre, y confírmalo.",
         style = Movi.textos.monto,
         color = Movi.colores.textoMedio,
-        lineHeight = 18.sp,
     )
-    Spacer(Modifier.height(10.dp))
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(46.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(Movi.colores.marca.copy(alpha = 0.16f))
-            .clickable(enabled = !confirmando) {
+    Spacer(Modifier.height(Espacio.s))
+    Boton(
+        texto = if (confirmando) "Confirmando…" else "Confirmar",
+        onClick = {
                 confirmando = true
                 onError(null)
                 coroutine.launch {
@@ -1273,16 +1225,11 @@ private fun PorConfirmar(event: FinancialEvent, onError: (String?) -> Unit, onCo
                         .onFailure { onError(it.toUserMessage()) }
                     confirmando = false
                 }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            if (confirmando) "Confirmando…" else "Confirmar",
-            style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
-            color = Movi.colores.marca,
-        )
-    }
+        },
+        variante = VarianteDeBoton.Principal,
+        habilitado = !confirmando,
+        anchoCompleto = true,
+    )
 }
 
 @Composable
@@ -1346,8 +1293,7 @@ private fun SeccionDelMovimiento(
     // que «no puedo editar los nombres de los movimientos»: el concepto estaba detrás de un
     // rótulo que hablaba solo de plata, así que quien buscaba renombrar no tenía ningún motivo
     // para tocar «Cambiar». Un campo que existe pero nadie encuentra es un campo que no existe.
-    SheetLabel("MONTO, CUENTA Y CONCEPTO")
-    Spacer(Modifier.height(8.dp))
+    SheetLabel("Monto, cuenta y concepto")
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1377,24 +1323,23 @@ private fun SeccionDelMovimiento(
 
     if (!abierto) return
 
-    Spacer(Modifier.height(14.dp))
+    Spacer(Modifier.height(Espacio.s))
     MoneyField(
         value = monto,
         onValueChange = { monto = it },
-        label = "MONTO",
+        label = "Monto",
         prefix = if (event.currency == "COP") "$" else "US$",
     )
 
-    Spacer(Modifier.height(16.dp))
-    SheetLabel("CONCEPTO")
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Espacio.m))
+    SheetLabel("Concepto")
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .heightIn(min = Medida.objetivoTactil)
+            .clip(RoundedCornerShape(Radio.s))
+            .background(Movi.colores.capa2)
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     ) {
         // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
         // Este campo llega prellenado con la descripción del movimiento, así que reescribirlo
@@ -1422,17 +1367,16 @@ private fun SeccionDelMovimiento(
         )
     }
 
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Espacio.m))
     if (esPataDeUnPar) {
-        SheetLabel("CUENTA")
-        Spacer(Modifier.height(8.dp))
+        SheetLabel("Cuenta")
         Text(
             text = cuentaActual?.name ?: "La cuenta de este movimiento",
             style = Movi.textos.cuerpo,
             color = Movi.colores.texto,
         )
-        Spacer(Modifier.height(6.dp))
-        Text(PATA_NO_CAMBIA_DE_CUENTA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+        Spacer(Modifier.height(Espacio.xs))
+        Text(PATA_NO_CAMBIA_DE_CUENTA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
     } else {
         SelectorDeCuentaDelMovimiento(
             elegibles = elegibles,
@@ -1459,32 +1403,23 @@ private fun SeccionDelMovimiento(
         avisoDeMontoDeUnPar(event.category).takeIf { esPataDeUnPar && monto != event.amount },
     )
     avisos.forEach { aviso ->
-        Spacer(Modifier.height(12.dp))
-        Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso, lineHeight = 17.sp)
+        Spacer(Modifier.height(Espacio.s))
+        Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso)
     }
 
-    Spacer(Modifier.height(14.dp))
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(46.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(if (puedeGuardar) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-            .clickable(enabled = puedeGuardar) { guardar() },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = when {
+    Spacer(Modifier.height(Espacio.s))
+    Boton(
+        texto = when {
                 guardando -> "Guardando…"
                 !esValido -> "Escribe un monto y un concepto"
                 !hayCambios -> "Sin cambios"
                 else -> "Guardar cambios"
             },
-            style = Movi.textos.monto,
-            fontWeight = FontWeight.Medium,
-            color = if (puedeGuardar) Movi.colores.marca else Movi.colores.textoApagado,
-        )
-    }
+        onClick = { guardar() },
+        variante = VarianteDeBoton.Principal,
+        habilitado = puedeGuardar,
+        anchoCompleto = true,
+    )
 }
 
 /**
@@ -1610,8 +1545,7 @@ private fun SeccionEstoSeRepite(
         }
     }
 
-    SheetLabel("¿SE REPITE TODOS LOS MESES?")
-    Spacer(Modifier.height(8.dp))
+    SheetLabel("¿Se repite todos los meses?")
     // **Dos estados, y el segundo existe porque el primero no tenía vuelta.** Movimientos
     // reconoce recurrentes por NOMBRE, así que una compra suelta en un comercio del que además
     // hay una suscripción quedaba marcada como recurrente para siempre: la única puerta era
@@ -1623,25 +1557,15 @@ private fun SeccionEstoSeRepite(
                 "nombre, ese sigue igual.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
-            lineHeight = 17.sp,
         )
-        Spacer(Modifier.height(12.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(if (!marcando) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                .clickable(enabled = !marcando) { marcarQueSeRepite(true) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = if (marcando) "Guardando…" else "Sí se repite, después de todo",
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Medium,
-                color = if (!marcando) Movi.colores.marca else Movi.colores.textoApagado,
-            )
-        }
+        Spacer(Modifier.height(Espacio.s))
+        Boton(
+            texto = if (marcando) "Guardando…" else "Sí se repite, después de todo",
+            onClick = { marcarQueSeRepite(true) },
+            variante = VarianteDeBoton.Principal,
+            habilitado = !marcando,
+            anchoCompleto = true,
+        )
         return
     }
     Text(
@@ -1650,28 +1574,18 @@ private fun SeccionEstoSeRepite(
             "el mes que viene, porque este pago ya lo hiciste.",
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
-        lineHeight = 17.sp,
     )
-    Spacer(Modifier.height(12.dp))
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(46.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(if (!consultando && !marcando) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-            .clickable(enabled = !consultando && !marcando) { intentar() },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = if (consultando) "Revisando…" else "Sí, se repite todos los meses",
-            style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
-            color = if (!consultando && !marcando) Movi.colores.marca else Movi.colores.textoApagado,
-        )
-    }
+    Spacer(Modifier.height(Espacio.s))
+    Boton(
+        texto = if (consultando) "Revisando…" else "Sí, se repite todos los meses",
+        onClick = { intentar() },
+        variante = VarianteDeBoton.Principal,
+        habilitado = !consultando && !marcando,
+        anchoCompleto = true,
+    )
     // La otra respuesta a la misma pregunta, y va discreta: la mayoría de las veces que alguien
     // abre esta sección es para marcar, no para desmarcar.
-    Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(Espacio.s))
     Text(
         text = if (marcando) "Guardando…" else "No, este no se repite",
         style = Movi.textos.apoyo,
@@ -1682,15 +1596,14 @@ private fun SeccionEstoSeRepite(
     // No es un error: es la respuesta correcta a la pregunta que acaba de hacer. Va acá, pegada
     // al botón que tocó, y no en la barra de errores de abajo.
     reglaExistente?.let { regla ->
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(Espacio.s))
         Text(
             text = "Ya lo tienes anotado como «${regla.name}», así que este movimiento no necesita otro.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
-            lineHeight = 17.sp,
         )
         if (onEditarRecurrente != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = "Editar este recurrente",
                 style = Movi.textos.apoyo,
@@ -1701,13 +1614,12 @@ private fun SeccionEstoSeRepite(
         }
     }
     nombreSinReglaQueEditar?.let { nombre ->
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(Espacio.s))
         Text(
             text = "Ya lo tienes anotado como «$nombre» (una suscripción confirmada), así que " +
                 "este movimiento no necesita otro recurrente.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
-            lineHeight = 17.sp,
         )
     }
 }
@@ -1735,16 +1647,15 @@ private fun SelectorDeCuentaDelMovimiento(
     onToggle: () -> Unit,
     onPick: (String) -> Unit,
 ) {
-    SheetLabel("CUENTA")
-    Spacer(Modifier.height(8.dp))
+    SheetLabel("Cuenta")
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
+            .heightIn(min = Medida.objetivoTactil)
+            .clip(RoundedCornerShape(Radio.s))
+            .background(Movi.colores.capa2)
             .clickable(enabled = enabled && elegibles.isNotEmpty(), onClick = onToggle)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -1761,23 +1672,21 @@ private fun SelectorDeCuentaDelMovimiento(
         }
     }
     if (ocultasPorMoneda > 0) {
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Text(
             text = "Solo se listan tus cuentas en $moneda: un movimiento no cambia de moneda al " +
                 "cambiar de cuenta.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
-            lineHeight = 16.sp,
         )
     }
     if (abierto && elegibles.isNotEmpty()) {
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Movi.colores.tarjeta)
-                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp)),
+                .clip(RoundedCornerShape(Radio.s))
+                .background(Movi.colores.capa2),
         ) {
             elegibles.forEach { cuenta ->
                 val elegida = cuenta.id == seleccionada?.id
@@ -1788,9 +1697,10 @@ private fun SelectorDeCuentaDelMovimiento(
                     color = if (elegida) Movi.colores.marca else Movi.colores.texto,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(if (elegida) Modifier.background(Movi.colores.marca.copy(alpha = 0.16f)) else Modifier)
+                        .then(if (elegida) Modifier.background(Movi.colores.lavado(Movi.colores.marca)) else Modifier)
                         .clickable { onPick(cuenta.id) }
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                        .heightIn(min = Medida.objetivoTactil)
+                        .padding(horizontal = Espacio.s, vertical = Espacio.s),
                 )
             }
         }
@@ -1876,8 +1786,7 @@ private fun SeccionDeFecha(
         }
     }
 
-    SheetLabel("FECHA")
-    Spacer(Modifier.height(8.dp))
+    SheetLabel("Fecha")
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1900,7 +1809,7 @@ private fun SeccionDeFecha(
     }
 
     if (abierto) {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
         SelectorDeFecha(
             seleccionada = elegida,
             hoy = hoy,
@@ -1916,33 +1825,24 @@ private fun SeccionDeFecha(
             avisoDeCambioDeMes(actual, elegida, hoy, periodo),
         )
         avisos.forEach { aviso ->
-            Spacer(Modifier.height(12.dp))
-            Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso, lineHeight = 17.sp)
+            Spacer(Modifier.height(Espacio.s))
+            Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso)
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
         val puedeGuardar = elegida != actual && !guardando
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(if (puedeGuardar) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-                .clickable(enabled = puedeGuardar) { guardar() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = when {
+        Boton(
+            texto = when {
                     guardando -> "Guardando…"
                     elegida == actual -> "Elige otro día"
                     else -> "Mover a ${etiquetaDeFecha(elegida, hoy).lowercase()}"
                 },
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Medium,
-                color = if (puedeGuardar) Movi.colores.marca else Movi.colores.textoApagado,
-            )
-        }
+            onClick = { guardar() },
+            variante = VarianteDeBoton.Principal,
+            habilitado = puedeGuardar,
+            anchoCompleto = true,
+        )
         error?.let {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Espacio.s))
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
     }

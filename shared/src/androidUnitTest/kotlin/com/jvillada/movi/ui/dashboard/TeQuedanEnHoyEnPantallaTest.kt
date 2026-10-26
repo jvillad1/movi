@@ -103,7 +103,6 @@ class TeQuedanEnHoyEnPantallaTest {
                     HeroDeUnVistazo(
                         section = ScreenSection(type = "HERO_BALANCE"),
                         data = data,
-                        conPatrimonio = false,
                         onNavigate = { navegoA = it },
                         hoy = hoy,
                     )
@@ -162,33 +161,27 @@ class TeQuedanEnHoyEnPantallaTest {
         assertEquals(color(columnaDePlan.single()), color(cifraDeHoy()), "Hoy y Plan, del mismo color")
     }
 
+    /**
+     * Ola R1: «Tu plata» salió del héroe —ni fila ni desglose—. Tiene su casa en Patrimonio, y en el
+     * Inicio vive en el carrusel de cuentas; repetida acá era la misma cifra dos veces.
+     */
     @Test
-    fun `Tu plata baja a una fila, y con una sola cuenta lleva a Cuentas`() {
-        montar(datos(gasto = emptyMap(), cuentas = unaCuenta))
-
-        composeRule.onNodeWithTag(TAG_FILA_TU_PLATA_DEL_HERO, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("\$2.345.678", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithTag(TAG_FILA_TU_PLATA_DEL_HERO, useUnmergedTree = true).performClick()
-        assertEquals(Screen.Accounts, navegoA)
-    }
-
-    @Test
-    fun `con dos cuentas, tocar Tu plata despliega el detalle sin navegar`() {
+    fun `Tu plata ya no está en el héroe, ni con una cuenta ni con dos`() {
         montar(datos(gasto = emptyMap(), cuentas = dosCuentas))
 
+        composeRule.onNodeWithTag(TAG_CIFRA_TE_QUEDAN, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(HERO_BALANCE_TITLE, useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Nequi", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithTag(TAG_FILA_TU_PLATA_DEL_HERO, useUnmergedTree = true).performClick()
-        composeRule.onNodeWithText("Nequi", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Ocultar el detalle de tu plata", useUnmergedTree = true).assertIsDisplayed()
-        assertEquals(null, navegoA)
+        composeRule.onNodeWithContentDescription("Ver el detalle de tu plata", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
-    fun `el resto de la tarjeta sigue llevando a Tus periodos`() {
+    fun `todo el héroe lleva a Tus periodos`() {
         montar(datos(gasto = emptyMap(), cuentas = unaCuenta))
         composeRule.onNodeWithTag(TAG_CIFRA_TE_QUEDAN, useUnmergedTree = true).performClick()
         assertEquals(Screen.Periodos, navegoA)
-        assertTrue(composeRule.onAllNodesWithText("Del 25 de agosto al 24 de septiembre", useUnmergedTree = true)
-            .fetchSemanticsNodes().isNotEmpty(), "el rango va sin «quedan N días»: los días los dice el detalle")
+        // Sin «Tu plata» ni barra: el héroe es el rótulo, la cifra y para cuántos días.
+        assertTrue(composeRule.onAllNodesWithText("para", substring = true, useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty(), "la línea de los días y la meta diaria")
     }
 }

@@ -10,7 +10,6 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -20,8 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.datetime.Clock
 import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.Repositories
@@ -41,6 +38,17 @@ import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.notifications.NotificationsPanel
 import com.jvillada.movi.ui.sdui.SduiRenderer
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.Encabezado
+import com.jvillada.movi.ui.extractos.TiposDeArchivo
+import com.jvillada.movi.ui.extractos.rememberFilePicker
+import com.jvillada.movi.ui.papeles.ArchivoCompartido
+import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import com.jvillada.movi.ui.LocalRefreshTick
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -172,10 +180,11 @@ fun debeRecargarElInicio(
 }
 
 /**
- * El título del Inicio y el rótulo de su pestaña. Ola C: «Hoy» — contesta «¿cómo estoy? ¿qué
- * viene?», y así se lee junto a Movimientos, Plan y Patrimonio.
+ * El rótulo de la pestaña del Inicio. Ola C la llamó «Hoy»; la ola R1 del rediseño la vuelve a llamar
+ * **«Inicio»**, como en las maquetas del camino 1: el encabezado ya no es un título sino el saludo
+ * («Hola, Juan») con el período.
  */
-const val TITULO_DEL_HOY: String = "Hoy"
+const val TITULO_DEL_HOY: String = "Inicio"
 
 @Composable
 fun DashboardScreen(
@@ -511,18 +520,18 @@ fun DashboardScreen(
             .background(Movi.colores.fondo)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // F60: encabezado único — el Hoy es raíz: avatar + el rótulo del menú + la campana.
-            // F5: la campana tiene contenido real — el punto solo aparece cuando `notifications`
-            // no está vacío. Ola C: se llama «Hoy», igual que su pestaña. El título vive en el
-            // binario, no en la definición SDUI, así que cambiarlo no pide otra generación.
-            MinScreenHeader(
-                title = TITULO_DEL_HOY,
-                leading = HeaderLeading.Avatar(onNavigate),
-                action = {
-                    // Recargando con cifras ya pintadas (la caché o la instantánea): una línea
-                    // discreta en vez de la barra de ancho completo. Va en la cabecera, cuyo alto
-                    // lo fija el avatar de 32 dp, así que aparecer y desaparecer no mueve nada de
-                    // lo de abajo — que es justo lo que no podía pasar mientras el dueño lee.
+            // Ola R1: el encabezado del camino 1 — el avatar (lleva a Ajustes), el saludo con el período
+            // y dos íconos, la lupa y la campana. «Compartir» salió del encabezado y vive en Ajustes:
+            // tres íconos más el avatar sobrecargaban la línea. La campana tiene su punto solo cuando
+            // `notifications` no está vacío.
+            Encabezado(
+                titulo = saludoDelInicio(SessionManager.userName),
+                subtitulo = periodoDelEncabezado(data),
+                inicio = { AvatarButton(onClick = { onNavigate(Screen.Mas) }) },
+                acciones = {
+                    // Recargando con cifras ya pintadas (la caché o la instantánea): una línea discreta
+                    // en vez de la barra de ancho completo. El alto del encabezado lo fija su mínimo,
+                    // así que aparecer y desaparecer no mueve nada de lo de abajo.
                     if (actualizandoConDatos) {
                         Text(
                             "Actualizando…",
@@ -532,38 +541,19 @@ fun DashboardScreen(
                         )
                     }
                     // Ola 5: buscar en toda la app (movimientos, comercios, personas, pantallas…).
-                    Icon(
-                        Icons.Rounded.Search,
-                        contentDescription = "Buscar",
-                        tint = Movi.colores.texto,
-                        modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Buscar) },
-                    )
-                    // Compartir con un tercero, al lado de la campana: el Inicio es donde uno está
-                    // mirando su plata cuando se le ocurre mostrársela a alguien.
-                    Icon(
-                        Icons.Rounded.Share,
-                        contentDescription = "Compartir un resumen",
-                        tint = Movi.colores.texto,
-                        modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Compartir) },
-                    )
+                    BotonDeIcono(Icons.Rounded.Search, "Buscar", onClick = { onNavigate(Screen.Buscar) })
                     Box {
-                        Icon(
-                            Icons.Rounded.Notifications,
-                            contentDescription = "Notificaciones",
-                            tint = Movi.colores.texto,
-                            modifier = Modifier.size(22.dp).clickable { showNotifications = true },
-                        )
+                        BotonDeIcono(Icons.Rounded.Notifications, "Notificaciones", onClick = { showNotifications = true })
                         if (notifications.isNotEmpty()) {
                             StatusDot(
                                 color = Movi.colores.sale,
-                                modifier = Modifier.align(Alignment.TopEnd),
+                                modifier = Modifier.align(Alignment.TopEnd).padding(Espacio.s),
                             )
                         }
                     }
                 },
             )
 
-            Spacer(Modifier.height(8.dp))
 
             // Sin nada pintado todavía (`loading && !actualizandoConDatos`), YA NO va la barra de
             // siempre: el hero y «Pregúntale a Movi» (Task 7) pintan su propio esqueleto con la
@@ -587,10 +577,21 @@ fun DashboardScreen(
             // solo en Android 13+ sin el permiso (ver [AvisosEnHoy]). Va donde va la guía, y solo
             // cuando la guía no está: una cuenta recién creada tiene cosas más urgentes que hacer.
             val ofertaDeAvisos = AvisosEnHoy.oferta()
-            // «Cerró tu período»: arriba de todo los primeros días del período nuevo, encima de la
-            // oferta de avisos. Como la guía, solo cuando la guía no está.
-            val cierre = cierreParaHoy(data)
+            // «Cerró tu período»: desde la ola R1 es una tarjeta más de «Movi propone hoy» (ver
+            // `propuestasDelInicio`), no una tarjeta suelta arriba de todo. «Ya lo vi» llega acá.
             val alcanceDelCierre = rememberCoroutineScope()
+            val descartarCierre: (String) -> Unit = { periodo ->
+                // Se va en el mismo toque; si el server no lo guarda, vuelve en la próxima carga, que
+                // es lo honesto.
+                data = data.copy(cierre = null)
+                DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = null)
+                alcanceDelCierre.launch { runCatching { Repositories.wallets.descartarCierre(periodo) } }
+            }
+            // «Subir comprobante» de la cuadrícula: elige el archivo y lo deja en [PapelesCompartidos],
+            // la misma puerta que el atajo del «+» (la hoja «Movi está leyendo…» lo toma).
+            val elegirComprobante = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
+                PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
+            }
             // SDUI: la definición del server si la hay; si no, la misma lista que el server
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
             // `LocalCargandoElInicio`: el hero y «Pregúntale a Movi» solo reciben `data`, no
@@ -616,27 +617,8 @@ fun DashboardScreen(
                                 onShowCreateSheet = { showCreateSheet = true },
                             )
                         }
-                    } else if (cierre != null || ofertaDeAvisos != null) {
-                        {
-                            Column {
-                                if (cierre != null) {
-                                    TarjetaDeCierre(
-                                        cierre = cierre,
-                                        onNavigate = onNavigate,
-                                        onDescartar = {
-                                            // Se va en el mismo toque; si el server no lo guarda,
-                                            // vuelve en la próxima carga, que es lo honesto.
-                                            data = data.copy(cierre = null)
-                                            DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = null)
-                                            alcanceDelCierre.launch {
-                                                runCatching { Repositories.wallets.descartarCierre(cierre.periodo) }
-                                            }
-                                        },
-                                    )
-                                }
-                                if (ofertaDeAvisos != null) TarjetaDeAvisos(ofertaDeAvisos)
-                            }
-                        }
+                    } else if (ofertaDeAvisos != null) {
+                        { TarjetaDeAvisos(ofertaDeAvisos) }
                     } else null,
                     // El hero vacío abre la MISMA hoja que «Primeros pasos» —
                     // mismo estado, un solo `CreateAccountSheet` en esta pantalla.
@@ -644,6 +626,8 @@ fun DashboardScreen(
                     // Ola 3: qué secciones se ven y en qué orden lo elige el dueño (ver
                     // [EditarInicioScreen]). Al final, siempre, para no competir con lo que Hoy dice.
                     footer = { BotonEditarInicio { onNavigate(Screen.EditarInicio) } },
+                    onSubirComprobante = elegirComprobante,
+                    onDescartarCierre = descartarCierre,
                 )
                 } // TirarParaActualizar
             }
@@ -651,7 +635,7 @@ fun DashboardScreen(
 
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Espacio.m),
         )
 
         if (showCreateSheet) {
@@ -703,21 +687,23 @@ internal fun PrimerosPasosCard(
     onShowCreateSheet: () -> Unit,
 ) {
     val steps = listOf(data.hasAccount, data.hasRecurringRule, data.hasCredit, data.hasMovement)
-    MinCard(
+    // Ola R1: con los componentes del sistema —una superficie con filas—, como el resto del Inicio.
+    Superficie(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+            .padding(horizontal = Medida.margenDePantalla),
+        relleno = RellenoDeSuperficie.Lista,
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text("Primeros pasos", style = Movi.textos.titulo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
             Text("${steps.count { it }} de ${steps.size}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
-        Spacer(Modifier.height(2.dp))
 
         PasoRow(done = data.hasAccount, title = "Crea tu primera cuenta", onClick = onShowCreateSheet)
-        Hairline()
+        Separador()
         PasoRow(
             done = data.hasRecurringRule,
             title = "Anota tus gastos recurrentes",
@@ -725,18 +711,18 @@ internal fun PrimerosPasosCard(
             // Ola C: los recurrentes se anotan y se revisan en Plan · Pagos del mes.
             onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
         )
-        Hairline()
+        Separador()
         PasoRow(done = data.hasCredit, title = "Si tienes préstamos o tarjetas, cárgalos", onClick = { onNavigate(Screen.Credits) })
-        Hairline()
+        Separador()
         PasoRow(done = data.hasMovement, title = "Registra un movimiento", onClick = { onNavigate(Screen.QuickAdd()) })
-        Hairline()
+        Separador()
 
         // Pie — sin tilde a propósito (ver KDoc). Extractos en todas las plataformas; el SMS
         // del banco solo en Android (no existe en iOS/web).
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
         ) {
             Text("Deja que la app se llene sola", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.weight(1f))
             // Ola B, tarea 7: era «Extractos» → Screen.Extractos; esa pantalla salió de la
@@ -747,6 +733,7 @@ internal fun PrimerosPasosCard(
     }
 }
 
+/** Un paso de la guía: una [Fila] con su tilde (o el círculo vacío) y la flecha si falta hacerlo. */
 @Composable
 private fun PasoRow(
     done: Boolean,
@@ -754,32 +741,20 @@ private fun PasoRow(
     subtitle: String? = null,
     onClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(
-            imageVector = if (done) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
-            contentDescription = if (done) "Hecho" else "Pendiente",
-            tint = if (done) Movi.colores.entra else Movi.colores.textoApagado,
-            modifier = Modifier.size(18.dp),
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = Movi.textos.cuerpo,
-                color = if (done) Movi.colores.textoMedio else Movi.colores.texto,
+    Fila(
+        titulo = title,
+        subtitulo = subtitle,
+        inicio = {
+            Icon(
+                imageVector = if (done) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                contentDescription = if (done) "Hecho" else "Pendiente",
+                tint = if (done) Movi.colores.entra else Movi.colores.textoApagado,
+                modifier = Modifier.size(Icono.m),
             )
-            if (subtitle != null) {
-                Text(text = subtitle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 1.dp))
-            }
-        }
-        if (!done) ChevronRight()
-    }
+        },
+        final = if (done) null else ({ Chevron() }),
+        onClick = onClick,
+    )
 }
 
 @Composable
@@ -789,6 +764,6 @@ private fun AccesoLink(label: String, onClick: () -> Unit) {
         style = Movi.textos.apoyo,
         fontWeight = FontWeight.Medium,
         color = Movi.colores.marca,
-        modifier = Modifier.clickable(onClick = onClick).padding(vertical = 4.dp),
+        modifier = Modifier.clickable(onClick = onClick).padding(vertical = Espacio.xxs),
     )
 }

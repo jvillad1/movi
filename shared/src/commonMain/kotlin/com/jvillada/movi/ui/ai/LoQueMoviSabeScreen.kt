@@ -1,5 +1,14 @@
 package com.jvillada.movi.ui.ai
 
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Vacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +49,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.BotonReintentar
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
+import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import kotlinx.coroutines.launch
@@ -113,8 +123,8 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
             leading = HeaderLeading.Back(fallback = Screen.Mas),
         )
         LazyColumn(
-            contentPadding = PaddingValues(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
-            verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+            contentPadding = PaddingValues(horizontal = Medida.margenDePantalla, vertical = Medida.dentroDeSeccion),
+            verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
             modifier = Modifier.weight(1f),
         ) {
             item {
@@ -125,16 +135,13 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
             }
             when {
                 cargando && recuerdos.isEmpty() -> item {
-                    Text("Cargando…", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+                    Column { repeat(3) { EsqueletoDeFila(conInicio = false, conFinal = false) } }
                 }
                 fallo && recuerdos.isEmpty() -> item {
-                    Column(verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
-                        Text("No pude cargar lo que Movi sabe de ti.", style = Movi.textos.cuerpo, color = Movi.colores.texto)
-                        BotonReintentar(onReintentar = { intento++ })
-                    }
+                    NoSePudoLeer("No pude cargar lo que Movi sabe de ti.", onReintentar = { intento++ })
                 }
                 recuerdos.isEmpty() -> item {
-                    VacioQueEnsena(titulo = NADA_TODAVIA, detalle = COMO_SE_LLENA, icono = Icons.Rounded.Psychology)
+                    Vacio(titulo = NADA_TODAVIA, detalle = COMO_SE_LLENA, icono = Icons.Rounded.Psychology)
                 }
                 else -> items(recuerdos, key = { it.id }) { recuerdo ->
                     FilaDeRecuerdo(
@@ -175,21 +182,15 @@ private fun FilaDeRecuerdo(
     var preguntandoSiBorrar by remember(recuerdo.id) { mutableStateOf(false) }
     var texto by remember(recuerdo.id, recuerdo.texto) { mutableStateOf(recuerdo.texto) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Movi.formas.amplia))
-            .background(Movi.colores.tarjeta)
-            .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
-        verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
+      Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
         if (editando) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(Movi.formas.normal))
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.normal))
-                    .padding(10.dp),
+                    .clip(RoundedCornerShape(Radio.m))
+                    .background(Movi.colores.capa2)
+                    .padding(Espacio.s),
             ) {
                 BasicTextField(
                     value = texto,
@@ -199,7 +200,7 @@ private fun FilaDeRecuerdo(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 Accion(GUARDAR, principal = true, habilitada = texto.isNotBlank() && texto.trim() != recuerdo.texto) {
                     onGuardar(texto.trim()) { editando = false }
                 }
@@ -210,20 +211,22 @@ private fun FilaDeRecuerdo(
             Text(deDondeSalio(recuerdo), style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             if (preguntandoSiBorrar) {
                 Text(PREGUNTA_DE_BORRAR, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                Row(horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                     Accion(SI_BORRAR, peligro = true) { preguntandoSiBorrar = false; onBorrar() }
                     Accion(CANCELAR) { preguntandoSiBorrar = false }
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                     Accion(EDITAR) { editando = true }
                     Accion(BORRAR) { preguntandoSiBorrar = true }
                 }
             }
         }
+      }
     }
 }
 
+/** Los botones de un recuerdo: el [Boton] chico del sistema (principal, peligro o fantasma). */
 @Composable
 private fun Accion(
     texto: String,
@@ -232,20 +235,15 @@ private fun Accion(
     habilitada: Boolean = true,
     onClick: () -> Unit,
 ) {
-    Text(
+    Boton(
         texto,
-        style = Movi.textos.apoyo,
-        fontWeight = FontWeight.Medium,
-        color = when {
-            !habilitada -> Movi.colores.textoApagado
-            principal -> Movi.colores.sobreMarca
-            peligro -> Movi.colores.sale
-            else -> Movi.colores.marca
+        onClick = onClick,
+        variante = when {
+            principal -> VarianteDeBoton.Principal
+            peligro -> VarianteDeBoton.Peligro
+            else -> VarianteDeBoton.Fantasma
         },
-        modifier = Modifier
-            .clip(RoundedCornerShape(Movi.formas.normal))
-            .then(if (principal && habilitada) Modifier.background(Movi.colores.marca) else Modifier)
-            .clickable(enabled = habilitada, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+        tamano = TamanoDeBoton.S,
+        habilitado = habilitada,
     )
 }

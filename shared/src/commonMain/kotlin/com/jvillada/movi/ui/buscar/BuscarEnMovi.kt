@@ -131,7 +131,7 @@ data class GrupoDeResultados(val tipo: TipoDeResultado, val resultados: List<Res
 internal data class PantallaBuscable(val nombre: String, val donde: String, val destino: Screen, val tambien: List<String> = emptyList())
 
 internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
-    PantallaBuscable("Hoy", "Pestaña", Screen.Dashboard, listOf("inicio", "te quedan")),
+    PantallaBuscable("Inicio", "Pestaña", Screen.Dashboard, listOf("hoy", "te quedan")),
     PantallaBuscable("Movimientos", "Pestaña", Screen.Transactions(), listOf("gastos", "ingresos")),
     PantallaBuscable("Por revisar", "Movimientos", Screen.PorRevisar, listOf("pendientes", "confirmar", "avisos del banco")),
     PantallaBuscable("Plan", "Pestaña", Screen.Plan(), listOf("pagos del mes", "disponible")),
@@ -141,7 +141,8 @@ internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
     PantallaBuscable("Créditos", "Patrimonio", Screen.Credits, listOf("deudas", "tarjetas", "prestamos")),
     PantallaBuscable("Cómo salir de tus deudas", "Créditos", Screen.SalidaDeDeudas, listOf("abono", "avalancha", "bola de nieve")),
     PantallaBuscable("Cuadre de saldos", "Patrimonio", Screen.CuadreDeSaldos, listOf("cuadrar", "ajustar saldo")),
-    PantallaBuscable(PERSONAS_Y_COMERCIOS, "Movimientos", Screen.Destinos(), listOf("terceros", "cuentas de otros")),
+    // Ola R4: su casa es Espacios (y Ajustes); Movimientos ya no tiene su fila.
+    PantallaBuscable(PERSONAS_Y_COMERCIOS, "Espacios y Ajustes", Screen.Destinos(), listOf("terceros", "cuentas de otros", "hogar")),
     PantallaBuscable(TITULO_DE_AJUSTES, "El avatar", Screen.Mas),
     PantallaBuscable("Perfil", TITULO_DE_AJUSTES, Screen.Profile, listOf("huella", "ocultar los saldos", "tema", "como se ve", "avisos por correo", "corte del periodo")),
     PantallaBuscable("Categorías", TITULO_DE_AJUSTES, Screen.Categorias),
@@ -231,7 +232,7 @@ fun buscarEnMovi(
                 nombre = (ejemplo.merchant?.takeIf { it.isNotBlank() } ?: ejemplo.description).trim(),
                 ejemplo = ejemplo,
                 enElPeriodo = enElPeriodo.size,
-                totalDelPeriodo = enElPeriodo.filter { it.currency == ejemplo.currency }.sumOf { it.amount },
+                totalDelPeriodo = enElPeriodo.filter { it.currency == ejemplo.currency }.sumOf { com.jvillada.movi.shared.model.montoContado(it) },
                 moneda = ejemplo.currency,
             )
         }

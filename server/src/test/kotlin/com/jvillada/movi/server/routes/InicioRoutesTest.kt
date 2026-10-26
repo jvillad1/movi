@@ -124,9 +124,7 @@ class InicioRoutesTest {
 
     private suspend fun HttpResponse.definicion(): ScreenDefinition = json.decodeFromString(bodyAsText())
 
-    private val ordenDeMovi = listOf(
-        "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "GASTO_POR_CATEGORIA", "PATRIMONIO", "ALERTS",
-    )
+    private val ordenDeMovi = listOf("CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA")
 
     @Test
     fun `sin nada guardado devuelve las listas vacías y el orden de Movi`() = testApplication {
@@ -141,13 +139,15 @@ class InicioRoutesTest {
             userA,
             PreferenciasDelInicio(
                 orden = listOf("GASTO_POR_CATEGORIA", "HERO_BALANCE", "GASTO_POR_CATEGORIA", "DISPONIBLE_DEL_PERIODO"),
-                ocultas = listOf("PATRIMONIO", "BANNER"),
+                ocultas = listOf("CUENTAS", "BANNER", "ALERTS"),
+                visibles = listOf("PATRIMONIO", "CUENTAS"),
             ),
         )
         assertEquals(HttpStatusCode.OK, res.status)
         val esperada = PreferenciasDelInicio(
             orden = listOf("GASTO_POR_CATEGORIA", "DISPONIBLE_DEL_PERIODO"),
-            ocultas = listOf("PATRIMONIO"),
+            ocultas = listOf("CUENTAS"),
+            visibles = listOf("PATRIMONIO"),
             ordenDeMovi = ordenDeMovi,
         )
         assertEquals(esperada, json.decodeFromString<PreferenciasDelInicio>(res.bodyAsText()))
@@ -155,20 +155,21 @@ class InicioRoutesTest {
     }
 
     @Test
-    fun `Hoy sale con el orden y sin las ocultas, y Para revisar deja su línea`() = testApplication {
+    fun `Hoy sale con el orden, sin las ocultas y con las opcionales prendidas`() = testApplication {
         wireApp()
         guardar(
             userA,
             PreferenciasDelInicio(
-                orden = listOf("GASTO_POR_CATEGORIA", "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "PATRIMONIO", "ALERTS"),
-                ocultas = listOf("DISPONIBLE_DEL_PERIODO", "ALERTS"),
+                orden = listOf("GASTO_POR_CATEGORIA", "PATRIMONIO", "CHECKLIST_DEL_PERIODO", "CUENTAS"),
+                ocultas = listOf("CUENTAS"),
+                visibles = listOf("PATRIMONIO"),
             ),
         )
         val res = hoy(userA)
         assertEquals(HttpStatusCode.OK, res.status)
         val def = res.definicion()
         assertEquals(
-            listOf("HERO_BALANCE", "GASTO_POR_CATEGORIA", "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "PATRIMONIO", PARA_REVISAR_COMPACTO, "BANNER"),
+            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "GASTO_POR_CATEGORIA", "PATRIMONIO", "CHECKLIST_DEL_PERIODO", "ALERTS", "BANNER"),
             def.sections.map { it.type },
         )
         assertNotEquals(DASHBOARD_LAYOUT_VERSION, def.version, "la versión cambia: el 304 no puede dejar el Hoy viejo")
@@ -194,9 +195,9 @@ class InicioRoutesTest {
                 it[sectionsJson] = json.encodeToString(conEnlaces)
             }
         }
-        guardar(userA, PreferenciasDelInicio(orden = listOf("ALERTS", "PATRIMONIO", "GASTO_POR_CATEGORIA", "DISPONIBLE_DEL_PERIODO", "CHECKLIST_DEL_PERIODO", "PREGUNTALE_A_MOVI")))
+        guardar(userA, PreferenciasDelInicio(orden = listOf("GASTO_POR_CATEGORIA", "CHECKLIST_DEL_PERIODO", "CUENTAS")))
         assertEquals(
-            listOf("HERO_BALANCE", "LINK_LIST", "ALERTS", "PATRIMONIO", "GASTO_POR_CATEGORIA", "DISPONIBLE_DEL_PERIODO", "CHECKLIST_DEL_PERIODO", "PREGUNTALE_A_MOVI", "BANNER"),
+            listOf("HERO_BALANCE", "LINK_LIST", "ACCIONES", "PROPUESTAS", "GASTO_POR_CATEGORIA", "CHECKLIST_DEL_PERIODO", "CUENTAS", "ALERTS", "BANNER"),
             hoy(userA).definicion().sections.map { it.type },
         )
     }
@@ -204,18 +205,20 @@ class InicioRoutesTest {
     @Test
     fun `la preferencia de uno no toca el Hoy del otro`() = testApplication {
         wireApp()
-        guardar(userA, PreferenciasDelInicio(ocultas = listOf("PATRIMONIO", "PREGUNTALE_A_MOVI")))
+        guardar(userA, PreferenciasDelInicio(ocultas = listOf("CUENTAS"), visibles = listOf("PATRIMONIO")))
         assertEquals(PreferenciasDelInicio(ordenDeMovi = ordenDeMovi), leer(userB))
         val deB = hoy(userB).definicion()
         assertEquals(defaultDashboardDefinition().sections, deB.sections)
         assertEquals(DASHBOARD_LAYOUT_VERSION, deB.version)
-        assertTrue(hoy(userA).definicion().sections.none { it.type == "PATRIMONIO" })
+        assertTrue(hoy(userA).definicion().sections.none { it.type == "CUENTAS" })
+        assertTrue(hoy(userA).definicion().sections.any { it.type == "PATRIMONIO" })
+        assertTrue(deB.sections.none { it.type == "PATRIMONIO" })
     }
 
     @Test
     fun `volver al orden de Movi borra la fila y Hoy vuelve a la versión global`() = testApplication {
         wireApp()
-        guardar(userA, PreferenciasDelInicio(ocultas = listOf("PATRIMONIO")))
+        guardar(userA, PreferenciasDelInicio(ocultas = listOf("CUENTAS")))
         assertEquals(1L, transaction { InicioPersonalizado.selectAll().count() })
         val res = guardar(userA, PreferenciasDelInicio())
         assertEquals(HttpStatusCode.OK, res.status)
@@ -234,7 +237,7 @@ class InicioRoutesTest {
             setBody("{\"orden\": 3}")
         }
         assertEquals(HttpStatusCode.BadRequest, ilegible.status)
-        val enorme = guardar(userA, PreferenciasDelInicio(orden = List(40) { "ALERTS" }))
+        val enorme = guardar(userA, PreferenciasDelInicio(orden = List(40) { "CUENTAS" }))
         assertEquals(HttpStatusCode.BadRequest, enorme.status)
         assertEquals(0L, transaction { InicioPersonalizado.selectAll().count() })
     }

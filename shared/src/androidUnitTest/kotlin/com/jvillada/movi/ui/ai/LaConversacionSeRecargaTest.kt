@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasAnyChild
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -81,7 +84,7 @@ class LaConversacionSeRecargaTest {
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { AIChatScreen(onNavigate = {}) } } }
         esperar("respuesta vieja")
 
-        composeRule.onNodeWithText(NUEVA_CONVERSACION, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNode(hasClickAction() and hasAnyChild(hasText(NUEVA_CONVERSACION)), useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         esperar(NO_REEMPLAZA_A_UN_ASESOR)
 
         assertEquals(1, nuevas, "se le avisa al server, o al volver reaparecería")

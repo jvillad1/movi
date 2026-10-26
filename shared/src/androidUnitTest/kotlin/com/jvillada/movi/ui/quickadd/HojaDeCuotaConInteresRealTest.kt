@@ -105,7 +105,7 @@ class HojaDeCuotaConInteresRealTest {
         tocar("Libre inversión 9695")
         // Las condiciones llegan por corrutina; el campo aparece cuando llegaron.
         composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText("INTERESES DE ESTE MES").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("Intereses de este mes").fetchSemanticsNodes().isNotEmpty()
         }
     }
 

@@ -117,7 +117,7 @@ class ElegirIconoYColorEnLaHojaTest {
         composeRule.waitUntil(5_000) { hay("Mercado") }
 
         tocar("Mercado")
-        composeRule.waitUntil(5_000) { hay("ÍCONO") }
+        composeRule.waitUntil(5_000) { hay("Ícono") }
 
         // Elegir un ícono del catálogo: manda su clave y no toca el color.
         tocar("Restaurante")
@@ -170,7 +170,7 @@ class ElegirIconoYColorEnLaHojaTest {
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { CategoriasScreen(onNavigate = {}) } } }
         composeRule.waitUntil(5_000) { hay("Mercado") }
         tocar("Mercado")
-        composeRule.waitUntil(5_000) { hay("ÍCONO") }
+        composeRule.waitUntil(5_000) { hay("Ícono") }
 
         tocar("Restaurante")
         composeRule.waitUntil(5_000) { llamadas.size == 1 }

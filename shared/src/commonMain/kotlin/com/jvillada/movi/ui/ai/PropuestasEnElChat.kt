@@ -1,5 +1,13 @@
 package com.jvillada.movi.ui.ai
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -97,7 +105,7 @@ internal const val HACERLO = "Hacerlo"
 internal const val NO_HACERLO = "No"
 internal const val YA_ESTA_HECHO = "Hecho"
 internal const val DESCARTADA = "Descartada"
-internal const val ROTULO_DE_LA_PROPUESTA = "MOVI PROPONE"
+internal const val ROTULO_DE_LA_PROPUESTA = "Movi propone"
 
 /**
  * Una propuesta, con su estado y sus dos botones. El estado vive en quien la pinta (la pantalla
@@ -115,73 +123,65 @@ internal fun PropuestaDelAsistente(
     var trabajando by remember(propuesta.id) { mutableStateOf(false) }
     var error by remember(propuesta.id) { mutableStateOf<String?>(null) }
 
-    Column(
+    // Ola R4: una propuesta de Movi va en la superficie de propuesta (el tinte de la marca).
+    Superficie(
         modifier = Modifier
-            .padding(start = 36.dp, bottom = 12.dp)
+            .padding(start = Espacio.xxl, bottom = Espacio.s)
             .widthIn(max = 320.dp)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Movi.formas.amplia))
-            .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.amplia))
-            .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
-        verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+            .fillMaxWidth(),
+        nivel = NivelDeSuperficie.Propuesta,
     ) {
+      Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(12.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(ROTULO_DE_LA_PROPUESTA, style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
+            Spacer(Modifier.width(Espacio.xs))
+            Text(ROTULO_DE_LA_PROPUESTA, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
         }
         Text(propuesta.frase, style = Movi.textos.cuerpo, color = Movi.colores.texto)
 
         when (estado) {
             EstadoDePropuesta.HECHA -> Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
+                Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(Icono.s))
+                Spacer(Modifier.width(Espacio.xs))
                 Text(YA_ESTA_HECHO, style = Movi.textos.apoyo, color = Movi.colores.entra, fontWeight = FontWeight.Medium)
             }
             EstadoDePropuesta.RECHAZADA ->
                 Text(DESCARTADA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             EstadoDePropuesta.PENDIENTE -> {
                 error?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
-                Row(horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto)) {
-                    Text(
-                        if (trabajando) "Haciéndolo…" else HACERLO,
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.sobreMarca,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(Movi.formas.normal))
-                            .background(Movi.colores.marca)
-                            .clickable(enabled = !trabajando) {
-                                trabajando = true
-                                error = null
-                                coroutine.launch {
-                                    runCatching { hacerLaPropuesta(repo(), propuesta) }
-                                        .onSuccess { onEstado(EstadoDePropuesta.HECHA) }
-                                        .onFailure { error = motivoDeLaFalla(it) }
-                                    trabajando = false
-                                }
+                Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    Boton(
+                        HACERLO,
+                        onClick = {
+                            trabajando = true
+                            error = null
+                            coroutine.launch {
+                                runCatching { hacerLaPropuesta(repo(), propuesta) }
+                                    .onSuccess { onEstado(EstadoDePropuesta.HECHA) }
+                                    .onFailure { error = motivoDeLaFalla(it) }
+                                trabajando = false
                             }
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        },
+                        tamano = TamanoDeBoton.S,
+                        cargando = trabajando,
                     )
-                    Text(
+                    Boton(
                         NO_HACERLO,
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.textoMedio,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(Movi.formas.normal))
-                            .clickable(enabled = !trabajando) {
-                                onEstado(EstadoDePropuesta.RECHAZADA)
-                                // «No» no toca su plata: solo se le cuenta al asistente. Si el aviso
-                                // no llega, la tarjeta igual queda descartada en pantalla.
-                                coroutine.launch {
-                                    runCatching { repo().resolverPropuesta(propuesta.id, EstadoDePropuesta.RECHAZADA) }
-                                }
+                        onClick = {
+                            onEstado(EstadoDePropuesta.RECHAZADA)
+                            // «No» no toca su plata: solo se le cuenta al asistente. Si el aviso
+                            // no llega, la tarjeta igual queda descartada en pantalla.
+                            coroutine.launch {
+                                runCatching { repo().resolverPropuesta(propuesta.id, EstadoDePropuesta.RECHAZADA) }
                             }
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        },
+                        variante = VarianteDeBoton.Fantasma,
+                        tamano = TamanoDeBoton.S,
+                        habilitado = !trabajando,
                     )
                 }
             }
         }
+      }
     }
 }

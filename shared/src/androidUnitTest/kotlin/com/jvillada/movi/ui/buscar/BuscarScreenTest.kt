@@ -20,6 +20,7 @@ import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.MoviTheme
@@ -92,7 +93,7 @@ class BuscarScreenTest {
         escribir("rappi")
         composeRule.waitUntil(5_000) { conTag(TAG_RESULTADO_DE_BUSCAR + "mov:r1") > 0 }
 
-        assertTrue(hay("MOVIMIENTOS"))
+        assertTrue(hay("Movimientos"))
         assertEquals(1, conTag(TAG_RESULTADO_DE_BUSCAR + "mov:r1"))
 
         // Un número busca el monto exacto.
@@ -101,11 +102,11 @@ class BuscarScreenTest {
 
         // Personas, categorías y cuentas, cada una en su grupo.
         escribir("caro")
-        assertTrue(hay("PERSONAS Y COMERCIOS"))
+        assertTrue(hay(PERSONAS_Y_COMERCIOS))
         escribir("comida")
-        assertTrue(hay("CATEGORÍAS"))
+        assertTrue(hay("Categorías"))
         escribir("bancolombia")
-        assertTrue(hay("CUENTAS"))
+        assertTrue(hay("Cuentas"))
     }
 
     @Test

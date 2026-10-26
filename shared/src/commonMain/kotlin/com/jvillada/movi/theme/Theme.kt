@@ -35,8 +35,9 @@ private fun esquemaDe(c: ColoresDeMovi, oscuro: Boolean): ColorScheme {
         onSurface = c.texto,
         surfaceContainer = c.tarjeta,
         surfaceContainerLow = c.tarjeta,
-        surfaceContainerHigh = c.tarjeta,
-        surfaceContainerHighest = c.tarjeta,
+        // Las capas del sistema (ola R0): lo que Material pone «más alto» va en la capa de arriba.
+        surfaceContainerHigh = c.capa2,
+        surfaceContainerHighest = c.capa3,
         onSurfaceVariant = c.textoMedio,
         outline = c.borde,
         outlineVariant = c.hilo,

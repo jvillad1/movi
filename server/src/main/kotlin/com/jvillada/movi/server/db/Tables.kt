@@ -441,6 +441,12 @@ object InicioPersonalizado : Table("inicio_personalizado") {
     val userId        = varchar("user_id", 50)
     val orden         = text("orden")
     val ocultas       = text("ocultas")
+    /**
+     * Ola R1: las secciones opcionales que el dueño prendió (`PreferenciasDelInicio.visibles`), en
+     * JSON. Nullable porque la tabla ya tiene filas: es lo único que `createMissingTablesAndColumns`
+     * puede agregar sin riesgo. `null` = ninguna.
+     */
+    val visibles      = text("visibles").nullable()
     val actualizadoEn = long("actualizado_en")
     override val primaryKey = PrimaryKey(userId)
 }
@@ -1179,4 +1185,70 @@ object PushSubscriptions : Table("push_subscriptions") {
     val createdAt = long("created_at")
     override val primaryKey = PrimaryKey(endpoint)
     init { index("idx_push_subscriptions_user_id", false, userId) }
+}
+
+/**
+ * **Espacios** (R3, 26-oct-2026) — un grupo de gasto compartido, «Casa con Caro», 50/50. Ver
+ * `Espacio.kt` en `:core`. `miembros` es JSON de `List<MiembroDelEspacio>` sin nombres (el nombre
+ * se resuelve en cada lectura desde `known_destinations`, así un tercero renombrado se ve igual en
+ * todas partes). Tablas nuevas: entran solo al `SchemaUtils.create` del arranque.
+ */
+object Espacios : Table("espacios") {
+    val id        = varchar("id", 60)
+    val userId    = varchar("user_id", 50)
+    val nombre    = varchar("nombre", 60)
+    val miembros  = text("miembros")
+    val reparto   = varchar("reparto", 20)
+    val createdAt = long("created_at")
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_espacios_user_id", false, userId) }
+}
+
+/**
+ * **Los gastos de un espacio.** Una tabla aparte y no una columna en `financial_events`, a propósito:
+ * la tabla de movimientos viaja al teléfono (espejo SQLDelight, sync, «fantasmas», reenvíos con
+ * `lastEditedAt`) y una columna nueva ahí habría que llevarla por todo ese camino. Acá el movimiento
+ * no se toca: el reparto es un dato del espacio que apunta a él (`evento_id`), y su parte ajena se
+ * deriva al leer, como `countsAsCashFlow`. Borrar el espacio o «Quitar del espacio» borra la fila y
+ * el movimiento vuelve a contar entero, sin haber cambiado nunca.
+ *
+ * - `evento_id` no nulo: un movimiento propio repartido (`pagado_por` = «yo»). Único por usuario:
+ *   un movimiento está en un espacio o en ninguno.
+ * - `evento_id` nulo: un gasto que pagó otro miembro; no toca ningún saldo.
+ *
+ * `partes` es JSON de `Map<miembro, pesos>` (suma `monto`).
+ */
+object GastosDelEspacio : Table("gastos_del_espacio") {
+    val id          = varchar("id", 60)
+    val userId      = varchar("user_id", 50)
+    val espacioId   = varchar("espacio_id", 60)
+    val eventoId    = varchar("evento_id", 60).nullable()
+    val pagadoPor   = varchar("pagado_por", 60)
+    val monto       = long("monto")
+    val categoria   = varchar("categoria", 100)
+    val descripcion = varchar("descripcion", 200)
+    val fecha       = long("fecha")
+    val partes      = text("partes")
+    val createdAt   = long("created_at")
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_gastos_del_espacio_user_id", false, userId) }
+}
+
+/**
+ * **«Marcar como saldado»**: quién le pagó a quién, cuánto y cuándo. `evento_id` es la
+ * transferencia real si el dueño la vinculó; ese movimiento deja de contar como ingreso o gasto. Un
+ * POST con el mismo id es la misma liquidación (saldar dos veces = una).
+ */
+object LiquidacionesDelEspacio : Table("liquidaciones_del_espacio") {
+    val id        = varchar("id", 60)
+    val userId    = varchar("user_id", 50)
+    val espacioId = varchar("espacio_id", 60)
+    val de        = varchar("de", 60)
+    val a         = varchar("a", 60)
+    val monto     = long("monto")
+    val fecha     = long("fecha")
+    val eventoId  = varchar("evento_id", 60).nullable()
+    val createdAt = long("created_at")
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_liquidaciones_del_espacio_user_id", false, userId) }
 }

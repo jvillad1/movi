@@ -139,14 +139,14 @@ class PorRevisarEnPantallaTest {
                 candidatos = listOf(pagoNu),
             ),
         )
-        esperarTexto("ENTRARON SOLOS")
+        esperarTexto("Entraron solos")
 
-        assertTrue(hay("MENSAJES DEL BANCO"))
+        assertTrue(hay("Mensajes del banco"))
         assertTrue("el pendiente está", hay("Uber"))
         assertTrue("el ya confirmado es historial, no va acá", !hay("Rappi"))
         assertTrue("lo que entró solo está", hay("Compra Exito"))
         assertTrue("lo anotado a mano no", !hay("Carnes y Legumbres"))
-        assertTrue(hay("PAGOS DE TARJETA"))
+        assertTrue(hay("Pagos de tarjeta"))
         assertTrue(hay("1 pago de tarjeta sin marcar"))
         assertTrue(!hay(TODO_AL_DIA))
     }
@@ -178,7 +178,7 @@ class PorRevisarEnPantallaTest {
         esperarTexto("Compra Exito")
 
         composeRule.onNodeWithText("Compra Exito", useUnmergedTree = true).performClick()
-        esperarTexto("POR CONFIRMAR")
+        esperarTexto("Por confirmar")
         composeRule.onNode(hasClickAction() and hasAnyChild(hasText("Confirmar")), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { confirmado != null }
@@ -199,15 +199,15 @@ class PorRevisarEnPantallaTest {
         esperarTexto("Compra Exito")
 
         composeRule.onNodeWithText("Compra Exito", useUnmergedTree = true).performClick()
-        esperarTexto("POR CONFIRMAR")
+        esperarTexto("Por confirmar")
         composeRule.onNode(hasClickAction() and hasAnyChild(hasText("Confirmar")), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { confirmado != null }
-        composeRule.waitUntil(5_000) { !hay("POR CONFIRMAR") }
+        composeRule.waitUntil(5_000) { !hay("Por confirmar") }
         composeRule.waitForIdle()
 
         assertTrue("ya no está pendiente", !hay("Compra Exito"))
-        assertTrue(!hay("ENTRARON SOLOS"))
+        assertTrue(!hay("Entraron solos"))
     }
 
     @Test
@@ -216,7 +216,7 @@ class PorRevisarEnPantallaTest {
         esperarTexto("1 pago de tarjeta sin marcar")
 
         composeRule.onNodeWithText("1 pago de tarjeta sin marcar", useUnmergedTree = true).performClick()
-        esperarTexto("PAGOS DE TARJETA SIN MARCAR")
+        esperarTexto("Pagos de tarjeta sin marcar")
         assertTrue(hay("Pago Nu"))
     }
 
@@ -227,9 +227,9 @@ class PorRevisarEnPantallaTest {
         montar(Repo(mensajes = listOf(sms("s1", SMS_STATE_CONFIRMED)), eventos = listOf(aMano)))
         esperarTexto(TODO_AL_DIA)
 
-        assertTrue(!hay("MENSAJES DEL BANCO"))
-        assertTrue(!hay("ENTRARON SOLOS"))
-        assertTrue(!hay("PAGOS DE TARJETA"))
+        assertTrue(!hay("Mensajes del banco"))
+        assertTrue(!hay("Entraron solos"))
+        assertTrue(!hay("Pagos de tarjeta"))
         composeRule.onNodeWithTag(TAG_ESQUELETO_DE_POR_REVISAR, useUnmergedTree = true).assertDoesNotExist()
         // Ya llegó un mensaje del banco (confirmado, pero llegó): no hay nada que enseñar acá.
         assertTrue(!hay("Que tus movimientos entren solos"))
@@ -285,7 +285,7 @@ class PorRevisarEnPantallaTest {
 
         hayRed = true
         composeRule.onNodeWithText("Reintentar", useUnmergedTree = true).performClick()
-        esperarTexto("MENSAJES DEL BANCO")
+        esperarTexto("Mensajes del banco")
         assertTrue(hay("Uber"))
     }
 
@@ -295,9 +295,9 @@ class PorRevisarEnPantallaTest {
     @Test
     fun `la configuracion de la captura no vive en la bandeja`() {
         montar(Repo(mensajes = listOf(sms("s1", SMS_STATE_PENDING))))
-        esperarTexto("MENSAJES DEL BANCO")
+        esperarTexto("Mensajes del banco")
 
-        assertTrue(!hay("CAPTURA EN ESTE TELÉFONO"))
+        assertTrue(!hay("Captura en este teléfono"))
         composeRule.onNodeWithTag(TAG_AVISO_DE_CAPTURA_EN_LA_BANDEJA, useUnmergedTree = true).assertDoesNotExist()
     }
 

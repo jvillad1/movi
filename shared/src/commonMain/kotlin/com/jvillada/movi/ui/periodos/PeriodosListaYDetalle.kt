@@ -27,6 +27,7 @@ import com.jvillada.movi.data.periodoVigenteSegun
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
@@ -196,7 +197,7 @@ private fun ListaAlLadoDelDetalle(onNavigate: (Screen) -> Unit, idPedido: String
                 estadoDeLaLista = estadoDeLaLista,
             )
         }
-        Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Movi.colores.hilo))
+        Box(modifier = Modifier.width(Medida.trazo).fillMaxHeight().background(Movi.colores.hilo))
         Box(modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_PANEL_DEL_DETALLE)) {
             if (mostrado != null) {
                 ContenidoDelDetalleDePeriodo(

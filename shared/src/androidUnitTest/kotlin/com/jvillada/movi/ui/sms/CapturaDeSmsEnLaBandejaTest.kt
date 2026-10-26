@@ -96,7 +96,7 @@ class CapturaDeSmsEnLaBandejaTest {
         mensajes = emptyList()
         montar()
 
-        esperarTexto("NUNCA HA LLEGADO UN MENSAJE")
+        esperarTexto("Nunca ha llegado un mensaje")
         composeRule.onNodeWithText(
             "Movi todavía no ha recibido ningún mensaje de tu banco",
             substring = true, useUnmergedTree = true,
@@ -112,7 +112,7 @@ class CapturaDeSmsEnLaBandejaTest {
         mensajes = listOf(sms("s1", "2026-08-01 10:00", SMS_STATE_CONFIRMED))
         montar()
 
-        esperarTexto("ÚLTIMO MENSAJE RECIBIDO")
+        esperarTexto("Último mensaje recibido")
         composeRule.onNodeWithText("AUTO-LECTURA ACTIVA", useUnmergedTree = true).assertDoesNotExist()
     }
 
@@ -135,9 +135,9 @@ class CapturaDeSmsEnLaBandejaTest {
 
         // Con la sección de captura ya pintada (el rótulo va en mayúsculas), la pantalla
         // terminó de componer y el aviso, si fuera a aparecer, ya estaría.
-        esperarTexto("CAPTURA EN ESTE TELÉFONO")
-        composeRule.onNodeWithText("NUNCA HA LLEGADO UN MENSAJE", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("ÚLTIMO MENSAJE RECIBIDO", useUnmergedTree = true).assertDoesNotExist()
+        esperarTexto("Captura en este teléfono")
+        composeRule.onNodeWithText("Nunca ha llegado un mensaje", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Último mensaje recibido", useUnmergedTree = true).assertDoesNotExist()
     }
 
     // ── Cuando sí llegó algo ───────────────────────────────────────────────────
@@ -151,13 +151,13 @@ class CapturaDeSmsEnLaBandejaTest {
         )
         montar()
 
-        esperarTexto("ÚLTIMO MENSAJE RECIBIDO")
+        esperarTexto("Último mensaje recibido")
         composeRule.onNodeWithText(
             "El último de los 3 mensajes de tu banco llegó el 3 de septiembre a las 7:15 a. m.",
             substring = true, useUnmergedTree = true,
         ).assertExists()
         // Y no se ofrece callar un aviso que no existe.
-        composeRule.onNodeWithText("No me avises de esto en Hoy ni en Por revisar", useUnmergedTree = true)
+        composeRule.onNodeWithText("Silenciar este aviso", useUnmergedTree = true)
             .assertDoesNotExist()
     }
 
@@ -175,11 +175,11 @@ class CapturaDeSmsEnLaBandejaTest {
         )
         montar()
 
-        esperarTexto("HISTORIAL")
+        esperarTexto("Historial")
         composeRule.onNodeWithText("Captura del banco", useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText("CAPTURA EN ESTE TELÉFONO", substring = true, useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText("CONFIRMADO", useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText("PENDIENTE", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Captura en este teléfono", substring = true, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Confirmado", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Pendiente", useUnmergedTree = true).assertExists()
         // Ya no cuenta pendientes en el encabezado: eso lo dice «Por revisar».
         composeRule.onNodeWithText("por confirmar", substring = true, useUnmergedTree = true).assertDoesNotExist()
     }
@@ -197,13 +197,13 @@ class CapturaDeSmsEnLaBandejaTest {
         mensajes = emptyList()
         montar()
 
-        esperarTexto("No me avises de esto en Hoy ni en Por revisar")
-        composeRule.onNodeWithText("No me avises de esto en Hoy ni en Por revisar", useUnmergedTree = true).performClick()
+        esperarTexto("Silenciar este aviso")
+        composeRule.onNodeWithText("Silenciar este aviso", useUnmergedTree = true).performClick()
 
         esperarTexto("Este aviso no se muestra en Hoy ni en Por revisar.")
         assertEquals(true, pedido?.smsAlertMuted)
         // El hecho sigue ahí: lo que se calló es el recordatorio, no la noticia.
-        composeRule.onNodeWithText("NUNCA HA LLEGADO UN MENSAJE", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Nunca ha llegado un mensaje", useUnmergedTree = true).assertExists()
     }
 
     @Test
@@ -212,10 +212,10 @@ class CapturaDeSmsEnLaBandejaTest {
         silenciadoEnElServer = true
         montar()
 
-        esperarTexto("Volver a avisarme en Hoy y en Por revisar")
-        composeRule.onNodeWithText("Volver a avisarme en Hoy y en Por revisar", useUnmergedTree = true).performClick()
+        esperarTexto("Volver a avisarme")
+        composeRule.onNodeWithText("Volver a avisarme", useUnmergedTree = true).performClick()
 
-        esperarTexto("No me avises de esto en Hoy ni en Por revisar")
+        esperarTexto("Silenciar este aviso")
         assertEquals(false, pedido?.smsAlertMuted)
     }
 }

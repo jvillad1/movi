@@ -24,7 +24,6 @@ import com.jvillada.movi.shared.model.ScreenAction
 import com.jvillada.movi.shared.model.ScreenCard
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
-import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
 import com.jvillada.movi.ui.components.SubirAlRetocarLaPestana
 import com.jvillada.movi.ui.components.ANCHO_DE_UNA_COLUMNA
@@ -50,6 +49,8 @@ import com.jvillada.movi.ui.dashboard.quickLinkFigure
 import com.jvillada.movi.ui.recurrentes.textoDelMonto
 import com.jvillada.movi.ui.dashboard.upcomingPaymentsWithin
 import com.jvillada.movi.ui.dashboard.visibleSections
+import com.jvillada.movi.ui.dashboard.TIPOS_DE_WIDGET
+import com.jvillada.movi.ui.dashboard.bloquesDelInicio
 
 /** La guía de primeros pasos cuando el Inicio va en dos columnas: arriba de la izquierda. */
 const val TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA: String = "inicio-guia-en-la-columna-izquierda"
@@ -93,12 +94,16 @@ fun SduiRenderer(
     // Lo que va al final del scroll, debajo de la última sección: «Editar inicio» (Ola 3). Chrome
     // nativo como [header], fuera del schema a propósito: así existe en cualquier definición.
     footer: (@Composable () -> Unit)? = null,
+    // Ola R1: «Subir comprobante» de la cuadrícula elige un archivo, y el selector vive en la pantalla
+    // (como el atajo del «+» vive en App.kt). Sin operación por default, para las pruebas.
+    onSubirComprobante: () -> Unit = {},
+    // «Ya lo vi» del cierre del período, que ahora es una tarjeta de «Movi propone hoy»: el estado
+    // (`data`) vive en `DashboardScreen`.
+    onDescartarCierre: (String) -> Unit = {},
 ) {
     val uriHandler = LocalUriHandler.current
     val sections = visibleSections(definition, data)
-    // Si la definición no trae la tarjeta del patrimonio (una fila guardada antes de la generación
-    // 8), el hero lo dice en una línea: el patrimonio no puede desaparecer del Inicio en esa ventana.
-    val conPatrimonioEnElHero = renderableSections(definition).none { it.type == "PATRIMONIO" }
+    val acciones = AccionesDelRenderer(onNavigate, onShowCreateSheet, onSubirComprobante, onDescartarCierre, uriHandler)
     val scroll = rememberScrollState()
     // La rueda del mouse sobre los márgenes mueve esta pantalla (ver [ScrollDesdeLosMargenes]).
     ScrollDesdeLosMargenes(scroll)
@@ -128,13 +133,13 @@ fun SduiRenderer(
                             Box(Modifier.fillMaxWidth().testTag(TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA)) { header() }
                             Spacer(Modifier.height(Movi.espacios.margen))
                         }
-                        ColumnaDeSecciones(columnas.izquierda, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler, Modifier.fillMaxWidth())
+                        ColumnaDeSecciones(columnas.izquierda, data, acciones, Modifier.fillMaxWidth())
                     }
-                    ColumnaDeSecciones(columnas.derecha, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler, Modifier.weight(1f))
+                    ColumnaDeSecciones(columnas.derecha, data, acciones, Modifier.weight(1f))
                 }
             } else {
                 ColumnaDeSecciones(
-                    columnas.izquierda, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler,
+                    columnas.izquierda, data, acciones,
                     Modifier.fillMaxWidth().widthIn(max = ANCHO_DE_UNA_COLUMNA),
                 )
             }
@@ -146,21 +151,35 @@ fun SduiRenderer(
     }
 }
 
-/** Una columna de secciones, con aire entre bloques: el Inicio se lee de a una pregunta por vez. */
+/** Lo que una sección puede pedirle a la pantalla, junto, para no pasarlo de a uno por cada nivel. */
+private class AccionesDelRenderer(
+    val onNavigate: (Screen) -> Unit,
+    val onShowCreateSheet: () -> Unit,
+    val onSubirComprobante: () -> Unit,
+    val onDescartarCierre: (String) -> Unit,
+    val uriHandler: UriHandler,
+)
+
+/**
+ * Una columna de secciones, con [com.jvillada.movi.theme.Medida.entreSecciones] entre bloques: el
+ * Inicio se lee de a una pregunta por vez. Los widgets seguidos («Falta por pagar», «En qué se va») van
+ * juntos en un bloque, lado a lado (ver [bloquesDelInicio]).
+ */
 @Composable
 private fun ColumnaDeSecciones(
     sections: List<ScreenSection>,
     data: DashboardData,
-    conPatrimonioEnElHero: Boolean,
-    onNavigate: (Screen) -> Unit,
-    onShowCreateSheet: () -> Unit,
-    uriHandler: UriHandler,
+    acciones: AccionesDelRenderer,
     modifier: Modifier,
 ) {
     Column(modifier = modifier) {
-        sections.forEachIndexed { index, section ->
-            if (index > 0) Spacer(Modifier.height(Movi.espacios.seccion))
-            SduiSection(section, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet, uriHandler)
+        bloquesDelInicio(sections).forEachIndexed { index, bloque ->
+            if (index > 0) Spacer(Modifier.height(Medida.entreSecciones))
+            if (bloque.all { it.type in TIPOS_DE_WIDGET }) {
+                WidgetsDelInicio(bloque.map { it.type }, data, acciones.onNavigate)
+            } else {
+                SduiSection(bloque.single(), data, acciones)
+            }
         }
     }
 }
@@ -169,25 +188,28 @@ private fun ColumnaDeSecciones(
 private fun SduiSection(
     section: ScreenSection,
     data: DashboardData,
-    conPatrimonioEnElHero: Boolean,
-    onNavigate: (Screen) -> Unit,
-    onShowCreateSheet: () -> Unit,
-    uriHandler: UriHandler,
+    acciones: AccionesDelRenderer,
 ) {
+    val onNavigate = acciones.onNavigate
+    val uriHandler = acciones.uriHandler
     when (section.type) {
-        // Generación 8: el hero contesta «¿cómo estoy?» y nada más (ver `HeroDeUnVistazo`). El tipo
-        // no cambia: es lo único que un APK viejo entiende, y él sigue pintando su hero de siempre.
-        "HERO_BALANCE" -> HeroDeUnVistazo(section, data, conPatrimonioEnElHero, onNavigate, onShowCreateSheet)
+        // El héroe contesta «¿cuánto me queda?» y nada más (ola R1, ver `HeroDeUnVistazo`). El tipo no
+        // cambia: es lo único que un APK viejo entiende, y él sigue pintando su héroe de siempre.
+        "HERO_BALANCE" -> HeroDeUnVistazo(section, data, onNavigate, acciones.onShowCreateSheet)
+        // Generación 9 (ola R1): la cuadrícula, «Movi propone hoy» y el carrusel de cuentas.
+        "ACCIONES" -> AccionesDelInicioSection(data, onNavigate, acciones.onSubirComprobante)
+        "PROPUESTAS" -> PropuestasDelInicioSection(data, onNavigate, acciones.onDescartarCierre)
+        "CUENTAS" -> CuentasDelInicioSection(data, onNavigate)
         "PREGUNTALE_A_MOVI" -> PreguntaleAMoviSection(section, data, onNavigate)
         "PATRIMONIO" -> PatrimonioSection(section, data, onNavigate)
         "UPCOMING_PAYMENTS" -> UpcomingPaymentsSection(section, data, onNavigate)
         // El tipo sigue llamándose ALERTS para que un APK viejo pinte algo, pero lo que muestra es
-        // «Para revisar»: además de lo que está mal, dice qué hacer y lleva a donde se hace.
+        // «Para revisar». Con PROPUESTAS en la definición, este cliente no lo pinta (`visibleSections`).
         "ALERTS" -> ParaRevisarSection(section, data, onNavigate)
         PARA_REVISAR_COMPACTO -> ParaRevisarCompactoSection(section, data, onNavigate)
-        "CHECKLIST_DEL_PERIODO" -> ChecklistDelPeriodoSection(section, data, onNavigate)
+        // Sueltos, sin el otro al lado (el Editor de pantallas los separó): el widget a todo el ancho.
+        "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA" -> WidgetsDelInicio(listOf(section.type), data, onNavigate)
         "DISPONIBLE_DEL_PERIODO" -> DisponibleDelPeriodoSection(section, data, onNavigate = onNavigate)
-        "GASTO_POR_CATEGORIA" -> GastoPorCategoriaSection(section, data, onNavigate)
         "QUICK_LINKS_WITH_TOTALS" -> QuickLinksSection(section, data, onNavigate, uriHandler)
         "CARD_ROW" -> CardRowSection(section, onNavigate, uriHandler)
         "CARD_LIST" -> CardListSection(section, onNavigate, uriHandler)
@@ -220,7 +242,7 @@ internal fun screenForTarget(target: String): Screen? = when (target) {
     // reemplazo con forma propia — a diferencia de Suscripciones/Recurrentes, acá no quedó un
     // «donde ahora viven las metas». Mismo trato que "investments" un poco más abajo: el target
     // sobrevive (una definición guardada puede seguir trayéndolo) y se manda a Cuentas en vez de
-    // crashear con un destino desconocido. `MetasScreen` sigue existiendo, solo sin puerta.
+    // crashear con un destino desconocido. `MetasScreen` se borró en la R4.
     "goals" -> Screen.Accounts
     // F61: Inversiones dejó de ser pantalla. Una definición guardada (o el Editor) puede seguir
     // trayendo este target — se manda a Cuentas, que es donde ahora viven las cuentas de
@@ -276,7 +298,7 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
         MinCard(
             modifier = Modifier.fillMaxWidth(),
             variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
         ) {
             rows.forEachIndexed { i, p ->
                 // F20: la regla sintética de una tarjeta (card_) también se gestiona en Créditos.
@@ -324,7 +346,7 @@ private fun AlertsSection(section: ScreenSection, data: DashboardData, onNavigat
         MinCard(
             modifier = Modifier.fillMaxWidth(),
             variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
         ) {
             alerts.forEachIndexed { i, alert ->
                 CardRow(
@@ -347,7 +369,7 @@ private fun QuickLinksSection(section: ScreenSection, data: DashboardData, onNav
         MinCard(
             modifier = Modifier.fillMaxWidth(),
             variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
         ) {
             section.cards.forEachIndexed { i, card ->
                 val target = card.action?.takeIf { it.type == "NAVIGATE" }?.target
@@ -379,8 +401,8 @@ private fun CardRowSection(section: ScreenSection, onNavigate: (Screen) -> Unit,
             Box(Modifier.padding(horizontal = Movi.espacios.amplio)) { MinSectionHeader(title = it) }
         }
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = Medida.margenDePantalla),
+            horizontalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
         ) {
             items(section.cards) { card -> SduiCardTile(card, clickHandler(card.action, onNavigate, uriHandler)) }
         }
@@ -394,7 +416,7 @@ private fun CardListSection(section: ScreenSection, onNavigate: (Screen) -> Unit
         MinCard(
             modifier = Modifier.fillMaxWidth(),
             variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
         ) {
             section.cards.forEachIndexed { i, card ->
                 CardRow(
@@ -419,7 +441,7 @@ private fun LinkListSection(section: ScreenSection, onNavigate: (Screen) -> Unit
         MinCard(
             modifier = Modifier.fillMaxWidth(),
             variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
         ) {
             section.cards.forEachIndexed { i, card ->
                 CardRow(
@@ -446,7 +468,7 @@ private fun BannerSection(section: ScreenSection, onNavigate: (Screen) -> Unit, 
         MinCard(
             modifier = Modifier.fillMaxWidth(),
             variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.s),
             onClick = clickHandler(action, onNavigate, uriHandler),
         ) {
             Row(
@@ -468,15 +490,15 @@ private fun SduiCardTile(card: ScreenCard, onClick: (() -> Unit)?) {
     MinCard(
         modifier = Modifier.width(150.dp).then(clickModifier),
         variant = MinCardVariant.Default,
-        padding = PaddingValues(14.dp),
+        padding = PaddingValues(Medida.rellenoDeSuperficie),
     ) {
         Text(card.title, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 2)
         card.subtitle?.let {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(Espacio.xxs))
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 2)
         }
         card.badge?.let {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(it, style = Movi.textos.rotulo, color = Movi.colores.marca)
         }
     }
