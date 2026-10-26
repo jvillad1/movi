@@ -131,7 +131,7 @@ data class GrupoDeResultados(val tipo: TipoDeResultado, val resultados: List<Res
 internal data class PantallaBuscable(val nombre: String, val donde: String, val destino: Screen, val tambien: List<String> = emptyList())
 
 internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
-    PantallaBuscable("Hoy", "Pestaña", Screen.Dashboard, listOf("inicio", "te quedan")),
+    PantallaBuscable("Inicio", "Pestaña", Screen.Dashboard, listOf("hoy", "te quedan")),
     PantallaBuscable("Movimientos", "Pestaña", Screen.Transactions(), listOf("gastos", "ingresos")),
     PantallaBuscable("Por revisar", "Movimientos", Screen.PorRevisar, listOf("pendientes", "confirmar", "avisos del banco")),
     PantallaBuscable("Plan", "Pestaña", Screen.Plan(), listOf("pagos del mes", "disponible")),

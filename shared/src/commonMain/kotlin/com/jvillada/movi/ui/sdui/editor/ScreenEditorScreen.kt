@@ -81,7 +81,7 @@ private val SECTION_TYPE_LABELS = mapOf(
  * `SduiRenderer.screenForTarget`); cambia lo que el selector dice de ellos.
  */
 internal val NAVIGATE_TARGET_LABELS = mapOf(
-    "dashboard" to "Hoy",
+    "dashboard" to "Inicio",
     "transactions" to "Movimientos",
     "quickadd" to "Agregar",
     // Ola C: los tres abren Plan; el paréntesis dice en qué segmento.

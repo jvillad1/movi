@@ -34,7 +34,7 @@ class ScreenEditorScreenTest {
      */
     @Test
     fun los_rotulos_nombran_los_lugares_de_la_ola_C() {
-        assertEquals("Hoy", NAVIGATE_TARGET_LABELS["dashboard"])
+        assertEquals("Inicio", NAVIGATE_TARGET_LABELS["dashboard"])
         assertEquals("Ajustes", NAVIGATE_TARGET_LABELS["mas"])
         assertEquals("Patrimonio", NAVIGATE_TARGET_LABELS["accounts"])
         assertTrue(NAVIGATE_TARGET_LABELS.getValue("budgets").startsWith("Plan"))

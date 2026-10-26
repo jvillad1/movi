@@ -157,10 +157,10 @@ class ScreenRoutesTest {
         assertEquals("dashboard", body["slug"]!!.jsonPrimitive.content)
         assertEquals(DASHBOARD_LAYOUT_VERSION, body["version"]!!.jsonPrimitive.content.toInt())
         val sections = body["sections"]!!.jsonArray
-        // Generación 8: el Inicio de un vistazo. «Pregúntale a Movi» segundo y el patrimonio antes de
-        // «Para revisar»; el BANNER se queda último para los APK que no conocen los tipos nuevos.
+        // Generación 9: el Inicio del rediseño (ola R1). Héroe, acciones, propuestas, cuentas y los dos
+        // widgets; ALERTS y el BANNER se quedan últimos para los APK que no conocen los tipos nuevos.
         assertEquals(
-            listOf("HERO_BALANCE", "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "GASTO_POR_CATEGORIA", "PATRIMONIO", "ALERTS", "BANNER"),
+            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
             sections.map { it.jsonObject["type"]!!.jsonPrimitive.content },
         )
 
@@ -354,7 +354,7 @@ class ScreenRoutesTest {
         val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
         assertEquals(DASHBOARD_LAYOUT_VERSION, body["version"]!!.jsonPrimitive.content.toInt())
         val types = body["sections"]!!.jsonArray.map { it.jsonObject["type"]!!.jsonPrimitive.content }
-        assertEquals(listOf("HERO_BALANCE", "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "GASTO_POR_CATEGORIA", "PATRIMONIO", "ALERTS", "BANNER"), types)
+        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"), types)
         assertTrue("QUICK_LINKS_WITH_TOTALS" !in types, "Explora desaparece tras el deploy, no solo en instalaciones nuevas")
     }
 }

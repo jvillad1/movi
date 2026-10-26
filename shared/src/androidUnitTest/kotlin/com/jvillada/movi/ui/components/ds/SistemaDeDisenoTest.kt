@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Search
@@ -25,6 +26,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Dp
+import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.LocalSaldosOcultos
@@ -102,6 +104,15 @@ class SistemaDeDisenoTest {
             Cifra(3_240_000, VarianteDeCifra.Heroe)
             BarraDeProgreso(0.4f)
             EsqueletoDeFila()
+            // Ola R1: la tarjeta de cuenta del carrusel y los widgets del Inicio.
+            TarjetaDeCuenta(
+                nombre = "Bancolombia", tipo = "Ahorros", rotuloDelSaldo = "Saldo", saldo = 13_845_800,
+                marca = marcaDelBanco("Bancolombia"), icono = Icons.Rounded.AccountBalance, onClick = {},
+            )
+            ParDeWidgets(
+                izquierdo = { m -> Widget("Falta por pagar", onClick = {}, modifier = m) { Cifra(4_312_000, VarianteDeCifra.Grande) } },
+                derecho = { m -> Widget("En qué se va", onClick = {}, modifier = m, detalle = "período") { BarraDeProgreso(0.6f) } },
+            )
         }
     }
 
@@ -193,6 +204,66 @@ class SistemaDeDisenoTest {
             composeRule.onAllNodesWithText(PLATA_OCULTA).fetchSemanticsNodes().size,
         )
         assertTrue(composeRule.onAllNodesWithText("27.500", substring = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    /**
+     * Ola R1: la tarjeta de cuenta mide [Medida.altoDeTarjetaDeCuenta] con marca y sin ella, lleva la
+     * marca invertida cuando el banco tiene una, se toca entera y su cifra se tapa con los saldos ocultos.
+     */
+    @Test
+    fun `la tarjeta de cuenta mide lo mismo con marca y sin ella, y tapa su saldo`() {
+        var tocada = 0
+        montar(ocultos = true) {
+            Column {
+                TarjetaDeCuenta(
+                    nombre = "Nu", tipo = "Cuenta", rotuloDelSaldo = "Saldo", saldo = 2_890_000,
+                    marca = marcaDelBanco("Nu"), icono = Icons.Rounded.AccountBalance, onClick = { tocada++ },
+                )
+                TarjetaDeCuenta(
+                    nombre = "Efectivo", tipo = "Efectivo", rotuloDelSaldo = "Saldo", saldo = 120_000,
+                    marca = null, icono = Icons.Rounded.AccountBalance, onClick = {},
+                )
+            }
+        }
+        assertEquals(Medida.altoDeTarjetaDeCuenta, altoDe(TAG_TARJETA_DE_CUENTA, 0))
+        assertEquals(Medida.altoDeTarjetaDeCuenta, altoDe(TAG_TARJETA_DE_CUENTA, 1))
+        assertEquals(1, composeRule.onAllNodesWithTag(TAG_MARCA_DE_LA_TARJETA, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(2, composeRule.onAllNodesWithText(PLATA_OCULTA, useUnmergedTree = true).fetchSemanticsNodes().size)
+        composeRule.onAllNodesWithTag(TAG_TARJETA_DE_CUENTA)[0].performClick()
+        assertEquals(1, tocada)
+    }
+
+    /** Los colores de una tarjeta con marca: los del banco, y el texto de apoyo igual que el principal. */
+    @Test
+    fun `la tarjeta de cuenta toma los colores de la marca`() {
+        val nu = marcaDelBanco("Nu")!!
+        val conMarca = coloresDeLaTarjetaDeCuenta(nu, com.jvillada.movi.theme.COLORES_OSCUROS)
+        assertEquals(androidx.compose.ui.graphics.Color(nu.fondo), conMarca.tarjeta)
+        assertEquals(androidx.compose.ui.graphics.Color(nu.texto), conMarca.texto)
+        assertEquals(conMarca.texto, conMarca.textoMedio)
+        val sinMarca = coloresDeLaTarjetaDeCuenta(null, com.jvillada.movi.theme.COLORES_OSCUROS)
+        assertEquals(com.jvillada.movi.theme.COLORES_OSCUROS.capa2, sinMarca.tarjeta)
+    }
+
+    /** Dos widgets lado a lado miden lo mismo aunque uno tenga más adentro, y cada uno se toca entero. */
+    @Test
+    fun `los widgets de un par miden lo mismo y se tocan enteros`() {
+        var tocado = ""
+        montar {
+            ParDeWidgets(
+                izquierdo = { m ->
+                    Widget("Falta por pagar", onClick = { tocado = "falta" }, modifier = m) {
+                        Cifra(4_312_000, VarianteDeCifra.Grande)
+                        Text("Arriendo")
+                        Text("Celular")
+                    }
+                },
+                derecho = { m -> Widget("En qué se va", onClick = { tocado = "va" }, modifier = m) { BarraDeProgreso(0.6f) } },
+            )
+        }
+        assertEquals(altoDe(TAG_WIDGET, 0), altoDe(TAG_WIDGET, 1))
+        composeRule.onAllNodesWithTag(TAG_WIDGET)[1].performClick()
+        assertEquals("va", tocado)
     }
 
     @Test

@@ -63,6 +63,7 @@ fun Route.inicioRoutes() {
                     it[userId] = uid
                     it[orden] = json.encodeToString(limpias.orden)
                     it[ocultas] = json.encodeToString(limpias.ocultas)
+                    it[visibles] = json.encodeToString(limpias.visibles)
                     it[actualizadoEn] = System.currentTimeMillis()
                 }
             }
@@ -88,6 +89,7 @@ internal suspend fun preferenciasDelInicioDe(uid: String): PreferenciasDelInicio
                 PreferenciasDelInicio(
                     orden = json.decodeFromString<List<String>>(fila[InicioPersonalizado.orden]),
                     ocultas = json.decodeFromString<List<String>>(fila[InicioPersonalizado.ocultas]),
+                    visibles = fila[InicioPersonalizado.visibles]?.let { json.decodeFromString<List<String>>(it) }.orEmpty(),
                 ).limpias()
             }
     }

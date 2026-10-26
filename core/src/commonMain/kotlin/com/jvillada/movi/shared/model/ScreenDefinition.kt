@@ -58,6 +58,10 @@ object ScreenTaxonomy {
         // contra lo que debes). Un APK anterior no los conoce y los descarta en silencio; por eso
         // la generación 8 conserva el BANNER de Movi AI al final (ver `DASHBOARD_LAYOUT_VERSION`).
         "PREGUNTALE_A_MOVI", "PATRIMONIO",
+        // Generación 9, el Inicio del rediseño (ola R1): la cuadrícula de acciones, el feed «Movi
+        // propone hoy» y el carrusel de cuentas. Un APK anterior no los conoce y los descarta; por eso
+        // la generación 9 conserva ALERTS y el BANNER al final (ver `DASHBOARD_LAYOUT_VERSION`).
+        "ACCIONES", "PROPUESTAS", "CUENTAS",
     )
 
     /**

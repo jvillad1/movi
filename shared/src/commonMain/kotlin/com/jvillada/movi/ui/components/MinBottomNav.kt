@@ -11,7 +11,7 @@ import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.SwapVert
-import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,7 +62,8 @@ data class DestinoPrincipal(
  * tres y el «+», medido con el motor de texto real en `LasCuatroPestanasTest`.
  */
 val destinosPrincipales: List<DestinoPrincipal> = listOf(
-    DestinoPrincipal(NavTab.HOY, "Hoy", Icons.Rounded.Today),
+    // Ola R1: «Hoy» pasa a llamarse «Inicio», como en las maquetas del camino 1.
+    DestinoPrincipal(NavTab.HOY, "Inicio", Icons.Rounded.Home),
     DestinoPrincipal(NavTab.MOVIMIENTOS, "Movimientos", Icons.Rounded.SwapVert, rotuloCorto = "Movs"),
     DestinoPrincipal(NavTab.PLAN, "Plan", Icons.AutoMirrored.Rounded.EventNote),
     DestinoPrincipal(NavTab.PATRIMONIO, "Patrimonio", Icons.Rounded.AccountBalance),
