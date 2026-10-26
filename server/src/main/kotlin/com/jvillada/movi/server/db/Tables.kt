@@ -441,6 +441,12 @@ object InicioPersonalizado : Table("inicio_personalizado") {
     val userId        = varchar("user_id", 50)
     val orden         = text("orden")
     val ocultas       = text("ocultas")
+    /**
+     * Ola R1: las secciones opcionales que el dueño prendió (`PreferenciasDelInicio.visibles`), en
+     * JSON. Nullable porque la tabla ya tiene filas: es lo único que `createMissingTablesAndColumns`
+     * puede agregar sin riesgo. `null` = ninguna.
+     */
+    val visibles      = text("visibles").nullable()
     val actualizadoEn = long("actualizado_en")
     override val primaryKey = PrimaryKey(userId)
 }

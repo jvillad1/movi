@@ -12,12 +12,14 @@ import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.RecurringRule
-import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.sdui.ChecklistDelPeriodoSection
+import com.jvillada.movi.ui.sdui.TAG_WIDGET_FALTA_POR_PAGAR
+import com.jvillada.movi.ui.sdui.TODO_PAGADO
+import com.jvillada.movi.ui.sdui.WidgetFaltaPorPagar
+import androidx.compose.ui.test.onNodeWithTag
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import org.junit.Rule
 import org.junit.Test
@@ -27,7 +29,8 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
 /**
- * **La tarjeta del Inicio dice que lo suyo es solo lo que falta.**
+ * **El widget «Falta por pagar» del Inicio dice que lo suyo es solo lo que falta.** (Ola R1: era una
+ * tarjeta con su lista; ahora es el widget compacto, con los dos pagos que vencen primero.)
  *
  * El dueño, mirando esa tarjeta: *«En Inicio veo donde dice Pagos del período y solo muestra los
  * faltantes, no muestra todos; debería indicar que esos son los faltantes nada más»*. La tarjeta
@@ -63,11 +66,7 @@ class ChecklistEnInicioTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    ChecklistDelPeriodoSection(
-                        section = ScreenSection(type = "CHECKLIST_DEL_PERIODO", title = "Pagos del período"),
-                        data = data,
-                        onNavigate = { navegoA = it },
-                    )
+                    WidgetFaltaPorPagar(data = data, onNavigate = { navegoA = it })
                 }
             }
         }
@@ -94,21 +93,12 @@ class ChecklistEnInicioTest {
     )
 
     @Test
-    fun `la tarjeta declara que lista lo pendiente y cuantos pagos del periodo son`() {
+    fun `el widget declara que lista lo pendiente y cuantos pagos del periodo son`() {
         montar(conTresPagosYUnoMarcado())
 
-        // El rótulo dejó de prometer «todos». MinSectionHeader lo pinta en mayúsculas.
         composeRule.onNodeWithText("Falta por pagar", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Pagos del período", useUnmergedTree = true).assertDoesNotExist()
-
-        composeRule.onNodeWithText("Te faltan 2 de 3 pagos de este período", useUnmergedTree = true)
-            .assertIsDisplayed()
-        // Y dice dónde está lo que no muestra — sin decir que fue el dueño quien lo marcó: fue
-        // Movi quien emparejó el arriendo solo (el checklist es de solo lectura desde #363).
-        composeRule.onNodeWithText(
-            "Ya salió 1. El checklist completo está en «Ver todos».",
-            useUnmergedTree = true,
-        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Faltan 2 de 3 pagos", useUnmergedTree = true).assertIsDisplayed()
     }
 
     /** Lo pendiente se lista; lo ya marcado no ocupa lugar en el resumen, pero sí en la cuenta. */
@@ -119,21 +109,23 @@ class ChecklistEnInicioTest {
         composeRule.onNodeWithText("Celular", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Gimnasio", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Arriendo", useUnmergedTree = true).assertDoesNotExist()
-        // El total es la suma de lo pendiente, sin el arriendo que ya se marcó.
-        composeRule.onNodeWithText("Falta $192.900", useUnmergedTree = true).assertIsDisplayed()
+        // El total es la suma de lo pendiente (`faltaPorPagar`), sin el arriendo que ya se marcó.
+        composeRule.onNodeWithText("$192.900", useUnmergedTree = true).assertIsDisplayed()
+        // El que venció va primero y lo dice.
+        composeRule.onNodeWithText("Vencido hace 2 días", useUnmergedTree = true).assertIsDisplayed()
     }
 
-    /** «Ver todos» aterriza en el checklist completo: Plan · Pagos del mes (ola C). */
+    /** Tocar el widget aterriza en el checklist completo: Plan · Pagos del mes. */
     @Test
-    fun `Ver todos lleva al checklist completo`() {
+    fun `tocar el widget lleva al checklist completo`() {
         montar(conTresPagosYUnoMarcado())
 
-        composeRule.onNodeWithText("Ver todos", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag(TAG_WIDGET_FALTA_POR_PAGAR).performClick()
 
         assertEquals(Screen.Plan(SEGMENTO_PAGOS), navegoA)
     }
 
-    /** Con todo marcado la tarjeta no miente al revés: lo dice, y no manda a ninguna parte. */
+    /** Con todo marcado el widget no miente al revés: lo dice, sin cifra. */
     @Test
     fun `sin nada pendiente lo dice y no promete que haya algo escondido`() {
         montar(
@@ -149,14 +141,13 @@ class ChecklistEnInicioTest {
             ),
         )
 
-        composeRule.onNodeWithText("Ya salió el único pago de este período", useUnmergedTree = true)
-            .assertIsDisplayed()
-        composeRule.onNodeWithText("Ver todos", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(TODO_PAGADO, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Celular", useUnmergedTree = true).assertDoesNotExist()
     }
 
-    /** El pie en plural: dos o más pagos ya salieron y siguen sin ocupar lugar en el resumen. */
+    /** En singular cuando falta uno solo: dos de tres ya salieron. */
     @Test
-    fun `el pie dice en plural cuando ya salio mas de un pago`() {
+    fun `dice en singular cuando falta un solo pago`() {
         montar(
             DashboardData(
                 upcoming = listOf(
@@ -177,9 +168,6 @@ class ChecklistEnInicioTest {
             ),
         )
 
-        composeRule.onNodeWithText(
-            "Ya salieron 2. El checklist completo está en «Ver todos».",
-            useUnmergedTree = true,
-        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Falta 1 de 3 pagos", useUnmergedTree = true).assertIsDisplayed()
     }
 }

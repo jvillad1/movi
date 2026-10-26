@@ -5,6 +5,7 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
@@ -538,12 +539,24 @@ data class TextosDeMovi(
         lineHeight = 18.sp,
         fontWeight = FontWeight.Medium,
     ),
-    /** Un monto en una fila. Tabular, para que la columna no baile. */
+    /**
+     * Un monto en una fila. Tabular, para que la columna no baile.
+     *
+     * **Ola R1: en Martian Mono, como la cifra héroe y la de tarjeta.** El camino 1 pone toda cifra de
+     * plata en la misma familia —las de las filas, las propuestas y los widgets también—, así un monto
+     * se reconoce como monto en cualquier pantalla. Un punto más chico que el cuerpo (12,5 contra
+     * 13,5): la monoespaciada es más ancha y a igual tamaño se ve más grande que el texto de al lado.
+     */
     val monto: TextStyle = TextStyle(
-        fontSize = 13.5.sp,
+        fontSize = 12.5.sp,
         lineHeight = 18.sp,
         fontWeight = FontWeight.Normal,
+        letterSpacing = (-0.3).sp,
         fontFeatureSettings = "tnum",
+        // Sin recorte: un renglón de monto mide su `lineHeight` (18) con cualquier fuente. Martian
+        // Mono a 12,5 sp es más baja que Space Grotesk a 13,5, y con el recorte de siempre cada fila
+        // con un monto se achicaba unos dp — lo que miden los esqueletos y el alto del MoneyField.
+        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
     ),
     /** El subtítulo de una fila, que dice algo que no está en ninguna otra parte. */
     val apoyo: TextStyle = TextStyle(

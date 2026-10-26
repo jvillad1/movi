@@ -133,6 +133,12 @@ object Medida {
     /** El círculo de una acción rápida (la cuadrícula del camino 3). */
     val accionRapida: Dp = 56.dp
 
+    /**
+     * El alto de una tarjeta de cuenta del carrusel «Tus cuentas» (ola R1): el nombre arriba y el
+     * saldo en `cifraDeTarjeta` abajo, con aire entre los dos.
+     */
+    val altoDeTarjetaDeCuenta: Dp = 128.dp
+
     /** El alto de una píldora de estado. */
     val altoDePildora: Dp = 24.dp
 

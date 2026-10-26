@@ -94,21 +94,47 @@ package com.jvillada.movi.shared.model
 // El orden de la lista es el del teléfono. En escritorio el cliente la reparte en dos columnas por
 // tipo (ver `columnasDelInicio`), conservando el orden dentro de cada una; eso NO viaja en la fila
 // porque es disposición, no contenido.
-const val DASHBOARD_LAYOUT_VERSION = 8
+// Generación 9: el Inicio del rediseño (ola R1, 26-oct-2026: el camino 1 «Noche premium», con la
+// cuadrícula del camino 3 y el feed del camino 5). Cada bloque contesta una sola pregunta y una cifra
+// que vive en otra pantalla no se repite acá:
+//
+// - HERO_BALANCE: «Te quedan», para cuántos días y la meta diaria. La barra Entró/Salió y el desglose
+//   de «Tu plata» salen (viven en Plan y en Patrimonio).
+// - ACCIONES: la cuadrícula de lo que se hace desde el Inicio (anotar, traspasar, pagar, subir un
+//   comprobante, revisar avisos, preguntarle a Movi). Reemplaza a PREGUNTALE_A_MOVI: preguntar es una
+//   acción más.
+// - PROPUESTAS: «Movi propone hoy», una tarjeta por cosa que pide decisión. Junta lo que estaba en
+//   «Para revisar», las alertas y la tarjeta del cierre.
+// - CUENTAS: el carrusel de las cuentas con el color de su banco. Lleva a Patrimonio.
+// - CHECKLIST_DEL_PERIODO y GASTO_POR_CATEGORIA, compactos, lado a lado («Falta por pagar», «En qué
+//   se va»): los widgets que el dueño elige en «Editar inicio».
+//
+// DISPONIBLE_DEL_PERIODO y PATRIMONIO **salen de la lista**: repetían Plan y Patrimonio. Siguen
+// disponibles en «Editar inicio» como secciones opcionales (ver `SECCIONES_OPCIONALES`): el server las
+// agrega a la definición del dueño que las prende.
+//
+// ALERTS y BANNER se quedan al final **solo para los APK viejos**: un APK de la generación 8 no conoce
+// ACCIONES, PROPUESTAS ni CUENTAS (`renderableSections` los descarta en silencio) y ve hero, falta por
+// pagar, en qué se va, «Para revisar» y el acceso a Movi AI —su Inicio de siempre, sin Disponible ni
+// patrimonio, que siguen a un toque en Plan y Patrimonio—. Este cliente no pinta ALERTS cuando la misma
+// definición trae PROPUESTAS, ni el BANNER de Movi AI cuando trae ACCIONES (ver `visibleSections`).
+const val DASHBOARD_LAYOUT_VERSION = 9
 
 fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     slug = "dashboard",
     version = DASHBOARD_LAYOUT_VERSION,
     sections = listOf(
         ScreenSection(type = "HERO_BALANCE", title = "Balance neto"),  // rótulo inerte: el renderer usa HERO_BALANCE_TITLE
-        ScreenSection(type = "PREGUNTALE_A_MOVI", title = "Pregúntale a Movi"),
-        ScreenSection(type = "CHECKLIST_DEL_PERIODO", title = "Pagos del período"),
-        ScreenSection(type = "DISPONIBLE_DEL_PERIODO", title = "Disponible"),
+        ScreenSection(type = "ACCIONES", title = "Acciones"),
+        ScreenSection(type = "PROPUESTAS", title = "Movi propone hoy"),
+        ScreenSection(type = "CUENTAS", title = "Tus cuentas"),
+        ScreenSection(type = "CHECKLIST_DEL_PERIODO", title = "Falta por pagar"),
         ScreenSection(type = "GASTO_POR_CATEGORIA", title = "En qué se va"),
-        ScreenSection(type = "PATRIMONIO", title = "Tu patrimonio"),
+        // Solo para los APK anteriores a la generación 9: el cliente nuevo no lo pinta cuando hay
+        // PROPUESTAS. Ver el comentario de la generación 9, arriba.
         ScreenSection(type = "ALERTS", title = "Para revisar"),
-        // Solo para los APK anteriores a la generación 8: el cliente nuevo lo esconde cuando hay
-        // PREGUNTALE_A_MOVI. Ver el comentario de la generación 8, arriba.
+        // Solo para los APK anteriores a la generación 8 (y a la 9, que ya no traen PREGUNTALE_A_MOVI):
+        // el cliente nuevo lo esconde cuando hay ACCIONES, que ya tiene «Preguntar a Movi».
         // Sin el "✦" que llevaba antes: en la web salía como ▯ (la fuente no tiene el glifo),
         // mismo problema que la Ola 2 arregló en los íconos de texto.
         ScreenSection(

@@ -22,7 +22,7 @@ class MinNavRailTest {
             listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.ESPACIOS, NavTab.PATRIMONIO),
             destinosPrincipales.map { it.tab },
         )
-        assertEquals(listOf("Hoy", "Movimientos", "Plan", "Espacios", "Patrimonio"), destinosPrincipales.map { it.label })
+        assertEquals(listOf("Inicio", "Movimientos", "Plan", "Espacios", "Patrimonio"), destinosPrincipales.map { it.label })
     }
 
     @Test

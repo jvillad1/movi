@@ -60,8 +60,9 @@ class LasCuatroPestanasTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val rotulos = listOf("Hoy", "Movimientos", "Plan", "Espacios", "Patrimonio")
-    private val loQueYaNoEsPestana = listOf("Más", "Inicio", "Movs", "Cuentas", "Créditos", "Presupuestos")
+    private val rotulos = listOf("Inicio", "Movimientos", "Plan", "Espacios", "Patrimonio")
+    // Ola R1: «Hoy» volvió a llamarse «Inicio»; lo que ya no es pestaña es «Hoy».
+    private val loQueYaNoEsPestana = listOf("Más", "Hoy", "Movs", "Cuentas", "Créditos", "Presupuestos")
 
     private var elegida: NavTab? = null
 
@@ -159,10 +160,10 @@ class LasCuatroPestanasTest {
     fun `con la letra del sistema al 130 por ciento ningun rotulo sale cortado`() {
         montarBarra(letraDelSistema = 1.3f)
 
-        val texto = layoutDelTexto("Hoy")
+        val texto = layoutDelTexto("Inicio")
         assertEquals(1, texto.lineCount)
-        assertFalse(texto.multiParagraph.didExceedMaxLines, "«Hoy» sin partirse")
-        rotulos.filter { it != "Hoy" }.forEach {
+        assertFalse(texto.multiParagraph.didExceedMaxLines, "«Inicio» sin partirse")
+        rotulos.filter { it != "Inicio" }.forEach {
             composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist()
             composeRule.onNodeWithContentDescription(it, useUnmergedTree = true).assertIsDisplayed()
         }

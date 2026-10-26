@@ -85,7 +85,7 @@ class LasCincoPestanasA360Test {
         assertTrue(nodo.width + 0.5f >= texto.getLineRight(0) - texto.getLineLeft(0), "«Patrimonio» entero")
         assertTrue(nodo.right <= ancho, "termina adentro de la pantalla")
 
-        listOf("Hoy", "Movimientos", "Plan", "Espacios").forEach {
+        listOf("Inicio", "Movimientos", "Plan", "Espacios").forEach {
             composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist()
             composeRule.onNodeWithContentDescription(it, useUnmergedTree = true).assertIsDisplayed()
         }
@@ -95,8 +95,8 @@ class LasCincoPestanasA360Test {
 
     @Test
     fun `el umbral - cinco rotulos medidos entran en 390 y no en 360`() {
-        // Los anchos medidos en este emulador (1,12×): Hoy, Movimientos, Plan, Espacios, Patrimonio.
-        val medidos = listOf(23.dp, 74.dp, 25.dp, 52.dp, 66.dp)
+        // Los anchos medidos en este emulador (1,12×): Inicio, Movimientos, Plan, Espacios, Patrimonio.
+        val medidos = listOf(38.dp, 74.dp, 25.dp, 52.dp, 66.dp)
         assertTrue(rotulosQueEntran(medidos, 390.dp))
         assertFalse(rotulosQueEntran(medidos, 360.dp))
     }

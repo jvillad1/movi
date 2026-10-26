@@ -362,7 +362,7 @@ class EsqueletoResponsivoTest {
 
         assertEquals(raiz(), limites(TAG_VELO_DE_HOJA))
         // Donde está el primer ítem del rail compacto (el «+» ocupa los primeros ~72 dp).
-        val hoy = composeRule.onNodeWithContentDescription("Hoy", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val hoy = composeRule.onNodeWithContentDescription("Inicio", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         composeRule.onRoot().performTouchInput { click(hoy.center) }
         composeRule.waitForIdle()
 

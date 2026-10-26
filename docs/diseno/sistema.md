@@ -42,6 +42,7 @@ Las reglas que se repiten tienen nombre propio (`Medida`), y se usa el nombre, n
 | `Medida.altoDeEncabezado` | 56 |
 | `Medida.avatar` / `avatarGrande` / `accionRapida` | 40 / 48 / 56 |
 | `Medida.altoDeMarcaDeBarra` | 12 — la marca sobre una `BarraDeProgreso` («la mitad» en Espacios) |
+| `Medida.altoDeTarjetaDeCuenta` | 128 — la tarjeta de una cuenta en el carrusel (ola R1) |
 
 `Movi.espacios.*` sigue existiendo (lo nombra media app) y ahora sale de acá. **Con la R0 cambiaron en
 toda la app a la vez:** el margen de pantalla de 20 a 16 y la separación entre secciones de 32 a 24.
@@ -102,6 +103,11 @@ Los siete estilos de siempre (`cifra`, `titular`, `titulo`, `cuerpo`, `monto`, `
 nuevo: **`cifraDeTarjeta`** (Martian Mono, 24 sp), la cifra de una tarjeta de cuenta o un widget. La
 cifra héroe es `cifra` (Martian Mono, 42 sp). Ningún `fontSize` suelto (lo vigila
 `LosTamanosSueltosSoloBajanTest`).
+
+**Ola R1: toda cifra de plata va en Martian Mono.** `monto` —el de una fila, una propuesta, un
+widget— pasó de Space Grotesk tabular a Martian Mono a 12,5 sp (la monoespaciada es más ancha: un
+punto menos que el cuerpo se lee del mismo tamaño). Así las cifras de la app se ven de la misma familia
+en todas partes. Space Grotesk queda para todo lo que no es un monto.
 
 ## 6. Los componentes (`ui/components/ds/`)
 
@@ -165,12 +171,42 @@ TarjetaDePropuesta(
 )
 ```
 
-**`Cifra`** — un monto: `Heroe` (una por pantalla), `Grande`, `Fila`, `Chica`; tono `Neutro`, `Ingreso`,
+**`Cifra`** — un monto: `Heroe` (una por pantalla), `Grande` (se achica hasta `Fila` si no entra, como
+la héroe hasta `Grande`), `Fila`, `Chica`; tono `Neutro`, `Ingreso`,
 `Alerta`, `Apagado`; signo y «Ocultar los saldos» incluidos.
 ```kotlin
 Cifra(-27_500)
 Cifra(4_500_000, tono = TonoDeCifra.Ingreso)        // +$4.500.000
 Cifra(teQuedan, VarianteDeCifra.Heroe)
+```
+
+**`TarjetaDeCuenta`** — la tarjeta de una cuenta del carrusel «Tus cuentas» (ola R1): el color y la
+marca de su banco (`MarcasConocidas`; la marca va invertida en un círculo), el nombre, el tipo y el
+saldo en `Cifra.Grande`. El nombre va en hasta dos renglones (nunca «Bancolombia Ah…») y el tipo baja
+junto al rótulo del saldo. Alto mínimo `Medida.altoDeTarjetaDeCuenta` (crece con la letra agrandada),
+radio `Radio.xl`, sin borde. Sin marca,
+la capa 2 y el ícono del tipo. En un carrusel ocupa `FRACCION_DE_TARJETA_DE_CUENTA` del ancho, para que
+la siguiente asome.
+```kotlin
+TarjetaDeCuenta(
+    nombre = "Bancolombia", tipo = "Ahorros", rotuloDelSaldo = "Saldo", saldo = 13_845_800,
+    marca = marcaDelBanco("Bancolombia"), icono = Icons.Filled.AccountBalance, onClick = ::abrir,
+    modifier = Modifier.fillParentMaxWidth(FRACCION_DE_TARJETA_DE_CUENTA),
+)
+```
+
+**`Widget`** y **`ParDeWidgets`** — un bloque compacto que **resume** una cifra que vive en otra
+pantalla y lleva allá (ola R1: «Falta por pagar» → Plan, «En qué se va» → su análisis). Es una
+`Superficie` tocable entera con su título y un detalle opcional. **Un monto nunca se recorta**: en una
+fila de widget el monto va sin peso (se mide primero, entero) y lo que se achica es la barra o el nombre
+(el único que lleva «…»); lo vigila `NadaSeRecortaEnElInicioTest` a 360 y 390 dp, también con la letra
+agrandada. Dos van lado a lado y del mismo alto
+con `ParDeWidgets`; uno solo va a todo el ancho.
+```kotlin
+ParDeWidgets(
+    izquierdo = { m -> Widget("Falta por pagar", onClick = ::abrirPlan, modifier = m) { Cifra(falta, VarianteDeCifra.Grande) } },
+    derecho = { m -> Widget("En qué se va", onClick = ::abrirAnalisis, modifier = m) { … } },
+)
 ```
 
 **`Encabezado`** — el de toda pantalla: 56 de alto, 16 de margen, título, flecha o avatar, acciones
@@ -191,7 +227,8 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 
 ## 7. La regla de secciones
 
-1. **Cada pantalla es dueña de una pregunta.** Hoy: «¿cómo voy?». Movimientos: «¿en qué se fue?».
+1. **Cada pantalla es dueña de una pregunta.** Inicio (antes «Hoy»): «¿cuánto me queda y qué hago
+   hoy?» —el héroe, las acciones, lo que Movi propone, las cuentas y los widgets que el dueño elige—. Movimientos: «¿en qué se fue?».
    Plan: «¿qué viene y cuánto puedo gastar?». Patrimonio / Espacios: «¿qué tengo y qué debo?». Una
    sección que contesta otra pregunta va en la pantalla de esa pregunta, con un enlace si hace falta.
 2. **Una cifra no se repite entre pantallas.** Cada número tiene una casa; en las demás se nombra con
@@ -207,7 +244,7 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 | `ElSistemaNoTieneValoresSueltosTest` | cero `.dp`/`.sp`/`Color(0x)`/radio/`fontSize`/`alpha` a mano dentro de `ds/` |
 | `ContrasteDeLosTokensTest` | el contraste de cada par, con las capas nuevas |
 | `LosTamanosSueltosSoloBajanTest` | los `fontSize` sueltos |
-| `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en los dos temas; la fila mide 56/64; el botón llega a 48 de toque; la cifra se oculta |
+| `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en los dos temas; la fila mide 56/64; el botón llega a 48 de toque; la cifra se oculta; la tarjeta de cuenta mide 128 con marca y sin ella; dos widgets de un par miden lo mismo |
 
 ## 9. Migrar una pantalla
 
@@ -217,3 +254,23 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 3. `python3 scripts/auditoria-de-diseno.py --resumen` y bajar `docs/diseno/lineas-base.txt` al número
    nuevo (la prueba lo exige).
 4. Mirarla después. Casi cada pantalla migrada tuvo un defecto visible.
+
+## 10. El Inicio (ola R1)
+
+El Inicio se arma desde la definición del server (`DashboardDefaults`, generación 9) con las
+preferencias del dueño («Editar inicio»). Cada bloque contesta una sola pregunta, con los componentes de
+arriba:
+
+| bloque | tipo SDUI | componente | lleva a |
+|---|---|---|---|
+| encabezado | — (chrome) | `Encabezado`: avatar, «Hola, Juan» con el período, lupa y campana | Ajustes, Buscar |
+| héroe | `HERO_BALANCE` | `Cifra.Heroe` «Te quedan», el ojo, «para N días · meta diaria $X», el veredicto | Tus períodos |
+| acciones | `ACCIONES` | `CuadriculaDeAcciones` 4 × 2 | Agregar, papeles, Por revisar, Movi AI |
+| Movi propone hoy | `PROPUESTAS` | `TarjetaDePropuesta`, una por tipo, tope 4 | su acción; «Ver todo» → Por revisar |
+| tus cuentas | `CUENTAS` | `TarjetaDeCuenta` en carrusel | el detalle de la cuenta; «Ver todo» → Patrimonio |
+| widgets | `CHECKLIST_DEL_PERIODO`, `GASTO_POR_CATEGORIA` | `ParDeWidgets` | Plan, En qué se va |
+
+`DISPONIBLE_DEL_PERIODO` y `PATRIMONIO` ya no vienen por defecto (repetían Plan y Patrimonio): son
+`SECCIONES_OPCIONALES` que el dueño prende en «Editar inicio». La barra Entró/Salió y el desglose de
+«Tu plata» salieron del héroe. ALERTS y el BANNER siguen al final de la definición solo para los APK
+viejos; este cliente no los pinta.
