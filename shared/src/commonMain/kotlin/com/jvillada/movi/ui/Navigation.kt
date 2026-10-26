@@ -126,7 +126,6 @@ sealed class Screen {
      * desde Créditos (Patrimonio → Deudas) y marca Patrimonio, como Créditos.
      */
     data object SalidaDeDeudas : Screen()
-    data object Goals : Screen()
     /**
      * Presupuestos suelto. Ola C: su cuerpo es el mismo que el segmento «Presupuestos» de [Plan]
      * (ver `rememberEstadoDePresupuestos`), y todas las puertas que llevaban acá —el destino SDUI
@@ -178,7 +177,8 @@ sealed class Screen {
 
     /**
      * «Documentos» — los papeles del dueño guardados en Movi (extractos, nóminas, contratos).
-     * Ficha de Más, junto a «Extractos»: el importador archiva ahí lo que pasa por él.
+     * Ficha de Ajustes: el importador archiva ahí lo que pasa por él, y su sección «Importaciones»
+     * es la casa del historial que antes tenía «Extractos» (borrada en la R4; `"extractos"` lleva acá).
      */
     data object Documentos : Screen()
     /**
@@ -255,7 +255,6 @@ sealed class Screen {
         val abrirCategoria: Boolean = false,
     ) : Screen()
     data object Mas : Screen()
-    data object Extractos : Screen()
     data object Accounts : Screen()
     /**
      * Detalle de una cuenta. Lleva el grupo de la cuenta además del id porque la navegación
@@ -352,7 +351,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
  * entrar a Perfil dejaría al dueño sin forma de saltar a Movimientos que no sea volver dos veces.
  */
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
-    Screen.Mas, Screen.Profile, Screen.Goals, Screen.Extractos, is Screen.AIChat,
+    Screen.Mas, Screen.Profile, is Screen.AIChat,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos,
     Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio -> true
     else -> false

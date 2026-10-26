@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -155,7 +157,7 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
                 style = Movi.textos.cuerpo,
                 fontWeight = FontWeight.Normal,
                 color = Movi.colores.textoMedio,
-                modifier = Modifier.padding(horizontal = 18.dp).padding(top = 4.dp, bottom = 14.dp),
+                modifier = Modifier.padding(horizontal = Espacio.m).padding(top = Espacio.xxs, bottom = Espacio.s),
             )
             // Esta pantalla existe para contestar «¿me falta algo?», así que no puede contestar
             // «te falta todo» mientras todavía está preguntando. La caché suele llegar llena
@@ -163,26 +165,26 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
             // web sí puede caer acá sin nada: ahí se espera, no se inventa.
             if (!data.puedeAfirmarVacio && fallo) {
                 // Se dice qué pasó y se ofrece la salida, en vez de girar sin fin.
-                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.m)) {
                     Text(
                         text = "No pudimos revisar qué te falta. Puede ser la conexión.",
                         style = Movi.textos.cuerpo,
                         fontWeight = FontWeight.Normal,
                         color = Movi.colores.textoMedio,
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(Espacio.s))
                     Text(
                         text = "Reintentar",
                         style = Movi.textos.cuerpo,
                         color = Movi.colores.marca,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(Radio.s))
                             .clickable { refreshKey++ }
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                            .padding(horizontal = Espacio.s, vertical = Espacio.xs),
                     )
                 }
             } else if (!data.puedeAfirmarVacio) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.m))
             } else {
                 PrimerosPasosCard(
                     data = data,
@@ -190,7 +192,7 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
                     onShowCreateSheet = { showCreateSheet = true },
                 )
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Espacio.xl))
         }
     }
 

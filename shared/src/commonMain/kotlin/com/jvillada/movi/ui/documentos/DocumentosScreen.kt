@@ -1,5 +1,22 @@
 package com.jvillada.movi.ui.documentos
 
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Description
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.Vacio
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -67,7 +84,6 @@ import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
 import com.jvillada.movi.ui.components.altoDeUnRenglon
 import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
-import com.jvillada.movi.ui.extractos.ImportCard
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
@@ -255,7 +271,15 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Documentos",
                 leading = HeaderLeading.Back(fallback = Screen.Mas),
-                action = { NewItemButton(label = "Subir archivo", onClick = elegirArchivo) },
+                action = {
+                    Boton(
+                        texto = "Subir archivo",
+                        onClick = elegirArchivo,
+                        variante = VarianteDeBoton.Fantasma,
+                        tamano = TamanoDeBoton.S,
+                        icono = Icons.Rounded.Add,
+                    )
+                },
             )
             val lista = documentos
             // Fix round 1: con nada pintado todavía (`lista == null && cargando`) el esqueleto de
@@ -276,7 +300,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 lista == null -> NoSePudoLeer(
                     "No pudimos cargar tus documentos",
                     onReintentar = { refreshKey++ },
-                    modifier = Modifier.padding(horizontal = 16.dp).padding(top = 14.dp),
+                    modifier = Modifier.padding(horizontal = Espacio.m).padding(top = Espacio.s),
                 )
 
                 // Revisión final de la ola: sin documentos, «Importaciones» TAMBIÉN se pinta. Es el
@@ -292,8 +316,8 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 lista.isEmpty() -> Column(
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                 ) {
-                    Column(modifier = Modifier.padding(horizontal = 20.dp).padding(top = 14.dp)) {
-                        VacioQueEnsena(
+                    Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
+                        Vacio(
                             titulo = "Tus papeles, a mano",
                             detalle = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel que quieras " +
                                 "tener a mano. Los extractos que importes se archivan solos.",
@@ -306,17 +330,17 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                         imports = imports,
                         onReintentar = { refreshKey++ },
                         onAbrir = { onNavigate(Screen.ImportDetail(it.id)) },
-                        modifier = Modifier.padding(top = 18.dp, bottom = 80.dp),
+                        modifier = Modifier.padding(top = Espacio.m, bottom = Medida.botonFlotante + Medida.entreSecciones),
                     )
                 }
 
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(top = 14.dp, bottom = 80.dp),
+                    contentPadding = PaddingValues(top = Espacio.s, bottom = Medida.botonFlotante + Medida.entreSecciones),
                 ) {
                     porTipo(lista).forEach { (tipo, delTipo) ->
                         item(key = "encabezado-${tipo.name}") {
-                            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
                                 MinSectionHeader(
                                     title = if (tipo.name == "OTRO") "Otros" else "${nombreDeTipo(tipo)}s",
                                     count = delTipo.size,
@@ -333,7 +357,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                                 onImportar = if (esImportable(doc)) { { importar(doc) } } else null,
                             )
                         }
-                        item(key = "espacio-${tipo.name}") { Spacer(Modifier.height(18.dp)) }
+                        item(key = "espacio-${tipo.name}") { Spacer(Modifier.height(Espacio.m)) }
                     }
 
                     // Ola B, tarea 7: la sección «Importaciones» que se mudó acá desde Extractos,
@@ -362,7 +386,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
 
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Espacio.m),
         )
 
         aSubir?.let { archivo ->
@@ -411,23 +435,35 @@ private fun SeccionDeImportaciones(
     modifier: Modifier = Modifier,
 ) {
     when {
-        error != null -> Column(modifier = modifier.padding(horizontal = 16.dp).padding(top = 4.dp)) {
+        error != null -> Column(modifier = modifier.padding(horizontal = Espacio.m).padding(top = Espacio.xxs)) {
             NoSePudoLeer(error, onReintentar = onReintentar)
         }
-        imports.isNotEmpty() -> Column(modifier = modifier.padding(horizontal = 16.dp)) {
+        imports.isNotEmpty() -> Column(modifier = modifier.padding(horizontal = Espacio.m)) {
             MinSectionHeader(title = "Importaciones", count = imports.size)
-            MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-            ) {
+            Superficie(relleno = RellenoDeSuperficie.Lista) {
                 imports.forEachIndexed { i, imp ->
-                    ImportCard(imp) { onAbrir(imp) }
-                    if (i < imports.size - 1) Hairline()
+                    if (i > 0) Separador()
+                    FilaDeImportacion(imp) { onAbrir(imp) }
                 }
             }
         }
     }
+}
+
+/**
+ * Una importación: el banco y el período, cuántas filas entraron y cuándo. Era `ImportCard` en
+ * Extractos (borrada en la R4); ahora es una [Fila] del sistema, sin mayúsculas.
+ */
+@Composable
+private fun FilaDeImportacion(imp: StatementImport, onClick: () -> Unit) {
+    Fila(
+        titulo = "${imp.bankName} · ${imp.period}",
+        subtitulo = "${imp.importedCount} importadas · ${imp.reconciledCount} reconciliadas · " +
+            etiquetaDeFecha(fechaDeEpoch(imp.importedAt), hoyEnAppZone()),
+        inicio = { IconoEnCirculo(Icons.Rounded.Description, tono = TonoDeIcono.Neutro) },
+        final = { Chevron() },
+        onClick = onClick,
+    )
 }
 
 /**
@@ -438,20 +474,20 @@ private fun SeccionDeImportaciones(
 private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar: () -> Unit) {
     MarcoDeHoja(
         onDismiss = onCancelar,
-        relleno = PaddingValues(horizontal = 20.dp, vertical = 22.dp),
+        relleno = PaddingValues(horizontal = Espacio.l, vertical = Espacio.l),
         conCierre = false,
     ) {
         Text("¿Borrar este documento?", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Text(nombreQueSePartePorSusSeparadores(doc.nombre), style = Movi.textos.cuerpo, color = Movi.colores.texto)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(Espacio.xxs))
         Text(
             "Se borra del todo. Movi no guarda una copia y no se puede deshacer.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             lineHeight = 17.sp,
         )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.l))
         Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
             Text(
                 "Cancelar",
@@ -459,20 +495,20 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
                 color = Movi.colores.textoMedio,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .clickable(onClick = onCancelar)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(Espacio.xs))
             Text(
                 "Borrar",
                 style = Movi.textos.cuerpo,
                 color = Movi.colores.sale,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .clickable(onClick = onConfirmar)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
             )
         }
     }
@@ -499,19 +535,19 @@ internal const val TAG_FILA_DE_DOCUMENTO: String = "fila-de-documento"
  */
 @Composable
 private fun DocumentosEsqueleto() {
-    Column(modifier = Modifier.padding(top = 14.dp)) {
+    Column(modifier = Modifier.padding(top = Espacio.s)) {
         // Fix round 1: la lista real arranca con un `MinSectionHeader` por tipo («Extractos · 3»)
         // ANTES de la primera fila — sin este renglón acá, la primera fila esqueleto quedaba más
         // arriba que la primera fila real y todo bajaba de golpe al llegar los datos.
         // `RotuloDeSeccionEsqueleto` ya copia el relleno y el estilo exactos de `MinSectionHeader`
         // (Task 8), así que alcanza con ponerlo en el mismo `Column(padding horizontal 16.dp)`.
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+        Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
             RotuloDeSeccionEsqueleto()
         }
         // `Hairline()` en TODAS las filas, no solo entre ellas: es lo que hace `FilaDeDocumento`
         // de verdad (su propio `Hairline()` va siempre, incluida la última fila de la lista).
         repeat(FILAS_DE_DOCUMENTO_ESQUELETO) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -519,17 +555,17 @@ private fun DocumentosEsqueleto() {
                         // `TAG_FILA_DE_DOCUMENTO` en la fila real (fix round 1: los dos tienen
                         // que medir el mismo punto, el borde exterior de la fila).
                         .testTag(TAG_FILA_DE_LISTA_ESQUELETO)
-                        .padding(start = 10.dp, end = 10.dp, top = 12.dp, bottom = 6.dp),
+                        .padding(start = Espacio.s, end = Espacio.s, top = Espacio.s, bottom = Espacio.xs),
                 ) {
                     LineaEsqueleto(
                         fraccionDelAncho = 0.6f,
                         estilo = Movi.textos.cuerpo,
                         modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
                     )
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(Espacio.xxs))
                     LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
-                    Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Spacer(Modifier.height(Espacio.xxs))
+                    Row(horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
                         repeat(3) { BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 44.dp) }
                     }
                 }
@@ -557,7 +593,7 @@ private fun FilaDeDocumento(
     // El texto arriba a todo el ancho y las acciones en un renglón DEBAJO. Con las tres acciones a
     // la derecha, en un teléfono de ~390 dp se comían un tercio de la fila y el nombre del archivo
     // se partía a mitad de palabra: «Portal_Beneficios_3037_movimi / entos_09_2026.jpeg».
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -566,9 +602,9 @@ private fun FilaDeDocumento(
                 // para que los dos midan el mismo punto (el borde exterior de la fila) en vez de
                 // que uno mida adentro del relleno y el otro no.
                 .testTag(TAG_FILA_DE_DOCUMENTO)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(Radio.m))
                 .clickable(onClick = onAbrir)
-                .padding(start = 10.dp, end = 10.dp, top = 12.dp, bottom = 6.dp),
+                .padding(start = Espacio.s, end = Espacio.s, top = Espacio.s, bottom = Espacio.xs),
         ) {
             // Con cortes invisibles después de `_`, `-` y `.`: si no entra, parte en un separador.
             // Solo lo que se pinta; `doc.nombre` sigue intacto para editar y para «Abrir».
@@ -578,7 +614,7 @@ private fun FilaDeDocumento(
                 color = Movi.colores.texto,
                 fontWeight = FontWeight.Medium,
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(Espacio.xxs))
             // Cuenta, peso, fecha y período en un renglón: son los datos con los que uno
             // reconoce cuál de tres extractos parecidos es el que busca. La cuenta va PRIMERO
             // y no al final: entre «Extracto_08_2026.pdf» repetidos, lo que los distingue es
@@ -595,15 +631,15 @@ private fun FilaDeDocumento(
                 color = Movi.colores.textoApagado,
             )
             doc.notas?.takeIf { it.isNotBlank() }?.let { nota ->
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 Text(nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(Espacio.xxs))
             // Corrido 8 dp a la izquierda para que la PALABRA «Abrir» —no su zona de toque— quede
             // alineada con el nombre de arriba.
             Row(
                 modifier = Modifier.offset(x = (-8).dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
             ) {
                 AccionDeFila("Abrir", Movi.colores.marca, FontWeight.Medium, onAbrir)
                 AccionDeFila("Editar", Movi.colores.textoMedio, null, onEditar)
@@ -626,9 +662,9 @@ private fun AccionDeFila(texto: String, color: Color, peso: FontWeight?, onClick
         fontWeight = peso,
         color = color,
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(Radio.s))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = Espacio.xs, vertical = Espacio.xxs),
     )
 }
 
@@ -702,29 +738,29 @@ internal fun EditarDocumentoSheet(
     }
 
     HojaDeDocumento(onDismiss = onDismiss, cerrarHabilitado = !guardando) {
-        CampoDeTexto("NOMBRE", nombre, { nombre = it.take(255) }, "Extracto agosto.pdf")
-        Spacer(Modifier.height(14.dp))
+        CampoDeTexto("Nombre", nombre, { nombre = it.take(255) }, "Extracto agosto.pdf")
+        Spacer(Modifier.height(Espacio.s))
 
         SelectorDeTipo(tipo, enabled = !guardando) { tipo = it }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(Espacio.s))
         SelectorDeCuenta(cuentas, cuenta, enabled = !guardando) { cuenta = it }
 
-        Spacer(Modifier.height(14.dp))
-        CampoDeTexto("PERÍODO", periodo, { periodo = it.take(50) }, "agosto 2026")
-        Spacer(Modifier.height(14.dp))
-        CampoDeTexto("NOTAS", notas, { notas = it.take(500) }, "Para qué lo guardaste")
+        Spacer(Modifier.height(Espacio.s))
+        CampoDeTexto("Período", periodo, { periodo = it.take(50) }, "agosto 2026")
+        Spacer(Modifier.height(Espacio.s))
+        CampoDeTexto("Notas", notas, { notas = it.take(500) }, "Para qué lo guardaste")
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.l))
         BotonDeLaHoja(
             texto = if (guardando) "Guardando…" else "Guardar",
             habilitado = !guardando && nombre.isNotBlank(),
         ) { guardar() }
         error?.let {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Espacio.s))
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.l))
     }
 }
 
@@ -735,15 +771,15 @@ private fun CampoDeTexto(
     onCambio: (String) -> Unit,
     marcador: String,
 ) {
-    Text(etiqueta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
-    Spacer(Modifier.height(8.dp))
+    Text(etiqueta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+    Spacer(Modifier.height(Espacio.xs))
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
     ) {
         if (valor.isEmpty()) {
             Text(marcador, style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
@@ -802,22 +838,22 @@ internal fun SubirDocumentoSheet(
         // El nombre y el peso, de solo lectura: acá no se renombra —eso es «Editar»— pero sí hace
         // falta ver QUÉ se está subiendo, porque el selector del sistema ya se cerró.
         Text(archivo.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(Espacio.xxs))
         Text(
             pesoLegible(archivo.bytes.size.toLong()),
             style = Movi.textos.apoyo,
             color = Movi.colores.textoApagado,
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Espacio.m))
         SelectorDeTipo(tipo, enabled = true) { tipo = it }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(Espacio.s))
         SelectorDeCuenta(cuentas, cuenta, enabled = true) { cuenta = it }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.l))
         BotonDeLaHoja(texto = "Subir", habilitado = true) { onSubir(tipo, cuenta) }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.l))
     }
 }
 
@@ -828,8 +864,8 @@ private fun SelectorDeTipo(
     enabled: Boolean,
     onElegir: (TipoDeDocumento) -> Unit,
 ) {
-    EtiquetaDeCampo("TIPO")
-    Spacer(Modifier.height(8.dp))
+    EtiquetaDeCampo("Tipo")
+    Spacer(Modifier.height(Espacio.xs))
     TipoDeDocumento.entries.forEach { t ->
         FilaElegible(nombreDeTipo(t), elegida = t == elegido, enabled = enabled) { onElegir(t) }
     }
@@ -852,8 +888,8 @@ private fun SelectorDeCuenta(
     enabled: Boolean,
     onElegir: (String?) -> Unit,
 ) {
-    EtiquetaDeCampo("CUENTA")
-    Spacer(Modifier.height(8.dp))
+    EtiquetaDeCampo("Cuenta")
+    Spacer(Modifier.height(Espacio.xs))
     FilaElegible("Sin cuenta", elegida = elegida == null, enabled = enabled) { onElegir(null) }
     ListaDeCuentasElegibles(
         // `conservar` sostiene la cuenta ya puesta aunque hoy no se ofreciera —el papel puede ser
@@ -862,11 +898,11 @@ private fun SelectorDeCuenta(
         uso = UsoDeCuenta.PAPEL_GUARDADO,
         selectedId = elegida,
         onPick = { if (enabled) onElegir(it) },
-        modifier = Modifier.padding(horizontal = 8.dp),
+        modifier = Modifier.padding(horizontal = Espacio.xs),
     )
 }
 
-/** El rótulo en versalitas de un campo de las hojas de documentos. */
+/** El rótulo de un campo de las hojas de documentos, en frase (ola R4: nada en mayúsculas). */
 @Composable
 private fun EtiquetaDeCampo(texto: String) {
     Text(
@@ -874,7 +910,6 @@ private fun EtiquetaDeCampo(texto: String) {
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
         fontWeight = FontWeight.Medium,
-        letterSpacing = 0.4.sp,
     )
 }
 
@@ -889,9 +924,9 @@ private fun FilaElegible(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 8.dp),
+            .padding(vertical = Espacio.s, horizontal = Espacio.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -908,7 +943,7 @@ private fun FilaElegible(
                 Icons.Rounded.Check,
                 contentDescription = null,
                 tint = Movi.colores.marca,
-                modifier = Modifier.size(15.dp),
+                modifier = Modifier.size(Icono.s),
             )
         }
     }
@@ -917,17 +952,7 @@ private fun FilaElegible(
 /** El botón ancho del pie de una hoja. */
 @Composable
 private fun BotonDeLaHoja(texto: String, habilitado: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (habilitado) Movi.colores.texto else Movi.colores.textoApagado)
-            .clickable(enabled = habilitado, onClick = onClick)
-            .padding(vertical = 15.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(texto, color = Movi.colores.fondo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium)
-    }
+    Boton(texto = texto, onClick = onClick, habilitado = habilitado, anchoCompleto = true)
 }
 
 /**

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.profile
 
+import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -161,7 +162,7 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
             MinCard(
                 modifier = Modifier.fillMaxWidth(),
                 variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                padding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.xxs),
             ) {
                 CardRow(
                     left = { Text(DESCARGAR_TUS_DATOS, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
@@ -215,7 +216,7 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
             // 3 — La contraseña y la palabra.
             Spacer(Modifier.height(Movi.espacios.margen))
             MinSectionHeader(title = "Confirma que eres tú")
-            Text("Tu contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+            Text("Tu contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
             AuthField(
                 value = contrasena,
                 onChange = { contrasena = it; error = null },
@@ -229,7 +230,7 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
                 "Escribe $PALABRA_PARA_BORRAR_LA_CUENTA para confirmar",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
-                modifier = Modifier.padding(bottom = 6.dp),
+                modifier = Modifier.padding(bottom = Espacio.xs),
             )
             AuthField(
                 value = confirmacion,
@@ -252,7 +253,7 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
                     .background(if (sePuede) Movi.colores.sale else Movi.colores.tarjeta)
                     .clickable(enabled = sePuede, role = Role.Button, onClick = ::borrar)
                     .testTag(TAG_BOTON_BORRAR)
-                    .padding(vertical = 15.dp),
+                    .padding(vertical = Espacio.m),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(

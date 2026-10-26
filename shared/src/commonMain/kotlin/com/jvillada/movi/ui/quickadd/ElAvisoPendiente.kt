@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.quickadd
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -98,7 +101,7 @@ internal fun FilaDelAvisoPendiente(
     Row(
         modifier = Modifier.fillMaxWidth().testTag(TAG_AVISO_PENDIENTE_EN_AGREGAR),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
         Text(
             texto,
@@ -117,10 +120,10 @@ internal fun FilaDelAvisoPendiente(
 private fun PastillaDelAviso(texto: String, destacada: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .border(1.dp, if (destacada) Movi.colores.marca else Movi.colores.borde, RoundedCornerShape(999.dp))
+            .clip(RoundedCornerShape(Radio.pill))
+            .border(Medida.trazo, if (destacada) Movi.colores.marca else Movi.colores.borde, RoundedCornerShape(Radio.pill))
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.xxs),
     ) {
         Text(
             texto,

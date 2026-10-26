@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.extractos
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.conCifrasOcultas
 
 import androidx.compose.foundation.background
@@ -93,12 +97,12 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
             subtitle = "Extracto de saldo",
         )
         Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espacio.m, vertical = Espacio.s),
         ) {
             MinCard(
                 modifier = Modifier.fillMaxWidth().testTag(TAG_PROPUESTA_DEL_EXTRACTO_DE_SALDO),
                 variant = MinCardVariant.Elevated,
-                padding = PaddingValues(18.dp),
+                padding = PaddingValues(Espacio.m),
             ) {
                 Text(
                     nombreDelExtractoDeSaldo(resumen),
@@ -106,9 +110,9 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                 )
-                Spacer(Modifier.height(10.dp))
-                Text("EL EXTRACTO DICE", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.s))
+                Text("El extracto dice", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(Espacio.xs))
                 Text(
                     conCifrasOcultas(fraseDelExtractoDeSaldo(resumen, elegida)),
                     style = Movi.textos.cuerpo,
@@ -120,21 +124,21 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
                         conCifrasOcultas("· $renglon"),
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.padding(top = Espacio.xxs),
                     )
                 }
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
                 when {
                     propuesta.opciones.isEmpty() -> Unit
                     propuesta.cuentaId != null && elegida != null -> {
-                        Text("EN TU CUENTA", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-                        Spacer(Modifier.height(4.dp))
+                        Text("En tu cuenta", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+                        Spacer(Modifier.height(Espacio.xxs))
                         Text(elegida.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto)
                     }
                     else -> {
-                        Text("¿EN QUÉ CUENTA?", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
-                        Spacer(Modifier.height(4.dp))
+                        Text("¿En qué cuenta?", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
+                        Spacer(Modifier.height(Espacio.xxs))
                         propuesta.opciones.forEach { opcion ->
                             OpcionDeCuenta(
                                 opcion = opcion,
@@ -145,7 +149,7 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
                     }
                 }
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(
                     when {
                         propuesta.opciones.isEmpty() ->
@@ -162,14 +166,14 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
                     color = if (hecho) Movi.colores.entra else Movi.colores.textoMedio,
                 )
                 error?.let {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Espacio.xs))
                     Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
             }
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.m).padding(bottom = Espacio.l),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
         ) {
             BotonDelSaldo(if (hecho) "Volver" else "Ahora no", principal = false, habilitado = !trabajando, modifier = Modifier.weight(1f)) {
                 goBack(Screen.Documentos)
@@ -203,20 +207,20 @@ private fun OpcionDeCuenta(opcion: CuentaParaElSaldo, elegida: Boolean, habilita
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .clickable(enabled = habilitada, role = Role.RadioButton, onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(vertical = Espacio.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(18.dp)
+                .size(Icono.m)
                 .clip(CircleShape)
                 .border(1.5.dp, if (elegida) Movi.colores.texto else Movi.colores.borde, CircleShape)
-                .padding(4.dp)
+                .padding(Espacio.xxs)
                 .then(if (elegida) Modifier.clip(CircleShape).background(Movi.colores.texto) else Modifier),
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(Espacio.s))
         Column(Modifier.weight(1f)) {
             Text(opcion.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1)
             Text(
@@ -232,13 +236,13 @@ private fun OpcionDeCuenta(opcion: CuentaParaElSaldo, elegida: Boolean, habilita
 private fun BotonDelSaldo(texto: String, principal: Boolean, habilitado: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .then(
                 if (principal) Modifier.background(if (habilitado) Movi.colores.texto else Movi.colores.textoApagado)
-                else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(14.dp)),
+                else Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)),
             )
             .clickable(enabled = habilitado, role = Role.Button, onClick = onClick)
-            .padding(vertical = 15.dp),
+            .padding(vertical = Espacio.m),
         contentAlignment = Alignment.Center,
     ) {
         Text(

@@ -210,11 +210,11 @@ fun AIChatScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(Movi.formas.normal))
                             .clickable(enabled = !loading) { nuevaConversacion() }
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(horizontal = Espacio.xs, vertical = Espacio.xs),
                     )
                 } else {
                     Text(
-                        "BETA",
+                        "Beta",
                         color = Movi.colores.textoMedio,
                         style = Movi.textos.rotulo,
                     )
@@ -225,7 +225,7 @@ fun AIChatScreen(
         LazyColumn(
             modifier = Modifier.weight(1f),
             state = listState,
-            contentPadding = PaddingValues(18.dp),
+            contentPadding = PaddingValues(Espacio.m),
         ) {
             if (messages.isEmpty() && !loading && historialCargado) {
                 item {
@@ -267,18 +267,18 @@ fun AIChatScreen(
                 text = it,
                 style = Movi.textos.apoyo,
                 color = Movi.colores.sale,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.l, vertical = Espacio.xxs),
             )
         }
 
         if (pendingImage != null || attachError != null) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.l),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 if (pendingImage != null) {
-                    Icon(Icons.Rounded.Image, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Rounded.Image, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(Icono.s))
                     Text(
                         text = pendingImage?.fileName ?: "",
                         style = Movi.textos.apoyo,
@@ -289,31 +289,31 @@ fun AIChatScreen(
                         Icons.Rounded.Close,
                         contentDescription = "Quitar imagen",
                         tint = Movi.colores.textoMedio,
-                        modifier = Modifier.size(16.dp).clickable { pendingImage = null },
+                        modifier = Modifier.size(Icono.s).clickable { pendingImage = null },
                     )
                 } else {
                     Text(text = attachError ?: "", style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.weight(1f))
                 }
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
         }
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .clip(RoundedCornerShape(24.dp))
+                .padding(horizontal = Espacio.m, vertical = Espacio.s)
+                .clip(RoundedCornerShape(Radio.xl))
                 .background(Movi.colores.tarjeta)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = Espacio.m, vertical = Espacio.xs),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
         ) {
             // F32: clip para adjuntar una foto (recibo, extracto, oferta del banco).
             Icon(
                 Icons.Rounded.AttachFile,
                 contentDescription = "Adjuntar imagen",
                 tint = Movi.colores.textoMedio,
-                modifier = Modifier.size(20.dp).clickable(enabled = !loading) { attachError = null; launchPicker() },
+                modifier = Modifier.size(Icono.m).clickable(enabled = !loading) { attachError = null; launchPicker() },
             )
             Box(modifier = Modifier.weight(1f)) {
                 // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
@@ -362,7 +362,7 @@ fun AIChatScreen(
                         Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                         contentDescription = "Enviar",
                         tint = if (canSend) Movi.colores.fondo else Movi.colores.textoMedio,
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(Icono.l),
                     )
                 }
             }
@@ -373,23 +373,23 @@ fun AIChatScreen(
 @Composable
 private fun AIMsgUser(text: String, hasImage: Boolean = false) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.s),
         horizontalArrangement = Arrangement.End,
     ) {
         Box(
             modifier = Modifier
                 .widthIn(max = 280.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(Radio.l))
                 .background(Movi.colores.texto)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = Espacio.s, vertical = Espacio.s),
         ) {
             Column {
                 if (hasImage) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Rounded.Image, contentDescription = null, tint = Movi.colores.fondo, modifier = Modifier.size(13.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+                        Icon(Icons.Rounded.Image, contentDescription = null, tint = Movi.colores.fondo, modifier = Modifier.size(Icono.s))
                         Text("Imagen adjunta", style = Movi.textos.apoyo, color = Movi.colores.fondo)
                     }
-                    if (text.isNotBlank()) Spacer(Modifier.height(4.dp))
+                    if (text.isNotBlank()) Spacer(Modifier.height(Espacio.xxs))
                 }
                 if (text.isNotBlank()) {
                     Text(text = text, style = Movi.textos.cuerpo, fontWeight = FontWeight.Normal, color = Movi.colores.fondo, lineHeight = 20.sp)
@@ -402,20 +402,20 @@ private fun AIMsgUser(text: String, hasImage: Boolean = false) {
 @Composable
 private fun AIMsgAI(text: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.s),
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.Top,
     ) {
         Box(
             modifier = Modifier
-                .size(26.dp)
+                .size(Icono.l)
                 .clip(CircleShape)
                 .background(Movi.colores.tarjeta),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(12.dp))
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(Icono.s))
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(Espacio.s))
         Box(modifier = Modifier.widthIn(max = 290.dp)) {
             Text(text = text, style = Movi.textos.cuerpo, fontWeight = FontWeight.Normal, color = Movi.colores.texto, lineHeight = 20.sp)
         }
@@ -513,7 +513,7 @@ private fun ChipDePregunta(texto: String, onClick: () -> Unit) {
 @Composable
 internal fun LasQueFuncionanSinLaIa(onPregunta: (PreguntaParaTocar) -> Unit) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(start = 36.dp, bottom = Movi.espacios.amplio),
+        modifier = Modifier.fillMaxWidth().padding(start = Espacio.xxl, bottom = Movi.espacios.amplio),
         verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
     ) {
         PREGUNTAS_PARA_TOCAR_DE_RESPALDO.forEach { pregunta -> ChipDePregunta(pregunta.texto) { onPregunta(pregunta) } }
@@ -540,7 +540,7 @@ internal const val QUE_MIRA_MOVI =
     "Miro tus movimientos, deudas, presupuestos y bienes para contestarte con tus números."
 
 /** El rótulo arriba de los chips. En la escala `rotulo`, que va en mayúsculas como los demás. */
-internal const val ROTULO_DE_LAS_SUGERENCIAS = "PREGÚNTALE, POR EJEMPLO"
+internal const val ROTULO_DE_LAS_SUGERENCIAS = "Pregúntale, por ejemplo"
 
 /** La acción del encabezado cuando hay conversación (Ola 3). */
 internal const val NUEVA_CONVERSACION = "Nueva conversación"

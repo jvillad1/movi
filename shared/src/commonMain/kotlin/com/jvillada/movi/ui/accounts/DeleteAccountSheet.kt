@@ -125,7 +125,7 @@ fun DeleteAccountSheet(
                 style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )
 
             // F55: la consecuencia real, con el conteo real — no un genérico "¿estás seguro?".
@@ -159,7 +159,7 @@ fun DeleteAccountSheet(
                 },
             )
             if (avisos.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(
                     text = avisos.joinToString("\n\n"),
                     // El mismo cuerpo que el párrafo de arriba (ver el comentario del bloque).
@@ -168,28 +168,28 @@ fun DeleteAccountSheet(
                     color = Movi.colores.texto,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(Radio.m))
                         .background(Movi.colores.tarjeta)
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                        .padding(horizontal = Espacio.s, vertical = Espacio.s),
                 )
             }
 
             if (error != null) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Espacio.l))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .height(50.dp)
-                        .clip(RoundedCornerShape(999.dp))
+                        .clip(RoundedCornerShape(Radio.pill))
                         .background(Movi.colores.tarjeta)
                         .clickable(enabled = !deleting, onClick = onDismiss),
                     contentAlignment = Alignment.Center,
@@ -200,7 +200,7 @@ fun DeleteAccountSheet(
                     modifier = Modifier
                         .weight(1.4f)
                         .height(50.dp)
-                        .clip(RoundedCornerShape(999.dp))
+                        .clip(RoundedCornerShape(Radio.pill))
                         .background(if (!deleting) Movi.colores.sale.copy(alpha = 0.14f) else Movi.colores.tarjeta)
                         .clickable(enabled = !deleting) { doDelete() },
                     contentAlignment = Alignment.Center,
@@ -214,7 +214,7 @@ fun DeleteAccountSheet(
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Espacio.s))
         }
     }
 }

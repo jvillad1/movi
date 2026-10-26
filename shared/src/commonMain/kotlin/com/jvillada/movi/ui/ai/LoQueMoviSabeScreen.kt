@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.ai
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -188,8 +190,8 @@ private fun FilaDeRecuerdo(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(Movi.formas.normal))
-                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.normal))
-                    .padding(10.dp),
+                    .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Movi.formas.normal))
+                    .padding(Espacio.s),
             ) {
                 BasicTextField(
                     value = texto,
@@ -246,6 +248,6 @@ private fun Accion(
             .clip(RoundedCornerShape(Movi.formas.normal))
             .then(if (principal && habilitada) Modifier.background(Movi.colores.marca) else Modifier)
             .clickable(enabled = habilitada, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.xs),
     )
 }

@@ -1,5 +1,27 @@
 package com.jvillada.movi.ui.destinos
 
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.Vacio
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.AvatarDePersona
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.Storefront
+import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
+import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -239,9 +261,9 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
         Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
             MinScreenHeader(
                 title = PERSONAS_Y_COMERCIOS,
-                // La puerta principal es Movimientos (ver `RenglonDePersonasYComercios`); «volver» sigue
-                // el historial real y solo cae acá cuando no hay ninguno.
-                leading = HeaderLeading.Back(fallback = Screen.Transactions()),
+                // Ola R4: las puertas son Espacios (ver `RenglonDePersonasYComercios`) y Ajustes;
+                // «volver» sigue el historial real y solo cae en Espacios cuando no hay ninguno.
+                leading = HeaderLeading.Back(fallback = Screen.Espacios),
                 subtitle = when {
                     cargando || noSeLeyo -> null
                     destinos.size == 1 -> "1 guardado"
@@ -250,40 +272,43 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
                 },
                 action = if (!noSeLeyo) {
                     {
-                        NewItemButton(
-                            label = "Nueva",
+                        Boton(
+                            texto = "Nueva",
                             onClick = { formulario = null; formularioAbierto = true },
+                            variante = VarianteDeBoton.Fantasma,
+                            tamano = TamanoDeBoton.S,
+                            icono = Icons.Rounded.Add,
                         )
                     }
                 } else null,
             )
 
             if (noSeLeyo) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
                 NoSePudoLeer(
                     "No pudimos cargar tus personas y comercios",
                     onReintentar = { loadKey++ },
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = Espacio.m),
                 )
             }
 
             if (!noSeLeyo) LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp),
+                contentPadding = PaddingValues(horizontal = Espacio.m),
             ) {
-                item { Spacer(Modifier.height(6.dp)) }
+                item { Spacer(Modifier.height(Espacio.xs)) }
 
                 // ── «¿Es la misma persona?»: arriba de todo, porque parte las cifras en dos ──
                 if (duplicados.isNotEmpty()) {
                     items(duplicados.take(DUPLICADOS_A_LA_VISTA), key = { "dup-" + claveDeNoSonLaMisma(it.queda.id, it.seVa.id) }) { par ->
                         Column {
                             TarjetaDeDuplicado(par, errorDeDuplicado, onUnir = { unirDuplicado(par) }, onNoSonLaMisma = { noSonLaMisma(par) })
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(Espacio.s))
                         }
                     }
                     errorDeDuplicado?.let { e ->
                         item {
-                            Text(e, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
+                            Text(e, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(start = Espacio.xxs, bottom = Espacio.s))
                         }
                     }
                 }
@@ -298,7 +323,7 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
                             error = errorDeSugerido,
                             onAlternar = { verSugeridos = !sugeridosAbiertos },
                         )
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(Espacio.s))
                     }
                     if (sugeridosAbiertos) {
                         val aMostrar = if (verTodosLosSugeridos) sugeridos else sugeridos.take(SUGERIDOS_A_LA_VISTA)
@@ -311,7 +336,7 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
                                     onUnir = { tercero -> unirSugerido(s, tercero) },
                                     onDescartar = { motivo -> descartar(s, motivo) },
                                 )
-                                Spacer(Modifier.height(10.dp))
+                                Spacer(Modifier.height(Espacio.s))
                             }
                         }
                         if (sugeridos.size > SUGERIDOS_A_LA_VISTA) {
@@ -319,56 +344,50 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
                                 Enlace(
                                     if (verTodosLosSugeridos) "Ver menos" else "Ver ${sugeridos.size - SUGERIDOS_A_LA_VISTA} más",
                                     { verTodosLosSugeridos = !verTodosLosSugeridos },
-                                    modifier = Modifier.padding(start = 4.dp, bottom = 14.dp),
+                                    modifier = Modifier.padding(start = Espacio.xxs, bottom = Espacio.s),
                                 )
                             }
                         }
                     }
-                    item { Spacer(Modifier.height(4.dp)) }
+                    item { Spacer(Modifier.height(Espacio.xxs)) }
                 }
 
                 if (destinos.size > TERCEROS_PARA_BUSCAR) {
                     item {
                         FieldBox("Buscar por nombre, número o llave", busqueda, { busqueda = it })
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(Espacio.s))
                     }
                 }
 
                 if (destinos.isEmpty() && !cargando) {
                     item {
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(18.dp),
-                        ) {
-                            Text(QUE_ES_ESTO, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                            Spacer(Modifier.height(14.dp))
-                            NewItemButton(
-                                label = "Guardar una persona o comercio",
-                                onClick = { formulario = null; formularioAbierto = true },
-                                full = true,
-                            )
-                        }
+                        Vacio(
+                            titulo = "A quién le envías plata",
+                            detalle = QUE_ES_ESTO,
+                            accion = "Guardar una persona o comercio",
+                            onAccion = { formulario = null; formularioAbierto = true },
+                            icono = Icons.Rounded.Groups,
+                        )
                     }
                 }
                 // Ola B, tarea 9: antes de la primera lectura buena, la forma de las fichas.
                 if (cargando && !leidos) {
                     destinosEsqueleto()
                 } else {
-                    seccionDeTerceros("Personas", personas) { detalle = it }
-                    seccionDeTerceros("Comercios", comercios) { detalle = it }
+                    seccionDeTerceros("Personas", personas, esComercio = false) { detalle = it }
+                    seccionDeTerceros("Comercios", comercios, esComercio = true) { detalle = it }
                     if (busqueda.isNotBlank() && visibles.isEmpty()) {
                         item {
                             Text(
                                 "Nadie guardado coincide con «${busqueda.trim()}».",
                                 style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
-                                modifier = Modifier.padding(start = 4.dp),
+                                modifier = Modifier.padding(start = Espacio.xxs),
                             )
                         }
                     }
                 }
-                item { Spacer(Modifier.height(80.dp)) }
+                item { Spacer(Modifier.height(Medida.botonFlotante + Medida.entreSecciones)) }
             }
         }
 
@@ -425,10 +444,9 @@ private fun LoQueEncontroMovi(
     error: String?,
     onAlternar: () -> Unit,
 ) {
-    MinCard(
+    Superficie(
         modifier = Modifier.fillMaxWidth().testTag(TAG_SUGERIDOS),
-        variant = MinCardVariant.Default,
-        padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        nivel = NivelDeSuperficie.Propuesta,
         onClick = if (abierto && !puedeCerrarse) null else onAlternar,
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -444,7 +462,7 @@ private fun LoQueEncontroMovi(
             else if (puedeCerrarse) Enlace("Ocultar", onAlternar)
         }
         if (error != null) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
     }
@@ -477,20 +495,28 @@ internal fun filtrarTerceros(destinos: List<DestinoConocido>, busqueda: String):
     }
 }
 
+/**
+ * Una sección de terceros (Personas o Comercios): su [Seccion] con el conteo y una [Superficie] con
+ * una [Fila] por tercero. Ola R4: antes era una tarjeta suelta por persona.
+ */
 private fun LazyListScope.seccionDeTerceros(
     titulo: String,
     terceros: List<DestinoConocido>,
+    esComercio: Boolean,
     onAbrir: (DestinoConocido) -> Unit,
 ) {
     if (terceros.isEmpty()) return
-    item { MinSectionHeader(title = titulo, count = terceros.size) }
-    items(terceros, key = { "dst-" + it.id }) { d ->
-        Column {
-            FichaDelDestino(d, onClick = { onAbrir(d) })
-            Spacer(Modifier.height(10.dp))
+    item(key = "seccion-$titulo") {
+        Column(modifier = Modifier.padding(bottom = Medida.entreSecciones)) {
+            Seccion(titulo = titulo, conteo = terceros.size)
+            Superficie(relleno = RellenoDeSuperficie.Lista) {
+                terceros.forEachIndexed { i, d ->
+                    if (i > 0) Separador()
+                    FichaDelDestino(d, esComercio = esComercio, onClick = { onAbrir(d) })
+                }
+            }
         }
     }
-    item { Spacer(Modifier.height(8.dp)) }
 }
 
 /**
@@ -513,11 +539,7 @@ private fun TarjetaDeSugerido(
     var escribiendoNombre by remember(sugerido.identificador.clave) { mutableStateOf(false) }
     var ocupado by remember(sugerido.identificador.clave) { mutableStateOf(false) }
 
-    MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_SUGERIDOS + ":" + sugerido.identificador.clave),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_SUGERIDOS + ":" + sugerido.identificador.clave)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -531,7 +553,7 @@ private fun TarjetaDeSugerido(
                     detalleDelSugerido(sugerido, hoy),
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier.padding(top = Espacio.xxs),
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -545,7 +567,7 @@ private fun TarjetaDeSugerido(
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(Espacio.s))
 
         if (pareceDe != null && !noEsEse) {
             Text("¿Es ${pareceDe.nombre}?", style = Movi.textos.cuerpo, color = Movi.colores.texto)
@@ -554,19 +576,19 @@ private fun TarjetaDeSugerido(
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
             )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(Espacio.xs))
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 Pastilla("Sí, es ${pareceDe.nombre}", { ocupado = true; onUnir(pareceDe) }, principal = true, enabled = !ocupado)
                 Pastilla("No, es otra", { noEsEse = true }, enabled = !ocupado)
             }
-            return@MinCard
+            return@Superficie
         }
 
         if (escribiendoNombre) {
             FieldBox("Nombre. Ej: Caro", nombre, { nombre = it })
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs), verticalAlignment = Alignment.CenterVertically) {
             Pastilla(
                 if (nombre.isBlank() && !escribiendoNombre) "Ponerle nombre" else "Guardar",
                 {
@@ -609,13 +631,12 @@ private fun TarjetaDeDuplicado(par: PosibleDuplicado, error: String?, onUnir: ()
     var ocupado by remember(par.queda.id, par.seVa.id) { mutableStateOf(false) }
     // Si falló, los botones vuelven: el error ya se dice debajo de las tarjetas.
     LaunchedEffect(error) { if (error != null) ocupado = false }
-    MinCard(
+    Superficie(
         modifier = Modifier.fillMaxWidth().testTag(TAG_DUPLICADO + ":" + claveDeNoSonLaMisma(par.queda.id, par.seVa.id)),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
+        nivel = NivelDeSuperficie.Propuesta,
     ) {
         Text(preguntaDelDuplicado(par), style = Movi.textos.titulo, color = Movi.colores.texto)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(Espacio.xxs))
         Text(
             "«${par.queda.nombre}» y «${par.seVa.nombre}». ${porQueSePregunta(par)}",
             style = Movi.textos.cuerpo,
@@ -625,10 +646,10 @@ private fun TarjetaDeDuplicado(par: PosibleDuplicado, error: String?, onUnir: ()
             "Si las unes, queda «${par.queda.nombre}» con los números, llaves y movimientos de las dos.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoApagado,
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(top = Espacio.xxs),
         )
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Spacer(Modifier.height(Espacio.s))
+        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
             Pastilla(UNIR, { ocupado = true; onUnir() }, principal = true, enabled = !ocupado)
             Pastilla(NO_SON_LA_MISMA, { ocupado = true; onNoSonLaMisma() }, enabled = !ocupado)
         }
@@ -681,29 +702,17 @@ const val TAG_FICHA_EN_LA_LISTA: String = "ficha-en-la-lista"
  * histórico vive en la ficha: con tres cifras por tarjeta no se sabía cuál mirar.
  */
 @Composable
-private fun FichaDelDestino(destino: DestinoConocido, onClick: () -> Unit) {
-    val hoy = remember { hoyEnAppZone() }
+private fun FichaDelDestino(destino: DestinoConocido, esComercio: Boolean, onClick: () -> Unit) {
     val enviado = destino.totalesDelPeriodo.filterValues { it != 0L }
     val recibido = destino.recibidosDelPeriodo.filterValues { it != 0L }
-    MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_FICHA_EN_LA_LISTA + ":" + destino.id),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
-        onClick = onClick,
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(destino.nombre, style = Movi.textos.titulo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    subtituloDelDestino(destino),
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            Spacer(Modifier.width(12.dp))
+    Fila(
+        titulo = destino.nombre,
+        subtitulo = subtituloDelDestino(destino).ifEmpty { null },
+        inicio = {
+            if (esComercio) IconoEnCirculo(Icons.Rounded.Storefront, tono = TonoDeIcono.Neutro)
+            else AvatarDePersona(destino.nombre, tono = TonoDeIcono.Info)
+        },
+        final = {
             Column(horizontalAlignment = Alignment.End) {
                 // Sin nada este período NO se escribe «$0»: un cero con la letra de una cifra se lee
                 // como un dato, y es una ausencia.
@@ -721,12 +730,10 @@ private fun FichaDelDestino(destino: DestinoConocido, onClick: () -> Unit) {
                     Text("este período", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
                 }
             }
-        }
-        ultimoDeLaFicha(destino, hoy)?.let { ultimo ->
-            Spacer(Modifier.height(8.dp))
-            Text(ultimo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
+        },
+        onClick = onClick,
+        modifier = Modifier.testTag(TAG_FICHA_EN_LA_LISTA + ":" + destino.id),
+    )
 }
 
 /**
@@ -737,18 +744,11 @@ private fun FichaDelDestino(destino: DestinoConocido, onClick: () -> Unit) {
 internal fun TotalesEnColumna(totales: Map<String, Long>, alineadoAlFinal: Boolean) {
     Column(
         horizontalAlignment = if (alineadoAlFinal) Alignment.End else Alignment.Start,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
     ) {
         // Orden fijo por moneda: sin esto el mapa podría pintar COP arriba una vez y USD arriba la
         // siguiente, y una cifra que cambia de lugar se lee como una cifra que cambió.
-        totales.entries.sortedBy { it.key }.forEach { (moneda, total) ->
-            Text(
-                formatMoney(total, moneda),
-                style = Movi.textos.monto,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-            )
-        }
+        totales.entries.sortedBy { it.key }.forEach { (moneda, total) -> Cifra(total, moneda = moneda) }
     }
 }
 
@@ -762,35 +762,14 @@ private const val FICHAS_DE_DESTINO_ESQUELETO = 3
  * totales+conteo del lado derecho.
  */
 private fun LazyListScope.destinosEsqueleto() {
-    items(FICHAS_DE_DESTINO_ESQUELETO) {
+    item {
         Column {
-            FichaDelDestinoEsqueleto()
-            Spacer(Modifier.height(10.dp))
-        }
-    }
-}
-
-@Composable
-private fun FichaDelDestinoEsqueleto() {
-    MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_LISTA_ESQUELETO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(18.dp),
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.fillMaxWidth(0.55f)) {
-                LineaEsqueleto(
-                    fraccionDelAncho = 0.7f,
-                    estilo = Movi.textos.titulo,
-                    modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
-                )
-                Spacer(Modifier.height(4.dp))
-                LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
-            }
-            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-                BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.monto), ancho = 96.dp)
-                Spacer(Modifier.height(4.dp))
-                LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.apoyo)
+            RotuloDeSeccionEsqueleto()
+            Superficie(relleno = RellenoDeSuperficie.Lista) {
+                repeat(FICHAS_DE_DESTINO_ESQUELETO) { i ->
+                    if (i > 0) Separador()
+                    EsqueletoDeFila(modifier = Modifier.testTag(TAG_FILA_DE_LISTA_ESQUELETO))
+                }
             }
         }
     }

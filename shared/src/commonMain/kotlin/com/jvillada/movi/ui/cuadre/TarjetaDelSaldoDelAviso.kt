@@ -1,10 +1,17 @@
 package com.jvillada.movi.ui.cuadre
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalance
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,8 +38,6 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso
 import com.jvillada.movi.theme.Movi
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
@@ -69,70 +74,21 @@ internal fun TarjetaDelSaldoDelAviso(
         }
     }
 
-    MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_SALDO_DEL_AVISO),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
-    ) {
-        Text(
-            propuesta.cuentaNombre,
-            style = Movi.textos.titulo,
-            fontWeight = FontWeight.Medium,
-            color = Movi.colores.texto,
-        )
-        Text(
-            textoDelMomentoDelAviso(propuesta.momento, hoy),
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            textoDeLaPropuestaPorAviso(propuesta),
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.texto,
-            lineHeight = 20.sp,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Movi no ajusta nada hasta que lo confirmes. El ajuste no cuenta como gasto ni como ingreso.",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
+    // Ola R4: es una propuesta de Movi, así que va como [TarjetaDePropuesta] —el tinte de la marca,
+    // el ícono, la acción principal y la secundaria—, como toda propuesta de la app.
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_SALDO_DEL_AVISO)) {
+        TarjetaDePropuesta(
+            icono = Icons.Rounded.AccountBalance,
+            titulo = propuesta.cuentaNombre,
+            cuerpo = "${textoDelMomentoDelAviso(propuesta.momento, hoy)}. ${textoDeLaPropuestaPorAviso(propuesta)}. " +
+                "Movi no ajusta nada hasta que lo confirmes. El ajuste no cuenta como gasto ni como ingreso.",
+            accion = if (trabajando) "Ajustando…" else AJUSTAR_POR_EL_AVISO,
+            onAccion = { hacer { Repositories.wallets.ajustarPorElAviso(propuesta.avisoId) } },
+            accionSecundaria = NO_AJUSTAR_POR_EL_AVISO,
+            onAccionSecundaria = { hacer { Repositories.wallets.descartarCuadrePorAviso(propuesta.avisoId) } },
         )
         error?.let {
-            Spacer(Modifier.height(8.dp))
-            Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(top = Espacio.xs))
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Pastilla(if (trabajando) "Ajustando…" else AJUSTAR_POR_EL_AVISO, habilitada = !trabajando, principal = true) {
-                hacer { Repositories.wallets.ajustarPorElAviso(propuesta.avisoId) }
-            }
-            Pastilla(NO_AJUSTAR_POR_EL_AVISO, habilitada = !trabajando) {
-                hacer { Repositories.wallets.descartarCuadrePorAviso(propuesta.avisoId) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Pastilla(texto: String, habilitada: Boolean, principal: Boolean = false, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .then(
-                if (principal) Modifier.background(if (habilitada) Movi.colores.texto else Movi.colores.textoApagado)
-                else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp)),
-            )
-            .clickable(enabled = habilitada, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-    ) {
-        Text(
-            texto,
-            style = Movi.textos.apoyo,
-            color = if (principal) Movi.colores.fondo else Movi.colores.texto,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-        )
     }
 }

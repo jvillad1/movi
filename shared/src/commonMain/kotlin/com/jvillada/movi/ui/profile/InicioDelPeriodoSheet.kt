@@ -139,7 +139,7 @@ fun InicioDelPeriodoSheet(
                 style = Movi.textos.titulo,
                 color = Movi.colores.texto,
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = "Normalmente arranca el ${diaLegible(deSiempre)}. Si este mes tu sueldo entró " +
                     "antes o después, dilo aquí: el mes anterior se cierra solo ese mismo día.",
@@ -148,19 +148,19 @@ fun InicioDelPeriodoSheet(
                 fontWeight = FontWeight.Normal,
                 color = Movi.colores.textoMedio,
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
 
             // Solo los días del mes en que ESTE período puede arrancar. Ver el KDoc.
             (1..diasDelMes).chunked(7).forEach { fila ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
                 ) {
                     fila.forEach { d ->
                         val esElElegido = d == dia
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(Medida.avatar)
                                 .clip(CircleShape)
                                 .background(if (esElElegido) Movi.colores.marca else Movi.colores.tarjeta)
                                 .clickable(enabled = !saving) { dia = d },
@@ -176,24 +176,24 @@ fun InicioDelPeriodoSheet(
                         }
                     }
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
             }
 
             previsualizacion?.let {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
             error?.let {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Espacio.m))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(46.dp)
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(RoundedCornerShape(Radio.pill))
                     .background(if (!saving) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
                     .clickable(enabled = !saving) { onSave(elegido.toString()) },
                 contentAlignment = Alignment.Center,
@@ -209,7 +209,7 @@ fun InicioDelPeriodoSheet(
             // necesario como ponerla —«me equivoqué, este mes sí empezó cuando siempre»— y sin
             // esta fila la única salida sería declarar a mano el día natural.
             if (periodo.prefijo in ajustes.iniciosPropios) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(
                     text = if (saving) "Guardando…" else "Volver al ${diaLegible(deSiempre)}, como siempre",
                     style = Movi.textos.apoyo,
@@ -223,7 +223,7 @@ fun InicioDelPeriodoSheet(
             // pregunta que abrió esta hoja— es quien más puede querer comparar con los
             // anteriores.
             if (onVerPeriodos != null) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(
                     text = "Ver tus períodos",
                     style = Movi.textos.apoyo,
@@ -232,7 +232,7 @@ fun InicioDelPeriodoSheet(
                     modifier = Modifier.clickable(enabled = !saving, onClick = onVerPeriodos),
                 )
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Espacio.xl))
         }
     }
 }

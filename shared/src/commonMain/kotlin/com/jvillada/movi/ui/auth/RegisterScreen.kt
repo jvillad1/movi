@@ -74,16 +74,16 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(Movi.colores.fondo).padding(24.dp),
+        modifier = Modifier.fillMaxSize().background(Movi.colores.fondo).padding(Espacio.xl),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("Crear cuenta", style = Movi.textos.titular, color = Movi.colores.texto)
         Text("Ingresa tus datos para empezar", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(Espacio.xxl))
 
-        MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
-            Text("Nombre", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+        MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(Espacio.l)) {
+            Text("Nombre", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
             AuthField(
                 value = name,
                 onChange = { name = it },
@@ -94,8 +94,8 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 ),
                 keyboardActions = KeyboardActions(onNext = { emailFocus.requestFocus() }),
             )
-            Spacer(Modifier.height(14.dp))
-            Text("Correo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+            Spacer(Modifier.height(Espacio.s))
+            Text("Correo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
             AuthField(
                 value = email,
                 onChange = { email = it },
@@ -107,8 +107,8 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 keyboardActions = KeyboardActions(onNext = { passwordFocus.requestFocus() }),
                 modifier = Modifier.focusRequester(emailFocus),
             )
-            Spacer(Modifier.height(14.dp))
-            Text("Contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+            Spacer(Modifier.height(Espacio.s))
+            Text("Contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
             AuthField(
                 value = password,
                 onChange = { password = it },
@@ -123,23 +123,23 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
             )
 
             error?.let {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Espacio.l))
             Box(
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                modifier = Modifier.fillMaxWidth().height(Medida.objetivoTactil)
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(if (loading) Movi.colores.tarjeta else Movi.colores.marca)
                     .noRippleClickable { submit() },
                 contentAlignment = Alignment.Center,
             ) {
                 if (loading) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(Icono.m),
                         color = Movi.colores.marca,
-                        strokeWidth = 2.dp,
+                        strokeWidth = Medida.trazoDeCarga,
                     )
                 } else {
                     Text(
@@ -151,7 +151,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Espacio.m))
         Text("¿Ya tienes cuenta? Entra", style = Movi.textos.cuerpo, color = Movi.colores.marca,
             modifier = Modifier.noRippleClickable { onNavigate(Screen.Login) })
     }

@@ -1284,9 +1284,9 @@ fun QuickAddScreen(
                         // La cuadrícula no tiene tope ni scroll propio: se estira y la
                         // desplaza la hoja, un solo desplazamiento (Ola 14 — «al hacer scroll
                         // desaparecen»). Ver el KDoc de [SelectorDeCategoria].
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         EnlaceAdministrarCategorias()
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(Espacio.xxs))
                     }
                     Picker.Wallet -> WalletPicker(
                         cuentas = cuentasDelPicker,
@@ -1313,7 +1313,7 @@ fun QuickAddScreen(
                             hoy = hoy,
                             onPick = { fecha = it; pasarA(pickers.cerrar()) },
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                     }
                     Picker.Note -> NoteEditor(
                         initial = note,
@@ -1439,7 +1439,7 @@ fun QuickAddScreen(
                 }
                 } // Box del alto fijado
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Espacio.s))
             }
         }
 
@@ -1540,7 +1540,7 @@ private fun EditorBody(
     //
     // No hay ningún número «medido» acá: los altos absolutos de la hoja y del hueco de contenido
     // no se midieron, se vieron. Lo medido es la comparación, y es la que decide.
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Espacio.m))
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1553,13 +1553,13 @@ private fun EditorBody(
         // 56 sp en una sola línea sin achique: un monto de nueve cifras se salía del ancho del
         // teléfono. CifraProtagonista baja de tamaño hasta que entra.
         CifraProtagonista(simboloDeMoneda(moneda) + formatAmountKeypadDisplay(amount), color = Movi.colores.texto)
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(Espacio.xxs))
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
             // El rótulo de la moneda REAL, no un «COP» clavado. Ver el parámetro [moneda].
-            Text(moneda, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
+            Text(moneda, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             Text("·", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             // La fecha, como pastilla tocable. Va acá y no en la tarjeta de abajo por el alto
             // (ver arriba), pero además queda donde tiene sentido leerla: pegada al monto, que
@@ -1567,12 +1567,12 @@ private fun EditorBody(
             // momento no tiene ni que interpretarla.
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(RoundedCornerShape(Radio.pill))
                     .background(Movi.colores.tarjeta)
                     .clickable(onClick = onPickDate)
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                    .padding(horizontal = Espacio.s, vertical = Espacio.xxs),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
             ) {
                 Text(
                     text = dateLabel,
@@ -1585,18 +1585,18 @@ private fun EditorBody(
                     Icons.Rounded.ChevronRight,
                     contentDescription = "Cambiar la fecha",
                     tint = Movi.colores.textoMedio,
-                    modifier = Modifier.size(13.dp),
+                    modifier = Modifier.size(Icono.s),
                 )
             }
         }
     }
 
-    Spacer(Modifier.height(18.dp))
+    Spacer(Modifier.height(Espacio.m))
 
     MinCard(
         modifier = Modifier.fillMaxWidth(),
         variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+        padding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.xxs),
     ) {
         CardRow(
             left = { Text("Categoría", style = Movi.textos.titulo, color = Movi.colores.textoMedio) },
@@ -1718,7 +1718,7 @@ private fun EditorBody(
     //
     // Dos renglones de alto: los mensajes de `toUserMessage()` más largos se parten en dos en
     // el ancho de un teléfono, y reservar de menos volvería a mover el teclado.
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Espacio.xs))
     Box(modifier = Modifier.fillMaxWidth().height(32.dp), contentAlignment = Alignment.CenterStart) {
         if (error != null) {
             Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.align(Alignment.TopStart))
@@ -1730,7 +1730,7 @@ private fun EditorBody(
                 horizontalArrangement = Arrangement.spacedBy(Movi.espacios.minimo),
                 modifier = Modifier.testTag(TAG_CONFIRMACION_DE_LO_ANOTADO),
             ) {
-                Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(14.dp))
+                Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
                 Text(
                     ultimoAnotado,
                     style = Movi.textos.apoyo,
@@ -1752,7 +1752,7 @@ private fun EditorBody(
         }
     }
 
-    Spacer(Modifier.height(14.dp))
+    Spacer(Modifier.height(Espacio.s))
 
     // Cada tecla vibra apenas, como un teclado de verdad (ver [Vibrador.tecla]).
     val vibrador = rememberVibrador()
@@ -1778,7 +1778,7 @@ private fun EditorBody(
                         contentAlignment = Alignment.Center,
                     ) {
                         if (key == "⌫") {
-                            Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = Movi.colores.texto, modifier = Modifier.size(22.dp))
+                            Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = Movi.colores.texto, modifier = Modifier.size(Icono.l))
                         } else {
                             Text(
                                 text = key,
@@ -1795,13 +1795,13 @@ private fun EditorBody(
         }
     }
 
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(Espacio.s))
 
     if (hasNoAccounts) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
             Text(
                 "Primero crea una cuenta donde anotar este movimiento",
@@ -1813,7 +1813,7 @@ private fun EditorBody(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(RoundedCornerShape(Radio.pill))
                     .background(Movi.colores.marca.copy(alpha = 0.16f))
                     .clickable { onCreateAccount() },
                 contentAlignment = Alignment.Center,
@@ -1836,7 +1836,7 @@ private fun EditorBody(
             // Con «Pagó otro» la fila toma el alto de sus hermanos (el botón de guardar), así la
             // hoja no cambia de alto. Sin él, la fila de siempre.
             modifier = Modifier.fillMaxWidth().then(if (onPagoOtro != null) Modifier.height(IntrinsicSize.Min) else Modifier),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
             if (onPagoOtro != null) {
                 Box(
@@ -1861,8 +1861,8 @@ private fun EditorBody(
                 Box(
                     modifier = Modifier
                         .size(56.dp, 54.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(Radio.l))
+                        .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.l))
                         .clickable(enabled = !saving) { onSubirPapel() }
                         .testTag(TAG_SUBIR_PAPEL_EN_AGREGAR),
                     contentAlignment = Alignment.Center,
@@ -1871,7 +1871,7 @@ private fun EditorBody(
                         imageVector = Icons.Rounded.UploadFile,
                         contentDescription = "Subir comprobante o extracto",
                         tint = Movi.colores.texto,
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(Icono.l),
                     )
                 }
             }
@@ -1879,7 +1879,7 @@ private fun EditorBody(
                 modifier = Modifier
                     .weight(1f)
                     .height(54.dp)
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(RoundedCornerShape(Radio.pill))
                     .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
                     .clickable(enabled = canSave) { onSave() },
                 contentAlignment = Alignment.Center,
@@ -1901,7 +1901,7 @@ private fun EditorBody(
         // caía en la tecla de arriba: escribías «0» y salía «8», sin ningún aviso. Reservarle
         // el alto fijo cuesta 16 dp de aire y deja el teclado quieto mientras se tipea, que es
         // exactamente lo que hay que garantizar en la pantalla donde se anota la plata.
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         Box(
             modifier = Modifier.fillMaxWidth().height(16.dp),
             contentAlignment = Alignment.Center,
@@ -1983,7 +1983,7 @@ private fun CategoriaChipsRow(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(Movi.formas.pleno))
-                .border(1.dp, Movi.colores.marca, RoundedCornerShape(Movi.formas.pleno))
+                .border(Medida.trazo, Movi.colores.marca, RoundedCornerShape(Movi.formas.pleno))
                 .clickable(role = Role.Button, onClick = onNueva)
                 .testTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR)
                 .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
@@ -2004,7 +2004,7 @@ private fun CategoriaChipsRow(
                     .clip(RoundedCornerShape(Movi.formas.pleno))
                     .background(if (activa) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
                     .then(
-                        if (!activa) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.pleno))
+                        if (!activa) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Movi.formas.pleno))
                         else Modifier,
                     )
                     .clickable(role = Role.Button) { onPick(nombre) }
@@ -2071,7 +2071,7 @@ internal fun AvisoDeCuentaRow(aviso: String?, reservado: Boolean) {
 @Composable
 internal fun PickerHeader(title: String, onClose: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = Espacio.xxs, bottom = Espacio.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
@@ -2091,7 +2091,7 @@ internal fun PickerHeader(title: String, onClose: () -> Unit) {
                 .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Rounded.Close, contentDescription = "Cerrar", tint = Movi.colores.texto, modifier = Modifier.size(16.dp))
+            Icon(Icons.Rounded.Close, contentDescription = "Cerrar", tint = Movi.colores.texto, modifier = Modifier.size(Icono.s))
         }
     }
 }
@@ -2141,7 +2141,7 @@ internal fun WalletPicker(
         if (cuentas.vacio) {
             // F10: este picker ya no debería ser alcanzable sin cuentas (ver el onClick de la
             // fila "Cuenta" en EditorBody), pero el texto no miente si de todos modos se llega.
-            Text("No tienes cuentas todavía.", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, modifier = Modifier.padding(vertical = 18.dp))
+            Text("No tienes cuentas todavía.", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, modifier = Modifier.padding(vertical = Espacio.m))
         } else {
             val visibles = if (verTodas) cuentas.todas else cuentas.principales
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
@@ -2150,7 +2150,7 @@ internal fun WalletPicker(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onPick(account.id) }
-                            .padding(vertical = 14.dp),
+                            .padding(vertical = Espacio.s),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -2166,7 +2166,7 @@ internal fun WalletPicker(
                                 color = Movi.colores.textoMedio,
                             )
                         }
-                        if (account.id == selectedId) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(16.dp))
+                        if (account.id == selectedId) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(Icono.s))
                     }
                 }
                 // Va DENTRO del LazyColumn y no debajo: con muchas cuentas la lista llega a su
@@ -2256,14 +2256,14 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
     // escribir «Nómina agosto», sin un toque previo que pueda caer en cualquier otro lado.
     val noteFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { noteFocusRequester.requestFocus() }
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.m)) {
         PickerHeader("Nota", onClose)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(Radio.m))
                 .background(Movi.colores.tarjeta)
-                .padding(horizontal = 14.dp, vertical = 14.dp),
+                .padding(horizontal = Espacio.s, vertical = Espacio.s),
         ) {
             BasicTextField(
                 value = value,
@@ -2315,12 +2315,12 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 },
             )
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(Espacio.s))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
-                .clip(RoundedCornerShape(999.dp))
+                .height(Medida.objetivoTactil)
+                .clip(RoundedCornerShape(Radio.pill))
                 .background(Movi.colores.marca.copy(alpha = 0.16f))
                 .clickable { onSave(value.text.trim()) },
             contentAlignment = Alignment.Center,

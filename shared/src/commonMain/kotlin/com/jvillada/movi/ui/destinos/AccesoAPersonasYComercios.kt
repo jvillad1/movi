@@ -1,31 +1,22 @@
 package com.jvillada.movi.ui.destinos
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Groups
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
 import com.jvillada.movi.shared.model.nombresDeLasCuentasDeOtros
-import com.jvillada.movi.theme.Movi
-import com.jvillada.movi.ui.components.ChevronRight
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
 
-/** El tag del acceso principal a «Personas y comercios» (Movimientos). */
+/** El tag de la fila que abre «Personas y comercios» (al final de Espacios). */
 const val TAG_ACCESO_A_PERSONAS_Y_COMERCIOS: String = "acceso-personas-y-comercios"
 
 /**
@@ -37,24 +28,17 @@ internal fun resumenDelAcceso(destinos: List<DestinoConocido>?): String =
     if (destinos.isNullOrEmpty()) "Guarda a quién le envías plata" else nombresDeLasCuentasDeOtros(destinos)
 
 /**
- * # La puerta principal a «Personas y comercios» (4-oct-2026)
+ * # La puerta a «Personas y comercios»
  *
- * El dueño: *«que tenga un acceso muy fácil de encontrar para ver cuentas de terceros»*. Hasta acá
- * se llegaba por Patrimonio —bajando hasta debajo de Inversión— o por el avatar → Ajustes. Ninguna
- * de las dos es donde uno piensa «¿a quién le mandé plata?»: eso se piensa en **Movimientos**.
+ * El dueño (4-oct-2026): *«que tenga un acceso muy fácil de encontrar para ver cuentas de
+ * terceros»*. Llegó a tener cuatro puertas (Movimientos, Patrimonio, Ajustes y la hoja de un
+ * espacio). **Ola R4: quedan dos** — esta fila, al final de **Espacios** (lo que tienes con los
+ * demás), y la ficha de Ajustes. Patrimonio contesta «¿qué tengo yo?» y Movimientos «¿en qué se
+ * fue?»: ninguna de las dos es la casa de los terceros.
  *
- * Así que va acá, **un renglón fijo** debajo de los filtros, con los nombres a la vista («Hernán,
- * Ana, Cancha El Gol y 2 más»). Un toque abre la lista; cada ficha de la lista ya dice cuánto se le
- * mandó este período. Desde Hoy son dos toques (la pestaña y el renglón).
- *
- * ### Por qué un renglón y no un filtro ni un chip por persona
- *
- * - **No es un filtro de la lista**: la pregunta no es «muéstrame mis movimientos de otra forma»
- *   sino «¿a quién le mando y cuánto?», que se contesta por persona y por período en su ficha.
- * - **Un chip por persona** no escala y el dueño ya pidió menos filtros en esa fila (ver
- *   `CHIPS_VISIBLES`).
- * - **Siempre está, y siempre de una línea**: no aparece cuando contesta la lectura, así que no
- *   empuja la lista ni hace saltar el esqueleto. Sin nadie guardado invita a guardar.
+ * Es una [Fila] del sistema con los nombres a la vista («Hernán, Ana, Cancha El Gol y 2 más») de
+ * subtítulo. Siempre está y siempre mide lo mismo: no aparece cuando contesta la lectura, así que no
+ * empuja nada. Sin nadie guardado invita a guardar.
  */
 @Composable
 fun RenglonDePersonasYComercios(
@@ -62,36 +46,16 @@ fun RenglonDePersonasYComercios(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    MinCard(
+    Superficie(
         modifier = modifier.fillMaxWidth().testTag(TAG_ACCESO_A_PERSONAS_Y_COMERCIOS),
-        variant = MinCardVariant.Default,
-        padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        onClick = onClick,
+        relleno = RellenoDeSuperficie.Lista,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(Icons.Rounded.Groups, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(18.dp))
-            Text(
-                PERSONAS_Y_COMERCIOS,
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-                maxLines = 1,
-                softWrap = false,
-            )
-            Text(
-                resumenDelAcceso(destinos),
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f),
-            )
-            ChevronRight()
-        }
+        Fila(
+            titulo = PERSONAS_Y_COMERCIOS,
+            subtitulo = resumenDelAcceso(destinos),
+            inicio = { IconoEnCirculo(Icons.Rounded.Groups, tono = TonoDeIcono.Info) },
+            final = { Chevron() },
+            onClick = onClick,
+        )
     }
 }

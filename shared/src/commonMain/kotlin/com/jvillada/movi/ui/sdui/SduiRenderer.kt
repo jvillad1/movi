@@ -242,7 +242,7 @@ internal fun screenForTarget(target: String): Screen? = when (target) {
     // reemplazo con forma propia — a diferencia de Suscripciones/Recurrentes, acá no quedó un
     // «donde ahora viven las metas». Mismo trato que "investments" un poco más abajo: el target
     // sobrevive (una definición guardada puede seguir trayéndolo) y se manda a Cuentas en vez de
-    // crashear con un destino desconocido. `MetasScreen` sigue existiendo, solo sin puerta.
+    // crashear con un destino desconocido. `MetasScreen` se borró en la R4.
     "goals" -> Screen.Accounts
     // F61: Inversiones dejó de ser pantalla. Una definición guardada (o el Editor) puede seguir
     // trayendo este target — se manda a Cuentas, que es donde ahora viven las cuentas de

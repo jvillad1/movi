@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.auth
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -117,13 +120,13 @@ internal fun PuertaAlVolver(
         contentAlignment = Alignment.Center,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            modifier = Modifier.fillMaxWidth().padding(Espacio.xl),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
             // El nombre, con la escala de títulos (sin tamaño suelto: ver LosTamanosSueltosSoloBajanTest).
             Text("Movi", style = Movi.textos.titular, fontWeight = FontWeight.Bold, color = Movi.colores.texto)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             Text(
                 "Pon tu huella para seguir donde estabas.",
                 style = Movi.textos.cuerpo,
@@ -131,13 +134,13 @@ internal fun PuertaAlVolver(
                 textAlign = TextAlign.Center,
             )
             motivo?.let {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, textAlign = TextAlign.Center)
             }
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(Espacio.xxl))
             Box(
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                modifier = Modifier.fillMaxWidth().height(Medida.objetivoTactil)
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(if (pidiendo) Movi.colores.tarjeta else Movi.colores.marca)
                     .clickable(role = Role.Button) { pedir() },
                 contentAlignment = Alignment.Center,
@@ -149,7 +152,7 @@ internal fun PuertaAlVolver(
                     color = if (pidiendo) Movi.colores.textoMedio else Movi.colores.sobreMarca,
                 )
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
             Text(
                 "Entrar con mi contraseña",
                 style = Movi.textos.cuerpo,

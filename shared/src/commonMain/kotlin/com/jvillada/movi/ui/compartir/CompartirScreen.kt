@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.compartir
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -228,10 +231,10 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
 
 @Composable
 private fun QueVaAVer() {
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(18.dp)) {
+    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(Espacio.m)) {
         Text(QUE_ES_COMPARTIR, style = Movi.textos.cuerpo, color = Movi.colores.texto)
         Spacer(Modifier.height(Movi.espacios.amplio))
-        Text("LO QUE VA A VER", style = Movi.textos.rotulo, color = Movi.colores.textoApagado)
+        Text("Lo que va a ver", style = Movi.textos.rotulo, color = Movi.colores.textoApagado)
         Spacer(Modifier.height(Movi.espacios.corto))
         LO_QUE_VA_A_VER.forEach { renglon ->
             Row(modifier = Modifier.padding(vertical = Movi.espacios.minimo)) {
@@ -239,7 +242,7 @@ private fun QueVaAVer() {
                     Icons.Rounded.CheckCircle,
                     contentDescription = null,
                     tint = Movi.colores.entra,
-                    modifier = Modifier.size(16.dp).padding(top = 1.dp),
+                    modifier = Modifier.size(Icono.s).padding(top = Espacio.xxs),
                 )
                 Spacer(Modifier.width(Movi.espacios.corto))
                 Text(renglon, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -259,7 +262,7 @@ private fun CrearEnlace(
     onCrear: () -> Unit,
 ) {
     Text(
-        "¿POR CUÁNTO TIEMPO?",
+        "¿Por cuánto tiempo?",
         style = Movi.textos.rotulo,
         color = Movi.colores.textoApagado,
         modifier = Modifier.padding(horizontal = Movi.espacios.corto),
@@ -275,7 +278,7 @@ private fun CrearEnlace(
                 modifier = Modifier
                     .clip(RoundedCornerShape(Movi.formas.pleno))
                     .background(if (elegida) Movi.colores.marca else Movi.colores.tarjeta)
-                    .border(1.dp, if (elegida) Movi.colores.marca else Movi.colores.borde, RoundedCornerShape(Movi.formas.pleno))
+                    .border(Medida.trazo, if (elegida) Movi.colores.marca else Movi.colores.borde, RoundedCornerShape(Movi.formas.pleno))
                     .clickable(enabled = !creando) { onDias(opcion) }
                     .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.corto),
             )
@@ -304,7 +307,7 @@ private fun EnlaceListo(
     onCopiar: () -> Unit,
     onOtro: () -> Unit,
 ) {
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.High, padding = PaddingValues(18.dp)) {
+    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.High, padding = PaddingValues(Espacio.m)) {
         Text("Tu enlace está listo", style = Movi.textos.titulo, color = Movi.colores.texto)
         Spacer(Modifier.height(Movi.espacios.minimo))
         Text("Vale ${rotuloDeVigencia(diasDelEnlace)}.", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -356,7 +359,7 @@ private fun FilaDeEnlace(enlace: EnlaceCompartido, ahora: Long, onRevocar: () ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("Resumen · ${textoDeVencimiento(enlace.venceEn, ahora)}", style = Movi.textos.cuerpo, color = Movi.colores.texto)
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 Text(
                     textoDeVistas(enlace.ultimaVista, enlace.vistas, ahora),
                     style = Movi.textos.apoyo,
@@ -384,11 +387,11 @@ private fun BotonPrincipal(texto: String, icono: ImageVector, habilitado: Boolea
             .clip(RoundedCornerShape(Movi.formas.amplia))
             .background(Movi.colores.marca)
             .clickable(enabled = habilitado, onClick = onClick)
-            .padding(vertical = 14.dp),
+            .padding(vertical = Espacio.s),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icono, contentDescription = null, tint = Movi.colores.sobreMarca, modifier = Modifier.size(18.dp))
+        Icon(icono, contentDescription = null, tint = Movi.colores.sobreMarca, modifier = Modifier.size(Icono.m))
         Spacer(Modifier.width(Movi.espacios.corto))
         Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.sobreMarca)
     }
@@ -400,13 +403,13 @@ private fun BotonSecundario(texto: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Movi.formas.amplia))
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.amplia))
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Movi.formas.amplia))
             .clickable(onClick = onClick)
-            .padding(vertical = 13.dp),
+            .padding(vertical = Espacio.s),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Rounded.ContentCopy, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.ContentCopy, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.m))
         Spacer(Modifier.width(Movi.espacios.corto))
         Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.marca)
     }

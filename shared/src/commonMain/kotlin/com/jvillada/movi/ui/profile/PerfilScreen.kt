@@ -1,5 +1,15 @@
 package com.jvillada.movi.ui.profile
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -131,371 +142,203 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
             title = "Perfil",
             leading = HeaderLeading.Back(fallback = Screen.Mas),
         )
-        Spacer(Modifier.height(14.dp))
-
+        // Ola R4: cada sección es su [Seccion] y una [Superficie] con [Fila]s del sistema; lo que
+        // una fila no alcanza a decir en un renglón va debajo, como nota de la sección. Entre
+        // secciones, `Medida.entreSecciones` (el `spacedBy` de la lista).
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(bottom = 80.dp),
+            contentPadding = PaddingValues(
+                start = Medida.margenDePantalla,
+                end = Medida.margenDePantalla,
+                top = Medida.dentroDeSeccion,
+                bottom = Medida.botonFlotante + Medida.entreSecciones,
+            ),
+            verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
         ) {
-            // Identity card
+            // Quién eres: el avatar, el nombre y el correo, con «Editar» (alias y color).
             item {
-                MinCard(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(20.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Superficie(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
                         // F42 · F46: mientras `profile` no llegó del server se usa lo que
-                        // SessionManager ya tenía cacheado del login — no hay pantalla vacía
-                        // ni parpadeo, y cuando la respuesta llega ambas fuentes coinciden
-                        // (el LaunchedEffect de arriba las sincroniza).
+                        // SessionManager ya tenía cacheado del login — no hay pantalla vacía.
                         val displayName = profile?.name ?: SessionManager.userName ?: "Usuario"
                         val avatarColor = avatarColorOrDefault(profile?.avatarColor ?: SessionManager.avatarColor)
                         val initials = displayName.split(" ").take(2)
                             .mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
                         Box(
                             modifier = Modifier
-                                .size(56.dp)
+                                .size(Medida.avatarGrande)
                                 .clip(CircleShape)
                                 .background(avatarColor),
                             contentAlignment = Alignment.Center,
                         ) {
-                            // Tamaño suelto a propósito: las iniciales son el dibujo del avatar, a la medida del círculo de 56 dp; ningún estilo de la escala es ese papel.
-                            Text(initials.ifEmpty { "U" }, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, letterSpacing = (-0.5).sp)
+                            Text(initials.ifEmpty { "U" }, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Color.White)
                         }
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(displayName, style = Movi.textos.titular, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
-                            Text(SessionManager.userEmail ?: "", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                            // F44: "PREMIUM · FAMILIAR" estaba fijo en el código — no existen
-                            // planes ni tipos de cuenta, así que la etiqueta mentía. Se saca;
-                            // vuelve con significado real si algún día hay planes o familia (F8).
+                            Text(displayName, style = Movi.textos.titular, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(SessionManager.userEmail ?: "", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        // F42 · F46: antes esta tarjeta era de solo lectura — nada acá abría
-                        // nada. Un solo "Editar" alcanza para las dos cosas que se pueden
-                        // cambiar (alias y color), en vez de dos afordancias separadas.
-                        Text(
-                            "Editar",
-                            style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca,
-                            modifier = Modifier.clickable { showEditProfile = true },
-                        )
+                        Boton("Editar", onClick = { showEditProfile = true }, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
                     }
                 }
             }
 
-            // Lo que no se pudo leer se dice, con su reintento — mismo componente que Cuentas,
-            // Créditos y Metas. Va arriba de las filas que dependen del perfil para que se lea
-            // antes de tocarlas, no después.
+            // Lo que no se pudo leer se dice, con su reintento, arriba de las filas que dependen
+            // del perfil para que se lea antes de tocarlas.
             if (falloElPerfil) {
                 item {
-                    Spacer(Modifier.height(14.dp))
-                    NoSePudoLeer(
-                        texto = AJUSTES_NO_LEIDOS,
-                        onReintentar = { profileReloadKey++ },
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
+                    NoSePudoLeer(texto = AJUSTES_NO_LEIDOS, onReintentar = { profileReloadKey++ })
                 }
             }
 
             // Cuenta
             item {
-                Spacer(Modifier.height(14.dp))
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Cuenta")
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        // F42: reemplaza la sección "Cuenta" que F45 había sacado entera por
-                        // ser puro decorado — esta fila sí tiene algo real detrás.
-                        CardRow(
-                            left = { Text("Cambiar contraseña", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
-                            showChevron = true,
-                            onClick = { showChangePassword = true },
-                        )
-                        // El día en que arranca el período. Vive en «Cuenta» y no escondido en
-                        // una pantalla aparte porque cambia el significado de TODAS las cifras
-                        // del mes: quien lo busca lo busca acá.
-                        // Mientras el corte no se sepa, esta fila NO dice «Mes de calendario» ni
-                        // se deja tocar: ese texto era el valor por defecto disfrazado del suyo, y
-                        // la hoja que abría llegaba con el día 1 preseleccionado y un «Guardar»
-                        // que lo escribía de verdad.
+                Column {
+                    Seccion(titulo = "Cuenta")
+                    Superficie(relleno = RellenoDeSuperficie.Lista) {
+                        Fila(titulo = "Cambiar contraseña", final = { Chevron() }, onClick = { showChangePassword = true })
+                        Separador(SangriaDeSeparador.Margen)
+                        // El día en que arranca el período: cambia el significado de TODAS las cifras
+                        // del mes. Mientras el corte no se sepa, la fila NO dice «Mes de calendario»
+                        // ni se deja tocar: ese texto era el valor por defecto disfrazado del suyo.
                         val cutoff = profile?.periodCutoffDay
-                        val abrirPeriodo: (() -> Unit)? =
-                            if (cutoff == null) null else ({ errorPeriodo = null; showPeriodo = true })
-                        CardRow(
-                            left = {
-                                Column {
-                                    Text("Inicio del mes", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                                    Text(
-                                        text = cutoff?.let { d ->
-                                            textoDelInicioDelMes(d, siElCorteCaeEnFinDeSemanaDe(profile?.periodWeekendRule))
-                                        } ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
-                                        style = Movi.textos.apoyo,
-                                        color = Movi.colores.textoMedio,
-                                    )
-                                }
-                            },
-                            showChevron = cutoff != null,
-                            isLast = true,
-                            onClick = abrirPeriodo,
+                        Fila(
+                            titulo = "Inicio del mes",
+                            subtitulo = cutoff?.let { d ->
+                                textoDelInicioDelMes(d, siElCorteCaeEnFinDeSemanaDe(profile?.periodWeekendRule))
+                            } ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
+                            final = if (cutoff != null) ({ Chevron() }) else null,
+                            onClick = if (cutoff == null) null else ({ errorPeriodo = null; showPeriodo = true }),
                         )
                     }
                 }
             }
 
-            // Cómo se ve la app. Sección propia y no una fila de «Cuenta» porque no es una
-            // propiedad del dueño: es de ESTE aparato. Ver el KDoc de TemaStore — el mismo día
-            // puede querer oscuro en el teléfono de noche y claro en el navegador de día.
+            // Cómo se ve la app: es de ESTE aparato, no del dueño (ver el KDoc de TemaStore).
             item {
-                Spacer(Modifier.height(14.dp))
-                Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-                    MinSectionHeader(title = "Cómo se ve")
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        // Ola 1 · «Que Movi se sienta viva»: tres opciones en vez del interruptor
-                        // claro/oscuro. La primera sigue al teléfono; ver [PreferenciaDeTema].
+                Column {
+                    Seccion(titulo = "Cómo se ve")
+                    Superficie(relleno = RellenoDeSuperficie.Lista) {
+                        // Ola 1: tres opciones; la primera sigue al teléfono ([PreferenciaDeTema]).
                         PreferenciaDeTema.entries.forEachIndexed { i, opcion ->
+                            if (i > 0) Separador(SangriaDeSeparador.Margen)
                             val elegida = TemaStore.preferencia == opcion
-                            CardRow(
-                                left = {
-                                    Column {
-                                        Text(
-                                            opcion.titulo,
-                                            style = Movi.textos.titulo,
-                                            color = Movi.colores.texto,
-                                        )
-                                        if (opcion == PreferenciaDeTema.SISTEMA) {
-                                            Text(
-                                                text = "Claro u oscuro, según cómo tengas el teléfono",
-                                                style = Movi.textos.apoyo,
-                                                color = Movi.colores.textoMedio,
-                                            )
-                                        }
-                                    }
-                                },
-                                right = {
-                                    // El mismo lenguaje que un ítem elegido en el resto de Movi: el
-                                    // check en el color de la marca, y nada en los otros.
-                                    Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                            Fila(
+                                titulo = opcion.titulo,
+                                subtitulo = if (opcion == PreferenciaDeTema.SISTEMA) "Claro u oscuro, según tu teléfono" else null,
+                                final = {
+                                    Box(modifier = Modifier.size(Icono.l), contentAlignment = Alignment.Center) {
                                         if (elegida) {
-                                            Icon(
-                                                Icons.Rounded.Check,
-                                                contentDescription = "Elegido",
-                                                tint = Movi.colores.marca,
-                                                modifier = Modifier.size(20.dp),
-                                            )
+                                            Icon(Icons.Rounded.Check, contentDescription = "Elegido", tint = Movi.colores.marca, modifier = Modifier.size(Icono.m))
                                         }
                                     }
                                 },
-                                isLast = i == PreferenciaDeTema.entries.lastIndex,
                                 onClick = { TemaStore.poner(opcion) },
                                 modifier = Modifier.semantics { selected = elegida },
                             )
                         }
-                    }
-                    // «Ocultar los saldos»: lo mismo que el ojo del héroe de Hoy, para quien lo
-                    // busque acá. También es de este aparato, como el tema.
-                    Spacer(Modifier.height(10.dp))
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
+                        Separador(SangriaDeSeparador.Ninguna)
+                        // «Ocultar los saldos»: lo mismo que el ojo de Hoy. También de este aparato.
                         val ocultos = LocalSaldosOcultos.current
-                        CardRow(
-                            left = {
-                                Column {
-                                    Text(
-                                        ROTULO_OCULTAR_LOS_SALDOS,
-                                        style = Movi.textos.titulo,
-                                        color = Movi.colores.texto,
-                                    )
-                                    Text(
-                                        text = "Tus cifras se ven como $PLATA_OCULTA en este aparato. " +
-                                            "También con el ojo de Hoy.",
-                                        style = Movi.textos.apoyo,
-                                        color = Movi.colores.textoMedio,
-                                    )
-                                }
-                            },
-                            right = {
-                                Switch(
-                                    checked = ocultos,
-                                    onCheckedChange = { SaldosOcultosStore.poner(it) },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Movi.colores.sobreMarca,
-                                        checkedTrackColor = Movi.colores.marca,
-                                        uncheckedThumbColor = Movi.colores.textoApagado,
-                                        uncheckedTrackColor = Movi.colores.tarjeta,
-                                        uncheckedBorderColor = Movi.colores.borde,
-                                    ),
-                                )
-                            },
-                            isLast = true,
+                        Fila(
+                            titulo = ROTULO_OCULTAR_LOS_SALDOS,
+                            subtitulo = "Tus cifras se ven como $PLATA_OCULTA en este aparato",
+                            final = { Interruptor(ocultos, onCambio = { SaldosOcultosStore.poner(it) }) },
                             onClick = { SaldosOcultosStore.alternar() },
                         )
-                    }
-                    // Ola 3 · «Editar inicio»: lo mismo que el botón del final de Hoy. A diferencia
-                    // del tema y del ojo, esto es del dueño y no del aparato: se guarda en el server.
-                    Spacer(Modifier.height(10.dp))
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        CardRow(
-                            left = { Text(TITULO_EDITAR_INICIO, style = Movi.textos.titulo, color = Movi.colores.texto) },
-                            sub = "Qué secciones ves en Hoy y en qué orden",
-                            showChevron = true,
-                            isLast = true,
+                        Separador(SangriaDeSeparador.Margen)
+                        // Ola 3 · «Editar inicio»: esto es del dueño (se guarda en el server).
+                        Fila(
+                            titulo = TITULO_EDITAR_INICIO,
+                            subtitulo = "Qué secciones ves en Hoy y en qué orden",
+                            final = { Chevron() },
                             onClick = { onNavigate(Screen.EditarInicio) },
                         )
                     }
                 }
             }
 
-            // «Entrar con huella». Solo aparece donde hay lector: en iOS y la web
-            // `Huella.deEsteAparato()` es null y este item no dibuja nada, igual que la sección
-            // de push no existe fuera del navegador.
+            // «Entrar con huella». Solo donde hay lector: en iOS y la web no dibuja nada.
             item {
                 val huella = Huella.deEsteAparato()
                 val estado = huella?.estado() ?: EstadoDeHuella.NO_DISPONIBLE
                 if (huella != null && estado != EstadoDeHuella.NO_DISPONIBLE) {
-                    // Se lee una vez y se guarda en estado de Compose: `SessionManager` no es
-                    // observable, así que sin esto el interruptor no se movería al tocarlo.
+                    // `SessionManager` no es observable: sin el estado el interruptor no se movería.
                     var activada by remember { mutableStateOf(SessionManager.huellaActivada) }
                     var avisoHuella by remember { mutableStateOf<String?>(null) }
                     var ocupada by remember { mutableStateOf(false) }
-
-                    Spacer(Modifier.height(14.dp))
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Entrar")
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                        ) {
-                            val alternar = alternar@{
-                                if (ocupada) return@alternar
-                                if (activada) {
-                                    // Apagarla es inmediato y no toca la sesión: lo único que
-                                    // cambia es que al abrir la app ya no se pide el dedo.
-                                    SessionManager.huellaActivada = false
-                                    activada = false
-                                    avisoHuella = null
-                                } else if (estado == EstadoDeHuella.SIN_REGISTRAR) {
-                                    avisoHuella = "Registra una huella en los ajustes de este teléfono y vuelve."
+                    val alternar = alternar@{
+                        if (ocupada) return@alternar
+                        if (activada) {
+                            // Apagarla es inmediato y no toca la sesión.
+                            SessionManager.huellaActivada = false
+                            activada = false
+                            avisoHuella = null
+                        } else if (estado == EstadoDeHuella.SIN_REGISTRAR) {
+                            avisoHuella = "Registra una huella en los ajustes de este teléfono y vuelve."
+                        } else {
+                            // Se pide el dedo ANTES de prender el interruptor: prenderlo a ciegas lo
+                            // dejaría con una puerta que recién falla la próxima vez que abra Movi.
+                            ocupada = true
+                            avisoHuella = null
+                            huella.pedir(PropositoDeHuella.ACTIVAR) { resultado ->
+                                ocupada = false
+                                if (resultado == ResultadoDeHuella.EXITO) {
+                                    SessionManager.huellaActivada = true
+                                    activada = true
                                 } else {
-                                    // Se pide el dedo ANTES de prender el interruptor: prenderlo a
-                                    // ciegas lo dejaría con una puerta que recién falla la próxima
-                                    // vez que abra Movi, cuando ya no está mirando esta pantalla.
-                                    ocupada = true
-                                    avisoHuella = null
-                                    huella.pedir(PropositoDeHuella.ACTIVAR) { resultado ->
-                                        ocupada = false
-                                        if (resultado == ResultadoDeHuella.EXITO) {
-                                            SessionManager.huellaActivada = true
-                                            activada = true
-                                        } else {
-                                            avisoHuella = motivoDeLaHuella(resultado)
-                                        }
-                                    }
+                                    avisoHuella = motivoDeLaHuella(resultado)
                                 }
                             }
-                            CardRow(
-                                left = {
-                                    Column {
-                                        Text(
-                                            "Entrar con huella",
-                                            style = Movi.textos.titulo,
-                                            fontWeight = FontWeight.Medium,
-                                            color = Movi.colores.texto,
-                                        )
-                                        Text(
-                                            text = avisoHuella ?: when {
-                                                ocupada -> "Esperando tu huella…"
-                                                activada -> EXPLICACION_HUELLA
-                                                estado == EstadoDeHuella.SIN_REGISTRAR ->
-                                                    "Este teléfono todavía no tiene huellas registradas."
-                                                else -> "Abre Movi con tu huella, sin escribir tu contraseña."
-                                            },
-                                            style = Movi.textos.apoyo,
-                                            color = if (avisoHuella != null) Movi.colores.sale else Movi.colores.textoMedio,
-                                        )
-                                        // El alcance exacto, dicho donde se toma la decisión y no
-                                        // descubierto después. La huella tapa la app; NO cifra la
-                                        // sesión, y eso es lo que deja a la captura de SMS
-                                        // funcionando sola en segundo plano.
-                                        if (activada) {
-                                            Text(
-                                                "Tapa la app, no la cifra. Tus SMS del banco se siguen subiendo solos aunque no abras Movi.",
-                                                style = Movi.textos.apoyo,
-                                                color = Movi.colores.textoApagado,
-                                            )
-                                        }
-                                    }
+                        }
+                    }
+                    Column {
+                        Seccion(titulo = "Entrar")
+                        Superficie(relleno = RellenoDeSuperficie.Lista) {
+                            Fila(
+                                titulo = "Entrar con huella",
+                                subtitulo = when {
+                                    ocupada -> "Esperando tu huella…"
+                                    activada -> "Activada"
+                                    estado == EstadoDeHuella.SIN_REGISTRAR -> "Sin huellas registradas"
+                                    else -> "Sin escribir tu contraseña"
                                 },
-                                right = {
-                                    Switch(
-                                        checked = activada,
-                                        onCheckedChange = { alternar() },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Movi.colores.sobreMarca,
-                                            checkedTrackColor = Movi.colores.marca,
-                                            uncheckedThumbColor = Movi.colores.textoApagado,
-                                            uncheckedTrackColor = Movi.colores.tarjeta,
-                                            uncheckedBorderColor = Movi.colores.borde,
-                                        ),
-                                    )
-                                },
-                                isLast = true,
+                                final = { Interruptor(activada, onCambio = { alternar() }) },
                                 onClick = { alternar() },
                             )
                         }
+                        // Lo que la fila no alcanza a decir: el aviso, o el alcance exacto (tapa la
+                        // app, NO cifra la sesión: por eso la captura de SMS sigue sola).
+                        NotaDeSeccion(
+                            avisoHuella ?: when {
+                                activada -> "$EXPLICACION_HUELLA Tapa la app, no la cifra: tus SMS del banco se siguen subiendo solos aunque no abras Movi."
+                                estado == EstadoDeHuella.SIN_REGISTRAR -> "Este teléfono todavía no tiene huellas registradas."
+                                else -> "Abre Movi con tu huella, sin escribir tu contraseña."
+                            },
+                            esError = avisoHuella != null,
+                        )
                     }
                 }
             }
 
-            // Aviso de vencimientos
+            // Avisos
             item {
-                Spacer(Modifier.height(14.dp))
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Avisos")
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        // Cuántos días antes avisar. Vivía SOLO como variable de entorno del
-                        // server: global para todos y fuera del alcance de cualquier usuario.
-                        // Mismo trato que «Inicio del mes»: sin el perfil no se afirma cuántos
-                        // días antes avisa, porque lo que se afirmaría es el valor por defecto.
+                Column {
+                    Seccion(titulo = "Avisos")
+                    Superficie(relleno = RellenoDeSuperficie.Lista) {
+                        // Cuántos días antes avisar. Sin el perfil no se afirma: lo que se afirmaría
+                        // es el valor por defecto.
                         val diasDeAviso = profile?.reminderLeadDays
-                        val abrirAviso: (() -> Unit)? =
-                            if (diasDeAviso == null) null else ({ errorAviso = null; showAviso = true })
-                        CardRow(
-                            left = {
-                                Column {
-                                    Text("Avisarme antes de un vencimiento", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                                    Text(
-                                        text = diasDeAviso?.let { reminderLeadHint(it) }
-                                            ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
-                                        style = Movi.textos.apoyo,
-                                        color = Movi.colores.textoMedio,
-                                    )
-                                }
-                            },
-                            showChevron = diasDeAviso != null,
-                            isLast = false,
-                            onClick = abrirAviso,
+                        Fila(
+                            titulo = "Avisarme antes de un vencimiento",
+                            subtitulo = diasDeAviso?.let { reminderLeadHint(it) }
+                                ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
+                            final = if (diasDeAviso != null) ({ Chevron() }) else null,
+                            onClick = if (diasDeAviso == null) null else ({ errorAviso = null; showAviso = true }),
                         )
-                        // «Cerró tu período» por correo. Es de la cuenta (el correo sale del server),
-                        // no del teléfono: por eso vive acá y no en «Captura en este teléfono». Sin el
-                        // perfil no se afirma si está encendido, y el interruptor no se mueve.
+                        Separador(SangriaDeSeparador.Margen)
+                        // «Cerró tu período» por correo: de la cuenta (sale del server), no del
+                        // teléfono. Sin el perfil no se afirma si está encendido.
                         val cierrePorCorreo = profile?.cierrePorCorreo
                         val alternarCierre: () -> Unit = alternarCierre@{
                             val actual = cierrePorCorreo ?: return@alternarCierre
@@ -511,135 +354,91 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                                     }
                             }
                         }
-                        CardRow(
-                            left = {
-                                Column {
-                                    Text("Resumen del período por correo", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                                    Text(
-                                        text = errorCierre ?: when (cierrePorCorreo) {
-                                            null -> if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO
-                                            true -> "El día siguiente al corte te llega cómo te fue en el período"
-                                            false -> "Apagado: el resumen sigue en Hoy y en «Tus períodos»"
-                                        },
-                                        style = Movi.textos.apoyo,
-                                        color = if (errorCierre != null) Movi.colores.sale else Movi.colores.textoMedio,
-                                    )
-                                }
+                        Fila(
+                            titulo = "Resumen del período por correo",
+                            subtitulo = when (cierrePorCorreo) {
+                                null -> if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO
+                                true -> "El día siguiente al corte"
+                                false -> "Apagado"
                             },
-                            right = {
-                                Switch(
-                                    checked = cierrePorCorreo == true,
-                                    enabled = cierrePorCorreo != null && !guardandoCierre,
-                                    onCheckedChange = { alternarCierre() },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Movi.colores.sobreMarca,
-                                        checkedTrackColor = Movi.colores.marca,
-                                        uncheckedThumbColor = Movi.colores.textoApagado,
-                                        uncheckedTrackColor = Movi.colores.tarjeta,
-                                        uncheckedBorderColor = Movi.colores.borde,
-                                    ),
+                            final = {
+                                Interruptor(
+                                    cierrePorCorreo == true,
+                                    onCambio = { alternarCierre() },
+                                    habilitado = cierrePorCorreo != null && !guardandoCierre,
                                 )
                             },
-                            isLast = true,
                             onClick = alternarCierre,
                         )
                     }
+                    NotaDeSeccion(
+                        errorCierre ?: when (cierrePorCorreoDe(profile)) {
+                            true -> "El día siguiente al corte te llega cómo te fue en el período."
+                            false -> "El resumen sigue en Hoy y en «Tus períodos»."
+                            null -> null
+                        },
+                        esError = errorCierre != null,
+                    )
                 }
             }
 
-            // Archetype card
-            item {
-                // F43: acá vivía la tarjeta "Tu arquetipo / Por definir / Completa el
-                // cuestionario financiero…" — el cuestionario no existe en ninguna parte de la
-                // app, así que era una promesa sin nada detrás. Se saca entera (no solo el
-                // texto) en vez de dejar un cuestionario que nunca se puede completar; la
-                // sección "Mi perfil financiero" se va con ella. Si algún día se construye el
-                // cuestionario, vuelve con contenido real.
-                if (!PushOptIn.supported && PushOptIn.necesitaInstalar) {
-                    Spacer(Modifier.height(14.dp))
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Notificaciones")
+            // Notificaciones push (en el navegador) o cómo activarlas en un iPhone.
+            if (!PushOptIn.supported && PushOptIn.necesitaInstalar) {
+                item {
+                    Column {
+                        Seccion(titulo = "Notificaciones")
                         AvisosEnElIphone()
                     }
                 }
-                if (PushOptIn.supported) {
-                    Spacer(Modifier.height(14.dp))
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Notificaciones")
-                        var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
-                        var refreshTick by remember { mutableStateOf(0) }
-                        LaunchedEffect(refreshTick) {
-                            // el flujo JS es async: refrescar unas veces tras cada acción
-                            repeat(20) {
-                                kotlinx.coroutines.delay(600)
-                                pushStatus = PushOptIn.status()
-                            }
+            }
+            if (PushOptIn.supported) {
+                item {
+                    var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
+                    var refreshTick by remember { mutableStateOf(0) }
+                    LaunchedEffect(refreshTick) {
+                        // el flujo JS es async: refrescar unas veces tras cada acción
+                        repeat(20) {
+                            kotlinx.coroutines.delay(600)
+                            pushStatus = PushOptIn.status()
                         }
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column {
-                                    Text("Notificaciones push", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                                    Text(
-                                        when (pushStatus) {
-                                            "enabled" -> "Activadas en este dispositivo"
-                                            "denied" -> "Bloqueadas por el navegador"
-                                            else -> "Recibe tus pagos próximos"
+                    }
+                    Column {
+                        Seccion(titulo = "Notificaciones")
+                        Superficie(relleno = RellenoDeSuperficie.Lista) {
+                            Fila(
+                                titulo = "Notificaciones push",
+                                subtitulo = when (pushStatus) {
+                                    "enabled" -> "Activadas en este dispositivo"
+                                    "denied" -> "Bloqueadas por el navegador"
+                                    else -> "Recibe tus pagos próximos"
+                                },
+                                final = {
+                                    Boton(
+                                        if (pushStatus == "enabled") "Desactivar" else "Activar",
+                                        onClick = {
+                                            if (pushStatus == "enabled") PushOptIn.disable() else PushOptIn.enable()
+                                            refreshTick++
                                         },
-                                        style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
+                                        variante = VarianteDeBoton.Secundario,
+                                        tamano = TamanoDeBoton.S,
+                                        habilitado = pushStatus != "denied",
                                     )
-                                }
-                                Text(
-                                    if (pushStatus == "enabled") "Desactivar" else "Activar",
-                                    style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium,
-                                    color = if (pushStatus == "denied") Movi.colores.textoApagado else Movi.colores.texto,
-                                    modifier = Modifier.clickable(enabled = pushStatus != "denied") {
-                                        if (pushStatus == "enabled") PushOptIn.disable() else PushOptIn.enable()
-                                        refreshTick++
-                                    },
-                                )
-                            }
+                                },
+                            )
                         }
                     }
                 }
             }
 
-            // Ola B, tarea 7: acá vivía «Meta principal» — siempre decía «Aún sin meta» (F26
-            // nunca llegó a darle una forma de crear una) y era la única puerta que le quedaba a
-            // Metas en Perfil. Se saca entera junto con la ficha de Más: Metas no se borra, solo
-            // deja de tener puerta.
-
-            // F45: acá vivía la sección "Cuenta" con las filas "Familia" (sin acción),
-            // "Privacidad y datos · SMS y extractos cifrados" (no hay cifrado propio en el
-            // servidor — viaja por HTTPS y queda en Postgres tal cual) y "Notificaciones ·
-            // Alertas inteligentes activas" (no existen). Las tres eran decorado, y dos
-            // afirmaban cosas falsas — se sacan enteras. "Notificaciones push", que sí
-            // funciona, se queda arriba, en su propia sección.
-
-
             // Tus datos: lo que hoy solo se podía sacar por psql. La cuenta es de quien la usa.
             item {
-                Spacer(Modifier.height(14.dp))
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Tus datos")
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        CardRow(
-                            left = { Text(DESCARGAR_TUS_DATOS, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
-                            sub = errorDatos ?: if (bajandoDatos) "Preparando el archivo…" else
-                                "Un ZIP con tus cuentas, movimientos, créditos y mensajes del banco, en CSV y JSON",
-                            showChevron = true,
-                            isLast = true,
+                Column {
+                    Seccion(titulo = "Tus datos")
+                    Superficie(relleno = RellenoDeSuperficie.Lista) {
+                        Fila(
+                            titulo = DESCARGAR_TUS_DATOS,
+                            subtitulo = if (bajandoDatos) "Preparando el archivo…" else "Un ZIP en CSV y JSON",
+                            final = { Chevron() },
                             onClick = {
                                 if (!bajandoDatos) {
                                     bajandoDatos = true
@@ -659,74 +458,39 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                             },
                         )
                     }
+                    NotaDeSeccion(
+                        errorDatos ?: "Tus cuentas, movimientos, créditos y mensajes del banco.",
+                        esError = errorDatos != null,
+                    )
                 }
             }
 
-            // Logout button
+            // Salir: cerrar la sesión de acá y, más discreto, todas (para el teléfono perdido).
             item {
-                Spacer(Modifier.height(24.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Movi.colores.tarjeta)
-                        .clickable { onLogout() }
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("Cerrar sesión", style = Movi.textos.cuerpo, color = Movi.colores.sale, fontWeight = FontWeight.Medium)
-                }
-            }
-
-            // Para el teléfono perdido o el computador prestado: cierra TODAS las sesiones, no solo
-            // la de acá. Va debajo del logout normal, más discreto, porque se usa poco y no se
-            // deshace — por eso pide confirmación.
-            item {
-                Spacer(Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(enabled = !cerrandoTodas) { errorCierreTotal = null; confirmarCierreTotal = true }
-                        .padding(12.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
+                Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    Boton("Cerrar sesión", onClick = onLogout, variante = VarianteDeBoton.Peligro, anchoCompleto = true)
+                    Boton(
                         CERRAR_SESION_EN_TODOS,
-                        style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium,
+                        onClick = { errorCierreTotal = null; confirmarCierreTotal = true },
+                        variante = VarianteDeBoton.Fantasma,
+                        habilitado = !cerrandoTodas,
+                        anchoCompleto = true,
                     )
-                }
-                errorCierreTotal?.let {
-                    Text(
-                        it,
-                        style = Movi.textos.apoyo, color = Movi.colores.sale,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    )
+                    errorCierreTotal?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
                 }
             }
 
-            // Va DESPUÉS de «Cerrar sesión» a propósito: `isAdmin` llega async, y si esta sección
-            // se pintara antes del botón, al aparecer lo empujaría hacia abajo en cada visita (salto de
-            // layout). Al final de la lista solo alarga el scroll — nada se mueve bajo el dedo.
-            // F47 · F48: sección de administración — solo para quien administra el Inicio
-            // (SDUI). Ver comentario junto a `isAdmin` arriba.
+            // DESPUÉS de «Cerrar sesión» a propósito: `isAdmin` llega async, y si esta sección se
+            // pintara antes, al aparecer empujaría el botón en cada visita.
             if (isAdmin == true) {
                 item {
-                    Spacer(Modifier.height(14.dp))
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Administración")
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                        ) {
-                            CardRow(
-                                left = { Text("Editor de pantallas", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
-                                sub = "Reordena y edita las secciones de Hoy sin desplegar",
-                                showChevron = true,
-                                isLast = true,
+                    Column {
+                        Seccion(titulo = "Administración")
+                        Superficie(relleno = RellenoDeSuperficie.Lista) {
+                            Fila(
+                                titulo = "Editor de pantallas",
+                                subtitulo = "Reordena y edita las secciones de Hoy",
+                                final = { Chevron() },
                                 onClick = { onNavigate(Screen.ScreenEditor) },
                             )
                         }
@@ -859,6 +623,41 @@ fun textoDelInicioDelMes(dia: Int, regla: SiElCorteCaeEnFinDeSemana): String {
     }
 }
 
+private fun cierrePorCorreoDe(perfil: com.jvillada.movi.shared.model.UserProfile?): Boolean? = perfil?.cierrePorCorreo
+
+/**
+ * **La nota de una sección**: lo que una [Fila] no alcanza a decir en su renglón (el alcance de la
+ * huella, para qué es el correo del cierre), debajo de la superficie y alineado con su texto. En
+ * `sale` si es un error.
+ */
+@Composable
+private fun NotaDeSeccion(texto: String?, esError: Boolean = false) {
+    if (texto == null) return
+    Text(
+        texto,
+        style = Movi.textos.apoyo,
+        color = if (esError) Movi.colores.sale else Movi.colores.textoMedio,
+        modifier = Modifier.padding(start = Medida.margenDePantalla, end = Medida.margenDePantalla, top = Espacio.xs),
+    )
+}
+
+/** El interruptor de Perfil, en los colores de la marca (los dos temas). */
+@Composable
+private fun Interruptor(encendido: Boolean, onCambio: (Boolean) -> Unit, habilitado: Boolean = true) {
+    Switch(
+        checked = encendido,
+        enabled = habilitado,
+        onCheckedChange = onCambio,
+        colors = SwitchDefaults.colors(
+            checkedThumbColor = Movi.colores.sobreMarca,
+            checkedTrackColor = Movi.colores.marca,
+            uncheckedThumbColor = Movi.colores.textoApagado,
+            uncheckedTrackColor = Movi.colores.tarjeta,
+            uncheckedBorderColor = Movi.colores.borde,
+        ),
+    )
+}
+
 /** La fila de Perfil que baja el ZIP con todos los datos de la cuenta. */
 const val DESCARGAR_TUS_DATOS: String = "Descargar tus datos"
 
@@ -881,13 +680,9 @@ const val NO_PUDIMOS_LEERLO: String = "No pudimos leerlo"
  */
 @Composable
 internal fun AvisosEnElIphone() {
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Avisos en tu iPhone", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+    Superficie(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+            Text("Avisos en tu iPhone", style = Movi.textos.titulo, color = Movi.colores.texto)
             Text(
                 "Safari solo deja avisar a Movi si está en tu pantalla de inicio. Toca Compartir, " +
                     "luego «Agregar a Inicio», y abre Movi desde ese ícono: ahí aparece «Activar».",

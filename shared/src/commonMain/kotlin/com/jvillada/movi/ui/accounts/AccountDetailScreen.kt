@@ -3,13 +3,10 @@ package com.jvillada.movi.ui.accounts
 import com.jvillada.movi.data.SaldosOcultosStore
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -28,10 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Apartado
@@ -45,6 +39,21 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.accountDayTotal
 import com.jvillada.movi.shared.model.masRecientePrimero
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.Vacio
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import androidx.compose.material.icons.rounded.Add
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.homeScreenFor
@@ -266,7 +275,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             imageVector = accountTypePair.first,
                             contentDescription = accountTypePair.second,
                             tint = Movi.colores.textoMedio,
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(Icono.l),
                         )
                     }
                 } else null,
@@ -275,11 +284,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             if (loading) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
-                    color = Movi.colores.marca.copy(alpha = 0.16f),
+                    color = Movi.colores.lavado(Movi.colores.marca),
                     trackColor = Movi.colores.tarjeta,
                 )
             } else {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(Medida.altoDeBarraDeProgreso))
             }
 
             // **Abrir arriba.** Mientras la cuenta no llega, el primer ítem de la lista es
@@ -297,7 +306,10 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 state = lista,
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp,
+                    start = Medida.margenDePantalla,
+                    end = Medida.margenDePantalla,
+                    top = Medida.dentroDeSeccion,
+                    bottom = Medida.botonFlotante + Medida.entreSecciones,
                 ),
             ) {
                 // **El saldo arriba** (Ola 2a). Antes el detalle abría casi directo en la lista y el
@@ -311,7 +323,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             acc = acc,
                             onCuadrar = { onNavigate(Screen.CuadreDeSaldos) },
                         )
-                        Spacer(Modifier.height(20.dp))
+                        Spacer(Modifier.height(Medida.entreSecciones))
                     }
 
                     // **El camino de escritura de `Account.condicionadaA`.** Sin esta fila el
@@ -323,28 +335,17 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     // pueda usar para algo, así que la pregunta no significa nada ahí.
                     if (!isDebtAccount(acc.type)) {
                         item(key = "condicion") {
-                            MinCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                variant = MinCardVariant.Elevated,
-                                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                            ) {
-                                CardRow(
-                                    left = {
-                                        Text(
-                                            "¿Solo sirve para algo?",
-                                            style = Movi.textos.cuerpo,
-                                            color = Movi.colores.texto,
-                                        )
-                                    },
-                                    sub = acc.condicionadaA
+                            Superficie(relleno = RellenoDeSuperficie.Lista) {
+                                Fila(
+                                    titulo = "¿Solo sirve para algo?",
+                                    subtitulo = acc.condicionadaA
                                         ?.let { "Solo para $it · no suma en «Tu plata»" }
                                         ?: "Puedes usar esta plata para lo que quieras",
-                                    isLast = true,
-                                    showChevron = true,
+                                    final = { Chevron() },
                                     onClick = { showCondicion = true },
                                 )
                             }
-                            Spacer(Modifier.height(20.dp))
+                            Spacer(Modifier.height(Medida.entreSecciones))
                         }
                     }
                 }
@@ -359,13 +360,13 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             onEditar = { hojaDeApartado = HojaDeApartado(it) },
                             onApartar = { hojaDeApartado = HojaDeApartado(null) },
                         )
-                        Spacer(Modifier.height(20.dp))
+                        Spacer(Modifier.height(Medida.entreSecciones))
                     }
                 }
 
                 // Section header
                 item(key = "section-header") {
-                    MinSectionHeader(title = "Movimientos", count = totalEvents.takeIf { it > 0 })
+                    Seccion(titulo = "Movimientos", conteo = totalEvents.takeIf { it > 0 })
                 }
 
                 // Empty state
@@ -374,7 +375,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                         NoSePudoLeer(
                             "No pudimos cargar los movimientos de esta cuenta",
                             onReintentar = { refreshKey++ },
-                            modifier = Modifier.padding(top = 40.dp),
+                            modifier = Modifier.padding(top = Espacio.xxxl),
                         )
                     }
                 } else if (!loading && days.isEmpty()) {
@@ -382,50 +383,32 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                         // F10: la acción registra directo en esta cuenta — no en la primera de
                         // la lista, que es lo que pasaba antes de que QuickAdd aceptara un
                         // accountId preseleccionado.
-                        Column(
-                            modifier = Modifier
-                                .fillParentMaxWidth()
-                                .padding(top = 60.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text("Sin movimientos aún", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(Movi.colores.marca.copy(alpha = 0.16f))
-                                    .clickable { onNavigate(Screen.QuickAdd(presetAccountId = accountId)) }
-                                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = "+ Registrar el primero",
-                                    style = Movi.textos.cuerpo,
-                                    color = Movi.colores.marca,
-                                )
-                            }
-                        }
+                        Vacio(
+                            titulo = "Sin movimientos aún",
+                            detalle = "Lo que anotes en esta cuenta o llegue del banco aparece aquí.",
+                            accion = "Registrar el primero",
+                            onAccion = { onNavigate(Screen.QuickAdd(presetAccountId = accountId)) },
+                        )
                     }
                 }
 
                 // Day groups
                 days.forEach { day ->
                     item(key = day.date) {
-                        Column(modifier = Modifier.padding(top = 20.dp)) {
+                        Column(modifier = Modifier.padding(top = Espacio.m)) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                                    .padding(bottom = Espacio.xs),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Text(
-                                    // Igual que el encabezado de cada día en Movimientos: «HOY»,
-                                    // «AYER», «23 DE AGOSTO» — no el «2026-08-23» de la clave.
-                                    text = formatDayHeading(day.date, hoyEnAppZone().toString()).uppercase(),
+                                    // «Hoy», «Ayer», «23 de agosto» — no el «2026-08-23» de la clave.
+                                    // Ola R4: en frase, no en mayúsculas.
+                                    text = formatDayHeading(day.date, hoyEnAppZone().toString()),
                                     style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                     fontWeight = FontWeight.Medium,
-                                    letterSpacing = 0.4.sp,
                                 )
                                 if (day.items.any { it.currency == "COP" }) {
                                     Text(
@@ -440,11 +423,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                     )
                                 }
                             }
-                            MinCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                variant = MinCardVariant.Elevated,
-                                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                            ) {
+                            Superficie(relleno = RellenoDeSuperficie.Lista) {
                                 day.items.forEachIndexed { i, event ->
                                     Column {
                                         // **Las mismas filas que Movimientos** (Ola 2a): con la marca
@@ -468,7 +447,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                             tonoForzado = if (event.type == TransactionType.INCOME) TonoDelMonto.INGRESO else TonoDelMonto.GASTO,
                                             onClick = { selectedEvent = event },
                                         )
-                                        if (i < day.items.size - 1) Hairline()
+                                        if (i < day.items.size - 1) Separador()
                                     }
                                 }
                             }
@@ -481,20 +460,13 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 // aparece una vez que la cuenta cargó (necesita accountName real para la hoja).
                 account?.let { acc ->
                     item(key = "delete-account") {
-                        Spacer(Modifier.height(28.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showDeleteAccount = true }
-                                .padding(vertical = 14.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "Eliminar cuenta",
-                                style = Movi.textos.cuerpo,
-                                color = Movi.colores.sale,
-                            )
-                        }
+                        Boton(
+                            texto = "Eliminar cuenta",
+                            onClick = { showDeleteAccount = true },
+                            variante = VarianteDeBoton.Peligro,
+                            anchoCompleto = true,
+                            modifier = Modifier.padding(top = Medida.entreSecciones),
+                        )
                     }
                 }
             }
@@ -506,7 +478,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 .align(Alignment.BottomCenter)
                 // La barra inferior ya no vive dentro de esta pantalla (la pinta App.kt debajo),
                 // así que el snackbar solo necesita separarse del borde.
-                .padding(bottom = 16.dp),
+                .padding(bottom = Medida.margenDePantalla),
         )
 
         selectedEvent?.let { event ->
@@ -630,42 +602,31 @@ private fun SeccionDeApartados(
     onEditar: (Apartado) -> Unit,
     onApartar: () -> Unit,
 ) {
-    if (apartados.isNotEmpty()) MinSectionHeader(title = "Apartado")
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-    ) {
+    if (apartados.isNotEmpty()) Seccion(titulo = "Apartado")
+    Superficie(relleno = RellenoDeSuperficie.Lista) {
         apartados.forEach { apartado ->
-            CardRow(
-                left = {
-                    Text(
-                        "${apartado.proposito} · ${formatCOP(apartado.restante)}",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.texto,
-                    )
+            Fila(
+                titulo = apartado.proposito,
+                subtitulo = apartado.categoria?.let { "Se descuenta con los gastos de $it" },
+                final = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                        Cifra(apartado.restante)
+                        Chevron()
+                    }
                 },
-                sub = apartado.categoria?.let { "Se descuenta con los gastos de $it" },
-                showChevron = true,
                 onClick = { onEditar(apartado) },
             )
+            Separador()
         }
         if (apartados.isNotEmpty()) {
-            CardRow(
-                left = {
-                    Text(
-                        "Libre · ${formatCOP(libreDeLaCuenta(account, apartados))}",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.textoMedio,
-                    )
-                },
-            )
+            Fila(titulo = "Libre", final = { Cifra(libreDeLaCuenta(account, apartados), tono = TonoDeCifra.Apagado) })
+            Separador()
         }
-        CardRow(
-            left = { Text("Apartar plata", style = Movi.textos.cuerpo, color = Movi.colores.marca) },
-            sub = if (apartados.isEmpty()) "Separa plata de esta cuenta para algo puntual" else null,
-            isLast = true,
-            showChevron = true,
+        Fila(
+            titulo = "Apartar plata",
+            subtitulo = if (apartados.isEmpty()) "Separa plata de esta cuenta para algo puntual" else null,
+            inicio = { IconoEnCirculo(Icons.Rounded.Add) },
+            final = { Chevron() },
             onClick = onApartar,
         )
     }
@@ -687,24 +648,21 @@ const val TAG_ENCABEZADO_DE_LA_CUENTA: String = "encabezado-de-la-cuenta"
 private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit) {
     val isCard = isDebtAccount(acc.type)
     val typeLabel = accountTypeIcon(acc.type).second
-    MinCard(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_LA_CUENTA),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(20.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_LA_CUENTA)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
         ) {
             AvatarDeLaCuenta(acc, tamano = TamanoDeAvatar.Encabezado)
             Column(modifier = Modifier.weight(1f)) {
+                // Ola R4: en frase, no en mayúsculas.
                 Text(
-                    text = if (isCard) "DEUDA ACTUAL" else "SALDO ACTUAL",
-                    style = Movi.textos.rotulo,
+                    text = if (isCard) "Deuda actual" else "Saldo actual",
+                    style = Movi.textos.apoyo,
+                    fontWeight = FontWeight.Medium,
                     color = Movi.colores.textoMedio,
                 )
                 if (typeLabel.isNotEmpty()) {
-                    Spacer(Modifier.height(2.dp))
                     Text(
                         text = if (isCard) typeLabel else "${acc.currency} · $typeLabel",
                         style = Movi.textos.apoyo,
@@ -713,31 +671,29 @@ private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit) {
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
         if (isCard) {
             val (debt, isEstimate) = cardDebt(acc)
             // El signo invertido —negativo es saldo a FAVOR— vive en [saldoDeDeuda] desde la Ola 15.
+            // Queda en `CifraProtagonista` (el texto ya armado) por el «≈» de una deuda estimada.
             val saldo = saldoDeDeuda(debt)
             CifraProtagonista(
                 text = "${if (isEstimate) "≈" else ""}${if (saldo.aFavor) "+" else ""}${saldo.magnitud}",
                 color = if (saldo.aFavor) Movi.colores.entra else Movi.colores.texto,
             )
         } else {
-            CifraProtagonista(
-                text = formatCOP(acc.balance), // formatCOP ya trae el signo (F36)
-                color = if (acc.balance < 0) Movi.colores.sale else Movi.colores.texto,
-            )
+            Cifra(acc.balance, VarianteDeCifra.Heroe, tono = if (acc.balance < 0) TonoDeCifra.Alerta else TonoDeCifra.Neutro)
         }
         if (hasForeignBalance(acc)) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Medida.dentroDeSeccion))
             CurrencyBreakdown(acc)
         }
         if (sePuedeCuadrar(acc)) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Medida.dentroDeSeccion))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.s),
             ) {
                 Text(
                     text = textoDelUltimoCuadre(acc, hoyEnAppZone()),
@@ -745,21 +701,12 @@ private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit) {
                     color = Movi.colores.textoMedio,
                     modifier = Modifier.weight(1f),
                 )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Movi.colores.marca.copy(alpha = 0.16f))
-                        .clickable(role = Role.Button, onClick = onCuadrar)
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "Cuadrar con el banco",
-                        style = Movi.textos.apoyo,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.marca,
-                    )
-                }
+                Boton(
+                    texto = "Cuadrar con el banco",
+                    onClick = onCuadrar,
+                    variante = VarianteDeBoton.Secundario,
+                    tamano = TamanoDeBoton.S,
+                )
             }
         }
     }

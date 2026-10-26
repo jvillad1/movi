@@ -170,14 +170,14 @@ class PersonasYComerciosEnPantallaTest {
     @Test
     fun `llegar con una ficha pedida la abre sola`() {
         montar(abrir = ana.id)
-        esperar("ESTE PERÍODO")
+        esperar("Este período")
         assertTrue(hay("Persona · ·0756 · esposa"))
     }
 
     @Test
     fun `la ficha dice lo enviado y lo recibido este periodo y periodo por periodo`() {
         montar(abrir = ana.id)
-        esperar("POR PERÍODO")
+        esperar("Por período")
         composeRule.onNodeWithTag(TAG_ESTE_PERIODO_DEL_TERCERO, useUnmergedTree = true).assertExists()
         assertTrue(hay("Le enviaste"))
         assertTrue(hay("Te envió"))
@@ -206,9 +206,9 @@ class PersonasYComerciosEnPantallaTest {
     @Test
     fun `editar muestra como lo reconoce Movi y no guarda como elegido el tipo deducido`() {
         montar(abrir = ana.id)
-        esperar("ESTE PERÍODO")
+        esperar("Este período")
         composeRule.onNodeWithTag(TAG_EDITAR_EL_TERCERO, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
-        esperar("CÓMO LO RECONOCE MOVI")
+        esperar("Cómo lo reconoce Movi")
         assertTrue(hay(AGREGAR_UN_IDENTIFICADOR))
         assertTrue(hay("Número de cuenta"))
 
@@ -224,7 +224,7 @@ class PersonasYComerciosEnPantallaTest {
     @Test
     fun `unir pide con cual y confirma antes, y no crea nada`() {
         montar(abrir = repetida.id)
-        esperar("ESTE PERÍODO")
+        esperar("Este período")
         composeRule.onNodeWithTag(TAG_EDITAR_EL_TERCERO, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         esperar(ES_LA_MISMA_QUE_OTRA)
         tocar(ES_LA_MISMA_QUE_OTRA)
@@ -245,7 +245,7 @@ class PersonasYComerciosEnPantallaTest {
     @Test
     fun `eliminar pregunta antes y dice que los movimientos no se tocan`() {
         montar(abrir = hernan.id)
-        esperar("ESTE PERÍODO")
+        esperar("Este período")
         composeRule.onNodeWithTag(TAG_EDITAR_EL_TERCERO, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         esperar("Eliminar")
         tocar("Eliminar")

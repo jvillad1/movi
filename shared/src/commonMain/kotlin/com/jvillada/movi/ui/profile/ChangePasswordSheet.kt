@@ -96,7 +96,7 @@ fun ChangePasswordSheet(
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         if (success) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = Espacio.xl),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -104,7 +104,7 @@ fun ChangePasswordSheet(
                     style = Movi.textos.cuerpo, color = Movi.colores.entra,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(
                     "Cerramos la sesión en tus otros aparatos.",
                     style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
@@ -113,7 +113,7 @@ fun ChangePasswordSheet(
             }
         } else {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                Text("Contraseña actual", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+                Text("Contraseña actual", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
                 AuthField(
                     value = current,
                     onChange = { current = it },
@@ -121,8 +121,8 @@ fun ChangePasswordSheet(
                     isPassword = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                 )
-                Spacer(Modifier.height(14.dp))
-                Text("Contraseña nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+                Spacer(Modifier.height(Espacio.s))
+                Text("Contraseña nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
                 AuthField(
                     value = new,
                     onChange = { new = it },
@@ -130,8 +130,8 @@ fun ChangePasswordSheet(
                     isPassword = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                 )
-                Spacer(Modifier.height(14.dp))
-                Text("Repetir la nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+                Spacer(Modifier.height(Espacio.s))
+                Text("Repetir la nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
                 AuthField(
                     value = repeat,
                     onChange = { repeat = it },
@@ -142,25 +142,25 @@ fun ChangePasswordSheet(
                 )
 
                 error?.let {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(Espacio.s))
                     Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Espacio.m))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(Radio.m))
                     .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
                     .clickable(enabled = canSave) { save() }
-                    .padding(vertical = 15.dp),
+                    .padding(vertical = Espacio.m),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(if (saving) "Cambiando…" else "Cambiar contraseña", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
             }
             if (!canSave && !saving && missingFieldMessage != null) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Text(
                     text = missingFieldMessage,
                     style = Movi.textos.apoyo,
@@ -170,6 +170,6 @@ fun ChangePasswordSheet(
                 )
             }
         }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Espacio.l))
     }
 }

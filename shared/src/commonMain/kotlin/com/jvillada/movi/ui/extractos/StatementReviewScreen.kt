@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -198,20 +199,20 @@ fun StatementReviewScreen(
             leading = HeaderLeading.Back(fallback = Screen.Documentos),
             subtitle = "${result.newTransactions.size} nuevas · ${result.matches.size} coincidencias",
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
 
         // **El destino, ahora elegible con el dedo.** Antes era un chip de solo lectura que además
         // solo se dibujaba si Movi había resuelto algo — y resolvía siempre, porque el último
         // respaldo agarraba la primera cuenta de la lista. Ahora se dibuja siempre: cuando no hay
         // candidata lo dice, en vez de dejar el botón apagado sin explicar por qué.
         val sinCuenta = destinationAccount == null
-        Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
+        Column(modifier = Modifier.padding(horizontal = Espacio.m).padding(bottom = Espacio.xs)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { eligiendoCuenta = !eligiendoCuenta }
-                    .padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    .padding(vertical = Espacio.xxs),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Destino:", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -225,9 +226,9 @@ fun StatementReviewScreen(
                     // se partiría en dos renglones por dejar «Cambiar» pegado al borde.
                     modifier = Modifier
                         .weight(1f, fill = false)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(Radio.s))
                         .background((if (sinCuenta) Movi.colores.aviso else Movi.colores.marca).copy(alpha = 0.12f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                        .padding(horizontal = Espacio.xs, vertical = Espacio.xxs),
                 )
                 Text(
                     if (eligiendoCuenta) "Cerrar" else "Cambiar",
@@ -239,17 +240,17 @@ fun StatementReviewScreen(
             // puso Movi Cambiar» no entra en una línea, y lo primero que se recorta es justamente
             // lo que hay que leer.
             avisoDeLaCuentaDelBanco(destino.origen, queLoDijo = "el extracto")?.let { aviso ->
-                Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = 3.dp))
+                Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = Espacio.xxs))
             }
         }
         if (eligiendoCuenta) {
             MinCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 8.dp),
+                    .padding(horizontal = Espacio.m)
+                    .padding(bottom = Espacio.xs),
                 variant = MinCardVariant.Default,
-                padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                padding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.xxs),
             ) {
                 ListaDeCuentasElegibles(
                     // `conservar` sostiene lo que él haya sacado del «Ver todas»: sin eso, la
@@ -274,9 +275,9 @@ fun StatementReviewScreen(
             if (result.matches.isNotEmpty()) {
                 item {
                     Text(
-                        "POSIBLES DUPLICADOS",
+                        "Posibles duplicados",
                         style = Movi.textos.rotulo, color = Movi.colores.aviso,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = Espacio.m, vertical = Espacio.xs),
                     )
                 }
                 items(result.matches, key = { it.parsed.id }) { match ->
@@ -295,7 +296,7 @@ fun StatementReviewScreen(
                                 parsed = match.parsed,
                             )
                         },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = Espacio.m, vertical = Espacio.xxs),
                     )
                 }
             }
@@ -312,8 +313,8 @@ fun StatementReviewScreen(
                         onAnotar = ::anotarLosCargos,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(top = 12.dp, bottom = 4.dp),
+                            .padding(horizontal = Espacio.m)
+                            .padding(top = Espacio.s, bottom = Espacio.xxs),
                     )
                 }
                 items(filasDelBanco, key = { it.id }) { tx ->
@@ -325,7 +326,7 @@ fun StatementReviewScreen(
                         notaEsAviso = estadosDeLosCargos[tx.id] is EstadoDelCargo.PuedeEstarSumado,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 2.dp),
+                            .padding(horizontal = Espacio.m, vertical = Espacio.xxs),
                     )
                 }
             }
@@ -336,13 +337,13 @@ fun StatementReviewScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(top = 12.dp, bottom = 4.dp),
+                            .padding(horizontal = Espacio.m)
+                            .padding(top = Espacio.s, bottom = Espacio.xxs),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            "NUEVAS TRANSACCIONES",
+                            "Nuevas transacciones",
                             style = Movi.textos.rotulo, color = Movi.colores.textoMedio,
                         )
                         val allSelected = filasNuevas.all { it.id in selectedIds }
@@ -362,7 +363,7 @@ fun StatementReviewScreen(
                         onToggle = { elegidasAMano[tx.id] = tx.id !in selectedIds },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 2.dp),
+                            .padding(horizontal = Espacio.m, vertical = Espacio.xxs),
                     )
                 }
             }
@@ -374,14 +375,14 @@ fun StatementReviewScreen(
         error?.let {
             Text(
                 it, style = Movi.textos.apoyo, color = Movi.colores.sale,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                modifier = Modifier.padding(horizontal = Espacio.m, vertical = Espacio.xxs),
             )
         }
         if (imported) {
             Text(
                 "Este extracto ya se importó",
                 style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                modifier = Modifier.padding(horizontal = Espacio.m, vertical = Espacio.xxs),
             )
         }
 
@@ -390,7 +391,7 @@ fun StatementReviewScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Movi.colores.tarjeta)
-                .padding(16.dp),
+                .padding(Espacio.m),
         ) {
             if (sinRevisar > 0) {
                 Text(
@@ -399,7 +400,7 @@ fun StatementReviewScreen(
                     style = Movi.textos.apoyo,
                     color = Movi.colores.aviso,
                     lineHeight = 17.sp,
-                    modifier = Modifier.padding(bottom = 10.dp),
+                    modifier = Modifier.padding(bottom = Espacio.s),
                 )
             }
             Button(
@@ -407,10 +408,10 @@ fun StatementReviewScreen(
                 enabled = canImport,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Movi.colores.marca),
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(Radio.m),
             ) {
                 if (working) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(Icono.m), strokeWidth = Medida.trazoDeCarga)
                 } else {
                     Text(
                         "Importar $importCount seleccionada${if (importCount != 1) "s" else ""}",
@@ -435,7 +436,7 @@ private fun BloqueDeCargosDelBanco(
     onAnotar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
         Text(
             "Cargos y abonos del banco ($cuantos)",
             style = Movi.textos.rotulo, color = Movi.colores.textoMedio,
@@ -454,7 +455,7 @@ private fun BloqueDeCargosDelBanco(
             OutlinedButton(
                 onClick = onAnotar,
                 enabled = puedeAnotar,
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(Radio.s),
             ) {
                 Text(
                     if (tildados == 1) "Anotar 1" else "Anotar los $tildados",
@@ -484,18 +485,18 @@ private fun NewTransactionRow(
 ) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(Radio.s))
             .background(Movi.colores.tarjeta)
             .clickable(onClick = onToggle)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = Espacio.s, vertical = Espacio.s),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         Icon(
             if (checked) Icons.Rounded.CheckBox else Icons.Rounded.CheckBoxOutlineBlank,
             contentDescription = if (checked) "Seleccionado" else "No seleccionado",
             tint = if (checked) Movi.colores.marca else Movi.colores.textoMedio,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(Icono.m),
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(tx.merchant, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
@@ -536,11 +537,11 @@ private fun ReconciliationCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .border(1.dp, borderColor.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .border(Medida.trazo, borderColor.copy(alpha = 0.5f), RoundedCornerShape(Radio.m))
+            .padding(Espacio.s),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
         // Badge + amount
         Row(
@@ -548,11 +549,11 @@ private fun ReconciliationCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
                 // Ola 2 #5 (F11): glifo escrito como texto → ícono Material (salía como ▯ en la web).
                 Icon(Icons.Rounded.Warning, contentDescription = null, tint = Movi.colores.aviso, modifier = Modifier.size(11.dp))
                 Text(
-                    "POSIBLE DUPLICADO",
+                    "Posible duplicado",
                     style = Movi.textos.rotulo, color = Movi.colores.aviso,
                 )
             }
@@ -568,11 +569,11 @@ private fun ReconciliationCard(
         Row(modifier = Modifier.fillMaxWidth()) {
             Spacer(Modifier.width(80.dp))
             Text(
-                "MANUAL", style = Movi.textos.rotulo, color = Movi.colores.marca,
+                "Manual", style = Movi.textos.rotulo, color = Movi.colores.marca,
                 modifier = Modifier.weight(1f),
             )
             Text(
-                "EXTRACTO", style = Movi.textos.rotulo, color = Movi.colores.entreCuentas,
+                "Extracto", style = Movi.textos.rotulo, color = Movi.colores.entreCuentas,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -625,12 +626,12 @@ private fun ReconciliationCard(
         if (!isDecided) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 OutlinedButton(
                     onClick = onReject,
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(Radio.s),
                 ) {
                     Text("No son el mismo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
@@ -649,19 +650,19 @@ private fun ReconciliationCard(
                         )
                     },
                     modifier = Modifier.weight(2f),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(Radio.s),
                     colors = ButtonDefaults.buttonColors(containerColor = Movi.colores.marca),
                 ) {
                     Text("Confirmar reconciliación", style = Movi.textos.apoyo, color = Color.White)
                 }
             }
         } else {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
                 // Ola 2 #5 (F11): "✓"/"→" como texto suelto → íconos Material.
                 if (decision!!.confirm) {
-                    Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(13.dp))
+                    Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(Icono.s))
                 } else {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(13.dp))
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(Icono.s))
                 }
                 Text(
                     if (decision.confirm) "Reconciliado" else "Se importará como nuevo",
@@ -692,13 +693,13 @@ private fun FieldRow(
             value = manualValue,
             active = selected == FieldSource.MANUAL,
             onClick = onSelectManual,
-            modifier = Modifier.weight(1f).padding(end = 4.dp),
+            modifier = Modifier.weight(1f).padding(end = Espacio.xxs),
         )
         FieldCell(
             value = statementValue,
             active = selected == FieldSource.STATEMENT,
             onClick = onSelectStatement,
-            modifier = Modifier.weight(1f).padding(start = 4.dp),
+            modifier = Modifier.weight(1f).padding(start = Espacio.xxs),
         )
     }
 }
@@ -717,10 +718,10 @@ private fun FieldCell(
         style = Movi.textos.apoyo,
         color = if (active) Movi.colores.texto else Movi.colores.textoMedio,
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(Radio.s))
             .background(bgColor)
-            .border(1.dp, borderColor, RoundedCornerShape(6.dp))
+            .border(Medida.trazo, borderColor, RoundedCornerShape(Radio.s))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = Espacio.xs, vertical = Espacio.xs),
     )
 }

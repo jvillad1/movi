@@ -69,11 +69,11 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
             title = "Detalle de importación",
             leading = HeaderLeading.Back(fallback = Screen.Documentos),
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
 
         when {
             loading -> LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.l),
                 color = Movi.colores.marca,
                 trackColor = Movi.colores.tarjeta,
             )
@@ -81,11 +81,11 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
                 error!!,
                 style = Movi.textos.cuerpo, color = Movi.colores.sale,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                modifier = Modifier.fillMaxWidth().padding(Espacio.l),
             )
             detail != null -> {
                 errorDeDeshacer?.let {
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(horizontal = 20.dp))
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(horizontal = Espacio.l))
                 }
                 // **Deshacer el importe entero.** Antes un extracto importado en la cuenta equivocada
                 // solo se arreglaba anulando fila por fila.
@@ -95,9 +95,9 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.sale,
                     modifier = Modifier
-                        .padding(horizontal = 20.dp)
+                        .padding(horizontal = Espacio.l)
                         .clickable(enabled = !deshaciendo) { pidiendoDeshacer = true }
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = Espacio.xs),
                 )
                 ImportDetailContent(detail = detail!!)
             }
@@ -128,11 +128,11 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
 private fun ImportDetailContent(detail: StatementImportDetail) {
     val imp = detail.import
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = Espacio.l),
+        verticalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         item(key = "header") {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(Espacio.xxs))
             ImportSummaryHeader(imp)
         }
 
@@ -142,22 +142,21 @@ private fun ImportDetailContent(detail: StatementImportDetail) {
                     "No se encontraron movimientos",
                     style = Movi.textos.cuerpo, color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = Espacio.xxl),
                 )
             }
         } else {
             item(key = "section-label") {
                 Text(
-                    "MOVIMIENTOS",
+                    "Movimientos",
                     style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
-                    letterSpacing = 0.8.sp,
                 )
             }
             item(key = "events-card") {
                 MinCard(
                     modifier = Modifier.fillMaxWidth(),
                     variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                    padding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.xxs),
                 ) {
                     detail.events.forEachIndexed { i, event ->
                         ImportEventRow(event)
@@ -167,7 +166,7 @@ private fun ImportDetailContent(detail: StatementImportDetail) {
             }
         }
 
-        item(key = "bottom-spacer") { Spacer(Modifier.height(24.dp)) }
+        item(key = "bottom-spacer") { Spacer(Modifier.height(Espacio.xl)) }
     }
 }
 
@@ -176,14 +175,14 @@ private fun ImportSummaryHeader(imp: StatementImport) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(Espacio.m),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
         Text(
-            "${imp.bankName.uppercase()} · ${imp.period.uppercase()}",
-            style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.8.sp,
+            "${imp.bankName} · ${imp.period}",
+            style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -208,19 +207,19 @@ private fun ImportEventRow(event: FinancialEvent) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 14.dp),
+            .padding(vertical = Espacio.s),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 event.description.ifBlank { event.merchant ?: "Sin descripción" },
                 style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto,
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(Espacio.xxs))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 Text(event.category, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 StatusDot(Movi.colores.textoApagado, 2.dp)

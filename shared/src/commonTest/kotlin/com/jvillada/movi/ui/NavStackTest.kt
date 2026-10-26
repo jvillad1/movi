@@ -64,7 +64,7 @@ class NavStackTest {
 
     @Test
     fun `back sin historial con fallback distinto para pantallas de primer nivel`() {
-        val result = NavStack.back(listOf(Screen.Goals), fallback = Screen.Dashboard)
+        val result = NavStack.back(listOf(Screen.Compartir), fallback = Screen.Dashboard)
         assertIs<NavStack.BackResult.Fallback>(result)
         assertEquals(Screen.Dashboard, (result as NavStack.BackResult.Fallback).screen)
     }
@@ -162,8 +162,6 @@ class NavStackTest {
         Screen.AIChat() to null,
         Screen.CapturaDelBanco to null,
         Screen.PrimerosPasos to null,
-        Screen.Goals to null,
-        Screen.Extractos to null,
         // Sin navegación: autenticación y flujos a pantalla completa.
         Screen.Login to null,
         Screen.Register to null,
