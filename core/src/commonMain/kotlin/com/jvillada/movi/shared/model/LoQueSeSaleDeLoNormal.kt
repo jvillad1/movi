@@ -250,9 +250,9 @@ fun categoriasPorEncima(
         .filter { esGastoDeConsumo(it) && it.currency == "COP" }
         .groupBy { it.category }
     val ahora = porCategoria(actual)
-    val antes = anteriores.map { periodo -> porCategoria(periodo).mapValues { (_, es) -> es.sumOf { it.amount } } }
+    val antes = anteriores.map { periodo -> porCategoria(periodo).mapValues { (_, es) -> es.sumOf { montoContado(it) } } }
     return ahora.mapNotNull { (categoria, eventos) ->
-        val gastado = eventos.sumOf { it.amount }
+        val gastado = eventos.sumOf { montoContado(it) }
         val promedio = antes.sumOf { it[categoria] ?: 0L } / antes.size
         val diferencia = gastado - promedio
         if (diferencia < DIFERENCIA_MINIMA_DE_CATEGORIA) return@mapNotNull null

@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
+import com.jvillada.movi.shared.model.conLoCompartido
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Events
@@ -96,6 +98,8 @@ fun Transaction.loadEventsBetween(uid: String, desde: Long, hastaExclusivo: Long
         .map { it[VoidEvents.originalEventId] }
         .toSet()
     val tipos = accountTypesFor(uid)
+    // R3: la parte ajena de un gasto repartido y lo que salda un espacio (ver `conLoCompartido`).
+    val compartido = loCompartidoDelUsuario(uid).indice
     return Events.selectAll()
         .where {
             (Events.userId eq uid) and
@@ -103,7 +107,7 @@ fun Transaction.loadEventsBetween(uid: String, desde: Long, hastaExclusivo: Long
                 (Events.timestamp less hastaExclusivo)
         }
         .filterNot { it[Events.id] in anulados }
-        .map { it.toFinancialEvent().withCashFlowFlag(tipos) }
+        .map { it.toFinancialEvent().withCashFlowFlag(tipos).conLoCompartido(compartido) }
 }
 
 /**

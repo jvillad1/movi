@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import com.jvillada.movi.server.balance.computeBalances
 import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
 import com.jvillada.movi.server.balance.toAccount
@@ -138,6 +139,7 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
         ventanaPrevia.first,
     )
     val historia = loadEventsBetween(uid, desdeLaHistoria, ventana.first)
+    val tuParteDeOtros = loCompartidoDelUsuario(uid).tuParteDeOtros
 
     val suscripciones = Subscriptions.selectAll().where { Subscriptions.userId eq uid }.map { it.toSubscription() }
     val periodoDeUnInstante: (Long) -> String = { ts ->
@@ -153,8 +155,9 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
             suscripciones, historia + delPeriodo, periodoDeUnInstante, actual.prefijo, previo.prefijo, nombreDeCuenta, diaDe,
         ) +
         categoriasPorEncima(
-            actual = delPeriodo,
-            anteriores = anteriores.map { (_, v) -> historia.filter { it.timestamp in v } },
+            // R3: tu parte de lo que pagó otro también es gasto de su categoría.
+            actual = delPeriodo + tuParteDeOtros.filter { it.timestamp in ventana },
+            anteriores = anteriores.map { (_, v) -> (historia + tuParteDeOtros).filter { it.timestamp in v } },
             periodoActual = actual.prefijo,
             nombreDeCuenta = nombreDeCuenta,
             diaDe = diaDe,

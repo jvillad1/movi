@@ -226,6 +226,21 @@ data class FinancialEvent(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val lastEditedAt: Long? = null,
+    /**
+     * **La parte de los demás** de un gasto repartido en un espacio (R3, ver `Espacio.kt`): con
+     * 50/50, la mitad. **Derivado, nunca almacenado** en la fila del movimiento —igual que
+     * [countsAsCashFlow]—: lo pone `conLoCompartido` al leer, desde los gastos del espacio. Lo
+     * usan los totales por [montoContado]; los saldos no (la plata salió entera). `0` en todo lo
+     * que no está repartido, y lo que mande un cliente se ignora.
+     */
+    val parteAjena: Long = 0L,
+    /** El espacio en que se repartió este movimiento, o `null`. Derivado, como [parteAjena]. */
+    val espacioId: String? = null,
+    /**
+     * El espacio que salda este movimiento (la transferencia de Caro vinculada a «Marcar como
+     * saldado»), o `null`. Derivado; con él, [countsAsCashFlow] es `false`: no es ingreso ni gasto.
+     */
+    val saldaEspacioId: String? = null,
 )
 
 /**
