@@ -660,16 +660,36 @@ internal fun org.jetbrains.exposed.sql.Transaction.sellarOcurrencia(
     today: java.time.LocalDate,
 ): MarcaResult {
     val ruleId = rule.id
+    val eventId = eventIdCrudo?.trim()?.takeIf { it.isNotEmpty() }
     // **Techo: el vencimiento de ese periodo tiene que haber LLEGADO — por día, no por
-    // mes.** Es la misma guarda que el GET, escrita igual.
+    // mes — salvo que lo pruebe un pago real hecho antes, dentro del período en curso.**
     //
-    // Fue un techo por mes, y ahí quedaba un hueco: el 27 de agosto, `"2026-08"` sobre
-    // una regla de día 31 pasaba —el mes ya empezó— y le apagaba el vencimiento del 31,
-    // que todavía no había llegado. No es alcanzable desde la pantalla (solo manda el
-    // periodo que le dio el GET), pero este archivo ya argumenta, para las cuatro
-    // puertas, que la UI ofrece y el endpoint no puede confiar en eso. Vale igual acá.
+    // La regla exacta: un vencimiento posterior a [today] se puede sellar **solo** si
+    //  1. viene con `eventId`,
+    //  2. ese movimiento es del dueño y está fechado [today] o antes (día civil de la app), y
+    //  3. el vencimiento cae dentro del período del dueño que contiene [today]
+    //     ([diasDelPeriodo]).
+    // Lo demás que no llegó sigue en 400: tildar sin movimiento, un movimiento fechado en el
+    // futuro, o el vencimiento de un período que todavía no empezó (el del mes siguiente).
+    // Que el movimiento no esté anulado, ni sea un traspaso, ni cierre ya otro período lo
+    // chequean las guardas de abajo, igual que para cualquier sello.
+    //
+    // Por qué la excepción (25-oct-2026): pagar antes del vencimiento es lo normal, y
+    // `resolverOcurrencias` ya ofrecía ese pago como candidato («¿Ya pagaste…?» con el
+    // movimiento del 25 a la vista para la cuota del 30). El techo rechazaba el «Sí, fue
+    // este» con «Ese vencimiento todavía no llegó»: el server preguntaba algo que después
+    // no dejaba contestar. Las dos condiciones de fecha son las mismas con las que el
+    // checklist elige qué ofrecer (ver [LecturaDeOcurrencias.evidenciaPara]).
+    //
+    // Por qué el techo sigue existiendo: fue un techo por mes, y ahí quedaba un hueco —el 27
+    // de agosto, `"2026-08"` sobre una regla de día 31 pasaba (el mes ya empezó) y le apagaba
+    // el vencimiento del 31, que todavía no había llegado—. Un sello sin evidencia apaga el
+    // aviso de una deuda que puede seguir viva; con el movimiento delante, lo que se apaga es
+    // un aviso que ya se pagó. No es alcanzable desde la pantalla (solo manda el periodo que
+    // le dio el GET), pero este archivo ya argumenta, para las cuatro puertas, que la UI
+    // ofrece y el endpoint no puede confiar en eso. Vale igual acá.
     val vencimientoDelPeriodo = occurrenceInMonth(YearMonth.parse(period), rule.dayOfMonth)
-    if (vencimientoDelPeriodo.isAfter(today)) {
+    if (vencimientoDelPeriodo.isAfter(today) && !pagadoAntesDelVencimiento(uid, eventId, vencimientoDelPeriodo, today)) {
         return MarcaResult.Error(
             HttpStatusCode.BadRequest,
             "Ese vencimiento todavía no llegó: no se puede dar por ocurrido.",
@@ -684,7 +704,6 @@ internal fun org.jetbrains.exposed.sql.Transaction.sellarOcurrencia(
             "Ese periodo es demasiado viejo para darlo por ocurrido.",
         )
     }
-    val eventId = eventIdCrudo?.trim()?.takeIf { it.isNotEmpty() }
     if (eventId != null) {
         val evento = Events.selectAll()
             .where { (Events.id eq eventId) and (Events.userId eq uid) }
@@ -737,6 +756,27 @@ internal fun org.jetbrains.exposed.sql.Transaction.sellarOcurrencia(
             confirmedAt = now,
         ),
     )
+}
+
+/**
+ * **¿[eventId] prueba que el vencimiento [vencimiento] —posterior a [today]— ya se pagó?** La
+ * excepción al techo de [sellarOcurrencia]: un movimiento del dueño fechado [today] o antes, y un
+ * vencimiento dentro del período del dueño en curso. El período se lee acá, dentro de la misma
+ * transacción, y solo cuando hace falta: todos los que sellan pasan por este camino sin tener que
+ * cargar los ajustes del período por su cuenta.
+ */
+private fun org.jetbrains.exposed.sql.Transaction.pagadoAntesDelVencimiento(
+    uid: String,
+    eventId: String?,
+    vencimiento: java.time.LocalDate,
+    today: java.time.LocalDate,
+): Boolean {
+    if (eventId == null) return false
+    if (vencimiento !in diasDelPeriodo(today, ajustesDelPeriodoSinSuspender(uid))) return false
+    val fila = Events.selectAll()
+        .where { (Events.id eq eventId) and (Events.userId eq uid) }
+        .firstOrNull() ?: return false
+    return !epochMillisToAppDate(fila[Events.timestamp]).isAfter(today)
 }
 
 /**
@@ -926,7 +966,7 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
                 candidates = occurrenceCandidatesFor(
                     rule,
                     due,
-                    lectura.sinRechazados(rule),
+                    lectura.evidenciaPara(rule, due, today),
                     lectura.reservados,
                     settings = periodo,
                     destinos = destinos,
@@ -1035,6 +1075,21 @@ internal class LecturaDeOcurrencias(
     /** Los movimientos de la franja sin los que el dueño ya rechazó para [rule]. */
     fun sinRechazados(rule: RecurringRule): List<FinancialEvent> =
         eventos.filterNot { (rule.id to it.id) in rechazados }
+
+    /**
+     * **Los movimientos que pueden probar el vencimiento [due] de [rule]**: [sinRechazados] y, si ese
+     * vencimiento todavía no llegó, solo los fechados [today] o antes.
+     *
+     * Es la otra mitad del techo de [sellarOcurrencia], que deja sellar un vencimiento futuro solo
+     * con un pago que ya pasó: lo que este checklist ofrece (o empareja) tiene que poder sellarse con
+     * el mismo período, y un movimiento fechado en el futuro no prueba que se haya pagado nada. Con
+     * el vencimiento ya llegado no se filtra por fecha, igual que el techo.
+     */
+    fun evidenciaPara(rule: RecurringRule, due: java.time.LocalDate, today: java.time.LocalDate): List<FinancialEvent> {
+        val todos = sinRechazados(rule)
+        if (!due.isAfter(today)) return todos
+        return todos.filterNot { epochMillisToAppDate(it.timestamp).isAfter(today) }
+    }
 }
 
 /** Arma la [LecturaDeOcurrencias] con los movimientos vivos de `[desde, hasta]` (días incluidos). */
@@ -1127,10 +1182,12 @@ internal fun resolverOcurrencias(
         // vista—, porque ya pasó algo que se le parece. Lo que sigue siendo ruido es preguntar por algo
         // que vence en tres semanas sin que haya pasado nada: eso sigue siendo [Resolucion.PorLlegar].
         // El día que cuenta es el que se espera (el salario del 25 que cae domingo llega el viernes).
+        // «Ya pasó» es literal: un movimiento fechado después de hoy no cuenta (ver
+        // [LecturaDeOcurrencias.evidenciaPara]), y así lo que se pregunta acá se puede sellar.
         fechaEsperada(rule, due, periodo).isAfter(today) -> {
-            val sinRechazados = lectura.sinRechazados(rule)
+            val evidencia = lectura.evidenciaPara(rule, due, today)
             val concluyentes = ocurrenciasConcluyentes(
-                rule, due, sinRechazados, lectura.reservados, settings = periodo, destinos = destinos,
+                rule, due, evidencia, lectura.reservados, settings = periodo, destinos = destinos,
             )
             val unico = concluyentes.singleOrNull()
             when {
@@ -1139,7 +1196,7 @@ internal fun resolverOcurrencias(
                     Resolucion.Emparejada(unico)
                 }
                 occurrenceCandidatesFor(
-                    rule, due, sinRechazados, lectura.reservados, settings = periodo, destinos = destinos,
+                    rule, due, evidencia, lectura.reservados, settings = periodo, destinos = destinos,
                 ).isNotEmpty() -> Resolucion.Abierta(concluyentes.size)
                 else -> Resolucion.PorLlegar
             }
@@ -1148,7 +1205,7 @@ internal fun resolverOcurrencias(
             val concluyentes = ocurrenciasConcluyentes(
                 rule,
                 due,
-                lectura.sinRechazados(rule),
+                lectura.evidenciaPara(rule, due, today),
                 lectura.reservados,
                 settings = periodo,
                 destinos = destinos,

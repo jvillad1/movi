@@ -88,6 +88,28 @@ class OccurrenceLogicTest {
         assertEquals("¿Ya pagaste el de agosto?", tituloPropuesta(TransactionType.EXPENSE, "2026-08"))
     }
 
+    /**
+     * El caso del 25-oct-2026: con corte 25 la cuota que vence el 30 de octubre cae en el período del
+     * dueño que arranca el 25 de octubre («noviembre»). La pregunta habla de la CUOTA —su mes es el
+     * del vencimiento, el mismo con que se sella—, no del período: decía «el de noviembre».
+     */
+    @Test fun `la pregunta dice el mes del vencimiento, no el nombre del periodo del dueno`() {
+        val pago = PagoDelPeriodo(
+            ruleId = "rr-prepagada",
+            nombre = "Prepagada Familiar",
+            monto = 138_600,
+            pagado = false,
+            diasParaVencer = 5,
+            vence = "2026-10-30",
+            periodoDelSello = "2026-10",
+            periodoDelDueno = "2026-11",
+        )
+        assertEquals("¿Ya pagaste el de octubre?", preguntaDeLaFila(pago))
+        assertEquals("¿Ya te llegó el de octubre?", preguntaDeLaFila(pago.copy(esIngreso = true)))
+        // Sin sello (un server viejo), el mes sale del vencimiento — nunca del período del dueño.
+        assertEquals("¿Ya pagaste el de octubre?", preguntaDeLaFila(pago.copy(periodoDelSello = null)))
+    }
+
     @Test fun `un periodo ilegible no imprime un numero crudo`() {
         // Nunca «el de 13» ni «el de null»: si no se entiende el periodo, la frase se acorta.
         assertEquals("¿Ya te llegó?", tituloPropuesta(TransactionType.INCOME, "basura"))
