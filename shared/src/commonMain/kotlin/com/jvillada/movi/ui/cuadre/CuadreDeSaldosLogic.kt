@@ -81,8 +81,13 @@ fun efectivoImposible(cuenta: Account): Boolean =
 /** La acción del detalle de un efectivo en negativo: el cuadre de saldos con esa cuenta arriba. */
 const val CUADRAR_EFECTIVO: String = "Cuadrar efectivo"
 
-/** Lo que dice la fila de un efectivo en negativo. */
-const val EFECTIVO_EN_NEGATIVO_CORTO: String = "No puede quedar en negativo: cuádralo"
+/**
+ * Lo que dice la fila de un efectivo en negativo. Corto a propósito (vuelta de diseño 24): «No puede
+ * quedar en negativo: cuádralo» salía «No puede quedar en negativ…» en Patrimonio a 390 px. La cifra
+ * ya va en rojo y con el signo; la fila dice qué pasa y qué hacer, y el porqué completo lo dice el
+ * detalle ([EFECTIVO_EN_NEGATIVO]). Lo vigila `ElEfectivoEnNegativoSeLeeEnteroTest` a 360 dp ×1,3.
+ */
+const val EFECTIVO_EN_NEGATIVO_CORTO: String = "En negativo: cuádralo"
 
 /** Lo que dice el detalle de un efectivo en negativo, al lado de [CUADRAR_EFECTIVO]. */
 const val EFECTIVO_EN_NEGATIVO: String =

@@ -560,6 +560,9 @@ private fun GrupoDeCuentas(titulo: String, cuentas: List<Account>, onNavigate: (
                     titulo = cuenta.name,
                     subtitulo = if (imposible) EFECTIVO_EN_NEGATIVO_CORTO else subtituloDeLaCuenta(cuenta),
                     tonoDelSubtitulo = if (imposible) TonoDeSubtitulo.Aviso else TonoDeSubtitulo.Normal,
+                    // El aviso es la razón de la fila: con la letra muy grande baja a un segundo
+                    // renglón antes que cortarse (vuelta de diseño 24). Con la de siempre entra en uno.
+                    lineasDelSubtitulo = if (imposible) 2 else 1,
                     inicio = { AvatarDeLaCuenta(cuenta) },
                     final = {
                         Cifra(

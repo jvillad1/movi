@@ -1184,3 +1184,35 @@ Arriendo primero, la campana y la propuesta priorizan igual, Hoy no repite un pa
 avisos y 1 movimiento los cuatro lugares dicen lo mismo), `HoyEnUnaMiradaTest` (la frase usa la cifra de
 Plan), `LosAvisosApagadosSeVenTest`, `ElFlujoLibrePideElSalarioTest`, `ChecklistEnInicioTest` y
 `DashboardRoutesTest` (el server cuenta los movimientos por confirmar como renglones).
+
+## 29. Vuelta de diseño 24: repartir en el teléfono sin esperar, y los cabos sueltos
+
+- **«Pagué yo» reparte de una también en el teléfono.** En Android e iOS el gasto se guarda primero en
+  la base local y lo sube el `SyncEngine` cada 30 s; el reparto lo hace el server, que no lo conocía, y
+  la hoja caía siempre a «Reintentar el reparto». Ahora `LocalRepository.repartirMovimiento`, si la fila
+  sigue pendiente, da antes **una vuelta de la misma subida** (`SyncEngine.subirLoPendiente`, con el
+  candado que comparte con el ciclo: cuentas antes que movimientos, el `POST /api/events` idempotente y
+  el mismo sello) y después reparte. Sin señal no pide el reparto: la hoja dice `REPARTO_SIN_CONEXION`
+  («El gasto quedó anotado. Para repartirlo hace falta conexión: reintenta cuando vuelva la señal.») y
+  deja «Reintentar el reparto», que nunca vuelve a guardar. No se difiere solo: las escrituras de un
+  espacio no tienen cola en el teléfono. Sin endpoint nuevo ni regla de plata nueva.
+- **El efectivo en negativo se lee entero.** La fila de Patrimonio decía «No puede quedar en negativ…» a
+  390 px. Ahora dice «En negativo: cuádralo» (la cifra ya va en rojo y con signo; el porqué completo
+  está en el detalle) y, solo en esa fila, el subtítulo puede bajar a un segundo renglón con la letra
+  muy grande antes que cortarse. A 390 con la letra de Movi entra en uno.
+- **La tarjeta de cuenta sigue con el color de su banco.** La revisión vio que una tarjeta rellena de
+  amarillo (Bancolombia) o morado (Nu) puede leerse como un botón. No se cambia: es la maqueta elegida
+  del camino 1 «Noche premium» (la tarjeta de Bancolombia en `#FDDA24` con el texto en `#111111`, la de Nu
+  en `#820AD1` con blanco, el círculo de la marca invertido) y está escrita en `TarjetaDeCuenta` (§ de
+  componentes) desde la R1. El contraste de la cifra no depende del tema: va en el texto de la marca
+  sobre su fondo, y `MarcasConocidasTest` exige 4,5:1 a cada marca del catálogo. Si el dueño quiere la
+  tarjeta en la superficie del sistema con la marca solo en el avatar, es un cambio de esa decisión.
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+
+Lo vigilan `RepartirSubeElMovimientoAntesTest` (`:core`, con la base local de verdad: sube y después
+reparte, sin señal no pide el reparto, el gasto nunca va dos veces, la cuenta creada sin señal sube
+primero, lo rechazado dice por qué), `RepartirEnElTelefonoTest` (la hoja contra `LocalRepository`:
+cierra sin «Reintentar», y sin señal dice el mensaje y el reintento no guarda otra vez),
+`RepartirDesdeAgregarTest` y `ElEfectivoEnNegativoSeLeeEnteroTest` (360 dp ×1,3 entero; 390 dp ×1,12 en
+un renglón).
