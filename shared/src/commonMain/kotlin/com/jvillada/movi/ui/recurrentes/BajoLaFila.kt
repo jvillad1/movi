@@ -32,7 +32,7 @@ import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
  */
 
 /** Dónde empieza el texto de una [com.jvillada.movi.ui.components.ds.Fila] con inicio. */
-val SANGRIA_DEL_TEXTO_DE_LA_FILA = Medida.margenDePantalla + Medida.avatar + Espacio.s
+val SANGRIA_DEL_TEXTO_DE_LA_FILA = Medida.margenDePantalla + Medida.avatar + com.jvillada.movi.ui.components.ds.ESPACIO_ANTES_DEL_TEXTO_DE_FILA
 
 /**
  * **Lo que cuelga de una fila**: alineado con su texto, con [Medida.margenDePantalla] a la derecha y

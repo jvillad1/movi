@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.ImeAction
 import com.jvillada.movi.ui.components.ds.ROTULO_VOLVER
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -2261,21 +2262,29 @@ internal fun WalletPicker(
     }
 }
 
-/** El `testTag` de la fila de una cuenta en el selector de «Cuenta» de Agregar. */
+/** El `testTag` de la fila de una cuenta en los selectores de cuenta de Agregar. */
 internal fun tagDeFilaDeCuentaEnAgregar(id: String): String = "quickadd:cuenta:$id"
 
+/** El `testTag` de la verificación de la cuenta elegida, sobre su marca. */
+internal const val TAG_CUENTA_ELEGIDA: String = "quickadd:cuenta-elegida"
+
 /**
- * **Una cuenta en el selector de «Cuenta»** — Vuelta de diseño 13. La [Fila] de Patrimonio
+ * **Una cuenta en un selector de Agregar** — Vuelta de diseño 13. La [Fila] de Patrimonio
  * (`GrupoDeCuentas` en `AccountsScreen.kt`) con dos diferencias:
  *
  * - **Una deuda dice que es deuda.** Bajo una tarjeta, «$1.240.000» a secas se lee como plata
  *   disponible (Ola 15): el subtítulo dice «Debes» —o «A favor» si está sobrepagada— y la [Cifra]
  *   va sin signo, en el color del texto (deber no es una alarma). Ver [saldoDeLaCuenta].
- * - **La elegida se marca**: la verificación en la marca al final, y el estado «elegida» para el
+ * - **La elegida se marca**: la verificación en la marca del banco, y el estado «elegida» para el
  *   lector de pantalla.
+ *
+ * **Vuelta de diseño 15: una sola para los tres selectores** —«Cuenta» de Gasto e Ingreso, y
+ * «Desde»/«Hacia» de Traspaso y Cuota—, y la verificación pasó del final de la fila a la marca: al
+ * final reservaba 28 dp en TODAS las filas (para que los saldos no bailaran), y con eso «Bancolombia
+ * Ahorros» se partía en dos renglones a 390 dp con aire de sobra. Sobre la marca no ocupa ancho.
  */
 @Composable
-private fun FilaDeCuentaEnAgregar(
+internal fun FilaDeCuentaEnAgregar(
     account: com.jvillada.movi.shared.model.Account,
     elegida: Boolean,
     onClick: () -> Unit,
@@ -2284,17 +2293,25 @@ private fun FilaDeCuentaEnAgregar(
     Fila(
         titulo = account.name,
         subtitulo = saldo.subtitulo,
-        inicio = { AvatarDeLaCuenta(account) },
-        final = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                Cifra(saldo.monto, moneda = saldo.moneda, tono = saldo.tono)
-                Box(modifier = Modifier.size(Icono.m), contentAlignment = Alignment.Center) {
-                    if (elegida) {
-                        Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.m))
+        inicio = {
+            Box(modifier = Modifier.size(Medida.avatar), contentAlignment = Alignment.Center) {
+                AvatarDeLaCuenta(account)
+                if (elegida) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(Medida.insignia)
+                            .border(Medida.trazoDeCarga, Movi.colores.capa2, CircleShape)
+                            .background(Movi.colores.marca, CircleShape)
+                            .testTag(TAG_CUENTA_ELEGIDA),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.sobreMarca, modifier = Modifier.size(Icono.s))
                     }
                 }
             }
         },
+        final = { Cifra(saldo.monto, moneda = saldo.moneda, tono = saldo.tono) },
         onClick = onClick,
         modifier = Modifier
             .heightIn(min = Medida.altoDeFilaDoble)

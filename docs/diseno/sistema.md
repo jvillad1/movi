@@ -20,8 +20,8 @@ Ocho pasos y nada más:
 | token | dp | cuándo |
 |---|---:|---|
 | `Espacio.xxs` | 4 | entre un ícono y su rótulo; entre dos renglones apretados |
-| `Espacio.xs` | 8 | entre hermanos chicos: chips, píldoras, botones de una fila |
-| `Espacio.s` | 12 | dentro de una sección; entre el inicio, el texto y el final de una fila |
+| `Espacio.xs` | 8 | entre hermanos chicos: chips, píldoras, botones de una fila; entre el texto y el final de una fila |
+| `Espacio.s` | 12 | dentro de una sección; entre el inicio y el texto de una fila |
 | `Espacio.m` | 16 | el margen de la pantalla; el relleno de una superficie |
 | `Espacio.l` | 20 | el relleno horizontal de un botón |
 | `Espacio.xl` | 24 | entre dos secciones |
@@ -136,7 +136,8 @@ Seccion(titulo = "Tarjetas", conteo = 3, accion = "Ver todo", onAccion = ::verTo
 ```
 
 **`Fila`** — la fila de lista de toda la app: `inicio` (avatar de comercio, `IconoEnCirculo`, persona),
-`titulo`, `subtitulo?`, `final` (`Cifra`, `Pildora` o `Chevron`). 56 / 64 de alto mínimo, 16 a los
+`titulo`, `subtitulo?`, `final` (`Cifra`, `Pildora` o `Chevron`). 12 entre el inicio y el texto, 8 entre
+el texto y el final (vuelta de diseño 15). 56 / 64 de alto mínimo, 16 a los
 lados, toque de borde a borde. El título va en hasta dos renglones antes del «…» (la fila crece) y el
 subtítulo en uno —o en dos con `lineasDelSubtitulo = 2`, solo donde el subtítulo es la razón de la fila
 y no se puede acortar («Hace más de un mes que no cuadras Bancolombia Ahorros», vuelta de diseño 2)—;
@@ -726,8 +727,8 @@ guardado no cambiaron.
   tecla. El segundo toque de un doble toque no le llega a nadie. El teclado físico y la accesibilidad no
   pasan por ahí.
 - **La Cuenta se elige como en Patrimonio**: una `Fila` por cuenta con la marca de su banco
-  (`AvatarDeLaCuenta`), el nombre, el saldo con `Cifra` en su moneda y la elegida con la verificación en
-  la marca (y `selected` para el lector de pantalla), sobre una `Superficie` de capa 2. Una deuda dice
+  (`AvatarDeLaCuenta`), el nombre, el saldo con `Cifra` en su moneda y la elegida con la verificación
+  (desde la vuelta 15, sobre la marca del banco; y `selected` para el lector de pantalla), sobre una `Superficie` de capa 2. Una deuda dice
   «Debes» (o «A favor») en el subtítulo, con la cifra sin signo.
 
 Lo vigila `AgregarPorDentroTest` (Robolectric, motor de texto real, 360 y 390 dp): la flecha y una sola
@@ -763,3 +764,34 @@ los cuatro propuestos creados.
 Lo vigilan `UnaSolaCifraHeroePorPantallaTest` y `PresupuestosConJerarquiaTest` (a 360 dp: la cifra
 `Grande` del resumen, una sola señal roja sin píldora, el tope a la derecha y la casilla, nada
 recortado).
+
+## 21. Vuelta de diseño 15: filas que respiran y la misma cifra en Categorías
+
+- **«Bancolombia Ahorros» va en un renglón a 390 dp.** Con la marca, el nombre y «$13.845.800», el
+  título se partía en dos con la fila medio vacía. Medido con la letra de la app (×1,12): el título
+  pide ~154 dp y le quedaban ~155 en Android (en la web, que dibuja la misma letra un par de px más
+  ancha, no entraba). Los px no estaban en el relleno de la fila (16, el margen de toda lista), ni en
+  el avatar (40), ni en la `Cifra` (Martian Mono, que no se recorta): estaban en el aire entre el
+  título y el monto. **Ese aire es `Espacio.xs` (8)**, era `Espacio.s` (12)
+  (`ESPACIO_ANTES_DEL_FINAL_DE_FILA`); entre el avatar y el texto sigue 12
+  (`ESPACIO_ANTES_DEL_TEXTO_DE_FILA`, la que usa `SANGRIA_DEL_TEXTO_DE_LA_FILA`). A 360 dp, o con la
+  letra del sistema agrandada, el título puede bajar a dos renglones —entre palabras—.
+- **Los selectores de cuenta de Agregar son uno.** «Desde» y «Hacia» de Traspaso y Cuota usan la fila
+  del de «Cuenta» (`FilaDeCuentaEnAgregar`): la marca, el nombre, el saldo con `Cifra` en su moneda,
+  «Debes» / «A favor» en una deuda y la elegida marcada, sobre una `Superficie` de capa 2 (los créditos
+  siguen en su grupo, al final). Eran el nombre pelado y un «Elegida» en texto, sin saldo. **La
+  verificación de la elegida va sobre la marca** (una insignia de `Medida.insignia` en la marca, con el
+  borde de la capa 2), no al final: ahí reservaba 28 dp en todas las filas y el nombre se partía.
+- **Categorías dice lo mismo que «En qué se va».** La cifra de cada categoría (`monthTotal` /
+  `monthIncomeTotal` de `GET /api/categories`) sale de `movimientosDeFlujo`, la regla única del
+  server —la de `spentByCategory` del Inicio y la de `esGastoDelPeriodo` + `montoContado` de la app—:
+  solo tu parte de un gasto repartido, tu parte de lo que pagó otro, sin traspasos, pagos de tarjeta
+  ni lo que espera en «Por confirmar»; lo que entró, con la regla del chip «Ingresos». El conteo
+  («N movimientos») sigue contando todo uso. El rótulo de la hoja dice «Este período» y solo «Este
+  mes» cuando el período es el mes del calendario (`rotuloDelPeriodoDeCategorias`).
+
+Lo vigilan `LaFilaNoSeParteConAireTest` (Robolectric, motor de texto real: un renglón y con aire a
+390 dp, también en el selector de Agregar; el aire de 8; dos renglones entre palabras a 360 dp o con la
+letra ×1,3), `SelectoresDeTraspasoTest` (Desde y Hacia, en Traspaso y Cuota, pintan `Fila` con
+`Cifra` y la marca), y en el server `EspacioRoutesTest` (con un gasto repartido y uno que pagó otro,
+Mercado da lo mismo en Categorías, en «En qué se va» y en el Inicio) y `CategoryRoutesTest`.

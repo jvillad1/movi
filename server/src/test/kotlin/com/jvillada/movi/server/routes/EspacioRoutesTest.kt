@@ -13,6 +13,8 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.esGastoDelPeriodo
 import com.jvillada.movi.shared.model.montoContado
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
@@ -140,7 +142,7 @@ class EspacioRoutesTest {
 
     private val hoy = System.currentTimeMillis() - 60_000
 
-    private fun evento(id: String, monto: Long, tipo: String = "EXPENSE", categoria: String = "Mercado", descripcion: String = "Mercado", uid: String = a, cuenta: String = ahorros) =
+    private fun evento(id: String, monto: Long, tipo: String = "EXPENSE", categoria: String = "Mercado", descripcion: String = "Mercado", uid: String = a, cuenta: String = ahorros, estado: String = "RECONCILED") =
         transaction {
             Events.insert {
                 it[Events.id] = id
@@ -153,7 +155,7 @@ class EspacioRoutesTest {
                 it[description] = descripcion
                 it[timestamp] = hoy
                 it[eventSource] = "MANUAL"
-                it[reconciliationStatus] = "RECONCILED"
+                it[reconciliationStatus] = estado
             }
         }
 
@@ -421,6 +423,44 @@ class EspacioRoutesTest {
 
         // Los saldos NO cambian: la plata salió entera de la cuenta.
         assertEquals(240_000, eventos.single { it.id == "e_mercado" }.amount)
+    }
+
+    /**
+     * **Vuelta de diseño 15: Mercado dice lo mismo en Categorías que en «En qué se va».** Ajustes →
+     * Categorías sumaba el monto entero de cada movimiento: el mercado repartido 50/50 contaba
+     * $240.000 en vez de tu parte, lo que pagó Caro no aparecía y lo que espera en «Por confirmar»
+     * ya sumaba. Ahora su cifra del período sale de la misma regla.
+     */
+    @Test
+    fun `la cifra de Mercado en Categorias es la de En que se va, con un gasto repartido y uno que pago otro`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_mercado", 240_000) // lo pagaste tú, repartido 50/50: tu parte, 120.000
+        evento("e_pendiente", 80_000, estado = "UNCONFIRMED") // espera en «Por confirmar»: no suma todavía
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado"}""")
+        // Lo pagó Caro: tu parte, 50.000, cuenta el día del gasto.
+        post("/api/espacios/esp_casa/gastos", """{"id":"g_caro","pagadoPor":"dst_caro","monto":100000,"categoria":"Mercado","fecha":$hoy}""")
+
+        val categorias = Json.parseToJsonElement(get("/api/categories").bodyAsText()).jsonArray.map { it.jsonObject }
+        val mercado = categorias.first { it["name"]!!.jsonPrimitive.content == "Mercado" }
+        val enCategorias = mercado["monthTotal"]!!.jsonPrimitive.long
+
+        // «En qué se va», como lo arma la app: la regla de :core (`esGastoDelPeriodo` + `montoContado`,
+        // las que usa `analisisDelPeriodo`) sobre lo que baja a la app (`/api/events/by-day` sale de
+        // `loadNonVoidedEvents`) más tu parte de lo que pagó otro. Todo cae en el período en curso.
+        val eventos = runBlocking { loadNonVoidedEvents(a) }
+        val tuParte: List<FinancialEvent> = json.decodeFromString(get("/api/espacios/tu-parte").bodyAsText())
+        val tipos = mapOf(ahorros to AccountType.SAVINGS)
+        val enQueSeVa = (eventos + tuParte)
+            .filter { esGastoDelPeriodo(it, tipos[it.accountId]) && it.category == "Mercado" }
+            .sumOf { montoContado(it) }
+
+        assertEquals(120_000L + 50_000L, enQueSeVa)
+        assertEquals(enQueSeVa, enCategorias, "Categorías y «En qué se va» dicen lo mismo de Mercado")
+        // Y el widget del Inicio, que sale de `movimientosDeFlujo`.
+        val tablero = Json.parseToJsonElement(get("/api/dashboard/summary").bodyAsText()).jsonObject
+        assertEquals(enCategorias, tablero["spentByCategory"]!!.jsonObject["Mercado"]!!.jsonPrimitive.long)
+        // El conteo sigue contando los usos tuyos del período (los dos movimientos), no la plata.
+        assertEquals(2, mercado["monthMovements"]!!.jsonPrimitive.int)
     }
 
     /**
