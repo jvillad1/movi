@@ -244,7 +244,9 @@ Cifra(teQuedan, VarianteDeCifra.Heroe)
 **`TarjetaDeCuenta`** — la tarjeta de una cuenta del carrusel «Tus cuentas» (ola R1): el color y la
 marca de su banco (`MarcasConocidas`; la marca va invertida en un círculo), el nombre, el tipo y el
 saldo en `Cifra.Grande`. El nombre va en hasta dos renglones (nunca «Bancolombia Ah…») y el tipo baja
-junto al rótulo del saldo. Alto mínimo `Medida.altoDeTarjetaDeCuenta` (crece con la letra agrandada),
+junto al rótulo del saldo. **El tipo no se repite** (vuelta de diseño 16): con la regla de Patrimonio
+(`tipoSiElNombreNoLoDice`), «Bancolombia Ahorros» va sin «Ahorros» —`tipo = null`— y el renglón queda
+con «Saldo» solo, del mismo alto: ninguna tarjeta del carrusel o la grilla salta. Alto mínimo `Medida.altoDeTarjetaDeCuenta` (crece con la letra agrandada),
 radio `Radio.xl`, sin borde. Sin marca,
 la capa 2 y el ícono del tipo. En un carrusel ocupa `FRACCION_DE_TARJETA_DE_CUENTA` del ancho, para que
 la siguiente asome. **Fuera del teléfono va en grilla** (vuelta de diseño 9, `tarjetasPorRenglon`): en
@@ -275,7 +277,9 @@ y la diferencia a la misma altura en palabras —«$120.000 más», «$45.000 me
 (`diferenciaDeLaCategoria`, sobre `contraElAnterior`: ninguna cuenta nueva). **Sin «+»**, que en Movi
 es plata que entra. En `sale` solo si sube mucho (los umbrales de «categoría muy por encima»: 1,5× y
 $300.000), en el color del texto si sube, apagada si baja. Sin barra: la que había medía contra el
-total del período y no decía contra qué.
+total del período y no decía contra qué. **El monto va siempre neutro** (vuelta de diseño 16): iba en
+`sale` si la categoría se pasaba de su presupuesto, y la señal salía dos veces; el tono va solo en la
+diferencia. `Cifra` dice su tono en la semántica (`TonoDeCifraKey`) para poder vigilarlo.
 ```kotlin
 ParDeWidgets(
     izquierdo = { m -> Widget("Falta por pagar", onClick = ::abrirPlan, modifier = m) { Cifra(falta, VarianteDeCifra.Grande) } },
@@ -344,7 +348,7 @@ de un toque que no es suyo, como el `Checkbox` de Material sin `onCheckedChange`
 ```kotlin
 Casilla(marcada = aceptado, onCambiar = { aceptado = it })
 Box(Modifier.toggleable(marcada, role = Role.Checkbox, onValueChange = { alternar() })) {
-    Fila(titulo = "Mercado", subtitulo = "Gastaste $1.020.000 el período pasado",
+    Fila(titulo = "Mercado", subtitulo = "Gastaste $1.020.000",
         inicio = { IconoDeCategoria("Mercado") },
         final = { Row { Cifra(1_050_000); Casilla(marcada) } })
 }
@@ -428,6 +432,10 @@ viejos; este cliente no los pinta.
   fecha, la cifra y el chevron se miden primero; si no cabe todo, se corta el «· N movimientos».
   **Sin el rótulo «Flujo del día»** (vuelta de diseño 14): la cifra del día sola —`Cifra` `Chica`, con
   su signo, en `entra` si entró plata— se entiende en todos los anchos; el rótulo sobraba en cada día.
+  **Su resaltado tiene aire y radio** (vuelta de diseño 16, `Modifier.renglonTocable` en
+  `ds/Resaltado.kt`): con el mouse encima pintaba una banda gris recta pegada a la fecha; ahora sale
+  `SALIDA_DEL_RESALTADO` (`Espacio.xs`) hacia cada lado, dentro del margen, con `Radio.m`, y la fecha
+  sigue alineada con el borde de la superficie de abajo.
 - **«N por revisar» es una `TarjetaDePropuesta`**, como en «Movi propone hoy». «Personas y comercios»
   ya no está arriba de la lista. **Es el primer ítem de la lista y se va con el scroll** (vuelta de
   diseño 1): fijos quedan solo el encabezado, el selector del período y los chips.
@@ -751,10 +759,11 @@ los cuatro propuestos creados.
   la barra: gastar no es un éxito ni una alarma—, «Llegaste justo al límite» en `aviso`. El porcentaje
   («273 %») va neutro, en `apoyo` y `textoMedio`, al final de la fila, sin píldora. En el resumen se
   quedan las `Pildora` «Sobrepasados · N» y «Sin margen o cerca · N»: son el resumen, una de cada una.
-- **Las propuestas son `Fila`** (`FilaDePropuesta`): el ícono de la categoría, el nombre, «Gastaste $X
-  el período pasado» (hasta tres renglones: es la razón de la fila y no se corta; a 390 dp entra en dos,
-  a 360 con un tope de siete cifras necesita tres), el tope
-  con `Cifra` a la derecha y la `Casilla` del sistema. Se marca la fila entera. Van de borde a borde
+- **Las propuestas son `Fila`** (`FilaDePropuesta`): el ícono de la categoría, el nombre, «Gastaste $X»
+  (desde la vuelta 16 sin «el período pasado»: el párrafo de arriba ya dice las fechas; a 360 dp con un
+  tope de siete cifras entra en un renglón, y con la letra agrandada puede bajar hasta tres), el tope
+  con `Cifra` a la derecha y la `Casilla` del sistema, pegados con `Espacio.xxs` como un ícono y su
+  rótulo (vuelta 16: con `Espacio.s` el subtítulo quedaba 6 dp corto a 360). Se marca la fila entera. Van de borde a borde
   de la tarjeta del vacío (`VacioQueEnsena(contenidoDeBordeABorde = true)`: con el relleno de la
   tarjeta más el de la fila no le quedaba lugar al nombre), separadas con `Separador(ConInicio)`.
   «Crear estos N» y «Crear uno a mano» quedan igual.
@@ -763,3 +772,30 @@ los cuatro propuestos creados.
 Lo vigilan `UnaSolaCifraHeroePorPantallaTest` y `PresupuestosConJerarquiaTest` (a 360 dp: la cifra
 `Grande` del resumen, una sola señal roja sin píldora, el tope a la derecha y la casilla, nada
 recortado).
+
+## 21. Vuelta de diseño 16: crear una cuenta es igual en todos lados
+
+Revisado en master a 390 px, en claro y oscuro.
+
+- **Un solo bloque para crear una cuenta** (`FormularioDeCuenta`, `ui/accounts/FormularioDeCuenta.kt`,
+  tag `formulario-de-cuenta`). La guía de primer uso ofrecía bancos con su marca y «Ahorros · Corriente ·
+  Efectivo · Inversión»; Patrimonio → «Nueva cuenta» (`CreateAccountSheet`), «Dinero / Inversión / Bien»
+  en tarjetas grandes y sin bancos. Ahora los dos pintan, en este orden: **Banco** (`PildoraDeFiltro` con
+  el avatar de la marca, `SelectorDeBanco`), **Tipo** (`TIPOS_DE_CUENTA`; «Bien» solo si quien llama pasa
+  `onElegirBien`: Patrimonio sí, la guía no), **Nombre** (`Campo`) y **Saldo de hoy** (`CampoDeMonto`).
+  Al elegir el banco el nombre se propone solo, con el tipo («Bancolombia Ahorros»,
+  `nombrePropuestoDeLaCuenta`), mientras esté vacío o siga siendo la propuesta; lo escrito a mano no se
+  pisa, y «Bien» no hereda el nombre propuesto para una cuenta. La cuenta sale de
+  `EstadoDelFormularioDeCuenta.cuentaNueva()` y se crea con `crearCuentaConSaldo`, la de siempre: los
+  mismos tipos (`SAVINGS`, `CHECKING`, `CASH`, `INVESTMENT`), ninguna lógica nueva. La hoja ahora se
+  desplaza (`verticalScroll` + `weight(1f, fill = false)`).
+- **«En qué se va» pinta el monto neutro** (§6).
+- **La tarjeta de cuenta no repite el tipo** (§6): `tipoSiElNombreNoLoDice`, la regla de Patrimonio,
+  también en el Inicio y en la lista de cuentas de la guía.
+- **Las propuestas de presupuesto dicen «Gastaste $X»** (§20).
+- **El encabezado del día resalta con aire y radio** (§11, `renglonTocable`).
+
+Lo vigilan `CrearUnaCuentaEsIgualEnTodosLadosTest` (los dos lugares pintan el bloque por su tag y crean
+la misma cuenta para la misma elección; «Bien» solo en Patrimonio; la tarjeta sin tipo mide lo mismo),
+`FormularioDeCuentaTest`, `ContraElPeriodoPasadoEnPantallaTest` (el monto neutro aunque la diferencia
+sea de alerta), `PresupuestosConJerarquiaTest` (un renglón a 360 dp) y `ElDiaPlegadoNoCortaLaFechaTest`.
