@@ -24,6 +24,7 @@ import com.jvillada.movi.ui.components.conLaCuentaQueSugiereMovi
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.resolverCuentaDelBanco
 import com.jvillada.movi.ui.components.toUserMessage
+import com.jvillada.movi.ui.sms.advertenciaDeBancos
 import com.jvillada.movi.ui.sms.anotarElMovimientoDelAviso
 import com.jvillada.movi.ui.sms.avisosDelPago
 import com.jvillada.movi.ui.sms.deudaPropuestaDelAviso
@@ -72,8 +73,17 @@ data class AnotacionEntendida(
 fun lineaDeLoQueVaAAnotar(categoria: String, cuenta: String, monto: Long, moneda: String): String =
     "$categoria · $cuenta · ${formatMoney(monto, moneda)}"
 
-/** Lo que Movi entendió de un pago: lo que anotaría, o por qué todavía no. */
-data class LoQueMoviEntendio(val anotacion: AnotacionEntendida?, val dudas: Set<DudaDelAviso>)
+/**
+ * Lo que Movi entendió de un pago: lo que anotaría, o por qué todavía no.
+ *
+ * @property advertencia «Ojo: el aviso es de Falabella y la cuenta es de Bancolombia» cuando la
+ *   cuenta que Movi propone —segura o no— no es del banco que mandó el aviso ([advertenciaDeBancos]).
+ */
+data class LoQueMoviEntendio(
+    val anotacion: AnotacionEntendida?,
+    val dudas: Set<DudaDelAviso>,
+    val advertencia: String? = null,
+)
 
 /** Las cuentas que se resolvieron por un dato y no por defecto: el número, el banco o la marca, lo que sabe Movi del pago. */
 private val CUENTAS_SEGURAS = setOf(
@@ -128,6 +138,8 @@ fun loQueMoviEntendio(
         sugeridaId = leido.cuentaSugeridaId,
     )
     val cuenta = resuelta.cuenta?.takeIf { resuelta.origen in CUENTAS_SEGURAS }
+    // La cuenta que se propone, aunque no sea segura: es la que Reconciliar va a mostrar.
+    val advertencia = advertenciaDeBancos(avisos.map { it.bank }, resuelta.cuenta)
     val nombraOtraCuentaSuya = destinoPropuestoDelAviso(leido, resuelta, cuentas) != null ||
         origenPropuestoDelAviso(leido, resuelta, cuentas) != null ||
         deudaPropuestaDelAviso(resuelta, leido.deudaSugeridaId, cuentas) != null
@@ -142,10 +154,11 @@ fun loQueMoviEntendio(
         antesDeLaCuenta = cuenta != null && esAntesDeLaCuenta(momento, propuestas.inicioDeLasCuentas[cuenta.id]),
         seReparte = propuesta.seReparte,
     )
-    if (dudas.isNotEmpty() || cuenta == null) return LoQueMoviEntendio(null, dudas)
+    if (dudas.isNotEmpty() || cuenta == null) return LoQueMoviEntendio(null, dudas, advertencia)
     return LoQueMoviEntendio(
         AnotacionEntendida(cabezaId = cabeza.id, sms = delQueSale, pago = pago, leido = leido, cuenta = cuenta, categoria = leido.category),
         emptySet(),
+        advertencia,
     )
 }
 

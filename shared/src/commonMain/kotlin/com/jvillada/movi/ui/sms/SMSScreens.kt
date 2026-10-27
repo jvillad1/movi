@@ -562,6 +562,8 @@ internal fun TarjetaDeMensajeDelBanco(
      * bandeja no: ahí todo está pendiente y la píldora no dice nada.
      */
     conPildoraDePendiente: Boolean = true,
+    /** «Ojo: el aviso es de … y la cuenta es de …» (ver [advertenciaDeBancos]), o `null`. */
+    advertencia: String? = null,
 ) {
     val apartado = loApartoMovi(sms)
     val pendiente = sms.state == SMS_STATE_PENDING
@@ -617,6 +619,8 @@ internal fun TarjetaDeMensajeDelBanco(
         // Antes de aprobar, que se sepa que otro aviso parece el mismo pago: dos avisos de un pago
         // aprobados por separado son dos movimientos.
         if (pendiente && sms.parecidoA != null) LineaDelMismoPago(parecidoA)
+        // La cuenta que propone Movi es de otro banco que el del aviso: se dice antes de confirmar.
+        if (pendiente) advertencia?.let { LineaDeAdvertenciaDeBancos(it) }
         // Por qué no está en «Por revisar»: lo apartó Movi, no él.
         textoDelApartado(sms)?.let { porQue ->
             Text(
@@ -879,6 +883,12 @@ fun SMSReconcileScreen(
         sugeridaId = parsed?.cuentaSugeridaId,
     )
     val resolvedAccount = cuentaDelSms.cuenta
+    // Vuelta de diseño 23: la cuenta que Movi propone es de otro banco que el del aviso. Solo se avisa;
+    // la cuenta no cambia. Si la eligió el dueño, ya decidió.
+    val advertenciaDeLaCuenta = if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.A_MANO) null else advertenciaDeBancos(
+        pagoActual?.miembros?.map { it.bank } ?: listOfNotNull(currentSms?.bank),
+        resolvedAccount,
+    )
 
     /**
      * **Las categorías que él usa, no una lista escrita a mano.**
@@ -1170,7 +1180,7 @@ fun SMSReconcileScreen(
         // F60 · F22: el detalle vuelve a la bandeja si no hay historial (su padre lógico). Ola C:
         // esa bandeja es «Por revisar».
         MinScreenHeader(
-            title = "Reconciliar movimiento",
+            title = "Revisar aviso",
             leading = HeaderLeading.Back(fallback = Screen.PorRevisar),
         )
 
@@ -1421,9 +1431,10 @@ fun SMSReconcileScreen(
                             value = resolvedAccount?.name ?: "Sin cuenta elegida",
                             // Lo que Movi haya adivinado se dice acá, antes de guardar: un SMS no trae
                             // la cuenta escrita, la pone la app, y eso hay que confesarlo.
-                            hint = if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI) {
+                            hint = advertenciaDeLaCuenta ?: if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI) {
                                 parsed?.cuentaSugeridaPor ?: avisoDeLaCuentaDelBanco(cuentaDelSms.origen)
                             } else avisoDeLaCuentaDelBanco(cuentaDelSms.origen),
+                            hintEsAviso = advertenciaDeLaCuenta != null,
                             action = if (eligiendoCuenta) "Cerrar" else "Cambiar",
                             onClick = { eligiendoCuenta = !eligiendoCuenta },
                         )
@@ -1738,6 +1749,8 @@ private fun Detail(
     label: String,
     value: String,
     hint: String? = null,
+    /** El [hint] pide atención («Ojo: el aviso es de Falabella…»): en el tono de aviso y en dos renglones. */
+    hintEsAviso: Boolean = false,
     action: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
@@ -1745,6 +1758,8 @@ private fun Detail(
         titulo = value,
         // El porqué, cuando lo puso Movi («La puso Movi», «Así lo anotaste 4 veces»); si no, qué es.
         subtitulo = hint ?: label,
+        tonoDelSubtitulo = if (hintEsAviso) TonoDeSubtitulo.Aviso else TonoDeSubtitulo.Normal,
+        lineasDelSubtitulo = if (hintEsAviso) 2 else 1,
         modifier = Modifier.testTag(tagDeFilaDelSms(label)),
         inicio = {
             if (ok) IconoEnCirculo(Icons.Rounded.Check, tono = TonoDeIcono.Exito)

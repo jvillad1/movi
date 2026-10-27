@@ -214,6 +214,8 @@ internal fun TarjetaDelMismoPago(
     /** Lo que Movi leyó del pago (la propuesta de la bandeja): el comercio y el monto de la cabeza. */
     leido: ParsedSms? = null,
     sinLeer: AvisoSinLeer? = null,
+    /** «Ojo: el aviso es de … y la cuenta es de …» (ver [advertenciaDeBancos]), o `null`. */
+    advertencia: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var abiertos by remember { mutableStateOf(false) }
@@ -249,6 +251,7 @@ internal fun TarjetaDelMismoPago(
         },
     ) {
         if (anotado) Text(avisoYaAnotado(yaAnotadoCon), style = Movi.textos.apoyo, color = Movi.colores.aviso)
+        if (!anotado) advertencia?.let { LineaDeAdvertenciaDeBancos(it) }
         // El texto del primero siempre; los demás, plegados: dicen lo mismo con otras palabras.
         TextoDelAviso(primero, plegable = true)
         if (abiertos) avisos.drop(1).forEach { aviso -> TextoDelAviso(aviso, plegable = true) }
