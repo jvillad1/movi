@@ -127,7 +127,8 @@ class BuscarEnMoviTest {
         assertTrue(Screen.Categorias in pantallas("categorias"))
         assertTrue(Screen.BorrarLaCuenta in pantallas("borrar mi cuenta"))
         assertTrue(Screen.Compartir in pantallas("Compartir"))
-        assertTrue(Screen.Profile in pantallas("huella"))
+        assertTrue(Screen.Mas in pantallas("huella"), "Perfil se mudó dentro de Ajustes")
+        assertTrue(Screen.Mas in pantallas("perfil"))
         // Un número no es el nombre de ninguna pantalla.
         assertTrue(pantallas("27500").isEmpty())
     }

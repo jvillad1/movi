@@ -12,6 +12,7 @@ import com.jvillada.movi.shared.model.PreguntaSugerida
 import com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso
 import com.jvillada.movi.shared.model.TipoDeAnomalia
 import com.jvillada.movi.shared.model.disponibleAlDia
+import com.jvillada.movi.shared.model.pesosDelCierre
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -34,7 +35,8 @@ class LasPreguntasSugeridasTextoTest {
     /**
      * Tenía $2.000.000 el 1, entraron $3.000.000; los fijos son $1.673.000 → disponible $3.327.000,
      * meta diaria $3.327.000 / 31 = $107.322. Gastó $450.000 de variable → le quedan $2.877.000, y
-     * del 13 al 31 son 19 días contando hoy.
+     * del 13 al 31 son 19 días contando hoy: $2.877.000 / 19 = $151.421 por día (lo que dice el
+     * héroe de Hoy, no la meta diaria del período entero).
      */
     private val disponible = disponibleAlDia(
         ingresosRecibidos = 3_000_000,
@@ -61,7 +63,7 @@ class LasPreguntasSugeridasTextoTest {
     fun `como voy`() {
         assertEquals(
             """
-            Te quedan ${'$'}2.877.000 para 19 días. Tu meta diaria es ${'$'}107.322.
+            Te quedan ${'$'}2.877.000 para 19 días · ${'$'}151.421 por día.
 
             Este período (1 de octubre al 31 de octubre) entró ${'$'}3.000.000 y salió ${'$'}1.950.000.
 
@@ -73,6 +75,43 @@ class LasPreguntasSugeridasTextoTest {
             """.trimIndent(),
             respuestaSinModelo(PreguntaSugerida.COMO_VOY, datos),
         )
+    }
+
+    /**
+     * Vuelta de diseño 3: «¿Cómo voy?» dice lo mismo que el héroe de Hoy. Por encima del ritmo, el
+     * héroe dice «para N días · vas $X por encima de lo previsto a hoy» (sin cifra por día); el último
+     * día, «para hoy». Nunca «Tu meta diaria», que era la meta del período entero.
+     */
+    @Test
+    fun `como voy por encima del ritmo y el ultimo dia dice lo que dice el heroe`() {
+        val rapido = disponibleAlDia(
+            ingresosRecibidos = 3_000_000,
+            pagos = pagos,
+            gastoVariablePorDia = mapOf("2026-10-05" to 2_450_000L, "2026-10-13" to 50_000L),
+            desde = "2026-10-01",
+            hasta = "2026-10-31",
+            hoy = "2026-10-13",
+            plata = PlataDelDisponible(saldoAlInicio = 2_000_000, entradas = 3_000_000, guardado = 0),
+        )!!
+        assertTrue(rapido.periodo.contraElRitmo > 0L)
+        val primera = respuestaSinModelo(PreguntaSugerida.COMO_VOY, datos.copy(disponible = rapido)).lines().first()
+        assertEquals(
+            "Te quedan ${pesosDelCierre(rapido.periodo.teQuedan)} para 19 días · " +
+                "vas ${pesosDelCierre(rapido.periodo.contraElRitmo)} por encima de lo previsto a hoy.",
+            primera,
+        )
+
+        val ultimoDia = disponibleAlDia(
+            ingresosRecibidos = 3_000_000,
+            pagos = pagos,
+            gastoVariablePorDia = mapOf("2026-10-05" to 400_000L),
+            desde = "2026-10-01",
+            hasta = "2026-10-31",
+            hoy = "2026-10-31",
+            plata = PlataDelDisponible(saldoAlInicio = 2_000_000, entradas = 3_000_000, guardado = 0),
+        )!!
+        val ultima = respuestaSinModelo(PreguntaSugerida.COMO_VOY, datos.copy(disponible = ultimoDia)).lines().first()
+        assertEquals("Te quedan ${pesosDelCierre(ultimoDia.periodo.teQuedan)} para hoy.", ultima)
     }
 
     @Test

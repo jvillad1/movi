@@ -16,7 +16,7 @@ private const val KEY_USER_ID = "user_id"
 private const val KEY_NAME    = "user_name"
 private const val KEY_EMAIL   = "user_email"
 // F42 · F46: color elegido para el avatar de iniciales — se llena la primera vez que
-// PerfilScreen pide el perfil (GET /api/users/me) y se actualiza tras cada edición. Vive en
+// Ajustes (MasScreen) pide el perfil (GET /api/users/me) y se actualiza tras cada edición. Vive en
 // Settings (no solo en memoria) para que sobreviva un reinicio de la app en Android/iOS,
 // igual que userName/userEmail.
 private const val KEY_AVATAR_COLOR = "avatar_color"
@@ -201,7 +201,7 @@ object SessionManager {
         set(v) = guardar(KEY_EMAIL, v)
 
     /**
-     * `null` hasta que PerfilScreen haga su primer `GET /api/users/me` en esta sesión — no en el
+     * `null` hasta que Ajustes (MasScreen) haga su primer `GET /api/users/me` en esta sesión — no en el
      * login, que no lo devuelve (AuthResponse no cambió: register/login son ajenos a esta
      * tarea). [com.jvillada.movi.ui.components.AvatarButton] cae a
      * [com.jvillada.movi.shared.model.AvatarPalette.DEFAULT] mientras tanto, que es exactamente

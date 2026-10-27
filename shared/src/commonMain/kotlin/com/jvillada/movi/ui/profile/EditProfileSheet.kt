@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 
 /**
  * F42 · F46 — editar alias y color de avatar. Se abre desde el "Editar" del encabezado de
- * [PerfilScreen]. Mismo patrón que las hojas de Créditos ([com.jvillada.movi.ui.credits.CardTermsSheet]):
+ * Ajustes ([com.jvillada.movi.ui.mas.MasScreen]). Mismo patrón que las hojas de Créditos ([com.jvillada.movi.ui.credits.CardTermsSheet]):
  * scrim + hoja, `SheetHandleWithClose`, botón que nunca se apaga en silencio (dice la primera
  * cosa que falta debajo).
  */

@@ -89,7 +89,6 @@ import com.jvillada.movi.ui.primeruso.PrimerUsoScreen
 import com.jvillada.movi.ui.primeruso.revisarLaGuiaDePrimerUso
 import com.jvillada.movi.ui.mas.MasScreen
 import com.jvillada.movi.ui.profile.BorrarLaCuentaScreen
-import com.jvillada.movi.ui.profile.PerfilScreen
 import com.jvillada.movi.ui.quickadd.QuickAddScreen
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.RecurringOfferBar
@@ -445,14 +444,6 @@ fun App() {
                 // siendo exhaustivo sobre `Screen` — con un `else` perdería el chequeo que avisa
                 // cuando alguien agrega una pantalla nueva y se olvida de enrutarla.
                 is Screen.QuickAdd       -> Unit
-                Screen.Profile           -> PerfilScreen(
-                    onNavigate = navigate,
-                    onLogout = {
-                        SessionManager.clear()
-                        backStack.clear()
-                        backStack.add(Screen.Login)
-                    },
-                )
                 is Screen.AIChat         -> AIChatScreen(navigate, preguntaInicial = pantalla.preguntaInicial, sugeridaInicial = pantalla.sugerida)
                 Screen.Credits           -> CreditosScreen(navigate)
                 Screen.SalidaDeDeudas    -> SalidaDeDeudasScreen(navigate)
@@ -470,7 +461,16 @@ fun App() {
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
                 is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, pantalla.smsId, abrirCategoria = pantalla.abrirCategoria)
-                Screen.Mas               -> MasScreen(navigate)
+                // Vuelta de diseño 3: Ajustes es una sola pantalla (Perfil se mudó adentro), y cerrar
+                // la sesión desde ahí hace lo que hacía desde Perfil.
+                Screen.Mas               -> MasScreen(
+                    onNavigate = navigate,
+                    onLogout = {
+                        SessionManager.clear()
+                        backStack.clear()
+                        backStack.add(Screen.Login)
+                    },
+                )
                 Screen.Accounts         -> AccountsScreen(navigate)
                 Screen.Espacios         -> com.jvillada.movi.ui.espacios.EspaciosScreen(navigate)
                 is Screen.Espacio       -> com.jvillada.movi.ui.espacios.EspacioScreen(pantalla.id, pagoOtro = pantalla.pagoOtro)

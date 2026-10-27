@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.primeruso
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.debeAbrirseLaGuiaDePrimerUso
 import com.jvillada.movi.shared.repository.WalletRepository
 
@@ -20,7 +21,7 @@ import com.jvillada.movi.shared.repository.WalletRepository
  * recurrentes—: la guía no tiene escrituras propias, salvo marcarse terminada.
  */
 enum class PasoDePrimerUso(val titulo: String) {
-    BIENVENIDA("Te damos la bienvenida"),
+    BIENVENIDA("Te damos la bienvenida a Movi"),
     PERIODO("Tu período"),
     CUENTAS("Tus cuentas"),
     CAPTURA("Que Movi se entere solo"),
@@ -29,6 +30,13 @@ enum class PasoDePrimerUso(val titulo: String) {
     ;
 
     val numero: Int get() = ordinal + 1
+
+    /**
+     * ¿Lleva el botón de texto «Saltar este paso»? Los pasos opcionales (el período, la captura, los
+     * pagos de cada mes). La bienvenida y el final no tienen nada que saltar, y las cuentas se saltan
+     * con «Ahora no»: sin ninguna cuenta Movi no tiene dónde anotar nada.
+     */
+    val seSaltaConUnBoton: Boolean get() = this == PERIODO || this == CAPTURA || this == RECURRENTES
 
     /** La fracción de la barra de progreso: el primer paso ya cuenta, el último la llena. */
     val progreso: Float get() = numero.toFloat() / entries.size
@@ -128,6 +136,20 @@ val ATAJOS_DE_RECURRENTES: List<AtajoDeRecurrente> = listOf(
  */
 val BANCOS_DE_LA_GUIA: List<String> = listOf(
     "bancolombia", "nu", "davivienda", "nequi", "banco_de_bogota", "bbva", "daviplata",
+)
+
+/**
+ * **Los tipos de cuenta que ofrece la guía**, con rótulos que entiende alguien nuevo (vuelta de
+ * diseño 3). Antes eran «Dinero / Inversión», los dos grupos de Patrimonio → «Nueva cuenta», que
+ * quien empieza no sabe leer. Cada rótulo va a un [AccountType] que ya existe —no se inventa
+ * ninguno—: ahorros, corriente y efectivo son los tres de **Dinero** (`AccountType.group`), y se
+ * suman igual en todas las cuentas de Movi; lo que cambia es que el efectivo no recibe extractos.
+ */
+val TIPOS_DE_CUENTA_DE_LA_GUIA: List<Pair<String, AccountType>> = listOf(
+    "Ahorros" to AccountType.SAVINGS,
+    "Corriente" to AccountType.CHECKING,
+    "Efectivo" to AccountType.CASH,
+    "Inversión" to AccountType.INVESTMENT,
 )
 
 /**

@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -25,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -55,6 +57,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.isAndroid
@@ -66,6 +69,7 @@ import com.jvillada.movi.shared.model.BANCOS_CONOCIDOS
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.DireccionDeCorreo
+import com.jvillada.movi.shared.model.Marca
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
@@ -86,6 +90,8 @@ import com.jvillada.movi.ui.DireccionDeTransicion
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.crearCuentaConSaldo
 import com.jvillada.movi.ui.components.AvatarDeLaCuenta
+import com.jvillada.movi.ui.components.CirculoDeMarca
+import com.jvillada.movi.ui.components.TamanoDeAvatar
 import com.jvillada.movi.ui.components.CasillaDeSeleccion
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.ds.BarraDeProgreso
@@ -118,8 +124,17 @@ import com.jvillada.movi.ui.transicionEntrePantallas
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
-/** El botón de avanzar de la guía (Empezar, Siguiente, Saltar, Ir a Inicio). Para las pruebas. */
+/** El botón principal de la guía (Empezar, Siguiente, Ir a Inicio). Para las pruebas. */
 const val TAG_AVANZAR_EN_LA_GUIA = "primer-uso-avanzar"
+
+/** El botón de texto que pasa al paso siguiente sin guardar nada. Para las pruebas. */
+const val TAG_SALTAR_EN_LA_GUIA = "primer-uso-saltar"
+
+/** Lo que dice el botón de texto que salta un paso. */
+const val SALTAR_ESTE_PASO = "Saltar este paso"
+
+/** El título grande de la bienvenida. */
+const val TITULO_DE_LA_BIENVENIDA = "Te damos la bienvenida a Movi"
 
 /** Lo que dice el botón que sale de la guía sin terminarla. */
 const val AHORA_NO = "Ahora no"
@@ -128,8 +143,11 @@ const val AHORA_NO = "Ahora no"
  * # La guía «Primer uso», a pantalla completa
  *
  * Ver [PasoDePrimerUso] para qué hace cada paso y [GuiaDePrimerUso] para cuándo se abre. Arriba:
- * «Paso N de 6», la barra de progreso y «Ahora no» (sale y la marca descartada). Abajo: «Atrás» y el
- * botón de avanzar, que dice «Saltar» mientras el paso no tiene nada hecho. **Todo paso se salta**;
+ * «Paso N de 6», la barra de progreso y «Ahora no» (sale y la marca descartada). Abajo, **igual en
+ * todos los pasos** (vuelta de diseño 3): «Atrás» y el botón principal, que dice «Empezar»,
+ * «Siguiente» o «Ir a Inicio» y **se habilita solo cuando hay algo que guardar**; debajo, en los
+ * pasos opcionales, el botón de texto «Saltar este paso». Antes el principal decía «Saltar» mientras
+ * no hubiera nada hecho, y el botón lleno de marca era el de no hacer nada. **Todo paso se salta**;
  * el de las cuentas, con «Ahora no»: sin ninguna cuenta Movi no tiene dónde anotar nada, y lo que
  * sigue (la captura, los pagos) se completa después desde «Primeros pasos».
  *
@@ -235,15 +253,14 @@ fun PrimerUsoScreen(
         PasoDePrimerUso.RECURRENTES -> recurrentes.isNotEmpty()
         else -> true
     }
-    val textoDeAvanzar = when {
-        paso == PasoDePrimerUso.BIENVENIDA -> "Empezar"
-        paso == PasoDePrimerUso.LISTO -> "Ir a Inicio"
-        // Sin ninguna cuenta no se sigue: el botón se apaga y la nota de abajo dice por qué.
-        paso == PasoDePrimerUso.CUENTAS -> "Siguiente"
-        hayAlgoHecho -> "Siguiente"
-        else -> "Saltar"
+    val textoDeAvanzar = when (paso) {
+        PasoDePrimerUso.BIENVENIDA -> "Empezar"
+        PasoDePrimerUso.LISTO -> "Ir a Inicio"
+        else -> "Siguiente"
     }
-    val sePuedeAvanzar = paso != PasoDePrimerUso.CUENTAS || cuentas.isNotEmpty()
+    // El principal solo cuando hay algo que guardar (o que seguir: la bienvenida y el final). Sin
+    // ninguna cuenta no se sigue: el botón se apaga y la nota de abajo dice por qué.
+    val sePuedeAvanzar = hayAlgoHecho
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Encabezado(
@@ -271,16 +288,27 @@ fun PrimerUsoScreen(
             },
             label = "pasos del primer uso",
         ) { p ->
+            // El alto del espacio entre la barra de arriba y los botones: la bienvenida se centra en
+            // él (y si no entra, se desplaza como cualquier paso).
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val altoDisponible = maxHeight
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = Medida.margenDePantalla, vertical = Medida.entreSecciones),
             ) {
-                Text(p.titulo, style = Movi.textos.titular, color = Movi.colores.texto)
-                Spacer(Modifier.height(Espacio.xs))
+                // La bienvenida lleva su propio título, grande y centrado (ver [PasoBienvenida]).
+                if (p != PasoDePrimerUso.BIENVENIDA) {
+                    Text(p.titulo, style = Movi.textos.titular, color = Movi.colores.texto)
+                    Spacer(Modifier.height(Espacio.xs))
+                }
                 when (p) {
-                    PasoDePrimerUso.BIENVENIDA -> PasoBienvenida()
+                    PasoDePrimerUso.BIENVENIDA -> PasoBienvenida(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = (altoDisponible - Medida.entreSecciones * 2).coerceAtLeast(Dp.Hairline)),
+                    )
                     PasoDePrimerUso.PERIODO -> PasoPeriodo(
                         dia = dia,
                         regla = regla,
@@ -314,6 +342,7 @@ fun PrimerUsoScreen(
                     )
                 }
             }
+            }
         }
 
         // La barra de abajo: «Atrás» y el botón de avanzar, siempre a la vista.
@@ -326,7 +355,7 @@ fun PrimerUsoScreen(
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 Spacer(Modifier.height(Espacio.xs))
             }
-            if (!sePuedeAvanzar) {
+            if (paso == PasoDePrimerUso.CUENTAS && !sePuedeAvanzar) {
                 Text(
                     "Agrega al menos una cuenta para seguir, o toca «$AHORA_NO» y hazlo después.",
                     style = Movi.textos.apoyo,
@@ -353,6 +382,19 @@ fun PrimerUsoScreen(
                     modifier = Modifier.weight(1f).testTag(TAG_AVANZAR_EN_LA_GUIA),
                 )
             }
+            // Saltar no es la acción principal: un botón de texto debajo, en los pasos opcionales.
+            // Pasa al siguiente sin guardar nada (el día elegido y no confirmado queda sin guardar).
+            val siguiente = paso.siguiente
+            if (paso.seSaltaConUnBoton && siguiente != null) {
+                Boton(
+                    SALTAR_ESTE_PASO,
+                    onClick = { irA(siguiente) },
+                    variante = VarianteDeBoton.Fantasma,
+                    habilitado = !guardando,
+                    anchoCompleto = true,
+                    modifier = Modifier.padding(top = Espacio.xs).testTag(TAG_SALTAR_EN_LA_GUIA),
+                )
+            }
         }
     }
 }
@@ -362,28 +404,86 @@ private val CUENTAS_QUE_PAGAN = setOf(AccountType.SAVINGS, AccountType.CHECKING,
 
 // ── 1 · Bienvenida ─────────────────────────────────────────────────────────────────────────────
 
+/** El `testTag` de la marca de Movi en la bienvenida. */
+const val TAG_MARCA_DE_MOVI = "marca-de-movi"
+
+/**
+ * **La bienvenida, con presencia** (vuelta de diseño 3). Era un título chico y tres filas con más de
+ * media pantalla vacía debajo. Ahora: la marca de Movi grande arriba ([MarcaDeMovi]), el título en
+ * `portada`, el saludo, las tres filas y la nota, **centrado verticalmente** en el espacio entre la
+ * barra de arriba y los botones ([modifier] trae ese alto como mínimo). Si no entra —letra muy
+ * grande—, se desplaza como cualquier paso.
+ */
 @Composable
-private fun PasoBienvenida() {
+private fun PasoBienvenida(modifier: Modifier) {
     val nombre = SessionManager.userName?.trim()?.substringBefore(' ')?.takeIf { it.isNotBlank() }
-    Text(
-        if (nombre != null) "Hola, $nombre. Esto es lo que hace Movi:" else "Esto es lo que hace Movi:",
-        style = Movi.textos.cuerpo,
-        color = Movi.colores.textoMedio,
-    )
-    Spacer(Modifier.height(Medida.dentroDeSeccion))
-    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-        Fila(titulo = "Anota lo que pasa en tu plata", inicio = { IconoEnCirculo(Icons.Rounded.EditNote) })
-        Separador()
-        Fila(titulo = "Te dice cuánto te queda para gastar", inicio = { IconoEnCirculo(Icons.Rounded.Savings) })
-        Separador()
-        Fila(titulo = "Te propone, pero nunca hace nada sin ti", inicio = { IconoEnCirculo(Icons.Rounded.AutoAwesome) })
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        MarcaDeMovi()
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Text(
+            TITULO_DE_LA_BIENVENIDA,
+            style = Movi.textos.portada,
+            color = Movi.colores.texto,
+            textAlign = TextAlign.Center,
+            // A todo el ancho: centrado por el párrafo, no por la caja (que mide el texto justo).
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(Espacio.xs))
+        Text(
+            if (nombre != null) "Hola, $nombre. Esto es lo que hace Movi:" else "Esto es lo que hace Movi:",
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.textoMedio,
+            textAlign = TextAlign.Center,
+            // A todo el ancho: centrado por el párrafo, no por la caja (que mide el texto justo).
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            Fila(titulo = "Anota lo que pasa en tu plata", inicio = { IconoEnCirculo(Icons.Rounded.EditNote) })
+            Separador()
+            Fila(titulo = "Te dice cuánto te queda para gastar", inicio = { IconoEnCirculo(Icons.Rounded.Savings) })
+            Separador()
+            Fila(titulo = "Te propone, pero nunca hace nada sin ti", inicio = { IconoEnCirculo(Icons.Rounded.AutoAwesome) })
+        }
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        Text(
+            "Son unos pasos cortos. Puedes saltar cualquiera y hacerlo después desde «Primeros pasos».",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            textAlign = TextAlign.Center,
+            // A todo el ancho: centrado por el párrafo, no por la caja (que mide el texto justo).
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
-    Spacer(Modifier.height(Medida.dentroDeSeccion))
-    Text(
-        "Son unos pasos cortos. Puedes saltar cualquiera y hacerlo después desde «Primeros pasos».",
-        style = Movi.textos.apoyo,
-        color = Movi.colores.textoMedio,
-    )
+}
+
+/**
+ * **La marca de Movi**: la billetera del ícono de la app (el `ic_launcher` de Android y el
+ * `movi-192.png` de la web son una billetera), en blanco sobre la marca, en un cuadrado redondeado
+ * como el de un ícono de app. Con el ícono del sistema y no con el PNG: un recurso de imagen de
+ * Compose todavía no llega a iOS (ver `laPlataformaTraeLasFuentes`), y ahí la app se caería.
+ */
+@Composable
+private fun MarcaDeMovi() {
+    Box(
+        modifier = Modifier
+            .size(Medida.accionRapida * 2)
+            .clip(RoundedCornerShape(Radio.xl))
+            .background(Movi.colores.marca)
+            .testTag(TAG_MARCA_DE_MOVI),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.AccountBalanceWallet,
+            contentDescription = "Movi",
+            tint = Movi.colores.sobreMarca,
+            modifier = Modifier.size(Icono.l * 2),
+        )
+    }
 }
 
 // ── 2 · Tu período ─────────────────────────────────────────────────────────────────────────────
@@ -547,8 +647,9 @@ private fun PasoCuentas(
             horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             verticalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
-            PildoraDeFiltro("Dinero", seleccionada = tipo == AccountType.SAVINGS, onClick = { tipo = AccountType.SAVINGS })
-            PildoraDeFiltro("Inversión", seleccionada = tipo == AccountType.INVESTMENT, onClick = { tipo = AccountType.INVESTMENT })
+            TIPOS_DE_CUENTA_DE_LA_GUIA.forEach { (rotulo, elTipo) ->
+                PildoraDeFiltro(rotulo, seleccionada = tipo == elTipo, onClick = { tipo = elTipo })
+            }
         }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         MoneyField(value = saldo, onValueChange = { saldo = it }, label = "Saldo de hoy")
@@ -691,10 +792,15 @@ private fun PasoTarjetas(tarjetas: List<String>, onTarjeta: (String) -> Unit) {
     }
 }
 
-/** Los bancos de [BANCOS_DE_LA_GUIA], por su nombre de `MarcasConocidas`. */
-private val NOMBRES_DE_LOS_BANCOS: List<String> =
-    BANCOS_DE_LA_GUIA.mapNotNull { id -> BANCOS_CONOCIDOS.firstOrNull { it.id == id }?.nombre }
+/** Los bancos de [BANCOS_DE_LA_GUIA], con su marca de `MarcasConocidas`. */
+private val MARCAS_DE_LOS_BANCOS: List<Marca> =
+    BANCOS_DE_LA_GUIA.mapNotNull { id -> BANCOS_CONOCIDOS.firstOrNull { it.id == id } }
 
+/**
+ * Los bancos de un toque, cada uno con **el avatar de su marca** (vuelta de diseño 3): el mismo
+ * círculo de color con la marca corta que la app pinta en las filas y las tarjetas de cuenta
+ * ([CirculoDeMarca]), a [TamanoDeAvatar.Linea] dentro de la píldora.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SelectorDeBanco(elegido: String?, onElegir: (String) -> Unit) {
@@ -702,18 +808,23 @@ private fun SelectorDeBanco(elegido: String?, onElegir: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         verticalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
-        NOMBRES_DE_LOS_BANCOS.forEach { nombre ->
-            PildoraDeFiltro(nombre, seleccionada = nombre == elegido, onClick = { onElegir(nombre) })
+        MARCAS_DE_LOS_BANCOS.forEach { marca ->
+            PildoraDeFiltro(
+                marca.nombre,
+                seleccionada = marca.nombre == elegido,
+                onClick = { onElegir(marca.nombre) },
+                inicio = { CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea) },
+            )
         }
     }
 }
 
-private fun rotuloDelTipo(tipo: AccountType): String = when (tipo) {
-    AccountType.INVESTMENT -> "Inversión"
-    AccountType.CREDIT_CARD -> "Tarjeta de crédito"
-    AccountType.LOAN -> "Préstamo"
-    else -> "Dinero"
-}
+private fun rotuloDelTipo(tipo: AccountType): String =
+    TIPOS_DE_CUENTA_DE_LA_GUIA.firstOrNull { it.second == tipo }?.first ?: when (tipo) {
+        AccountType.CREDIT_CARD -> "Tarjeta de crédito"
+        AccountType.LOAN -> "Préstamo"
+        else -> "Cuenta"
+    }
 
 // ── 4 · Que Movi se entere solo ────────────────────────────────────────────────────────────────
 

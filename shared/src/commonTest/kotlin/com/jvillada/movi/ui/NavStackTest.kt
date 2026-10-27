@@ -121,7 +121,7 @@ class NavStackTest {
     fun `entrar y crear cuenta son las pantallas de antes de la sesion`() {
         assertTrue(NavStack.esDeAutenticacion(Screen.Login))
         assertTrue(NavStack.esDeAutenticacion(Screen.Register))
-        listOf(Screen.Dashboard, Screen.Mas, Screen.Profile, Screen.Transactions())
+        listOf(Screen.Dashboard, Screen.Mas, Screen.BorrarLaCuenta, Screen.Transactions())
             .forEach { assertFalse(NavStack.esDeAutenticacion(it), "$it") }
     }
 
@@ -152,7 +152,6 @@ class NavStackTest {
         Screen.AccountDetail("acc-3", AccountGroup.DEUDA) to NavTab.PATRIMONIO,
         // Ajustes y lo que se abre desde ahí: por el avatar, sin pestaña marcada.
         Screen.Mas to null,
-        Screen.Profile to null,
         Screen.Categorias to null,
         Screen.Documentos to null,
         Screen.Compartir to null,
@@ -193,7 +192,7 @@ class NavStackTest {
 
     @Test
     fun `Ajustes no marca pestana pero sigue con la barra abajo`() {
-        listOf(Screen.Mas, Screen.Profile, Screen.Categorias, Screen.Documentos, Screen.Compartir,
+        listOf(Screen.Mas, Screen.BorrarLaCuenta, Screen.Categorias, Screen.Documentos, Screen.Compartir,
             Screen.AIChat(), Screen.CapturaDelBanco, Screen.PrimerosPasos, Screen.LoQueMoviSabe,
             Screen.BorrarLaCuenta, Screen.EditarInicio)
             .forEach {
@@ -320,7 +319,7 @@ class NavStackTest {
             .forEach { assertTrue(NavStack.esRaizDePestana(it), "$it") }
         listOf(
             Screen.Transactions(CHIP_ENTRE_CUENTAS), Screen.Plan(SEGMENTO_PRESUPUESTOS), Screen.Credits,
-            Screen.PorRevisar, Screen.AIChat(), Screen.QuickAdd(), Screen.Profile,
+            Screen.PorRevisar, Screen.AIChat(), Screen.QuickAdd(), Screen.BorrarLaCuenta,
         ).forEach { assertFalse(NavStack.esRaizDePestana(it), "$it") }
     }
 
@@ -350,7 +349,7 @@ class NavStackTest {
     fun `el resto de las pantallas son destinos, no modales`() {
         listOf(
             Screen.Dashboard, Screen.Transactions(), Screen.Accounts, Screen.Credits, Screen.Budgets,
-            Screen.Mas, Screen.Profile, Screen.Login,
+            Screen.Mas, Screen.BorrarLaCuenta, Screen.Login,
             Screen.AccountDetail("acc_1", AccountGroup.DINERO),
         ).forEach { assertFalse(opensAsOverlay(it), "$it") }
     }

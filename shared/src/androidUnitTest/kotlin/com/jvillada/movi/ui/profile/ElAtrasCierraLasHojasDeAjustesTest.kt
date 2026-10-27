@@ -25,6 +25,7 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.LocalPilaDeHojas
 import com.jvillada.movi.ui.PilaDeHojas
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.mas.MasScreen
 import com.jvillada.movi.ui.atras
 import com.jvillada.movi.ui.hayAdondeVolver
 import org.junit.After
@@ -39,7 +40,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * # El «atrás» del teléfono sobre las hojas de Perfil
+ * # El «atrás» del teléfono sobre las hojas de Ajustes
+ *
+ * Vuelta de diseño 3: las hojas eran de Perfil, que se mudó dentro de Ajustes (`MasScreen`). La
+ * pantalla alta (3200 dp) es para que la `LazyColumn` componga hasta «Cuenta».
  *
  * `PilaDeHojas` trajo el mecanismo y `ElAtrasDelSistemaTest` lo probó con hojas de mentira; lo que
  * no podía cubrir —lo dice en su propio KDoc— es que **las hojas de Perfil se anoten**. Es una
@@ -51,8 +55,8 @@ import kotlin.test.assertTrue
  * cableado que arma `App.kt`, con la pantalla de Perfil real adentro.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(qualifiers = "w411dp-h731dp-xhdpi")
-class ElAtrasCierraLasHojasDePerfilTest {
+@Config(qualifiers = "w411dp-h3200dp-xhdpi")
+class ElAtrasCierraLasHojasDeAjustesTest {
 
     @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
 
@@ -70,8 +74,8 @@ class ElAtrasCierraLasHojasDePerfilTest {
         reminderLeadDays = 5,
     )
 
-    /** Donde estaba parado cuando abrió Perfil: Inicio → Más → Perfil. */
-    private fun pilaEnPerfil() = mutableStateListOf(Screen.Dashboard, Screen.Mas, Screen.Profile)
+    /** Donde estaba parado cuando abrió Ajustes: Inicio → Ajustes (el avatar). */
+    private fun pilaEnAjustes() = mutableStateListOf(Screen.Dashboard, Screen.Mas)
 
     /** El cableado de `App.kt`, con Perfil adentro. */
     @Composable
@@ -82,7 +86,7 @@ class ElAtrasCierraLasHojasDePerfilTest {
                 onBack = { atras(hojas, pila) },
             )
             CompositionLocalProvider(LocalPilaDeHojas provides hojas) {
-                Box(Modifier.fillMaxSize()) { PerfilScreen(onNavigate = {}, onLogout = {}) }
+                Box(Modifier.fillMaxSize()) { MasScreen(onNavigate = {}, onLogout = {}) }
             }
         }
     }
@@ -111,8 +115,8 @@ class ElAtrasCierraLasHojasDePerfilTest {
     }
 
     @Test
-    fun `atras cierra la hoja de contrasena y deja Perfil donde estaba`() {
-        val pila = pilaEnPerfil()
+    fun `atras cierra la hoja de contrasena y deja Ajustes donde estaba`() {
+        val pila = pilaEnAjustes()
         val hojas = PilaDeHojas()
         montar(object : RepositorioDePrueba() {
             override suspend fun getUserProfile(): UserProfile = perfilDelDueno
@@ -128,7 +132,7 @@ class ElAtrasCierraLasHojasDePerfilTest {
 
         assertFalse(hay("Contraseña actual"), "la hoja debería haberse cerrado")
         assertEquals(
-            listOf(Screen.Dashboard, Screen.Mas, Screen.Profile),
+            listOf(Screen.Dashboard, Screen.Mas),
             pila.toList(),
             "cerrar una hoja no es navegar: la pila no se mueve",
         )
@@ -140,7 +144,7 @@ class ElAtrasCierraLasHojasDePerfilTest {
 
     @Test
     fun `atras sobre la hoja del periodo la cierra sin guardar nada`() {
-        val pila = pilaEnPerfil()
+        val pila = pilaEnAjustes()
         val hojas = PilaDeHojas()
         var guardado: UpdateProfileRequest? = null
         montar(object : RepositorioDePrueba() {
@@ -160,7 +164,7 @@ class ElAtrasCierraLasHojasDePerfilTest {
 
         assertFalse(hay("¿Qué día empieza tu mes?"), "la hoja debería haberse cerrado")
         assertNull(guardado, "salir de la hoja no guarda: atrás es cancelar, no confirmar")
-        assertEquals(listOf(Screen.Dashboard, Screen.Mas, Screen.Profile), pila.toList())
+        assertEquals(listOf(Screen.Dashboard, Screen.Mas), pila.toList())
         assertTrue(hay("Cada día 25"), "el corte del dueño queda como estaba")
     }
 
@@ -169,8 +173,8 @@ class ElAtrasCierraLasHojasDePerfilTest {
      * la pila. Sin esto, una hoja que se anota y no se desanota dejaría la pantalla sin salida.
      */
     @Test
-    fun `sin hoja abierta, atras sale de Perfil`() {
-        val pila = pilaEnPerfil()
+    fun `sin hoja abierta, atras sale de Ajustes`() {
+        val pila = pilaEnAjustes()
         val hojas = PilaDeHojas()
         montar(object : RepositorioDePrueba() {
             override suspend fun getUserProfile(): UserProfile = perfilDelDueno
@@ -185,6 +189,6 @@ class ElAtrasCierraLasHojasDePerfilTest {
         assertFalse(hojas.hayHojaAbierta)
 
         apretarAtras()
-        assertEquals(listOf(Screen.Dashboard, Screen.Mas), pila.toList())
+        assertEquals(listOf<Screen>(Screen.Dashboard), pila.toList())
     }
 }

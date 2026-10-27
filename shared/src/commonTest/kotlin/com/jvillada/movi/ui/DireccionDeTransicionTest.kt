@@ -52,7 +52,7 @@ class DireccionDeTransicionTest {
     @Test
     fun `reemplazar la pila entera es un fundido`() {
         assertEquals(DireccionDeTransicion.FUNDIDO, direccionDe(listOf(Screen.Login), listOf(hoy)))
-        assertEquals(DireccionDeTransicion.FUNDIDO, direccionDe(listOf(hoy, Screen.Profile), listOf(Screen.Login)))
+        assertEquals(DireccionDeTransicion.FUNDIDO, direccionDe(listOf(hoy, Screen.BorrarLaCuenta), listOf(Screen.Login)))
         // El destino de reserva de la flecha ‹ (una pila de uno que se reemplaza).
         assertEquals(DireccionDeTransicion.FUNDIDO, direccionDe(listOf(Screen.Credits), listOf(Screen.Accounts)))
     }

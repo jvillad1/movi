@@ -47,11 +47,14 @@ import kotlin.test.assertTrue
 
 /**
  * **Hoy y Plan, montados uno encima del otro con los mismos datos, dicen la misma cifra** (Ola 1):
- * el mismo valor, entero en la cifra grande de Hoy y compacto en la columna «Período» de Plan.
+ * el mismo valor, entero en la cifra grande de Hoy y compacto en la frase de Plan.
  *
  * Arriba el hero de Hoy (`HeroDeUnVistazo`), abajo la tarjeta de Plan tal como la arma
  * `PlanScreen` (`TarjetaDelDisponible` con `disponibleDelInicio(data)`). Se lee lo que de verdad se
- * pinta: el texto de la cifra grande y el de la columna «Período», y el color de los dos.
+ * pinta: el texto de la cifra grande y el de la frase de Plan, y el color de los dos.
+ *
+ * Vuelta de diseño 3: la columna «Período» de Plan ya no repite lo que queda —lo dice su frase—;
+ * dice lo gastado y de cuánto.
  *
  * Escenario de `DisponibleEnInicioTest`: lunes 21-sep-2026, $10M de ingresos, $3,1M de arriendo.
  */
@@ -129,7 +132,7 @@ class TeQuedanEnHoyEnPantallaTest {
         composeRule.onNodeWithTag(TAG_CIFRA_TE_QUEDAN, useUnmergedTree = true).fetchSemanticsNode()
 
     @Test
-    fun `te quedan - Hoy dice el mismo texto que la columna Periodo de Plan`() {
+    fun `te quedan - Hoy dice la misma cifra que la frase de Plan, y la columna Periodo no la repite`() {
         montar(datos(gasto = mapOf("2026-08-26" to 100_000L), cuentas = unaCuenta))
 
         val esperado = disponibleDelInicio(datos(mapOf("2026-08-26" to 100_000L), unaCuenta), hoy)!!.periodo.teQuedan
@@ -137,13 +140,16 @@ class TeQuedanEnHoyEnPantallaTest {
         // Hoy, entero: es la cifra principal del dueño.
         assertEquals(formatCOP(esperado), deHoy)
         assertEquals("\$6.800.000", deHoy)
-        // Plan, el MISMO valor en su columna «Período», compacto porque ahí no entra entero.
-        assertEquals(
-            1,
-            composeRule.onAllNodesWithText(formatMoneyCompact(esperado), useUnmergedTree = true).fetchSemanticsNodes().size,
-            "la columna «Período» de Plan dice ${formatMoneyCompact(esperado)}",
-        )
+        // Plan, el MISMO valor en su frase, compacto; y una sola vez: la columna «Período» ya no lo repite.
         assertEquals("\$6,8M", formatMoneyCompact(esperado))
+        composeRule.onNodeWithText("Te quedan \$6,8M para 4 días · \$1,7M por día", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText(formatMoneyCompact(esperado), useUnmergedTree = true).fetchSemanticsNodes().size,
+            "la columna «Período» no repite ${formatMoneyCompact(esperado)}",
+        )
+        // La columna dice lo gastado y de cuánto.
+        composeRule.onNodeWithText("de \$6,9M", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText(ROTULO_TE_QUEDAN, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("para 4 días · \$1,7M por día", useUnmergedTree = true).assertIsDisplayed()
         assertEquals(normal, color(cifraDeHoy()))
@@ -155,10 +161,17 @@ class TeQuedanEnHoyEnPantallaTest {
 
         composeRule.onNodeWithText(ROTULO_TE_PASASTE, useUnmergedTree = true).assertIsDisplayed()
         assertEquals("\$100.000", texto(cifraDeHoy()))
-        val columnaDePlan = composeRule.onAllNodesWithText("−\$100.000", useUnmergedTree = true).fetchSemanticsNodes()
-        assertEquals(1, columnaDePlan.size, "Plan dice −\$100.000 en su columna «Período»")
+        val fraseDePlan = composeRule.onAllNodesWithText("Te pasaste del disponible del período por \$100.000", useUnmergedTree = true)
+            .fetchSemanticsNodes()
+        assertEquals(1, fraseDePlan.size, "Plan dice el mismo \$100.000 en su frase")
+        assertEquals(0, composeRule.onAllNodesWithText("−\$100.000", useUnmergedTree = true).fetchSemanticsNodes().size,
+            "la columna «Período» no lo repite")
         assertEquals(rojo, color(cifraDeHoy()))
-        assertEquals(color(columnaDePlan.single()), color(cifraDeHoy()), "Hoy y Plan, del mismo color")
+        assertEquals(color(fraseDePlan.single()), color(cifraDeHoy()), "Hoy y Plan, del mismo color")
+        // La columna «Período» dice lo gastado ($7M), en el mismo rojo: se pasó.
+        val gastadoEnPlan = composeRule.onAllNodesWithText("\$7M", useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(1, gastadoEnPlan.size)
+        assertEquals(rojo, color(gastadoEnPlan.single()))
     }
 
     /**

@@ -201,7 +201,7 @@ internal fun HeroDeUnVistazo(
                 }
             }
             if (teQuedan != null) {
-                // El MISMO valor que la columna «Período» de Plan, entero: es la cifra principal del
+                // El MISMO valor que la frase del disponible de Plan, entero: es la cifra principal del
                 // dueño, «$4.963.400» y no «$5M». Sin signo: el rótulo ya dice de qué lado está.
                 Cifra(
                     cifraContando(teQuedan.monto, entradaDeLaCifra),

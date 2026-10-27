@@ -96,7 +96,6 @@ sealed class Screen {
          */
         val presetPestana: com.jvillada.movi.ui.quickadd.PestanaDeAgregar? = null,
     ) : Screen()
-    data object Profile : Screen()
     /**
      * Movi AI, opcionalmente **con una pregunta ya lista**.
      *
@@ -357,7 +356,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
  * entrar a Perfil dejaría al dueño sin forma de saltar a Movimientos que no sea volver dos veces.
  */
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
-    Screen.Mas, Screen.Profile, is Screen.AIChat,
+    Screen.Mas, is Screen.AIChat,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos,
     Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio -> true
     else -> false

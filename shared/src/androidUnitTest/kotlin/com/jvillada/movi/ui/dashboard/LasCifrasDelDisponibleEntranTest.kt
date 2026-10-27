@@ -101,9 +101,11 @@ class LasCifrasDelDisponibleEntranTest {
         }
         composeRule.waitForIdle()
 
-        listOf("−\$888.888", "gastaste", "\$888.888").forEach { texto ->
+        // La semana y hoy: «−$888.888» grande y «$888.888» chico. El período (vuelta de diseño 3):
+        // «$888.888» grande y «de $0» chico.
+        listOf("−\$888.888" to 2, "gastaste" to 3, "\$888.888" to 3, "de \$0" to 1).forEach { (texto, cuantas) ->
             val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
-            assertEquals("«$texto» tendría que estar en las tres columnas", 3, nodos.size)
+            assertEquals("«$texto» tendría que estar en $cuantas columnas", cuantas, nodos.size)
             nodos.forEach { nodo ->
                 // Contra el ancho que la columna le da (`maxWidth`), no contra `hasVisualOverflow`:
                 // el nodo de un `Text` mide lo que su texto, y el redondeo a píxeles enteros lo
@@ -116,6 +118,43 @@ class LasCifrasDelDisponibleEntranTest {
                 val detalle = "la columna da ${columna}px y el texto entero pide ${pide}px"
                 assertTrue("«$texto» no entra en su columna a 390 dp: $detalle", pide <= columna)
                 assertEquals("«$texto» quedó en más de un renglón: $detalle", 1, layout.lineCount)
+            }
+        }
+    }
+
+    /**
+     * Con margen, la columna del período dice lo gastado y «de $X» con la meta del período (vuelta de
+     * diseño 3): $15,6M de ingresos − $3,1M de arriendo = $12,5M, y $888.888 gastados hoy.
+     */
+    @Test
+    fun `con margen lo gastado y de cuanto del periodo entran en su columna`() {
+        val conMargen = sinMargen.copy(
+            summary = FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 15_600_000, egresos = 0),
+        )
+        composeRule.setContent {
+            MoviTheme {
+                val base = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
+                    Box(Modifier.fillMaxSize()) {
+                        DisponibleDelPeriodoSection(
+                            section = ScreenSection(type = "DISPONIBLE_DEL_PERIODO", title = "Disponible"),
+                            data = conMargen,
+                            hoy = hoy,
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        listOf("\$888.888", "de \$12,5M").forEach { texto ->
+            val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
+            assertTrue("«$texto» tendría que estar", nodos.isNotEmpty())
+            nodos.forEach { nodo ->
+                val layout = layoutDe(nodo)
+                val columna = layout.layoutInput.constraints.maxWidth
+                val pide = layout.multiParagraph.intrinsics.maxIntrinsicWidth
+                assertTrue("«$texto» no entra en su columna: ${pide}px de ${columna}px", pide <= columna)
+                assertEquals("«$texto» quedó en más de un renglón", 1, layout.lineCount)
             }
         }
     }

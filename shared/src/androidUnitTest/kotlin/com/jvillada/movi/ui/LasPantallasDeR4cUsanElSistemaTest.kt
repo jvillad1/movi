@@ -36,7 +36,6 @@ import com.jvillada.movi.ui.cuadre.CuadreDeSaldosScreen
 import com.jvillada.movi.ui.destinos.DestinosScreen
 import com.jvillada.movi.ui.destinos.TAG_FICHA_EN_LA_LISTA
 import com.jvillada.movi.ui.mas.MasScreen
-import com.jvillada.movi.ui.profile.PerfilScreen
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -179,10 +178,11 @@ class LasPantallasDeR4cUsanElSistemaTest {
         usaElSistema("Personas y comercios", prefijos = listOf(TAG_FICHA_EN_LA_LISTA))
     }
 
+    /** Vuelta de diseño 3: Ajustes es una sola pantalla de secciones y filas (Perfil se mudó adentro). */
     @Test
-    fun `Perfil usa el sistema`() {
-        montar("Cada día 25") { PerfilScreen(onNavigate = {}, onLogout = {}) }
-        usaElSistema("Perfil", conCifras = false)
+    fun `Ajustes usa el sistema`() {
+        montar("Cada día 25") { MasScreen(onNavigate = {}, onLogout = {}) }
+        usaElSistema("Ajustes", conCifras = false)
     }
 
     @Test
@@ -202,17 +202,6 @@ class LasPantallasDeR4cUsanElSistemaTest {
         val cifras = nodos(TAG_CIFRA)
         assertTrue(cifras.isNotEmpty(), "«Movi dice» es una Cifra")
         cifras.forEach { assertTrue(seVeEntero(it), "«${texto(it)}» se recorta a 360 dp") }
-    }
-
-    @Test
-    fun `Ajustes es la cuadricula de acciones del sistema`() {
-        Repositories.sustitutoDePrueba = repo
-        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { MasScreen(onNavigate = {}) } } }
-        composeRule.waitForIdle()
-        assertTrue(nodos(TAG_ENCABEZADO).isNotEmpty())
-        assertTrue(nodos(com.jvillada.movi.ui.components.ds.TAG_CUADRICULA_DE_ACCIONES).isNotEmpty())
-        val minimo = with(composeRule.density) { Medida.objetivoTactil.toPx() } - 0.5f
-        nodos(com.jvillada.movi.ui.components.ds.TAG_ACCION_RAPIDA).forEach { assertTrue(it.size.height >= minimo) }
     }
 
     /**
