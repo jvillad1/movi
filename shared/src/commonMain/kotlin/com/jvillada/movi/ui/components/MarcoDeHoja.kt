@@ -113,8 +113,11 @@ const val TAG_PANEL_DE_HOJA = "marco-de-hoja-panel"
  *   geometría (`HojaAgregarGeometriaTest` y compañía) miden con margen cero, y no se movieron.
  * - **Mediano y expandido**: el mismo velo y el panel **centrado**, de a lo sumo [anchoMaximo] de
  *   ancho y el [FRACCION_DE_ALTO_DE_HOJA_CENTRADA] del alto, con las cuatro esquinas redondeadas y
- *   solo la X (no hay nada que arrastrar). **Escape** cierra, con la misma condición que el toque
- *   afuera ([dismissEnabled]) — salvo que la hoja pase [onEscape] (ver abajo).
+ *   solo la X (no hay nada que arrastrar).
+ *
+ * En las dos, **Escape** cierra con la misma condición que el toque afuera ([dismissEnabled]) —
+ * salvo que la hoja pase [onEscape] (ver abajo)—, también con un campo de la hoja enfocado. La del
+ * teléfono lo atiende desde la vuelta de diseño 17: antes, en la web angosta, solo la X la cerraba.
  *
  * Nada de `Dialog` ni `Popup`: la hoja se sigue dibujando dentro del árbol, así que
  * [com.jvillada.movi.ui.PilaDeHojas] y las pruebas de geometría la siguen viendo. Las dos se dibujan
@@ -163,7 +166,9 @@ const val TAG_PANEL_DE_HOJA = "marco-de-hoja-panel"
  * En la hoja desde abajo (la web por debajo de 600 dp) el panel solo se vuelve destino de foco
  * cuando hay [onTecla] **y** la plataforma tiene teclado físico ([LocalHayTecladoFisico]): en el
  * teléfono Android no, porque un panel con el foco al abrir es exactamente lo que
- * `SelectorDeCategoriaEnAgregarTest` prohíbe (nada puede tener el foco al abrir un selector).
+ * `SelectorDeCategoriaEnAgregarTest` prohíbe (nada puede tener el foco al abrir un selector). Sin
+ * [onTecla] y con teclado físico, el que toma el foco es el velo, y solo si nadie de adentro lo
+ * tomó al abrir: así Escape le llega a la hoja aunque no se haya tocado ningún campo.
  */
 @Composable
 fun MarcoDeHoja(
@@ -182,7 +187,7 @@ fun MarcoDeHoja(
     val hoja: @Composable () -> Unit = if (compacta) {
         {
             HojaDesdeAbajo(
-                onDismiss, dismissEnabled, fraccionDeAltoMaximo, conCierre, relleno, onTecla,
+                onDismiss, dismissEnabled, fraccionDeAltoMaximo, conCierre, relleno, onEscape, onTecla,
                 enLaCascara = anfitrion != null, content = content,
             )
         }
@@ -429,11 +434,15 @@ private fun HojaDesdeAbajo(
     fraccionDeAltoMaximo: Float?,
     conCierre: Boolean,
     relleno: PaddingValues,
+    onEscape: (() -> Unit)?,
     onTecla: ((KeyEvent) -> Boolean)?,
     enLaCascara: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val estado = rememberEstadoDeLaHoja(onDismiss, dismissEnabled)
+    // Escape, como en la centrada (vuelta de diseño 17): sin [onEscape] propio es el toque afuera.
+    // Hasta acá la hoja desde abajo no lo atendía, y en la web angosta solo la X la cerraba.
+    val escapeActual by rememberUpdatedState(onEscape ?: estado::cerrar)
     val densidad = LocalDensity.current
     val umbralDeVelocidad = with(densidad) { VELOCIDAD_PARA_CERRAR_ARRASTRANDO.toPx() }
     // **Arrastrarla hacia abajo la cierra**, desde la manija o desde el cuerpo, sin romper el scroll
@@ -480,6 +489,38 @@ private fun HojaDesdeAbajo(
             .focusable()
     }
     if (onTecla != null) LaunchedEffect(Unit) { reclamarFoco() }
+    // Con teclado físico y sin [onTecla] (que ya le da el foco al panel), el velo es un destino de
+    // foco para que Escape le llegue a alguien aunque nadie haya tocado un campo. Lo pide al abrir
+    // **solo si nadie de adentro lo tomó** (un buscador que se enfoca solo se lo queda), y lo
+    // recupera como la centrada: al cerrarse el sub-editor que lo tenía o la hoja de arriba.
+    val veloConFoco = onTecla == null && LocalHayTecladoFisico.current
+    val focoDelVelo = remember { FocusRequester() }
+    var adentroHayFoco by remember { mutableStateOf(false) }
+    val pila = LocalPilaDeFocoDeHojas.current ?: remember { PilaDeFocoDeHojas() }
+    val estaHoja = remember {
+        PilaDeFocoDeHojas.Hoja(reclamar = { alcance.launch { runCatching { focoDelVelo.requestFocus() } } })
+    }
+    if (veloConFoco) {
+        DisposableEffect(pila) {
+            pila.abrir(estaHoja)
+            onDispose { pila.cerrar(estaHoja) }
+        }
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            if (!adentroHayFoco) estaHoja.reclamar()
+        }
+    }
+    val focoDelVeloModifier = if (veloConFoco) {
+        Modifier
+            .onFocusChanged { foco ->
+                adentroHayFoco = foco.hasFocus
+                if (!foco.hasFocus && pila.esLaDeArriba(estaHoja)) estaHoja.reclamar()
+            }
+            .focusRequester(focoDelVelo)
+            .focusable()
+    } else {
+        Modifier
+    }
 
     @Composable
     fun Columna(altoMaximo: Dp?) {
@@ -534,6 +575,18 @@ private fun HojaDesdeAbajo(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            // Escape cierra (o lo que decida [onEscape]) desde cualquier lugar de la hoja: en el
+            // *preview*, de la raíz hacia adentro, para que llegue aunque un campo tenga el foco. Un
+            // menú desplegable abierto es un `Popup` con su propia raíz: su Escape no pasa por acá.
+            .onPreviewKeyEvent { evento ->
+                if (evento.key == Key.Escape && evento.type == KeyEventType.KeyDown) {
+                    escapeActual()
+                    true
+                } else {
+                    false
+                }
+            }
+            .then(focoDelVeloModifier)
             // El velo se oscurece a la par de la hoja: entra, sale y se aclara mientras se arrastra.
             .drawBehind { drawRect(Color.Black.copy(alpha = OPACIDAD_DEL_VELO * estado.fraccionVisible())) }
             .clickable(enabled = dismissEnabled && !estado.cerrando, onClick = estado::cerrar)

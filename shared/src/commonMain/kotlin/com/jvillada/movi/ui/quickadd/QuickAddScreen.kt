@@ -1076,9 +1076,9 @@ fun QuickAddScreen(
      * la composición vigente— guarda con los valores de ahora.
      */
     fun alTeclear(evento: KeyEvent): Boolean {
-        // Escape con un sub-editor abierto vuelve al formulario también en la hoja desde abajo (la
-        // web angosta con teclado físico), que no atiende Escape por su cuenta. En la hoja centrada
-        // no llega acá: la atrapa antes `MarcoDeHoja` y la pasa por `onEscape`, que hace lo mismo.
+        // Respaldo: desde la vuelta de diseño 17 las dos hojas (la centrada y la de abajo) atrapan
+        // Escape antes y lo pasan por `onEscape`, que hace lo mismo. Se queda por si alguna vez el
+        // marco deja de atenderlo: con un sub-editor abierto, Escape vuelve al formulario.
         if (evento.key == Key.Escape && pickers.hayPicker) {
             if (evento.type == KeyEventType.KeyDown) volverAlFormulario()
             return true
