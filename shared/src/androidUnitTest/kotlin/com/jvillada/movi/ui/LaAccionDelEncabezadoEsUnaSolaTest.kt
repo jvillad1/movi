@@ -78,8 +78,10 @@ class LaAccionDelEncabezadoEsUnaSolaTest {
     private fun nodos(tag: String): List<SemanticsNode> =
         composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
 
+    /** Lo que dice la acción: su texto o, cuando cedió el lugar al título, la descripción del ícono. */
     private fun textosDentro(nodo: SemanticsNode): List<String> =
         listOfNotNull(nodo.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }) +
+            nodo.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() +
             nodo.children.flatMap(::textosDentro)
 
     private fun contiene(afuera: Rect, adentro: Rect): Boolean =
@@ -116,9 +118,13 @@ class LaAccionDelEncabezadoEsUnaSolaTest {
             assertTrue(texto in textosDentro(accion), "$cual: la acción dice «$texto»")
             val encabezado = nodos(TAG_ENCABEZADO).first()
             assertTrue(contiene(encabezado.boundsInRoot, accion.boundsInRoot), "$cual: la acción va dentro del encabezado")
-            accion.size.height
+            accion.size.height to (accion.config.getOrNull(SemanticsProperties.Text) == null && accion.children.none { it.config.getOrNull(SemanticsProperties.Text) != null })
         }
-        assertTrue(altos.all { abs(it - altos.first()) <= 1 }, "la acción mide lo mismo en las tres: $altos")
+        // Las que van con texto miden lo mismo (vuelta de diseño 8: la que cede su lugar al título
+        // queda en el ícono, de 48; ver `LaAccionDelEncabezadoCedeAlTituloTest`).
+        val conTexto = altos.filterNot { it.second }.map { it.first }
+        assertTrue(conTexto.isNotEmpty(), "alguna conserva su texto: $altos")
+        assertTrue(conTexto.all { abs(it - conTexto.first()) <= 1 }, "la acción con texto mide lo mismo en todas: $altos")
         assertEquals(
             0,
             composeRule.onAllNodesWithText("Nuevo crédito", useUnmergedTree = true).fetchSemanticsNodes().size,

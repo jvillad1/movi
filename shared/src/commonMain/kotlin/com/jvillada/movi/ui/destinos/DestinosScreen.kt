@@ -58,7 +58,9 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.ajustesDelPeriodo
-import com.jvillada.movi.shared.model.identificadoresDelDestino
+import com.jvillada.movi.shared.model.IdentificadorDelDestino
+import com.jvillada.movi.shared.model.MIN_DIGITOS_DEL_NUMERO
+import com.jvillada.movi.shared.model.TipoDeIdentificador
 import com.jvillada.movi.shared.model.AgregarIdentificador
 import com.jvillada.movi.shared.model.DescartarSugerido
 import com.jvillada.movi.shared.model.DestinoSugerido
@@ -646,17 +648,20 @@ private fun TarjetaDeDuplicado(par: PosibleDuplicado, error: String?, onUnir: ()
     }
 }
 
-/** «·3068 · Persona · 2 veces · último 19 sep». */
+/** «Cuenta ·3068 · Persona · 2 veces · último 19 sep». */
 internal fun detalleDelSugerido(s: DestinoSugerido, hoy: kotlinx.datetime.LocalDate): String =
-    listOfNotNull(
-        // El dato solo si el título es otro: «Ana Prueba Salazar · Ana Prueba Salazar» lo repetía.
-        comoSeLeeEnLaFicha(s.identificador).takeIf {
-            s.nombrePropuesto.isNotEmpty() && normalizarParaBuscar(it) != normalizarParaBuscar(s.nombrePropuesto)
-        },
-        s.tipo.comoSeDice(),
-        if (s.veces == 1) "1 vez" else "${s.veces} veces",
-        "último " + etiquetaDeFecha(fechaDeEpoch(s.ultimo), hoy).replaceFirstChar { it.lowercaseChar() },
-    ).joinToString(" · ")
+    enUnaLinea(
+        listOf(
+            // El dato solo si el título es otro: «Ana Prueba Salazar · Ana Prueba Salazar» lo repetía.
+            identificadorEnUnaLinea(s.identificador)?.takeIf {
+                s.nombrePropuesto.isNotEmpty() &&
+                    normalizarParaBuscar(comoSeLeeEnLaFicha(s.identificador)) != normalizarParaBuscar(s.nombrePropuesto)
+            },
+            s.tipo.comoSeDice(),
+            if (s.veces == 1) "1 vez" else "${s.veces} veces",
+            "último " + etiquetaDeFecha(fechaDeEpoch(s.ultimo), hoy).replaceFirstChar { it.lowercaseChar() },
+        ),
+    )
 
 /**
  * Lo que la pantalla vacía explica, en dos frases: qué es y que no suma en su plata. Cómo se usa lo
@@ -668,10 +673,31 @@ internal const val QUE_ES_ESTO: String =
 
 /**
  * El renglón de debajo del nombre: cómo lo reconoce el banco (la cola del número, la llave — ver
- * [identificadoresDelDestino]) y la nota, si la tiene.
+ * [identificadorEnUnaLinea]) y la nota, si la tiene: «Cuenta ·0756 · esposa». Vacío si no hay nada.
  */
 internal fun subtituloDelDestino(destino: DestinoConocido): String =
-    (identificadoresDelDestino(destino) + listOfNotNull(destino.deQuien)).joinToString(" · ")
+    enUnaLinea(destino.todosLosIdentificadores().map(::identificadorEnUnaLinea) + destino.deQuien)
+
+/**
+ * **Un identificador dentro de una línea con otras partes** (vuelta de diseño 8): el número va
+ * nombrado, «cuenta ·0756», y no «·0756» a secas, que al empezar el renglón —o detrás de « · »— se
+ * leía como un separador suelto («·0756», «Persona · ·0756»). La llave ya dice qué es («llave
+ * @caro»), y un nombre se lee como nombre. `null` si no queda nada que decir.
+ */
+internal fun identificadorEnUnaLinea(identificador: IdentificadorDelDestino): String? = when (identificador.tipo) {
+    TipoDeIdentificador.NUMERO -> soloLosDigitos(identificador.valor).takeLast(MIN_DIGITOS_DEL_NUMERO)
+        .takeIf { it.isNotEmpty() }?.let { "cuenta ·$it" }
+    TipoDeIdentificador.LLAVE -> comoSeLeeEnLaFicha(identificador).takeIf { it.isNotBlank() }
+}
+
+/**
+ * **Las partes de un renglón, unidas con « · »**: sin las que faltan ni las vacías —nunca queda un
+ * « · » colgando adelante, atrás o doble— y con la primera letra en mayúscula. Pura.
+ */
+internal fun enUnaLinea(partes: List<String?>): String =
+    partes.mapNotNull { parte -> parte?.trim()?.takeIf { it.isNotEmpty() } }
+        .joinToString(" · ")
+        .replaceFirstChar { it.uppercaseChar() }
 
 /** «Último: ayer · $1.170.560» o «Último: te envió · 2 oct · $400.000», o `null` sin ninguno. */
 internal fun ultimoDeLaFicha(destino: DestinoConocido, hoy: kotlinx.datetime.LocalDate): String? {

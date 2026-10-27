@@ -4,6 +4,11 @@ import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import androidx.compose.material.icons.rounded.AutoAwesome
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Icono
@@ -607,39 +612,25 @@ private fun textoDeResultado(
 
 /**
  * «Movi encontró N cosas para ordenar», arriba de los filtros y la búsqueda — solo aparece cuando
- * [propuestasDeOrden] tiene algo pendiente. Un borde y no el color de marca de lleno: es una
- * sugerencia que el dueño puede ignorar del todo, no una alerta.
+ * [propuestasDeOrden] tiene algo pendiente. Vuelta de diseño 8: es una propuesta de Movi como las
+ * del Inicio, así que va en su forma ([TarjetaDePropuesta], con «Revisar»), no en una caja con
+ * borde propia. Sigue siendo una sugerencia que se puede ignorar: el tono es el de la marca.
  */
 @Composable
 private fun TarjetaDeOrden(cantidad: Int, onRevisar: () -> Unit, onRenglones: (Int) -> Unit = {}) {
-    val forma = RoundedCornerShape(Movi.formas.amplia)
-    Row(
+    Box(
         modifier = Modifier
             .testTag(TAG_TARJETA_DE_ORDEN)
-            .fillMaxWidth()
-            .padding(start = Movi.espacios.amplio, top = Movi.espacios.medio, end = Movi.espacios.amplio)
-            .clip(forma)
-            .background(Movi.colores.tarjeta)
-            .border(Medida.trazo, Movi.colores.borde, forma)
-            .clickable(onClick = onRevisar)
-            .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.amplio),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+            .padding(start = Medida.margenDePantalla, top = Medida.dentroDeSeccion, end = Medida.margenDePantalla),
     ) {
-        Text(
-            text = textoDeLaTarjetaDeOrden(cantidad),
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.texto,
-            modifier = Modifier.weight(1f),
+        TarjetaDePropuesta(
+            icono = Icons.Rounded.AutoAwesome,
+            titulo = textoDeLaTarjetaDeOrden(cantidad),
+            accion = "Revisar",
+            onAccion = onRevisar,
             // Cuántos renglones ocupó, para que la próxima carga reserve ese alto (ver
             // `FormaRecordada`).
-            onTextLayout = { onRenglones(it.lineCount) },
-        )
-        Text(
-            "Revisar",
-            style = Movi.textos.apoyo,
-            fontWeight = FontWeight.Medium,
-            color = Movi.colores.marca,
+            alMedirElTitulo = onRenglones,
         )
     }
 }
@@ -649,31 +640,33 @@ const val TAG_TARJETA_DE_ORDEN: String = "tarjeta-de-orden"
 
 /**
  * [TarjetaDeOrden] mientras la lista no llegó, **solo si la última carga la tenía** (ver
- * `FormaRecordada`): mismos rellenos, borde y forma, un bloque de [renglones] renglones de
- * `Movi.textos.cuerpo` donde va el texto y otro del alto de `Movi.textos.apoyo` donde va
- * «Revisar». Sin él, la tarjeta aparecía con los datos y empujaba la lista ~50 dp.
+ * `FormaRecordada`): la misma anatomía de [TarjetaDePropuesta] —el círculo del ícono, [renglones]
+ * renglones de `Movi.textos.titulo` donde va el título y el alto de un botón chico debajo— sobre la
+ * misma superficie. Sin él, la tarjeta aparecía con los datos y empujaba la lista ~50 dp.
  */
 @Composable
 private fun TarjetaDeOrdenEsqueleto(renglones: Int) {
-    val forma = RoundedCornerShape(Movi.formas.amplia)
-    Row(
+    Box(
         modifier = Modifier
             .testTag(TAG_TARJETA_DE_ORDEN)
-            .fillMaxWidth()
-            .padding(start = Movi.espacios.amplio, top = Movi.espacios.medio, end = Movi.espacios.amplio)
-            .clip(forma)
-            .background(Movi.colores.tarjeta)
-            .border(Medida.trazo, Movi.colores.borde, forma)
-            .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.amplio),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+            .padding(start = Medida.margenDePantalla, top = Medida.dentroDeSeccion, end = Medida.margenDePantalla),
     ) {
-        Box(Modifier.weight(1f)) {
-            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.cuerpo) * renglones, ancho = null)
+        Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Propuesta) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
+                CirculoEsqueleto(diametro = Medida.avatar)
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+                    BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.titulo) * renglones)
+                    Box(modifier = Modifier.fillMaxWidth(FRACCION_DEL_BOTON_ESQUELETO).padding(top = Espacio.xs)) {
+                        BloqueEsqueleto(alto = Medida.altoChico)
+                    }
+                }
+            }
         }
-        BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 52.dp)
     }
 }
+
+/** El ancho del botón «Revisar» que todavía no llegó, como fracción del texto de la tarjeta. */
+private const val FRACCION_DEL_BOTON_ESQUELETO = 0.3f
 
 /**
  * La hoja que revisa las propuestas **una por una**: [propuesta] es siempre la primera pendiente
@@ -817,12 +810,23 @@ private fun FilaDeCategoria(categoria: CategoryUsage, primera: Boolean, ultima: 
             titulo = categoria.name,
             subtitulo = resumenDeUsoCorto(categoria),
             inicio = { IconoDeCategoria(categoria.name) },
-            final = cifraDelMes(categoria)?.let { cifra ->
-                { Text(cifra, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, maxLines = 1) }
-            },
+            final = cifrasDelMes(categoria)?.let { cifras -> { CifrasDeLaCategoria(cifras) } },
             onClick = onClick,
             modifier = Modifier.testTag(tagDeFilaDeCategoria(categoria.name)),
         )
+    }
+}
+
+/**
+ * **Lo de este mes, con la cifra del sistema** (vuelta de diseño 8): el gasto en el color del texto
+ * —gastar no es una alarma— y lo que entró en `entra` con «+», uno debajo del otro si hubo los dos.
+ * Antes iban en la letra de cuerpo, «$260.000 · +$850.000».
+ */
+@Composable
+private fun CifrasDeLaCategoria(cifras: CifrasDelMes) {
+    Column(horizontalAlignment = Alignment.End) {
+        cifras.gasto?.let { Cifra(it) }
+        cifras.ingreso?.let { Cifra(it, tono = TonoDeCifra.Ingreso) }
     }
 }
 
