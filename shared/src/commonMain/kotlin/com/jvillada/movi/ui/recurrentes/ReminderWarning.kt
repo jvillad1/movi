@@ -32,7 +32,7 @@ import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.shared.model.ReminderChannels
-import com.jvillada.movi.ui.components.CasillaDeSeleccion
+import com.jvillada.movi.ui.components.ds.Casilla
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 
@@ -215,7 +215,7 @@ fun ReminderOptInField(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
-            CasillaDeSeleccion(marcada = checked)
+            Casilla(marcada = checked)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Recordarme unos días antes",

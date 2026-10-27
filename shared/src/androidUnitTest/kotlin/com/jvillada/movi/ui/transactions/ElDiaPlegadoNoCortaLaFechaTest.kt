@@ -8,10 +8,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -34,7 +34,8 @@ import kotlin.test.assertTrue
  *
  * En producción, plegado, el encabezado decía «20 d… · 2 movimientos   Flujo del día −$57.400»: la
  * fecha —lo único que nombra el día— se recortaba para hacerle lugar al conteo y al rótulo. Ahora la
- * fecha, la cifra y el chevron se miden primero; si no cabe todo, se cae primero «Flujo del día».
+ * fecha, la cifra y el chevron se miden primero; si no cabe todo, se corta el conteo. Desde la vuelta
+ * de diseño 14 el rótulo «Flujo del día» no va en ningún ancho: la cifra sola, con su signo, se entiende.
  *
  * A 360 dp (el teléfono más angosto) con la letra del sistema a ×1,3, con el margen de la pantalla
  * como en Movimientos. Mismo método que `NadaSeRecortaEnElInicioTest` (`sdk = [34]`, `NATIVE`).
@@ -84,8 +85,6 @@ class ElDiaPlegadoNoCortaLaFechaTest {
             d.getLineRight(0) - d.getLineLeft(0) <= nodo.size.width + 0.5f
     }
 
-    private fun seTocan(a: Rect, b: Rect) = a.right > b.left + 0.5f && b.right > a.left + 0.5f
-
     private fun laFechaEntera(fecha: String) {
         val nodoFecha = unico(TAG_FECHA_DEL_DIA)
         val d = disposicion(nodoFecha)
@@ -97,10 +96,7 @@ class ElDiaPlegadoNoCortaLaFechaTest {
         val cifra = unico(TAG_CIFRA)
         assertTrue(entero(cifra), "la cifra del día se recorta")
         assertTrue(nodoFecha.boundsInRoot.right <= cifra.boundsInRoot.left, "la fecha se mete debajo de la cifra")
-        // Si el rótulo quedó, no pisa nada.
-        conTexto(ROTULO_DEL_FLUJO_DEL_DIA).forEach { rotulo ->
-            assertTrue(!seTocan(rotulo.boundsInRoot, nodoFecha.boundsInRoot) && !seTocan(rotulo.boundsInRoot, cifra.boundsInRoot))
-        }
+        assertTrue(conTexto("Flujo del día", substring = true).isEmpty(), "el encabezado del día ya no dice «Flujo del día»")
     }
 
     @Test
@@ -110,10 +106,9 @@ class ElDiaPlegadoNoCortaLaFechaTest {
     }
 
     @Test
-    fun `si no cabe todo se cae primero el rotulo, despues se corta el conteo`() {
+    fun `si no cabe todo se corta el conteo, nunca la fecha ni la cifra`() {
         montar("30 de septiembre", cuantos = 128, total = -12_257_400L)
         laFechaEntera("30 de septiembre")
-        assertTrue(conTexto(ROTULO_DEL_FLUJO_DEL_DIA).isEmpty(), "con la fecha, el conteo y la cifra no cabe también el rótulo")
         assertTrue(conTexto("· 128 movimientos").isNotEmpty(), "el conteo sigue, aunque sea cortado")
     }
 
@@ -131,10 +126,10 @@ class ElDiaPlegadoNoCortaLaFechaTest {
     }
 
     @Test
-    fun `con espacio de sobra el rotulo sigue`() {
+    fun `con espacio de sobra tampoco dice Flujo del dia, solo la cifra con su signo`() {
         montar("Hoy", escala = 1f, cuantos = 2, total = -57_400L)
         laFechaEntera("Hoy")
-        assertEquals(1, conTexto(ROTULO_DEL_FLUJO_DEL_DIA).size)
+        assertEquals("−\$57.400", conTexto("57.400", substring = true).single().config[SemanticsProperties.Text].joinToString("") { it.text })
         assertTrue(entero(conTexto("· 2 movimientos").single()))
     }
 }

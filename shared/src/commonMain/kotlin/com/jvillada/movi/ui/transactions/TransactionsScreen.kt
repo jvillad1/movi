@@ -43,10 +43,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.SubcomposeLayout
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.layoutId
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.FocusRequester
@@ -401,14 +399,14 @@ const val CHIP_RECURRENTES = 5
 const val TAG_FILA_DE_MOVIMIENTO_SUELTO: String = "fila-de-movimiento-suelto"
 
 /**
- * El tag del renglón de encabezado de un día esqueleto («HOY · Flujo del día …»), para contar
+ * El tag del renglón de encabezado de un día esqueleto («Hoy · −$250.100»), para contar
  * cuántos GRUPOS pinta [movimientosEsqueleto] sin depender de ningún texto — no hay ninguno
  * todavía, ver su KDoc.
  */
 const val TAG_ENCABEZADO_DE_DIA_ESQUELETO: String = "encabezado-de-dia-esqueleto"
 
 /**
- * El tag del renglón de encabezado de un día REAL («HOY · Flujo del día …», el que pliega y
+ * El tag del renglón de encabezado de un día REAL («Hoy · −$250.100», el que pliega y
  * despliega el día). Ola B, tarea 9 (fix round 1): sin él, una prueba no tenía cómo comparar el
  * TOP de este renglón contra el del encabezado esqueleto de arriba y verificar que el primer
  * grupo no salta al llegar los datos.
@@ -429,7 +427,7 @@ const val TAG_LINEA_DE_PERIODO: String = "linea-de-periodo"
  * **Movimientos mientras carga, con la forma de Movimientos** (Ola B, tarea 9).
  *
  * Task 7 (ola A) puso UNA tarjeta de 6 filas sueltas. La pantalla real no es una lista: son varios
- * DÍAS, cada uno con su renglón de encabezado («HOY · Flujo del día −$250.100», ver más abajo en
+ * DÍAS, cada uno con su renglón de encabezado («Hoy · −$250.100», ver más abajo en
  * el `forEach` real) y su propia tarjeta — así que la tarjeta única se convertía en 2-3 tarjetas
  * más chicas apenas llegaban los datos, el salto que reportó el dueño.
  *
@@ -1752,14 +1750,11 @@ internal fun CifraDelMovimiento(
     Cifra(montoParaLaCifra(tono, monto), variante, modifier, tonoDeCifraDelTono(tono), moneda)
 }
 
-/** El rótulo del flujo del día, al lado de su cifra. Es lo primero que se cae si el renglón no alcanza. */
-const val ROTULO_DEL_FLUJO_DEL_DIA: String = "Flujo del día"
-
 /** El tag de la fecha del encabezado de un día. */
 const val TAG_FECHA_DEL_DIA: String = "fecha-del-dia"
 
 /** Las piezas del renglón de [EncabezadoDelDia], para que su `Layout` las encuentre. */
-private enum class PiezaDelDia { Fecha, Cuantos, Rotulo, Monto, Chevron }
+private enum class PiezaDelDia { Fecha, Cuantos, Monto, Chevron }
 
 /**
  * **El encabezado de un día, en un renglón** (ola R4): la fecha a la izquierda —«Hoy», «Ayer», «23
@@ -1768,16 +1763,17 @@ private enum class PiezaDelDia { Fecha, Cuantos, Rotulo, Monto, Chevron }
  * plegado dice cuántos renglones esconde. Mide [Medida.objetivoTactil], igual que su esqueleto.
  *
  * V6: el total suma el FLUJO (lo que entró y salió del bolsillo), no todos los renglones de abajo —
- * la apertura de una cuenta queda afuera—. «Flujo del día» lo dice en dos palabras, para que la
- * cifra no parezca una suma mal hecha.
+ * la apertura de una cuenta queda afuera—.
  *
  * **Lo que cede cuando no cabe** (vuelta de diseño 2): en producción, plegado, decía «20 d… · 2
  * movimientos Flujo del día −$57.400»: se recortaba la fecha, que es lo único que nombra el día.
  * Ahora la fecha, la cifra y el chevron se miden primero y enteros; con lo que sobra va «· N
- * movimientos» y después el rótulo [ROTULO_DEL_FLUJO_DEL_DIA]. Si no alcanza para los dos, **se cae
- * primero el rótulo** (la cifra sola, chica y con signo, se entiende); y si aun así no alcanza, el
- * conteo se corta con «…». Plegado y desplegado es el mismo renglón: solo cambian el chevron y el
- * conteo.
+ * movimientos», cortado con «…» si no alcanza. Plegado y desplegado es el mismo renglón: solo
+ * cambian el chevron y el conteo.
+ *
+ * **Sin el rótulo «Flujo del día»** (vuelta de diseño 14): la vuelta 2 ya lo hacía caer cuando no
+ * cabía, y la cifra sola —chica, con su signo y en el color de lo que entró o salió— se entiende en
+ * todos los anchos. Sobraba en cada día.
  */
 @Composable
 internal fun EncabezadoDelDia(
@@ -1787,11 +1783,6 @@ internal fun EncabezadoDelDia(
     cuantos: Int,
     onAlternar: () -> Unit,
 ) {
-    // El ancho del rótulo se mide sin componerlo: si no cabe, no se compone (ni lo lee el lector de
-    // pantalla, ni queda un nodo sin lugar).
-    val medidor = rememberTextMeasurer()
-    val estiloDelRotulo = Movi.textos.apoyo
-    val colorDelRotulo = Movi.colores.textoMedio
     SubcomposeLayout(
         modifier = Modifier
             .fillMaxWidth()
@@ -1850,27 +1841,15 @@ internal fun EncabezadoDelDia(
         val monto = pieza(PiezaDelDia.Monto)!!.measure(suelta)
         val paraLaFecha = (ancho - monto.width - chevron.width - 2 * entre).coerceAtLeast(0)
         val fechaP = pieza(PiezaDelDia.Fecha)!!.measure(suelta.copy(maxWidth = paraLaFecha))
-        var sobra = paraLaFecha - fechaP.width
+        val sobra = paraLaFecha - fechaP.width
 
-        // Después, con lo que sobra: el conteo entero y el rótulo; si no caben los dos, el rótulo se cae.
-        val cuantosM = pieza(PiezaDelDia.Cuantos)
-        val cuantosAncho = cuantosM?.let { junto + it.maxIntrinsicWidth(Constraints.Infinity) } ?: 0
-        val rotuloAncho = entre + medidor.measure(ROTULO_DEL_FLUJO_DEL_DIA, style = estiloDelRotulo, softWrap = false, maxLines = 1).size.width
-        val rotulo = if (cuantosAncho + rotuloAncho <= sobra) {
-            subcompose(PiezaDelDia.Rotulo) {
-                Text(text = ROTULO_DEL_FLUJO_DEL_DIA, style = estiloDelRotulo, color = colorDelRotulo, maxLines = 1, softWrap = false)
-            }.single().measure(suelta.copy(maxWidth = sobra - cuantosAncho - entre))
-        } else {
-            null
-        }
-        if (rotulo != null) sobra -= entre + rotulo.width
-        val cuantosP = cuantosM?.takeIf { sobra > junto }?.measure(suelta.copy(maxWidth = sobra - junto))
+        // Después, con lo que sobra: el conteo, cortado con «…» si no entra entero.
+        val cuantosP = pieza(PiezaDelDia.Cuantos)?.takeIf { sobra > junto }?.measure(suelta.copy(maxWidth = sobra - junto))
 
         val alto = maxOf(
             restricciones.minHeight,
             fechaP.height,
             cuantosP?.height ?: 0,
-            rotulo?.height ?: 0,
             monto.height,
             chevron.height,
         )
@@ -1882,7 +1861,6 @@ internal fun EncabezadoDelDia(
             chevron.placeRelative(xChevron, centrado(chevron))
             val xMonto = xChevron - entre - monto.width
             monto.placeRelative(xMonto, centrado(monto))
-            rotulo?.placeRelative(xMonto - entre - rotulo.width, centrado(rotulo))
         }
     }
 }

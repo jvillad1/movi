@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -50,6 +51,12 @@ const val TAG_VACIO_QUE_ENSENA: String = "vacio-que-ensena"
  * de explicar ya trae algo armado (Presupuestos propone categorías con lo que el dueño gastó) y
  * cuyas acciones van después de eso. Quien lo usa suele pasar `accion = null` y poner sus botones
  * ahí adentro.
+ *
+ * [contenidoDeBordeABorde] (vuelta de diseño 14): el [contenido] va sin el relleno de los lados de
+ * la tarjeta, para una lista de `Fila` —que trae su propio margen y su toque de borde a borde—. Con
+ * el relleno de [Espacio.xxl] a cada lado más el de la fila, a 360 dp a una propuesta de
+ * Presupuestos le quedaban unos 30 dp para el nombre. Lo demás (título, detalle, la acción) sigue con
+ * su relleno, así que el título no se corre.
  */
 @Composable
 fun VacioQueEnsena(
@@ -60,11 +67,15 @@ fun VacioQueEnsena(
     modifier: Modifier = Modifier,
     icono: ImageVector? = null,
     contenido: (@Composable () -> Unit)? = null,
+    contenidoDeBordeABorde: Boolean = false,
 ) {
+    // El relleno de los lados va en cada pieza y no en la tarjeta, para que el contenido pueda ir
+    // de borde a borde ([contenidoDeBordeABorde]). Sin él, la tarjeta se ve como siempre.
+    val lados = Modifier.padding(horizontal = Espacio.xxl)
     MinCard(
         modifier = modifier.fillMaxWidth().testTag(TAG_VACIO_QUE_ENSENA),
         variant = MinCardVariant.Elevated,
-        padding = PaddingValues(Espacio.xxl),
+        padding = PaddingValues(vertical = Espacio.xxl),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -86,6 +97,7 @@ fun VacioQueEnsena(
                 style = Movi.textos.titulo,
                 color = Movi.colores.texto,
                 textAlign = TextAlign.Center,
+                modifier = lados,
             )
             if (detalle != null) {
                 Spacer(Modifier.height(Movi.espacios.corto))
@@ -94,15 +106,20 @@ fun VacioQueEnsena(
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
+                    modifier = lados,
                 )
             }
             if (contenido != null) {
                 Spacer(Modifier.height(Movi.espacios.amplio))
-                contenido()
+                if (contenidoDeBordeABorde) {
+                    contenido()
+                } else {
+                    Column(modifier = lados.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { contenido() }
+                }
             }
             if (accion != null && onAccion != null) {
                 Spacer(Modifier.height(Movi.espacios.amplio))
-                NewItemButton(label = accion, onClick = onAccion, full = true)
+                Box(modifier = lados) { NewItemButton(label = accion, onClick = onAccion, full = true) }
             }
         }
     }

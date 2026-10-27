@@ -199,8 +199,9 @@ class DiaADiaEnMovimientosTest {
 
         assertTrue(composeRule.onAllNodesWithText("Día a día", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         assertTrue(composeRule.onAllNodesWithText("te pasaste", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
-        // El día sigue diciendo su flujo, en un renglón.
-        assertTrue(hay("Flujo del día"))
+        // El día sigue diciendo su flujo con la cifra sola, sin el rótulo (vuelta de diseño 14).
+        assertTrue(!hay("Flujo del día"))
+        assertTrue(composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
     }
 
     @Test

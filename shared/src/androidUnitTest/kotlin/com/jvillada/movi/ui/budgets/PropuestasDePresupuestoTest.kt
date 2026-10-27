@@ -112,8 +112,11 @@ class PropuestasDePresupuestoTest {
         montar(SinPresupuestos())
 
         assertTrue(hay("Movi te propone 3 a partir de lo que gastaste del 25 de julio al 24 de agosto."))
-        assertTrue(hay("Gastaste \$1.020.000 · tope \$1.050.000"))
-        assertTrue(hay("Gastaste \$99.001 · tope \$100.000"))
+        // Vuelta de diseño 14: el tope ya no va en el subtítulo, va a la derecha con `Cifra`.
+        assertTrue(hay("Gastaste \$1.020.000 el período pasado"))
+        assertTrue(hay("Gastaste \$99.001 el período pasado"))
+        assertTrue(hay("\$1.050.000"))
+        assertTrue(!hay("· tope"))
         propuestas.forEach { composeRule.onNodeWithTag(tagDePropuestaDePresupuesto(it.category)).assertIsOn() }
         composeRule.onNodeWithTag(TAG_CREAR_PROPUESTAS).assertIsEnabled()
         assertTrue(hay("Crear estos 3"))
