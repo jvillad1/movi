@@ -1431,9 +1431,13 @@ fun SMSReconcileScreen(
                             value = resolvedAccount?.name ?: "Sin cuenta elegida",
                             // Lo que Movi haya adivinado se dice acá, antes de guardar: un SMS no trae
                             // la cuenta escrita, la pone la app, y eso hay que confesarlo.
-                            hint = advertenciaDeLaCuenta ?: if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI) {
-                                parsed?.cuentaSugeridaPor ?: avisoDeLaCuentaDelBanco(cuentaDelSms.origen)
-                            } else avisoDeLaCuentaDelBanco(cuentaDelSms.origen),
+                            // Vuelta de diseño 23: con bancos distintos, el porqué y el «Ojo», juntos.
+                            hint = listOfNotNull(
+                                if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI) {
+                                    parsed?.cuentaSugeridaPor ?: avisoDeLaCuentaDelBanco(cuentaDelSms.origen)
+                                } else avisoDeLaCuentaDelBanco(cuentaDelSms.origen),
+                                advertenciaDeLaCuenta,
+                            ).joinToString(" · ").ifEmpty { null },
                             hintEsAviso = advertenciaDeLaCuenta != null,
                             action = if (eligiendoCuenta) "Cerrar" else "Cambiar",
                             onClick = { eligiendoCuenta = !eligiendoCuenta },
