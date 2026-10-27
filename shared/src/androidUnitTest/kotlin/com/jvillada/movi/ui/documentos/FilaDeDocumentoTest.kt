@@ -1,5 +1,13 @@
 package com.jvillada.movi.ui.documentos
 
+import androidx.compose.ui.unit.dp
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.VarianteDeBotonKey
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.TAG_BOTON
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -139,5 +147,34 @@ class FilaDeDocumentoTest {
         accion("Borrar").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { borrados.isNotEmpty() }
         assertEquals(listOf("d1"), borrados)
+    }
+
+    /**
+     * **Vuelta de diseño 20: la fila es la `Fila` del sistema y las acciones son `Boton`.** Tocar la
+     * fila entera abre el documento (lo mismo que «Abrir»); «Borrar» va en `Peligro` y las demás en
+     * `Fantasma`. Eran un `Column` tocable y textos tocables armados a mano.
+     */
+    @Test
+    fun la_fila_es_del_sistema_y_las_acciones_son_botones() {
+        montar()
+
+        // La fila mide lo que mide una `Fila` con subtítulo.
+        val fila = composeRule.onNode(hasTestTag(TAG_FILA_DE_DOCUMENTO), useUnmergedTree = true).fetchSemanticsNode()
+        val alto = with(composeRule.density) { fila.size.height.toDp() }
+        assertTrue(alto >= Medida.altoDeFilaDoble - 0.5.dp, "la fila mide $alto")
+        val variantes = composeRule.onAllNodes(hasTestTag(TAG_BOTON), useUnmergedTree = true).fetchSemanticsNodes()
+            .associate { nodo ->
+                val texto = nodo.children.flatMap { it.config.getOrNull(SemanticsProperties.Text).orEmpty() }.joinToString("") { it.text }
+                texto to nodo.config.getOrNull(VarianteDeBotonKey)
+            }
+        assertEquals(VarianteDeBoton.Fantasma, variantes["Abrir"])
+        assertEquals(VarianteDeBoton.Fantasma, variantes["Editar"])
+        assertEquals(VarianteDeBoton.Peligro, variantes["Borrar"])
+        assertEquals(VarianteDeBoton.Fantasma, variantes["Importar movimientos"])
+
+        composeRule.onNode(hasTestTag(TAG_FILA_DE_DOCUMENTO), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { abiertos.isNotEmpty() }
+        assertEquals(listOf("https://ejemplo.test/d1"), abiertos)
     }
 }
