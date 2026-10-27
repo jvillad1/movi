@@ -9,6 +9,7 @@ colores_literales = 0
 
 # Lo que no es del sistema (LoQueNoEsDelSistemaSoloBajaTest, vuelta de diseño 18): botones de
 # Material, Color.White/Black, Hairline, MinCard, Text(formatCOP/formatMoney…) y fontWeight =.
+# Vuelta de diseño 21: las cinco primeras llegaron a 0 y la prueba las exige en 0 (no solo «no subir»).
 botones_de_material = 0
 blanco_o_negro = 0
 hairline = 0

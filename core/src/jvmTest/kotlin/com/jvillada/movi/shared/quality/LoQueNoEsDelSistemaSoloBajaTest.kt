@@ -38,6 +38,10 @@ import kotlin.test.fail
  *
  * Las líneas base viven en `docs/diseno/lineas-base.txt`, junto a las de los valores sueltos.
  *
+ * **Vuelta de diseño 21:** `hairline`, `mincard` y `cifra_en_text` llegaron a cero (`Hairline` y
+ * `MinCard` se borraron), como antes los botones de Material y el blanco o negro. Esas cinco ya no
+ * son un trinquete sino una prohibición: exigen 0 aunque alguien suba su línea base.
+ *
  * **Si te falló porque el número subió**: usa el componente o el token de la tabla.
  * **Si falló porque bajó** —migraste algo—: baja la línea base al número nuevo en el mismo cambio.
  */
@@ -51,6 +55,9 @@ class LoQueNoEsDelSistemaSoloBajaTest {
         "cifra_en_text" to Regex("""(?<![\w.])Text\(\s*(?:text\s*=\s*)?(?:formatCOP|formatMoney)\("""),
         "font_weight" to Regex("""\bfontWeight\s*="""),
     )
+
+    /** Las claves que llegaron a cero y tienen que quedarse ahí (vuelta de diseño 21). */
+    private val EN_CERO = setOf("botones_de_material", "blanco_o_negro", "hairline", "mincard", "cifra_en_text")
 
     /** Por clave, los archivos (relativos a `ui/`) que no se cuentan. Ver el KDoc. */
     private val excepciones: Map<String, Set<String>> = mapOf(
@@ -104,6 +111,28 @@ class LoQueNoEsDelSistemaSoloBajaTest {
                     "del sistema (ver el KDoc de esta prueba). Donde más hay:\n" + peores(donde)
             } else {
                 null
+            }
+        }
+        if (fallas.isNotEmpty()) fail(fallas.joinToString("\n\n"))
+    }
+
+    /**
+     * **Las que ya llegaron a cero se quedan en cero** (vuelta de diseño 21), aunque alguien suba su
+     * línea base en `lineas-base.txt`: no hay pantalla que necesite un `Button` de Material, un
+     * blanco a mano, una `Hairline`, una `MinCard` —las dos últimas ya no existen— ni un monto en un
+     * `Text`. Si una de verdad hiciera falta, se agrega como excepción con nombre, no subiendo el tope.
+     */
+    @Test
+    fun `lo que llego a cero se queda en cero`() {
+        val base = lineasBase()
+        val conteos = conteos()
+        val fallas = EN_CERO.mapNotNull { clave ->
+            val donde = conteos.getValue(clave)
+            when {
+                base[clave] != 0 -> "«$clave» tiene que estar en 0 en docs/diseno/lineas-base.txt (dice ${base[clave]})"
+                donde.isNotEmpty() -> "«$clave» volvió a aparecer (${donde.size}). Usa el componente o el token " +
+                    "del sistema (ver el KDoc de esta prueba):\n" + donde.joinToString("\n") { "  $it" }
+                else -> null
             }
         }
         if (fallas.isNotEmpty()) fail(fallas.joinToString("\n\n"))
