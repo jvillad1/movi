@@ -93,6 +93,7 @@ const val TAG_LO_QUE_CUBRIO: String = "fila-de-periodo-lo-que-cubrio"
 const val TAG_INCLUYE_CREDITOS: String = "periodo-incluye-creditos"
 const val TAG_LISTA_DE_PERIODOS: String = "lista-de-periodos"
 const val TAG_VACIOS_DEL_PRINCIPIO: String = "periodos-vacios-del-principio"
+const val TAG_RACHA_DE_VACIOS: String = "periodos-racha-de-vacios"
 
 /** Cuántas filas reserva el esqueleto sin nada recordado todavía (la primera vez en el aparato). */
 private const val FILAS_POR_DEFECTO = 3
@@ -232,18 +233,21 @@ internal fun ListaDePeriodos(
                     )
                 }
                 else -> {
-                    val (tarjetas, vacios) = separarLosVaciosDelPrincipio(estado.periodos.orEmpty())
-                    items(tarjetas, key = { it.id }) { resumen ->
-                        FilaDePeriodo(resumen, elegida = resumen.id == elegido, onClick = { onTocar(resumen.id) })
-                    }
-                    if (vacios.isNotEmpty()) {
-                        item(key = "vacios-del-principio") {
+                    items(piezasDeLosPeriodos(estado.periodos.orEmpty()), key = { it.clave }) { pieza ->
+                        when (pieza) {
+                            is PiezaDePeriodos.Tarjeta -> FilaDePeriodo(
+                                pieza.resumen,
+                                elegida = pieza.resumen.id == elegido,
+                                onClick = { onTocar(pieza.resumen.id) },
+                            )
                             // Una fila apagada y sin toque: no hay nada que abrir. Sin tarjeta, directo
-                            // sobre el fondo: su texto queda alineado con el de las tarjetas de arriba.
-                            Fila(
-                                titulo = textoDeLosVaciosDelPrincipio(tarjetas.last()),
+                            // sobre el fondo: su texto queda alineado con el de las tarjetas.
+                            is PiezaDePeriodos.Vacios -> Fila(
+                                titulo = pieza.texto,
                                 tonoDelTitulo = TonoDeFila.Apagado,
-                                modifier = Modifier.testTag(TAG_VACIOS_DEL_PRINCIPIO),
+                                modifier = Modifier.testTag(
+                                    if (pieza.delPrincipio) TAG_VACIOS_DEL_PRINCIPIO else TAG_RACHA_DE_VACIOS,
+                                ),
                             )
                         }
                     }
@@ -258,26 +262,93 @@ internal fun tieneMovimientosDeFlujo(resumen: ResumenDePeriodo): Boolean =
     fraccionQueEntro(resumen.entradas, resumen.salidas) != null
 
 /**
- * **Los meses vacíos de antes del primero con movimientos no ocupan una tarjeta cada uno** (vuelta
- * de diseño 5). Julio, junio, mayo… cada uno con «Sin movimientos de flujo» alargaban la lista con
- * cosas que no dicen nada: el dueño empezó a usar Movi en agosto, y eso se dice una vez.
- *
- * Parte [periodos] (del en curso hacia atrás, como los manda el server) en las tarjetas y los vacíos
- * del principio: los que quedan **después** (más viejos) del último con movimientos de flujo. Un
- * período vacío **entre** dos con movimientos se queda como tarjeta, porque ahí sí dice algo. Sin
- * ninguno con movimientos, el primero (el en curso) sigue siendo tarjeta. Solo decide cómo se pinta:
- * no quita ni cambia ningún período ni sus cifras.
+ * Una pieza de la lista de Tus períodos: la tarjeta de un período, o una racha de vacíos en una fila.
+ * [clave] es la de la lista perezosa.
  */
-internal fun separarLosVaciosDelPrincipio(
-    periodos: List<ResumenDePeriodo>,
-): Pair<List<ResumenDePeriodo>, List<ResumenDePeriodo>> {
-    val corte = maxOf(periodos.indexOfLast(::tieneMovimientosDeFlujo), 0) + 1
-    return periodos.take(corte) to periodos.drop(corte)
+internal sealed interface PiezaDePeriodos {
+    val clave: String
+
+    data class Tarjeta(val resumen: ResumenDePeriodo) : PiezaDePeriodos {
+        override val clave: String get() = resumen.id
+    }
+
+    /**
+     * Períodos vacíos seguidos, del más nuevo al más viejo (como los manda el server).
+     * [delPrincipio]: son los de antes del primer período con movimientos.
+     */
+    data class Vacios(val periodos: List<ResumenDePeriodo>, val delPrincipio: Boolean, val texto: String) : PiezaDePeriodos {
+        override val clave: String get() = "vacios-" + periodos.first().id
+    }
+}
+
+/** Desde cuántos vacíos seguidos en el medio de la lista se juntan en una fila. */
+internal const val VACIOS_PARA_JUNTAR: Int = 2
+
+/**
+ * **Los meses vacíos no ocupan una tarjeta cada uno** (vuelta de diseño 5, generalizada en la 7).
+ *
+ * Parte [periodos] (del en curso hacia atrás, como los manda el server) en tarjetas y filas:
+ * - **los del principio** —los que quedan después (más viejos) del último con movimientos de flujo—
+ *   van juntos al final, en una fila: «Antes de agosto 2026 no hay movimientos» (aunque sea uno: el
+ *   dueño empezó a usar Movi en agosto, y eso se dice una vez);
+ * - **una racha de [VACIOS_PARA_JUNTAR] o más en el medio** va en una fila en su lugar: «Octubre 2025 a
+ *   julio 2026 · sin movimientos». En la demo eran diez tarjetas «Sin movimientos de flujo» seguidas;
+ * - **un vacío solo** entre dos con movimientos se queda como tarjeta, porque ahí sí dice algo.
+ *
+ * El primero (el en curso) es siempre tarjeta, tenga o no movimientos. Solo decide cómo se pinta: no
+ * quita ni cambia ningún período ni sus cifras (aplanadas, las piezas dan la misma lista).
+ */
+internal fun piezasDeLosPeriodos(periodos: List<ResumenDePeriodo>): List<PiezaDePeriodos> {
+    if (periodos.isEmpty()) return emptyList()
+    val ultimoConMovimientos = periodos.indexOfLast(::tieneMovimientosDeFlujo)
+    val corte = maxOf(ultimoConMovimientos, 0) + 1
+    val piezas = mutableListOf<PiezaDePeriodos>(PiezaDePeriodos.Tarjeta(periodos.first()))
+    var racha = mutableListOf<ResumenDePeriodo>()
+    fun cerrarLaRacha() {
+        if (racha.size >= VACIOS_PARA_JUNTAR) {
+            piezas += PiezaDePeriodos.Vacios(racha.toList(), delPrincipio = false, texto = textoDeLaRachaDeVacios(racha))
+        } else {
+            racha.forEach { piezas += PiezaDePeriodos.Tarjeta(it) }
+        }
+        racha = mutableListOf()
+    }
+    for (resumen in periodos.subList(1, corte)) {
+        if (tieneMovimientosDeFlujo(resumen)) {
+            cerrarLaRacha()
+            piezas += PiezaDePeriodos.Tarjeta(resumen)
+        } else {
+            racha += resumen
+        }
+    }
+    cerrarLaRacha()
+    val delPrincipio = periodos.drop(corte)
+    if (delPrincipio.isNotEmpty()) {
+        piezas += PiezaDePeriodos.Vacios(
+            delPrincipio,
+            delPrincipio = true,
+            texto = textoDeLosVaciosDelPrincipio(periodos[corte - 1]),
+        )
+    }
+    return piezas
 }
 
 /** «Antes de agosto 2026 no hay movimientos»: [primero] es la última tarjeta, el primero con movimientos. */
 internal fun textoDeLosVaciosDelPrincipio(primero: ResumenDePeriodo): String =
     "Antes de ${primero.nombre.replaceFirstChar { it.lowercase() }} no hay movimientos"
+
+/**
+ * «Octubre 2025 a julio 2026 · sin movimientos»: del más viejo al más nuevo de [racha] (que llega del
+ * más nuevo al más viejo). Si los dos son del mismo año, el año va una vez: «Marzo a julio 2026».
+ */
+internal fun textoDeLaRachaDeVacios(racha: List<ResumenDePeriodo>): String {
+    val desde = racha.last().nombre
+    val hasta = racha.first().nombre.replaceFirstChar { it.lowercase() }
+    val anio = Regex(""" (\d{4})$""")
+    val anioDesde = anio.find(desde)?.groupValues?.get(1)
+    val anioHasta = anio.find(hasta)?.groupValues?.get(1)
+    val inicio = if (anioDesde != null && anioDesde == anioHasta) desde.removeSuffix(" $anioDesde") else desde
+    return "$inicio a $hasta · sin movimientos"
+}
 
 /** «Del 24 de septiembre al 24 de octubre», o `null` si alguna de las dos fechas no se pudo leer. */
 internal fun rangoDelResumen(resumen: ResumenDePeriodo): String? {
