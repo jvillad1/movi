@@ -2,7 +2,7 @@
 # Solo pueden bajar: cuando migres una pantalla, baja el número acá en el mismo cambio.
 # Para recontar: python3 scripts/auditoria-de-diseno.py --resumen
 
-dp_sueltos = 213
+dp_sueltos = 196
 radios_con_numero = 16
 colores_literales = 0
 # fontSize sueltos (LosTamanosSueltosSoloBajanTest): 2
@@ -11,7 +11,7 @@ colores_literales = 0
 # Material, Color.White/Black, Hairline, MinCard, Text(formatCOP/formatMoney…) y fontWeight =.
 botones_de_material = 0
 blanco_o_negro = 0
-hairline = 13
-mincard = 20
-cifra_en_text = 10
-font_weight = 145
+hairline = 4
+mincard = 14
+cifra_en_text = 4
+font_weight = 134

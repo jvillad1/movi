@@ -112,10 +112,11 @@ class PeriodosScreenTest {
         assertTrue(hay("Empezó el 26"))
 
         // Cifras: entró/salió/te quedó, con las mismas funciones que la pantalla usa.
-        assertTrue(hay(formatMoneyCompact(enCurso.entradas)))
+        // Lo que entró, con «+»: la `Cifra` del sistema en tono de ingreso (vuelta de diseño 19).
+        assertTrue(hay("+" + formatMoneyCompact(enCurso.entradas)))
         assertTrue(hay(formatMoneyCompact(enCurso.salidas)))
         assertTrue(hay("+" + formatMoneyCompact(enCurso.entradas - enCurso.salidas)))
-        assertTrue(hay(formatMoneyCompact(conInicioPropio.entradas)))
+        assertTrue(hay("+" + formatMoneyCompact(conInicioPropio.entradas)))
         assertTrue(hay(formatMoneyCompact(conInicioPropio.salidas)))
         assertTrue(hay("−" + formatMoneyCompact(conInicioPropio.salidas - conInicioPropio.entradas)))
 

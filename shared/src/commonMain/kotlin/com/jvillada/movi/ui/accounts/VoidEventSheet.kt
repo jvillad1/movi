@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.accounts
 
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.Cifra
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -127,7 +130,6 @@ fun VoidEventSheet(
     }
 
     val isIncome = event.type == TransactionType.INCOME
-    val signedAmount = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}"
     val nombres = remember(cuentas) { cuentas.associate { it.id to it.name } }
     val loQuePasa = (otraMitad as? LaOtraMitad.Llego)?.let { loQuePasaAlAnular(event, it.hermana) }.orEmpty()
 
@@ -149,11 +151,7 @@ fun VoidEventSheet(
         ) {
 
             // Event summary card
-            MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.s),
-            ) {
+            Superficie(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -173,11 +171,11 @@ fun VoidEventSheet(
                         )
                     }
                     Spacer(Modifier.width(Espacio.s))
-                    Text(
-                        text = signedAmount,
-                        style = Movi.textos.monto,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
+                    // Vuelta de diseño 19: la `Cifra` del sistema pone el signo, el tono y «Ocultar los saldos».
+                    Cifra(
+                        if (isIncome) event.amount else -event.amount,
+                        tono = if (isIncome) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
+                        moneda = event.currency,
                     )
                 }
             }

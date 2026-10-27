@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.budgets
 
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
@@ -591,11 +592,12 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
                 // sola héroe por pantalla (`UnaSolaCifraHeroePorPantallaTest`). Un renglón siempre.
                 Cifra(estado.totalSpent, VarianteDeCifra.Grande)
                 Spacer(Modifier.height(Espacio.xxs))
-                Text(
-                    text = "de ${formatCOP(estado.totalLimit)}",
-                    color = Movi.colores.textoMedio,
-                    style = Movi.textos.monto,
-                )
+                // Vuelta de diseño 19: el tope es una `Cifra` (letra tabular, «Ocultar los saldos»).
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "de", color = Movi.colores.textoMedio, style = Movi.textos.apoyo)
+                    Spacer(Modifier.width(Espacio.xxs))
+                    Cifra(estado.totalLimit, tono = TonoDeCifra.Apagado)
+                }
                 val warnCount = estado.warnCount
                 val overCount = estado.overCount
                 if (warnCount + overCount > 0) {
@@ -999,7 +1001,7 @@ private fun BudgetSheet(
                                     Text(ev.description, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                                     Text("Hoy en \"${ev.category}\" · toca para moverlo aquí", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                 }
-                                Text(formatCOP(ev.amount), style = Movi.textos.monto, color = Movi.colores.texto)
+                                Cifra(ev.amount)
                             }
                         }
                     }
@@ -1054,7 +1056,7 @@ private fun BudgetSheet(
             } ?: 0L
             if (faltante != 0L && movimientos.isEmpty() && category.isNotBlank()) {
                 Spacer(Modifier.height(Espacio.m))
-                Hairline()
+                Separador(SangriaDeSeparador.Ninguna)
                 Spacer(Modifier.height(Espacio.s))
                 Text(
                     // Igual que el renglón de más abajo: se nombra la diferencia, no una causa
@@ -1066,7 +1068,7 @@ private fun BudgetSheet(
             }
             if (movimientos.isNotEmpty()) {
                 Spacer(Modifier.height(Espacio.m))
-                Hairline()
+                Separador(SangriaDeSeparador.Ninguna)
                 Spacer(Modifier.height(Espacio.s))
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -1116,11 +1118,8 @@ private fun BudgetSheet(
                             Text(ev.description, style = Movi.textos.cuerpo, color = Movi.colores.texto)
                             Text(etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoyEnAppZone()), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                         }
-                        Text(
-                            text = formatCOP(ev.amount),
-                            style = Movi.textos.monto,
-                            color = Movi.colores.texto,
-                        )
+                        Spacer(Modifier.width(Espacio.xs))
+                        Cifra(ev.amount)
                     }
                 }
             }

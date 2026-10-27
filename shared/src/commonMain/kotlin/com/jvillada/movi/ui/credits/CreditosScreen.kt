@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.ui.components.ds.CifraConRotulo
+import com.jvillada.movi.ui.components.ds.DisposicionDeCifraConRotulo
+import com.jvillada.movi.ui.components.ds.RotuloConValor
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
@@ -488,7 +491,7 @@ private fun LoQueCuestaLaDeuda(
     if (planes.isEmpty()) return
     val resumen = resumirDeudas(planes)
     Spacer(Modifier.height(Espacio.m))
-    Hairline()
+    Separador(SangriaDeSeparador.Ninguna)
     Spacer(Modifier.height(Espacio.s))
 
     // **Las dos cifras se muestran, no se colapsan en una, y las dos son filas.** Quedarse solo con
@@ -496,21 +499,21 @@ private fun LoQueCuestaLaDeuda(
     // escondería que existen; y dejar la ajena como nota al pie hacía que un dueño con solo créditos
     // de Skandia leyera «Intereses este mes — $0» en la fila titular. Ver [saleDeTuBolsillo].
     TituloDelGrupo(TITULO_INTERES_DEL_MES)
-    FilaDelResumen(ALCANCE_INTERES_PROPIO, formatCOP(resumen.interesMensualPropio))
+    FilaDelResumen(ALCANCE_INTERES_PROPIO, resumen.interesMensualPropio)
     if (resumen.interesMensualAjeno > 0L) {
         Spacer(Modifier.height(Espacio.xxs))
-        FilaDelResumen(alcanceDelInteresAjeno(quienesPagan), formatCOP(resumen.interesMensualAjeno))
+        FilaDelResumen(alcanceDelInteresAjeno(quienesPagan), resumen.interesMensualAjeno)
     }
 
     if (resumen.interesPorPagarPropio > 0L || resumen.interesPorPagarAjeno > 0L) {
         Spacer(Modifier.height(Espacio.s))
         TituloDelGrupo(TITULO_INTERES_POR_PAGAR)
         if (resumen.interesPorPagarPropio > 0L) {
-            FilaDelResumen(ALCANCE_FALTA_PROPIO, formatCOP(resumen.interesPorPagarPropio))
+            FilaDelResumen(ALCANCE_FALTA_PROPIO, resumen.interesPorPagarPropio)
         }
         if (resumen.interesPorPagarAjeno > 0L) {
             Spacer(Modifier.height(Espacio.xxs))
-            FilaDelResumen(alcanceDeLaFaltaAjena(quienesPagan), formatCOP(resumen.interesPorPagarAjeno))
+            FilaDelResumen(alcanceDeLaFaltaAjena(quienesPagan), resumen.interesPorPagarAjeno)
         }
     }
 
@@ -519,7 +522,7 @@ private fun LoQueCuestaLaDeuda(
     if (resumen.mesesHastaLaUltimaCuota != null || resumen.creditosQueNoSeTerminan > 0) {
         Spacer(Modifier.height(Espacio.s))
         TituloDelGrupo(TITULO_ULTIMA_CUOTA)
-        FilaDelResumen(ALCANCE_ULTIMA_CUOTA, textoDeLaUltimaCuota(resumen, periodoActual))
+        FechaDelResumen(ALCANCE_ULTIMA_CUOTA, textoDeLaUltimaCuota(resumen, periodoActual))
     }
 
     // **Los dos avisos, y el primero es el que faltaba.** `creditosQueNoSeTerminan` se calculaba,
@@ -559,19 +562,27 @@ private fun TituloDelGrupo(titulo: String) {
 
 /**
  * Una fila del resumen. [alcance] no es una decoración: es **de qué habla** la cifra de la derecha,
- * y va en el rótulo justamente para que no se pueda leer el número sin él.
+ * y va en el rótulo justamente para que no se pueda leer el número sin él. Vuelta de diseño 19: la
+ * `CifraConRotulo` del sistema, en renglón (la cifra con su letra, su signo y «Ocultar los saldos»).
  */
 @Composable
-private fun FilaDelResumen(alcance: String, valor: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = Espacio.xs),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(alcance, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(Espacio.xs))
-        MontoDeFila(valor)
-    }
+private fun FilaDelResumen(alcance: String, monto: Long) {
+    CifraConRotulo(
+        alcance,
+        monto,
+        Modifier.padding(start = Espacio.xs),
+        disposicion = DisposicionDeCifraConRotulo.EnRenglon,
+    )
+}
+
+/** [FilaDelResumen] con una fecha («Marzo 2031») en lugar de una cifra: el mismo renglón. */
+@Composable
+private fun FechaDelResumen(alcance: String, fecha: String) {
+    RotuloConValor(
+        alcance,
+        Modifier.padding(start = Espacio.xs),
+        disposicion = DisposicionDeCifraConRotulo.EnRenglon,
+    ) { MontoDeFila(fecha) }
 }
 
 /**

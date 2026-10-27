@@ -250,6 +250,37 @@ Cifra(500_000, tono = TonoDeCifra.EntreCuentas)     // $500.000, sin signo
 Cifra(teQuedan, VarianteDeCifra.Heroe)
 ```
 
+**`FormaDeCifra`** (vuelta de diseño 19) — cómo se escribe: `Entera` («$15.600.000») **siempre**,
+salvo en una **columna de tres** (el Disponible del período, las cifras de Tus períodos), donde va
+`Compacta` («$15,6M» de un millón para arriba, los pesos por debajo): un tercio de tarjeta a 360 dp
+deja ~90 dp y Martian Mono pide ~9,5 dp por carácter con la letra de la app (0,7 em a 12,5 sp × 1,12),
+así que «$15.600.000» no entra. En otra moneda no se compacta. Una fila, una tarjeta, dos cifras lado
+a lado o el patrimonio de Hoy van enteras: «$1,5M» al lado de un héroe entero se leía como otro número.
+```kotlin
+Cifra(resumen.entradas, tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta)   // +$15,6M
+```
+
+**`CifraConRotulo`** (vuelta de diseño 19, `ds/CifraConRotulo.kt`) — una cifra con su nombre:
+«Tienes $1.528.700.000», «Entró +$15,6M», «Tuyo $1.250.000». El rótulo en `apoyo`, `textoMedio` y
+como se escribe (nunca en mayúsculas); la cifra es la `Cifra` del sistema, con su variante, tono,
+moneda y forma como parámetros, así que trae el signo y «Ocultar los saldos». Dos disposiciones:
+`Apilada` (lo normal: el rótulo arriba, `Espacio.xxs`, la cifra; `alFinal` alinea las dos a la
+derecha, para la última de un renglón de cifras) y `EnRenglon` (el rótulo a la izquierda, `Espacio.xs`
+y la cifra a la derecha: un desglose que se lee de arriba abajo, como el resumen de Créditos; el rótulo
+se parte antes de que la cifra se recorte). `monto = null` es «todavía no se sabe»: «—» con la letra
+de la cifra y el mismo alto. `EsqueletoDeCifraConRotulo` reserva lo mismo mientras carga, y
+`RotuloConValor` es la misma pieza para un valor que no es plata (la fecha de la última cuota). Eran
+cuatro implementaciones, cada una con su alto y su espacio (`ParDeCifra` en Hoy, `ParDeCifraDePeriodo`,
+`FilaDelResumen` de Créditos y los cuatro `Text` del flujo libre de Plan).
+```kotlin
+Row {
+    CifraConRotulo("Tienes", tienes, Modifier.weight(1f))
+    CifraConRotulo("Debes", debes, alFinal = true)
+}
+CifraConRotulo("Flujo libre", cifras?.disponible, variante = VarianteDeCifra.Grande)
+CifraConRotulo("Tuyo", interes, disposicion = DisposicionDeCifraConRotulo.EnRenglon)
+```
+
 **`TarjetaDeCuenta`** — la tarjeta de una cuenta del carrusel «Tus cuentas» (ola R1): el color y la
 marca de su banco (`MarcasConocidas`; la marca va invertida en un círculo), el nombre, el tipo y el
 saldo en `Cifra.Grande`. El nombre va en hasta dos renglones (nunca «Bancolombia Ah…») y el tipo baja
@@ -396,6 +427,8 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 | `LasGuiasNoParecenDatosTest` | ningún `guia =` / `placeholder =` con un literal puramente numérico en `ui/` («20», «29,6», «$ 0»): va `ejemplo =`, y sin su propio «Ej:» (§15) |
 | `LosCamposDelSistemaTest` (Robolectric) | el rótulo en frase, la guía de un monto en la letra de cuerpo y el valor en la de cifras, el error en `sale`, «¿Qué es esto?» abre y cierra, la caja llega a 48, y nada se recorta a 360 dp con la letra a ×1,3 (también en las hojas de crédito y tarjeta) |
 | `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en los dos temas; la fila mide 56/64; el botón llega a 48 de toque; la cifra se oculta; la tarjeta de cuenta mide 128 con marca y sin ella; dos widgets de un par miden lo mismo; la casilla que se toca sola mide 48 y dice su estado |
+| `CifraConRotuloTest` (Robolectric, motor de texto real) | el rótulo como se escribe, la cifra del sistema con su signo y tono, nada en claro con los saldos ocultos, «—» sin dato, y ninguna cifra recortada ni partida a 360 dp con la letra ×1,12 (tres compactas, dos enteras de diez dígitos, una en renglón) |
+| `LasCifrasDelSistemaSeOcultanTest` (Robolectric) | con «Ocultar los saldos», ni un «$» seguido de un dígito en el flujo libre de Plan, Presupuestos, la hoja de anular, los candidatos a pago de tarjeta y, en Hoy, «Tu patrimonio», «Para revisar» (con la evidencia abierta) y «Tu día más justo» |
 | `LoQueNoEsDelSistemaSoloBajaTest` (`core/src/jvmTest/.../quality/`, vuelta de diseño 18) | en `ui/` fuera de `ds/`, seis cosas que solo pueden bajar de su línea base (`lineas-base.txt`): `Button(`/`OutlinedButton(`/`TextButton(` de Material, `Color.White`/`Color.Black` (salvo el velo de `MarcoDeHoja`), `Hairline(`, `MinCard(`, un `Text(` cuyo primer argumento es `formatCOP(`/`formatMoney(` (aproximación por regex) y `fontWeight =` (§24) |
 | `UnaSolaCifraHeroePorPantallaTest` (Robolectric) | a lo sumo una `Cifra` `Heroe` en Hoy, Plan (Pagos y Presupuestos), Patrimonio, Créditos, Movimientos y Espacios; exactamente una donde la pantalla tiene su protagonista (Hoy, Patrimonio, Créditos) |
 
@@ -931,7 +964,39 @@ Lo vigilan `HojasYConfirmacionesDelSistemaTest` (Robolectric: la confirmación p
 una cuenta, ajustar el saldo de un crédito y el inicio del mes abren con `EncabezadoDeHoja`), la guarda
 nueva y `ContrasteDeLosTokensTest`.
 
-## 25. Vuelta de diseño 20: Agregar, la revisión de extractos y los chips, al sistema
+## 25. Vuelta de diseño 19: Hoy y las cifras con rótulo, todas del sistema
+
+Un revisor auditó master buscando lo que todavía no usaba el sistema. Lo de Hoy y lo de las cifras:
+
+- **Hoy: «Tu patrimonio», «Para revisar», «Pregúntale a Movi» y «Tu día más justo»** eran `MinCard`
+  con rellenos sueltos (18 × 6, 18 × 12), `CardRow`/`Hairline`, puntos de 7 dp a mano y la `Cifra`
+  vieja con números compactos («$5M») en la misma pantalla donde el héroe dice la cifra entera. Ahora
+  son `Superficie(Lista)` + `Fila` + `Separador`:
+  - **«Tu patrimonio»**: arriba el neto (`CifraConRotulo` `Grande`), la barra y «Tienes · Debes», con
+    las cifras enteras; debajo un tramo por `Fila`, con el ícono de lo que es en su círculo (`Exito` lo
+    que tienes, `Neutro` lo que debes: los dos lados de la barra) y la `Cifra` entera al final. Las
+    cuentas de «Tu plata» cuelgan de su fila con `BajoLaFila`, en `Cifra` `Chica` apagada en su moneda
+    (`CuentaHero` trae el saldo y la moneda sin escribir).
+  - **«Para revisar»**: cada cosa es una `Fila` con el `IconoEnCirculo` de la pantalla donde se
+    resuelve, en `Aviso` si es urgente y en la marca si no, el detalle de subtítulo (dos renglones) y el
+    `Chevron`. Lo que se sale de lo normal, con `WarningAmber` en aviso; la evidencia (con su `Cifra`
+    `Chica`) y «Ver los movimientos · Está bien» cuelgan con `BajoLaFila`. La línea compacta es una
+    `Fila` con el ícono de la bandeja en aviso.
+  - **«Pregúntale a Movi»**: cada pregunta es una `Fila` con el ícono de Movi AI y el `Chevron`; su
+    esqueleto, `EsqueletoDeFila` (los dos miden 56). El campo de abajo sigue siendo un botón con cara
+    de campo —escribir ahí y saltar al chat perdería el foco—, con el margen de la fila.
+  - **«Tu día más justo»**: una `Fila` —lo que es de título (en `sale` si quedarías en rojo), cuándo de
+    subtítulo, la `Cifra` al final—. Cargando, el subtítulo vacío reserva su renglón y la cifra es un
+    bloque del mismo alto: nada salta.
+  - **El Disponible** sigue con sus tres columnas, ahora con la `Cifra` del sistema `Compacta` (§6).
+- **Montos con `Text`** (el flujo libre de Plan, el tope y los movimientos de Presupuestos, la hoja de
+  anular, los candidatos a pago de tarjeta, la fila de una categoría en el detalle de un período):
+  `Cifra`. La hoja de anular dice el gasto con «−» y el ingreso con «+» por el tono, no armando el texto.
+- **`CifraConRotulo`** (§6) en Hoy, Tus períodos (compacta: son tres), Créditos (en renglón) y el flujo
+  libre de Plan (también su cifra grande, con «—» sin datos).
+- **`Hairline` → `Separador` y `MinCard` → `Superficie`** en los archivos tocados.
+
+## 26. Vuelta de diseño 20: Agregar, la revisión de extractos y los chips, al sistema
 
 La misma auditoría de la vuelta 18 dejó una lista de lo que seguía hecho a mano. Esta vuelta la toma.
 
@@ -978,7 +1043,9 @@ La misma auditoría de la vuelta 18 dejó una lista de lo que seguía hecho a ma
 **Las líneas base**, antes → después: botones de Material 4 → **0**, `Color.White`/`Black` 3 → **0**
 (fuera del velo de `MarcoDeHoja`, exceptuado), `Hairline` 14 → 13, `MinCard` 22 → 20,
 `Text(formatCOP…)` 10 → 10, `fontWeight =` 190 → 145; `.dp` sueltos 242 → 213 y radios con número
-19 → 16.
+19 → 16. Con la vuelta 19 ya mezclada (que bajó `Hairline`, `MinCard`, `Text(formatCOP…)`, `fontWeight`
+y `.dp` en Hoy y las cifras), las líneas base quedan en: `.dp` sueltos 196, radios 16, botones de
+Material 0, blanco o negro 0, `Hairline` 4, `MinCard` 14, `Text(formatCOP…)` 4, `fontWeight =` 134.
 
 Lo vigilan `LaRevisionDelExtractoEsDelSistemaTest` (cada botón es un `Boton` con su variante, una
 `Casilla` por fila que se destilda al tocarla, los montos son `Cifra`, y el texto del botón

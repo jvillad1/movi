@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.RecurringOfferGate
@@ -47,6 +46,8 @@ import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.CifraConRotulo
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
@@ -1129,19 +1130,14 @@ private fun ResumenFlujoLibreCard(
     cifras: ResumenRecurrentes?,
 ) {
     Superficie(modifier = Modifier.fillMaxWidth()) {
-        Text("Flujo libre", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-        Spacer(Modifier.height(Espacio.xs))
         // **La cifra grande es [ResumenRecurrentes.disponible], no `flujoLibre`.** El mínimo de una
         // tarjeta no es un gasto del mes —eso sigue igual, ver `cuentaComoCompromisoMensual`— pero
         // es plata que hay que pagar sí o sí, y mientras el número grande la ignoraba el dueño leía
         // $601.574 libres sin saber que el mínimo de su Master Black son $1.843.014. Las dos
         // cifras se muestran; la que manda es la que ya descontó lo comprometido.
-        // La cifra de una tarjeta (ola R4: `Cifra.Grande`, la del sistema; antes 28 sp a mano).
-        if (cifras != null) {
-            Cifra(cifras.disponible, VarianteDeCifra.Grande)
-        } else {
-            Text(text = "—", style = Movi.textos.cifraDeTarjeta, color = Movi.colores.texto)
-        }
+        // La cifra de una tarjeta (ola R4: `Cifra.Grande`, la del sistema; antes 28 sp a mano), con
+        // su rótulo arriba (vuelta de diseño 19: `CifraConRotulo`; sin datos, «—» del mismo alto).
+        CifraConRotulo("Flujo libre", cifras?.disponible, variante = VarianteDeCifra.Grande)
         Spacer(Modifier.height(Espacio.xxs))
         Text(
             text = cifras?.let { subtituloDelFlujoLibre(it) } ?: "Ingresos recurrentes − Gastos recurrentes",
@@ -1149,29 +1145,13 @@ private fun ResumenFlujoLibreCard(
             color = Movi.colores.textoMedio,
         )
         Spacer(Modifier.height(Espacio.s))
-        Hairline()
+        Separador(SangriaDeSeparador.Ninguna)
         Spacer(Modifier.height(Espacio.s))
+        // Vuelta de diseño 19: `CifraConRotulo`, la del sistema. Eran cuatro `Text` con el monto ya
+        // escrito: sin el tono de la `Cifra` (lo que entra va con «+»), sin su letra tabular.
         Row(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Ingresos recurrentes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(Espacio.xs))
-                Text(
-                    text = cifras?.let { formatCOP(it.ingresos) } ?: "—",
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.entra,
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Gastos recurrentes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(Espacio.xs))
-                Text(
-                    text = cifras?.let { formatCOP(it.gastos) } ?: "—",
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                )
-            }
+            CifraConRotulo("Ingresos recurrentes", cifras?.ingresos, Modifier.weight(1f), tono = TonoDeCifra.Ingreso)
+            CifraConRotulo("Gastos recurrentes", cifras?.gastos, Modifier.weight(1f))
         }
         // **Los mínimos, en su propia fila y no adentro de «Gastos recurrentes».** Es la tensión
         // que esta feature tuvo que resolver: el pago de una tarjeta NO es gasto del mes (las
@@ -1182,28 +1162,9 @@ private fun ResumenFlujoLibreCard(
         if (cifras != null && cifras.minimosDeTarjeta > 0L) {
             Spacer(Modifier.height(Espacio.s))
             Row(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(ETIQUETA_MINIMOS_DE_TARJETA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(Espacio.xs))
-                    Text(
-                        // El signo lo trae el formato, no un prefijo pegado afuera (F36): `formatCOP` ya sabe
-                        // escribir un negativo, y duplicarlo daría «− −$…» el día que alguien pase otra cifra.
-                        text = formatCOP(-cifras.minimosDeTarjeta),
-                        style = Movi.textos.monto,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.texto,
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Libre sin las tarjetas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(Espacio.xs))
-                    Text(
-                        text = formatCOP(cifras.flujoLibre),
-                        style = Movi.textos.monto,
-                        fontWeight = FontWeight.Medium,
-                        color = Movi.colores.textoMedio,
-                    )
-                }
+                // El signo lo trae la cifra (F36): se pasa el monto en negativo, no un «−» pegado.
+                CifraConRotulo(ETIQUETA_MINIMOS_DE_TARJETA, -cifras.minimosDeTarjeta, Modifier.weight(1f))
+                CifraConRotulo("Libre sin las tarjetas", cifras.flujoLibre, Modifier.weight(1f), tono = TonoDeCifra.Apagado)
             }
         }
         // Y cuando el mínimo no está cargado, la cifra grande deja de ser un hecho y se dice.

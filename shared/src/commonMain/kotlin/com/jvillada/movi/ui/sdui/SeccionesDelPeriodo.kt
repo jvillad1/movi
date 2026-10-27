@@ -3,9 +3,7 @@ package com.jvillada.movi.ui.sdui
 import com.jvillada.movi.ui.components.conCifrasOcultas
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,11 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.testTag
@@ -29,7 +25,6 @@ import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.shared.model.ContraElAnterior
 import com.jvillada.movi.shared.model.Tendencia
 import com.jvillada.movi.ui.dashboard.descripcionDeLaFlecha
-import com.jvillada.movi.ui.dashboard.pieDeLaComparacion
 import com.jvillada.movi.ui.dashboard.textoDeLaFlecha
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Anomalia
@@ -43,7 +38,6 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,34 +46,43 @@ import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.components.ChevronRight
-import com.jvillada.movi.ui.components.Cifra
-import com.jvillada.movi.ui.components.Hairline
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
-import com.jvillada.movi.ui.components.MinSectionHeader
-import com.jvillada.movi.ui.components.formatCOP
-import com.jvillada.movi.ui.components.formatMoney
-import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.CategoriaDelPeriodo
 import com.jvillada.movi.ui.dashboard.CosaParaRevisar
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.DestinoDeRevision
-import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
-import com.jvillada.movi.ui.dashboard.categoriasDelPeriodo
-import com.jvillada.movi.ui.dashboard.checklistDelPeriodo
 import com.jvillada.movi.ui.dashboard.cosasParaRevisarDe
-import com.jvillada.movi.ui.dashboard.faltaPorPagar
-import com.jvillada.movi.ui.dashboard.lineaDeLoQueFalta
-import com.jvillada.movi.ui.dashboard.pagosPendientes
-import com.jvillada.movi.ui.dashboard.pieDeLoYaPagado
-import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
-import com.jvillada.movi.ui.recurrentes.CasillaDeChecklist
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.categorias.colorDeCategoria
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.rounded.AccountBalance
+import androidx.compose.material.icons.rounded.CreditCard
+import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.People
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.Savings
+import androidx.compose.material.icons.rounded.Sms
+import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.recurrentes.BajoLaFila
 
 /**
  * # Las secciones que convierten el Inicio en el resumen del período
@@ -121,11 +124,8 @@ internal fun FilaDeCategoria(categoria: CategoriaDelPeriodo, entrada: Float) {
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.size(Movi.espacios.corto))
-            Cifra(
-                formatMoneyCompact(categoria.gastado),
-                Movi.textos.monto,
-                color = if (categoria.superada) Movi.colores.sale else Movi.colores.texto,
-            )
+            // Vuelta de diseño 19: la `Cifra` del sistema, entera, como toda cifra de una fila.
+            Cifra(categoria.gastado, tono = if (categoria.superada) TonoDeCifra.Alerta else TonoDeCifra.Neutro)
         }
         Spacer(Modifier.height(Movi.espacios.minimo + 2.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -221,15 +221,14 @@ internal fun ParaRevisarSection(
     val coroutine = rememberCoroutineScope()
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-        MinSectionHeader(title = section.title ?: "Para revisar", count = cosas.size + anomalias.size)
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
-        ) {
+        Seccion(titulo = section.title ?: "Para revisar", conteo = cosas.size + anomalias.size)
+        // Vuelta de diseño 19: una `Superficie` de lista con una `Fila` por cosa y el `Separador` del
+        // sistema; el punto de 7 dp a mano pasó a ser el `IconoEnCirculo` de lo que es, en ámbar si
+        // es urgente.
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             cosas.forEachIndexed { i, cosa ->
                 FilaParaRevisar(cosa) { onNavigate(pantallaDe(cosa.destino)) }
-                if (i < cosas.lastIndex || anomalias.isNotEmpty()) Hairline()
+                if (i < cosas.lastIndex || anomalias.isNotEmpty()) Separador()
             }
             anomalias.forEachIndexed { i, anomalia ->
                 FilaDeAnomalia(anomalia) {
@@ -240,7 +239,7 @@ internal fun ParaRevisarSection(
                             .onFailure { AnomaliasDescartadasEnLaSesion.deshacer(anomalia.huella) }
                     }
                 }
-                if (i < anomalias.lastIndex) Hairline()
+                if (i < anomalias.lastIndex) Separador()
             }
         }
     }
@@ -278,29 +277,17 @@ internal fun ParaRevisarCompactoSection(
     }
     val cuantas = cosas.size + anomaliasVisiblesDe(data).size
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-        MinCard(
+        Superficie(
             modifier = Modifier.fillMaxWidth().testTag(TAG_PARA_REVISAR_COMPACTO),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
-            onClick = { abierta = true },
-            onClickLabel = "Ver lo que hay para revisar",
+            relleno = RellenoDeSuperficie.Lista,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-            ) {
-                Box(Modifier.size(7.dp).clip(CircleShape).background(Movi.colores.aviso))
-                Text(
-                    text = textoDeParaRevisarCompacto(cuantas),
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.aviso,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                ChevronRight()
-            }
+            Fila(
+                titulo = textoDeParaRevisarCompacto(cuantas),
+                inicio = { IconoEnCirculo(Icons.Rounded.Inbox, tono = TonoDeIcono.Aviso) },
+                final = { Chevron() },
+                onClick = { abierta = true },
+                onClickLabel = "Ver lo que hay para revisar",
+            )
         }
     }
 }
@@ -317,37 +304,30 @@ const val TAG_FILA_DE_ANOMALIA: String = "fila-de-anomalia"
 private fun FilaDeAnomalia(anomalia: Anomalia, onDescartar: () -> Unit) {
     var verEvidencia by rememberSaveable(anomalia.huella) { mutableStateOf(false) }
     val hoy = remember { epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()) }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).testTag(TAG_FILA_DE_ANOMALIA),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(Movi.colores.aviso),
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_ANOMALIA)) {
+        Fila(
+            titulo = conCifrasOcultas(anomalia.titulo),
+            subtitulo = conCifrasOcultas(anomalia.detalle),
+            lineasDelSubtitulo = 2,
+            inicio = { IconoEnCirculo(Icons.Rounded.WarningAmber, tono = TonoDeIcono.Aviso) },
         )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = conCifrasOcultas(anomalia.titulo), style = Movi.textos.cuerpo, color = Movi.colores.texto)
-            Text(text = conCifrasOcultas(anomalia.detalle), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        // La evidencia y las dos salidas cuelgan de la fila, alineadas con su texto.
+        BajoLaFila {
             if (verEvidencia) {
-                Spacer(Modifier.height(Movi.espacios.corto))
                 anomalia.evidencia.forEach { e ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.Top) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = renglonDeEvidencia(e, hoy),
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                             modifier = Modifier.weight(1f),
                         )
-                        Text(formatMoney(e.monto, e.moneda), style = Movi.textos.apoyo, color = Movi.colores.texto)
+                        Spacer(Modifier.width(Espacio.xs))
+                        Cifra(e.monto, VarianteDeCifra.Chica, moneda = e.moneda)
                     }
                 }
             }
-            Spacer(Modifier.height(Movi.espacios.corto))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 ActionChip(
                     label = if (verEvidencia) "Ocultar los movimientos" else "Ver los movimientos",
                     primary = false,
@@ -364,30 +344,28 @@ internal fun renglonDeEvidencia(e: EvidenciaDeAnomalia, hoy: kotlinx.datetime.Lo
 
 @Composable
 private fun FilaParaRevisar(cosa: CosaParaRevisar, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(if (cosa.urgente) Movi.colores.aviso else Movi.colores.marca),
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = conCifrasOcultas(cosa.texto),
-                style = Movi.textos.cuerpo,
-                color = if (cosa.urgente) Movi.colores.aviso else Movi.colores.texto,
-            )
-            Text(text = conCifrasOcultas(cosa.detalle), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        }
-    }
+    Fila(
+        titulo = conCifrasOcultas(cosa.texto),
+        subtitulo = conCifrasOcultas(cosa.detalle),
+        lineasDelSubtitulo = 2,
+        inicio = {
+            IconoEnCirculo(iconoDeRevision(cosa.destino), tono = if (cosa.urgente) TonoDeIcono.Aviso else TonoDeIcono.Marca)
+        },
+        final = { Chevron() },
+        onClick = onClick,
+    )
+}
+
+/** El ícono de una cosa para revisar, por la pantalla donde se resuelve. */
+private fun iconoDeRevision(destino: DestinoDeRevision): ImageVector = when (destino) {
+    DestinoDeRevision.MOVIMIENTOS -> Icons.AutoMirrored.Rounded.ReceiptLong
+    DestinoDeRevision.RECURRENTES, DestinoDeRevision.SUSCRIPCIONES -> Icons.Rounded.Repeat
+    DestinoDeRevision.PRESUPUESTOS -> Icons.Rounded.Savings
+    DestinoDeRevision.CREDITOS -> Icons.Rounded.CreditCard
+    DestinoDeRevision.POR_REVISAR -> Icons.Rounded.Inbox
+    DestinoDeRevision.CUADRE -> Icons.Rounded.AccountBalance
+    DestinoDeRevision.CAPTURA -> Icons.Rounded.Sms
+    DestinoDeRevision.CUENTAS_DE_OTROS -> Icons.Rounded.People
 }
 
 private fun pantallaDe(destino: DestinoDeRevision): Screen = when (destino) {

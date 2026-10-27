@@ -424,6 +424,8 @@ class DashboardLogicTest {
             ),
         )
         assertEquals(listOf("$2.000.000", "−US$50"), hero?.map { it.monto })
+        // Vuelta de diseño 19: el mismo saldo sin escribir, para la `Cifra` del sistema.
+        assertEquals(listOf(2_000_000L to "COP", -50L to "USD"), hero?.map { it.saldo to it.moneda })
     }
 
     @Test
