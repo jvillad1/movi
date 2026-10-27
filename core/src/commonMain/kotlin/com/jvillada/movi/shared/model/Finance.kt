@@ -11,6 +11,12 @@ enum class Scope { SELF, FAMILY }
 data class FinanceSummary(
     val scope: Scope,
     val balance: Long,
+    /**
+     * Ingresos y egresos del período en curso, en COP y solo flujo de caja, con **la misma regla que
+     * «Salió»** (`movimientosDeFlujo` en el server): **solo tu parte** de un gasto compartido, tu
+     * parte de lo que pagó otro el día del gasto, y lo que salda un espacio fuera (R3, ver
+     * [montoContado]). [balance] sí es el patrimonio entero: la plata salió de la cuenta.
+     */
     val ingresos: Long,
     val egresos: Long,
     /**

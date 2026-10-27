@@ -2,8 +2,8 @@ package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
-import com.jvillada.movi.server.db.Events
-import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
+import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.routes.CajaDelDueno
 import com.jvillada.movi.server.routes.cajaProyectadaDe
@@ -42,9 +42,9 @@ import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
@@ -144,9 +144,15 @@ private data class FilaDeMovimiento(
     val cuenta: String,
     /**
      * `null` si cuenta como gasto o ingreso del mes (lo normal); si no, **por qué no** —«pago de
-     * tarjeta», «traspaso entre tus cuentas»—. Ver [porQueNoCuentaEnElMes].
+     * tarjeta», «traspaso entre tus cuentas», «salda un gasto compartido»—. Ver [porQueNoCuentaEnElMes].
      */
     val noCuenta: String? = null,
+    /**
+     * **Lo que suma en Entró/Salió: solo tu parte** (R3, `montoContado` en :core). Igual a [monto]
+     * salvo en un gasto repartido en un espacio, donde la parte de los demás no es gasto tuyo.
+     * [monto] sigue siendo lo que salió de la cuenta: es lo que el dueño ve en el extracto.
+     */
+    val contado: Long = monto,
 ) {
     val cuentaEnElMes: Boolean get() = noCuenta == null
 }
@@ -227,10 +233,11 @@ private suspend fun totalesPorCategoria(uid: String, args: Map<String, String>):
     val desde = fechaDe(args["desde"]) ?: AppClock.today().minusMonths(1)
     val hasta = fechaDe(args["hasta"]) ?: AppClock.today()
 
-    val todas = filasDe(uid, desde, hasta)
+    val todas = filasDe(uid, desde, hasta) + tuParteDeOtrosEntre(uid, desde, hasta)
     if (todas.isEmpty()) return "Sin movimientos entre $desde y $hasta."
     // **Los totales son los de siempre**: solo lo que cuenta en el mes. Lo demás va en su propio
-    // bloque, abajo, rotulado — nunca mezclado con «Salió».
+    // bloque, abajo, rotulado — nunca mezclado con «Salió». Y **solo tu parte** de lo compartido
+    // (`contado`, R3): las mismas cifras que «Salió» y el héroe de Hoy (`movimientosDeFlujo`).
     val filas = todas.filter { it.cuentaEnElMes }
     val fuera = todas.filterNot { it.cuentaEnElMes }
 
@@ -240,10 +247,10 @@ private suspend fun totalesPorCategoria(uid: String, args: Map<String, String>):
             val gastos = deEsaMoneda.filter { !it.esIngreso }
             val ingresos = deEsaMoneda.filter { it.esIngreso }
             appendLine("== En $moneda ==")
-            appendLine("- Entró: ${ingresos.sumOf { it.monto }}")
-            appendLine("- Salió: ${gastos.sumOf { it.monto }}")
+            appendLine("- Entró: ${ingresos.sumOf { it.contado }}")
+            appendLine("- Salió: ${gastos.sumOf { it.contado }}")
             gastos.groupBy { it.categoria }
-                .mapValues { (_, dela) -> dela.sumOf { it.monto } }
+                .mapValues { (_, dela) -> dela.sumOf { it.contado } }
                 .entries.sortedByDescending { it.value }
                 .forEach { (categoria, monto) ->
                     appendLine("- $categoria: $monto")
@@ -255,7 +262,7 @@ private suspend fun totalesPorCategoria(uid: String, args: Map<String, String>):
             if (gastos.isNotEmpty()) {
                 appendLine("De qué cuenta salió:")
                 gastos.groupBy { it.cuenta }
-                    .mapValues { (_, dela) -> dela.sumOf { it.monto } }
+                    .mapValues { (_, dela) -> dela.sumOf { it.contado } }
                     .entries.sortedByDescending { it.value }
                     .forEach { (cuenta, monto) -> appendLine("- $cuenta: $monto") }
             }
@@ -441,46 +448,70 @@ private suspend fun filasDe(uid: String, desde: LocalDate, hasta: LocalDate): Li
     val inicio = appDateToEpochMillis(desde)
     val finExclusivo = appDateToEpochMillis(hasta.plusDays(1))
     return dbQuery {
-        val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }
-            .map { it[VoidEvents.originalEventId] }.toSet()
         val tipoDeCuenta = accountTypesFor(uid)
         val nombreDeCuenta = Accounts.selectAll().where { Accounts.userId eq uid }
             .associate { it[Accounts.id] to it[Accounts.name] }
 
-        Events.selectAll()
-            .where {
-                (Events.userId eq uid) and
-                    (Events.timestamp greaterEq inicio) and
-                    (Events.timestamp less finExclusivo)
-            }
-            .filterNot { it[Events.id] in anulados }
-            .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
+        // Sin anulados y con lo que dicen los espacios ya puesto (`conLoCompartido`): la parte ajena
+        // de un gasto repartido y la transferencia que salda un espacio. Ver `loadEventsBetween`.
+        loadEventsBetween(uid, inicio, finExclusivo)
+            .filterNot { esperaEnPorConfirmar(it.reconciliationStatus) }
             // Ola 3: lo que no cuenta como flujo YA NO se descarta acá —se rotula—. Descartarlo
             // dejaba al asistente sin poder contestar «¿cuánto le pagué a la Master Black?»; los
             // totales lo siguen dejando afuera (ver [totalesPorCategoria]).
-            .map { fila ->
+            .map { e ->
                 FilaDeMovimiento(
-                    fecha = epochMillisToAppDateString(fila[Events.timestamp]),
-                    nombre = fila[Events.description],
-                    categoria = fila[Events.category],
-                    monto = fila[Events.amount],
-                    moneda = fila[Events.currency],
-                    esIngreso = fila[Events.type] == TransactionType.INCOME.name,
-                    cuenta = nombreDeCuenta[fila[Events.accountId]] ?: "otra cuenta",
-                    noCuenta = porQueNoCuentaEnElMes(
-                        tipoDeCuenta[fila[Events.accountId]],
-                        TransactionType.valueOf(fila[Events.type]),
-                        fila[Events.category],
-                    ),
+                    fecha = epochMillisToAppDateString(e.timestamp),
+                    nombre = e.description,
+                    categoria = e.category,
+                    monto = e.amount,
+                    moneda = e.currency,
+                    esIngreso = e.type == TransactionType.INCOME,
+                    cuenta = nombreDeCuenta[e.accountId] ?: "otra cuenta",
+                    noCuenta = porQueNoCuentaEnElMes(tipoDeCuenta[e.accountId], e.type, e.category)
+                        // R3: lo que salda un espacio no es ingreso ni gasto (solo salda).
+                        ?: e.saldaEspacioId?.let { SALDA_UN_GASTO_COMPARTIDO },
+                    contado = montoContado(e),
                 )
             }
             .sortedByDescending { it.fecha }
     }
 }
 
+/** El rótulo de una transferencia que salda un espacio: no suma en Entró ni en Salió (R3). */
+internal const val SALDA_UN_GASTO_COMPARTIDO = "salda un gasto compartido"
+
+/** La «cuenta» de tu parte de un gasto que pagó otro: no salió de ninguna de tus cuentas. */
+internal const val TU_PARTE_DE_UN_GASTO_COMPARTIDO = "tu parte de un gasto compartido"
+
+/**
+ * **Tu parte de lo que pagaron otros** entre [desde] y [hasta], como filas para los totales (R3,
+ * `tuParteComoEventos` en :core): es gasto tuyo el día del gasto aunque no esté en tus cuentas. Solo
+ * para [totalesPorCategoria]: la lista de movimientos no los muestra (no son movimientos tuyos).
+ */
+private suspend fun tuParteDeOtrosEntre(uid: String, desde: LocalDate, hasta: LocalDate): List<FilaDeMovimiento> {
+    val inicio = appDateToEpochMillis(desde)
+    val finExclusivo = appDateToEpochMillis(hasta.plusDays(1))
+    return dbQuery { loCompartidoDelUsuario(uid).tuParteDeOtros }
+        .filter { it.timestamp >= inicio && it.timestamp < finExclusivo }
+        .map { e ->
+            FilaDeMovimiento(
+                fecha = epochMillisToAppDateString(e.timestamp),
+                nombre = e.description,
+                categoria = e.category,
+                monto = montoContado(e),
+                moneda = e.currency,
+                esIngreso = false,
+                cuenta = TU_PARTE_DE_UN_GASTO_COMPARTIDO,
+            )
+        }
+}
+
 private fun renglon(f: FilaDeMovimiento): String {
     val signo = if (f.esIngreso) "+" else "-"
-    val rotulo = f.noCuenta?.let { " [NO cuenta como gasto ni ingreso: $it]" }.orEmpty()
+    val rotulo = f.noCuenta?.let { " [NO cuenta como gasto ni ingreso: $it]" }
+        // R3: de un gasto repartido solo suma tu parte; el resto lo pone otra persona del espacio.
+        ?: if (f.contado != f.monto) " [gasto compartido: en Salió cuenta solo tu parte, ${f.contado}]" else ""
     return "${f.fecha} · ${f.nombre} (${f.categoria}, ${f.cuenta}): $signo${f.monto} ${f.moneda}$rotulo"
 }
 

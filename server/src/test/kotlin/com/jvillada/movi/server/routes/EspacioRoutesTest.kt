@@ -3,6 +3,16 @@ package com.jvillada.movi.server.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.ai.LlamadaDeHerramienta
+import com.jvillada.movi.server.ai.TOTALES_POR_CATEGORIA
+import com.jvillada.movi.server.ai.ejecutarHerramienta
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
+import com.jvillada.movi.shared.model.esGastoDelPeriodo
+import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
@@ -10,6 +20,7 @@ import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Espacios
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.GastosDelEspacio
@@ -22,6 +33,7 @@ import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImports
+import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
@@ -84,6 +96,8 @@ class EspacioRoutesTest {
         Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals, PushSubscriptions,
         CategoryPrefs, RecurringOccurrences, OccurrenceRejections, Apartados,
         KnownDestinations, Espacios, GastosDelEspacio, LiquidacionesDelEspacio,
+        // Las lee el contexto de Movi AI (`cargarDatosDelUsuario`): los papeles y las suscripciones.
+        Documents, Subscriptions,
     )
 
     @BeforeTest
@@ -341,6 +355,72 @@ class EspacioRoutesTest {
         )
         assertEquals("e_de_caro", liq.eventoId)
         assertTrue(detalle().propuestas.isEmpty())
+    }
+
+    /**
+     * **Ninguna cifra de «entró / salió / neto» difiere entre pantallas** (vuelta 10). Un período con
+     * (1) un gasto tuyo repartido 50/50, (2) un gasto que pagó Caro con tu parte y (3) la
+     * transferencia de Caro que salda: `/api/finance-summary` (la segunda línea del héroe de Hoy, el
+     * Disponible de Plan, el Día a día) tiene que dar lo mismo que `/api/dashboard/summary`
+     * (`movimientosDeFlujo`), que «En qué se va» (la regla de `:core` sobre lo que baja a la app más
+     * tu parte de otros), que el contexto de Movi AI y que su herramienta de totales. Antes
+     * `finance-summary` sumaba el monto entero: Salió $510.000 en vez de $200.000, y los $390.000 de
+     * Caro entraban como ingreso.
+     */
+    @Test
+    fun `finance-summary cuenta solo tu parte, igual que Salio, En que se va y Movi AI`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_sueldo", 1_000_000, tipo = "INCOME", categoria = "Salario", descripcion = "Nómina")
+        evento("e_mercado", 240_000) // (1) lo pagaste tú y se repartió 50/50: tu parte, 120.000
+        evento("e_almuerzo", 30_000, categoria = "Comida")
+        evento("e_de_caro", 390_000, tipo = "INCOME", categoria = "Ingreso", descripcion = "Transferencia de Caro")
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado"}""")
+        // (2) lo pagó Caro: tu parte, 50.000, cuenta el día del gasto
+        post("/api/espacios/esp_casa/gastos", """{"id":"g_caro","pagadoPor":"dst_caro","monto":100000,"categoria":"Mercado","fecha":$hoy}""")
+        // (3) Caro salda con una transferencia real: no es ingreso
+        post("/api/espacios/esp_casa/liquidaciones", """{"id":"liq","de":"dst_caro","a":"yo","monto":390000,"eventoId":"e_de_caro"}""")
+
+        val entro = 1_000_000L
+        val salio = 120_000L + 30_000L + 50_000L
+
+        val resumen = Json.parseToJsonElement(get("/api/finance-summary").bodyAsText()).jsonObject
+        assertEquals(entro, resumen["ingresos"]!!.jsonPrimitive.long, "la transferencia que salda no es ingreso")
+        assertEquals(salio, resumen["egresos"]!!.jsonPrimitive.long, "solo tu parte, y tu parte de lo que pagó Caro")
+
+        // Lo mismo que `movimientosDeFlujo` (Salió, categorías, presupuestos).
+        val tablero = Json.parseToJsonElement(get("/api/dashboard/summary").bodyAsText()).jsonObject
+        assertEquals(entro, tablero["monthIncome"]?.jsonPrimitive?.long ?: 0L)
+        assertEquals(salio, tablero["monthSpent"]!!.jsonPrimitive.long)
+
+        // Lo mismo que «En qué se va» y el panel de Movimientos: la regla de :core sobre los movimientos
+        // que bajan a la app (`/api/events/by-day` sale de `loadNonVoidedEvents`) y tu parte de otros.
+        val eventos = runBlocking { loadNonVoidedEvents(a) }
+        val tuParte: List<FinancialEvent> = json.decodeFromString(get("/api/espacios/tu-parte").bodyAsText())
+        val tipos = mapOf(ahorros to AccountType.SAVINGS)
+        assertEquals(salio, (eventos + tuParte).filter { esGastoDelPeriodo(it, tipos[it.accountId]) }.sumOf { montoContado(it) })
+        assertEquals(
+            entro,
+            eventos.filter { it.type == TransactionType.INCOME && it.currency == "COP" && cuentaEnGastosEIngresos(it) }.sumOf { it.amount },
+        )
+        assertEquals(entro - salio, resumen["ingresos"]!!.jsonPrimitive.long - resumen["egresos"]!!.jsonPrimitive.long)
+
+        // Movi AI: el «Resumen del mes en curso» del contexto, el contexto del período y la herramienta.
+        val datos = runBlocking { cargarDatosDelUsuario(a) }
+        assertEquals(entro to salio, datos.ingresos to datos.egresos)
+        assertEquals(entro to salio, datos.periodo.ingresos to datos.periodo.gastoPorCategoria.values.sum())
+        val hoyEnBogota = AppClock.today()
+        val totales = runBlocking {
+            ejecutarHerramienta(
+                a,
+                LlamadaDeHerramienta("t1", TOTALES_POR_CATEGORIA, mapOf("desde" to hoyEnBogota.minusDays(1).toString(), "hasta" to hoyEnBogota.toString())),
+            )
+        }
+        assertTrue("- Entró: $entro" in totales, totales)
+        assertTrue("- Salió: $salio" in totales, totales)
+        assertTrue("Salda un gasto compartido" in totales, "la transferencia de Caro va rotulada aparte:\n$totales")
+
+        // Los saldos NO cambian: la plata salió entera de la cuenta.
+        assertEquals(240_000, eventos.single { it.id == "e_mercado" }.amount)
     }
 
     /**

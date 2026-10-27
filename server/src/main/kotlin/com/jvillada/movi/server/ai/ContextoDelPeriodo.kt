@@ -1,7 +1,5 @@
 package com.jvillada.movi.server.ai
 
-import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
-import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Credits
@@ -21,6 +19,8 @@ import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.server.routes.estadosDeLasOcurrenciasReales
+import com.jvillada.movi.server.routes.flujoDeCaja
+import com.jvillada.movi.server.routes.movimientosDeFlujo
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.ComoVaLaDeuda
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
@@ -32,7 +32,6 @@ import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
-import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.montoMensualEquivalente
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
@@ -235,67 +234,29 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             .map { it[VoidEvents.originalEventId] }.toSet()
         val tipoDeCuenta = accountTypesFor(uid)
 
-        val delPeriodo = Events.selectAll()
-            .where {
-                (Events.userId eq uid) and
-                    (Events.currency eq "COP") and
-                    (Events.timestamp greaterEq ventana.startMillis) and
-                    (Events.timestamp less ventana.endMillisExclusive)
-            }
-            .filterNot { it[Events.id] in anulados }
-            .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
-            .filter { fila ->
-                val tipo = tipoDeCuenta[fila[Events.accountId]]
-                tipo == null || isCashFlow(tipo, TransactionType.valueOf(fila[Events.type]), fila[Events.category])
-            }
-        // R3 · solo tu parte (ver `montoContado` en :core): lo que salda un espacio no es ingreso ni
-        // gasto, un gasto repartido cuenta sin la parte ajena y tu parte de lo que pagó otro suma.
-        val compartido = loCompartidoDelUsuario(uid)
-        val saldan = compartido.indice.saldaPorEvento
-        val delPeriodoContado = delPeriodo.filterNot { it[Events.id] in saldan }
-        fun contado(fila: org.jetbrains.exposed.sql.ResultRow): Long {
-            val monto = fila[Events.amount]
-            if (fila[Events.type] != TransactionType.EXPENSE.name) return monto
-            return (monto - (compartido.indice.parteAjenaPorEvento[fila[Events.id]] ?: 0L)).coerceIn(0L, monto)
-        }
-        val deOtros = compartido.tuParteDeOtros
-            .filter { it.timestamp >= ventana.startMillis && it.timestamp < ventana.endMillisExclusive }
-
-        val ingresos = delPeriodoContado
-            .filter { it[Events.type] == TransactionType.INCOME.name }
-            .sumOf { it[Events.amount] }
+        // **La misma lista que «Salió», `/api/finance-summary` y el héroe de Hoy** (`movimientosDeFlujo`):
+        // en pesos, vivos, fuera de «Por confirmar», sin lo que `isCashFlow` deja afuera y con la
+        // regla de R3 —solo tu parte de un gasto repartido, tu parte de lo que pagó otro el día del
+        // gasto, y lo que salda un espacio fuera—. Acá había una copia de esa regla, escrita a mano.
+        val movimientos = movimientosDeFlujo(uid, ventana.startMillis, ventana.endMillisExclusive, anulados, tipoDeCuenta)
+        val (ingresos, gastoPorCategoria) = flujoDeCaja(movimientos)
         // La pata del crédito del desembolso es un EXPENSE en una cuenta LOAN y `isCashFlow` ya la
         // dejó fuera: aquí solo queda la pata que entró a la cuenta de dinero.
-        val creditosDesembolsados = delPeriodo
-            .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.category] == DESEMBOLSO_CATEGORY }
-            .sumOf { it[Events.amount] }
-        val gastoPorCategoria = (
-            delPeriodoContado
-                .filter { it[Events.type] == TransactionType.EXPENSE.name }
-                .map { it[Events.category] to contado(it) } +
-                deOtros.map { it.category to montoContado(it) }
-            )
-            .groupBy({ it.first }, { it.second })
-            .mapValues { (_, montos) -> montos.sum() }
+        val creditosDesembolsados = movimientos
+            .filter { it.type == TransactionType.INCOME && it.category == DESEMBOLSO_CATEGORY }
+            .sumOf { it.amount }
         val nombreDeCuenta = Accounts.selectAll().where { Accounts.userId eq uid }
             .associate { it[Accounts.id] to it[Accounts.name] }
-        val gastos = delPeriodoContado
-            .filter { it[Events.type] == TransactionType.EXPENSE.name }
-            .map { fila ->
+        val gastos = movimientos
+            .filter { it.type == TransactionType.EXPENSE }
+            .map { m ->
                 GastoDelPeriodo(
-                    fecha = epochMillisToAppDateString(fila[Events.timestamp]),
-                    nombre = fila[Events.description],
-                    categoria = fila[Events.category],
-                    cuenta = nombreDeCuenta[fila[Events.accountId]] ?: "otra cuenta",
-                    monto = contado(fila),
-                )
-            } + deOtros.map { e ->
-                GastoDelPeriodo(
-                    fecha = epochMillisToAppDateString(e.timestamp),
-                    nombre = e.description,
-                    categoria = e.category,
-                    cuenta = "tu parte de un gasto compartido",
-                    monto = montoContado(e),
+                    fecha = epochMillisToAppDateString(m.timestamp),
+                    nombre = m.description,
+                    categoria = m.category,
+                    // Sin cuenta: es tu parte de un gasto que pagó otro (R3).
+                    cuenta = m.accountId?.let { nombreDeCuenta[it] ?: "otra cuenta" } ?: "tu parte de un gasto compartido",
+                    monto = m.amount,
                 )
             }
 
