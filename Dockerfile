@@ -70,10 +70,15 @@ RUN echo "── recursos ──" && (free -m || true) && df -h /app && nproc
 #    yarn/node que el plugin de Kotlin guarda en el montaje de caché quedó trabada
 #    (un build cortado a la mitad la deja así). Es el mismo mal que en GitHub Actions se
 #    curó con `rm -rf ~/.gradle/yarn ~/.gradle/nodejs`. Bajarlos cuesta segundos.
+# 4. EL CACHÉ DE NPM montado (27-oct-2026). Desde #508 el wasm instala con npm, y npm guarda
+#    lo que baja en /root/.npm, que no estaba en ningún montaje: cada build bajaba todos los
+#    paquetes otra vez. Dos de tres builds tardaron 17 min en el paso del wasm (con yarn eran
+#    ~6) y Railway cortó el build entero por tiempo («DeadlineExceeded»).
 # 2. LA GUARDA de fuentes. Esta sí vale: habría frenado ese despliegue, que subió un
 #    código anterior a las fuentes. Un build fallido en Railway deja arriba el
 #    despliegue anterior; uno exitoso con el código equivocado lo reemplaza sin ruido.
 RUN --mount=type=cache,id=s/8fdd793e-509a-42a8-ae98-e1fc6be27577-gradle,target=/root/.gradle \
+    --mount=type=cache,id=s/8fdd793e-509a-42a8-ae98-e1fc6be27577-npm,target=/root/.npm \
     KOTLIN=$(sed -n 's/^kotlin = "\(.*\)"$/\1/p' gradle/libs.versions.toml) && \
     MARCA=/root/.gradle/.cache-de-build-purgado-kotlin-$KOTLIN-2 && \
     if [ ! -f "$MARCA" ]; then \
