@@ -17,11 +17,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.CuentasDelPicker
 import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.theme.Icono
 
 /**
  * **La lista de cuentas para elegir con el dedo, en las pantallas de lo que llegó del banco.**
@@ -67,8 +67,7 @@ fun ListaDeCuentasElegibles(
             Text(
                 "No tienes cuentas todavía.",
                 // Una frase, no el rótulo de una fila: la talla del cuerpo con el peso de la prosa.
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Normal,
+                style = Movi.textos.cuerpoRegular,
                 color = Movi.colores.textoMedio,
                 modifier = Modifier.padding(vertical = 14.dp),
             )
@@ -84,9 +83,8 @@ fun ListaDeCuentasElegibles(
                 ) {
                     Text(
                         account.name,
-                        style = Movi.textos.cuerpo,
+                        style = if (account.id == selectedId) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
                         color = Movi.colores.texto,
-                        fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
                         modifier = Modifier.weight(1f),
                     )
                     if (account.id == selectedId) {
@@ -94,7 +92,7 @@ fun ListaDeCuentasElegibles(
                             Icons.Rounded.Check,
                             contentDescription = null,
                             tint = Movi.colores.texto,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(Icono.s),
                         )
                     }
                 }

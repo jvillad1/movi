@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -184,7 +183,7 @@ private fun ImportSummaryHeader(imp: StatementImport) {
         ) {
             Text(
                 "${imp.importedCount} importadas · ${imp.reconciledCount} reconciliadas",
-                style = Movi.textos.cuerpo, fontWeight = FontWeight.SemiBold, color = Movi.colores.texto,
+                style = Movi.textos.cuerpoFuerte, color = Movi.colores.texto,
             )
             Text(epochToShortDate(imp.importedAt), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }

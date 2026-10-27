@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -87,6 +86,6 @@ fun NumeroEnCirculo(numero: Int, modifier: Modifier = Modifier) {
             .background(Movi.colores.capa2, CircleShape),
         contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
-        Text(text = "$numero", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+        Text(text = "$numero", style = Movi.textos.cuerpo, color = Movi.colores.texto)
     }
 }

@@ -99,8 +99,7 @@ fun MinNavRail(
             )
             Text(
                 "Agregar",
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.SemiBold,
+                style = Movi.textos.cuerpoFuerte,
                 color = Movi.colores.sobreMarca,
             )
         }
@@ -216,9 +215,7 @@ internal val RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO = 2.dp
  */
 @Composable
 internal fun RotuloDelRailCompacto(texto: String, activo: Boolean, modifier: Modifier = Modifier) {
-    val estilo = Movi.textos.rotulo.copy(
-        letterSpacing = 0.2.sp,
-        fontWeight = if (activo) FontWeight.SemiBold else FontWeight.Normal,
+    val estilo = (if (activo) Movi.textos.pestanaActiva else Movi.textos.pestana).copy(
         color = if (activo) Movi.colores.texto else Movi.colores.textoApagado,
     )
     BasicText(
@@ -259,8 +256,7 @@ private fun RailItem(
         )
         Text(
             text = label,
-            style = Movi.textos.cuerpo,
-            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+            style = if (isActive) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
             color = if (isActive) Movi.colores.texto else Movi.colores.textoApagado,
         )
     }

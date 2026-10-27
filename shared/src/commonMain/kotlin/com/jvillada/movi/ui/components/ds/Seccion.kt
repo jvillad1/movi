@@ -13,7 +13,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
@@ -75,8 +74,7 @@ fun Seccion(
             if (conteo != null) {
                 Text(
                     text = " · $conteo",
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Normal,
+                    style = Movi.textos.tituloRegular,
                     color = Movi.colores.textoMedio,
                     maxLines = 1,
                 )

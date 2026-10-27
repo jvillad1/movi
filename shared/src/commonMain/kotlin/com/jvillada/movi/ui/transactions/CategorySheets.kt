@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
+import kotlin.math.abs
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.Cifra
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -20,7 +22,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.data.Repositories
@@ -628,7 +629,7 @@ internal fun ContenidoDelMovimiento(
         MarcoDelMovimiento(lugar, onDismiss = onDismiss, dismissEnabled = true) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 SheetLabel("Saldo inicial")
-                Text(event.description, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                Text(event.description, style = Movi.textos.tituloMedio, color = Movi.colores.texto)
                 Spacer(Modifier.height(Espacio.m))
                 Text(OPENING_BALANCE_EXPLAINER, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                 if (onVerCuenta != null) {
@@ -666,8 +667,7 @@ internal fun ContenidoDelMovimiento(
                 SheetLabel("¿Y los parecidos?")
                 Text(
                     tituloDeLaOferta(o),
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
+                    style = Movi.textos.tituloMedio,
                     color = Movi.colores.texto,
                 )
                 Spacer(Modifier.height(Espacio.xs))
@@ -690,11 +690,7 @@ internal fun ContenidoDelMovimiento(
                                 color = Movi.colores.textoMedio,
                             )
                         }
-                        Text(
-                            formatMoney(otro.amount, otro.currency),
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.textoMedio,
-                        )
+                        Cifra(abs(otro.amount), moneda = otro.currency, tono = TonoDeCifra.Apagado)
                     }
                 }
                 Spacer(Modifier.height(Espacio.m))
@@ -1110,7 +1106,6 @@ fun CardPaymentCandidatesSheet(
                         Text(
                             event.description,
                             style = Movi.textos.cuerpo,
-                            fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
                         )
                         Spacer(Modifier.height(Espacio.xxs))
@@ -1204,12 +1199,11 @@ private fun NombreQueSeEdita(nombre: String, evento: FinancialEvent? = null, onE
         }
         Text(
             nombre,
-            style = Movi.textos.titulo,
-            fontWeight = FontWeight.Medium,
+            style = Movi.textos.tituloMedio,
             color = Movi.colores.texto,
             modifier = Modifier.weight(1f),
         )
-        Text("Editar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
+        Text("Editar", style = Movi.textos.cuerpo, color = Movi.colores.marca)
     }
 }
 
@@ -1318,13 +1312,9 @@ private fun SeccionDelMovimiento(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = formatMoney(event.amount, event.currency),
-                // El monto que encabeza la hoja: tamaño de título, con las cifras tabulares de un
-                // monto. La escala todavía no tiene un estilo para esto.
-                style = Movi.textos.titulo.copy(fontFeatureSettings = "tnum"),
-                color = Movi.colores.texto,
-            )
+            // El monto que encabeza la hoja, en la `Cifra` de una fila (vuelta de diseño 21: era un
+            // `Text` en `titulo` con `tnum`, sin «Ocultar los saldos» y en la letra de la interfaz).
+            Cifra(abs(event.amount), moneda = event.currency)
             // El nombre de la cuenta y no su id: si la lista todavía no llegó no se inventa nada.
             cuentaActual?.let {
                 Text(it.name, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -1333,7 +1323,6 @@ private fun SeccionDelMovimiento(
         Text(
             text = if (abierto) "Cerrar" else "Cambiar",
             style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
             color = Movi.colores.marca,
         )
     }
@@ -1582,8 +1571,7 @@ private fun SeccionEstoSeRepite(
     Spacer(Modifier.height(Espacio.s))
     Text(
         text = if (marcando) "Guardando…" else "No, este no se repite",
-        style = Movi.textos.apoyo,
-        fontWeight = FontWeight.Medium,
+        style = Movi.textos.apoyoMedio,
         color = if (marcando) Movi.colores.textoApagado else Movi.colores.marca,
         modifier = Modifier.clickable(enabled = !marcando && !consultando) { marcarQueSeRepite(false) },
     )
@@ -1600,8 +1588,7 @@ private fun SeccionEstoSeRepite(
             Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = "Editar este recurrente",
-                style = Movi.textos.apoyo,
-                fontWeight = FontWeight.Medium,
+                style = Movi.textos.apoyoMedio,
                 color = Movi.colores.marca,
                 modifier = Modifier.clickable { onEditarRecurrente(regla) },
             )
@@ -1686,8 +1673,7 @@ private fun SelectorDeCuentaDelMovimiento(
                 val elegida = cuenta.id == seleccionada?.id
                 Text(
                     text = cuenta.name,
-                    style = Movi.textos.cuerpo,
-                    fontWeight = if (elegida) FontWeight.Medium else FontWeight.Normal,
+                    style = if (elegida) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
                     color = if (elegida) Movi.colores.marca else Movi.colores.texto,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1789,15 +1775,13 @@ private fun SeccionDeFecha(
     ) {
         Text(
             text = etiquetaDeFecha(actual, hoy),
-            style = Movi.textos.titulo,
-            fontWeight = FontWeight.Medium,
+            style = Movi.textos.tituloMedio,
             color = Movi.colores.texto,
             modifier = Modifier.weight(1f),
         )
         Text(
             text = if (abierto) "Cerrar" else "Cambiar",
             style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
             color = Movi.colores.marca,
         )
     }

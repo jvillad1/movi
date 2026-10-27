@@ -42,7 +42,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -468,7 +467,6 @@ fun CreditTermsSheet(
                     Text(
                         "¿Acabas de recibir la plata de este crédito?",
                         style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                     )
                     Spacer(Modifier.height(Espacio.xs))
@@ -602,7 +600,6 @@ fun CreditTermsSheet(
                             "Reintentar",
                             style = Movi.textos.cuerpo,
                             color = Movi.colores.texto,
-                            fontWeight = FontWeight.Medium,
                             modifier = Modifier
                                 .clickable(enabled = !saving) { intentoDeCarga++ }
                                 .padding(vertical = Espacio.xxs),
@@ -747,7 +744,6 @@ fun CreditTermsSheet(
                                 "Reintentar",
                                 style = Movi.textos.cuerpo,
                                 color = Movi.colores.texto,
-                                fontWeight = FontWeight.Medium,
                                 modifier = Modifier.clickable(enabled = !saving) { intentoDeCarga++ }.padding(vertical = Espacio.xxs),
                             )
                         }

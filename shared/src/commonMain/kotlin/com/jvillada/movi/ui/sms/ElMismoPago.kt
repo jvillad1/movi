@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.model.AvisoSinLeer
 import com.jvillada.movi.shared.model.ParsedSms
@@ -360,8 +359,7 @@ internal fun TextoDelAviso(aviso: SmsMessage, plegable: Boolean = false, accion:
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "${canalLegibleDelAviso(aviso.bank)} · ${horaLegibleDeSms(aviso.time) ?: aviso.time}",
-                style = Movi.textos.apoyo,
-                fontWeight = FontWeight.Medium,
+                style = Movi.textos.apoyoMedio,
                 color = Movi.colores.textoMedio,
                 modifier = Modifier.weight(1f),
             )
@@ -407,7 +405,7 @@ internal fun LoQueDiceElBanco(texto: String, modifier: Modifier = Modifier, pleg
     ) {
         Box(modifier = Modifier.width(Medida.trazo).fillMaxHeight().background(Movi.colores.hilo))
         Text(
-            resaltadoDelTextoDelBanco(texto),
+            resaltadoDelTextoDelBanco(texto, Movi.textos.enfasis),
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             fontFamily = FontFamily.Monospace,
@@ -460,9 +458,8 @@ const val TAG_LINEA_DE_LO_ENTENDIDO: String = "por-revisar:linea-de-lo-entendido
 internal fun LineaDeLoEntendido(linea: String) {
     Text(
         "Se anota: $linea",
-        style = Movi.textos.apoyo,
+        style = Movi.textos.apoyoMedio,
         color = Movi.colores.texto,
-        fontWeight = FontWeight.Medium,
         modifier = Modifier.testTag(TAG_LINEA_DE_LO_ENTENDIDO),
     )
 }

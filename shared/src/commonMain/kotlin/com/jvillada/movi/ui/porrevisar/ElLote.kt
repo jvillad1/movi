@@ -19,12 +19,8 @@ import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.Movi
-import com.jvillada.movi.ui.components.Hairline
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.sms.PastillaDelPago
 
 /*
@@ -108,8 +104,7 @@ internal fun TarjetaDelLote(
                         Column {
                             Text(
                                 nombreParaMostrar(anotacion.leido.merchant),
-                                style = Movi.textos.apoyo,
-                                fontWeight = FontWeight.Medium,
+                                style = Movi.textos.apoyoMedio,
                                 color = Movi.colores.texto,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,

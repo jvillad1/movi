@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
@@ -34,11 +33,10 @@ import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
 import com.jvillada.movi.ui.components.CardRow
 import com.jvillada.movi.ui.components.ChevronRight
-import com.jvillada.movi.ui.components.Hairline
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.Cifra
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.LinkFigure
@@ -52,6 +50,8 @@ import com.jvillada.movi.ui.dashboard.visibleSections
 import com.jvillada.movi.ui.dashboard.TIPOS_DE_WIDGET
 import com.jvillada.movi.ui.dashboard.bloquesDelInicio
 import com.jvillada.movi.ui.dashboard.elHeroePideLaCuenta
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 
 /** La guía de primeros pasos cuando el Inicio va en dos columnas: arriba de la izquierda. */
 const val TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA: String = "inicio-guia-en-la-columna-izquierda"
@@ -314,39 +314,37 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
             // en algo que hable de eso.
             onAction = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
         )
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
-        ) {
-            rows.forEachIndexed { i, p ->
-                // F20: la regla sintética de una tarjeta (card_) también se gestiona en Créditos.
-                val isCredit = p.rule.id.startsWith(CREDIT_RULE_PREFIX) || p.rule.id.startsWith(CARD_RULE_PREFIX)
-                val urgent = p.daysUntil <= 0
-                CardRow(
-                    left = { Text(p.rule.name, style = Movi.textos.titulo, color = Movi.colores.texto) },
-                    sub = dueLabel(p.daysUntil),
-                    // Una tarjeta no tiene cuota: su monto es el SALDO. Mostrarlo bajo «Próximos
-                    // pagos» anunciaba $27.501.150 como el próximo pago del dueño cuando el mínimo
-                    // ronda el 5 %. Se muestra el saldo, dicho con su nombre y en gris — no como
-                    // la cifra que va a salir de su cuenta. Ver `RecurringRule.montoEsSaldo`.
-                    right = {
-                        // El TEXTO lo decide `textoDelMonto` (una sola función para los cuatro
-                        // renderers); el estilo lo elige cada pantalla: un saldo va en gris y más
-                        // chico porque no es una cifra que vaya a salir de la cuenta.
-                        if (p.rule.montoEsSaldo) {
-                            Cifra(textoDelMonto(p.rule), Movi.textos.apoyo, color = Movi.colores.textoApagado)
-                        } else {
-                            Cifra(textoDelMonto(p.rule), Movi.textos.monto, color = if (urgent) Movi.colores.sale else Movi.colores.texto)
-                        }
-                    },
-                    isLast = i == rows.lastIndex,
-                    // Una cuota de crédito se gestiona en Créditos; una regla, en Plan · Pagos del
-                    // mes — que es donde ahora vive su «¿ya ocurrió?».
-                    onClick = {
-                        onNavigate(if (isCredit) Screen.Credits else Screen.Plan(SEGMENTO_PAGOS))
-                    },
-                )
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            Column(Modifier.padding(horizontal = Medida.rellenoDeSuperficie)) {
+                rows.forEachIndexed { i, p ->
+                    // F20: la regla sintética de una tarjeta (card_) también se gestiona en Créditos.
+                    val isCredit = p.rule.id.startsWith(CREDIT_RULE_PREFIX) || p.rule.id.startsWith(CARD_RULE_PREFIX)
+                    val urgent = p.daysUntil <= 0
+                    CardRow(
+                        left = { Text(p.rule.name, style = Movi.textos.titulo, color = Movi.colores.texto) },
+                        sub = dueLabel(p.daysUntil),
+                        // Una tarjeta no tiene cuota: su monto es el SALDO. Mostrarlo bajo «Próximos
+                        // pagos» anunciaba $27.501.150 como el próximo pago del dueño cuando el mínimo
+                        // ronda el 5 %. Se muestra el saldo, dicho con su nombre y en gris — no como
+                        // la cifra que va a salir de su cuenta. Ver `RecurringRule.montoEsSaldo`.
+                        right = {
+                            // El TEXTO lo decide `textoDelMonto` (una sola función para los cuatro
+                            // renderers); el estilo lo elige cada pantalla: un saldo va en gris y más
+                            // chico porque no es una cifra que vaya a salir de la cuenta.
+                            if (p.rule.montoEsSaldo) {
+                                Cifra(textoDelMonto(p.rule), Movi.textos.apoyoMedio, color = Movi.colores.textoApagado)
+                            } else {
+                                Cifra(textoDelMonto(p.rule), estiloDeLaCifra(VarianteDeCifra.Fila, Movi.textos), color = if (urgent) Movi.colores.sale else Movi.colores.texto)
+                            }
+                        },
+                        isLast = i == rows.lastIndex,
+                        // Una cuota de crédito se gestiona en Créditos; una regla, en Plan · Pagos del
+                        // mes — que es donde ahora vive su «¿ya ocurrió?».
+                        onClick = {
+                            onNavigate(if (isCredit) Screen.Credits else Screen.Plan(SEGMENTO_PAGOS))
+                        },
+                    )
+                }
             }
         }
     }
@@ -362,18 +360,16 @@ private fun AlertsSection(section: ScreenSection, data: DashboardData, onNavigat
     )
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         MinSectionHeader(title = section.title ?: "Alertas", count = alerts.size)
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
-        ) {
-            alerts.forEachIndexed { i, alert ->
-                CardRow(
-                    left = { Text(alert.text, style = Movi.textos.titulo, color = Movi.colores.aviso) },
-                    showChevron = true,
-                    isLast = i == alerts.lastIndex,
-                    onClick = { onNavigate(alert.target) },
-                )
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            Column(Modifier.padding(horizontal = Medida.rellenoDeSuperficie)) {
+                alerts.forEachIndexed { i, alert ->
+                    CardRow(
+                        left = { Text(alert.text, style = Movi.textos.titulo, color = Movi.colores.aviso) },
+                        showChevron = true,
+                        isLast = i == alerts.lastIndex,
+                        onClick = { onNavigate(alert.target) },
+                    )
+                }
             }
         }
     }
@@ -385,25 +381,23 @@ private fun AlertsSection(section: ScreenSection, data: DashboardData, onNavigat
 private fun QuickLinksSection(section: ScreenSection, data: DashboardData, onNavigate: (Screen) -> Unit, uriHandler: UriHandler) {
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         section.title?.let { MinSectionHeader(title = it) }
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
-        ) {
-            section.cards.forEachIndexed { i, card ->
-                val target = card.action?.takeIf { it.type == "NAVIGATE" }?.target
-                val figure = target?.let { quickLinkFigure(it, data) } ?: LinkFigure()
-                CardRow(
-                    left = { Text(card.title, style = Movi.textos.titulo, color = Movi.colores.texto) },
-                    // El subtítulo escrito en el Editor manda sobre el calculado.
-                    sub = card.subtitle ?: figure.sub,
-                    right = figure.value?.let { value ->
-                        { Cifra(value, Movi.textos.monto, color = if (figure.isAlert) Movi.colores.sale else Movi.colores.texto) }
-                    },
-                    showChevron = card.action != null,
-                    isLast = i == section.cards.lastIndex,
-                    onClick = clickHandler(card.action, onNavigate, uriHandler),
-                )
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            Column(Modifier.padding(horizontal = Medida.rellenoDeSuperficie)) {
+                section.cards.forEachIndexed { i, card ->
+                    val target = card.action?.takeIf { it.type == "NAVIGATE" }?.target
+                    val figure = target?.let { quickLinkFigure(it, data) } ?: LinkFigure()
+                    CardRow(
+                        left = { Text(card.title, style = Movi.textos.titulo, color = Movi.colores.texto) },
+                        // El subtítulo escrito en el Editor manda sobre el calculado.
+                        sub = card.subtitle ?: figure.sub,
+                        right = figure.value?.let { value ->
+                            { Cifra(value, estiloDeLaCifra(VarianteDeCifra.Fila, Movi.textos), color = if (figure.isAlert) Movi.colores.sale else Movi.colores.texto) }
+                        },
+                        showChevron = card.action != null,
+                        isLast = i == section.cards.lastIndex,
+                        onClick = clickHandler(card.action, onNavigate, uriHandler),
+                    )
+                }
             }
         }
     }
@@ -432,20 +426,18 @@ private fun CardRowSection(section: ScreenSection, onNavigate: (Screen) -> Unit,
 private fun CardListSection(section: ScreenSection, onNavigate: (Screen) -> Unit, uriHandler: UriHandler) {
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         section.title?.let { MinSectionHeader(title = it) }
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
-        ) {
-            section.cards.forEachIndexed { i, card ->
-                CardRow(
-                    left = { Text(card.title, style = Movi.textos.titulo, color = Movi.colores.texto) },
-                    sub = card.subtitle,
-                    right = card.badge?.let { badge -> { Text(badge, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) } },
-                    showChevron = card.action != null,
-                    isLast = i == section.cards.size - 1,
-                    onClick = clickHandler(card.action, onNavigate, uriHandler),
-                )
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            Column(Modifier.padding(horizontal = Medida.rellenoDeSuperficie)) {
+                section.cards.forEachIndexed { i, card ->
+                    CardRow(
+                        left = { Text(card.title, style = Movi.textos.titulo, color = Movi.colores.texto) },
+                        sub = card.subtitle,
+                        right = card.badge?.let { badge -> { Text(badge, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) } },
+                        showChevron = card.action != null,
+                        isLast = i == section.cards.size - 1,
+                        onClick = clickHandler(card.action, onNavigate, uriHandler),
+                    )
+                }
             }
         }
     }
@@ -457,18 +449,16 @@ private fun LinkListSection(section: ScreenSection, onNavigate: (Screen) -> Unit
         section.title?.let {
             MinSectionHeader(title = it)
         }
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.xxs),
-        ) {
-            section.cards.forEachIndexed { i, card ->
-                CardRow(
-                    left = { Text(card.title, style = Movi.textos.titulo, color = Movi.colores.texto) },
-                    showChevron = true,
-                    isLast = i == section.cards.size - 1,
-                    onClick = clickHandler(card.action, onNavigate, uriHandler),
-                )
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            Column(Modifier.padding(horizontal = Medida.rellenoDeSuperficie)) {
+                section.cards.forEachIndexed { i, card ->
+                    CardRow(
+                        left = { Text(card.title, style = Movi.textos.titulo, color = Movi.colores.texto) },
+                        showChevron = true,
+                        isLast = i == section.cards.size - 1,
+                        onClick = clickHandler(card.action, onNavigate, uriHandler),
+                    )
+                }
             }
         }
     }
@@ -484,14 +474,13 @@ private fun BannerSection(section: ScreenSection, onNavigate: (Screen) -> Unit, 
     val action = section.cards.firstOrNull()?.action
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         section.title?.let { MinSectionHeader(title = it) }
-        MinCard(
+        Superficie(
             modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.s),
+            relleno = RellenoDeSuperficie.Ninguno,
             onClick = clickHandler(action, onNavigate, uriHandler),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.rellenoDeSuperficie, vertical = Espacio.s),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -506,11 +495,7 @@ private fun BannerSection(section: ScreenSection, onNavigate: (Screen) -> Unit, 
 @Composable
 private fun SduiCardTile(card: ScreenCard, onClick: (() -> Unit)?) {
     val clickModifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
-    MinCard(
-        modifier = Modifier.width(150.dp).then(clickModifier),
-        variant = MinCardVariant.Default,
-        padding = PaddingValues(Medida.rellenoDeSuperficie),
-    ) {
+    Superficie(modifier = Modifier.width(150.dp).then(clickModifier)) {
         Text(card.title, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 2)
         card.subtitle?.let {
             Spacer(Modifier.height(Espacio.xxs))

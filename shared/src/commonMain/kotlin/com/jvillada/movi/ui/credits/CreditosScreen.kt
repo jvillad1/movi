@@ -32,7 +32,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -289,7 +288,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 Superficie(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
                 ) {
-                    Text("Deuda total", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                    Text("Deuda total", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
                     Spacer(Modifier.height(Espacio.xs))
                     // F20: préstamos + tarjetas — la MISMA función que usa el Inicio.
                     // La protagonista de esta pantalla, igual que «Tu plata» en el Inicio: misma
@@ -556,7 +555,7 @@ private fun LoQueCuestaLaDeuda(
 /** El rótulo de un grupo de filas del resumen: qué se está midiendo, antes de con qué alcance. */
 @Composable
 private fun TituloDelGrupo(titulo: String) {
-    Text(titulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+    Text(titulo, style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
     Spacer(Modifier.height(Espacio.xs))
 }
 
@@ -600,10 +599,9 @@ private fun AvisoDeLaPantalla(texto: String, color: Color, fondo: Color, onRengl
     ) {
         Text(
             texto,
-            style = Movi.textos.apoyo,
+            style = Movi.textos.apoyoMedio,
             color = color,
             lineHeight = INTERLINEADO_DEL_AVISO,
-            fontWeight = FontWeight.Medium,
             // Cuántos renglones ocupó, para que la próxima carga reserve ese alto (ver
             // `FormaRecordada`).
             onTextLayout = { onRenglones(it.lineCount) },
@@ -672,9 +670,8 @@ private fun FilaDeDeuda(
                 if (nota != null) {
                     Text(
                         nota.texto,
-                        style = Movi.textos.apoyo,
+                        style = if (nota.esAlerta) Movi.textos.apoyoMedio else Movi.textos.apoyo,
                         color = if (nota.esAlerta) Movi.colores.sale else Movi.colores.aviso,
-                        fontWeight = if (nota.esAlerta) FontWeight.Medium else FontWeight.Normal,
                     )
                 }
                 if (fraccion != null) {
@@ -720,7 +717,7 @@ private fun DebtTypeChooserSheet(
                 .verticalScroll(rememberScrollState())
                 .weight(1f, fill = false),
         ) {
-            Text("¿Qué deuda quieres registrar?", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Text("¿Qué deuda quieres registrar?", style = Movi.textos.tituloMedio, color = Movi.colores.texto)
             Spacer(Modifier.height(Espacio.s))
             DebtTypeOption(
                 title = "Préstamo",

@@ -21,6 +21,8 @@ import androidx.compose.ui.text.style.TextAlign
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 
 /** Tag estable: encuentra cualquier vacío que enseña en una prueba sin acoplarse al texto. */
 const val TAG_VACIO_QUE_ENSENA: String = "vacio-que-ensena"
@@ -72,13 +74,12 @@ fun VacioQueEnsena(
     // El relleno de los lados va en cada pieza y no en la tarjeta, para que el contenido pueda ir
     // de borde a borde ([contenidoDeBordeABorde]). Sin él, la tarjeta se ve como siempre.
     val lados = Modifier.padding(horizontal = Espacio.xxl)
-    MinCard(
+    Superficie(
         modifier = modifier.fillMaxWidth().testTag(TAG_VACIO_QUE_ENSENA),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(vertical = Espacio.xxl),
+        relleno = RellenoDeSuperficie.Ninguno,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(vertical = Espacio.xxl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (icono != null) {

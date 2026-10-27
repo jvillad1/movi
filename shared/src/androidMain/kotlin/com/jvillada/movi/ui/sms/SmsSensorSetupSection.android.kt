@@ -69,13 +69,12 @@ import com.jvillada.movi.sms.backfillMessage
 import com.jvillada.movi.sms.captureOutageNotice
 import com.jvillada.movi.sms.isBackfillError
 import com.jvillada.movi.ui.auth.noRippleClickable
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.jvillada.movi.ui.components.ds.Superficie
 
 /**
  * Actual Android: la única plataforma donde la captura de SMS existe. Las piezas vienen
@@ -163,7 +162,7 @@ private fun SensorPermissionsCard(installSource: InstallSource) {
         )
     }
 
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Permiso de SMS", fontSize = 14.sp, color = Movi.colores.texto)
             Text(
@@ -237,7 +236,7 @@ private fun SensorNotificationsCard(installSource: InstallSource) {
     }
 
     Spacer(Modifier.height(10.dp))
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Acceso a notificaciones", fontSize = 14.sp, color = Movi.colores.texto)
             Text(
@@ -345,7 +344,7 @@ private fun AvisosDelTelefonoCard() {
     OnResume(activity) { refrescar() }
 
     Spacer(Modifier.height(10.dp))
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Avisos de Movi", fontSize = 14.sp, color = Movi.colores.texto)
             Text(
@@ -480,7 +479,7 @@ private fun SensorHibernationCard() {
     if (!shouldWarnAboutHibernation(Build.VERSION.SDK_INT, exempt)) return
 
     Spacer(Modifier.height(10.dp))
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(
             // Sin nombrar la hibernación: desde Android 11 se revocan los permisos, y desde
             // Android 13 además se detiene la app. La consecuencia es la misma en ambos y es
@@ -580,7 +579,7 @@ private fun SensorBackfillCard(installSource: InstallSource, outageSince: Long, 
 
     val toSettings = !canRead && (activity == null || shouldOpenSettings(asked, rationale))
 
-    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         if (outageSince > 0L) {
             // m2: quien fue deslogueado por el Worker aterrizó en un login genérico sin
             // saber que la captura estuvo muda. Este es el único lector de la marca, y el

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.ui.components.ds.Cifra
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,7 +44,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DosPatasDelAviso
 import com.jvillada.movi.shared.model.EventSource
@@ -57,9 +57,6 @@ import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.repartoAMano
 import com.jvillada.movi.theme.Movi
-import com.jvillada.movi.ui.components.Hairline
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.formatMoney
 
@@ -182,7 +179,7 @@ internal fun TarjetaDelReparto(
                 verticalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 if (!aMano) {
-                    Text(textoDelRepartoExacto(exactos, propuesta.moneda), style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, modifier = conMargen)
+                    Text(textoDelRepartoExacto(exactos, propuesta.moneda), style = Movi.textos.cuerpo, color = Movi.colores.texto, modifier = conMargen)
                     Text(
                         "Suman exactamente lo que dice el aviso. Se anota un movimiento por pago, con su categoría, y cada pago del período queda marcado.",
                         style = Movi.textos.apoyo,
@@ -223,10 +220,10 @@ internal fun TarjetaDelReparto(
                                         .background(if (orden >= 0) Movi.colores.marca else Movi.colores.capa2, CircleShape),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    if (orden >= 0) Text("${orden + 1}", style = Movi.textos.apoyo, color = Movi.colores.sobreMarca, fontWeight = FontWeight.Medium)
+                                    if (orden >= 0) Text("${orden + 1}", style = Movi.textos.apoyoMedio, color = Movi.colores.sobreMarca)
                                 }
                             },
-                            final = toma?.let { t -> { Text(formatMoney(t, propuesta.moneda), style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) } },
+                            final = toma?.let { t -> { Cifra(t, moneda = propuesta.moneda) } },
                             onClick = if (habilitado) {
                                 { elegidos = if (orden >= 0) elegidos.filter { it.ruleId != pago.ruleId } else elegidos + pago }
                             } else null,

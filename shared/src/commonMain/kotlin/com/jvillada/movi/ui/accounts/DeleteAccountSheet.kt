@@ -9,7 +9,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -155,8 +154,7 @@ fun DeleteAccountSheet(
                 Text(
                     text = avisos.joinToString("\n\n"),
                     // El mismo cuerpo que el párrafo de arriba (ver el comentario del bloque).
-                    style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Normal,
+                    style = Movi.textos.cuerpoRegular,
                     color = Movi.colores.texto,
                     modifier = Modifier
                         .fillMaxWidth()

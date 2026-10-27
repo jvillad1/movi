@@ -80,8 +80,8 @@ private fun rellenoDe(relleno: RellenoDeSuperficie): PaddingValues = when (relle
 }
 
 /**
- * **Una superficie**: el contenedor de toda tarjeta de la app. Reemplaza a `MinCard`, que ahora
- * delega acá.
+ * **Una superficie**: el contenedor de toda tarjeta de la app. Reemplazó a `MinCard`, que se borró
+ * en la vuelta de diseño 21 con su última llamada.
  *
  * Radio [Radio.l] siempre, sin borde, con el color de su [nivel].
  *
@@ -119,13 +119,12 @@ fun Superficie(
 }
 
 /**
- * **Solo para `MinCard`, mientras dure la migración.** Es [Superficie] con el relleno como
- * `PaddingValues` libre, porque las 148 llamadas a `MinCard` pasan rellenos sueltos y no se pueden
- * romper en esta ola. Una pantalla nueva no la usa: usa [Superficie] con un [RellenoDeSuperficie].
- * Cuando la última `MinCard` con relleno propio se migre, esto se borra.
+ * Lo que dibuja [Superficie], con el relleno ya resuelto. Fue `internal` mientras `MinCard` pasaba
+ * rellenos sueltos; desde la vuelta de diseño 21 no queda ninguna y es privada: un relleno que no es
+ * de [RellenoDeSuperficie] va dentro del contenido, en tokens.
  */
 @Composable
-internal fun SuperficieConRellenoLibre(
+private fun SuperficieConRellenoLibre(
     modifier: Modifier,
     nivel: NivelDeSuperficie,
     relleno: PaddingValues,

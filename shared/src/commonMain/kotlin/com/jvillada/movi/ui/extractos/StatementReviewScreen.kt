@@ -36,6 +36,7 @@ import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 
 
 @Composable
@@ -242,29 +243,30 @@ fun StatementReviewScreen(
             }
         }
         if (eligiendoCuenta) {
-            MinCard(
+            Superficie(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Espacio.m)
                     .padding(bottom = Espacio.xs),
-                variant = MinCardVariant.Default,
-                padding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.xxs),
+                relleno = RellenoDeSuperficie.Lista,
             ) {
-                ListaDeCuentasElegibles(
-                    // `conservar` sostiene lo que él haya sacado del «Ver todas»: sin eso, la
-                    // cuenta que acaba de elegir se escondería sola al reabrir el selector.
-                    cuentas = cuentasPara(
-                        accounts,
-                        UsoDeCuenta.CUENTA_DEL_EXTRACTO,
-                        conservar = destinationAccount?.id,
-                    ),
-                    uso = UsoDeCuenta.CUENTA_DEL_EXTRACTO,
-                    selectedId = destinationAccount?.id,
-                    onPick = { id ->
-                        cuentaElegida = id
-                        eligiendoCuenta = false
-                    },
-                )
+                Column(Modifier.padding(horizontal = Espacio.m)) {
+                    ListaDeCuentasElegibles(
+                        // `conservar` sostiene lo que él haya sacado del «Ver todas»: sin eso, la
+                        // cuenta que acaba de elegir se escondería sola al reabrir el selector.
+                        cuentas = cuentasPara(
+                            accounts,
+                            UsoDeCuenta.CUENTA_DEL_EXTRACTO,
+                            conservar = destinationAccount?.id,
+                        ),
+                        uso = UsoDeCuenta.CUENTA_DEL_EXTRACTO,
+                        selectedId = destinationAccount?.id,
+                        onPick = { id ->
+                            cuentaElegida = id
+                            eligiendoCuenta = false
+                        },
+                    )
+                }
             }
         }
 

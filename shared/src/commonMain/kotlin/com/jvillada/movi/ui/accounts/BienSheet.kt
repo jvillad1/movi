@@ -28,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -299,8 +298,7 @@ private fun Opcion(texto: String, elegida: Boolean, modifier: Modifier, onClick:
     ) {
         Text(
             text = texto,
-            style = Movi.textos.cuerpo,
-            fontWeight = if (elegida) FontWeight.Medium else FontWeight.Normal,
+            style = if (elegida) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
             color = if (elegida) Movi.colores.marca else Movi.colores.texto,
             maxLines = 1,
         )
@@ -312,7 +310,6 @@ private fun Enlace(texto: String, enabled: Boolean, color: Color = Movi.colores.
     Text(
         text = texto,
         style = Movi.textos.cuerpo,
-        fontWeight = FontWeight.Medium,
         color = if (enabled) color else Movi.colores.textoApagado,
         modifier = Modifier
             .clip(RoundedCornerShape(Movi.formas.minima))

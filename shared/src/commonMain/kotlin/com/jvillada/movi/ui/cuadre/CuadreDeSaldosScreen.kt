@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
@@ -52,8 +51,6 @@ import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.VacioQueEnsena
@@ -320,8 +317,7 @@ private fun FilaDeCuadre(
             Column(modifier = Modifier.fillMaxWidth(0.55f)) {
                 Text(
                     cuenta.name,
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
+                    style = Movi.textos.tituloMedio,
                     color = Movi.colores.texto,
                 )
                 Text(

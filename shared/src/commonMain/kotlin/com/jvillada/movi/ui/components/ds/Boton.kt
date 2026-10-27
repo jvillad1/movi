@@ -24,7 +24,6 @@ import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Espacio
@@ -156,8 +155,7 @@ fun Boton(
         }
         Text(
             text = texto,
-            style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.SemiBold,
+            style = Movi.textos.cuerpoFuerte,
             color = color,
             maxLines = 1,
         )

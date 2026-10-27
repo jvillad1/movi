@@ -23,7 +23,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,9 +36,7 @@ import com.jvillada.movi.shared.model.ScreenTaxonomy
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.HeaderLeading
-import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinScreenHeader
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.dashboard.HERO_BALANCE_TITLE
@@ -52,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.jvillada.movi.ui.components.ds.Superficie
 
 private const val SLUG = "dashboard"
 
@@ -250,13 +248,13 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
         MinScreenHeader(
             title = "Editor de pantallas",
             leading = HeaderLeading.Back(fallback = Screen.Mas),
-            action = { if (saved) Text("Guardado", style = Movi.textos.apoyo, color = Movi.colores.entra, fontWeight = FontWeight.Medium) },
+            action = { if (saved) Text("Guardado", style = Movi.textos.apoyoMedio, color = Movi.colores.entra) },
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Espacio.s))
 
         if (loading) {
             LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.l),
                 color = Movi.colores.marca,
                 trackColor = Movi.colores.tarjeta,
             )
@@ -265,11 +263,11 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
 
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.xxs),
+            verticalArrangement = Arrangement.spacedBy(Espacio.s),
         ) {
             itemsIndexed(sections) { index, section ->
-                MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated) {
+                Superficie(modifier = Modifier.fillMaxWidth()) {
                     SectionHeader(
                         label = SECTION_TYPE_LABELS[section.type] ?: section.type,
                         canMoveUp = index > 0,
@@ -278,17 +276,17 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                         onMoveDown = { moveSection(index, 1) },
                         onRemove = { removeSection(index) },
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(Espacio.s))
                     SectionBody(section = section, onUpdate = { updateSection(index, it) })
                 }
             }
 
             item {
                 if (showAddTypePicker) {
-                    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Default) {
-                        Text("Tipo de sección", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                    Superficie(modifier = Modifier.fillMaxWidth()) {
+                        Text("Tipo de sección", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
                         Spacer(Modifier.height(10.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                             ScreenTaxonomy.SECTION_TYPES.forEach { type ->
                                 SelectRow(
                                     label = SECTION_TYPE_LABELS[type] ?: type,
@@ -297,7 +295,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                                 )
                             }
                         }
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Espacio.xs))
                         Text(
                             "Cancelar",
                             style = Movi.textos.cuerpo, color = Movi.colores.textoMedio,
@@ -307,11 +305,11 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                 } else {
                     Text(
                         "+ Agregar sección",
-                        style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca,
+                        style = Movi.textos.cuerpo, color = Movi.colores.marca,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(Radio.m))
+                            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
                             .clickable { showAddTypePicker = true }
                             .padding(vertical = 14.dp),
                     )
@@ -323,7 +321,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
             }
 
             item {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 val canSave = !saving && !sectionsHaveInvalidUrl(sections)
                 Box(
                     modifier = Modifier
@@ -334,7 +332,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(if (saving) "Guardando…" else "Guardar", color = Movi.colores.fondo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium)
+                    Text(if (saving) "Guardando…" else "Guardar", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
                 }
             }
 
@@ -346,13 +344,13 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                     ) {
                         Text(
                             "¿Restaurar al original? Sí",
-                            style = Movi.textos.cuerpo, color = Movi.colores.sale, fontWeight = FontWeight.Medium,
-                            modifier = Modifier.clickable(enabled = !saving) { restore() }.padding(8.dp),
+                            style = Movi.textos.cuerpo, color = Movi.colores.sale,
+                            modifier = Modifier.clickable(enabled = !saving) { restore() }.padding(Espacio.xs),
                         )
                         Text(
                             "No",
                             style = Movi.textos.cuerpo, color = Movi.colores.textoMedio,
-                            modifier = Modifier.clickable { showRestoreConfirm = false }.padding(8.dp),
+                            modifier = Modifier.clickable { showRestoreConfirm = false }.padding(Espacio.xs),
                         )
                     }
                 } else {
@@ -360,10 +358,10 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                         "Restaurar original",
                         style = Movi.textos.cuerpo, color = Movi.colores.sale,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { showRestoreConfirm = true }.padding(vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { showRestoreConfirm = true }.padding(vertical = Espacio.xs),
                     )
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(Espacio.l))
             }
         }
     }
@@ -379,7 +377,7 @@ private fun SectionHeader(
     onRemove: () -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, modifier = Modifier.weight(1f))
+        Text(label, style = Movi.textos.tituloMedio, color = Movi.colores.texto, modifier = Modifier.weight(1f))
         // Ola 2 #5 (F11): glifos escritos como texto → íconos Material (salían como ▯ en la web).
         Icon(
             Icons.Rounded.ArrowUpward, contentDescription = "Subir",
@@ -404,9 +402,9 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
     when (section.type) {
         "BANNER" -> {
             FieldBox("Título (opcional)", section.title ?: "", { onUpdate(section.copy(title = it.ifBlank { null })) })
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Espacio.xs))
             FieldBox("Texto", section.text ?: "", { onUpdate(section.copy(text = it)) })
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Espacio.s))
             val bannerAction = section.cards.firstOrNull()?.action
             ActionEditor(bannerAction) { newAction ->
                 val newCards = if (newAction == null) emptyList() else listOf(ScreenCard(title = "", action = newAction))
@@ -417,7 +415,7 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
         "CARD_ROW", "CARD_LIST", "LINK_LIST", "QUICK_LINKS_WITH_TOTALS" -> {
             if (section.type == "QUICK_LINKS_WITH_TOTALS") {
                 FieldBox("Título (opcional)", section.title ?: "", { onUpdate(section.copy(title = it.ifBlank { null })) })
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 // La cifra de cada tarjeta la calcula el cliente según el destino de su acción
                 // (Cuentas → activos, Créditos → deuda, Presupuestos → gastado del mes…); acá solo
                 // se eligen y ordenan las tarjetas. Un subtítulo escrito acá reemplaza al calculado.
@@ -425,7 +423,7 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
                 Spacer(Modifier.height(10.dp))
             }
             section.cards.forEachIndexed { cardIndex, card ->
-                if (cardIndex > 0) Spacer(Modifier.height(12.dp))
+                if (cardIndex > 0) Spacer(Modifier.height(Espacio.s))
                 CardEditor(
                     index = cardIndex,
                     card = card,
@@ -442,7 +440,7 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
             Spacer(Modifier.height(if (section.cards.isEmpty()) 0.dp else 10.dp))
             Text(
                 "+ Agregar tarjeta",
-                style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca,
+                style = Movi.textos.cuerpo, color = Movi.colores.marca,
                 modifier = Modifier.clickable { onUpdate(section.copy(cards = section.cards + ScreenCard(title = ""))) }.padding(vertical = 6.dp),
             )
         }
@@ -460,7 +458,7 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
             // peor que uno que dice por qué no se puede.
             if (section.type != "HERO_BALANCE") {
                 FieldBox("Título (opcional)", section.title ?: "", { onUpdate(section.copy(title = it.ifBlank { null })) })
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
             }
             Text(
                 when (section.type) {
@@ -489,19 +487,19 @@ private fun CardEditor(index: Int, card: ScreenCard, onUpdate: (ScreenCard) -> U
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .padding(12.dp),
+            .padding(Espacio.s),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Tarjeta ${index + 1}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            Icon(Icons.Rounded.Close, contentDescription = "Quitar", tint = Movi.colores.sale, modifier = Modifier.size(15.dp).clickable(onClick = onRemove).padding(4.dp))
+            Text("Tarjeta ${index + 1}", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio, modifier = Modifier.weight(1f))
+            Icon(Icons.Rounded.Close, contentDescription = "Quitar", tint = Movi.colores.sale, modifier = Modifier.size(15.dp).clickable(onClick = onRemove).padding(Espacio.xxs))
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         FieldBox("Título", card.title, { onUpdate(card.copy(title = it)) })
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         FieldBox("Subtítulo (opcional)", card.subtitle ?: "", { onUpdate(card.copy(subtitle = it.ifBlank { null })) })
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Espacio.xs))
         FieldBox("Badge (opcional)", card.badge ?: "", { onUpdate(card.copy(badge = it.ifBlank { null })) })
         Spacer(Modifier.height(10.dp))
         ActionEditor(card.action) { onUpdate(card.copy(action = it)) }
@@ -511,9 +509,9 @@ private fun CardEditor(index: Int, card: ScreenCard, onUpdate: (ScreenCard) -> U
 @Composable
 private fun ActionEditor(action: ScreenAction?, onChange: (ScreenAction?) -> Unit) {
     Column {
-        Text("ACCIÓN", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+        Text("ACCIÓN", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
         Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
             ActionModeChip("Ninguna", action == null) { onChange(null) }
             ActionModeChip("Navegar", action?.type == "NAVIGATE") {
                 val target = action?.target?.takeIf { it in ScreenTaxonomy.NAVIGATE_TARGETS } ?: ScreenTaxonomy.NAVIGATE_TARGETS.first()
@@ -526,7 +524,7 @@ private fun ActionEditor(action: ScreenAction?, onChange: (ScreenAction?) -> Uni
         }
         when (action?.type) {
             "NAVIGATE" -> {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     // NAVEGABLES_DESDE_EL_EDITOR y no NAVIGATE_TARGETS: «Metas» ya no se ofrece
                     // (Ola B, tarea 7). Una tarjeta vieja con target "goals" sigue mostrándose sin
@@ -541,16 +539,15 @@ private fun ActionEditor(action: ScreenAction?, onChange: (ScreenAction?) -> Uni
                 }
             }
             "OPEN_URL" -> {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 val isValidUrl = action.target.startsWith("https://")
                 FieldBox("https://", action.target, { onChange(ScreenAction("OPEN_URL", it)) })
                 if (!isValidUrl) {
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "Los enlaces deben empezar con https://",
-                        style = Movi.textos.apoyo,
+                        style = Movi.textos.apoyoMedio,
                         color = Movi.colores.sale,
-                        fontWeight = FontWeight.Medium,
                     )
                 }
             }
@@ -566,9 +563,9 @@ private fun ActionModeChip(label: String, selected: Boolean, onClick: () -> Unit
             .clip(RoundedCornerShape(10.dp))
             .background(if (selected) Movi.colores.texto else Movi.colores.tarjeta)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = Espacio.xs),
     ) {
-        Text(label, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = if (selected) Movi.colores.fondo else Movi.colores.texto)
+        Text(label, style = Movi.textos.apoyoMedio, color = if (selected) Movi.colores.fondo else Movi.colores.texto)
     }
 }
 
@@ -582,9 +579,9 @@ private fun FieldBox(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         if (value.isEmpty()) Text(placeholder, style = Movi.textos.cuerpo, color = Movi.colores.textoApagado)
@@ -607,13 +604,13 @@ private fun SelectRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Radio.m))
             .background(if (selected) Movi.colores.tarjeta else androidx.compose.ui.graphics.Color.Transparent)
-            .border(1.dp, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(12.dp))
+            .border(Medida.trazo, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(Radio.m))
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = Espacio.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
+        Text(label, style = if (selected) Movi.textos.cuerpo else Movi.textos.cuerpoRegular, color = Movi.colores.texto)
     }
 }

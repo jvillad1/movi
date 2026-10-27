@@ -14,10 +14,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Medida
 
 /**
  * **El selector segmentado de Movi**: una fila de pastillas a todo el ancho, una elegida.
@@ -37,9 +39,9 @@ fun SelectorSegmentado(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(999.dp))
+            .clip(RoundedCornerShape(Radio.pill))
             .background(Movi.colores.tarjeta)
-            .border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
+            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.pill))
             .padding(3.dp),
     ) {
         labels.forEachIndexed { i, label ->
@@ -47,7 +49,7 @@ fun SelectorSegmentado(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(RoundedCornerShape(Radio.pill))
                     // El elegido es una pastilla llena de marca, no solo otro color de letra: en
                     // Plan es el control principal, y con el fondo igual al del contenedor no se
                     // veía cuál estaba elegido. `sobreMarca` sobre `marca` y `marca` sobre
@@ -55,13 +57,12 @@ fun SelectorSegmentado(
                     // cambian colores: el alto es el mismo, nada salta al elegir.
                     .background(if (isActive) Movi.colores.marca else Color.Transparent)
                     .clickable(enabled = enabled) { onSelect(i) }
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = Espacio.xs),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = label,
                     style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
                     color = if (isActive) Movi.colores.sobreMarca else Movi.colores.textoMedio,
                     letterSpacing = 0.1.sp,
                     // Una sola línea SIEMPRE. Con cuatro segmentos, cada uno se queda con ~82 dp

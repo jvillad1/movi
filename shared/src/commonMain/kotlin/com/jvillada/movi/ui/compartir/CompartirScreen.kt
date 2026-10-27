@@ -15,7 +15,6 @@ import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import androidx.compose.material.icons.rounded.Link
-import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
@@ -68,8 +67,6 @@ import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ConfirmarEnHoja
 import com.jvillada.movi.ui.components.HeaderLeading
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
@@ -256,7 +253,7 @@ private fun QueVaAVer() {
     Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(QUE_ES_COMPARTIR, style = Movi.textos.cuerpo, color = Movi.colores.texto)
         Spacer(Modifier.height(Medida.dentroDeSeccion))
-        Text("Lo que va a ver", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+        Text("Lo que va a ver", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(Espacio.xs))
         LO_QUE_VA_A_VER.forEach { renglon ->
             Row(modifier = Modifier.padding(vertical = Espacio.xxs), horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {

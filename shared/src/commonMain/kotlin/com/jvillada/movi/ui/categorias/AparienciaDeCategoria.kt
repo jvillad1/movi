@@ -30,6 +30,7 @@ import com.jvillada.movi.theme.COLORES_DEL_CATALOGO
 import com.jvillada.movi.theme.COLOR_DE_CATEGORIA_RESPALDO
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.esColorDelCatalogo
+import com.jvillada.movi.theme.Icono
 
 /**
  * # Cómo se ve una categoría, en un solo lugar
@@ -355,7 +356,7 @@ const val TAG_ICONO_DE_CATEGORIA: String = "icono-de-categoria"
  * una línea de texto (una barra del Inicio, el rótulo de una hoja).
  */
 enum class TamanoDeIconoDeCategoria(val circulo: Dp, val icono: Dp) {
-    Normal(circulo = 36.dp, icono = 20.dp),
+    Normal(circulo = 36.dp, icono = Icono.m),
     Chico(circulo = 24.dp, icono = 14.dp),
 }
 

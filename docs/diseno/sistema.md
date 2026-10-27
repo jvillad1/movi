@@ -86,7 +86,8 @@ lo justo. `ContrasteDeLosTokensTest` mide: cada texto ≥ 4,5:1 sobre el fondo *
 cada color de estado ≥ 4,5 sobre su propio lavado.
 
 El borde (`borde`) sigue existiendo para campos y separaciones que de verdad lo necesitan; una tarjeta
-no lleva borde. `MinCardVariant.High` (que era «tarjeta con borde») ahora es la capa 2.
+no lleva borde. `MinCardVariant.High` (que era «tarjeta con borde») pasó a ser la capa 2; desde la vuelta
+de diseño 21, `MinCard` ya no existe.
 
 ## 4. Marca y estado
 
@@ -118,11 +119,30 @@ widget— pasó de Space Grotesk tabular a Martian Mono a 12,5 sp (la monoespaci
 punto menos que el cuerpo se lee del mismo tamaño). Así las cifras de la app se ven de la misma familia
 en todas partes. Space Grotesk queda para todo lo que no es un monto.
 
+**Vuelta de diseño 21: los pesos con nombre.** Una pantalla no escribe `fontWeight =`: elige un estilo.
+Son los de arriba con otro de los pesos que la escala ya usa —Normal, Medium, SemiBold; **ningún peso
+nuevo**— y se derivan de su base en el cuerpo de `TextosDeMovi`, así llevan su familia y nunca se
+separan de ella en tamaño ni interlineado (lo fija `TipografiaTest`):
+
+| estilo | es | para |
+|---|---|---|
+| `apoyoMedio` | `apoyo` en Medium | el mini-título: el rótulo de un dato arriba de su valor, el nombre en una fila apretada, el número de un círculo. Es la letra de `RotuloDeCampo` (que además trae su color y su margen) |
+| `tituloMedio` | `titulo` en Medium | un nombre que encabeza sin gritar (vuelta 4): una cuenta, una categoría, un tercero arriba de su detalle; el título de `EncabezadoDeHoja` |
+| `tituloRegular` | `titulo` en Normal | lo que acompaña a un título en su renglón: el conteo de una `Seccion`, «· 3 movimientos» junto a un día plegado |
+| `cuerpoFuerte` | `cuerpo` en SemiBold | lo elegido y lo que se toca: la opción elegida de un selector, el texto de un `Boton` |
+| `cuerpoRegular` | `cuerpo` en Normal | un párrafo (la respuesta de Movi AI, una explicación larga) y la opción no elegida donde así iba |
+| `pestana` / `pestanaActiva` | `rotulo` en frase, casi sin espaciado, Normal / SemiBold | el rótulo de una pestaña (barra del teléfono, riel compacto) |
+| `enfasis` | `SpanStyle` en SemiBold | el énfasis dentro de una frase (`withStyle(Movi.textos.enfasis)`): la **negrita** de Movi AI, lo que se resalta de un aviso del banco |
+
+Lo elegido se escribe con el estilo, no con el peso: `style = if (elegido) Movi.textos.cuerpoFuerte else
+Movi.textos.cuerpo`. Un `Bold` sobre la letra de la interfaz se dibujaba igual que SemiBold (Space
+Grotesk viene en 400, 500 y 600): los pocos que había pasaron a su estilo sin cambiar nada.
+
 ## 6. Los componentes (`ui/components/ds/`)
 
 Cada uno con pocos parámetros; las variantes, en un `enum`.
 
-**`Superficie`** — el contenedor de toda tarjeta. Reemplaza a `MinCard` (que delega acá).
+**`Superficie`** — el contenedor de toda tarjeta. Reemplazó a `MinCard`, borrada en la vuelta de diseño 21.
 ```kotlin
 Superficie { Text("Tu plata", style = Movi.textos.apoyo); Cifra(tuPlata, VarianteDeCifra.Grande) }
 Superficie(relleno = RellenoDeSuperficie.Lista) { Fila(…); Separador(); Fila(…) }
@@ -429,7 +449,7 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 | `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en los dos temas; la fila mide 56/64; el botón llega a 48 de toque; la cifra se oculta; la tarjeta de cuenta mide 128 con marca y sin ella; dos widgets de un par miden lo mismo; la casilla que se toca sola mide 48 y dice su estado |
 | `CifraConRotuloTest` (Robolectric, motor de texto real) | el rótulo como se escribe, la cifra del sistema con su signo y tono, nada en claro con los saldos ocultos, «—» sin dato, y ninguna cifra recortada ni partida a 360 dp con la letra ×1,12 (tres compactas, dos enteras de diez dígitos, una en renglón) |
 | `LasCifrasDelSistemaSeOcultanTest` (Robolectric) | con «Ocultar los saldos», ni un «$» seguido de un dígito en el flujo libre de Plan, Presupuestos, la hoja de anular, los candidatos a pago de tarjeta y, en Hoy, «Tu patrimonio», «Para revisar» (con la evidencia abierta) y «Tu día más justo» |
-| `LoQueNoEsDelSistemaSoloBajaTest` (`core/src/jvmTest/.../quality/`, vuelta de diseño 18) | en `ui/` fuera de `ds/`, seis cosas que solo pueden bajar de su línea base (`lineas-base.txt`): `Button(`/`OutlinedButton(`/`TextButton(` de Material, `Color.White`/`Color.Black` (salvo el velo de `MarcoDeHoja`), `Hairline(`, `MinCard(`, un `Text(` cuyo primer argumento es `formatCOP(`/`formatMoney(` (aproximación por regex) y `fontWeight =` (§24) |
+| `LoQueNoEsDelSistemaSoloBajaTest` (`core/src/jvmTest/.../quality/`, vuelta de diseño 18) | en `ui/` fuera de `ds/`, seis cosas que solo pueden bajar de su línea base (`lineas-base.txt`): `Button(`/`OutlinedButton(`/`TextButton(` de Material, `Color.White`/`Color.Black` (salvo el velo de `MarcoDeHoja`), `Hairline(`, `MinCard(`, un `Text(` cuyo primer argumento es `formatCOP(`/`formatMoney(` (aproximación por regex) y `fontWeight =` (§24). **Desde la vuelta 21 las cinco primeras se exigen en 0**, aunque alguien suba su línea base (§27) |
 | `UnaSolaCifraHeroePorPantallaTest` (Robolectric) | a lo sumo una `Cifra` `Heroe` en Hoy, Plan (Pagos y Presupuestos), Patrimonio, Créditos, Movimientos y Espacios; exactamente una donde la pantalla tiene su protagonista (Hoy, Patrimonio, Créditos) |
 
 ## 9. Migrar una pantalla
@@ -1064,3 +1084,52 @@ y anotar otro» es un `Boton` `Fantasma` que aparece sin mover el teclado, las f
 `Fila`, «Subir comprobante» es un `BotonDeIcono` de 48 con su descripción),
 `CategoriasConPildorasYFilasTest`, `FilaDeDocumentoTest`, dos más en `SistemaDeDisenoTest`, y las de
 siempre de la hoja de Agregar (`HojaAgregarGeometriaTest`, `AgregarPorDentroTest`, el teclado).
+
+## 27. Vuelta de diseño 21: llevar a cero lo que no es del sistema
+
+Una vuelta de limpieza: bajar las cuentas de la guarda sin cambiar cómo se ve ninguna pantalla.
+
+- **`fontWeight =` de 134 a 2.** 33 repetían el peso de su estilo (`cuerpo` + Medium, `titulo` +
+  SemiBold, `monto` + Normal) y dos eran un Bold que se dibujaba como el SemiBold de su estilo: se
+  borraron. El resto pasó a los **pesos con nombre** de §5 (más de cuarenta a `apoyoMedio`, diecisiete
+  a `tituloMedio`, y `cuerpoRegular`, `cuerpoFuerte`, `tituloRegular`, `pestana` / `pestanaActiva`,
+  `enfasis`). Lo elegido de un selector es `if (elegido) estiloA else estiloB`. El
+  `Cifra(texto, estilo)` viejo de `ui/components` ya no fuerza Medium: recibe un estilo que ya lo trae
+  (`estiloDeLaCifra(VarianteDeCifra.Fila, …)` o `apoyoMedio`). `ds/` también los usa (`Boton`,
+  `Pildora`, `RotuloDeCampo`, `Seccion`, `EncabezadoDeHoja`, `TarjetaDeCuenta`, `AccionRapida`).
+  Quedan dos a propósito: el logotipo «movi» del riel (que tampoco tiene estilo: su `fontSize` es una de
+  las dos excepciones de tamaño) y el nombre de una categoría en su hoja (`titular` en Medium, único).
+- **`MinCard` de 14 a 0, y borrada** (con `MinCardVariant`), también sus 6 usos fuera de `ui/`
+  (la oferta de avisos y el sensor de SMS de Android). Un relleno que no es de `RellenoDeSuperficie`
+  va dentro del contenido, en tokens: las listas de `CardRow` del Inicio por SDUI y la de cuentas de la
+  revisión de un extracto son `Superficie(Lista)` con su margen horizontal adentro; «No se pudo leer»,
+  el vacío que enseña y «No pudimos actualizar», `Superficie(Ninguno)` con el relleno en su columna.
+  `SuperficieConRellenoLibre` quedó privada.
+- **`Hairline` de 4 a 0, y borrada**: `Separador(SangriaDeSeparador.Ninguna)` dibuja lo mismo.
+- **Montos en `Text` de 4 a 0**: la fila de un movimiento parecido en la hoja de categoría, el monto
+  que encabeza «Monto, cuenta y concepto», el total de los movimientos de un presupuesto y lo que toma
+  cada pago al repartir son `Cifra`. Ahora también se ocultan con «Ocultar los saldos».
+- **De paso, `.dp` sueltos de 196 a 119 y radios con número de 16 a 3**, solo donde el valor
+  coincidía exacto con un token (rellenos y separaciones a `Espacio`, radios a `Radio`, bordes de 1 a
+  `Medida.trazo`, íconos a `Icono`): nada cambia de tamaño.
+
+**La guarda**: `hairline`, `mincard` y `cifra_en_text` llegaron a 0, como antes `botones_de_material` y
+`blanco_o_negro`. `LoQueNoEsDelSistemaSoloBajaTest` las exige en **0** —falla si reaparecen o si su
+línea base deja de ser 0—, no solo «no subir».
+
+| clave | antes | después |
+|---|---:|---:|
+| `dp_sueltos` | 196 | 119 |
+| `radios_con_numero` | 16 | 3 |
+| `botones_de_material` | 0 | 0 |
+| `blanco_o_negro` | 0 | 0 |
+| `hairline` | 4 | **0** |
+| `mincard` | 14 | **0** |
+| `cifra_en_text` | 4 | **0** |
+| `font_weight` | 134 | **2** |
+
+**Lo que se ve distinto** (casi nada): tres de los cuatro montos que eran `Text` ahora van en la letra
+de las cifras (Martian Mono), como toda cifra de plata —el del encabezado de «Monto, cuenta y concepto»
+pasó de `titulo` (15,5) a la cifra de una fila (12,5)—; el total de un presupuesto es la `Cifra`
+`Chica`, que es la misma letra que tenía. La negrita de un aviso del banco es SemiBold (era Bold sobre la
+monoespaciada del sistema, que la sintetiza igual).

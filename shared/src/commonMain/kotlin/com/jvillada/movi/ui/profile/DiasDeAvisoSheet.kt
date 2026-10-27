@@ -24,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.MarcoDeHoja
@@ -91,8 +90,7 @@ fun DiasDeAvisoSheet(
                     ) {
                         Text(
                             text = d.toString(),
-                            style = Movi.textos.cuerpo,
-                            fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
+                            style = if (elegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
                             color = if (elegido) Movi.colores.fondo else Movi.colores.texto,
                         )
                     }

@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -36,6 +35,7 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ANCHO_DE_LECTURA
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.theme.Medida
 
 /**
  * # Movimientos en lista + detalle (Ola W4; ancho de la lista y el detalle ajustados en la Ola X)
@@ -86,7 +86,7 @@ import com.jvillada.movi.ui.components.WindowWidthClass
 val ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS: Dp = 420.dp
 
 /** El hilo entre la lista y el detalle. */
-val ANCHO_DEL_DIVISOR_DE_MOVIMIENTOS: Dp = 1.dp
+val ANCHO_DEL_DIVISOR_DE_MOVIMIENTOS: Dp = Medida.trazo
 
 /**
  * Lo mínimo que mide el detalle al lado de la lista: 380 dp (antes 420). Ola X: al subir
@@ -220,8 +220,7 @@ internal fun InvitacionAElegirUnMovimiento() {
     ) {
         Text(
             text = TITULO_DE_LA_INVITACION_A_ELEGIR,
-            style = Movi.textos.titulo,
-            fontWeight = FontWeight.Medium,
+            style = Movi.textos.tituloMedio,
             color = Movi.colores.texto,
             textAlign = TextAlign.Center,
         )

@@ -25,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,8 +43,6 @@ import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.tipoOPersona
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.MarcoDeHoja
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
@@ -178,7 +175,7 @@ fun DetalleDelDestinoSheet(
             }
 
             Spacer(Modifier.height(Espacio.m))
-            Text("Este período", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+            Text("Este período", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
             Spacer(Modifier.height(Espacio.xs))
             Row(modifier = Modifier.fillMaxWidth().testTag(TAG_ESTE_PERIODO_DEL_TERCERO)) {
                 ColumnaDeCifra("Le enviaste", enviadoEstePeriodo, Modifier.weight(1f))
@@ -186,7 +183,7 @@ fun DetalleDelDestinoSheet(
             }
             if (porMotivo.isNotEmpty()) {
                 Spacer(Modifier.height(Espacio.s))
-                Text("Lo que le enviaste, por motivo", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+                Text("Lo que le enviaste, por motivo", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(Espacio.xs))
                 Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs), modifier = Modifier.testTag(TAG_POR_MOTIVO_DEL_TERCERO)) {
                     porMotivo.forEach { envio ->
@@ -216,9 +213,9 @@ fun DetalleDelDestinoSheet(
             if (porPeriodo.size > 1 || (porPeriodo.size == 1 && porPeriodo.single().periodo != enCurso)) {
                 Spacer(Modifier.height(Espacio.m))
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    Text("Por período", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, modifier = Modifier.weight(1.4f))
-                    Text("Enviaste", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
-                    Text("Te envió", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                    Text("Por período", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio, modifier = Modifier.weight(1.4f))
+                    Text("Enviaste", style = Movi.textos.apoyoMedio, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                    Text("Te envió", style = Movi.textos.apoyoMedio, color = Movi.colores.textoApagado, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(Espacio.xs))
                 Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs), modifier = Modifier.testTag(TAG_POR_PERIODO_DEL_TERCERO)) {
@@ -249,7 +246,7 @@ fun DetalleDelDestinoSheet(
             Separador(SangriaDeSeparador.Ninguna)
             Spacer(Modifier.height(Espacio.s))
 
-            Text("Movimientos", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+            Text("Movimientos", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
             Spacer(Modifier.height(Espacio.xs))
             when {
                 error != null -> Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)

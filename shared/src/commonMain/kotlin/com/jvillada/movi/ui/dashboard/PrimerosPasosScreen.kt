@@ -24,7 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
@@ -165,8 +164,7 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
                 text = "Lo que conviene tener listo para que las cifras de Movi digan la verdad. " +
                     "Puedes volver aquí cuando quieras.",
                 // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Normal,
+                style = Movi.textos.cuerpoRegular,
                 color = Movi.colores.textoMedio,
                 modifier = Modifier.padding(horizontal = Espacio.m).padding(top = Espacio.xxs, bottom = Espacio.s),
             )

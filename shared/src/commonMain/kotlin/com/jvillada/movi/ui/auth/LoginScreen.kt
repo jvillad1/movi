@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -51,8 +50,6 @@ import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
@@ -329,7 +326,7 @@ private fun OfrecimientoDeHuella(
     Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
         Text(
             "Entra con tu huella la próxima vez",
-            style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
+            style = Movi.textos.titulo,
             color = Movi.colores.texto,
         )
         Spacer(Modifier.height(Espacio.xs))

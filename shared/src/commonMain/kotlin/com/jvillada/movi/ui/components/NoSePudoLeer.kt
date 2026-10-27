@@ -19,6 +19,8 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 
 /**
  * **«No pudimos cargar X» no es lo mismo que «no tienes X»**, y esta tarjeta es la que lo dice.
@@ -39,13 +41,9 @@ fun NoSePudoLeer(
     onReintentar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    MinCard(
-        modifier = modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(Espacio.xxl),
-    ) {
+    Superficie(modifier = modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Ninguno) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(Espacio.xxl),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(Espacio.m),
         ) {

@@ -25,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Repositories
@@ -40,11 +39,8 @@ import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.planDeSalida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.MoneyField
@@ -196,8 +192,11 @@ private fun ContenidoDelPlan(
         resumenDelSimulador(plan, periodoActual).forEachIndexed { i, linea ->
             Text(
                 linea,
-                style = if (i == 0 && plan.abonoMensual > 0L && plan.enElCalculo.isNotEmpty()) Movi.textos.titulo else Movi.textos.apoyo,
-                fontWeight = if (i == 0) FontWeight.Medium else FontWeight.Normal,
+                style = when {
+                    i == 0 && plan.abonoMensual > 0L && plan.enElCalculo.isNotEmpty() -> Movi.textos.tituloMedio
+                    i == 0 -> Movi.textos.apoyoMedio
+                    else -> Movi.textos.apoyo
+                },
                 color = if (i == 0) Movi.colores.texto else Movi.colores.textoMedio,
             )
             Spacer(Modifier.height(Movi.espacios.minimo))

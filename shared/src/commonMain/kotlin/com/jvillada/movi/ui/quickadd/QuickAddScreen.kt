@@ -77,7 +77,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1835,7 +1834,6 @@ private fun EditorBody(
                                 // Sin estilo a propósito: tecla del teclado numérico; `titular` (19) la achica y `cifra` (42) no cabe.
                                 fontSize = 22.sp,
                                 style = Movi.textos.monto,
-                                fontWeight = FontWeight.Normal,
                                 color = Movi.colores.texto,
                             )
                         }
@@ -2045,8 +2043,7 @@ internal fun PickerHeader(title: String, onVolver: () -> Unit) {
         )
         Text(
             title,
-            style = Movi.textos.titulo,
-            fontWeight = FontWeight.Medium,
+            style = Movi.textos.tituloMedio,
             color = Movi.colores.texto,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
@@ -37,8 +36,6 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.AtrasCierraEstaHoja
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.MarcoDeHoja
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
@@ -50,6 +47,8 @@ import kotlin.math.roundToLong
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.theme.Radio
 
 /** El tag de la hoja, para las pruebas y las capturas. */
 const val TAG_HOJA_LEYENDO_EL_PAPEL: String = "hoja-leyendo-el-papel"
@@ -139,11 +138,7 @@ private fun TarjetaDelResultado(
     onAnotarIgual: () -> Unit,
     onDocumentos: () -> Unit,
 ) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(
             resultado.nombre,
             style = Movi.textos.apoyo,
@@ -151,12 +146,11 @@ private fun TarjetaDelResultado(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(Espacio.xxs))
         val esAlerta = resultado is ResultadoDelPapel.NoSePudo
         Text(
             tituloDelResultado(resultado),
             style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
             color = if (esAlerta) Movi.colores.aviso else Movi.colores.texto,
         )
         when (resultado) {
@@ -172,7 +166,7 @@ private fun TarjetaDelResultado(
                 LineaDeLoLeido(resultado.lectura)
                 val id = resultado.lectura.porRevisarId
                 if (id != null) {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(Espacio.s))
                     Pastilla(
                         if (resultado.lectura.estadoEnLaBandeja == null || resultado.lectura.estadoEnLaBandeja == SMS_STATE_PENDING) "Revisar" else "Ver",
                         principal = true,
@@ -181,7 +175,7 @@ private fun TarjetaDelResultado(
             }
             is ResultadoDelPapel.YaAnotado -> {
                 LineaDeLoLeido(resultado.lectura)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Espacio.xs))
                 val hoy = hoyEnAppZone()
                 resultado.lectura.yaAnotado.forEach { ev ->
                     Text(
@@ -190,18 +184,18 @@ private fun TarjetaDelResultado(
                         color = Movi.colores.textoMedio,
                     )
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Pastilla("Anotarlo de todas formas", principal = false, onClick = onAnotarIgual)
             }
             is ResultadoDelPapel.Extracto -> {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Espacio.s))
                 Pastilla("Revisar el extracto", principal = true) { onVerExtracto(resultado.lectura) }
             }
             is ResultadoDelPapel.NoSePudo -> {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(Espacio.xxs))
                 Text(resultado.motivo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 if (resultado.guardado) {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(Espacio.s))
                     Pastilla("Ver en Documentos", principal = false, onClick = onDocumentos)
                 }
             }
@@ -215,7 +209,7 @@ private fun LineaDeLoLeido(lectura: com.jvillada.movi.shared.model.LecturaDelPap
     val leido = lectura.leido ?: return
     val signo = if (leido.type == TransactionType.INCOME) "+" else "−"
     val cuando = lectura.cuando?.let { " · ${fechaLegibleDeSms(it)}" }.orEmpty()
-    Spacer(Modifier.height(4.dp))
+    Spacer(Modifier.height(Espacio.xxs))
     Text(
         "$signo${formatMoney(leido.amount.roundToLong(), leido.currency)} · ${leido.merchant}$cuando",
         style = Movi.textos.apoyo,
@@ -227,20 +221,19 @@ private fun LineaDeLoLeido(lectura: com.jvillada.movi.shared.model.LecturaDelPap
 private fun Pastilla(texto: String, principal: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
+            .clip(RoundedCornerShape(Radio.pill))
             .then(
                 if (principal) Modifier.background(Movi.colores.marca)
-                else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp)),
+                else Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.pill)),
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 9.dp),
+            .padding(horizontal = Espacio.m, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         Text(
             texto,
             style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
             color = if (principal) Movi.colores.sobreMarca else Movi.colores.texto,
         )
     }

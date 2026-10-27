@@ -33,8 +33,6 @@ import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.shared.model.ReminderChannels
 import com.jvillada.movi.ui.components.ds.Casilla
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton

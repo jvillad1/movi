@@ -27,8 +27,6 @@ import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.primeruso.GuiaDePrimerUso
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
 

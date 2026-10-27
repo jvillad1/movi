@@ -59,7 +59,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -436,7 +435,6 @@ private fun AjusteDeBancoMudo(dias: Int, mudos: List<OrigenMudo>, onCambio: (Int
             Text(
                 textoDeDiasDeBancoMudo(dias),
                 style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
                 modifier = Modifier.widthIn(min = Medida.altoDeFilaDoble),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -476,10 +474,13 @@ private val CUENTA_O_TARJETA = Regex("""\*\s?(\d{4,})""")
  * No toca [texto] en sí (sigue siendo el dato crudo que llegó del banco): solo decide qué rangos
  * pintar en negrita al mostrarlo. Sin ninguno de los patrones, devuelve el texto tal cual, sin
  * negrita y sin lanzar — un SMS raro sin monto no es un error.
+ *
+ * La negrita es [enfasis] (`Movi.textos.enfasis`, vuelta de diseño 21), que la pantalla pasa: esto
+ * es puro y no lee el tema.
  */
-internal fun resaltadoDelTextoDelBanco(texto: String): AnnotatedString = buildAnnotatedString {
+internal fun resaltadoDelTextoDelBanco(texto: String, enfasis: SpanStyle): AnnotatedString = buildAnnotatedString {
     append(texto)
-    fun negrita(rango: IntRange) = addStyle(SpanStyle(fontWeight = FontWeight.Bold), rango.first, rango.last + 1)
+    fun negrita(rango: IntRange) = addStyle(enfasis, rango.first, rango.last + 1)
 
     // El banco/entidad: la palabra o frase antes de los primeros dos puntos, si los hay.
     val dosPuntos = texto.indexOf(':')

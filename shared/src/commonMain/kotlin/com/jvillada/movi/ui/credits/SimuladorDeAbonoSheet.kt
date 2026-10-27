@@ -17,7 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.CreditSummary
@@ -128,7 +127,6 @@ fun SimuladorDeAbonoSheet(
                 Text(
                     resultado.titular,
                     style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
                     color = if (resultado.esAlerta) Movi.colores.sale else Movi.colores.texto,
                 )
                 resultado.detalle?.let {
@@ -173,8 +171,7 @@ fun SimuladorDeAbonoSheet(
 private fun ChipDeMonto(etiqueta: String, seleccionado: Boolean, onClick: () -> Unit) {
     Text(
         etiqueta,
-        style = Movi.textos.apoyo,
-        fontWeight = FontWeight.Medium,
+        style = Movi.textos.apoyoMedio,
         color = if (seleccionado) Movi.colores.fondo else Movi.colores.texto,
         modifier = Modifier
             .clip(RoundedCornerShape(Radio.m))

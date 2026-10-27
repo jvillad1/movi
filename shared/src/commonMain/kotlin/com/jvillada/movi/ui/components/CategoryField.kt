@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,6 +42,7 @@ import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.categorias.aparienciaDe
 import com.jvillada.movi.ui.categorias.prefDeCategoria
+import com.jvillada.movi.theme.Medida
 
 /**
  * F35: filtra y ordena las sugerencias de categoría para [CategoryField]. Separada del
@@ -492,7 +492,7 @@ fun CategoryField(
                 .testTag(TAG_CAMPO_DE_CATEGORIA)
                 .clip(forma)
                 .background(Movi.colores.tarjeta)
-                .border(1.dp, if (abierto) Movi.colores.marca else Movi.colores.borde, forma)
+                .border(Medida.trazo, if (abierto) Movi.colores.marca else Movi.colores.borde, forma)
                 .clickable { abierto = !abierto }
                 .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.medio),
             verticalAlignment = Alignment.CenterVertically,
@@ -562,9 +562,8 @@ fun EnlaceAdministrarCategorias() {
     val navegar = LocalNavigate.current
     Text(
         text = "Administrar categorías",
-        style = Movi.textos.apoyo,
+        style = Movi.textos.apoyoMedio,
         color = Movi.colores.marca,
-        fontWeight = FontWeight.Medium,
         modifier = Modifier
             .clip(RoundedCornerShape(Movi.formas.minima))
             .clickable { navegar(Screen.Categorias) }

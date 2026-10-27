@@ -9,6 +9,8 @@ import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.esCodigoDeIaNoDisponible
 import com.jvillada.movi.shared.repository.ApiException
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
 /**
  * Lo que dice la app cuando el server contestó 503 con `IA_SIN_CREDITO` / `IA_NO_DISPONIBLE`: la
@@ -111,7 +113,7 @@ fun Throwable.toUserMessage(): String {
 @Composable
 fun BarraDeError(mensaje: String?) {
     if (mensaje == null) return
-    Hairline()
+    Separador(SangriaDeSeparador.Ninguna)
     Text(
         text = mensaje,
         style = Movi.textos.apoyo,

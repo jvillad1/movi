@@ -23,13 +23,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
 /**
  * Los destinos de la navegación principal.
@@ -128,7 +129,7 @@ fun MinBottomNav(
         ) {
             // La barra se despega del contenido con un BORDE, no con otro gris. Es la misma decisión
             // que la de las tarjetas: con planos tan cercanos, el borde es el que hace el trabajo.
-            Hairline()
+            Separador(SangriaDeSeparador.Ninguna)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -219,10 +220,8 @@ private fun NavItem(
 
 /** El estilo del rótulo de una pestaña: el `rotulo` del sistema, más firme si está activa. */
 @Composable
-private fun estiloDelRotulo(activo: Boolean): TextStyle = Movi.textos.rotulo.copy(
-    letterSpacing = 0.2.sp,
-    fontWeight = if (activo) FontWeight.SemiBold else FontWeight.Normal,
-)
+private fun estiloDelRotulo(activo: Boolean): TextStyle =
+    if (activo) Movi.textos.pestanaActiva else Movi.textos.pestana
 
 /**
  * **¿Entran los cinco rótulos enteros en [ancho]?** Cada pestaña ocupa lo más ancho entre su rótulo

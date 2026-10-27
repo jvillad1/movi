@@ -36,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.ClaveDeLectura
@@ -80,8 +79,6 @@ import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
@@ -671,7 +668,6 @@ private fun DeDondeSalioLoQueFalto(detalle: DetalleDePeriodo) {
             text = "De dónde salió lo que faltó",
             style = Movi.textos.cuerpo,
             color = Movi.colores.texto,
-            fontWeight = FontWeight.Medium,
         )
         filas.forEach { fila ->
             Spacer(Modifier.height(Movi.espacios.corto))
@@ -1064,8 +1060,7 @@ private fun ConfirmarEmpezarHoy(periodo: PeriodoFinanciero, hoy: LocalDate, esta
     Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = textoDeEmpezarHoy(periodo, hoy),
-            style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Normal,
+            style = Movi.textos.cuerpoRegular,
             color = Movi.colores.texto,
         )
         estado.errorAlGuardar?.let {

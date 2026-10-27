@@ -30,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -172,8 +171,7 @@ fun PeriodoSheet(
                         ) {
                             Text(
                                 text = d.toString(),
-                                style = Movi.textos.cuerpo,
-                                fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
+                                style = if (elegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
                                 color = if (elegido) Movi.colores.fondo else Movi.colores.texto,
                                 textAlign = TextAlign.Center,
                             )

@@ -24,7 +24,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -39,6 +38,7 @@ import com.jvillada.movi.theme.COLOR_DE_CATEGORIA_RESPALDO
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
+import com.jvillada.movi.theme.Medida
 
 /**
  * # El comercio, protagonista de la fila
@@ -144,7 +144,7 @@ fun CirculoDeMarca(marca: Marca, modifier: Modifier = Modifier, tamano: TamanoDe
             .semantics { contentDescription = marca.nombre }
             .size(tamano.circulo)
             .background(Color(marca.fondo), CircleShape)
-            .border(1.dp, Movi.colores.hilo, CircleShape),
+            .border(Medida.trazo, Movi.colores.hilo, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -152,7 +152,6 @@ fun CirculoDeMarca(marca: Marca, modifier: Modifier = Modifier, tamano: TamanoDe
             style = Movi.textos.titulo.copy(
                 fontSize = tamanoDeLetra,
                 lineHeight = tamanoDeLetra,
-                fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.02).em,
                 color = Color(marca.texto),
                 textAlign = TextAlign.Center,

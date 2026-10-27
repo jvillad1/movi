@@ -35,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.AccionPropuesta
@@ -135,7 +134,7 @@ internal fun PropuestaDelAsistente(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
             Spacer(Modifier.width(Espacio.xs))
-            Text(ROTULO_DE_LA_PROPUESTA, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+            Text(ROTULO_DE_LA_PROPUESTA, style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
         }
         Text(propuesta.frase, style = Movi.textos.cuerpo, color = Movi.colores.texto)
 
@@ -143,7 +142,7 @@ internal fun PropuestaDelAsistente(
             EstadoDePropuesta.HECHA -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(Icono.s))
                 Spacer(Modifier.width(Espacio.xs))
-                Text(YA_ESTA_HECHO, style = Movi.textos.apoyo, color = Movi.colores.entra, fontWeight = FontWeight.Medium)
+                Text(YA_ESTA_HECHO, style = Movi.textos.apoyoMedio, color = Movi.colores.entra)
             }
             EstadoDePropuesta.RECHAZADA ->
                 Text(DESCARTADA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)

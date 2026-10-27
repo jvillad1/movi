@@ -1,7 +1,6 @@
 package com.jvillada.movi.ui.sms
 
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontWeight
+import com.jvillada.movi.theme.TextosDeMovi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -13,7 +12,8 @@ import kotlin.test.assertTrue
  */
 class ResaltadoDelTextoDelBancoTest {
 
-    private val negrita = SpanStyle(fontWeight = FontWeight.Bold)
+    /** La negrita del sistema (vuelta de diseño 21): el énfasis de `Movi.textos`. */
+    private val negrita = TextosDeMovi().enfasis
 
     /** Los rangos con negrita, como pares (texto, inicio, fin-exclusivo) para comparar fácil. */
     private fun rangosEnNegrita(resultado: androidx.compose.ui.text.AnnotatedString) =
@@ -32,7 +32,7 @@ class ResaltadoDelTextoDelBancoTest {
         val texto = "Bancolombia: Pagaste \$386.902 en la tarjeta de crédito *3684 desde la " +
             "cuenta *8133, el 27/09/2026 09:17…"
 
-        val resultado = resaltadoDelTextoDelBanco(texto)
+        val resultado = resaltadoDelTextoDelBanco(texto, negrita)
 
         assertEquals(texto, resultado.text)
         val esperados = setOf(
@@ -49,7 +49,7 @@ class ResaltadoDelTextoDelBancoTest {
         val texto = "Bancolombia: Transferiste \$1,300,000 desde la cuenta *1234 hacia la " +
             "cuenta *5678, el 27/09/2026 10:00…"
 
-        val resultado = resaltadoDelTextoDelBanco(texto)
+        val resultado = resaltadoDelTextoDelBanco(texto, negrita)
 
         val esperados = setOf(
             "Bancolombia" to rango(texto, "Bancolombia"),
@@ -64,7 +64,7 @@ class ResaltadoDelTextoDelBancoTest {
     fun `el formato con punto de miles tambien se reconoce`() {
         val texto = "Bancolombia: Pagaste \$4.000.000 en la tarjeta *9999, el 27/09/2026 10:00…"
 
-        val resultado = resaltadoDelTextoDelBanco(texto)
+        val resultado = resaltadoDelTextoDelBanco(texto, negrita)
 
         val esperados = setOf(
             "Bancolombia" to rango(texto, "Bancolombia"),
@@ -78,7 +78,7 @@ class ResaltadoDelTextoDelBancoTest {
     fun `un SMS sin monto ni cuenta ni dos puntos no lleva nada en negrita`() {
         val texto = "Tu clave de un solo uso ya venció, pídela de nuevo."
 
-        val resultado = resaltadoDelTextoDelBanco(texto)
+        val resultado = resaltadoDelTextoDelBanco(texto, negrita)
 
         assertEquals(texto, resultado.text)
         assertEquals(emptyList(), resultado.spanStyles)

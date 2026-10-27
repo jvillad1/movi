@@ -60,7 +60,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
@@ -76,8 +75,6 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.HeaderLeading
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NewItemButton
@@ -746,7 +743,7 @@ internal fun SubirDocumentoSheet(
     HojaDeDocumento(onDismiss = onDismiss, cerrarHabilitado = true) {
         // El nombre y el peso, de solo lectura: acá no se renombra —eso es «Editar»— pero sí hace
         // falta ver QUÉ se está subiendo, porque el selector del sistema ya se cerró.
-        Text(archivo.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+        Text(archivo.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto)
         Spacer(Modifier.height(Espacio.xxs))
         Text(
             pesoLegible(archivo.bytes.size.toLong()),
@@ -827,9 +824,8 @@ private fun FilaElegible(
     ) {
         Text(
             texto,
-            style = Movi.textos.cuerpo,
+            style = if (elegida) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
             color = if (elegida) Movi.colores.texto else Movi.colores.textoMedio,
-            fontWeight = if (elegida) FontWeight.Medium else FontWeight.Normal,
             modifier = Modifier.weight(1f),
         )
         // Mismo motivo que en `CreditTermsSheet`: la fuente del navegador no trae U+2713 y el

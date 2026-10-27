@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.rememberLectura
@@ -255,9 +254,8 @@ private fun LoQueDiceElPrestamo(
             comoVaEstaDeuda(p, periodoActual)?.let { comoVa ->
                 Text(
                     comoVa.texto,
-                    style = Movi.textos.apoyo,
+                    style = if (comoVa.esAlerta) Movi.textos.apoyoMedio else Movi.textos.apoyo,
                     color = if (comoVa.esAlerta) Movi.colores.sale else Movi.colores.textoApagado,
-                    fontWeight = if (comoVa.esAlerta) FontWeight.Medium else FontWeight.Normal,
                 )
             }
         }

@@ -10,7 +10,6 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,76 +20,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
 import com.jvillada.movi.ui.components.ds.varianteDeCifra
-import com.jvillada.movi.ui.components.ds.SuperficieConRellenoLibre
-
-/**
- * Las tres alturas de tarjeta que **ya no son tres colores**.
- *
- * Eran `#191B20`, `#1D1F25` y `#22252B`: tres grises a 1,10 · 1,15 · 1,23 de contraste contra el
- * fondo, o sea tres planos separados por casi nada, que en un teléfono al sol no se distinguen.
- *
- * El enum sobrevive porque lo nombran 69 llamadas, y en los hechos ya era uno solo: [Elevated] en
- * 60, [Default] en 8 y [High] en **una**.
- *
- * **Ola R0:** `MinCard` delega en `Superficie` (`ui/components/ds/`). [Default] y [Elevated] son la
- * capa 1; [High], que antes era la misma superficie con un borde, es la capa 2 — superficies por
- * capas, sin bordes duros.
- */
-enum class MinCardVariant {
-    /** Lo normal: la capa 1. */
-    Default,
-
-    /** Lo normal también. Se conserva porque es el default histórico y lo dicen 60 llamadas. */
-    Elevated,
-
-    /** La que va ENCIMA de otra tarjeta: la capa 2. */
-    High,
-}
-
-/**
- * **La tarjeta de siempre, que ahora es una [com.jvillada.movi.ui.components.ds.Superficie].**
- *
- * Una pantalla nueva usa `Superficie` directamente, con un `RellenoDeSuperficie` en vez de un
- * [padding] suelto: la auditoría de la ola R0 contó 27 rellenos distintos pasados acá. Este
- * componente queda para no romper sus 148 llamadas mientras se migran; el default del relleno ya
- * es el del sistema (`Medida.rellenoDeSuperficie`, 16).
- */
-@Composable
-fun MinCard(
-    modifier: Modifier = Modifier,
-    variant: MinCardVariant = MinCardVariant.Elevated,
-    padding: PaddingValues = PaddingValues(Medida.rellenoDeSuperficie),
-    onClick: (() -> Unit)? = null,
-    onClickLabel: String? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    SuperficieConRellenoLibre(
-        modifier = modifier,
-        nivel = if (variant == MinCardVariant.High) NivelDeSuperficie.Capa2 else NivelDeSuperficie.Capa1,
-        relleno = padding,
-        onClick = onClick,
-        onClickLabel = onClickLabel,
-        contenido = content,
-    )
-}
-
-@Composable
-fun Hairline(insetStart: Dp = 0.dp, insetEnd: Dp = 0.dp) {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = insetStart, end = insetEnd),
-        thickness = Medida.trazo,
-        color = Movi.colores.hilo,
-    )
-}
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Separador
 
 /**
  * **El título de una sección, que ahora es [com.jvillada.movi.ui.components.ds.Seccion].**
@@ -179,7 +118,7 @@ fun CardRow(
                 ChevronRight()
             }
         }
-        if (!isLast) Hairline()
+        if (!isLast) Separador(SangriaDeSeparador.Ninguna)
     }
 }
 
@@ -208,20 +147,19 @@ fun CardRow(
  *   `fontSize =`. Del estilo salen el tamaño y el interlineado; las cifras tabulares se fuerzan
  *   acá, porque [TextosDeMovi.apoyo] y [TextosDeMovi.titulo] no las traen y una cifra sin `tnum`
  *   baila en la columna.
- * @param fontWeight manda sobre el peso del estilo, como antes: una cifra va en Medium aunque su
- *   estilo sea Normal o SemiBold.
+ *   **El peso es el del estilo** (vuelta de diseño 21: antes un `fontWeight` lo forzaba a Medium):
+ *   una cifra va en Medium, así que se pasa uno que ya lo trae —el de una `Cifra` de fila,
+ *   `estiloDeLaCifra(VarianteDeCifra.Fila, Movi.textos)`, o [TextosDeMovi.apoyoMedio]—.
  */
 @Composable
 fun Cifra(
     text: String,
-    estilo: TextStyle = Movi.textos.monto,
+    estilo: TextStyle = estiloDeLaCifra(VarianteDeCifra.Fila, Movi.textos),
     color: Color = Movi.colores.texto,
-    fontWeight: FontWeight = FontWeight.Medium,
 ) {
     Text(
         text = text,
         style = estilo.copy(
-            fontWeight = fontWeight,
             letterSpacing = (-0.3).sp,
             fontFeatureSettings = "tnum",
         ),
