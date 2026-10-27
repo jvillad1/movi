@@ -2,6 +2,10 @@ package com.jvillada.movi.ui.categorias
 
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
@@ -22,6 +26,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -774,19 +780,13 @@ private fun HojaDeOrden(
 
 // ── Piezas de la lista ────────────────────────────────────────────────────────
 
+/**
+ * Un filtro de la lista: el [PildoraDeFiltro] del sistema (vuelta de diseño 20). Era un `Text` con
+ * fondo y `clickable` armados a mano, con el texto elegido en el color del `fondo`.
+ */
 @Composable
 private fun Pastilla(texto: String, activa: Boolean, onClick: () -> Unit) {
-    Text(
-        text = texto,
-        style = Movi.textos.apoyo,
-        fontWeight = FontWeight.Medium,
-        color = if (activa) Movi.colores.fondo else Movi.colores.textoMedio,
-        modifier = Modifier
-            .clip(RoundedCornerShape(Radio.pill))
-            .background(if (activa) Movi.colores.marca else Movi.colores.tarjeta)
-            .clickable(onClick = onClick)
-            .padding(horizontal = Espacio.s, vertical = Espacio.xs),
-    )
+    PildoraDeFiltro(texto, seleccionada = activa, onClick = onClick)
 }
 
 /** La búsqueda de la lista de categorías: un [Campo] del sistema, sin rótulo (la guía lo dice). */
@@ -910,6 +910,7 @@ private fun HojaBase(onDismiss: () -> Unit, content: @Composable ColumnScope.() 
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HojaDetalle(
     categoria: CategoryUsage,
@@ -972,14 +973,15 @@ private fun HojaDetalle(
             )
 
             // ── Tipo ──────────────────────────────────────────────────────────
-            Text(
-                "Tipo",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(top = Espacio.l, bottom = Espacio.xs),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs), modifier = Modifier.fillMaxWidth()) {
+            RotuloDeCampo("Tipo", modifier = Modifier.padding(top = Espacio.l))
+            // Vuelta de diseño 20: `PildoraDeFiltro` del ancho de su texto, que bajan a un segundo
+            // renglón si no entran. Repartidas a partes iguales, «Automático» no entraba entero a
+            // 390 dp y la opción armada a mano tenía que achicarse la letra.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 val opciones = listOf(
                     null,
                     TransactionType.EXPENSE.name,
@@ -987,10 +989,9 @@ private fun HojaDetalle(
                     CATEGORY_TYPE_BOTH,
                 )
                 opciones.forEach { opcion ->
-                    OpcionDeTipo(
+                    PildoraDeFiltro(
                         texto = etiquetaDeTipoFijado(opcion),
-                        activa = categoria.pinnedType == opcion,
-                        modifier = Modifier.weight(1f),
+                        seleccionada = categoria.pinnedType == opcion,
                         onClick = { if (categoria.pinnedType != opcion) onFijarTipo(opcion) },
                     )
                 }
@@ -1006,45 +1007,49 @@ private fun HojaDetalle(
                 modifier = Modifier.padding(top = Espacio.xs),
             )
 
-            Column(modifier = Modifier.padding(top = Espacio.l, bottom = Espacio.l)) {
-                Separador(SangriaDeSeparador.Ninguna)
-                if (nombreSostieneReglasDePlata(categoria.name)) {
-                    // La cuota y el desembolso de un crédito cuentan por su nombre exacto: el
-                    // server rechaza renombrarlas o unificarlas, así que ni se ofrecen.
-                    Text(
-                        categoriaQueSostieneReglasMensaje(categoria.name),
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                        lineHeight = 15.sp,
-                        modifier = Modifier.padding(vertical = Espacio.s),
-                    )
-                    Separador(SangriaDeSeparador.Ninguna)
-                } else {
+            // Vuelta de diseño 20: las acciones son `Fila` del sistema en una `Superficie` de capa 2,
+            // como toda lista dentro de una hoja (eran columnas tocables armadas a mano entre líneas).
+            // Lo que solo explica va antes, como texto.
+            val sostieneReglas = nombreSostieneReglasDePlata(categoria.name)
+            if (sostieneReglas) {
+                // La cuota y el desembolso de un crédito cuentan por su nombre exacto: el server
+                // rechaza renombrarlas o unificarlas, así que ni se ofrecen.
+                Text(
+                    categoriaQueSostieneReglasMensaje(categoria.name),
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.padding(top = Espacio.l),
+                )
+            } else if (categoria.scope != CategoryScope.CUSTOM) {
+                Text(
+                    "Las categorías del catálogo de Movi no se renombran: el catálogo es el " +
+                        "mismo para todos y volvería a sugerirte el nombre viejo. Si quieres " +
+                        "juntarla con otra, únela; si no la usas, escóndela.",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.padding(top = Espacio.l),
+                )
+            }
+            Superficie(
+                nivel = NivelDeSuperficie.Capa2,
+                relleno = RellenoDeSuperficie.Lista,
+                modifier = Modifier.fillMaxWidth().padding(top = Medida.dentroDeSeccion, bottom = Espacio.l),
+            ) {
+                if (!sostieneReglas) {
                     if (categoria.scope == CategoryScope.CUSTOM) {
                         AccionDeHoja(
                             titulo = "Renombrar",
                             detalle = "Cambia el nombre en todos tus movimientos, tu presupuesto y tus recurrentes.",
                             onClick = onRenombrar,
                         )
-                        Separador(SangriaDeSeparador.Ninguna)
-                    } else {
-                        Text(
-                            "Las categorías del catálogo de Movi no se renombran: el catálogo es el " +
-                                "mismo para todos y volvería a sugerirte el nombre viejo. Si quieres " +
-                                "juntarla con otra, únela; si no la usas, escóndela.",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            lineHeight = 15.sp,
-                            modifier = Modifier.padding(vertical = Espacio.s),
-                        )
-                        Separador(SangriaDeSeparador.Ninguna)
+                        Separador(SangriaDeSeparador.Margen)
                     }
                     AccionDeHoja(
                         titulo = "Unificar en otra",
                         detalle = "Todo lo que dice «${categoria.name}» pasa a decir la que elijas. No se borra nada.",
                         onClick = onUnificar,
                     )
-                    Separador(SangriaDeSeparador.Ninguna)
+                    Separador(SangriaDeSeparador.Margen)
                 }
                 AccionDeHoja(
                     titulo = if (categoria.hidden) "Volver a sugerirla" else "Esconder",
@@ -1053,7 +1058,6 @@ private fun HojaDetalle(
                     else "Deja de sugerirse al escribir. Tus movimientos viejos no se tocan.",
                     onClick = { onCambiarVisibilidad(!categoria.hidden) },
                 )
-                Separador(SangriaDeSeparador.Ninguna)
             }
         }
     }
@@ -1089,24 +1093,12 @@ private fun SeccionApariencia(
             )
         }
 
-        Text(
-            "Ícono",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(top = Espacio.m, bottom = Espacio.xs),
-        )
+        RotuloDeCampo("Ícono", modifier = Modifier.padding(top = Espacio.m))
         CuadriculaDeApariencia(ICONOS_DEL_CATALOGO) { item, modifier ->
             CeldaDeIcono(item = item, elegido = item.clave == apariencia.icono, onClick = { onElegirIcono(item.clave) }, modifier = modifier)
         }
 
-        Text(
-            "Color",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(top = Espacio.m, bottom = Espacio.xs),
-        )
+        RotuloDeCampo("Color", modifier = Modifier.padding(top = Espacio.m))
         // Fila que se desplaza y no la misma cuadrícula que el ícono: un círculo sin rótulo no
         // necesita el ancho de celda de 80 dp que pide un ícono con dos renglones de texto debajo
         // — con ese ancho los diez círculos quedaban con huecos enormes entre uno y otro.
@@ -1167,7 +1159,7 @@ private fun CeldaDeIcono(item: IconoDelCatalogo, elegido: Boolean, onClick: () -
         modifier = modifier
             .testTag(tagDeIconoDelCatalogo(item.clave))
             .clip(forma)
-            .then(if (elegido) Modifier.border(2.dp, Movi.colores.marca, forma) else Modifier)
+            .then(if (elegido) Modifier.border(Medida.trazoDeCarga, Movi.colores.marca, forma) else Modifier)
             .clickable(onClick = onClick)
             .padding(vertical = Movi.espacios.corto, horizontal = Movi.espacios.minimo),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1188,7 +1180,6 @@ private fun CeldaDeIcono(item: IconoDelCatalogo, elegido: Boolean, onClick: () -
         Text(
             item.rotulo,
             style = Movi.textos.apoyo,
-            fontWeight = if (elegido) FontWeight.Medium else FontWeight.Normal,
             color = if (elegido) Movi.colores.marca else Movi.colores.texto,
             textAlign = TextAlign.Center,
             minLines = 2,
@@ -1220,7 +1211,7 @@ private fun CeldaDeColor(item: ColorDelCatalogo, elegido: Boolean, onClick: () -
         modifier = Modifier
             .testTag(tagDeColorDelCatalogo(item.clave))
             .clip(forma)
-            .then(if (elegido) Modifier.border(2.dp, Movi.colores.texto, forma) else Modifier)
+            .then(if (elegido) Modifier.border(Medida.trazoDeCarga, Movi.colores.texto, forma) else Modifier)
             .selectable(selected = elegido, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = item.rotulo }
             .padding(Espacio.xxs),
@@ -1235,39 +1226,20 @@ private fun CeldaDeColor(item: ColorDelCatalogo, elegido: Boolean, onClick: () -
     }
 }
 
-@Composable
-private fun OpcionDeTipo(texto: String, activa: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Text(
-        text = texto,
-        // 11.sp y casi sin padding lateral: son cuatro opciones repartidas a partes iguales, y a
-        // 390 dp de ancho «Automático» se cortaba en «Automáti…» — un rótulo cortado en el
-        // control que decide el tipo de la categoría es justo donde no se puede adivinar.
-        style = Movi.textos.apoyo,
-        fontWeight = FontWeight.Medium,
-        color = if (activa) Movi.colores.fondo else Movi.colores.textoMedio,
-        maxLines = 1,
-        softWrap = false,
-        overflow = TextOverflow.Ellipsis,
-        textAlign = TextAlign.Center,
-        modifier = modifier
-            .clip(RoundedCornerShape(Radio.m))
-            .background(if (activa) Movi.colores.marca else Movi.colores.tarjeta)
-            .clickable(onClick = onClick)
-            .padding(vertical = Espacio.s, horizontal = Espacio.xxs),
-    )
-}
-
+/**
+ * Una acción de la hoja de una categoría (renombrar, unificar, esconder): la [Fila] del sistema con
+ * lo que hace en el subtítulo —en dos renglones, porque la frase es la razón de la fila— y el
+ * [Chevron] (vuelta de diseño 20; era una columna tocable armada a mano).
+ */
 @Composable
 private fun AccionDeHoja(titulo: String, detalle: String, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = Espacio.s),
-    ) {
-        Text(titulo, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-        Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 15.sp, modifier = Modifier.padding(top = Espacio.xxs))
-    }
+    Fila(
+        titulo = titulo,
+        subtitulo = detalle,
+        lineasDelSubtitulo = 2,
+        final = { Chevron() },
+        onClick = onClick,
+    )
 }
 
 /**
