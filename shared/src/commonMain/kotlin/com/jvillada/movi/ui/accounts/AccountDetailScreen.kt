@@ -332,15 +332,15 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     // [CondicionDeCuentaSheet].
                     //
                     // No aparece en una deuda: una tarjeta o un préstamo no son plata que se
-                    // pueda usar para algo, así que la pregunta no significa nada ahí.
+                    // pueda usar para algo, así que la fila no significa nada ahí.
                     if (!isDebtAccount(acc.type)) {
                         item(key = "condicion") {
                             Superficie(relleno = RellenoDeSuperficie.Lista) {
+                                // Vuelta de diseño 5: la fila dice el estado y no una pregunta
+                                // («¿Solo sirve para algo?» no se entendía).
                                 Fila(
-                                    titulo = "¿Solo sirve para algo?",
-                                    subtitulo = acc.condicionadaA
-                                        ?.let { "Solo para $it · no suma en «Tu plata»" }
-                                        ?: "Puedes usar esta plata para lo que quieras",
+                                    titulo = PARA_QUE_ES_ESTA_PLATA,
+                                    subtitulo = subtituloDeParaQueEs(acc),
                                     final = { Chevron() },
                                     onClick = { showCondicion = true },
                                 )

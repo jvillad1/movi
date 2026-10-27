@@ -34,7 +34,7 @@ class CuentasQueMuevenPlataTest {
         condicionadaA = "Vivienda",
     )
 
-    /** La misma cuenta el día que el dueño le quite la condición desde «¿Solo sirve para algo?». */
+    /** La misma cuenta el día que el dueño le quite la condición desde «Para qué es esta plata». */
     private val skandiaSinCondicion = skandia.copy(condicionadaA = null)
 
     private val todas = listOf(efectivo, ahorros, nu, amex, carro, hipotecario, skandia)
