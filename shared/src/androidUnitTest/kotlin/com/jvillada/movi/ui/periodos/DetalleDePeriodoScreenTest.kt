@@ -174,7 +174,8 @@ class DetalleDePeriodoScreenTest {
         assertTrue(hay("Octubre 2026"))
         assertTrue(hay("Del 24 de septiembre al 20 de octubre"))
         assertTrue(hay("Este período empezó el 24 de septiembre (antes del día 25)"))
-        assertTrue(hay(formatMoneyCompact(9_000_000L)))
+        // Lo que entró, con «+»: es la `Cifra` del sistema en tono de ingreso (vuelta de diseño 19).
+        assertTrue(hay("+" + formatMoneyCompact(9_000_000L)))
         assertTrue(hay(formatMoneyCompact(2_500_000L)))
         assertTrue(hay("Tu plata: ${formatMoneyCompact(5_000_000L)} al empezar → ${formatMoneyCompact(11_500_000L)} hoy"))
 

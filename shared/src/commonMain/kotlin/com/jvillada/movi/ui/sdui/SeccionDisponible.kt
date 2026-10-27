@@ -36,14 +36,11 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.BarraDeProgreso
 import com.jvillada.movi.ui.components.ds.Cifra as CifraDelSistema
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.FormaDeCifra
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeBarra
-import com.jvillada.movi.ui.components.Cifra
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
-import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.NivelDelGasto
@@ -260,10 +257,11 @@ private fun ColumnaDeVentana(
         // Rojo cuando la ventana está PASADA, que es exactamente cuando lo que queda es negativo
         // (sin margen: gastó algo contra una meta de cero). En el período la cifra es lo gastado, y
         // va en rojo con el mismo criterio: gastaste más de lo que había.
-        Cifra(
-            formatMoneyCompact(if (delPeriodo) ventana.gastado else ventana.teQuedan),
-            Movi.textos.monto,
-            color = if (ventana.nivel == NivelDelGasto.PASADO) Movi.colores.sale else Movi.colores.texto,
+        // Vuelta de diseño 19: la `Cifra` del sistema, compacta porque son tres columnas (§6).
+        CifraDelSistema(
+            if (delPeriodo) ventana.gastado else ventana.teQuedan,
+            tono = if (ventana.nivel == NivelDelGasto.PASADO) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
+            forma = FormaDeCifra.Compacta,
         )
         // «gastaste» y la cifra en dos renglones, no en uno: «gastaste $440.000» no entra en su
         // tercio de tarjeta a 390 dp —visto en la web, cortado en «gastaste $440…»— y achicar la

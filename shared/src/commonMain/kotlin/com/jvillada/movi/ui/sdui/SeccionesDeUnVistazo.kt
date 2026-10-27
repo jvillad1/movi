@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -19,7 +18,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.AccountBalance
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.CreditCard
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.Icon
@@ -34,12 +39,12 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.rangoLegibleDe
@@ -50,30 +55,35 @@ import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.CifraConRotulo
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.recurrentes.BajoLaFila
 import com.jvillada.movi.ui.ai.CUANTAS_PREGUNTAS_SUGERIDAS
 import com.jvillada.movi.ui.ai.preguntasParaTocar
 import com.jvillada.movi.ui.components.AvatarDeLaCuenta
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.TamanoDeAvatar
-import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.CifraProtagonista
-import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
-import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.OjoDeLosSaldos
 import com.jvillada.movi.ui.components.conCifrasOcultas
-import com.jvillada.movi.ui.components.StatusDot
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.formatCOP
-import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.TramoDelPatrimonio
 import com.jvillada.movi.ui.dashboard.cifraContando
@@ -303,49 +313,26 @@ private fun colorDelDetalle(nivel: NivelDelGasto): Color = when (nivel) {
 }
 
 /**
- * Una fila del desglose de «Tu plata»: el nombre de la cuenta y su saldo ya formateado
- * ([CuentaHero]). La usan el hero (desplegado inline, ver [HeroDeUnVistazo]) y «Tu patrimonio»
- * ([PatrimonioSection]) — mismo dato ([cuentasDelHero]), mismo diseño de fila, para que las dos
- * listas no puedan desalinearse entre sí. [modifier] es lo único que cambia entre las dos: el
- * hero no sangra, «Tu patrimonio» sangra bajo su tramo «Tu plata».
+ * El saldo de una cuenta debajo del tramo «Tu plata» de «Tu patrimonio» ([PatrimonioSection]):
+ * la marca del banco en chiquito, el nombre y su [com.jvillada.movi.ui.components.ds.Cifra] en su
+ * moneda, `Chica` y apagada (es un desglose). Cuelga de la fila con `BajoLaFila`.
  */
 @Composable
-private fun FilaDeCuentaDelHero(cuenta: CuentaHero, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+private fun FilaDeCuentaDelHero(cuenta: CuentaHero) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         // La marca del banco en chiquito (Ola 2a), o el ícono del tipo de cuenta.
         AvatarDeLaCuenta(nombre = cuenta.nombre, tipo = cuenta.tipo, tamano = TamanoDeAvatar.Linea)
-        Spacer(Modifier.width(Movi.espacios.corto))
+        Spacer(Modifier.width(Espacio.xs))
         Text(
             text = cuenta.nombre,
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        Spacer(Modifier.width(Movi.espacios.corto))
-        Cifra(cuenta.monto, Movi.textos.apoyo, color = Movi.colores.textoMedio)
-    }
-}
-
-/** Un rótulo chico arriba y su cifra abajo; [alFinal] lo alinea a la derecha. */
-@Composable
-private fun ParDeCifra(
-    rotulo: String,
-    cifra: String,
-    color: Color,
-    modifier: Modifier = Modifier,
-    alFinal: Boolean = false,
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = if (alFinal) Alignment.End else Alignment.Start,
-    ) {
-        Text(rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        Cifra(cifra, Movi.textos.titulo, color = color)
+        Spacer(Modifier.width(Espacio.xs))
+        Cifra(cuenta.saldo, VarianteDeCifra.Chica, tono = TonoDeCifra.Apagado, moneda = cuenta.moneda)
     }
 }
 
@@ -446,21 +433,14 @@ internal fun PreguntaleAMoviSection(
     val cargando = data.accounts == null && data.summary == null && LocalCargandoElInicio.current
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-        MinSectionHeader(title = section.title ?: "Pregúntale a Movi")
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(
-                start = Movi.espacios.amplio,
-                end = Movi.espacios.amplio,
-                top = Movi.espacios.minimo,
-                bottom = Movi.espacios.amplio,
-            ),
-        ) {
+        Seccion(titulo = section.title ?: "Pregúntale a Movi")
+        // Vuelta de diseño 19: una `Superficie` de lista con una `Fila` por pregunta (el ícono de
+        // Movi AI en su círculo, la flecha al final) y el `Separador` del sistema entre ellas.
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             if (cargando) {
                 repeat(CUANTAS_PREGUNTAS_SUGERIDAS) { i ->
                     FilaDePreguntaEsqueleto()
-                    if (i < CUANTAS_PREGUNTAS_SUGERIDAS - 1) Hairline()
+                    if (i < CUANTAS_PREGUNTAS_SUGERIDAS - 1) Separador()
                 }
             } else {
                 preguntas.forEachIndexed { i, pregunta ->
@@ -471,12 +451,21 @@ internal fun PreguntaleAMoviSection(
                     FilaDePregunta(conCifrasOcultas(pregunta.corta), completa = conCifrasOcultas(pregunta.texto)) {
                         onNavigate(Screen.AIChat(preguntaInicial = pregunta.texto, sugerida = pregunta.sugerida?.id))
                     }
-                    if (i < preguntas.lastIndex) Hairline()
+                    if (i < preguntas.lastIndex) Separador()
                 }
             }
-            Spacer(Modifier.height(Movi.espacios.corto))
-            // El campo se ve igual cargando o no: se puede preguntar sin datos.
-            CampoParaPreguntar { onNavigate(Screen.AIChat()) }
+            // El campo se ve igual cargando o no: se puede preguntar sin datos. Con el margen de la
+            // fila a los lados y el relleno de la superficie abajo.
+            Box(
+                modifier = Modifier.padding(
+                    start = Medida.margenDePantalla,
+                    end = Medida.margenDePantalla,
+                    top = Espacio.xs,
+                    bottom = Medida.rellenoDeSuperficie - Espacio.xxs,
+                ),
+            ) {
+                CampoParaPreguntar { onNavigate(Screen.AIChat()) }
+            }
         }
     }
 }
@@ -488,48 +477,28 @@ internal fun PreguntaleAMoviSection(
  */
 const val TAG_FILA_ESQUELETO_PREGUNTA: String = "fila-esqueleto-pregunta"
 
-/** El esqueleto de [FilaDePregunta]: el mismo ícono, un renglón en vez del texto de la pregunta. */
+/** El esqueleto de [FilaDePregunta]: la `Fila` del sistema sin el texto, del mismo alto. */
 @Composable
 private fun FilaDePreguntaEsqueleto() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = Movi.espacios.medio)
-            .testTag(TAG_FILA_ESQUELETO_PREGUNTA),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-    ) {
-        BloqueEsqueleto(alto = Icono.s, ancho = Icono.s)
-        LineaEsqueleto(fraccionDelAncho = 0.75f, modifier = Modifier.weight(1f))
+    Box(modifier = Modifier.testTag(TAG_FILA_ESQUELETO_PREGUNTA)) {
+        EsqueletoDeFila(conSubtitulo = false, conFinal = false)
     }
 }
 
+/**
+ * Una pregunta para tocar: la `Fila` del sistema. [pregunta] es la versión corta que se ve;
+ * [completa], la que oye el lector de pantalla (y la que se manda).
+ */
 @Composable
 private fun FilaDePregunta(pregunta: String, completa: String = pregunta, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(role = Role.Button, onClickLabel = "Preguntarle a Movi", onClick = onClick)
-            .padding(vertical = Movi.espacios.medio),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-    ) {
-        Icon(
-            Icons.Rounded.AutoAwesome,
-            contentDescription = null,
-            tint = Movi.colores.marca,
-            modifier = Modifier.size(Icono.s),
-        )
-        Text(
-            text = pregunta,
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.texto,
-            modifier = Modifier
-                .weight(1f)
-                .then(if (completa != pregunta) Modifier.semantics { contentDescription = completa } else Modifier),
-        )
-        ChevronRight()
-    }
+    Fila(
+        titulo = pregunta,
+        modifier = if (completa != pregunta) Modifier.semantics { contentDescription = completa } else Modifier,
+        inicio = { IconoEnCirculo(Icons.Rounded.AutoAwesome) },
+        final = { Chevron() },
+        onClick = onClick,
+        onClickLabel = "Preguntarle a Movi",
+    )
 }
 
 @Composable
@@ -588,70 +557,70 @@ internal fun PatrimonioSection(
     val cuentas = cuentasDelHero(data.accounts, data.apartados.orEmpty()).orEmpty()
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-        MinSectionHeader(title = section.title ?: "Tu patrimonio")
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(Movi.espacios.margen),
-        ) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Patrimonio neto",
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.textoMedio,
-                    modifier = Modifier.weight(1f),
+        Seccion(titulo = section.title ?: "Tu patrimonio")
+        // Vuelta de diseño 19: arriba el neto y la barra con `CifraConRotulo` (las cifras enteras,
+        // como en el resto de la app: «$1,5M» al lado del héroe entero se leía como otro número);
+        // abajo los tramos, una `Fila` cada uno, en la misma superficie de lista.
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            Column(
+                modifier = Modifier.padding(
+                    horizontal = Medida.rellenoDeSuperficie,
+                    vertical = Medida.rellenoDeSuperficie - Espacio.xxs,
+                ),
+            ) {
+                // El neto en el color del texto, nunca en rojo: es estructura de largo plazo.
+                CifraConRotulo("Patrimonio neto", patrimonio.neto, variante = VarianteDeCifra.Grande)
+                Spacer(Modifier.height(Espacio.s))
+                BarraDeDosTramos(
+                    fraccionIzquierda = patrimonio.fraccionQueTienes,
+                    colorIzquierda = Movi.colores.entra,
+                    // Las deudas no son una alerta (Ola 2a): son estructura de largo plazo, en neutro.
+                    colorDerecha = Movi.colores.neutro,
+                    entrada = entrada,
                 )
-                Cifra(formatMoneyCompact(patrimonio.neto), Movi.textos.titulo, color = Movi.colores.texto)
+                Spacer(Modifier.height(Espacio.xs))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    CifraConRotulo("Tienes", patrimonio.tienes, Modifier.weight(1f))
+                    Spacer(Modifier.width(Espacio.xs))
+                    CifraConRotulo("Debes", patrimonio.debes, alFinal = true)
+                }
             }
-            Spacer(Modifier.height(Movi.espacios.medio))
-            BarraDeDosTramos(
-                fraccionIzquierda = patrimonio.fraccionQueTienes,
-                colorIzquierda = Movi.colores.entra,
-                // Las deudas no son una alerta (Ola 2a): son estructura de largo plazo, en neutro.
-                colorDerecha = Movi.colores.neutro,
-                entrada = entrada,
-            )
-            Spacer(Modifier.height(Movi.espacios.corto))
-            Row(modifier = Modifier.fillMaxWidth()) {
-                ParDeCifra("Tienes", formatMoneyCompact(patrimonio.tienes), Movi.colores.entra, Modifier.weight(1f))
-                ParDeCifra("Debes", formatMoneyCompact(patrimonio.debes), Movi.colores.texto, alFinal = true)
-            }
-            Spacer(Modifier.height(Movi.espacios.medio))
-            Hairline()
-            Spacer(Modifier.height(Movi.espacios.minimo))
-            patrimonio.tramos.forEach { tramo ->
+            Separador(SangriaDeSeparador.Ninguna)
+            patrimonio.tramos.forEachIndexed { i, tramo ->
                 FilaDeTramo(tramo) { onNavigate(destinoDelTramo(tramo)) }
                 if (tramo.nombre == "Tu plata" && cuentas.size > 1) {
-                    cuentas.forEach { cuenta ->
-                        FilaDeCuentaDelHero(
-                            cuenta,
-                            modifier = Modifier.padding(start = Movi.espacios.margen, bottom = Movi.espacios.minimo),
-                        )
+                    BajoLaFila {
+                        cuentas.forEach { cuenta -> FilaDeCuentaDelHero(cuenta) }
                     }
                 }
+                if (i < patrimonio.tramos.lastIndex) Separador()
             }
         }
     }
 }
 
+/**
+ * Un tramo del patrimonio: la `Fila` del sistema, con el ícono de lo que es en su círculo —verde lo
+ * que tienes, neutro lo que debes, como los dos lados de la barra— y la cifra entera al final.
+ */
 @Composable
 private fun FilaDeTramo(tramo: TramoDelPatrimonio, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(vertical = Movi.espacios.corto),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-    ) {
-        StatusDot(color = if (tramo.esDeuda) Movi.colores.neutro else Movi.colores.entra, size = 7.dp)
-        Text(
-            text = tramo.nombre,
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.texto,
-            modifier = Modifier.weight(1f),
-        )
-        Cifra(formatMoneyCompact(tramo.monto), Movi.textos.monto, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
-        ChevronRight()
-    }
+    Fila(
+        titulo = tramo.nombre,
+        inicio = {
+            IconoEnCirculo(iconoDelTramo(tramo), tono = if (tramo.esDeuda) TonoDeIcono.Neutro else TonoDeIcono.Exito)
+        },
+        final = { Cifra(tramo.monto) },
+        onClick = onClick,
+    )
+}
+
+/** El ícono de un tramo, por lo que es. */
+private fun iconoDelTramo(tramo: TramoDelPatrimonio): ImageVector = when {
+    tramo.esDeuda -> Icons.Rounded.CreditCard
+    tramo.nombre == "Tu plata" -> Icons.Rounded.AccountBalanceWallet
+    tramo.nombre.startsWith("Apartado") -> Icons.Rounded.Savings
+    tramo.nombre.startsWith("Uso condicionado") -> Icons.Rounded.Lock
+    tramo.nombre == "Bienes" -> Icons.Rounded.Home
+    else -> Icons.Rounded.AccountBalance
 }

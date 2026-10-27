@@ -16,6 +16,7 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.TextosDeMovi
 import com.jvillada.movi.ui.components.LocalSaldosOcultos
 import com.jvillada.movi.ui.components.PLATA_OCULTA
+import com.jvillada.movi.ui.components.formatMoneyCompactSinOcultar
 import com.jvillada.movi.ui.components.signedMoneySinOcultar
 import kotlin.math.abs
 
@@ -61,6 +62,18 @@ enum class TonoDeCifra {
 }
 
 /**
+ * **Cómo se escribe una cifra** (vuelta de diseño 19).
+ *
+ * - [Entera]: «$15.600.000». **Siempre**, salvo la excepción de abajo: una fila, una tarjeta, un
+ *   resumen dicen la cifra completa.
+ * - [Compacta]: «$15,6M» de un millón para arriba, los pesos por debajo («$250.000»). **Solo en una
+ *   columna de tres** —el Disponible del período, las cifras de Tus períodos—: un tercio de tarjeta a
+ *   360 dp deja ~90 dp, y Martian Mono pide ~9,5 dp por carácter con la letra de la app, así que
+ *   «$15.600.000» no entra. Solo pesos: en otra moneda va [Entera].
+ */
+enum class FormaDeCifra { Entera, Compacta }
+
+/**
  * **La variante de una [Cifra], en su semántica** (vuelta de diseño 14). La regla «una sola
  * [VarianteDeCifra.Heroe] por pantalla» se vigila contando este dato en el árbol de semántica
  * (`UnaSolaCifraHeroePorPantallaTest`): no depende del texto, del tamaño de la letra ni de un tag por
@@ -103,11 +116,24 @@ fun colorDeLaCifra(tono: TonoDeCifra, colores: ColoresDeMovi): Color = when (ton
  * El texto de una cifra: `−$27.500`, `+$4.500.000`, `US$181`. Con [ocultos], [PLATA_OCULTA] y
  * nada más (sin signo: un «−» suelto ya diría que la cuenta va en rojo). Pura, para probarla.
  */
-fun textoDeLaCifra(monto: Long, moneda: String, tono: TonoDeCifra, ocultos: Boolean): String = when {
-    ocultos -> PLATA_OCULTA
-    tono == TonoDeCifra.Ingreso && monto > 0 -> "+" + signedMoneySinOcultar(monto, moneda)
-    tono == TonoDeCifra.EntreCuentas -> signedMoneySinOcultar(abs(monto), moneda)
-    else -> signedMoneySinOcultar(monto, moneda)
+fun textoDeLaCifra(
+    monto: Long,
+    moneda: String,
+    tono: TonoDeCifra,
+    ocultos: Boolean,
+    forma: FormaDeCifra = FormaDeCifra.Entera,
+): String {
+    if (ocultos) return PLATA_OCULTA
+    val escrita: (Long) -> String = if (forma == FormaDeCifra.Compacta && moneda == "COP") {
+        ::formatMoneyCompactSinOcultar
+    } else {
+        { signedMoneySinOcultar(it, moneda) }
+    }
+    return when {
+        tono == TonoDeCifra.Ingreso && monto > 0 -> "+" + escrita(monto)
+        tono == TonoDeCifra.EntreCuentas -> escrita(abs(monto))
+        else -> escrita(monto)
+    }
 }
 
 /**
@@ -124,6 +150,7 @@ fun textoDeLaCifra(monto: Long, moneda: String, tono: TonoDeCifra, ocultos: Bool
  * Cifra(tuPlata, VarianteDeCifra.Heroe)                    // la cifra de la pantalla
  * Cifra(181, moneda = "USD", variante = VarianteDeCifra.Chica)
  * Cifra(500_000, tono = TonoDeCifra.EntreCuentas)          // $500.000, en el azul de un traspaso
+ * Cifra(15_600_000, forma = FormaDeCifra.Compacta)         // $15,6M, solo en una columna de tres
  * ```
  */
 @Composable
@@ -133,8 +160,9 @@ fun Cifra(
     modifier: Modifier = Modifier,
     tono: TonoDeCifra = TonoDeCifra.Neutro,
     moneda: String = "COP",
+    forma: FormaDeCifra = FormaDeCifra.Entera,
 ) {
-    val texto = textoDeLaCifra(monto, moneda, tono, LocalSaldosOcultos.current)
+    val texto = textoDeLaCifra(monto, moneda, tono, LocalSaldosOcultos.current, forma)
     val estilo = estiloDeLaCifra(variante, Movi.textos).copy(color = colorDeLaCifra(tono, Movi.colores))
     val conTag = modifier.testTag(TAG_CIFRA).semantics {
         varianteDeCifra = variante

@@ -328,7 +328,8 @@ class InicioDeUnVistazoEnPantallaTest {
         montar(definicion = inicioConPreferencias(defaultDashboardDefinition(), PreferenciasDelInicio(visibles = listOf("PATRIMONIO"))))
         composeRule.onNodeWithText("Tienes", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Debes", useUnmergedTree = true).assertIsDisplayed()
-        primero("\$2.191M").assertIsDisplayed()
+        // Vuelta de diseño 19: las cifras de «Tu patrimonio» van enteras, como el héroe.
+        primero("\$2.191.000.000").assertIsDisplayed()
         composeRule.onNodeWithText("Deudas", useUnmergedTree = true).performClick()
         assertEquals(Screen.Credits, navegoA)
     }

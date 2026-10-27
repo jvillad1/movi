@@ -149,8 +149,14 @@ class PresupuestosConJerarquiaTest {
         montar(ConPresupuestos(), esperar = "Restaurantes y domicilios")
         val tarjeta = nodos(TAG_TARJETA_DEL_GASTO_DEL_PERIODO).single()
         val cifras = (listOf(tarjeta) + descendientes(tarjeta)).filter { it.config.getOrNull(SemanticsProperties.TestTag) == TAG_CIFRA }
-        assertEquals(listOf(VarianteDeCifra.Grande), cifras.map { it.config[VarianteDeCifraKey] }, "la cifra de «Gastado en …»")
-        assertEquals("\$213.900", texto(cifras.single()))
+        // La gastada en `Grande` y, debajo, el tope («de $109.300») en la de una fila (vuelta de diseño 19).
+        assertEquals(
+            listOf(VarianteDeCifra.Grande, VarianteDeCifra.Fila),
+            cifras.map { it.config[VarianteDeCifraKey] },
+            "la cifra de «Gastado en …» y su tope",
+        )
+        assertEquals("\$213.900", texto(cifras.first()))
+        assertEquals("\$109.300", texto(cifras.last()))
     }
 
     @Test
