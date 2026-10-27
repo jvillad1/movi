@@ -3,7 +3,6 @@ package com.jvillada.movi.ui.components.ds
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,7 +23,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
@@ -93,6 +99,48 @@ internal fun AccionDelEncabezado(accion: AccionDeEncabezado, modifier: Modifier 
 }
 
 /**
+ * **La [AccionDeEncabezado] cuando el título no deja lugar para su texto** (vuelta de diseño 8): solo
+ * el ícono, en la marca, en un área de [Medida.objetivoTactil]. El texto no se pierde: es lo que dice
+ * el lector de pantalla. Lleva el mismo tag que [AccionDelEncabezado].
+ */
+@Composable
+internal fun AccionDelEncabezadoSoloIcono(accion: AccionDeEncabezado, modifier: Modifier = Modifier) {
+    val color = if (accion.habilitado) Movi.colores.marca else Movi.colores.textoApagado
+    Box(
+        modifier = modifier
+            .size(Medida.objetivoTactil)
+            .clip(CircleShape)
+            .clickable(
+                enabled = accion.habilitado,
+                role = Role.Button,
+                onClickLabel = accion.texto,
+                onClick = accion.onClick,
+            )
+            .testTag(TAG_ACCION_DEL_ENCABEZADO),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(accion.icono, contentDescription = accion.texto, tint = color, modifier = Modifier.size(Icono.l))
+    }
+}
+
+/**
+ * **Cuánto mide la [AccionDelEncabezado] con su texto**, sin componerla: el relleno de un [Boton]
+ * [TamanoDeBoton.S] a los dos lados, el ícono, el espacio hasta el texto y el texto en la letra del
+ * botón. [Encabezado] decide con esto si la acción va con texto o solo con el ícono; componer las dos
+ * formas para medirlas dejaría la que no se usa en el árbol del lector de pantalla.
+ * `LaAccionDelEncabezadoCedeAlTituloTest` vigila que coincida con lo que mide el botón de verdad.
+ */
+internal fun anchoDeLaAccionConTexto(medidor: TextMeasurer, texto: String, estilo: TextStyle, densidad: Density): Int =
+    with(densidad) {
+        val anchoDelTexto = medidor.measure(texto, estilo, maxLines = 1, softWrap = false).size.width
+        (Espacio.s * 2 + Icono.m + Espacio.xs).roundToPx() + anchoDelTexto
+    }
+
+/** ¿Título y acción con texto caben en [disponible]? Pura: la regla de quién cede (vuelta de diseño 8). */
+fun laAccionVaConTexto(anchoDelTitulo: Int, anchoDeLaAccion: Int, separacion: Int, disponible: Int): Boolean =
+    anchoDelTitulo + separacion + anchoDeLaAccion <= disponible
+
+/**
  * **El encabezado de una pantalla. El mismo alto y los mismos márgenes en todas.**
  *
  * - Alto [Medida.altoDeEncabezado] (56), como mínimo: con la letra del sistema agrandada crece en
@@ -100,10 +148,13 @@ internal fun AccionDelEncabezado(accion: AccionDeEncabezado, modifier: Modifier 
  * - Margen [Medida.margenDePantalla] a los dos lados. Con [onVolver], la flecha va en un área de
  *   toque de 48 y el margen se corre lo justo para que **el dibujo** de la flecha quede en el
  *   margen, alineado con todo lo de abajo.
- * - El título en `titular`, un renglón. El subtítulo opcional, en `apoyo`.
+ * - El título en `titular`. **Nunca se corta** (vuelta de diseño 8: «Personas y comerc…»): si no
+ *   cabe al lado de la acción con texto, la acción pasa a solo ícono ([AccionDelEncabezadoSoloIcono],
+ *   con su texto para el lector de pantalla y el mismo tag); si ni así cabe, baja a dos renglones.
+ *   El subtítulo opcional, en `apoyo`, un renglón.
  * - [accion] a la derecha, al final: **la** acción principal, siempre con la misma forma
- *   ([AccionDelEncabezado]: texto con ícono). Una pantalla con dos o más acciones pone las demás en
- *   [acciones], como [BotonDeIcono] con su descripción.
+ *   ([AccionDelEncabezado]: texto con ícono, o solo el ícono cuando el título lo pide). Una pantalla
+ *   con dos o más acciones pone las demás en [acciones], como [BotonDeIcono] con su descripción.
  * - [acciones] antes de [accion]: [BotonDeIcono]s, una [Pildora] («Beta») o «Actualizando…». Nunca
  *   un [Boton] con texto: para eso está [accion].
  * - Sin línea debajo: superficies por capas, sin bordes duros (camino 1).
@@ -149,25 +200,121 @@ fun Encabezado(
             onVolver != null -> BotonDeIcono(Icons.AutoMirrored.Rounded.ArrowBack, ROTULO_VOLVER, onVolver)
             inicio != null -> inicio()
         }
-        Column(modifier = Modifier.weight(1f).semantics { heading() }) {
+        TituloYAcciones(
+            titulo = titulo,
+            subtitulo = subtitulo,
+            acciones = acciones,
+            accion = accion,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** Las piezas de [TituloYAcciones], por nombre: cada una se compone una sola vez por medida. */
+private enum class PiezaDelEncabezado { Titulo, Subtitulo, Acciones, AccionConTexto, AccionSoloIcono }
+
+/**
+ * **El título y lo que va a su derecha, con el título primero.** Se mide así:
+ * 1. [acciones] (íconos, una píldora): ocupan lo suyo, siempre.
+ * 2. La [accion], con texto si el título entero cabe al lado ([laAccionVaConTexto]); si no, solo el
+ *    ícono. Su ancho con texto se calcula sin componerla ([anchoDeLaAccionConTexto]).
+ * 3. El título con lo que queda, en hasta dos renglones; el subtítulo, en uno.
+ */
+@Composable
+private fun TituloYAcciones(
+    titulo: String,
+    subtitulo: String?,
+    acciones: (@Composable RowScope.() -> Unit)?,
+    accion: AccionDeEncabezado?,
+    modifier: Modifier = Modifier,
+) {
+    val medidor = rememberTextMeasurer()
+    val estiloDelBoton = Movi.textos.cuerpo.copy(fontWeight = FontWeight.SemiBold)
+    val estiloDelTitulo = Movi.textos.titular
+    val colorDelTitulo = Movi.colores.texto
+    val estiloDelSubtitulo = Movi.textos.apoyo
+    val colorDelSubtitulo = Movi.colores.textoMedio
+    SubcomposeLayout(modifier) { constraints ->
+        val separacion = Espacio.s.roundToPx()
+        val disponible = constraints.maxWidth
+        val libre = constraints.copy(minWidth = 0, minHeight = 0)
+
+        val accionesMedidas = acciones?.let { contenido ->
+            subcompose(PiezaDelEncabezado.Acciones) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = contenido,
+                )
+            }.map { it.measure(libre) }
+        }.orEmpty()
+        val anchoDeAcciones = accionesMedidas.sumOf { it.width } +
+            if (accionesMedidas.isEmpty()) 0 else separacion
+
+        val tituloMedible = subcompose(PiezaDelEncabezado.Titulo) {
             Text(
                 text = titulo,
-                style = Movi.textos.titular,
-                color = Movi.colores.texto,
-                maxLines = 1,
+                style = estiloDelTitulo,
+                color = colorDelTitulo,
+                maxLines = RENGLONES_DEL_TITULO_DEL_ENCABEZADO,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
             )
-            if (subtitulo != null) {
+        }.single()
+        val anchoDelTitulo = tituloMedible.maxIntrinsicWidth(constraints.maxHeight)
+
+        val accionMedida = accion?.let { a ->
+            val conTexto = laAccionVaConTexto(
+                anchoDelTitulo = anchoDelTitulo,
+                anchoDeLaAccion = anchoDeLaAccionConTexto(medidor, a.texto, estiloDelBoton, this),
+                separacion = separacion,
+                disponible = disponible - anchoDeAcciones,
+            )
+            val pieza = if (conTexto) PiezaDelEncabezado.AccionConTexto else PiezaDelEncabezado.AccionSoloIcono
+            subcompose(pieza) {
+                if (conTexto) AccionDelEncabezado(a) else AccionDelEncabezadoSoloIcono(a)
+            }.single().measure(libre)
+        }
+        val anchoDeLaAccion = accionMedida?.let { it.width + separacion } ?: 0
+
+        val anchoDelTexto = (disponible - anchoDeAcciones - anchoDeLaAccion).coerceAtLeast(0)
+        val restriccionDelTexto = Constraints(maxWidth = anchoDelTexto)
+        val tituloMedido = tituloMedible.measure(restriccionDelTexto)
+        val subtituloMedido = subtitulo?.let { sub ->
+            subcompose(PiezaDelEncabezado.Subtitulo) {
                 Text(
-                    text = subtitulo,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
+                    text = sub,
+                    style = estiloDelSubtitulo,
+                    color = colorDelSubtitulo,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }.single().measure(restriccionDelTexto)
+        }
+
+        val altoDelTexto = tituloMedido.height + (subtituloMedido?.height ?: 0)
+        val alto = maxOf(
+            altoDelTexto,
+            accionesMedidas.maxOfOrNull { it.height } ?: 0,
+            accionMedida?.height ?: 0,
+            constraints.minHeight,
+        )
+        layout(disponible, alto) {
+            val arribaDelTexto = (alto - altoDelTexto) / 2
+            tituloMedido.placeRelative(0, arribaDelTexto)
+            subtituloMedido?.placeRelative(0, arribaDelTexto + tituloMedido.height)
+            var x = anchoDelTexto
+            accionesMedidas.forEach { pieza ->
+                x += separacion
+                pieza.placeRelative(x, (alto - pieza.height) / 2)
+                x += pieza.width
+            }
+            accionMedida?.let { pieza ->
+                pieza.placeRelative(disponible - pieza.width, (alto - pieza.height) / 2)
             }
         }
-        if (acciones != null) acciones()
-        if (accion != null) AccionDelEncabezado(accion)
     }
 }
+
+/** El título de un encabezado baja a dos renglones antes de cortarse (vuelta de diseño 8). */
+const val RENGLONES_DEL_TITULO_DEL_ENCABEZADO: Int = 2
