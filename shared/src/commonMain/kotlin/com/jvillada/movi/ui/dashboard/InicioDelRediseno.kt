@@ -9,6 +9,9 @@ import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.tituloDelPeriodo
 import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.ANCHO_DE_LECTURA
+import com.jvillada.movi.ui.components.WindowWidthClass
+import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
 import com.jvillada.movi.ui.quickadd.pantallaDelAtajo
@@ -338,6 +341,35 @@ fun cuentasDelCarrusel(accounts: List<Account>?): List<CuentaDelCarrusel>? {
         porGrupo[AccountGroup.INVERSION].orEmpty().sortedByDescending { it.balance } +
         porGrupo[AccountGroup.DEUDA].orEmpty().sortedBy { it.balance })
         .map { cuentaDelCarrusel(it) }
+}
+
+/**
+ * **¿Carrusel o grilla?** (vuelta de diseño 9). Cuántas [com.jvillada.movi.ui.components.ds.TarjetaDeCuenta]
+ * van por renglón en «Tus cuentas», o **0 para el carrusel**.
+ *
+ * En el teléfono ([WindowWidthClass.Compact]) sigue el carrusel, con la siguiente asomando. Fuera del
+ * teléfono —el umbral de pantalla ancha de siempre, `claseDeAncho`— la columna del Inicio mide de 450
+ * a 720 dp, y en un carrusel la segunda tarjeta quedaba cortada a la derecha: ahí van en grilla, **2
+ * por renglón**, y **3** cuando la sección tiene el ancho entero de la columna de lectura
+ * ([ANCHO_DE_LECTURA], el Inicio en una columna). Ningún umbral nuevo: la clase de ancho y la columna
+ * de lectura son los de toda la app.
+ *
+ * Con una sola cuenta no hay grilla: la tarjeta va a todo el ancho, como siempre. Con menos cuentas
+ * que columnas, una columna por cuenta (dos tarjetas no dejan un hueco a la derecha).
+ *
+ * | Ventana | Clase     | Columna del Inicio | Tarjetas por renglón |
+ * |---------|-----------|--------------------|----------------------|
+ * | 390     | teléfono  | 390                | carrusel             |
+ * | 768     | mediana   | 688                | 2                    |
+ * | 999     | mediana   | 720 (lectura)      | 3                    |
+ * | 1024    | escritorio| 720 (lectura)      | 3                    |
+ * | 1280    | escritorio| 532 (dos columnas) | 2                    |
+ * | 1920    | escritorio| 640 (dos columnas) | 2                    |
+ */
+fun tarjetasPorRenglon(clase: WindowWidthClass, anchoDeLaSeccion: Dp, cuantas: Int): Int {
+    if (clase == WindowWidthClass.Compact || cuantas < 2) return 0
+    val columnas = if (anchoDeLaSeccion >= ANCHO_DE_LECTURA) 3 else 2
+    return minOf(columnas, cuantas)
 }
 
 private fun cuentaDelCarrusel(cuenta: Account): CuentaDelCarrusel {

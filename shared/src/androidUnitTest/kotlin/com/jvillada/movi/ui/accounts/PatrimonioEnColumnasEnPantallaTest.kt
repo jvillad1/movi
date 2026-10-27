@@ -108,15 +108,23 @@ class PatrimonioEnColumnasEnPantallaTest {
         assertEquals(resumen.top, cuentas.top, 0.5f)
         assertEquals(anchoDelPanel, resumen.width + cuentas.width, 0.5f, "las dos columnas llenan el panel")
         assertEquals(resumen.width, cuentas.width, 0.5f)
-        // La tarjeta del patrimonio, Deudas y el cuadre en el resumen; Dinero, Inversión y Bienes al
-        // lado.
+        // Vuelta de diseño 9: a la izquierda la tarjeta del patrimonio y, debajo, Herramientas (el
+        // cuadre); a la derecha Dinero, Inversión, Bienes y Deudas, en el orden de una columna.
         val tarjeta = limites(TAG_TARJETA_DEL_PATRIMONIO)
         assertTrue(tarjeta.right <= resumen.right + 0.5f, "$tarjeta")
-        assertTrue(limites(TAG_TARJETA_DE_DEUDAS).right <= resumen.right + 0.5f)
-        assertTrue(limites(TAG_TARJETA_DE_CUADRE).right <= resumen.right + 0.5f)
+        val cuadre = limites(TAG_TARJETA_DE_CUADRE)
+        assertTrue(cuadre.right <= resumen.right + 0.5f, "Herramientas va en el resumen: $cuadre")
+        assertTrue(cuadre.top > tarjeta.bottom, "Herramientas va debajo del patrimonio")
+        val deudas = limites(TAG_TARJETA_DE_DEUDAS)
+        assertTrue(deudas.left >= cuentas.left - 0.5f, "Deudas va con las cuentas: $deudas / $cuentas")
         listOf("Nu", "Fondo de inversión", "Casa Almendros").forEach {
             assertTrue(limitesDelTexto(it).left >= cuentas.left, "$it va en la columna de las cuentas")
         }
+        // El orden de una columna: Dinero, Inversión, Bienes y, al final, Deudas.
+        val nuTop = limitesDelTexto("Nu").top
+        val fondoTop = limitesDelTexto("Fondo de inversión").top
+        val casaTop = limitesDelTexto("Casa Almendros").top
+        assertTrue(nuTop < fondoTop && fondoTop < casaTop && casaTop < deudas.top, "$nuTop / $fondoTop / $casaTop / $deudas")
         // «Cuentas de otros» va justo debajo de las cuentas propias: en su columna, no en el resumen.
         // El grupo Dinero arranca arriba, a la altura de la tarjeta del patrimonio.
         assertEquals(tarjeta.top, composeRule.onAllNodesWithTag(TAG_GRUPO_DE_CUENTAS, useUnmergedTree = true)
@@ -222,6 +230,23 @@ class PatrimonioEnColumnasEnPantallaTest {
         assertEquals(tarjetaCargando.left, tarjetaCargada.left, 0.5f)
         assertEquals(tarjetaCargando.top, tarjetaCargada.top, 0.5f)
         assertEquals(tarjetaCargando.width, tarjetaCargada.width, 0.5f)
+    }
+
+    /**
+     * Vuelta de diseño 9: en una columna nada cambia de orden —la cifra, Dinero, Inversión, Bienes,
+     * Deudas y Herramientas—, el mismo que reparten las dos columnas.
+     */
+    @Test
+    @Config(qualifiers = "w768dp-h2400dp-mdpi")
+    fun `en una columna el orden es el de siempre`() {
+        montar()
+        esperar("Casa Almendros")
+        val tarjeta = limites(TAG_TARJETA_DEL_PATRIMONIO)
+        val nu = limitesDelTexto("Nu")
+        val casa = limitesDelTexto("Casa Almendros")
+        val deudas = limites(TAG_TARJETA_DE_DEUDAS)
+        val cuadre = limites(TAG_TARJETA_DE_CUADRE)
+        assertTrue(tarjeta.bottom < nu.top && nu.top < casa.top && casa.bottom < deudas.top && deudas.bottom < cuadre.top)
     }
 
     // ── Sin cuentas ────────────────────────────────────────────────────────────

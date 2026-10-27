@@ -279,11 +279,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     }
                 }
 
-                if (!conResumen) return
-
                 // ── «Deudas» (Ola C, tarea 4): lectura propia, así que aparece (o su esqueleto, o su
-                // error) sin importar en qué estado esté `cuentas` arriba.
-                item(key = "deudas") {
+                // error) sin importar en qué estado esté `cuentas` arriba. Vuelta de diseño 9: en dos
+                // columnas va con las cuentas, debajo de los bienes (el orden de una columna): lo que
+                // tienes y lo que debes, juntos; el resumen queda con la cifra y las herramientas.
+                if (conCuentas) item(key = "deudas") {
                     SeccionDeDeudas(
                         creditos = creditos,
                         tarjetas = tarjetasDeCredito,
@@ -295,7 +295,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
 
                 // ── Herramientas: el cuadre de saldos y la plata que se movió entre cuentas. Solo
                 // necesitan que `cuentas` haya contestado, vacía o no.
-                if (cuentas != null) item(key = "herramientas") {
+                if (conResumen && cuentas != null) item(key = "herramientas") {
                     val ahora = remember(cuentas) { Clock.System.now().toEpochMilliseconds() }
                     Herramientas(
                         atrasadas = textoDelAvisoDeCuadre(cuentasSinCuadrar(cuentas, ahora)),

@@ -202,6 +202,16 @@ fun analisisDelPeriodo(
 
 private fun enEpoch(fecha: LocalDate): Long = fecha.atStartOfDayIn(AppTimeZone.zone).toEpochMilliseconds()
 
+/**
+ * **Los movimientos que analiza «En qué se va»**: la historia de Movimientos (`/api/events/by-day`,
+ * sin anulados) más **tu parte de lo que pagaron otros** en un espacio (R3, `getTuParteDeOtros`,
+ * ver [tuParteComoEventos]): es gasto tuyo el día del gasto, como en «Salió» y en el widget del
+ * Inicio, aunque no esté en tus cuentas. Una sola función para «En qué se va» y el panel de
+ * Movimientos (vuelta de diseño 9), así las dos pantallas no pueden contar distinto.
+ */
+fun movimientosDelAnalisis(dias: List<EventDay>, tuParteDeOtros: List<FinancialEvent>): List<FinancialEvent> =
+    dias.flatMap { it.items } + tuParteDeOtros
+
 // ── La lista de abajo ────────────────────────────────────────────────────────
 
 /** Cómo se agrupa la lista: el selector Categoría · Comercio · Cuenta. */

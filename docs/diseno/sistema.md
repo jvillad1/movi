@@ -232,7 +232,10 @@ saldo en `Cifra.Grande`. El nombre va en hasta dos renglones (nunca «Bancolombi
 junto al rótulo del saldo. Alto mínimo `Medida.altoDeTarjetaDeCuenta` (crece con la letra agrandada),
 radio `Radio.xl`, sin borde. Sin marca,
 la capa 2 y el ícono del tipo. En un carrusel ocupa `FRACCION_DE_TARJETA_DE_CUENTA` del ancho, para que
-la siguiente asome.
+la siguiente asome. **Fuera del teléfono va en grilla** (vuelta de diseño 9, `tarjetasPorRenglon`): en
+el Inicio a 1280 la segunda tarjeta del carrusel quedaba cortada; con la clase de ancho mediana o de
+escritorio van 2 por renglón, 3 si la sección tiene la columna de lectura entera (720), con
+`Medida.dentroDeSeccion` entre ellas y las de un renglón del mismo alto.
 ```kotlin
 TarjetaDeCuenta(
     nombre = "Bancolombia", tipo = "Ahorros", rotuloDelSaldo = "Saldo", saldo = 13_845_800,
@@ -359,7 +362,7 @@ arriba:
 | héroe | `HERO_BALANCE` | `Cifra.Heroe` «Te quedan», el ojo, «para N días · $X por día» (lo que queda entre los días que faltan), el veredicto | Tus períodos |
 | acciones | `ACCIONES` | `CuadriculaDeAcciones` 4 × 2 | Agregar, papeles, Por revisar, Movi AI; «Repartir» abre la hoja «Pagó otro» del espacio (vuelta 7: elige el espacio si hay varios, lo crea si no hay) |
 | Movi propone hoy | `PROPUESTAS` | `TarjetaDePropuesta`, una por tipo, tope 4 | su acción; «Ver todo» → Por revisar |
-| tus cuentas | `CUENTAS` | `TarjetaDeCuenta` en carrusel | el detalle de la cuenta; «Ver todo» → Patrimonio |
+| tus cuentas | `CUENTAS` | `TarjetaDeCuenta` en carrusel (en grilla fuera del teléfono) | el detalle de la cuenta; «Ver todo» → Patrimonio |
 | widgets | `CHECKLIST_DEL_PERIODO`, `GASTO_POR_CATEGORIA` | `ParDeWidgets` | Plan, En qué se va |
 
 `DISPONIBLE_DEL_PERIODO` y `PATRIMONIO` ya no vienen por defecto (repetían Plan y Patrimonio): son
@@ -404,6 +407,14 @@ viejos; este cliente no los pinta.
   banco va «Se anota: …» o el detalle del server, y si el detalle está en blanco no va nada (un
   `Text("")` era un renglón vacío: ~30 px de hueco antes de los botones). Entre bloques, `Espacio.xs`
   de la tarjeta; la distancia del último texto a los botones es la misma con «Se anota» y sin él.
+
+- **El panel de Movimientos sin nada elegido resume el período** (vuelta de diseño 9,
+  `ResumenEnElPanel.kt`): en pantalla ancha, en vez de «Elige un movimiento» y ~800 px en blanco, lo
+  que entró, lo que salió y el neto (`Cifra.Grande`), y el gasto por categoría como `Fila` con la
+  diferencia contra el período pasado del widget «En qué se va» (`diferenciaDeLaCategoria`) y el
+  enlace «Ver en qué se va». Tocar una categoría filtra la lista (`FiltroDeMovimientos`, con su chip).
+  Ninguna cuenta nueva: `analisisDelPeriodo`/`filasDelAnalisis` y la regla del chip «Ingresos» sobre
+  la historia que la lista ya leyó. Al elegir un movimiento, su detalle como siempre.
 
 ## 12. Plan, Presupuestos, Tus períodos y Créditos (ola R4b)
 
@@ -459,6 +470,9 @@ pasaron al sistema. Lo que se decidió y vale para las que vengan:
 - **Grupos de cuentas**: `Seccion(titulo, conteo)` + `Superficie(relleno = Lista)` con una `Fila` por
   cuenta; el inicio es la marca del banco (`AvatarDeLaCuenta`), el final la `Cifra` en la moneda de la
   cuenta. Un grupo vacío no se pinta.
+- **Patrimonio en dos columnas** (vuelta de diseño 9): a la izquierda la cifra con su curva y debajo
+  Herramientas; a la derecha Dinero, Inversión, Bienes y Deudas, en el orden de una columna. Deudas
+  vivía en la izquierda y la derecha quedaba con «Dinero · 2»: dos columnas cojas.
 - **Una lista perezosa sobre una superficie** (Categorías, cientos de filas): cada fila es un tramo de
   la superficie —la primera redondea arriba, la última abajo, `Separador` entre ellas—, para no
   componer la lista entera dentro de una sola `Superficie`.

@@ -9,10 +9,14 @@ import com.jvillada.movi.ui.components.cabenDosColumnasIguales
 /**
  * # Patrimonio en dos columnas (Ola W3)
  *
- * En pantalla ancha, a la izquierda **el resumen** (la tarjeta del patrimonio neto con sus bienes y
- * sus deudas, y las puertas a Créditos, a Cuentas de otros, al cuadre y a los movimientos entre
- * cuentas); a la derecha **las cuentas** (Dinero, Inversión, Bienes). Las dos columnas miden lo
- * mismo.
+ * En pantalla ancha, a la izquierda **el resumen** (la tarjeta del patrimonio neto con su curva y su
+ * resta, y debajo Herramientas: el cuadre y los movimientos entre cuentas); a la derecha **lo que
+ * tienes y lo que debes**: Dinero, Inversión, Bienes y Deudas, en el orden de una sola columna. Las
+ * dos columnas miden lo mismo.
+ *
+ * Vuelta de diseño 9: Deudas pasó del resumen a la derecha. A la izquierda iban la cifra, Deudas y
+ * Herramientas, y a la derecha a veces solo «Dinero · 2»: la derecha quedaba corta y la izquierda
+ * larga. Así las dos quedan parejas, y Deudas queda al lado de lo que se tiene, como en una columna.
  *
  * ### La cuenta, desde la ventana (con el rail, SIEMPRE)
  *

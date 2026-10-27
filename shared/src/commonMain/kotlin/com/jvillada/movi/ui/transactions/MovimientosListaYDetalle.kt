@@ -201,7 +201,9 @@ internal fun ListaYPanelDeMovimientos(
 }
 
 /**
- * El panel sin nada elegido. Movimientos arranca así a propósito: elegir solo el más reciente
+ * El panel sin nada elegido **mientras la historia no se leyó** (vuelta de diseño 9: con la historia,
+ * el panel muestra el resumen del período, ver `ResumenDelPeriodoEnElPanel`). Movimientos arranca
+ * sin nada elegido a propósito: elegir solo el más reciente
  * dispararía una lectura de más (sus parecidos, su marca de recurrente) y daría la impresión de que
  * «ya se abrió algo» que nadie tocó.
  */
