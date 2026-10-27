@@ -17,7 +17,6 @@ import com.jvillada.movi.server.balance.cuentasConSaldo
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
-import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
@@ -38,9 +37,6 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
-import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.esperaEnPorConfirmar
-import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.server.ai.ContextoDelPeriodo
 import com.jvillada.movi.server.ai.DatosParaLosHechos
 import com.jvillada.movi.server.ai.lineaDelApartadoDeLaCuenta
@@ -644,39 +640,18 @@ internal suspend fun cargarDatosDelUsuario(uid: String): DatosDelUsuario {
     // finance-summary. Con corte 1 —el default— es el mes de calendario de siempre.
     val (monthStart, monthEnd) = currentPeriodWindow(ajustesDePeriodoDe(uid))
 
-    // Income and expense sums — filter ResultRows directly, same as finance-summary
+    // Ingresos y gastos del período: los de `/api/finance-summary` y del héroe de Hoy, con la MISMA
+    // función (`monthCashFlow` → `movimientosDeFlujo`). Sin «Por confirmar», sin los movimientos de
+    // cuentas de deuda (ver isCashFlow: un ajuste de deuda de $60M entraba rotulado como
+    // «Ingresos») y **solo tu parte** de un gasto compartido (R3): antes esta era una tercera copia
+    // de la regla que sumaba el monto entero, y el asistente decía otro «Gastos» que la pantalla.
     val (ingresos, egresos) = dbQuery {
         val voidedIds = VoidEvents.selectAll()
             .where { VoidEvents.userId eq uid }
             .map { it[VoidEvents.originalEventId] }
             .toSet()
-
-        val monthEvents = Events.selectAll().where {
-            (Events.userId eq uid) and
-            (Events.timestamp greaterEq monthStart) and
-            (Events.timestamp less monthEnd)
-        }.filterNot { it[Events.id] in voidedIds }
-            // Tampoco lo que espera en «Por confirmar»: el asistente dice los mismos Ingresos y
-            // Gastos que el Inicio.
-            .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
-
-        // Mismo filtro que /api/finance-summary: los movimientos de cuentas de deuda no son
-        // ingreso ni gasto del mes (ver isCashFlow). Sin esto, un ajuste de deuda de $60M
-        // entraba al contexto del asistente rotulado como "Ingresos" y razonaba sobre él.
-        val accountTypeById = accountTypesFor(uid)
-        val cashFlow = monthEvents.filter { row ->
-            val accountType = accountTypeById[row[Events.accountId]]
-            accountType == null ||
-                isCashFlow(accountType, TransactionType.valueOf(row[Events.type]), row[Events.category])
-        }
-
-        val inc = cashFlow
-            .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.currency] == "COP" }
-            .sumOf { it[Events.amount] }
-        val exp = cashFlow
-            .filter { it[Events.type] == TransactionType.EXPENSE.name && it[Events.currency] == "COP" }
-            .sumOf { it[Events.amount] }
-        inc to exp
+        val (inc, gastoPorCategoria) = monthCashFlow(uid, monthStart, monthEnd, voidedIds, accountTypesFor(uid))
+        inc to gastoPorCategoria.values.sum()
     }
 
     // Cuántos papeles tiene, nada más: los renglones se piden con `buscar_documentos`.
