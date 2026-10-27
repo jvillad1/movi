@@ -446,6 +446,27 @@ class DashboardRoutesTest {
         assertEquals(2_000_000L, body.long("monthIncome"))
     }
 
+    /**
+     * Vuelta de diseño 22: Hoy dice cuántos movimientos esperan en «Por confirmar» con la misma cuenta
+     * que el renglón «N por revisar» de Movimientos: un traspaso (sus dos patas) es uno, los anulados
+     * no cuentan, lo de otro mes sí (lo que falta confirmar falta igual), y lo de otro usuario no.
+     */
+    @Test
+    fun `cuenta los movimientos por confirmar como renglones, un traspaso es uno`() = testApplication {
+        wireApp()
+        event("p-1", savings, "EXPENSE", 80_000L, estado = "UNCONFIRMED")
+        event("p-viejo", savings, "EXPENSE", 15_000L, estado = "UNCONFIRMED", timestamp = lastMonthMillis())
+        event("p-sale", savings, "EXPENSE", 300_000L, estado = "UNCONFIRMED", traspaso = "t1")
+        event("p-entra", card, "INCOME", 300_000L, estado = "UNCONFIRMED", traspaso = "t1")
+        event("p-anulado", savings, "EXPENSE", 9_000L, estado = "UNCONFIRMED")
+        voidEvent("p-anulado")
+        event("ok", savings, "EXPENSE", 40_000L)
+        event("p-otro", "acc-b", "EXPENSE", 1_000L, estado = "UNCONFIRMED", uid = otherUserId)
+
+        assertEquals(3L, summary().long("movimientosPorConfirmar"))
+        assertEquals(1L, summary(otherUserId).long("movimientosPorConfirmar"))
+    }
+
     @Test
     fun `eventos anulados y de otros meses no cuentan`() = testApplication {
         wireApp()

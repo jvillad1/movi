@@ -35,6 +35,14 @@ data class DashboardSummary(
     /** Mensajes del banco en estado `pending` — lo que el inbox de SMS llama «por confirmar». */
     val pendingSms: Int = 0,
     /**
+     * **Los movimientos que entraron solos y esperan en «Por confirmar»**, contados como renglones de
+     * la bandeja (un traspaso es uno, ver [renglonesPorConfirmar]). Vuelta de diseño 22: con esto la
+     * insignia de «Avisos» y «Movi propone hoy» dicen el mismo número que «N por revisar» de
+     * Movimientos, que sí se baja la historia. Con default: un server viejo no lo manda (cero) y un
+     * APK viejo lo ignora.
+     */
+    val movimientosPorConfirmar: Int = 0,
+    /**
      * **Cuántos mensajes del banco han llegado alguna vez** (cualquier estado), y el `time` del
      * más reciente. Ver [CapturaDeSms]: durante varias entregas la captura de SMS no entregó ni
      * un mensaje y nadie lo supo, porque su único indicador vivía en la app de Android y el

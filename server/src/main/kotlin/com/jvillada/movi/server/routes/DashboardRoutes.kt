@@ -51,6 +51,9 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
 import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
+import com.jvillada.movi.shared.model.PataPorConfirmar
+import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.renglonesPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.isReservedCategory
 import io.ktor.http.HttpStatusCode
@@ -204,6 +207,9 @@ fun Route.dashboardRoutes() {
                 // así que solo se pide la bandeja entera cuando hay algo pendiente.
                 pendingSms = if (filasDeSms.none { (_, _, state) -> state == SMS_STATE_PENDING }) 0
                 else cuantosPagosPorRevisar(bandejaConLosPagos(uid, ahora)),
+                // Vuelta de diseño 22: los movimientos que esperan en «Por confirmar», contados como
+                // los cuenta Movimientos (un traspaso es un renglón), para que Hoy diga su número.
+                movimientosPorConfirmar = movimientosPorConfirmarDe(uid, voidedIds),
                 smsTotal = captura.total,
                 smsLastAt = captura.ultimo,
                 // Ola 2: los orígenes de captura que se callaron (lee las mismas filas otra vez, con
@@ -721,3 +727,24 @@ internal fun Transaction.cardPaymentCandidateCount(
         }
         .count { looksLikeCardPayment(it[Events.description], it[Events.category]) }
 }
+
+/**
+ * **Cuántos movimientos esperan en «Por confirmar»**, como renglones de la bandeja: las dos patas de
+ * un traspaso cuentan una (ver [renglonesPorConfirmar], la misma regla que la app). Sin los anulados,
+ * igual que `GET /api/events/by-day`, que es de donde Movimientos los cuenta. Solo lee tres columnas
+ * de las filas por confirmar: no se baja la historia.
+ */
+internal fun Transaction.movimientosPorConfirmarDe(uid: String, voidedIds: Set<String>): Int =
+    renglonesPorConfirmar(
+        Events.select(Events.id, Events.transferId, Events.type)
+            .where { (Events.userId eq uid) and (Events.reconciliationStatus eq ReconciliationStatus.UNCONFIRMED.name) }
+            .filterNot { it[Events.id] in voidedIds }
+            .map { fila ->
+                PataPorConfirmar(
+                    id = fila[Events.id],
+                    transferId = fila[Events.transferId],
+                    // Un tipo que no se entiende no completa un traspaso: cuenta solo, como en la lista.
+                    tipo = runCatching { TransactionType.valueOf(fila[Events.type]) }.getOrNull() ?: TransactionType.EXPENSE,
+                )
+            },
+    )
