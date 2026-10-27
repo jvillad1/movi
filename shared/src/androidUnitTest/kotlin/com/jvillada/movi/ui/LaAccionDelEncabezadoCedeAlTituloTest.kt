@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performSemanticsAction
@@ -196,6 +197,19 @@ class LaAccionDelEncabezadoCedeAlTituloTest {
         )
     }
 
+    /** El subtítulo del encabezado, entero: ningún renglón con «…» ni más ancho que su caja. */
+    private fun subtituloEntero(subtitulo: String) {
+        val nodo = composeRule.onAllNodes(
+            hasText(subtitulo) and hasAnyAncestor(hasTestTag(TAG_ENCABEZADO)),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes().single()
+        val medida = medidaDe(nodo)
+        (0 until medida.lineCount).forEach { renglon ->
+            assertFalse(medida.isLineEllipsized(renglon), "«$subtitulo» sale cortado a 360 dp con la letra a ×1,3")
+            assertTrue(medida.getLineRight(renglon) <= medida.size.width + 1f, "«$subtitulo» se sale de su caja")
+        }
+    }
+
     // ── Las pantallas con acción de encabezado ─────────────────────────────────────────
 
     @Test
@@ -238,6 +252,8 @@ class LaAccionDelEncabezadoCedeAlTituloTest {
         Repositories.sustitutoDePrueba = repo
         montar { AIChatScreen(onNavigate = {}) }
         revisar("Movi AI", "Nueva conversación")
+        // Vuelta de diseño 12: «Conoce tus fi…». El subtítulo también manda sobre la acción.
+        subtituloEntero("Conoce tus finanzas")
     }
 
     @Test
@@ -319,5 +335,34 @@ class LaAccionDelEncabezadoCedeAlTituloTest {
     fun `la regla de quien cede`() {
         assertTrue(laAccionVaConTexto(anchoDelTitulo = 100, anchoDeLaAccion = 80, separacion = 12, disponible = 192))
         assertFalse(laAccionVaConTexto(anchoDelTitulo = 100, anchoDeLaAccion = 80, separacion = 12, disponible = 191))
+        // Título > subtítulo > texto de la acción (vuelta de diseño 12).
+        assertTrue(laAccionVaConTexto(anchoDelTitulo = 60, anchoDeLaAccion = 80, separacion = 12, disponible = 192, anchoDelSubtitulo = 100))
+        assertFalse(laAccionVaConTexto(anchoDelTitulo = 60, anchoDeLaAccion = 80, separacion = 12, disponible = 192, anchoDelSubtitulo = 101))
+    }
+
+    @Test
+    fun `un subtitulo que no cabe al lado del texto de la accion la hace ceder`() {
+        montar {
+            Encabezado(
+                "Movi AI",
+                subtitulo = "Conoce tus finanzas",
+                onVolver = {},
+                accion = AccionDeEncabezado("Nueva conversación", Icons.Rounded.Add, onClick = {}),
+            )
+        }
+        assertEquals(listOf("Nueva conversación"), textosDentro(nodos(TAG_ACCION_DEL_ENCABEZADO).single()), "la acción, en su ícono")
+        subtituloEntero("Conoce tus finanzas")
+    }
+
+    @Test
+    fun `ni con el icono cabe, el subtitulo baja a dos renglones sin cortarse`() {
+        val largo = "Lo que Movi sabe de tus cuentas y tus deudas"
+        montar {
+            Encabezado("Movi AI", subtitulo = largo, onVolver = {}, accion = AccionDeEncabezado("Nueva", Icons.Rounded.Add, onClick = {}))
+        }
+        val nodo = composeRule.onAllNodes(hasText(largo) and hasAnyAncestor(hasTestTag(TAG_ENCABEZADO)), useUnmergedTree = true)
+            .fetchSemanticsNodes().single()
+        assertEquals(2, medidaDe(nodo).lineCount, "el subtítulo largo baja a un segundo renglón")
+        subtituloEntero(largo)
     }
 }
