@@ -177,11 +177,11 @@ private fun FilaDePropuesta(
             lineasDelSubtitulo = RENGLONES_DEL_SUBTITULO_DE_LA_PROPUESTA,
             inicio = { IconoDeCategoria(propuesta.category) },
             final = {
-                // El tope y su casilla van juntos, como un ícono y su rótulo (`Espacio.xxs`): son un
-                // solo control, «este tope, sí o no». Con `Espacio.s` entre los dos, a 360 dp
-                // «Gastaste $1.850.000» quedaba 6 dp corto y bajaba a un segundo renglón (medido en
+                // El tope y su casilla, a `Espacio.xs`: dos hermanos chicos de un solo control («este
+                // tope, sí o no»). Con `Espacio.s` entre los dos, a 360 dp «Gastaste $1.850.000»
+                // quedaba unos dp corto y bajaba a un segundo renglón (medido en
                 // `PresupuestosConJerarquiaTest`, vuelta de diseño 16).
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                     Cifra(propuesta.amount.roundToLong(), modifier = Modifier.testTag(TAG_TOPE_DE_LA_PROPUESTA))
                     Casilla(marcada = marcada)
                 }
