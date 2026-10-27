@@ -22,6 +22,7 @@ import com.jvillada.movi.shared.model.CapturaDeSms
 import com.jvillada.movi.shared.model.alertaDeCapturaEnInicio
 import com.jvillada.movi.shared.model.OrigenMudo
 import com.jvillada.movi.shared.model.textoDeOrigenMudo
+import com.jvillada.movi.shared.model.queNoLlega
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.EventDay
@@ -577,7 +578,17 @@ fun dueLabel(daysUntil: Int): String = when {
 
 // ── Alertas ────────────────────────────────────────────────────────────────────────
 
-data class DashboardAlert(val text: String, val target: Screen)
+/**
+ * Una alerta del Inicio. [tipo], [titulo] y [subtitulo] son para la campana (vuelta de diseño 8):
+ * el ícono y el tono, la frase corta y lo que la completa. [text] sigue siendo la frase entera.
+ */
+data class DashboardAlert(
+    val text: String,
+    val target: Screen,
+    val tipo: TipoDeNotificacion? = null,
+    val titulo: String = text,
+    val subtitulo: String? = null,
+)
 
 /**
  * Los presupuestos de verdad superados.
@@ -610,27 +621,60 @@ fun dashboardAlerts(
     /** Ola 2: los orígenes que se callaron. Llevan a «Captura del banco», donde se revisa. */
     bancosMudos: List<OrigenMudo> = emptyList(),
 ): List<DashboardAlert> = buildList {
-    bancosMudos.forEach { add(DashboardAlert(textoDeOrigenMudo(it), Screen.CapturaDelBanco)) }
+    bancosMudos.forEach {
+        add(
+            DashboardAlert(
+                textoDeOrigenMudo(it),
+                Screen.CapturaDelBanco,
+                TipoDeNotificacion.BancoMudo,
+                titulo = "Hace ${it.diasSinCaptura} días no llegan ${queNoLlega(it)}",
+                subtitulo = "Revisa la captura",
+            ),
+        )
+    }
     when (overBudget.size) {
         0 -> Unit
         // Ola C: Presupuestos es un segmento de Plan — la alerta abre Plan con ese segmento puesto.
-        1 -> add(DashboardAlert("Presupuesto de ${overBudget[0]} superado", Screen.Plan(SEGMENTO_PRESUPUESTOS)))
-        else -> add(DashboardAlert("${overBudget.size} presupuestos superados", Screen.Plan(SEGMENTO_PRESUPUESTOS)))
+        1 -> add(DashboardAlert("Presupuesto de ${overBudget[0]} superado", Screen.Plan(SEGMENTO_PRESUPUESTOS), TipoDeNotificacion.PresupuestoSuperado))
+        else -> add(DashboardAlert("${overBudget.size} presupuestos superados", Screen.Plan(SEGMENTO_PRESUPUESTOS), TipoDeNotificacion.PresupuestoSuperado))
     }
     // Ola C: las dos llevan a la misma bandeja, «Por revisar», que junta lo que entró solo. Antes
     // cada una abría un lugar distinto (Movimientos, Mensajes del banco) y ninguno tenía lo otro.
     if (cardCandidates > 0) {
-        add(DashboardAlert(plural(cardCandidates, "pago de tarjeta", "pagos de tarjeta") + " por confirmar", Screen.PorRevisar))
+        add(
+            DashboardAlert(
+                plural(cardCandidates, "pago de tarjeta", "pagos de tarjeta") + " por confirmar",
+                Screen.PorRevisar,
+                TipoDeNotificacion.PagoDeTarjetaPorConfirmar,
+                subtitulo = "En Por revisar",
+            ),
+        )
     }
     if (pendingSms > 0) {
-        add(DashboardAlert(plural(pendingSms, "mensaje del banco", "mensajes del banco") + " por confirmar", Screen.PorRevisar))
+        add(
+            DashboardAlert(
+                plural(pendingSms, "mensaje del banco", "mensajes del banco") + " por confirmar",
+                Screen.PorRevisar,
+                TipoDeNotificacion.MensajesDelBanco,
+                subtitulo = "En Por revisar",
+            ),
+        )
     }
     // Va última y nunca convive con la de arriba: si hay algo por confirmar, es que llegó algo.
     // El dueño pasó semanas anotando a mano creyendo que la captura corría, y no se enteró
     // porque el único indicador vivía en una pantalla a la que no tenía motivo para entrar. La
     // fila es el motivo. Lleva a «Captura del banco», donde se arregla y donde se silencia.
     captura?.let { c ->
-        alertaDeCapturaEnInicio(c, capturaSilenciada)?.let { add(DashboardAlert(it, Screen.CapturaDelBanco)) }
+        alertaDeCapturaEnInicio(c, capturaSilenciada)?.let {
+            add(
+                DashboardAlert(
+                    it,
+                    Screen.CapturaDelBanco,
+                    TipoDeNotificacion.CapturaSinMensajes,
+                    subtitulo = "Revisa la captura del banco",
+                ),
+            )
+        }
     }
 }
 
@@ -821,8 +865,75 @@ private fun plural(n: Int, singular: String, plural: String) = "$n ${if (n == 1)
 
 // ── F5: panel de notificaciones ────────────────────────────────────────────────────
 
-/** Una fila del panel de la campana: el texto y a dónde lleva tocarla. */
-data class NotificationRow(val text: String, val target: Screen)
+/**
+ * **De qué habla un aviso de la campana** (vuelta de diseño 8): decide su ícono y su tono, y en qué
+ * orden va. Los avisos son los mismos de siempre; esto solo dice cómo se ven.
+ */
+enum class TipoDeNotificacion {
+    /** Un pago que ya venció. */
+    PagoVencido,
+
+    /** Un pago que vence hoy o en los próximos días. */
+    PagoPorVencer,
+
+    /** Un banco que avisaba siempre y se calló. */
+    BancoMudo,
+
+    /** Uno o varios presupuestos superados. */
+    PresupuestoSuperado,
+
+    /** Pagos de tarjeta que Movi encontró y esperan que el dueño los confirme. */
+    PagoDeTarjetaPorConfirmar,
+
+    /** Mensajes del banco por confirmar en «Por revisar». */
+    MensajesDelBanco,
+
+    /** Nunca llegó un mensaje del banco. */
+    CapturaSinMensajes,
+}
+
+/**
+ * Una fila del panel de la campana: lo que dice, a dónde lleva tocarla y cómo se ve.
+ *
+ * @property titulo la frase, como se dice: «Internet venció ayer», «2 mensajes del banco por
+ *   confirmar». Ya no «Internet · Vencido ayer».
+ * @property subtitulo lo que el título no dice y ayuda a decidir; `null` si no aporta.
+ * @property monto la cifra del pago, si la tiene; va con la `Cifra` del sistema.
+ * @property urgencia menor = más urgente; la campana ordena por esto (ver [urgenciaDeLaNotificacion]).
+ */
+data class NotificationRow(
+    val titulo: String,
+    val target: Screen,
+    val tipo: TipoDeNotificacion,
+    val subtitulo: String? = null,
+    val monto: Long? = null,
+    val moneda: String = "COP",
+    val urgencia: Int = urgenciaDeLaNotificacion(tipo),
+)
+
+/**
+ * **Qué tan urgente es un aviso**, menor primero: lo vencido, lo que vence hoy, el banco que se
+ * calló (sin captura se pierde todo lo demás), el presupuesto pasado, lo que vence en unos días, lo
+ * que espera confirmación y, al final, que nunca llegó un mensaje (un estado, no un apuro).
+ */
+fun urgenciaDeLaNotificacion(tipo: TipoDeNotificacion, diasParaVencer: Int? = null): Int = when (tipo) {
+    TipoDeNotificacion.PagoVencido -> 0
+    TipoDeNotificacion.PagoPorVencer -> if (diasParaVencer != null && diasParaVencer <= 0) 1 else 4
+    TipoDeNotificacion.BancoMudo -> 2
+    TipoDeNotificacion.PresupuestoSuperado -> 3
+    TipoDeNotificacion.PagoDeTarjetaPorConfirmar -> 5
+    TipoDeNotificacion.MensajesDelBanco -> 5
+    TipoDeNotificacion.CapturaSinMensajes -> 6
+}
+
+/** «Internet venció ayer», «Carro vence hoy», «Colegio vence en 2 días»: el pago, en una frase. */
+fun tituloDelPagoQueVence(nombre: String, diasParaVencer: Int): String = when {
+    diasParaVencer < -1 -> "$nombre venció hace ${-diasParaVencer} días"
+    diasParaVencer == -1 -> "$nombre venció ayer"
+    diasParaVencer == 0 -> "$nombre vence hoy"
+    diasParaVencer == 1 -> "$nombre vence mañana"
+    else -> "$nombre vence en $diasParaVencer días"
+}
 
 /**
  * Todo lo que la campana muestra — una vista DERIVADA de los datos que el Inicio ya carga,
@@ -831,6 +942,10 @@ data class NotificationRow(val text: String, val target: Screen)
  * las mismas alertas que ya calcula [dashboardAlerts] — candidatos de pago de tarjeta, SMS
  * pendientes y presupuestos superados —, así el punto rojo y el panel nunca dicen algo que la
  * campana no pueda resolver.
+ *
+ * Vuelta de diseño 8: cada fila sabe de qué habla ([TipoDeNotificacion]) para llevar su ícono y su
+ * tono, dice su título en frase y su monto aparte, y lo urgente va primero ([NotificationRow.urgencia];
+ * a igual urgencia, el orden de siempre).
  */
 fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
     upcomingPaymentsWithin(data.upcoming.orEmpty()).forEach { p ->
@@ -844,13 +959,26 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
         } else {
             Screen.Plan(SEGMENTO_PAGOS)
         }
-        add(NotificationRow("${p.rule.name} · ${dueLabel(p.daysUntil)}", target))
+        val tipo = if (p.daysUntil < 0) TipoDeNotificacion.PagoVencido else TipoDeNotificacion.PagoPorVencer
+        add(
+            NotificationRow(
+                titulo = tituloDelPagoQueVence(p.rule.name, p.daysUntil),
+                target = target,
+                tipo = tipo,
+                monto = p.rule.amount.takeIf { it > 0 },
+                moneda = p.rule.currency,
+                urgencia = urgenciaDeLaNotificacion(tipo, p.daysUntil),
+            ),
+        )
     }
     dashboardAlerts(
         overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
         data.captura, data.capturaSilenciada, data.bancosMudos,
-    ).forEach { add(NotificationRow(it.text, it.target)) }
-}
+    ).forEach { alerta ->
+        val tipo = alerta.tipo ?: TipoDeNotificacion.MensajesDelBanco
+        add(NotificationRow(titulo = alerta.titulo, target = alerta.target, tipo = tipo, subtitulo = alerta.subtitulo))
+    }
+}.sortedBy { it.urgencia }
 
 // ── Secciones visibles ─────────────────────────────────────────────────────────────
 

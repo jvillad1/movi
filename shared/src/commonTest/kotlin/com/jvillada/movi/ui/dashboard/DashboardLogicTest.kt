@@ -888,16 +888,64 @@ class DashboardLogicTest {
             pendingSms = 2,
         )
         val rows = notificationRows(d)
+        // Vuelta de diseño 8: el título en frase y lo urgente primero (lo vencido, lo de hoy, el
+        // presupuesto pasado, lo de dentro de unos días y al final lo que espera confirmación).
         assertEquals(
             listOf(
-                "Cuota Carro · Vencido ayer" to Screen.Credits,       // synthetic de crédito -> Créditos
-                "Pago Visa · Vence hoy" to Screen.Credits,            // synthetic de tarjeta -> Créditos
-                "Colegio · Vence en 2 días" to Screen.Plan(SEGMENTO_PAGOS), // regla real -> Plan · Pagos del mes
+                "Cuota Carro venció ayer" to Screen.Credits,       // synthetic de crédito -> Créditos
+                "Pago Visa vence hoy" to Screen.Credits,            // synthetic de tarjeta -> Créditos
                 "Presupuesto de Mercado superado" to Screen.Plan(SEGMENTO_PRESUPUESTOS),
+                "Colegio vence en 2 días" to Screen.Plan(SEGMENTO_PAGOS), // regla real -> Plan · Pagos del mes
                 "1 pago de tarjeta por confirmar" to Screen.PorRevisar,
                 "2 mensajes del banco por confirmar" to Screen.PorRevisar,
             ),
-            rows.map { it.text to it.target },
+            rows.map { it.titulo to it.target },
+        )
+        assertEquals(
+            listOf(
+                TipoDeNotificacion.PagoVencido,
+                TipoDeNotificacion.PagoPorVencer,
+                TipoDeNotificacion.PresupuestoSuperado,
+                TipoDeNotificacion.PagoPorVencer,
+                TipoDeNotificacion.PagoDeTarjetaPorConfirmar,
+                TipoDeNotificacion.MensajesDelBanco,
+            ),
+            rows.map { it.tipo },
+        )
+        // El monto del pago va aparte, para la Cifra; las alertas no tienen monto.
+        assertEquals(listOf(800_000L, 500_000L, null, 700_000L, null, null), rows.map { it.monto })
+    }
+
+    @Test
+    fun `el pago que vence se dice en una frase`() {
+        assertEquals("Internet venció hace 3 días", tituloDelPagoQueVence("Internet", -3))
+        assertEquals("Internet venció ayer", tituloDelPagoQueVence("Internet", -1))
+        assertEquals("Internet vence hoy", tituloDelPagoQueVence("Internet", 0))
+        assertEquals("Internet vence mañana", tituloDelPagoQueVence("Internet", 1))
+        assertEquals("Internet vence en 5 días", tituloDelPagoQueVence("Internet", 5))
+    }
+
+    @Test
+    fun `la campana no cambia que avisos hay, solo como se dicen`() {
+        val d = DashboardData(
+            upcoming = listOf(upcoming("rr_1", "Internet", 90_000, daysUntil = -1)),
+            budgets = listOf(Budget("Mercado", 100_000), Budget("Ropa", 50_000)),
+            spentByCategory = mapOf("Mercado" to 150_000L, "Ropa" to 60_000L),
+            cardCandidates = 2,
+            pendingSms = 1,
+        )
+        val alertas = dashboardAlerts(
+            overBudgetCategories(d.budgets, d.spentByCategory), d.cardCandidates, d.pendingSms,
+        )
+        val rows = notificationRows(d)
+        // Un pago y las mismas alertas del Inicio, ni una más ni una menos.
+        assertEquals(1 + alertas.size, rows.size)
+        assertEquals(alertas.map { it.target }.toSet() + Screen.Plan(SEGMENTO_PAGOS), rows.map { it.target }.toSet())
+        assertEquals("Internet venció ayer", rows.first().titulo)
+        assertEquals(
+            rows.map { it.urgencia }.sorted(),
+            rows.map { it.urgencia },
+            "lo urgente va primero",
         )
     }
 }

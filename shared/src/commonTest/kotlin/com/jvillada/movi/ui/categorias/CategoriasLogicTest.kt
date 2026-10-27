@@ -371,16 +371,19 @@ class CategoriasLogicTest {
 
     @Test
     fun `la cifra del mes es null si no la uso este mes`() {
-        assertEquals(null, cifraDelMes(cat("Comida", movements = 12, total = 450_000)))
+        assertEquals(null, cifrasDelMes(cat("Comida", movements = 12, total = 450_000)))
     }
 
     @Test
-    fun `la cifra del mes separa gasto de ingreso, sin la oracion completa`() {
-        val cifra = cifraDelMes(cat("Otros", monthMovements = 2, monthTotal = 10_000, monthIncomeTotal = 5_000))!!
-        assertTrue(cifra.contains("10.000"), cifra)
-        assertTrue(cifra.contains("5.000"), cifra)
-        assertFalse(cifra.contains("Este mes"), cifra)
-        assertFalse(cifra.contains("movimiento"), cifra)
+    fun `la cifra del mes separa gasto de ingreso, cada uno para su Cifra`() {
+        assertEquals(
+            CifrasDelMes(gasto = 10_000, ingreso = 5_000),
+            cifrasDelMes(cat("Otros", monthMovements = 2, monthTotal = 10_000, monthIncomeTotal = 5_000)),
+        )
+        assertEquals(CifrasDelMes(gasto = 260_000, ingreso = null), cifrasDelMes(cat("Mercado", monthMovements = 3, monthTotal = 260_000)))
+        assertEquals(CifrasDelMes(gasto = null, ingreso = 850_000), cifrasDelMes(cat("Sueldo", monthMovements = 1, monthIncomeTotal = 850_000)))
+        // Movimientos del mes en otra moneda: nada en pesos que mostrar.
+        assertEquals(null, cifrasDelMes(cat("Viaje", monthMovements = 2)))
     }
 
     @Test

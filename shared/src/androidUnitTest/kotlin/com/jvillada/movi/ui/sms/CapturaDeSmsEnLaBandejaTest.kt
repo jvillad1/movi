@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.jvillada.movi.data.Repositories
@@ -15,6 +16,7 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.ds.TEXTO_QUE_ES_ESTO
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -84,6 +86,12 @@ class CapturaDeSmsEnLaBandejaTest {
         }
     }
 
+    /** Abre «¿Qué es esto?» de la primera tarjeta: lo largo se pliega, no se pierde (vuelta 8). */
+    private fun abrirLaAyudaDelUltimoMensaje() {
+        composeRule.onAllNodesWithText(TEXTO_QUE_ES_ESTO, useUnmergedTree = true)[0].performClick()
+        composeRule.waitForIdle()
+    }
+
     private fun sms(id: String, cuando: String, estado: String = SMS_STATE_PENDING) = SmsMessage(
         id = id, time = cuando, bank = "Bancolombia",
         text = "Compra aprobada \$28.500 en Uber BV.", state = estado, det = "Uber",
@@ -97,6 +105,12 @@ class CapturaDeSmsEnLaBandejaTest {
         montar()
 
         esperarTexto("Nunca ha llegado un mensaje")
+        // El detalle no está a la vista hasta que se pide: la tarjeta es una fila y una línea.
+        composeRule.onNodeWithText(
+            "Movi todavía no ha recibido ningún mensaje de tu banco",
+            substring = true, useUnmergedTree = true,
+        ).assertDoesNotExist()
+        abrirLaAyudaDelUltimoMensaje()
         composeRule.onNodeWithText(
             "Movi todavía no ha recibido ningún mensaje de tu banco",
             substring = true, useUnmergedTree = true,
@@ -112,7 +126,7 @@ class CapturaDeSmsEnLaBandejaTest {
         mensajes = listOf(sms("s1", "2026-08-01 10:00", SMS_STATE_CONFIRMED))
         montar()
 
-        esperarTexto("Último mensaje recibido")
+        esperarTexto("Último mensaje")
         composeRule.onNodeWithText("AUTO-LECTURA ACTIVA", useUnmergedTree = true).assertDoesNotExist()
     }
 
@@ -137,7 +151,7 @@ class CapturaDeSmsEnLaBandejaTest {
         // terminó de componer y el aviso, si fuera a aparecer, ya estaría.
         esperarTexto("Captura en este teléfono")
         composeRule.onNodeWithText("Nunca ha llegado un mensaje", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Último mensaje recibido", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag(TAG_ULTIMO_MENSAJE, useUnmergedTree = true).assertDoesNotExist()
     }
 
     // ── Cuando sí llegó algo ───────────────────────────────────────────────────
@@ -151,7 +165,10 @@ class CapturaDeSmsEnLaBandejaTest {
         )
         montar()
 
-        esperarTexto("Último mensaje recibido")
+        // La fila dice cuándo y cuántos; el detalle entero se abre con «¿Qué es esto?».
+        esperarTexto("Último mensaje · 3 de septiembre")
+        esperarTexto("3 mensajes de tu banco")
+        abrirLaAyudaDelUltimoMensaje()
         composeRule.onNodeWithText(
             "El último de los 3 mensajes de tu banco llegó el 3 de septiembre a las 7:15 a. m.",
             substring = true, useUnmergedTree = true,
