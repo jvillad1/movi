@@ -72,7 +72,7 @@ class LaCabezaDelAvisoTest {
             ParsedSms(12_300.0, "PANADERIA LA ESQ", TransactionType.EXPENSE, "Comida"),
             hoy,
         )
-        assertEquals("PANADERIA LA ESQ", cabeza.titulo)
+        assertEquals("Panaderia La Esq", cabeza.titulo, "el comercio no grita (vuelta de diseño 4)")
         assertNull(cabeza.marca)
         assertEquals("Comida", cabeza.categoria)
         assertEquals("SMS · 11:02 a. m.", cabeza.subtitulo, "el código del remitente no dice nada: «SMS»")
@@ -123,8 +123,26 @@ class LaCabezaDelAvisoTest {
             ParsedSms(12_300.0, "PANADERIA LA ESQUINA", TransactionType.EXPENSE, "Comida"),
             hoy,
         )
-        assertEquals("PANADERIA LA ESQUINA", cabeza.titulo)
+        assertEquals("Panaderia La Esquina", cabeza.titulo)
         assertEquals("Google Wallet · SMS · 11:02 a. m.", cabeza.subtitulo)
+    }
+
+    /** Vuelta de diseño 4: el título salía tal cual del SMS. La marca se sigue buscando en el crudo. */
+    @Test
+    fun `el comercio en mayusculas se muestra con su nombre`() {
+        val exito = cabezaDelAviso(
+            listOf(aviso("85540", "Bancolombia: Compraste \$84.900,00 en EXITO SUBA con tu T.Deb *1111.")),
+            ParsedSms(84_900.0, "EXITO SUBA", TransactionType.EXPENSE, "Mercado"),
+            hoy,
+        )
+        assertEquals("Éxito Suba", exito.titulo)
+        assertEquals("exito", exito.marca?.id)
+        val rappi = cabezaDelAviso(
+            listOf(deFalabella),
+            ParsedSms(42_500.0, "RAPPI", TransactionType.EXPENSE, "Restaurantes"),
+            hoy,
+        )
+        assertEquals("Rappi", rappi.titulo)
     }
 
     @Test

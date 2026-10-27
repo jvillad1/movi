@@ -31,6 +31,12 @@ import com.jvillada.movi.theme.Movi
 /** Cuántos renglones puede ocupar el título de una [Fila] antes de cortarse con «…». */
 const val LINEAS_DEL_TITULO_DE_FILA: Int = 2
 
+/**
+ * **El tono del subtítulo de una [Fila]**: [Normal] (texto medio) casi siempre; [Aviso] cuando el
+ * subtítulo pide algo al dueño («Faltan datos: tócala para completarlos», en Créditos).
+ */
+enum class TonoDeSubtitulo { Normal, Aviso }
+
 /** Tag estable de una [Fila]. */
 const val TAG_FILA: String = "ds-fila"
 
@@ -56,6 +62,8 @@ const val TAG_FILA: String = "ds-fila"
  * - [subtitulo]: un renglón, con «…» si no entra. Donde el subtítulo es la razón de la fila y no
  *   se puede acortar («Hace más de un mes que no cuadras Bancolombia Ahorros», en Herramientas),
  *   [lineasDelSubtitulo] = 2: la fila crece en vez de cortar la frase (vuelta de diseño 2).
+ * - [tonoDelSubtitulo]: [TonoDeSubtitulo.Aviso] pinta el subtítulo en el color de aviso, para el
+ *   que pide algo (vuelta de diseño 4). El color nunca es la única pista: la frase lo dice.
  * - El [final] se mide primero y entero: un monto nunca se recorta; lo que cede es el texto.
  * - [final]: un monto ([Cifra]), una [Pildora] o un [Chevron].
  *
@@ -79,6 +87,7 @@ fun Fila(
     onClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
     lineasDelSubtitulo: Int = 1,
+    tonoDelSubtitulo: TonoDeSubtitulo = TonoDeSubtitulo.Normal,
 ) {
     Row(
         modifier = modifier
@@ -105,7 +114,10 @@ fun Fila(
                 Text(
                     text = subtitulo,
                     style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
+                    color = when (tonoDelSubtitulo) {
+                        TonoDeSubtitulo.Normal -> Movi.colores.textoMedio
+                        TonoDeSubtitulo.Aviso -> Movi.colores.aviso
+                    },
                     maxLines = lineasDelSubtitulo,
                     overflow = TextOverflow.Ellipsis,
                 )

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.porrevisar
 
+import com.jvillada.movi.shared.model.nombreParaMostrar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -106,7 +107,7 @@ internal fun TarjetaDelLote(
                         if (i > 0) Separador(SangriaDeSeparador.Ninguna)
                         Column {
                             Text(
-                                anotacion.leido.merchant,
+                                nombreParaMostrar(anotacion.leido.merchant),
                                 style = Movi.textos.apoyo,
                                 fontWeight = FontWeight.Medium,
                                 color = Movi.colores.texto,

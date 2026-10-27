@@ -14,6 +14,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.fechaCortaDeSms
 import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.shared.model.marcaDelTexto
+import com.jvillada.movi.shared.model.nombreParaMostrar
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.components.CirculoDeMarca
 import com.jvillada.movi.ui.components.TamanoDeAvatar
@@ -90,7 +91,8 @@ private fun marcaDeComercioEn(avisos: List<SmsMessage>): Marca? =
  * [sinLeer] (el monto que se puede anotar igual).
  *
  * - El **título** es el comercio que leyó Movi; si no leyó ninguno, la marca de comercio que nombra
- *   el texto; y si tampoco, el banco ([bancoDelAviso]).
+ *   el texto; y si tampoco, el banco ([bancoDelAviso]). El comercio va como se lee
+ *   ([nombreParaMostrar]: «RAPPI» → «Rappi»), no como lo grita el banco.
  * - La **marca** sigue al título: la del comercio cuando el título es el comercio (o, si el comercio
  *   no tiene marca, el ícono de su [CabezaDelAviso.categoria]), la del banco cuando el título es el
  *   banco. Nunca la del comercio al lado del nombre del banco, que era lo que confundía.
@@ -138,7 +140,9 @@ fun cabezaDelAviso(
         )
     }
     return CabezaDelAviso(
-        titulo = comercio,
+        // «RAPPI» → «Rappi», «EXITO SUBA» → «Éxito Suba» (vuelta de diseño 4). Solo el título: la
+        // marca se busca en el texto crudo, y lo que se guarda sigue siendo lo que leyó Movi.
+        titulo = nombreParaMostrar(comercio),
         subtitulo = subtitulo,
         marca = marcaDelTexto(comercio) ?: enElTexto,
         categoria = (leido?.category ?: sinLeer?.categoria)?.takeIf { it.isNotBlank() },

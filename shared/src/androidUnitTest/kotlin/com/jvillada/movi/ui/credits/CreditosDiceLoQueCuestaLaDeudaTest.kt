@@ -121,6 +121,14 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
     }
 
     /**
+     * Vuelta de diseño 4: lo que la tarjeta de un préstamo decía —el interés de la cuota, el plazo,
+     * cómo va— vive en su detalle, que es lo que abre tocar la fila.
+     */
+    private fun montarElDetalle(credito: CreditSummary) {
+        composeRule.montarElDetalleDe(credito.account, RepositorioDeLaDeuda(creditos = listOf(credito)))
+    }
+
+    /**
      * Una fila del resumen: el **rótulo con su alcance y la cifra, en la misma fila**.
      *
      * Se afirma sobre las dos juntas (`hasAnySibling`) a propósito. Buscar la cifra sola dejaba la
@@ -142,7 +150,7 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
 
         // Arriba, sobre toda la cartera: sale de esta pantalla sabiendo que existe.
         composeRule.onNodeWithText("En 1 crédito la cuota, descontados los seguros, no alcanza para los intereses", substring = true).assertExists()
-        // Y en la tarjeta del crédito que lo causa, con la cifra en pesos.
+        // Y en la fila del crédito que lo causa, con la cifra en pesos.
         composeRule.onNodeWithText("tu deuda crece $21.894 cada mes", substring = true).assertExists()
     }
 
@@ -159,16 +167,28 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
             composeRule.onAllNodesWithText("no cubre los intereses", substring = true).fetchSemanticsNodes().size,
             "el préstamo de su mamá no es una amortización negativa: es el trato",
         )
-        composeRule.onNodeWithText("la deuda se queda donde está", substring = true).assertExists()
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("tu deuda crece", substring = true).fetchSemanticsNodes().size,
+            "la fila del préstamo de su mamá no lleva la alerta",
+        )
     }
 
-    /** La primera pregunta, en la tarjeta: cuánto de la cuota es interés. */
+    /** En su detalle dice lo que pasa, sin alarma. */
     @Test
-    fun `cada tarjeta dice cuanto de su cuota es interes`() {
-        montar(listOf(libreInversion))
+    fun `el detalle del credito mama dice que la deuda se queda donde esta`() {
+        montarElDetalle(mama)
 
-        composeRule.onNodeWithText("29,8 % de la cuota", substring = true).assertExists()
-        composeRule.onNodeWithText("$358.488 de interés", substring = true).assertExists()
+        composeRule.onNodeWithText("la deuda se queda donde está", substring = true, useUnmergedTree = true).assertExists()
+    }
+
+    /** La primera pregunta, en el detalle del préstamo: cuánto de la cuota es interés. */
+    @Test
+    fun `cada credito dice en su detalle cuanto de su cuota es interes`() {
+        montarElDetalle(libreInversion)
+
+        composeRule.onNodeWithText("29,8 % de la cuota", substring = true, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("$358.488 de interés", substring = true, useUnmergedTree = true).assertExists()
     }
 
     /**
@@ -184,18 +204,28 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
         composeRule.onNodeWithTag(TAG_BARRA_DE_PROGRESO, useUnmergedTree = true).assertExists()
     }
 
-    /** La tercera: cuándo se termina, y el supuesto dicho con todas las letras. */
+    /** La tercera: el supuesto de la proyección, dicho con todas las letras en el resumen. */
     @Test
-    fun `la pantalla dice cuando termina y con que supuesto`() {
+    fun `la pantalla dice con que supuesto proyecta`() {
         montar(listOf(libreInversion))
+
+        composeRule.onNodeWithText(SUPUESTO_DE_LA_PROYECCION, substring = true).assertExists()
+    }
+
+    /** Y cuándo se termina cada préstamo, en su detalle. */
+    @Test
+    fun `el detalle dice cuando termina`() {
+        montarElDetalle(libreInversion)
 
         // El mes de la última cuota se cuenta desde el mes en curso (corte 1: esta clase no manda
         // perfil), así que se calcula igual acá. Fijo en «junio de 2030» se rompió el 1 de octubre
         // de 2026: el número de cuotas (46) no depende de la fecha, el mes en que termina sí.
         val ultima = nombreDe(periodoDe(Clock.System.now().toEpochMilliseconds(), PeriodSettings()).mas(46 - 1))
-        composeRule.onNodeWithText("Te faltan 46 cuotas · la última en $ultima si la cuota y la tasa no cambian", substring = true)
-            .assertExists()
-        composeRule.onNodeWithText(SUPUESTO_DE_LA_PROYECCION, substring = true).assertExists()
+        composeRule.onNodeWithText(
+            "Te faltan 46 cuotas · la última en $ultima si la cuota y la tasa no cambian",
+            substring = true,
+            useUnmergedTree = true,
+        ).assertExists()
     }
 
     /**
@@ -205,10 +235,10 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
      */
     @Test
     fun `el plazo pactado se distingue de la proyeccion`() {
-        montar(listOf(libreInversion))
+        montarElDetalle(libreInversion)
 
-        composeRule.onNodeWithText("Plazo pactado 105 meses", substring = true).assertExists()
-        composeRule.onNodeWithText("Te faltan 46 cuotas", substring = true).assertExists()
+        composeRule.onNodeWithText("Plazo pactado 105 meses", substring = true, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Te faltan 46 cuotas", substring = true, useUnmergedTree = true).assertExists()
     }
 
     /**
@@ -314,10 +344,12 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
      * pasó, en pesos, en vez de «0% pagado».
      */
     @Test
-    fun `la tarjeta ya no dice cero por ciento pagado sobre una deuda que crecio`() {
+    fun `la fila ya no dice cero por ciento pagado sobre una deuda que crecio`() {
         montar(listOf(hipotecario))
 
-        composeRule.onNodeWithText("$4.183.376 más que al inicio", substring = true).assertExists()
+        // En la lista, la nota de la fila es la alerta (la deuda crece); el «más que al inicio» lo
+        // dice su detalle (la prueba de abajo).
+        composeRule.onNodeWithText("tu deuda crece", substring = true, useUnmergedTree = true).assertExists()
         // Y la barra **no se dibuja**. Se afirma sobre el dibujo y no sobre el dato: lo que
         // engañaba era el rectángulo vacío, no el `Float` que lo alimenta.
         assertEquals(
@@ -327,9 +359,19 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
         )
         assertEquals(
             0,
-            composeRule.onAllNodesWithText("0% pagado", substring = true).fetchSemanticsNodes().size,
-            "«0% pagado» sobre una deuda que creció se lee como «todavía no empezaste»",
+            composeRule.onAllNodesWithText("0 % pagado", substring = true).fetchSemanticsNodes().size +
+                composeRule.onAllNodesWithText("0% pagado", substring = true).fetchSemanticsNodes().size,
+            "«0 % pagado» sobre una deuda que creció se lee como «todavía no empezaste»",
         )
+    }
+
+    /** En el detalle, cuánto se pasó del capital, en pesos y sin barra. */
+    @Test
+    fun `el detalle de una deuda que crecio dice cuanto se paso`() {
+        montarElDetalle(hipotecario)
+
+        composeRule.onNodeWithText("$4.183.376 más que al inicio", substring = true, useUnmergedTree = true).assertExists()
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_BARRA_DE_PROGRESO, useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 }
 

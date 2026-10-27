@@ -78,20 +78,20 @@ class ElPeriodoDeCreditosEsElDelDuenoTest {
         Repositories.sustitutoDePrueba = null
     }
 
+    /**
+     * Vuelta de diseño 4: la fecha de la última cuota de un préstamo la dice su detalle (la lista
+     * de Créditos es de filas). Se cuenta igual: desde el período del dueño.
+     */
     private fun montar(cutoffDay: Int, iniciosPropios: Map<String, String>) {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
-            override suspend fun getCredits(): List<CreditSummary> = listOf(libreInversion)
-            override suspend fun getCards(): List<CardSummary> = emptyList()
-            override suspend fun getUserProfile(): UserProfile = UserProfile(
-                id = "u1",
-                email = "jvillad1@gmail.com",
-                name = "Juan",
-                avatarColor = "#FF0000",
-                periodCutoffDay = cutoffDay,
-                periodStarts = iniciosPropios,
-            )
-        }
-        composeRule.setContent { MoviTheme { CreditosScreen(onNavigate = {}) } }
+        val perfil = UserProfile(
+            id = "u1",
+            email = "jvillad1@gmail.com",
+            name = "Juan",
+            avatarColor = "#FF0000",
+            periodCutoffDay = cutoffDay,
+            periodStarts = iniciosPropios,
+        )
+        composeRule.montarElDetalleDe(libreInversion.account, RepositorioDeLaDeuda(creditos = listOf(libreInversion), perfil = perfil))
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("la última en", substring = true, useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()

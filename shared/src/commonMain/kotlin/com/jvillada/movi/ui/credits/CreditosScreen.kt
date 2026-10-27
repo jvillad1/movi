@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
@@ -66,6 +67,8 @@ import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDeBarra
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.components.ds.TonoDeSubtitulo
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.recurrentes.BajoLaFila
@@ -120,15 +123,8 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     var editingLoan by remember { mutableStateOf<CreditSummary?>(null) }
     var showCardSheet by remember { mutableStateOf(false) }
     var editingCard by remember { mutableStateOf<CardSummary?>(null) }
-    var adjusting by remember { mutableStateOf<CreditSummary?>(null) }
-    // El crédito cuyo abono extraordinario se está simulando. No escribe nada: contesta «¿y si le
-    // abono de más?». Ver [SimuladorDeAbonoSheet].
-    var simulando by remember { mutableStateOf<CreditSummary?>(null) }
-    // El crédito cuyo descuento de nómina se está registrando. No abre hoja: es un solo dato
-    // (la cuota, que ya está en los términos) y el server lo hace idempotente por mes, así que
-    // pedir confirmación sería ceremonia sobre algo que no se puede duplicar.
-    var descontando by remember { mutableStateOf<CreditSummary?>(null) }
-    var errorDescuento by remember { mutableStateOf<String?>(null) }
+    // Vuelta de diseño 4: «Ajustar saldo», «¿Y si abonas de más?» y «Registrar pago/descuento» ya
+    // no son botones de la lista: viven en el detalle de la deuda (ver [SeccionDeLaDeuda]).
     // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
     // parpadeaba un instante antes de que llegaran los créditos reales.
     val loading = creditosLeidos.actualizando || tarjetasLeidas.actualizando || perfilLeido.actualizando
@@ -252,16 +248,9 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 leading = leadingFor(Screen.Credits, onNavigate, fallback = Screen.Accounts),
                 action = if (actualizandoConAlgoALaVista) {
                     { ActualizandoEnLaCabecera() }
-                } else if (nuevoEnLaCabecera) {
-                    {
-                        Boton(
-                            texto = "Nuevo crédito",
-                            onClick = { showTypeChooser = true },
-                            variante = VarianteDeBoton.Secundario,
-                            tamano = TamanoDeBoton.S,
-                            icono = Icons.Rounded.Add,
-                        )
-                    }
+                } else null,
+                accion = if (nuevoEnLaCabecera) {
+                    AccionDeEncabezado("Nuevo crédito", Icons.Rounded.Add, onClick = { showTypeChooser = true })
                 } else null,
             )
             // Un solo aviso: sin nada que mostrar, el de «No pudimos cargar» de abajo ya lo dice todo.
@@ -316,23 +305,30 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     )
                 }
             }
-            val tarjetaDePrestamo: @Composable (CreditSummary) -> Unit = { c ->
-                LoanCard(
-                    credit = c,
-                    plan = planes[c.account.id],
-                    periodoActual = periodoActual,
-                    onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
-                    onEdit = { editingLoan = c; showLoanSheet = true },
-                    onAdjust = { adjusting = c },
-                    onSimulate = { simulando = c },
-                    onPayrollDeduction = { descontando = c },
+            // Vuelta de diseño 4: cada deuda es una fila tocable. Abre su detalle —donde viven
+            // «Editar», «Ajustar saldo» y lo demás—; sin términos, tocarla los completa.
+            val hoy = hoyEnAppZone()
+            val filaDePrestamo: @Composable (CreditSummary) -> Unit = { c ->
+                FilaDeDeuda(
+                    nombre = c.account.name,
+                    icono = Icons.Rounded.AccountBalance,
+                    deuda = prestamoEnLaLista(c, planes[c.account.id], periodoActual, hoy),
+                    saldo = { Cifra(c.account.balance) },
+                    onAbrir = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
+                    onCompletar = { editingLoan = c; showLoanSheet = true },
                 )
             }
-            val tarjetaDeCredito: @Composable (CardSummary) -> Unit = { c ->
-                CreditCardCard(
-                    card = c,
-                    onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
-                    onEdit = { editingCard = c; showCardSheet = true },
+            val filaDeTarjeta: @Composable (CardSummary) -> Unit = { c ->
+                val moneda = c.account.currency
+                FilaDeDeuda(
+                    nombre = c.account.name,
+                    icono = Icons.Rounded.CreditCard,
+                    deuda = tarjetaEnLaLista(c, hoy),
+                    // La deuda en SU moneda: una Mastercard en USD debe dólares, y su componente COP
+                    // sería $0, un número que miente.
+                    saldo = { MontoDeFila(formatMoney(c.account.balancesByCurrency[moneda] ?: c.account.balance, moneda)) },
+                    onAbrir = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
+                    onCompletar = { editingCard = c; showCardSheet = true },
                 )
             }
 
@@ -370,32 +366,20 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         if (ambos) {
                             Column(modifier = izquierda) {
                                 Seccion(titulo = "Préstamos", conteo = creditosListos.size)
-                                Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                                    creditosListos.forEach { tarjetaDePrestamo(it) }
-                                }
+                                GrupoDeDeudas(creditosListos, filaDePrestamo)
                             }
                             Column(modifier = derecha) {
                                 Seccion(titulo = "Tarjetas", conteo = tarjetasListas.size)
-                                Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                                    tarjetasListas.forEach { tarjetaDeCredito(it) }
-                                }
+                                GrupoDeDeudas(tarjetasListas, filaDeTarjeta)
                             }
                         } else if (creditosListos.isNotEmpty()) {
                             val (pares, impares) = repartirEnDos(creditosListos)
-                            Column(modifier = izquierda, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                                pares.forEach { tarjetaDePrestamo(it) }
-                            }
-                            Column(modifier = derecha, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                                impares.forEach { tarjetaDePrestamo(it) }
-                            }
+                            Column(modifier = izquierda) { GrupoDeDeudas(pares, filaDePrestamo) }
+                            Column(modifier = derecha) { if (impares.isNotEmpty()) GrupoDeDeudas(impares, filaDePrestamo) }
                         } else {
                             val (pares, impares) = repartirEnDos(tarjetasListas)
-                            Column(modifier = izquierda, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                                pares.forEach { tarjetaDeCredito(it) }
-                            }
-                            Column(modifier = derecha, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                                impares.forEach { tarjetaDeCredito(it) }
-                            }
+                            Column(modifier = izquierda) { GrupoDeDeudas(pares, filaDeTarjeta) }
+                            Column(modifier = derecha) { if (impares.isNotEmpty()) GrupoDeDeudas(impares, filaDeTarjeta) }
                         }
                     }
                 }
@@ -430,9 +414,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         Spacer(Modifier.height(Medida.entreSecciones))
                         Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
                             Seccion(titulo = "Préstamos", conteo = creditosListos.size)
-                            Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                                creditosListos.forEach { tarjetaDePrestamo(it) }
-                            }
+                            GrupoDeDeudas(creditosListos, filaDePrestamo)
                         }
                     }
                 }
@@ -442,9 +424,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         Spacer(Modifier.height(Medida.entreSecciones))
                         Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
                             Seccion(titulo = "Tarjetas", conteo = tarjetasListas.size)
-                            Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                                tarjetasListas.forEach { tarjetaDeCredito(it) }
-                            }
+                            GrupoDeDeudas(tarjetasListas, filaDeTarjeta)
                         }
                     }
                 }
@@ -476,30 +456,6 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 onDismiss = { showCardSheet = false },
                 onSaved = { showCardSheet = false; reloadKey++ },
             )
-        }
-        simulando?.let { credit ->
-            SimuladorDeAbonoSheet(
-                credit = credit,
-                periodoActual = periodoActual,
-                onDismiss = { simulando = null },
-            )
-        }
-        adjusting?.let { credit ->
-            CreditBalanceSheet(
-                credit = credit,
-                onDismiss = { adjusting = null },
-                onSaved = { adjusting = null; reloadKey++ },
-            )
-        }
-        // El descuento de nómina se registra sin hoja: no hay nada que preguntar —el monto es la
-        // cuota— y el server lo hace idempotente por mes, así que un doble toque no baja la deuda
-        // dos veces.
-        descontando?.let { credit ->
-            LaunchedEffect(credit.account.id) {
-                runCatching { Repositories.wallets.registerPayrollDeduction(credit.account.id) }
-                    .onSuccess { descontando = null; reloadKey++ }
-                    .onFailure { descontando = null; errorDescuento = it.toUserMessage() }
-            }
         }
     }
 }
@@ -649,151 +605,78 @@ private val RELLENO_DEL_AVISO_H = Espacio.s
 private val RELLENO_DEL_AVISO_V = Espacio.xs
 private val INTERLINEADO_DEL_AVISO = 16.sp
 
+/** El tag de la fila de una deuda en la lista de Créditos (con lo que cuelga de ella). */
+const val TAG_FILA_DE_DEUDA: String = "fila-de-deuda"
+
 /**
- * Tarjeta de un préstamo: cuota, tasa, plazo y progreso — lo que Créditos mostraba desde siempre.
- * Ola 7 (F61): como las deudas ya no se listan en Cuentas, tocar la tarjeta abre el historial
- * de la cuenta ([onOpen] → AccountDetail); editar términos pasa a ser el lápiz de la derecha.
- *
- * Desde esta rama también dice **cuánto de la cuota es interés y cuándo se termina la deuda**
- * ([plan]), que es lo que la pantalla no contestaba.
+ * **Las deudas de un grupo, en una lista**: una [Superficie] con relleno de lista y una fila por
+ * deuda, separadas por un hilo — la misma forma que los grupos de cuentas de Patrimonio.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LoanCard(
-    credit: CreditSummary,
-    plan: PlanDelCredito?,
-    periodoActual: PeriodoFinanciero,
-    onOpen: () -> Unit,
-    onEdit: () -> Unit,
-    onAdjust: () -> Unit,
-    onSimulate: () -> Unit,
-    onPayrollDeduction: () -> Unit,
-) {
-    val progreso = progresoDeCredito(credit)
-    val tasa = credit.terms?.let { if (it.sinIntereses) "Sin intereses" else "${it.rateEa}% EA" }
-    // Ola R4: la tarjeta es una [Fila] (nombre, banco y tasa, el saldo en [Cifra]) con lo demás
-    // colgando debajo ([BajoLaFila]): el avance, la cuota con quién la paga en una [Pildora], el plan
-    // y las acciones en botones chicos. Tocar la fila abre el historial de la cuenta.
+private fun <T> GrupoDeDeudas(deudas: List<T>, fila: @Composable (T) -> Unit) {
     Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-        Fila(
-            titulo = credit.account.name,
-            subtitulo = listOfNotNull(credit.terms?.bank ?: "Sin términos registrados", tasa).joinToString(" · "),
-            inicio = { IconoEnCirculo(Icons.Rounded.AccountBalance, tono = TonoDeIcono.Neutro) },
-            final = { Cifra(credit.account.balance) },
-            onClick = onOpen,
-        )
-        BajoLaFila {
-            Text(
-                progreso.etiqueta,
-                style = Movi.textos.apoyo,
-                fontFamily = if (progreso.esAviso) FontFamily.Default else FontFamily.Monospace,
-                color = Movi.colores.textoMedio,
-            )
-            if (progreso.mostrarBarra) {
-                Box(Modifier.fillMaxWidth().testTag(TAG_BARRA_DE_PROGRESO)) {
-                    BarraDeProgreso(fraccion = progreso.fraccion, tono = TonoDeBarra.Neutro)
-                }
-            }
-            credit.terms?.let { t ->
-                Separador(SangriaDeSeparador.Ninguna)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "Cuota · día ${t.dayOfMonth}",
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                        modifier = Modifier.weight(1f),
-                    )
-                    // El monto se mide primero y entero; lo que se achica es el rótulo.
-                    Cifra(t.installment)
-                }
-                // Quién la paga, si no es el dueño: un estado de la cuota, en una píldora, en su
-                // renglón (al lado del monto no entraba a 360 dp).
-                when {
-                    t.payrollDeduction -> Pildora("De tu nómina", TonoDePildora.Info)
-                    !t.paidBy.isNullOrBlank() -> Pildora("La paga ${t.paidBy}", TonoDePildora.Info)
-                }
-                Text(
-                    "Plazo pactado ${t.termMonths} meses · desde el ${fechaEnPalabras(t.startDate, hoyEnAppZone())}",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoApagado,
-                )
-                plan?.let { p ->
-                    Text(textoDelInteres(p), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    comoVaEstaDeuda(p, periodoActual)?.let { comoVa ->
-                        Text(
-                            comoVa.texto,
-                            style = Movi.textos.apoyo,
-                            color = if (comoVa.esAlerta) Movi.colores.sale else Movi.colores.textoApagado,
-                            fontWeight = if (comoVa.esAlerta) FontWeight.Medium else FontWeight.Normal,
-                        )
-                    }
-                }
-                t.notes?.takeIf { it.isNotBlank() }?.let { nota ->
-                    Text(text = nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
-            }
-            // Las acciones, en botones chicos del sistema. Envuelven a un segundo renglón si no
-            // caben (a 360 dp, con «Registrar pago de …», no caben).
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-                verticalArrangement = Arrangement.spacedBy(Espacio.xs),
-            ) {
-                if (plan?.comoVa?.seProyecta == true) {
-                    Boton(ACCION_SIMULAR_ABONO, onClick = onSimulate, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
-                }
-                val quienPaga = credit.terms?.paidBy?.takeIf { it.isNotBlank() }
-                if (quienPaga != null && credit.terms?.payrollDeduction != true) {
-                    Boton("Registrar pago de $quienPaga", onClick = onPayrollDeduction, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
-                }
-                if (credit.terms?.payrollDeduction == true) {
-                    Boton("Registrar descuento", onClick = onPayrollDeduction, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
-                }
-                Boton("Ajustar saldo", onClick = onAdjust, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
-                Boton("Editar", onClick = onEdit, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S, icono = Icons.Rounded.Edit)
-            }
+        deudas.forEachIndexed { i, deuda ->
+            if (i > 0) Separador()
+            fila(deuda)
         }
     }
 }
 
 /**
- * Tarjeta de una tarjeta de crédito (F20): deuda actual, cupo disponible si hay, corte y día de
- * pago. La deuda se muestra en la moneda de la tarjeta ([formatMoney]) — una Mastercard en USD
- * debe dólares, y su componente COP sería $0, un número que miente.
+ * **Una deuda en la lista de Créditos** (vuelta de diseño 4): una [Fila] tocable —ícono, nombre, el
+ * próximo pago y el saldo— y, debajo, solo lo que hace falta: la barra cuando es verdadera, o la
+ * nota que la barra no puede decir (la deuda que crece, el desembolso que falta). Sin botones: tocarla
+ * abre su detalle, donde están «Editar» y «Ajustar saldo»; sin términos, tocarla los completa.
+ *
+ * Antes era una tarjeta con «Ajustar saldo» y «Editar» adentro, un «0% pagado» y una barra, y una
+ * deuda sin términos decía «Sin términos registrados · $0 · 0% pagado».
  */
 @Composable
-private fun CreditCardCard(card: CardSummary, onOpen: () -> Unit, onEdit: () -> Unit) {
-    val currency = card.account.currency
-    val debt = card.account.balancesByCurrency[currency] ?: card.account.balance
-    // Ola R4: una [Fila] como la de un préstamo. La deuda en SU moneda (`formatMoney`): una
-    // Mastercard en USD debe dólares, y su componente COP sería $0, un número que miente.
-    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+private fun FilaDeDeuda(
+    nombre: String,
+    icono: ImageVector,
+    deuda: DeudaEnLaLista,
+    saldo: @Composable () -> Unit,
+    onAbrir: () -> Unit,
+    onCompletar: () -> Unit,
+) {
+    Column(modifier = Modifier.testTag(TAG_FILA_DE_DEUDA)) {
         Fila(
-            titulo = card.account.name,
-            subtitulo = card.terms?.bank ?: "Sin corte ni pago — edítalos",
-            inicio = { IconoEnCirculo(Icons.Rounded.CreditCard, tono = TonoDeIcono.Neutro) },
-            final = { MontoDeFila(formatMoney(debt, currency)) },
-            onClick = onOpen,
+            titulo = nombre,
+            subtitulo = deuda.subtitulo,
+            // El subtítulo es la razón de la fila —el próximo pago, o que faltan datos— y no se
+            // corta: hasta dos renglones (a 360 dp, «Cuota $1.204.064 · 15 de noviembre» al lado de
+            // un saldo de ocho cifras no entra en uno). «Faltan datos» va en el tono de aviso.
+            tonoDelSubtitulo = if (deuda.faltanDatos) TonoDeSubtitulo.Aviso else TonoDeSubtitulo.Normal,
+            lineasDelSubtitulo = 2,
+            inicio = { IconoEnCirculo(icono, tono = TonoDeIcono.Neutro) },
+            final = { if (deuda.pagada) Pildora(DEUDA_PAGADA, TonoDePildora.Exito) else saldo() },
+            onClick = if (deuda.faltanDatos) onCompletar else onAbrir,
+            onClickLabel = if (deuda.faltanDatos) "Completar los datos" else "Ver la deuda",
         )
-        BajoLaFila {
-            card.available?.let {
-                Text("Disponible ${formatMoney(it, currency)}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            }
-            card.terms?.let { t ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(t.cutoffDay?.let { "Corte · día $it" } ?: "Sin día de corte", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    Text("Pago · día ${t.paymentDay}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        val nota = deuda.nota
+        val fraccion = deuda.fraccionPagada
+        if (nota != null || fraccion != null) {
+            BajoLaFila {
+                if (nota != null) {
+                    Text(
+                        nota.texto,
+                        style = Movi.textos.apoyo,
+                        color = if (nota.esAlerta) Movi.colores.sale else Movi.colores.aviso,
+                        fontWeight = if (nota.esAlerta) FontWeight.Medium else FontWeight.Normal,
+                    )
                 }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                if (currency != "COP") Pildora(currency, TonoDePildora.Neutra)
-                Boton("Editar", onClick = onEdit, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S, icono = Icons.Rounded.Edit)
+                if (fraccion != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                    ) {
+                        Box(Modifier.weight(1f).testTag(TAG_BARRA_DE_PROGRESO)) {
+                            BarraDeProgreso(fraccion = fraccion, tono = TonoDeBarra.Neutro)
+                        }
+                        Text(deuda.avance.orEmpty(), style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
+                    }
+                }
             }
         }
     }
@@ -857,7 +740,7 @@ const val TAG_TARJETA_DEL_RESUMEN_DE_DEUDA: String = "tarjeta-del-resumen-de-deu
 /** La cifra esqueleto de la tarjeta de «Deuda total» — está solo mientras carga. */
 const val TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA: String = "esqueleto-del-resumen-de-deuda"
 
-/** Cada tarjeta de préstamo que todavía no llegó. */
+/** Cada fila de préstamo que todavía no llegó. */
 const val TAG_ESQUELETO_TARJETA_DE_PRESTAMO: String = "esqueleto-tarjeta-de-prestamo"
 
 /** Cada aviso de la tarjeta de «Deuda total» que todavía no llegó (solo si la última carga lo tenía). */
@@ -875,7 +758,7 @@ private const val MAX_PRESTAMOS_ESQUELETO = 12
  * pantalla.
  *
  * Cada pieza copia los rellenos y los estilos de texto de la real ([LoQueCuestaLaDeuda],
- * [LoanCard]) para que la tarjeta de arriba mida lo mismo cargando que cargada (±8 dp, lo mide
+ * [FilaDeDeuda]) para que la tarjeta de arriba mida lo mismo cargando que cargada (±8 dp, lo mide
  * `CreditosNoAfirmanMientrasCarganTest`).
  *
  * **Con [forma] (la última carga que salió bien en este aparato, ver `FormaRecordada`) reserva
@@ -958,8 +841,11 @@ private fun CreditosEsqueleto(forma: FormaDeCreditos?, dosColumnas: Boolean = fa
                 ) {
                     Column(modifier = if (dosColumnas) Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS) else Modifier.weight(1f)) {
                         RotuloDeSeccionEsqueleto()
-                        Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                            repeat(prestamos) { TarjetaDePrestamoEsqueleto() }
+                        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                            repeat(prestamos) { i ->
+                                if (i > 0) Separador()
+                                EsqueletoDeFila(modifier = Modifier.testTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO))
+                            }
                         }
                     }
                     if (dosColumnas) Spacer(Modifier.weight(1f))
@@ -980,28 +866,6 @@ private fun AvisoEsqueleto(renglones: Int) {
         alto = RELLENO_DEL_AVISO_V * 2 + interlineado * renglones,
         modifier = Modifier.testTag(TAG_ESQUELETO_DE_AVISO),
     )
-}
-
-/**
- * Un préstamo que todavía no llegó, con la forma de [LoanCard]: nombre y tasa, el banco, el saldo
- * con su avance, la barra, y debajo del hilo la cuota, el plazo y la línea del interés.
- */
-@Composable
-private fun TarjetaDePrestamoEsqueleto() {
-    Superficie(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO),
-        relleno = RellenoDeSuperficie.Lista,
-    ) {
-        EsqueletoDeFila()
-        BajoLaFila {
-            LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
-            BloqueEsqueleto(alto = Medida.altoDeBarraDeProgreso)
-            RenglonConCifraEsqueleto(fraccionDelRotulo = 0.4f)
-            LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.apoyo)
-            LineaEsqueleto(fraccionDelAncho = 0.85f, estilo = Movi.textos.apoyo)
-            BloqueEsqueleto(alto = Medida.altoChico, ancho = Medida.avatar * 3)
-        }
-    }
 }
 
 /** El tag de la fila «Cómo salir de tus deudas», para encontrarla sin depender de su texto. */

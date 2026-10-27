@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.accounts
 
+import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,7 +60,6 @@ import com.jvillada.movi.ui.components.saldoEnSuMoneda
 import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.components.valorEnPesos
-import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
@@ -69,11 +69,9 @@ import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.Vacio
-import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.ui.cuadre.cuentasSinCuadrar
@@ -202,18 +200,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 leading = HeaderLeading.Avatar(onNavigate),
                 // Mientras dice «Actualizando…» no lleva «Nueva cuenta»: las dos juntas no entran a
                 // 390 dp sin cortar el título en «Patr…». El botón vuelve apenas la lectura contesta.
-                action = {
-                    if (actualizandoConAlgoALaVista) {
-                        ActualizandoEnLaCabecera()
-                    } else {
-                        Boton(
-                            texto = "Nueva cuenta",
-                            onClick = { showCreateSheet = true },
-                            variante = VarianteDeBoton.Fantasma,
-                            tamano = TamanoDeBoton.S,
-                            icono = Icons.Rounded.Add,
-                        )
-                    }
+                action = if (actualizandoConAlgoALaVista) {
+                    { ActualizandoEnLaCabecera() }
+                } else null,
+                accion = if (actualizandoConAlgoALaVista) null else {
+                    AccionDeEncabezado("Nueva cuenta", Icons.Rounded.Add, onClick = { showCreateSheet = true })
                 },
             )
 

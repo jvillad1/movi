@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
+import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.ui.components.ds.Encabezado
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
@@ -55,8 +56,10 @@ fun leadingFor(screen: Screen, onNavigate: (Screen) -> Unit, fallback: Screen): 
  * área de toque de 48. Ya no lleva la línea de abajo: superficies por capas, sin bordes duros.
  *
  * @param subtitle línea secundaria opcional (p.ej. «3 nuevas · 2 coincidencias» al revisar un extracto).
- * @param action   slot a la derecha (NewItemButton, lupa, campana…); null si la pantalla no
- *                 tiene acción propia.
+ * @param action   slot a la derecha para íconos (lupa, campana), una píldora o «Actualizando…»;
+ *                 null si no hay nada de eso.
+ * @param accion   la acción principal de la pantalla («Nueva cuenta»): siempre con la forma de
+ *                 [com.jvillada.movi.ui.components.ds.AccionDelEncabezado] (vuelta de diseño 4).
  */
 @Composable
 fun MinScreenHeader(
@@ -64,6 +67,7 @@ fun MinScreenHeader(
     leading: HeaderLeading,
     subtitle: String? = null,
     action: (@Composable RowScope.() -> Unit)? = null,
+    accion: AccionDeEncabezado? = null,
 ) {
     val goBack = LocalGoBack.current
     Encabezado(
@@ -74,5 +78,6 @@ fun MinScreenHeader(
             { AvatarButton(onClick = { avatar.onNavigate(Screen.Mas) }) }
         },
         acciones = action,
+        accion = accion,
     )
 }
