@@ -133,7 +133,11 @@ Seccion(titulo = "Tarjetas", conteo = 3, accion = "Ver todo", onAccion = ::verTo
 **`Fila`** — la fila de lista de toda la app: `inicio` (avatar de comercio, `IconoEnCirculo`, persona),
 `titulo`, `subtitulo?`, `final` (`Cifra`, `Pildora` o `Chevron`). 56 / 64 de alto mínimo, 16 a los
 lados, toque de borde a borde. El título va en hasta dos renglones antes del «…» (la fila crece) y el
-subtítulo en uno; el final se mide primero, así que un monto nunca se recorta. Va directo sobre el fondo o en una `Superficie` con relleno `Lista`.
+subtítulo en uno —o en dos con `lineasDelSubtitulo = 2`, solo donde el subtítulo es la razón de la fila
+y no se puede acortar («Hace más de un mes que no cuadras Bancolombia Ahorros», vuelta de diseño 2)—;
+el final se mide primero, así que un monto nunca se recorta. **El subtítulo dice algo que el título y la
+sección no dicen**: dentro de «Dinero · 2» una cuenta no dice «Dinero» (dice «Ahorros», o nada si su
+nombre ya lo dice). Va directo sobre el fondo o en una `Superficie` con relleno `Lista`.
 ```kotlin
 Fila(
     titulo = "Rappi · Las Doce", subtitulo = "Restaurantes · Nu",
@@ -157,11 +161,14 @@ PildoraDeFiltro("Gastos", seleccionada = filtro == Gastos, onClick = { filtro = 
 ```
 
 **`AccionRapida`** y **`CuadriculaDeAcciones`** — la cuadrícula del camino 3: cuatro columnas, ícono en
-círculo de 56 y rótulo de dos renglones, una destacada como mucho, insignia opcional.
+círculo de 56 y **rótulo de un renglón** (vuelta de diseño 2: «Gasto», «Comprobante», «Preguntar»; si uno
+no entra se achica hasta la letra de `rotulo` y recién ahí lleva «…»), con la frase entera en
+`descripcion` para el lector de pantalla («Anotar un gasto»). Una destacada como mucho, insignia
+opcional. Las fichas de Ajustes, que son nombres de pantallas, van con `RenglonesDelRotulo.Dos`.
 ```kotlin
 CuadriculaDeAcciones(listOf(
-    Accion("Anotar gasto", Icons.Rounded.Edit, ::anotar, destacada = true),
-    Accion("Por revisar", Icons.Rounded.Inbox, ::revisar, insignia = 3),
+    Accion("Gasto", Icons.Rounded.Edit, ::anotar, destacada = true, descripcion = "Anotar un gasto"),
+    Accion("Avisos", Icons.Rounded.Inbox, ::revisar, insignia = 3, descripcion = "Revisar los avisos"),
 ))
 ```
 
@@ -289,7 +296,9 @@ viejos; este cliente no los pinta.
   `PildoraDeFiltro` elegido con su ×, al lado de los filtros de tipo.
 - **El día en un renglón**: la fecha como se escribe («Hoy», «23 de agosto») con el estilo de `Seccion`
   y el flujo del día a la derecha; todo el renglón pliega el día (alto `Medida.objetivoTactil`). La
-  comparación «Día a día» salió: es de Plan.
+  comparación «Día a día» salió: es de Plan. **La fecha nunca se recorta** (vuelta de diseño 2): la
+  fecha, la cifra y el chevron se miden primero; si no cabe todo, se cae primero el rótulo «Flujo del
+  día» y después se corta el «· N movimientos».
 - **«N por revisar» es una `TarjetaDePropuesta`**, como en «Movi propone hoy». «Personas y comercios»
   ya no está arriba de la lista.
 - **La fila de un movimiento es una `Fila`** (Movimientos, Por revisar, Buscar, el detalle de una
@@ -301,6 +310,13 @@ viejos; este cliente no los pinta.
   la superficie de la propuesta cuando pide decisión y la capa 1 cuando es historial, el estado en una
   `Pildora` en frase («Pendiente», «Confirmado»), lo que dijo el banco como cita y las acciones en
   `Boton` chicos. La usan Por revisar, Captura del banco, Reconciliar y los débitos automáticos.
+- **La cabeza del aviso se lee primero** (vuelta de diseño 2, `cabezaDelAviso` en
+  `ui/sms/LaCabezaDelAviso.kt`): el título es el comercio o lo que Movi entendió («Rappi»), con su marca
+  (o el ícono de su categoría); a la derecha el monto con `Cifra` (gasto neutro, ingreso `entra`, pago
+  entre cuentas `entreCuentas`); debajo «banco · hora». Si Movi no entendió el comercio, el título es el
+  banco con su marca. El texto del banco va después, apagado y en dos renglones que se abren al tocarlo.
+  **En la bandeja no va la píldora «Pendiente»**: ahí todo lo está; quedan las que dicen algo («Ya
+  anotado», «Avisado 3 veces»). El historial de Captura del banco sí la lleva.
 
 ## 12. Plan, Presupuestos, Tus períodos y Créditos (ola R4b)
 
