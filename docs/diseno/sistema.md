@@ -385,6 +385,7 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 | `LosTamanosSueltosSoloBajanTest` | los `fontSize` sueltos |
 | `LosCamposSonDelSistemaTest` | ningún `BasicTextField` / `TextField` / `OutlinedTextField` en `ui/` fuera de `ui/components/` y de seis excepciones con nombre (§15) |
 | `LosRotulosNoGritanTest` | ninguna función `…SectionLabel` en `ui/`, y ningún `Seccion` / `GrupoDeCampos` / `RotuloDeCampo` / `rotulo =` / `label =` con un texto entero en mayúsculas |
+| `LasGuiasNoParecenDatosTest` | ningún `guia =` / `placeholder =` con un literal puramente numérico en `ui/` («20», «29,6», «$ 0»): va `ejemplo =`, y sin su propio «Ej:» (§15) |
 | `LosCamposDelSistemaTest` (Robolectric) | el rótulo en frase, la guía de un monto en la letra de cuerpo y el valor en la de cifras, el error en `sale`, «¿Qué es esto?» abre y cierra, la caja llega a 48, y nada se recorta a 360 dp con la letra a ×1,3 (también en las hojas de crédito y tarjeta) |
 | `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en los dos temas; la fila mide 56/64; el botón llega a 48 de toque; la cifra se oculta; la tarjeta de cuenta mide 128 con marca y sin ella; dos widgets de un par miden lo mismo; la casilla que se toca sola mide 48 y dice su estado |
 | `UnaSolaCifraHeroePorPantallaTest` (Robolectric) | a lo sumo una `Cifra` `Heroe` en Hoy, Plan (Pagos y Presupuestos), Patrimonio, Créditos, Movimientos y Espacios; exactamente una donde la pantalla tiene su protagonista (Hoy, Patrimonio, Créditos) |
@@ -590,7 +591,11 @@ un formulario se arma con seis piezas de `ds/Campo.kt`:
 2. **La caja**: capa 2, `Radio.s`, relleno `Espacio.s`, alto mínimo `Medida.objetivoTactil` (48). El
    borde (`Medida.trazo`) va en `borde`, en la marca con foco y en `sale` con error.
 3. **El texto guía**, en `cuerpo` y `textoApagado`: un ejemplo («Ej: Bancolombia Ahorros»), no el nombre
-   del campo ni la moneda.
+   del campo ni la moneda. **Un ejemplo numérico va siempre con «Ej:»** (vuelta de diseño 17): un «20»
+   gris solo en la caja del corte parece un corte ya cargado. Se pasa con `ejemplo = "20"` y el campo
+   pinta «Ej: 20» (`Campo`, `CampoDeMonto`, `CampoDeTasa`); una `guia` puramente numérica que llegue
+   suelta también sale con «Ej:» (`textoGuiaDelCampo`). **Un monto vacío muestra la moneda y nada
+   más** —antes un «0» en la letra de las cifras—, o `ejemplo = "1.250.000"` si el campo lo necesita.
 4. **La ayuda, de una línea**, en `apoyo`. Lo que no cabe va en `masAyuda`, que abre «¿Qué es esto?» a
    la derecha de la ayuda: **se mueve, no se borra**. «Opcional» va en el rótulo («Notas (opcional)»).
 5. **El error**, en `sale`, en el lugar de la ayuda; el campo lo anuncia al lector de pantalla.
@@ -717,7 +722,7 @@ guardado no cambiaron.
   flecha del `Encabezado` (`BotonDeIcono` con `ROTULO_VOLVER`, 48 de toque) y el título, «‹ Categoría».
   La única «×» es la de la hoja, y la cierra entera (antes había dos cruces apiladas). **Escape y el atrás
   de Android vuelven al formulario**, no cierran la hoja: el sub-editor se anota en la pila de hojas
-  (`AtrasCierraEstaHoja`) encima de la hoja, y en la hoja desde abajo Escape llega por `onTecla`. Vale
+  (`AtrasCierraEstaHoja`) encima de la hoja, y en la hoja desde abajo Escape llega por `onEscape` (desde la vuelta 17; antes, por `onTecla`). Vale
   también para «Desde», «Hacia» y la fecha de Traspaso y Cuota.
 - **La cuadrícula de categorías habla con una sola letra** (`SelectorDeCategoria`, en toda la app): todos
   los rótulos en `apoyo`, hasta dos renglones partidos entre palabras, sin achicarse. Antes cada rótulo que
@@ -831,3 +836,36 @@ Lo vigilan `CrearUnaCuentaEsIgualEnTodosLadosTest` (los dos lugares pintan el bl
 la misma cuenta para la misma elección; «Bien» solo en Patrimonio; la tarjeta sin tipo mide lo mismo),
 `FormularioDeCuentaTest`, `ContraElPeriodoPasadoEnPantallaTest` (el monto neutro aunque la diferencia
 sea de alerta), `PresupuestosConJerarquiaTest` (un renglón a 360 dp) y `ElDiaPlegadoNoCortaLaFechaTest`.
+
+## 23. Vuelta de diseño 17: hojas que obedecen y ejemplos que no parecen datos
+
+Revisado en master a 390 px con la cuenta demo.
+
+- **Escape cierra también la hoja desde abajo** (`MarcoDeHoja`). En la web angosta (< 600 dp) la hoja
+  del teléfono no atendía Escape: Patrimonio → «Nueva cuenta» solo se cerraba con la «×». Ahora lo
+  atrapa en el *preview*, como la centrada, así que un campo enfocado no se lo traga, y pasa por
+  `onEscape`: en Agregar el primer Escape sigue volviendo del sub-editor al formulario. Con teclado
+  físico (`LocalHayTecladoFisico`) y sin `onTecla`, el velo toma el foco al abrir si nadie de adentro lo
+  tomó, para que Escape llegue sin haber tocado un campo. Un menú desplegable es un `Popup` con su
+  propia raíz: su Escape no pasa por la hoja.
+- **«Repartir» es una acción de la fila del detalle** (`AccionDelMovimiento.Repartir`, ícono de
+  Espacios, después de «Repetir»), no una tarjeta de ~110 dp debajo de la categoría de cada gasto.
+  Abre una fila por espacio con «Tu parte $X» (`SeccionDeRepartir`). La tarjeta «con razón» (la
+  categoría o el comercio ya se repartieron) no quedó: el cliente no lo sabe sin pedir el detalle de
+  cada espacio, y los parecidos llegan sin el espacio. Un gasto repartido sigue mostrando «Repartido en
+  … · Tu parte · Quitar» (`BloqueDeRepartido`) al abrir. La fila no pasa de
+  `MAXIMO_DE_ACCIONES_DEL_MOVIMIENTO` (6; con siete, «Categoría» se corta a 360 dp): con «Tercero» y
+  «Repartir» a la vez, «Repartir» va al principio de «Más».
+- **Los ejemplos numéricos dicen «Ej:»** (§15): corte, día de pago, tasa y plazo de las hojas de
+  tarjeta y crédito; un monto vacío, solo la moneda.
+- **`EncabezadoDeHoja`** (`ds/Encabezado.kt`): el nombre en `titulo` medio y, debajo, qué es en
+  `cuerpo` `textoMedio` —el patrón que las hojas con título escribían a mano—. La hoja de la tarjeta abre
+  con «Nu · Tarjeta» (antes «La tarjeta» como título de grupo y el nombre suelto) y la del crédito con
+  «Vehículo 4083 · Préstamo», con el nombre editable debajo. Los títulos de las hojas de Espacios
+  (`TituloDeLaHoja`) delegan acá.
+
+Lo vigilan `EscapeEnLaHojaAngostaTest` (Escape con un `Campo` enfocado cierra la hoja a 390 dp, respeta
+`dismissEnabled`, llega sin foco con teclado físico, y en Agregar vuelve primero de la Nota),
+`EspaciosEnPantallaTest` y `AccionesDelMovimientoTest` (la acción, el bloque, el tope de seis),
+`LasGuiasNoParecenDatosTest` y `LosCamposDelSistemaTest` (las guías con «Ej:», el monto sin «0», el
+encabezado de las dos hojas).

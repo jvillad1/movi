@@ -108,6 +108,30 @@ const val TEXTO_QUE_ES_ESTO: String = "¿Qué es esto?"
 /** Lo que dice el mismo enlace con la ayuda abierta. */
 const val TEXTO_OCULTAR_AYUDA: String = "Ocultar"
 
+/** Lo que va delante de un ejemplo en el texto guía. Ver [textoGuiaDelCampo]. */
+const val PREFIJO_DE_EJEMPLO: String = "Ej: "
+
+/**
+ * ¿[guia] es solo una cifra —«20», «29,6», «$ 0», «1.250.000»—? Una guía así, en gris dentro de la
+ * caja, parece un dato ya cargado.
+ */
+fun esGuiaNumerica(guia: String): Boolean {
+    val sinMoneda = guia.trim().removePrefix("US$").removePrefix("$").trim()
+    return sinMoneda.any(Char::isDigit) && sinMoneda.all { it.isDigit() || it in ".,% " }
+}
+
+/**
+ * **El texto guía que se pinta** (vuelta de diseño 17). Una guía numérica va siempre con «Ej:»
+ * («Ej: 20», «Ej: 29,6»): sola, el «20» gris del corte de una tarjeta parecía un corte cargado. Con
+ * [ejemplo] el campo antepone «Ej: » él mismo; una [guia] numérica que llegue suelta también lo
+ * lleva, para que la regla no dependa de acordarse.
+ */
+fun textoGuiaDelCampo(guia: String?, ejemplo: String?): String? = when {
+    ejemplo != null -> PREFIJO_DE_EJEMPLO + ejemplo
+    guia != null && esGuiaNumerica(guia) -> PREFIJO_DE_EJEMPLO + guia.trim()
+    else -> guia
+}
+
 /**
  * **El campo de texto de toda la app.** Vuelta de diseño 6.
  *
@@ -121,7 +145,8 @@ const val TEXTO_OCULTAR_AYUDA: String = "Ocultar"
  * 2. **La caja**: capa 2, [Radio.s], relleno [Espacio.s], alto mínimo [Medida.objetivoTactil]. El
  *    borde se pinta en la marca con foco y en `sale` con error.
  * 3. **El texto guía**, en `cuerpo` y `textoApagado`: un ejemplo («Ej: Bancolombia Ahorros»), no el
- *    nombre del campo.
+ *    nombre del campo. Un ejemplo numérico va con [ejemplo] («20» → «Ej: 20»): una cifra gris sola
+ *    parece un dato cargado ([textoGuiaDelCampo]).
  * 4. **La ayuda**, de UNA línea, en `apoyo`. Lo que no cabe en una línea va en [masAyuda], que se
  *    abre con «¿Qué es esto?»: se mueve, no se borra.
  * 5. **El error**, en `sale`, en el lugar de la ayuda.
@@ -131,7 +156,7 @@ const val TEXTO_OCULTAR_AYUDA: String = "Ocultar"
  *
  * ```
  * Campo(nombre, { nombre = it }, rotulo = "Nombre", guia = "Ej: Bancolombia Ahorros")
- * Campo(dia, { dia = it.filter(Char::isDigit) }, rotulo = "Día de pago", guia = "5",
+ * Campo(dia, { dia = it.filter(Char::isDigit) }, rotulo = "Día de pago", ejemplo = "5",
  *     teclado = KeyboardOptions(keyboardType = KeyboardType.Number))
  * ```
  */
@@ -156,7 +181,10 @@ fun Campo(
     renglones: Int = 1,
     foco: FocusRequester? = null,
     tag: String = TAG_CAMPO,
+    /** Un ejemplo del valor: se pinta como «Ej: [ejemplo]» y gana sobre [guia]. */
+    ejemplo: String? = null,
 ) {
+    val textoGuia = textoGuiaDelCampo(guia, ejemplo)
     val interaccion = remember { MutableInteractionSource() }
     val enfocado by interaccion.collectIsFocusedAsState()
     var mostrarSecreto by remember { mutableStateOf(false) }
@@ -170,9 +198,9 @@ fun Campo(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) {
-                if (valor.isEmpty() && guia != null) {
+                if (valor.isEmpty() && textoGuia != null) {
                     Text(
-                        text = guia,
+                        text = textoGuia,
                         style = Movi.textos.cuerpo,
                         color = Movi.colores.textoApagado,
                         maxLines = renglones,
@@ -234,8 +262,9 @@ fun Campo(
  * La misma anatomía que [Campo], con tres diferencias: el valor escrito va en la letra de las cifras
  * (`monto`, Martian Mono), el símbolo de la moneda ([moneda], «$» o «US$») se pinta aparte —no es
  * parte del texto, el cursor nunca se para antes de él— y el texto guía va en la letra de cuerpo,
- * sin la moneda adentro («Capital original», no «$ Capital original (COP)»). Sin guía, un «0» en
- * la letra de las cifras.
+ * sin la moneda adentro («Capital original», no «$ Capital original (COP)»). Sin guía, la moneda
+ * sola (hasta la vuelta de diseño 17 era un «0», que parecía un monto cargado); si el campo necesita
+ * un ejemplo, [ejemplo] = «1.250.000» pinta «Ej: 1.250.000».
  *
  * La lógica —agrupar en miles mientras se escribe, dejar el cursor después del mismo dígito,
  * parsear a [Long]— es la de siempre: [nextMoneyField], [moneyFieldFromDigits] y
@@ -260,7 +289,10 @@ fun CampoDeMonto(
     moneda: String = "$",
     maxDigitos: Int = 12,
     tag: String = TAG_CAMPO_DE_MONTO,
+    /** Un ejemplo del monto, ya formateado («1.250.000»): se pinta como «Ej: 1.250.000». */
+    ejemplo: String? = null,
 ) {
+    val textoGuia = textoGuiaDelCampo(guia, ejemplo)
     val digitos = valor?.toString() ?: ""
     // (Vivía en `MoneyField`, que ahora delega acá.)
     // ── Ola 9 · C — CÓMO SE EDITA UN MONTO (y por qué antes se guardaba otra cifra) ──
@@ -344,12 +376,14 @@ fun CampoDeMonto(
             )
             Spacer(Modifier.width(Espacio.xs))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                if (digitos.isEmpty()) {
+                // Vacío y sin guía: la moneda sola. Antes un «0» en la letra de las cifras, que
+                // parecía un monto cargado (vuelta de diseño 17).
+                if (digitos.isEmpty() && textoGuia != null) {
                     // Una sola línea siempre: el campo también va a media fila (la cuota de un
                     // crédito) y una guía partida en dos estiraba la caja y desalineaba al de al lado.
                     Text(
-                        text = guia ?: "0",
-                        style = if (guia != null) Movi.textos.cuerpo else Movi.textos.monto,
+                        text = textoGuia,
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.textoApagado,
                         maxLines = 1,
                         softWrap = false,

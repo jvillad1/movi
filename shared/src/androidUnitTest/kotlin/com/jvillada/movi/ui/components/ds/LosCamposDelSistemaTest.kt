@@ -22,6 +22,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -161,6 +162,63 @@ class LosCamposDelSistemaTest {
         assertEquals(familiaDeCifras, moneda.layoutInput.style.fontFamily, "la moneda va con la cifra")
     }
 
+    // ── Vuelta de diseño 17: un ejemplo numérico va con «Ej:» ─────────────────────────────
+
+    @Test
+    fun `un ejemplo numerico se pinta con Ej`() {
+        montar {
+            Column {
+                Campo("", {}, rotulo = "Corte (opcional)", ejemplo = "20")
+                Campo("", {}, rotulo = "Tasa E.A.", sufijo = "%", ejemplo = "29,6")
+                CampoDeMonto(null, {}, rotulo = "Cupo", ejemplo = "1.250.000")
+            }
+        }
+        val guias = composeRule.onAllNodesWithTag(TAG_GUIA_DEL_CAMPO, useUnmergedTree = true)
+            .fetchSemanticsNodes().map(::textoDe)
+        assertEquals(listOf("Ej: 20", "Ej: 29,6", "Ej: 1.250.000"), guias)
+    }
+
+    @Test
+    fun `una guia numerica suelta tambien lleva Ej, y una con palabras queda igual`() {
+        montar {
+            Column {
+                Campo("", {}, rotulo = "Día de pago", guia = "5")
+                Campo("", {}, rotulo = "Banco", guia = "Ej: Bancolombia")
+            }
+        }
+        val guias = composeRule.onAllNodesWithTag(TAG_GUIA_DEL_CAMPO, useUnmergedTree = true)
+            .fetchSemanticsNodes().map(::textoDe)
+        assertEquals(listOf("Ej: 5", "Ej: Bancolombia"), guias)
+    }
+
+    @Test
+    fun `un monto vacio sin guia muestra la moneda y nada mas`() {
+        montar { CampoDeMonto(null, {}, rotulo = "Saldo de hoy") }
+        composeRule.onAllNodesWithTag(TAG_GUIA_DEL_CAMPO, useUnmergedTree = true).assertCountEquals0()
+        assertEquals("$", textoDe(composeRule.onNodeWithTag(TAG_MONEDA_DEL_CAMPO, useUnmergedTree = true).fetchSemanticsNode()))
+        composeRule.onAllNodesWithText("0", useUnmergedTree = true).assertCountEquals0()
+    }
+
+    @Test
+    fun `MoneyField con su placeholder de siempre no pinta un cero`() {
+        montar { com.jvillada.movi.ui.components.MoneyField(null, {}) }
+        composeRule.onAllNodesWithTag(TAG_GUIA_DEL_CAMPO, useUnmergedTree = true).assertCountEquals0()
+    }
+
+    @Test
+    fun `que guia es numerica`() {
+        listOf("20", "5", "29,6", "$ 0", "US$ 1.250.000", "1.250.000", "18,5 %").forEach {
+            assertTrue(esGuiaNumerica(it), "«$it» parece un dato")
+        }
+        listOf("Ej: 20", "AAAA-MM-DD", "Bancolombia", "Abono extra, por ejemplo \$500.000", "", "$").forEach {
+            assertTrue(!esGuiaNumerica(it), "«$it» no es solo una cifra")
+        }
+        assertEquals("Ej: 20", textoGuiaDelCampo(guia = null, ejemplo = "20"))
+        assertEquals("Ej: 20", textoGuiaDelCampo(guia = "Lo que sea", ejemplo = "20"), "el ejemplo gana")
+        assertEquals("Mercado", textoGuiaDelCampo(guia = "Mercado", ejemplo = null))
+        assertEquals(null, textoGuiaDelCampo(guia = null, ejemplo = null))
+    }
+
     @Test
     fun `MoneyField delega y quita el simbolo de su placeholder viejo`() {
         montar {
@@ -257,8 +315,8 @@ class LosCamposDelSistemaTest {
                     Campo("", {}, rotulo = "Banco", guia = "Ej: Bancolombia")
                     CampoDeMonto(null, {}, rotulo = "Capital original")
                     Row(horizontalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                        Box(Modifier.weight(1f)) { Campo("", {}, rotulo = "Corte (opcional)", guia = "20") }
-                        Box(Modifier.weight(1f)) { Campo("", {}, rotulo = "Día de pago", guia = "5") }
+                        Box(Modifier.weight(1f)) { Campo("", {}, rotulo = "Corte (opcional)", ejemplo = "20") }
+                        Box(Modifier.weight(1f)) { Campo("", {}, rotulo = "Día de pago", ejemplo = "5") }
                     }
                     CampoDeMonto(
                         4_101_123L, {},
@@ -312,6 +370,49 @@ class LosCamposDelSistemaTest {
         }
         ningunTextoSeRecorta()
         composeRule.onNodeWithText("Pago mínimo del extracto (opcional)", useUnmergedTree = true).assertExists()
+    }
+
+    // ── Vuelta de diseño 17: el encabezado de las hojas ──────────────────────────────────
+
+    private fun textosDelEncabezado(): List<String> =
+        composeRule.onAllNodes(
+            androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(TAG_ENCABEZADO_DE_HOJA)),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes().map(::textoDe).filter { it.isNotEmpty() }
+
+    @Test
+    fun `la hoja de una tarjeta abre con su nombre y Tarjeta, y sus guias dicen Ej`() {
+        val nu = Account("acc_nu", "Nu", AccountType.CREDIT_CARD, 0)
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = listOf(nu)
+        }
+        montar {
+            CardTermsSheet(CardSummary(account = nu, terms = CardTerms(accountId = nu.id, bank = "Nu", paymentDay = 5)), {}, {})
+        }
+        assertEquals(listOf("Nu", "Tarjeta"), textosDelEncabezado())
+        composeRule.onNodeWithText("La tarjeta", useUnmergedTree = true).assertDoesNotExist()
+        val guias = composeRule.onAllNodesWithTag(TAG_GUIA_DEL_CAMPO, useUnmergedTree = true).fetchSemanticsNodes().map(::textoDe)
+        assertTrue("Ej: 20" in guias, "el corte vacío: $guias")
+        assertTrue("Ej: 29,6" in guias, "la tasa vacía: $guias")
+        assertTrue(guias.none { esGuiaNumerica(it) }, "ninguna guía es una cifra sola: $guias")
+    }
+
+    @Test
+    fun `la hoja de un credito abre con su nombre y Prestamo`() {
+        val vehiculo = Account("acc_4083", "Vehículo 4083", AccountType.LOAN, 50_000_000)
+        val terms = CreditTerms(
+            accountId = vehiculo.id, bank = "Banco de Occidente", principal = 60_000_000L, rateEa = 18.16,
+            termMonths = 60, installment = 1_500_000L, dayOfMonth = 20, startDate = "2024-06-01",
+        )
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = listOf(vehiculo)
+        }
+        montar {
+            CreditTermsSheet(CreditSummary(account = vehiculo, terms = terms, paidPct = null), emptyList(), {}, {})
+        }
+        assertEquals(listOf("Vehículo 4083", "Préstamo"), textosDelEncabezado())
+        composeRule.onNodeWithText("El crédito", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Nombre del crédito", useUnmergedTree = true).assertExists()
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountEquals0() {
