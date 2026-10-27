@@ -1,159 +1,233 @@
 package com.jvillada.movi.ui.mas
 
-import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.ui.components.ds.TAG_SECCION
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
+import com.jvillada.movi.ui.profile.BORRAR_MI_CUENTA
+import com.jvillada.movi.ui.profile.CERRAR_SESION_EN_TODOS
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
- * **Ajustes** (la pantalla que se llamaba «Más»). Se monta la pantalla completa (y no solo la lista
- * privada `items`, que no se puede leer desde afuera) para probar lo que de verdad importa: qué
- * ficha ve el dueño.
+ * # Ajustes: una sola pantalla (vuelta de diseño 3)
  *
- * PR 2 del rediseño de Recurrentes (2026-09): «Recurrentes» dejó de tener entrada acá. Ola C: salió
- * también todo lo que ahora es una pestaña (Cuentas, el cuadre, Créditos y Presupuestos), y la
- * pantalla pasó a abrirse desde el avatar.
+ * Hasta la vuelta 3 el avatar abría una cuadrícula de ocho fichas y la configuración de verdad
+ * estaba escondida en «Perfil». Ahora Ajustes es la tarjeta del perfil arriba y las secciones con
+ * sus filas, en un orden fijo; «Perfil» dejó de ser una pantalla (`Screen.Profile` no existe, así
+ * que el compilador ya prueba que nadie navega ahí; el destino SDUI `"profile"` lleva acá, ver
+ * `SduiRendererTest`).
  *
- * **Ola V — «Cuentas de otros» es la única excepción a esa regla, y es a propósito.** Sigue siendo
- * la pantalla de Patrimonio que ya era (`Screen.Destinos`, con su pestaña de siempre): esta ficha
- * no la duplica, es una SEGUNDA puerta hacia la misma pantalla. Se agregó porque el dueño la buscó
- * en Ajustes y no la encontró — Patrimonio → «Te deben» era la única entrada, un lugar que no dice
- * «registra quién es esta cuenta».
+ * Se monta alto (3200 dp) para que la `LazyColumn` componga todas las secciones.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(qualifiers = "w411dp-h731dp-xhdpi")
+@Config(qualifiers = "w411dp-h3200dp-xhdpi")
 class MasScreenTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val lasDeAjustes = listOf(
-        "Perfil", "Categorías", "Documentos", "Personas y comercios", "Compartir", "Movi AI", "Captura del banco",
-    )
-    private val lasQueSonPestana = listOf(
-        "Cuentas", "Cuadre de saldos", "Presupuestos", "Créditos", "Recurrentes",
-    )
-
-    @Test
-    fun `Ajustes ofrece sus fichas y ninguna que ya sea una pestana`() {
-        composeRule.setContent {
-            MoviTheme { MasScreen(onNavigate = {}) }
-        }
-
-        composeRule.onNodeWithText(TITULO_DE_AJUSTES, useUnmergedTree = true).assertIsDisplayed()
-        lasDeAjustes.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertIsDisplayed() }
-        lasQueSonPestana.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
+    @After
+    fun limpiar() {
+        Repositories.sustitutoDePrueba = null
     }
 
-    /**
-     * Hasta la ola C, en pantalla ancha Más escondía lo que el rail ya mostraba. Ahora nada de Ajustes
-     * es una pestaña, así que la web ve las mismas fichas que el teléfono.
-     */
-    @Test
-    fun `en pantalla ancha Ajustes muestra las mismas fichas`() {
-        composeRule.setContent {
-            CompositionLocalProvider(LocalWindowWidthClass provides WindowWidthClass.Expanded) {
-                MoviTheme { MasScreen(onNavigate = {}) }
-            }
-        }
+    private val perfilDelDueno = UserProfile(
+        id = "u1", email = "jvillad1@gmail.com", name = "Juan Villada", avatarColor = "#7C6CF0",
+        periodCutoffDay = 25, reminderLeadDays = 5,
+    )
 
-        lasDeAjustes.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertIsDisplayed() }
+    private val repo = object : RepositorioDePrueba() {
+        override suspend fun getUserProfile(): UserProfile = perfilDelDueno
+        override suspend fun isScreenAdmin(): Boolean = false
     }
 
-    /** Ola W1: en una ventana mediana (rail compacto) tampoco se esconde nada. */
-    @Test
-    fun `en una ventana mediana Ajustes muestra las mismas fichas`() {
-        composeRule.setContent {
-            CompositionLocalProvider(LocalWindowWidthClass provides WindowWidthClass.Medium) {
-                MoviTheme { MasScreen(onNavigate = {}) }
-            }
-        }
+    private var navegoA: Screen? = null
+    private var sesionesCerradas = 0
 
-        lasDeAjustes.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertIsDisplayed() }
+    private fun montar(ancho: WindowWidthClass? = null) {
+        Repositories.sustitutoDePrueba = repo
+        composeRule.setContent {
+            val pantalla = @androidx.compose.runtime.Composable {
+                MoviTheme {
+                    Box(Modifier.fillMaxSize()) {
+                        MasScreen(onNavigate = { navegoA = it }, onLogout = { sesionesCerradas++ })
+                    }
+                }
+            }
+            if (ancho != null) CompositionLocalProvider(LocalWindowWidthClass provides ancho) { pantalla() }
+            else pantalla()
+        }
+        composeRule.waitUntil(5_000) { hay("Cada día 25") }
+    }
+
+    private fun hay(texto: String): Boolean =
+        composeRule.onAllNodes(hasText(texto, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    private fun tocarFila(titulo: String) {
+        composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText(titulo)), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
+    private fun texto(nodo: SemanticsNode): String =
+        nodo.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()
+
+    private fun textosDentroDe(nodo: SemanticsNode): List<String> =
+        listOf(texto(nodo)).filter { it.isNotEmpty() } + nodo.children.flatMap(::textosDentroDe)
+
+    /** Los títulos de las secciones, de arriba abajo. */
+    private fun secciones(): List<Pair<String, Float>> =
+        composeRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.TestTag, TAG_SECCION), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .map { textosDentroDe(it).first() to it.boundsInRoot.top }
+            .sortedBy { it.second }
+
+    private fun arribaDe(texto: String): Float =
+        composeRule.onNode(hasText(texto), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+
+    @Test
+    fun `arriba el perfil y despues las secciones en su orden`() {
+        montar()
+
+        val tarjeta = composeRule.onNodeWithTag(TAG_TARJETA_DEL_PERFIL, useUnmergedTree = true).fetchSemanticsNode()
+        assertTrue(hay("Juan Villada"), "la tarjeta dice el nombre")
+        assertTrue(hay("Editar"))
+
+        val vistas = secciones()
+        // En Android de prueba no hay lector de huella ni es administrador: sin «Entrar» ni «Administración».
+        assertEquals(listOf("Tu plata", "Movi", "Cómo se ve", "Avisos", "Tus datos", "Cuenta"), vistas.map { it.first })
+        assertEquals(SECCIONES_DE_AJUSTES.filter { it in vistas.map { v -> v.first } }, vistas.map { it.first }, "el orden de SECCIONES_DE_AJUSTES")
+        assertTrue(tarjeta.boundsInRoot.bottom <= vistas.first().second, "el perfil va arriba de todo")
+
+        // Cada fila en su sección, en el orden pedido.
+        val enOrden = listOf(
+            "Inicio del mes", "Categorías", "Personas y comercios", "Captura del banco",
+            "Movi AI", "Lo que Movi sabe de ti", "Editar inicio",
+            "Igual que el teléfono", "Ocultar los saldos",
+            "Avisarme antes de un vencimiento", "Resumen del período por correo",
+            "Documentos", "Descargar tus datos", "Compartir",
+            "Cambiar contraseña", CERRAR_SESION, CERRAR_SESION_EN_TODOS,
+            BORRAR_MI_CUENTA,
+        )
+        val alturas = enOrden.map { arribaDe(it) }
+        assertEquals(alturas.sorted(), alturas, "las filas no están en el orden de las secciones")
+    }
+
+    @Test
+    fun `Cerrar sesion sigue cerrando la sesion`() {
+        montar()
+        tocarFila(CERRAR_SESION)
+        assertEquals(1, sesionesCerradas)
+    }
+
+    @Test
+    fun `cada fila lleva a su pantalla`() {
+        montar()
+        mapOf(
+            "Categorías" to Screen.Categorias,
+            "Personas y comercios" to Screen.Destinos(),
+            "Captura del banco" to Screen.CapturaDelBanco,
+            "Movi AI" to Screen.AIChat(),
+            "Lo que Movi sabe de ti" to Screen.LoQueMoviSabe,
+            "Editar inicio" to Screen.EditarInicio,
+            "Documentos" to Screen.Documentos,
+            "Compartir" to Screen.Compartir,
+            BORRAR_MI_CUENTA to Screen.BorrarLaCuenta,
+        ).forEach { (fila, destino) ->
+            navegoA = null
+            tocarFila(fila)
+            assertEquals(destino, navegoA, "«$fila»")
+        }
+    }
+
+    @Test
+    fun `la configuracion que estaba en Perfil esta en Ajustes`() {
+        montar()
+        listOf(
+            "Cambiar contraseña", "Inicio del mes", "Cómo se ve", "Ocultar los saldos", "Editar inicio",
+            "Avisarme antes de un vencimiento", "Descargar tus datos", CERRAR_SESION, CERRAR_SESION_EN_TODOS,
+        ).forEach { assertTrue(hay(it), "falta «$it»") }
+        // Ya no hay una ficha «Perfil» que lleve a otra pantalla.
+        assertTrue(composeRule.onAllNodes(hasText("Perfil"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun `Borrar mi cuenta va al final, aparte, como una fila`() {
+        montar()
+        val borrar = arribaDe(BORRAR_MI_CUENTA)
+        assertTrue(borrar > arribaDe(CERRAR_SESION_EN_TODOS), "después de todo lo demás")
+        // Es una fila (se toca entera), no un botón lleno.
+        composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText(BORRAR_MI_CUENTA)), useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `Ajustes no ofrece lo que ya es una pestana ni Metas ni Extractos`() {
+        montar()
+        listOf("Cuentas", "Cuadre de saldos", "Presupuestos", "Créditos", "Recurrentes", "Metas", "Extractos")
+            .forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
+    }
+
+    /** Ola C: en pantalla ancha y mediana tampoco se esconde nada. */
+    @Test
+    fun `en pantalla ancha y mediana Ajustes muestra lo mismo`() {
+        montar(WindowWidthClass.Expanded)
+        assertEquals(6, secciones().size)
     }
 
     /** Ajustes no es pestaña: lleva flecha (vuelve a donde se estaba), no el avatar que la abrió. */
     @Test
     fun `Ajustes lleva flecha de volver`() {
-        composeRule.setContent {
-            MoviTheme { MasScreen(onNavigate = {}) }
-        }
-
+        montar()
+        composeRule.onNodeWithText(TITULO_DE_AJUSTES, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Volver", useUnmergedTree = true).assertIsDisplayed()
     }
 
-    @Test
-    fun `tocar Perfil abre Perfil`() {
-        var navegoA: Screen? = null
-        composeRule.setContent {
-            MoviTheme { MasScreen(onNavigate = { navegoA = it }) }
-        }
-
-        composeRule.onNodeWithText("Perfil", useUnmergedTree = true).performClick()
-
-        assertEquals(Screen.Profile, navegoA)
-    }
-
-    /** Ola V: la segunda puerta hacia `Screen.Destinos` — ver el KDoc de la clase. */
-    @Test
-    fun `tocar Personas y comercios abre Destinos`() {
-        var navegoA: Screen? = null
-        composeRule.setContent {
-            MoviTheme { MasScreen(onNavigate = { navegoA = it }) }
-        }
-
-        composeRule.onNodeWithText("Personas y comercios", useUnmergedTree = true).performClick()
-
-        assertEquals(Screen.Destinos(), navegoA)
-    }
-
     /**
-     * Ola C, tarea 5: la configuración de la captura (permisos, notificaciones, hibernación) y el
-     * historial de mensajes salieron de la bandeja y viven en Ajustes. En Android —donde corren
-     * estas pruebas— la ficha se llama «Captura del banco».
+     * En Android —donde corren estas pruebas— la fila se llama «Captura del banco» (en la web y en
+     * iOS, «Mensajes del banco»).
      */
     @Test
     fun `la captura del banco vive en Ajustes`() {
-        var navegoA: Screen? = null
-        composeRule.setContent {
-            MoviTheme { MasScreen(onNavigate = { navegoA = it }) }
-        }
-
-        composeRule.onNodeWithText("Captura del banco", useUnmergedTree = true).performClick()
-
-        assertEquals(Screen.CapturaDelBanco, navegoA)
+        montar()
+        assertTrue(hay("Captura del banco"))
         composeRule.onNodeWithText("Mensajes del banco", useUnmergedTree = true).assertDoesNotExist()
     }
 
-    // ── Ola B, tarea 7: Metas y Extractos salieron; Primeros pasos es condicional ──────
-
-    @Test
-    fun `Ajustes no ofrece Metas ni Extractos, y Documentos sigue ahi`() {
-        composeRule.setContent {
-            MoviTheme { MasScreen(onNavigate = {}) }
-        }
-
-        composeRule.onNodeWithText("Metas", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Extractos", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Documentos", useUnmergedTree = true).assertIsDisplayed()
-    }
+    // ── Primeros pasos es condicional (Ola B, tarea 7) ─────────────────────────
 
     private fun cuentaConMovimiento(eventCount: Int) = DashboardData(
         accounts = if (eventCount > 0) listOf(Account(id = "a1", name = "Nu", type = AccountType.SAVINGS, balance = 1)) else emptyList(),
@@ -165,37 +239,23 @@ class MasScreenTest {
 
     @Test
     fun `Primeros pasos aparece mientras la guia del Inicio este incompleta`() {
-        // Contestaron las cinco lecturas y no hay ni cuenta ni movimiento: la MISMA condición
-        // que prende la guía en el Inicio (`DashboardData.guiaIncompleta`).
         DashboardDataCache.data = cuentaConMovimiento(eventCount = 0)
-
-        composeRule.setContent {
-            MoviTheme { MasScreen(onNavigate = {}) }
-        }
-
-        composeRule.onNodeWithText("Primeros pasos", useUnmergedTree = true).assertIsDisplayed()
+        montar()
+        assertTrue(hay("Primeros pasos"))
+        tocarFila("Primeros pasos")
+        assertEquals(Screen.PrimerosPasos, navegoA)
     }
 
     @Test
     fun `Primeros pasos no aparece si ya hay cuenta y movimiento`() {
         DashboardDataCache.data = cuentaConMovimiento(eventCount = 3)
-
-        composeRule.setContent {
-            MoviTheme { MasScreen(onNavigate = {}) }
-        }
-
-        composeRule.onNodeWithText("Primeros pasos", useUnmergedTree = true).assertDoesNotExist()
+        montar()
+        assertTrue(!hay("Primeros pasos"))
     }
 
     @Test
     fun `sin datos del Inicio todavia, Primeros pasos tampoco aparece`() {
-        // `DashboardDataCache.data` empieza en null en cada prueba (ver AppDePrueba): sin
-        // respuesta, `guiaIncompleta` es `false` — no se afirma que falte algo que Más nunca
-        // preguntó, mismo criterio que `puedeAfirmarVacio`.
-        composeRule.setContent {
-            MoviTheme { MasScreen(onNavigate = {}) }
-        }
-
-        composeRule.onNodeWithText("Primeros pasos", useUnmergedTree = true).assertDoesNotExist()
+        montar()
+        assertTrue(!hay("Primeros pasos"))
     }
 }

@@ -49,7 +49,7 @@ class DisposicionTest {
         listOf(Screen.Dashboard, Screen.Accounts, Screen.Credits, Screen.Plan())
             .forEach { assertEquals(Disposicion.Tablero, disposicionDe(it), "$it") }
         listOf(
-            Screen.Mas, Screen.Profile, Screen.Categorias, Screen.Login, Screen.PorRevisar,
+            Screen.Mas, Screen.BorrarLaCuenta, Screen.Categorias, Screen.Login, Screen.PorRevisar,
         ).forEach { assertEquals(Disposicion.Lectura, disposicionDe(it), "$it") }
     }
 
@@ -97,7 +97,7 @@ class DisposicionTest {
         // Ola W4: Movimientos pasó a lista y detalle (ver `MovimientosListaYDetalleTest`).
         assertEquals(1_440.dp, anchoMaximoDeLaPantalla(Screen.Transactions(), WindowWidthClass.Expanded))
         assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.PorRevisar, WindowWidthClass.Expanded))
-        assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.Profile, WindowWidthClass.Medium))
+        assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.BorrarLaCuenta, WindowWidthClass.Medium))
         assertEquals(Dp.Infinity, anchoMaximoDeLaPantalla(Screen.Dashboard, WindowWidthClass.Compact))
     }
 
@@ -114,11 +114,11 @@ class DisposicionTest {
         assertEquals(390.dp, anchoDelPanelEnLaCascara(390.dp, Screen.Dashboard))
         // Mediano: menos el rail compacto; una lectura se topa en 720.
         assertEquals(688.dp, anchoDelPanelEnLaCascara(768.dp, Screen.Dashboard))
-        assertEquals(720.dp, anchoDelPanelEnLaCascara(999.dp, Screen.Profile))
+        assertEquals(720.dp, anchoDelPanelEnLaCascara(999.dp, Screen.BorrarLaCuenta))
         // Escritorio: menos el rail ancho. Lista y detalle (W2) a 1280: 1064, no 1280.
         assertEquals(1_064.dp, anchoDelPanelEnLaCascara(1_280.dp, Screen.Periodos))
         assertEquals(1_440.dp, anchoDelPanelEnLaCascara(1_920.dp, Screen.Periodos))
-        assertEquals(720.dp, anchoDelPanelEnLaCascara(1_280.dp, Screen.Profile))
+        assertEquals(720.dp, anchoDelPanelEnLaCascara(1_280.dp, Screen.BorrarLaCuenta))
     }
 
     @Test

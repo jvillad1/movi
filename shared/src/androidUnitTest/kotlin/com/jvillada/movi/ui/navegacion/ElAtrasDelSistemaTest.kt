@@ -84,7 +84,7 @@ class ElAtrasDelSistemaTest {
 
     @Test
     fun `con una hoja abierta, atras cierra la hoja y no toca la pila`() {
-        val pila = mutableStateListOf<Screen>(Screen.Dashboard, Screen.Mas, Screen.Profile)
+        val pila = mutableStateListOf<Screen>(Screen.Dashboard, Screen.Mas, Screen.Categorias)
         val hojas = PilaDeHojas()
 
         composeRule.setContent {
@@ -103,7 +103,7 @@ class ElAtrasDelSistemaTest {
         composeRule.onNodeWithText("Cambiar contraseña").assertDoesNotExist()
         assertEquals(
             "la pila no se puede mover: cerrar una hoja no es navegar",
-            listOf(Screen.Dashboard, Screen.Mas, Screen.Profile),
+            listOf(Screen.Dashboard, Screen.Mas, Screen.Categorias),
             pila.toList(),
         )
         assertFalse(hojas.hayHojaAbierta)
@@ -143,10 +143,10 @@ class ElAtrasDelSistemaTest {
 
     @Test
     fun `sin hojas abiertas, atras saca el tope de la pila`() {
-        val pila = mutableStateListOf<Screen>(Screen.Dashboard, Screen.Mas, Screen.Profile)
+        val pila = mutableStateListOf<Screen>(Screen.Dashboard, Screen.Mas, Screen.Categorias)
         val hojas = PilaDeHojas()
 
-        composeRule.setContent { CascaraDeLaApp(pila, hojas) { Text("Perfil") } }
+        composeRule.setContent { CascaraDeLaApp(pila, hojas) { Text("Categorías") } }
         apretarAtras()
 
         assertEquals(listOf(Screen.Dashboard, Screen.Mas), pila.toList())

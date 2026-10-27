@@ -917,7 +917,7 @@ private fun LazyListScope.propuestaDeRecordatorios(
             accion = if (bloqueadas) "Ver tus avisos" else "Activar notificaciones",
             onAccion = {
                 if (bloqueadas) {
-                    onNavigate(Screen.Profile)
+                    onNavigate(Screen.Mas)
                 } else {
                     PushOptIn.enable()
                     estado.pushRefreshTick++

@@ -264,7 +264,9 @@ internal fun screenForTarget(target: String): Screen? = when (target) {
     // ahora vive.
     "extractos" -> Screen.Documentos
     "aichat" -> Screen.AIChat()
-    "profile" -> Screen.Profile
+    // Vuelta de diseño 3: «Perfil» se mudó dentro de Ajustes. El target sobrevive (una definición
+    // guardada puede traerlo) y lleva a Ajustes, donde ahora vive todo lo que tenía.
+    "profile" -> Screen.Mas
     else -> null
 }
 

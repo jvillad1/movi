@@ -25,7 +25,14 @@ class ScreenEditorScreenTest {
 
     @Test
     fun el_resto_de_los_targets_se_sigue_ofreciendo() {
-        assertEquals(ScreenTaxonomy.NAVIGATE_TARGETS.filterNot { it == "goals" }, NAVEGABLES_DESDE_EL_EDITOR)
+        assertEquals(ScreenTaxonomy.NAVIGATE_TARGETS.filterNot { it == "goals" || it == "profile" }, NAVEGABLES_DESDE_EL_EDITOR)
+    }
+
+    /** Vuelta de diseño 3: «Perfil» es Ajustes, que el Editor ya ofrece como «mas». Sigue válido. */
+    @Test
+    fun el_editor_no_ofrece_perfil_aparte_de_Ajustes() {
+        assertFalse("profile" in NAVEGABLES_DESDE_EL_EDITOR)
+        assertTrue("profile" in ScreenTaxonomy.NAVIGATE_TARGETS)
     }
 
     /**
