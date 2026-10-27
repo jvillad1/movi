@@ -26,6 +26,8 @@ import com.jvillada.movi.shared.model.RepartoDelEspacio
 import com.jvillada.movi.shared.model.idsDeMiembros
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.partesDelGasto
+import com.jvillada.movi.shared.repository.ApiException
+import com.jvillada.movi.shared.repository.MovimientoSinSubir
 import com.jvillada.movi.theme.Espacio as EspacioDeDiseno
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
@@ -58,9 +60,15 @@ import kotlinx.coroutines.launch
  * **Cómo se reparte no se elige acá**: la proporción es del espacio ([Espacio.reparto], mitad y mitad
  * o porcentajes), y no existe una por gasto. La hoja la dice; inventar otra sería lógica de plata nueva.
  *
- * **Si se guardó y no se pudo repartir** (sin conexión; o, en el teléfono, porque el movimiento todavía
- * no subió al server y el reparto lo pide el server), el gasto ya quedó anotado: la hoja lo dice y
- * ofrece reintentar **solo el reparto**, con el mismo movimiento. Nunca vuelve a guardar.
+ * **En el teléfono el gasto se guarda primero en la base local** y lo sube el `SyncEngine` cada 30 s.
+ * El reparto lo hace el server, así que antes de pedirlo `LocalRepository.repartirMovimiento` da una
+ * vuelta de esa misma subida (vuelta de diseño 24): con señal, «Pagué yo» sube el gasto y lo reparte
+ * de una, sin pasar por «Reintentar».
+ *
+ * **Si se guardó y no se pudo repartir** (sin conexión, o el server rechazó el gasto), el gasto ya
+ * quedó anotado: la hoja lo dice ([motivoDelRepartoPendiente]) y ofrece reintentar **solo el
+ * reparto**, con el mismo movimiento. Nunca vuelve a guardar. No se difiere solo: las escrituras de
+ * un espacio no tienen cola en el teléfono, y armarle una sería lógica nueva.
  */
 
 /** Lo que Agregar ya tiene escrito y viaja a la hoja. */
@@ -141,7 +149,28 @@ suspend fun repartirDesdeAgregar(
     val evento = yaGuardado ?: intentar { caminos.guardarElGasto() }
         .getOrElse { return ResultadoDeRepartir.NoSeGuardo(it.toUserMessage()) }
     return intentar { caminos.repartirMovimiento(decision.espacio.id, evento.id) }
-        .fold({ ResultadoDeRepartir.Listo(evento) }, { ResultadoDeRepartir.GuardadoSinRepartir(evento, mensajeDelEspacio(it)) })
+        .fold({ ResultadoDeRepartir.Listo(evento) }, { ResultadoDeRepartir.GuardadoSinRepartir(evento, motivoDelRepartoPendiente(it)) })
+}
+
+/** Lo que dice la hoja cuando el gasto quedó sin conexión para repartirlo (vuelta de diseño 24). */
+const val REPARTO_SIN_CONEXION: String =
+    "El gasto quedó anotado. Para repartirlo hace falta conexión: reintenta cuando vuelva la señal."
+
+/**
+ * **Qué dice la hoja si el gasto quedó anotado y el reparto no.** Siempre empieza por lo que sí pasó
+ * (el gasto está anotado: no hay que volver a escribirlo) y sigue con lo que falta:
+ *
+ * - el gasto no subió y el server lo rechazó ([MovimientoSinSubir.rechazo]): lo que dijo el server;
+ * - el server no quiso repartirlo ([ApiException]): lo que dijo;
+ * - sin señal (el gasto no subió, o el reparto no llegó): [REPARTO_SIN_CONEXION].
+ */
+fun motivoDelRepartoPendiente(e: Throwable): String {
+    val rechazo = (e as? MovimientoSinSubir)?.rechazo
+    return when {
+        rechazo != null -> "El gasto quedó anotado en este teléfono, pero el servidor no lo recibió: $rechazo"
+        e is ApiException -> "El gasto quedó anotado, pero no se pudo repartir: ${e.toUserMessage()}"
+        else -> REPARTO_SIN_CONEXION
+    }
 }
 
 /** «Mitad y mitad», o los porcentajes del espacio: «Tú 60 % · Caro 40 %». */
@@ -211,7 +240,7 @@ fun HojaRepartirEsteGasto(
                 is ResultadoDeRepartir.NoSeGuardo -> error = r.motivo
                 is ResultadoDeRepartir.GuardadoSinRepartir -> {
                     yaGuardado = r.evento
-                    error = "El gasto quedó anotado, pero no se pudo repartir: ${r.motivo}"
+                    error = r.motivo
                 }
             }
             trabajando = false

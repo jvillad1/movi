@@ -53,8 +53,10 @@ actual fun createRepository(): WalletRepository {
     val remote = WalletRepositoryImpl(createHttpClient(), apiBaseUrl)
     val db = createDatabase("movi.db")
     val userId = { SessionManager.userId ?: "" }
-    SyncEngine(db, remote, userId).start()
-    return LocalRepository(db, remote, userId)
+    // El mismo que corre cada 30 s es el que «Repartir» le pide subir ya (vuelta de diseño 24):
+    // comparten el candado y no empujan la misma fila a la vez.
+    val sincronizador = SyncEngine(db, remote, userId).also { it.start() }
+    return LocalRepository(db, remote, userId, sincronizador = sincronizador)
 }
 
 // No-op: no hay overlay HTML que recuperar acá. Compose navega solo al ver

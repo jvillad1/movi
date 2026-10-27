@@ -209,6 +209,13 @@ class LocalRepository(
     private val remote: WalletRepository,
     private val userId: () -> String,
     private val disco: CoroutineDispatcher = dispatcherDeDisco(),
+    /**
+     * Quien sube lo pendiente. La app pasa el MISMO que arrancó (`createRepository`), así una subida
+     * pedida (ver [repartirMovimiento]) y la del ciclo comparten el candado; una prueba que no pasa
+     * ninguno recibe uno propio, sin arrancar.
+     */
+    private val sincronizador: com.jvillada.movi.shared.SyncEngine =
+        com.jvillada.movi.shared.SyncEngine(db, remote, userId),
 ) : WalletRepository {
 
     /**
@@ -2017,7 +2024,34 @@ class LocalRepository(
     override suspend fun guardarEspacio(espacio: com.jvillada.movi.shared.model.Espacio) = remote.guardarEspacio(espacio)
     override suspend fun getDetalleDelEspacio(id: String): com.jvillada.movi.shared.model.DetalleDelEspacio =
         leerUnoConCache("espacio:$id") { remote.getDetalleDelEspacio(id) }
-    override suspend fun repartirMovimiento(espacioId: String, eventoId: String) = remote.repartirMovimiento(espacioId, eventoId)
+    /**
+     * **Repartir pide que el server ya tenga el movimiento** (vuelta de diseño 24). En el teléfono,
+     * «Pagué yo» guarda el gasto primero acá ([postEvent]: local, `syncedAt` en null) y lo sube el
+     * `SyncEngine` en su ciclo de 30 s; el reparto lo hace el server, que hasta entonces no conoce
+     * ese id y contestaba 404 —la hoja caía a «Reintentar el reparto»—.
+     *
+     * Ahora, si la fila sigue pendiente, primero se da **una vuelta de la misma subida de siempre**
+     * ([com.jvillada.movi.shared.SyncEngine.subirLoPendiente]: cuentas antes que movimientos, el
+     * mismo `POST /api/events` idempotente por id y el mismo sello `markSyncedIfUnchanged`, así que
+     * el ciclo no lo vuelve a empujar) y después se reparte. Si con eso no subió —sin señal, o el
+     * server lo rechazó— lanza [MovimientoSinSubir] y no manda el reparto: la hoja lo dice.
+     * Un movimiento que no está en este teléfono (vino del server) o ya sellado se reparte directo.
+     */
+    override suspend fun repartirMovimiento(espacioId: String, eventoId: String): com.jvillada.movi.shared.model.GastoDelEspacio {
+        enDisco { asegurarQueSubio(eventoId) }
+        return remote.repartirMovimiento(espacioId, eventoId)
+    }
+
+    /** Ver [repartirMovimiento]. Lanza [MovimientoSinSubir] si la fila sigue sin sello. */
+    private suspend fun asegurarQueSubio(eventoId: String) {
+        val fila = db.financialEventQueries.selectById(eventoId, userId()).executeAsOneOrNull() ?: return
+        if (fila.syncedAt != null) return
+        sincronizador.subirLoPendiente()
+        val despues = db.financialEventQueries.selectById(eventoId, userId()).executeAsOneOrNull() ?: return
+        if (despues.syncedAt == null) {
+            throw MovimientoSinSubir(eventoId, rechazo = despues.syncError?.takeIf { it.isNotBlank() })
+        }
+    }
     override suspend fun quitarDelEspacio(espacioId: String, eventoId: String) = remote.quitarDelEspacio(espacioId, eventoId)
     override suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio) =
         remote.anotarGastoDeOtro(espacioId, gasto)
