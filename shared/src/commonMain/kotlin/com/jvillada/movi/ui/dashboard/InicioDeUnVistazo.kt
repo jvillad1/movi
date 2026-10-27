@@ -334,7 +334,7 @@ internal fun porDiaQueQueda(d: DisponibleDelPeriodo): String =
  * Ola 1 · Movi avisa (1-oct). Hoy abría con «Tu plata», el saldo total, que no contesta la pregunta
  * del día: ¿cuánto puedo gastar? El dueño decidió que la cifra principal sea «Te quedan $X».
  *
- * **No es una cuenta nueva: es la columna «Período» de la tarjeta Disponible de Plan**
+ * **No es una cuenta nueva: es lo que le queda al período en la tarjeta Disponible de Plan** (su frase)
  * ([DisponibleDelPeriodo.periodo], [VentanaDelDisponible.teQuedan]), leída del MISMO
  * [DisponibleDelPeriodo] que pinta esa tarjeta ([disponibleDelInicio]). Si Hoy y Plan pudieran dar
  * dos números distintos para «¿cuánto me queda?», ninguno de los dos se podría creer. Lo fija
@@ -343,8 +343,8 @@ internal fun porDiaQueQueda(d: DisponibleDelPeriodo): String =
  * @property teQuedan la cifra con signo, idéntica a `periodo.teQuedan`.
  * @property monto lo que se escribe después del [rotulo]: sin signo, porque el rótulo ya dice de qué
  *   lado está («Te pasaste por $629.882» y no «Te quedan −$629.882»). Hoy lo escribe entero
- *   (`formatCOP`, «$4.963.400»); la columna de Plan, compacto («$5M»): mismo valor, otro ancho.
- * @property enRojo el mismo criterio que pinta de rojo la columna «Período» en Plan.
+ *   (`formatCOP`, «$4.963.400»); la frase de Plan, compacto («$5M»): mismo valor, otro ancho.
+ * @property enRojo el mismo criterio que pinta de rojo la frase y la columna «Período» en Plan.
  * @property detalle la línea chica de abajo: para cuántos días y cuánto da por día, o qué ventana se
  *   pasó.
  */
@@ -361,7 +361,7 @@ data class TeQuedanDeHoy(
 /** El rótulo cuando queda algo (o nada). */
 const val ROTULO_TE_QUEDAN: String = "Te quedan"
 
-/** El rótulo cuando la columna «Período» está en negativo. */
+/** El rótulo cuando lo que le queda al período está en negativo. */
 const val ROTULO_TE_PASASTE: String = "Te pasaste por"
 
 /**
