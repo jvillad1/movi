@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +46,11 @@ import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.VerTodasLasCuentas
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.CampoDeMonto
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.RotuloDeCampo
+import com.jvillada.movi.ui.components.ds.AyudaDeCampo
 
 /**
  * La ÚNICA hoja para anotar algo que se repite (Ola 8; desde la Ola 16, también si se repite una
@@ -504,28 +508,7 @@ fun CreateRecurringRuleSheet(
             }
 
             // --- NOMBRE ---
-            SheetSectionLabel("NOMBRE")
-            Spacer(Modifier.height(Espacio.xs))
-            SheetInputBox {
-                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                // [esAtajoDeSeleccionarTodo].
-                val campo = rememberCampoConSeleccion(name) { name = it }
-                BasicTextField(
-                    value = campo.valor,
-                    onValueChange = campo::alCambiar,
-                    cursorBrush = SolidColor(Movi.colores.texto),
-                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                    decorationBox = { inner ->
-                        if (name.isEmpty()) {
-                            Text("Ej: Arriendo, Netflix, Gym", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                        }
-                        inner()
-                    },
-                )
-            }
+            Campo(name, { name = it }, rotulo = "Nombre", guia = "Ej: Arriendo, Netflix, Gym")
 
             Spacer(Modifier.height(Espacio.m))
 
@@ -537,8 +520,7 @@ fun CreateRecurringRuleSheet(
             // es COP) y editando una suscripción el `PUT` no escribe esa columna — ver el
             // KDoc de [existingSub].
             if (!isEditMode) {
-                SheetSectionLabel("MONEDA")
-                Spacer(Modifier.height(Espacio.xs))
+                RotuloDeCampo("Moneda")
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
@@ -582,8 +564,7 @@ fun CreateRecurringRuleSheet(
             // columna—, y hace falta: un cobro que Movi detectó nace mensual, así que un
             // anual mal clasificado solo se puede arreglar acá.
             if (!isEditMode || editandoSuscripcion) {
-                SheetSectionLabel("CADA CUÁNTO")
-                Spacer(Modifier.height(Espacio.xs))
+                RotuloDeCampo("Cada cuánto")
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
@@ -617,15 +598,12 @@ fun CreateRecurringRuleSheet(
             // que llega al extracto una vez al año — no la doceava parte. Pedir el número
             // que el dueño puede verificar y hacer nosotros la división es lo que impide
             // que quede guardada una cifra que no existe en ninguna parte del mundo real.
-            SheetSectionLabel(if (esAnual) "MONTO DEL COBRO ANUAL" else "MONTO")
-            Spacer(Modifier.height(Espacio.xs))
             // V12: en Colombia "$20" se lee veinte pesos. Si el cobro es en dólares, el campo
             // lo dice mientras se escribe — igual que después lo dice la fila de la lista.
-            MoneyField(
-                value = amount,
-                onValueChange = { amount = it },
-                prefix = if (enDolares) "US$" else "$",
-                placeholder = if (enDolares) "US$ 0" else "$ 0",
+            CampoDeMonto(
+                amount, { amount = it },
+                rotulo = if (esAnual) "Monto del cobro anual" else "Monto",
+                moneda = if (enDolares) "US$" else "$",
             )
 
             Spacer(Modifier.height(Espacio.m))
@@ -634,8 +612,7 @@ fun CreateRecurringRuleSheet(
             // En un cobro anual esto es el día, pero Movi no guarda el MES: el modelo de
             // suscripciones tiene `dayOfMonth` y nada más. La consecuencia se dice abajo,
             // en la nota, en vez de dejar que el dueño la deduzca cuando el aviso no llegue.
-            SheetSectionLabel("DÍA DEL MES")
-            Spacer(Modifier.height(Espacio.xs))
+            RotuloDeCampo("Día del mes")
             DayOfMonthPicker(
                 selected = dayOfMonth,
                 enabled = !saving,
@@ -650,8 +627,7 @@ fun CreateRecurringRuleSheet(
             // existe y que no aplica, en lugar de elegirla y que Movi la cambie por atrás. (Un
             // ingreso recurrente en dólares, o uno anual, no se puede registrar hoy — el
             // modelo de suscripciones es de cobros. Ver la nota de abajo.)
-            SheetSectionLabel("TIPO")
-            Spacer(Modifier.height(Espacio.xs))
+            RotuloDeCampo("Tipo")
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
@@ -729,7 +705,7 @@ fun CreateRecurringRuleSheet(
                     usedCategories = usedCategories,
                     prefs = categoryPrefs,
                     usos = UsedCategoriesCache.usosRecientes,
-                    label = "CATEGORÍA",
+                    label = "Categoría",
                     placeholder = "Ej: Vivienda, Suscripción, Salud",
                 )
             }
@@ -903,17 +879,9 @@ fun CreateRecurringRuleSheet(
         // arriba y el dueño nunca baja, porque el botón ya es fijo: si el POST fallaba,
         // el texto rojo se agregaba al fondo, fuera de vista, y el botón volvía a decir
         // «Crear recurrente». Tocaba, no pasaba nada, y volvía a tocar.
-        if (error != null) {
-            Text(
-                text = error!!,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.sale,
-                modifier = Modifier.padding(bottom = Espacio.xs),
-            )
-        }
-
-        // --- CTA --- (fijo al pie, fuera del área que scrollea)
-        Boton(
+        //
+        // --- CTA --- (fijo al pie, fuera del área que scrollea): el pie de hoja del sistema.
+        PieDeHoja(
             texto = when {
                 saving       -> if (isEditMode) "Guardando…" else "Creando…"
                 isEditMode   -> "Guardar cambios"
@@ -921,17 +889,9 @@ fun CreateRecurringRuleSheet(
             },
             onClick = { save() },
             habilitado = canSave,
-            anchoCompleto = true,
+            razon = if (saving) null else missingFieldMessage,
+            error = error,
         )
-        if (!canSave && !saving && missingFieldMessage != null) {
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = missingFieldMessage,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
-        }
 
         Spacer(Modifier.height(Espacio.s))
     }
@@ -1028,8 +988,7 @@ private fun AccountPickerField(
     var verTodas by remember(open, cuentas.principales.isEmpty()) {
         mutableStateOf(cuentas.principales.isEmpty())
     }
-    SheetSectionLabel("CUENTA (OPCIONAL)")
-    Spacer(Modifier.height(Espacio.xs))
+    RotuloDeCampo("Cuenta (opcional)")
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1122,15 +1081,7 @@ internal fun DestinoConocidoPickerField(
     // Con un destino ya puesto el selector se abre aunque la lista esté vacía o no haya llegado,
     // por el mismo motivo que en `AccountPickerField`: quitarlo tiene que poder pedirse siempre.
     val sePuedeElegir = destinos.isNotEmpty() || selectedId != null
-    SheetSectionLabel("PERSONA O COMERCIO (OPCIONAL)")
-    Spacer(Modifier.height(Espacio.xs))
-    Text(
-        "Si esto es una transferencia a alguien que ya tienes guardado en «Personas y comercios», " +
-            "asócialo: Movi va a reconocer el pago aunque el banco no repita este nombre.",
-        style = Movi.textos.apoyo,
-        color = Movi.colores.textoMedio,
-        modifier = Modifier.padding(bottom = Espacio.xs),
-    )
+    RotuloDeCampo(ROTULO_DE_LA_PERSONA_O_COMERCIO)
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1161,6 +1112,11 @@ internal fun DestinoConocidoPickerField(
             }
         }
     }
+    AyudaDeCampo(
+        ayuda = "Una transferencia a alguien que ya guardaste.",
+        masAyuda = "Si esto es una transferencia a alguien que ya tienes guardado en «Personas y " +
+            "comercios», asócialo: Movi va a reconocer el pago aunque el banco no repita este nombre.",
+    )
     if (open && sePuedeElegir) {
         Spacer(Modifier.height(Espacio.xs))
         Column(
@@ -1195,28 +1151,8 @@ private fun AccountPickerRow(label: String, selected: Boolean, onClick: () -> Un
     )
 }
 
-@Composable
-private fun SheetSectionLabel(text: String) {
-    Text(
-        text = text,
-        style = Movi.textos.apoyo,
-        color = Movi.colores.textoMedio,
-        fontWeight = FontWeight.Medium,
-    )
-}
-
-@Composable
-private fun SheetInputBox(content: @Composable BoxScope.() -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.m))
-            .background(Movi.colores.tarjeta)
-            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-            .padding(horizontal = Espacio.s, vertical = Espacio.s),
-        content = content,
-    )
-}
+/** El rótulo del selector de persona o comercio (en el recurrente y en la hoja del crédito). */
+const val ROTULO_DE_LA_PERSONA_O_COMERCIO: String = "Persona o comercio (opcional)"
 
 @Composable
 private fun RowScope.SheetChip(

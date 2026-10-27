@@ -189,7 +189,7 @@ class SuscripcionAnualEnElTableroTest {
         composeRule.waitForIdle()
         esperarTexto("Editar suscripción")
 
-        composeRule.onNodeWithText("MONTO DEL COBRO ANUAL", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Monto del cobro anual", useUnmergedTree = true).assertExists()
         composeRule.onAllNodesWithText("dividimos en 12", substring = true, useUnmergedTree = true)
             .assertCountEquals(1)
     }
@@ -201,7 +201,7 @@ class SuscripcionAnualEnElTableroTest {
         composeRule.waitForIdle()
         esperarTexto("Editar suscripción")
 
-        composeRule.onAllNodesWithText("MONTO DEL COBRO ANUAL", useUnmergedTree = true)
+        composeRule.onAllNodesWithText("Monto del cobro anual", useUnmergedTree = true)
             .assertCountEquals(0)
         composeRule.onAllNodesWithText("dividimos en 12", substring = true, useUnmergedTree = true)
             .assertCountEquals(0)
