@@ -53,12 +53,17 @@ jobs:
       # `continue-on-error` va SOLO en el primer intento. En el segundo no: ahí sí tiene que
       # romper. Sin esa asimetría, un JDK que nunca se instala dejaría pasar el trabajo entero y
       # los pasos de abajo fallarían con un error que no explica nada.
+      # `token`: para el JDK de JetBrains, setup-java le pregunta a la API de GitHub cuál es la
+      # última versión. Sin token esa pregunta va anónima y comparte el cupo de 60 por hora con
+      # todos los runners de la misma IP: el 26 y el 27-oct-2026 los dos intentos fallaron con
+      # «API rate limit exceeded» y el trabajo se cayó sin correr ninguna prueba.
       - id: jdk
         uses: actions/setup-java@v5
         continue-on-error: true
         with:
           distribution: jetbrains
           java-version: '21'
+          token: ${{ github.token }}
 
       - name: Reintentar el JDK
         if: steps.jdk.outcome == 'failure'
@@ -69,6 +74,7 @@ jobs:
         with:
           distribution: jetbrains
           java-version: '21'
+          token: ${{ github.token }}
 
       - uses: gradle/actions/setup-gradle@v4
 
