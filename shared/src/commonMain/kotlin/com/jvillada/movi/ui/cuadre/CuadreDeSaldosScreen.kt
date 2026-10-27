@@ -92,7 +92,11 @@ import kotlinx.datetime.LocalDate
  *   cualquier tipo de cuenta. Sí mueve el saldo, que es justamente lo que se vino a arreglar.
  */
 @Composable
-fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
+fun CuadreDeSaldosScreen(
+    onNavigate: (Screen) -> Unit,
+    /** La cuenta que va arriba, preseleccionada («Cuadrar efectivo»); `null` = el orden de siempre. */
+    primeraId: String? = null,
+) {
     var cuentas by remember { mutableStateOf<List<Account>>(emptyList()) }
     var cargando by remember { mutableStateOf(true) }
     // Ver [NoSePudoLeer]: no se afirma «no tienes cuentas» sin una lectura que haya contestado.
@@ -120,7 +124,7 @@ fun CuadreDeSaldosScreen(onNavigate: (Screen) -> Unit) {
         // efecto a mitad de camino) no puede escribir «No pudimos cargar» ni `cargando = false`
         // encima de la lectura que la reemplaza.
         intentar { Repositories.wallets.getAccounts() }
-            .onSuccess { cuentas = cuentasParaCuadrar(it); leidas = true }
+            .onSuccess { cuentas = cuentasConLaPrimera(cuentasParaCuadrar(it), primeraId); leidas = true }
             .onFailure { e -> error = e.toUserMessage() }
         cargando = false
         intentar { Repositories.wallets.getCuadresPorAviso() }.onSuccess { propuestas = it }

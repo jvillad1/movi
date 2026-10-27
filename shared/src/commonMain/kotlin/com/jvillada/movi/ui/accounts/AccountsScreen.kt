@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.accounts
 
+import com.jvillada.movi.ui.cuadre.EFECTIVO_EN_NEGATIVO_CORTO
+import com.jvillada.movi.ui.cuadre.efectivoImposible
+import com.jvillada.movi.ui.components.ds.TonoDeSubtitulo
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -551,9 +554,12 @@ private fun GrupoDeCuentas(titulo: String, cuentas: List<Account>, onNavigate: (
             cuentas.forEachIndexed { i, cuenta ->
                 if (i > 0) Separador()
                 val (monto, moneda) = saldoEnSuMoneda(cuenta)
+                // Vuelta de diseño 23: un efectivo en negativo no queda en rojo sin explicación.
+                val imposible = efectivoImposible(cuenta)
                 Fila(
                     titulo = cuenta.name,
-                    subtitulo = subtituloDeLaCuenta(cuenta),
+                    subtitulo = if (imposible) EFECTIVO_EN_NEGATIVO_CORTO else subtituloDeLaCuenta(cuenta),
+                    tonoDelSubtitulo = if (imposible) TonoDeSubtitulo.Aviso else TonoDeSubtitulo.Normal,
                     inicio = { AvatarDeLaCuenta(cuenta) },
                     final = {
                         Cifra(
