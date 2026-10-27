@@ -274,6 +274,9 @@ su tono (`TonoDeIcono`). Los miembros de un espacio y quien pagó un gasto.
 AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 ```
 
+**`Campo`**, **`CampoDeMonto`**, **`GrupoDeCampos`**, **`RotuloDeCampo`**, **`AyudaDeCampo`** y
+**`PieDeHoja`** (vuelta de diseño 6, `ds/Campo.kt`) — los formularios. Ver §15.
+
 ## 7. La regla de secciones
 
 1. **Cada pantalla es dueña de una pregunta.** Inicio (antes «Hoy»): «¿cuánto me queda y qué hago
@@ -293,6 +296,9 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 | `ElSistemaNoTieneValoresSueltosTest` | cero `.dp`/`.sp`/`Color(0x)`/radio/`fontSize`/`alpha` a mano dentro de `ds/` |
 | `ContrasteDeLosTokensTest` | el contraste de cada par, con las capas nuevas |
 | `LosTamanosSueltosSoloBajanTest` | los `fontSize` sueltos |
+| `LosCamposSonDelSistemaTest` | ningún `BasicTextField` / `TextField` / `OutlinedTextField` en `ui/` fuera de `ui/components/` y de seis excepciones con nombre (§15) |
+| `LosRotulosNoGritanTest` | ninguna función `…SectionLabel` en `ui/`, y ningún `Seccion` / `GrupoDeCampos` / `RotuloDeCampo` / `rotulo =` / `label =` con un texto entero en mayúsculas |
+| `LosCamposDelSistemaTest` (Robolectric) | el rótulo en frase, la guía de un monto en la letra de cuerpo y el valor en la de cifras, el error en `sale`, «¿Qué es esto?» abre y cierra, la caja llega a 48, y nada se recorta a 360 dp con la letra a ×1,3 (también en las hojas de crédito y tarjeta) |
 | `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en los dos temas; la fila mide 56/64; el botón llega a 48 de toque; la cifra se oculta; la tarjeta de cuenta mide 128 con marca y sin ella; dos widgets de un par miden lo mismo |
 
 ## 9. Migrar una pantalla
@@ -437,3 +443,61 @@ pasaron al sistema. Lo que se decidió y vale para las que vengan:
   mayúsculas y minúsculas se deja. **Solo para mostrar**: la cabeza de la tarjeta de aviso,
   Reconciliar, el lote de Por revisar y la notificación; lo que se guarda, las huellas y la memoria
   de categorías siguen con el texto crudo.
+
+## 15. Vuelta de diseño 6: los formularios entran al sistema
+
+Antes, cada una de las veinte hojas que piden datos armaba su caja con un `BasicTextField`: rótulos
+en mayúsculas (`SectionLabel("TÉRMINOS")`, `SheetSectionLabel("NOMBRE")`), el nombre del campo metido
+en el texto guía («$ Capital original (COP)», en la letra de las cifras y cortado), párrafos de tres
+o cuatro renglones debajo de cada campo y el botón apagado con la razón a veces sí, a veces no. Ahora
+un formulario se arma con seis piezas de `ds/Campo.kt`:
+
+| pieza | cuándo |
+|---|---|
+| `Campo` | todo texto que se escribe: nombre, banco, día, notas, contraseña (`secreto`), tasa (`sufijo = "%"`), texto largo (`renglones`) |
+| `CampoDeMonto` | toda cifra de plata. El valor en la letra de las cifras (`monto`), la guía en la de cuerpo y la moneda (`$`, `US$`) pintada aparte, nunca dentro de la guía. Reusa `nextMoneyField` / `parseMoneyDigits`; `MoneyField` delega acá |
+| `GrupoDeCampos` | el título de un bloque de un formulario, en frase («Términos», «El crédito»): es un `Seccion` con una descripción opcional y los campos separados por `Medida.dentroDeSeccion`. Entre grupos, `Medida.entreSecciones` |
+| `RotuloDeCampo` | el rótulo de algo que pide un dato y no es una caja (las píldoras de la moneda, un selector de cuenta, el tipo) |
+| `AyudaDeCampo` | la ayuda de una línea + «¿Qué es esto?» de algo que no es una caja (el selector de persona o comercio) |
+| `PieDeHoja` | **el pie de toda hoja**: el error del guardado en `sale` justo encima, el `Boton` `M` a todo el ancho, y si está apagado, **la razón en una línea centrada justo debajo** («Falta el banco»). Con `secundaria` («Cancelar», «Quitar») van dos botones del mismo ancho, la secundaria a la izquierda. Anular y quitar van en `Peligro` |
+
+**La anatomía de un campo**, de arriba a abajo:
+
+1. **El rótulo**, arriba y siempre, en frase, en `apoyo` medio y `textoMedio`, un renglón, con
+   `Espacio.xs` hasta la caja. Es el nombre del campo y no se borra al escribir. Si llega en
+   mayúsculas, se pinta en frase.
+2. **La caja**: capa 2, `Radio.s`, relleno `Espacio.s`, alto mínimo `Medida.objetivoTactil` (48). El
+   borde (`Medida.trazo`) va en `borde`, en la marca con foco y en `sale` con error.
+3. **El texto guía**, en `cuerpo` y `textoApagado`: un ejemplo («Ej: Bancolombia Ahorros»), no el nombre
+   del campo ni la moneda.
+4. **La ayuda, de una línea**, en `apoyo`. Lo que no cabe va en `masAyuda`, que abre «¿Qué es esto?» a
+   la derecha de la ayuda: **se mueve, no se borra**. «Opcional» va en el rótulo («Notas (opcional)»).
+5. **El error**, en `sale`, en el lugar de la ayuda; el campo lo anuncia al lector de pantalla.
+
+```kotlin
+GrupoDeCampos("Términos") {
+    Campo(banco, { banco = it }, rotulo = "Banco", guia = "Ej: Bancolombia")
+    CampoDeMonto(capital, { capital = it }, rotulo = "Capital original")
+    CampoDeMonto(
+        seguro, { seguro = it },
+        rotulo = "Seguro mensual (opcional)",
+        ayuda = "El seguro de vida deudor que va dentro de la cuota.",
+        masAyuda = "Esa parte no baja la deuda, así que sin este dato Movi te mostraría menos deuda.",
+    )
+}
+PieDeHoja("Guardar crédito", ::guardar, habilitado = puedeGuardar, razon = loQueFalta, error = error)
+```
+
+**Pasaron al sistema:** las hojas de crédito y tarjeta (y las de ajustar saldo y simular un abono,
+que usaban el mismo `SectionLabel`), crear cuenta, apartado, bien, para qué es esta plata, anular, el
+recurrente, el monto y el concepto de un movimiento, renombrar y buscar categorías, los espacios
+(«Pagó otro», «Marcar como saldado»), editar y subir un documento, lo que Movi sabe de ti, la
+entrada, el registro, cambiar la contraseña, borrar la cuenta y la ficha de una persona o comercio.
+`FieldBox` (créditos) y `MoneyField` siguen con su API y delegan en `Campo` / `CampoDeMonto`, así que
+Agregar (traspaso), Reconciliar, Cuadre, Perfil y Primeros pasos también pintan el campo nuevo.
+
+**Se quedan con su campo propio** (lo vigila `LosCamposSonDelSistemaTest`, que también falla si una
+excepción ya no tiene campo): la caja de Buscar, el compositor de Movi AI, Agregar (su teclado
+numérico y la nota), el Editor de pantallas (admin), la guía de primer uso y la fila «Comercio» de
+Reconciliar, que se edita en su lugar dentro de una `Fila`.
+

@@ -210,9 +210,12 @@ class TarjetaDeOrdenTest {
         assertFalse(mergeLlamado) // elegir todavía no confirma
         // El botón de confirmar, por su texto EXACTO y no por `tocar` (que puede toparse antes
         // con el `clickable(enabled = false)` de `HojaBase`, un padre del botón sin scroll de
-        // por medio en esta hoja en particular).
-        composeRule.onNodeWithText("Unificar en «Pasta»", useUnmergedTree = true)
-            .performSemanticsAction(SemanticsActions.OnClick)
+        // por medio en esta hoja en particular). Vuelta de diseño 6: el botón es el `Boton` del
+        // pie de hoja, y lo que se toca es la fila que tiene ese texto adentro.
+        composeRule.onNode(
+            hasClickAction() and hasAnyChild(hasText("Unificar en «Pasta»")),
+            useUnmergedTree = true,
+        ).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { mergeLlamado }
     }
 

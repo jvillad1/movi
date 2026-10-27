@@ -218,16 +218,35 @@ class LosCamposDelSistemaTest {
 
     // ── Nada se recorta ──────────────────────────────────────────────────────────────────
 
-    /** Cada texto de la pantalla: ni «…», ni más alto o más ancho que su caja. */
+    /** Cada texto de la pantalla: ni «…», ni más ancho que su caja. */
     private fun ningunTextoSeRecorta() {
         val nodos = composeRule.onAllNodes(androidx.compose.ui.test.hasAnyAncestor(isRoot()), useUnmergedTree = true)
             .fetchSemanticsNodes()
         val recortados = nodos.mapNotNull { nodo ->
             val layout = layoutDe(nodo) ?: return@mapNotNull null
-            val cortado = (0 until layout.lineCount).any { layout.isLineEllipsized(it) } || layout.hasVisualOverflow
+            // «…» o un renglón que termina más allá del ancho que le tocó. No `hasVisualOverflow`
+            // ni `didOverflowWidth`: en Robolectric los dos dicen «sí» de todo texto de ancho
+            // ajustado (comparan con el ancho máximo, no con el que el renglón ocupa).
+            val cortado = (0 until layout.lineCount).any {
+                layout.isLineEllipsized(it) || layout.getLineRight(it) > layout.size.width + 1f
+            }
             if (cortado) textoDe(nodo) else null
         }
         assertTrue(recortados.isEmpty(), "Textos recortados a 360 dp con la letra a ×1,3: $recortados")
+    }
+
+    /** Un detector que nunca encuentra nada no se distingue de uno roto: acá tiene que encontrar. */
+    @Test
+    fun `el detector de recortes ve un rotulo que no cabe`() {
+        montar(escala = 1.3f) {
+            Box(Modifier.padding(Medida.margenDePantalla)) {
+                Box(Modifier.fillMaxSize(0.2f)) {
+                    Campo("", {}, rotulo = "Un rótulo larguísimo que a este ancho no puede caber entero")
+                }
+            }
+        }
+        val fallo = runCatching { ningunTextoSeRecorta() }.exceptionOrNull()
+        assertNotNull(fallo, "el rótulo de un renglón se cortó con «…» y el detector no lo vio")
     }
 
     @Test
