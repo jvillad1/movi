@@ -108,6 +108,11 @@ nuevo: **`cifraDeTarjeta`** (Martian Mono, 24 sp), la cifra de una tarjeta de cu
 cifra héroe es `cifra` (Martian Mono, 42 sp). Ningún `fontSize` suelto (lo vigila
 `LosTamanosSueltosSoloBajanTest`).
 
+**Vuelta de diseño 3: `portada`** (Space Grotesk bold, 32 sp), el título de una pantalla de una sola
+cosa: el logotipo «Movi» de la entrada (era el `fontSize` suelto de `LoginScreen`) y «Te damos la
+bienvenida a Movi» en la guía de primer uso. No es para una cifra ni para el título de una pantalla
+con contenido (`titular`).
+
 **Ola R1: toda cifra de plata va en Martian Mono.** `monto` —el de una fila, una propuesta, un
 widget— pasó de Space Grotesk tabular a Martian Mono a 12,5 sp (la monoespaciada es más ancha: un
 punto menos que el cuerpo se lee del mismo tamaño). Así las cifras de la app se ven de la misma familia
@@ -154,6 +159,8 @@ y filtro que se elige.
 ```kotlin
 Pildora("Vence en 2 días", TonoDePildora.Aviso)
 PildoraDeFiltro("Gastos", seleccionada = filtro == Gastos, onClick = { filtro = Gastos })
+// Vuelta 3: con `inicio`, lo que no es un ícono (el avatar de la marca de un banco, 20 dp).
+PildoraDeFiltro(marca.nombre, elegido, onClick, inicio = { CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea) })
 ```
 
 **`AccionRapida`** y **`CuadriculaDeAcciones`** — la cuadrícula del camino 3: cuatro columnas, ícono en

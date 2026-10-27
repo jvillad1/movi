@@ -71,15 +71,16 @@ internal fun familiaDeLasCifras(): FontFamily {
 }
 
 /**
- * Los ocho estilos con su familia puesta. **Pura**, sin `@Composable`, para poder probarla.
+ * Los nueve estilos con su familia puesta. **Pura**, sin `@Composable`, para poder probarla.
  *
- * `cifra`, `cifraDeTarjeta` y `monto` van en la de cifras; los otros cinco, en la de la interfaz. Ola R1:
+ * `cifra`, `cifraDeTarjeta` y `monto` van en la de cifras; los otros seis, en la de la interfaz. Ola R1:
  * `monto` pasó a Martian Mono —el camino 1 pone toda cifra de plata en la misma familia, también la de
  * una fila—; antes iba en la de la interfaz con `tnum`.
  */
 internal fun TextosDeMovi.conFamilias(interfaz: FontFamily, cifras: FontFamily): TextosDeMovi = copy(
     cifra = cifra.copy(fontFamily = cifras),
     cifraDeTarjeta = cifraDeTarjeta.copy(fontFamily = cifras),
+    portada = portada.copy(fontFamily = interfaz),
     titular = titular.copy(fontFamily = interfaz),
     titulo = titulo.copy(fontFamily = interfaz),
     cuerpo = cuerpo.copy(fontFamily = interfaz),
