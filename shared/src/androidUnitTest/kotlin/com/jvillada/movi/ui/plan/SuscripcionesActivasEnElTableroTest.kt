@@ -201,7 +201,9 @@ class SuscripcionesActivasEnElTableroTest {
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithText("Quitar", useUnmergedTree = true).fetchSemanticsNodes().size > filas
         }
-        val todos = composeRule.onAllNodesWithText("Quitar", useUnmergedTree = true)
+        // En el árbol combinado: desde la vuelta de diseño 18 el «Quitar» de la confirmación es un
+        // `Boton`, y el texto es de su hijo (el nodo tocable lo lleva solo al combinar).
+        val todos = composeRule.onAllNodesWithText("Quitar")
         todos[todos.fetchSemanticsNodes().size - 1].performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
