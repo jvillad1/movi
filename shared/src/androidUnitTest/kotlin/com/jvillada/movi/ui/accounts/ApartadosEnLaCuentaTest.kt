@@ -72,6 +72,14 @@ class ApartadosEnLaCuentaTest {
         composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty()
 
+    /**
+     * La fila «Libre» de los apartados, por su texto entero: «Libre: para cualquier gasto» (la fila
+     * de para qué es la plata, vuelta de diseño 5) es otra cosa.
+     */
+    private fun hayLaFilaLibre(): Boolean =
+        composeRule.onAllNodesWithText("Libre", substring = false, useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+
     private fun tocar(texto: String) {
         composeRule.onNode(hasClickAction() and hasAnyChild(hasText(texto)), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
@@ -100,7 +108,7 @@ class ApartadosEnLaCuentaTest {
         detalle()
 
         esperarTexto("Colegio nov-dic"); esperarTexto("\$8.000.000")
-        esperarTexto("Libre"); esperarTexto("\$217.464")
+        composeRule.waitUntil(timeoutMillis = 5_000) { hayLaFilaLibre() }; esperarTexto("\$217.464")
         esperarTexto("Se descuenta con los gastos de Hija")
         esperarTexto("Apartar plata")
         // El saldo de la cuenta sigue cuadrando con el banco al peso.
@@ -120,7 +128,7 @@ class ApartadosEnLaCuentaTest {
         detalle()
 
         esperarTexto("Apartar plata")
-        assertTrue(!hay("Libre"), "sin apartados no hay nada libre que decir")
+        assertTrue(!hayLaFilaLibre(), "sin apartados no hay nada libre que decir")
         tocar("Apartar plata")
         esperarTexto("¿Para qué?")
         esperarTexto("Se descuenta con los gastos de")
@@ -147,7 +155,7 @@ class ApartadosEnLaCuentaTest {
         assertEquals(8_000_000L, enviado.monto)
         assertEquals(null, enviado.categoria)
         assertEquals(0L, enviado.desde, "uno nuevo deja que el server ponga desde cuándo cuenta")
-        esperarTexto("Libre"); esperarTexto("\$217.464")
+        composeRule.waitUntil(timeoutMillis = 5_000) { hayLaFilaLibre() }; esperarTexto("\$217.464")
     }
 
     @Test
@@ -171,7 +179,34 @@ class ApartadosEnLaCuentaTest {
         tocar("Quitar")
         composeRule.waitUntil(timeoutMillis = 5_000) { quitados.isNotEmpty() }
         assertEquals(listOf("apt_colegio"), quitados)
-        composeRule.waitUntil(timeoutMillis = 5_000) { !hay("Libre") }
+        composeRule.waitUntil(timeoutMillis = 5_000) { !hayLaFilaLibre() }
+    }
+
+    /**
+     * Vuelta de diseño 5: la fila de la condición dice el estado («Para qué es esta plata · Libre:
+     * para cualquier gasto»), no la pregunta «¿Solo sirve para algo?», y la hoja habla igual.
+     */
+    @Test
+    fun `la fila de la condicion dice para que es la plata y abre la hoja que habla igual`() {
+        Repositories.sustitutoDePrueba = ConNu()
+        detalle()
+        esperarTexto(PARA_QUE_ES_ESTA_PLATA)
+        assertTrue(hay(PLATA_LIBRE))
+        assertTrue(!hay("¿Solo sirve para algo?"))
+
+        tocar(PARA_QUE_ES_ESTA_PLATA)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(PARA_QUE_ES_ESTA_PLATA, useUnmergedTree = true).fetchSemanticsNodes().size == 2
+        }
+        assertTrue(hay("Vacío es libre: para cualquier gasto."))
+    }
+
+    @Test
+    fun `una cuenta condicionada dice para que es en la fila`() {
+        Repositories.sustitutoDePrueba = ConNu(cuenta = nu.copy(condicionadaA = "vivienda"))
+        detalle()
+        esperarTexto("Solo para vivienda · no suma en «Tu plata»")
+        assertTrue(!hay(PLATA_LIBRE))
     }
 
     @Test

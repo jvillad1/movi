@@ -47,7 +47,10 @@ enum class VarianteDeBoton {
     /** Una acción al lado de la principal: en la capa 2, con texto normal. */
     Secundario,
 
-    /** Una acción que casi no pesa: solo el texto, en marca. */
+    /**
+     * **El botón de texto**: una acción que casi no pesa, solo el texto en marca, sin fondo —tampoco
+     * apagado—. «Saltar este paso» debajo de «Siguiente», «Ver» al lado de «Confirmar».
+     */
     Fantasma,
 
     /** Borrar, anular, salir: el color de `sale` sobre su lavado. Nunca lleno de rojo. */
@@ -73,6 +76,16 @@ fun coloresDelBoton(variante: VarianteDeBoton, colores: ColoresDeMovi): Pair<Col
 }
 
 /**
+ * El fondo y el texto de una variante **apagada**: la capa 2 y el texto apagado, para que se siga
+ * leyendo como botón pero no como tocable; el [VarianteDeBoton.Fantasma] sigue sin fondo, porque un
+ * botón de texto que se apaga y se rellena de gris parece otro botón. Pura.
+ */
+fun coloresDelBotonApagado(variante: VarianteDeBoton, colores: ColoresDeMovi): Pair<Color, Color> = when (variante) {
+    VarianteDeBoton.Fantasma -> Color.Transparent to colores.textoApagado
+    else -> colores.capa2 to colores.textoApagado
+}
+
+/**
  * **El botón de Movi.** Reemplaza a los botones armados a mano —la auditoría encontró botones
  * principales de 46, 48, 50 y 54 dp de alto, con radios de 10, 12, 14 y píldora—.
  *
@@ -80,8 +93,9 @@ fun coloresDelBoton(variante: VarianteDeBoton, colores: ColoresDeMovi): Pair<Col
  * - [icono] opcional a la izquierda, a [Icono.m].
  * - [cargando]: la ruedita reemplaza al ícono, el botón no se toca y el lector de pantalla dice
  *   «Cargando». El ancho no cambia (el texto se queda), así que nada salta.
- * - Apagado ([habilitado] en `false`): fondo de la capa 2 y texto apagado, sea cual sea la
- *   variante, para que se siga leyendo como botón pero no como tocable.
+ * - Apagado ([habilitado] en `false`): fondo de la capa 2 y texto apagado, para que se siga leyendo
+ *   como botón pero no como tocable; el de texto ([VarianteDeBoton.Fantasma]) sigue sin fondo (ver
+ *   [coloresDelBotonApagado]).
  *
  * ```
  * Boton("Guardar", onClick = ::guardar, anchoCompleto = true, cargando = guardando)
@@ -100,10 +114,11 @@ fun Boton(
     habilitado: Boolean = true,
     anchoCompleto: Boolean = false,
 ) {
-    val (fondoActivo, textoActivo) = coloresDelBoton(variante, Movi.colores)
-    val apagado = !habilitado
-    val fondo = if (apagado) Movi.colores.capa2 else fondoActivo
-    val color = if (apagado) Movi.colores.textoApagado else textoActivo
+    val (fondo, color) = if (habilitado) {
+        coloresDelBoton(variante, Movi.colores)
+    } else {
+        coloresDelBotonApagado(variante, Movi.colores)
+    }
     val forma = RoundedCornerShape(Radio.m)
     Row(
         modifier = modifier

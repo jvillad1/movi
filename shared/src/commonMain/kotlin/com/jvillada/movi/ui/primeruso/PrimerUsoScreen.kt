@@ -384,15 +384,20 @@ fun PrimerUsoScreen(
             }
             // Saltar no es la acción principal: un botón de texto debajo, en los pasos opcionales.
             // Pasa al siguiente sin guardar nada (el día elegido y no confirmado queda sin guardar).
+            // Vuelta de diseño 5: chico y centrado, sin ancho completo, para que «Siguiente» sea la
+            // única acción con peso (a todo el ancho se leía como un tercer botón).
             val siguiente = paso.siguiente
             if (paso.seSaltaConUnBoton && siguiente != null) {
                 Boton(
                     SALTAR_ESTE_PASO,
                     onClick = { irA(siguiente) },
                     variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.S,
                     habilitado = !guardando,
-                    anchoCompleto = true,
-                    modifier = Modifier.padding(top = Espacio.xs).testTag(TAG_SALTAR_EN_LA_GUIA),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = Espacio.xs)
+                        .testTag(TAG_SALTAR_EN_LA_GUIA),
                 )
             }
         }

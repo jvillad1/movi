@@ -64,4 +64,20 @@ class LaFilaDiceSiLaPlataEsCondicionadaTest {
         assertFalse(esDeUsoCondicionado(cuenta("Glim", AccountType.SAVINGS, "  ")))
         assertEquals("Ahorros", subtituloDeLaCuenta(cuenta("Glim", AccountType.SAVINGS, "  ")))
     }
+
+    /**
+     * Vuelta de diseño 5: la fila del detalle de la cuenta era «¿Solo sirve para algo?», una pregunta
+     * que no se entendía. Ahora dice el estado: «Para qué es esta plata» · «Libre: para cualquier
+     * gasto», o para qué es.
+     */
+    @Test
+    fun `la fila del detalle dice si la plata es libre o para que es`() {
+        assertEquals("Para qué es esta plata", PARA_QUE_ES_ESTA_PLATA)
+        assertEquals("Libre: para cualquier gasto", subtituloDeParaQueEs(cuenta("Bancolombia Ahorros", AccountType.SAVINGS)))
+        assertEquals("Libre: para cualquier gasto", subtituloDeParaQueEs(cuenta("Glim", AccountType.SAVINGS, "  ")))
+        assertEquals(
+            "Solo para vivienda · no suma en «Tu plata»",
+            subtituloDeParaQueEs(cuenta("AFC Davibank 9497", AccountType.SAVINGS, " vivienda ")),
+        )
+    }
 }

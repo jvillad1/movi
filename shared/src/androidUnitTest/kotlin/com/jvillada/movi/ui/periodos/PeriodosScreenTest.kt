@@ -9,7 +9,10 @@ import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -107,8 +110,6 @@ class PeriodosScreenTest {
         assertTrue(hay("Agosto 2026"))
         assertTrue(hay("Del 26 de julio al 24 de agosto"))
         assertTrue(hay("Empezó el 26"))
-        assertTrue(hay("Julio 2026"))
-        assertTrue(hay("Del 26 de junio al 25 de julio"))
 
         // Cifras: entró/salió/te quedó, con las mismas funciones que la pantalla usa.
         assertTrue(hay(formatMoneyCompact(enCurso.entradas)))
@@ -118,15 +119,64 @@ class PeriodosScreenTest {
         assertTrue(hay(formatMoneyCompact(conInicioPropio.salidas)))
         assertTrue(hay("−" + formatMoneyCompact(conInicioPropio.salidas - conInicioPropio.entradas)))
 
-        // El período sin flujo no dice «$0»: lo dice con palabras.
-        assertTrue(hay("Sin movimientos de flujo"))
+        // Julio, vacío y anterior al primero con movimientos, no es una tarjeta: es la fila del final.
+        assertTrue(!hay("Julio 2026"))
+        assertTrue(!hay("Del 26 de junio al 25 de julio"))
+        assertTrue(hay("Antes de agosto 2026 no hay movimientos"))
 
-        // Orden: del en curso al más viejo, de arriba hacia abajo.
+        // Orden: del en curso al más viejo, de arriba hacia abajo, y la fila al final.
         val topEnCurso = arriba("Septiembre 2026")
         val topInicioPropio = arriba("Agosto 2026")
-        val topSinFlujo = arriba("Julio 2026")
+        val topVacios = arriba("Antes de agosto 2026 no hay movimientos")
         assertTrue(topEnCurso < topInicioPropio, "septiembre (en curso) va arriba de agosto")
-        assertTrue(topInicioPropio < topSinFlujo, "agosto va arriba de julio")
+        assertTrue(topInicioPropio < topVacios, "agosto va arriba de la fila de los vacíos")
+    }
+
+    // ── Vuelta de diseño 5: los meses vacíos del principio ────────────────────────────────────
+
+    private fun vacio(id: String, nombre: String, desde: String, hasta: String) =
+        ResumenDePeriodo(id = id, nombre = nombre, desde = desde, hasta = hasta)
+
+    @Test
+    fun `con 2 periodos con movimientos y 4 vacios anteriores se ven 2 tarjetas y 1 fila`() {
+        montarConRepo(
+            ConPeriodos(
+                listOf(
+                    enCurso,
+                    conInicioPropio,
+                    sinFlujo,
+                    vacio("2026-06", "Junio 2026", "2026-05-26", "2026-06-25"),
+                    vacio("2026-05", "Mayo 2026", "2026-04-26", "2026-05-25"),
+                    vacio("2026-04", "Abril 2026", "2026-03-26", "2026-04-25"),
+                ),
+            ),
+        )
+        esperarTexto("Septiembre 2026")
+
+        val tarjetas = composeRule.onAllNodesWithTag(TAG_FILA_DE_PERIODO, useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(2, tarjetas.size, "una tarjeta por período con movimientos")
+        val filas = composeRule.onAllNodesWithTag(TAG_VACIOS_DEL_PRINCIPIO, useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(1, filas.size, "los cuatro vacíos, en una sola fila")
+        assertTrue(hay("Antes de agosto 2026 no hay movimientos"))
+        listOf("Julio 2026", "Junio 2026", "Mayo 2026", "Abril 2026").forEach { assertTrue(!hay(it), "$it no es tarjeta") }
+        assertTrue(!hay("Sin movimientos de flujo"))
+        // La fila no abre nada: no hay nada que mirar.
+        composeRule.onNodeWithTag(TAG_VACIOS_DEL_PRINCIPIO, useUnmergedTree = true).assert(!hasClickAction())
+    }
+
+    @Test
+    fun `un periodo vacio entre dos con movimientos sigue siendo tarjeta`() {
+        val mayoConFlujo = ResumenDePeriodo(
+            id = "2026-06", nombre = "Junio 2026", desde = "2026-05-26", hasta = "2026-06-25",
+            entradas = 100_000L, salidas = 50_000L, movimientos = 2,
+        )
+        montarConRepo(ConPeriodos(listOf(enCurso, conInicioPropio, sinFlujo, mayoConFlujo)))
+        esperarTexto("Septiembre 2026")
+
+        assertEquals(4, composeRule.onAllNodesWithTag(TAG_FILA_DE_PERIODO, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertTrue(hay("Julio 2026"))
+        assertTrue(hay("Sin movimientos de flujo"), "el vacío del medio lo dice con palabras, no con «$0»")
+        assertTrue(composeRule.onAllNodesWithTag(TAG_VACIOS_DEL_PRINCIPIO, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     @Test

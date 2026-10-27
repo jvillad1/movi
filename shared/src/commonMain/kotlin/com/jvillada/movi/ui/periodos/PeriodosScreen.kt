@@ -51,6 +51,8 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.TonoDeFila
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDePildora
@@ -90,6 +92,7 @@ const val TAG_FILA_DE_PERIODO_ESQUELETO: String = "fila-de-periodo-esqueleto"
 const val TAG_LO_QUE_CUBRIO: String = "fila-de-periodo-lo-que-cubrio"
 const val TAG_INCLUYE_CREDITOS: String = "periodo-incluye-creditos"
 const val TAG_LISTA_DE_PERIODOS: String = "lista-de-periodos"
+const val TAG_VACIOS_DEL_PRINCIPIO: String = "periodos-vacios-del-principio"
 
 /** Cuántas filas reserva el esqueleto sin nada recordado todavía (la primera vez en el aparato). */
 private const val FILAS_POR_DEFECTO = 3
@@ -228,13 +231,53 @@ internal fun ListaDePeriodos(
                         detalle = "En cuanto tengas movimientos anotados vas a ver aquí cómo te fue en cada ciclo.",
                     )
                 }
-                else -> items(estado.periodos.orEmpty(), key = { it.id }) { resumen ->
-                    FilaDePeriodo(resumen, elegida = resumen.id == elegido, onClick = { onTocar(resumen.id) })
+                else -> {
+                    val (tarjetas, vacios) = separarLosVaciosDelPrincipio(estado.periodos.orEmpty())
+                    items(tarjetas, key = { it.id }) { resumen ->
+                        FilaDePeriodo(resumen, elegida = resumen.id == elegido, onClick = { onTocar(resumen.id) })
+                    }
+                    if (vacios.isNotEmpty()) {
+                        item(key = "vacios-del-principio") {
+                            // Una fila apagada y sin toque: no hay nada que abrir. Sin tarjeta, directo
+                            // sobre el fondo: su texto queda alineado con el de las tarjetas de arriba.
+                            Fila(
+                                titulo = textoDeLosVaciosDelPrincipio(tarjetas.last()),
+                                tonoDelTitulo = TonoDeFila.Apagado,
+                                modifier = Modifier.testTag(TAG_VACIOS_DEL_PRINCIPIO),
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+/** Si en [resumen] entró o salió algo: lo mismo que decide «Sin movimientos de flujo» en [CifrasDelPeriodo]. */
+internal fun tieneMovimientosDeFlujo(resumen: ResumenDePeriodo): Boolean =
+    fraccionQueEntro(resumen.entradas, resumen.salidas) != null
+
+/**
+ * **Los meses vacíos de antes del primero con movimientos no ocupan una tarjeta cada uno** (vuelta
+ * de diseño 5). Julio, junio, mayo… cada uno con «Sin movimientos de flujo» alargaban la lista con
+ * cosas que no dicen nada: el dueño empezó a usar Movi en agosto, y eso se dice una vez.
+ *
+ * Parte [periodos] (del en curso hacia atrás, como los manda el server) en las tarjetas y los vacíos
+ * del principio: los que quedan **después** (más viejos) del último con movimientos de flujo. Un
+ * período vacío **entre** dos con movimientos se queda como tarjeta, porque ahí sí dice algo. Sin
+ * ninguno con movimientos, el primero (el en curso) sigue siendo tarjeta. Solo decide cómo se pinta:
+ * no quita ni cambia ningún período ni sus cifras.
+ */
+internal fun separarLosVaciosDelPrincipio(
+    periodos: List<ResumenDePeriodo>,
+): Pair<List<ResumenDePeriodo>, List<ResumenDePeriodo>> {
+    val corte = maxOf(periodos.indexOfLast(::tieneMovimientosDeFlujo), 0) + 1
+    return periodos.take(corte) to periodos.drop(corte)
+}
+
+/** «Antes de agosto 2026 no hay movimientos»: [primero] es la última tarjeta, el primero con movimientos. */
+internal fun textoDeLosVaciosDelPrincipio(primero: ResumenDePeriodo): String =
+    "Antes de ${primero.nombre.replaceFirstChar { it.lowercase() }} no hay movimientos"
 
 /** «Del 24 de septiembre al 24 de octubre», o `null` si alguna de las dos fechas no se pudo leer. */
 internal fun rangoDelResumen(resumen: ResumenDePeriodo): String? {

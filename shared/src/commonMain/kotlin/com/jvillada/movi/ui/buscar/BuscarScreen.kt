@@ -58,6 +58,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.data.BusquedasRecientesStore
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Repositories
@@ -96,6 +97,23 @@ const val TAG_RECIENTE_DE_BUSCAR: String = "buscar-reciente-"
 const val TITULO_DE_BUSCAR: String = "Buscar"
 
 /**
+ * **El texto guía de la caja**, corto para que quepa en un renglón a 360 dp con la letra agrandada
+ * (vuelta de diseño 5: «Movimientos, comercios, personas, pantallas…» se cortaba a 390). Todo lo
+ * que se puede buscar lo dice la [PISTA_DE_BUSCAR] de abajo.
+ */
+const val GUIA_DE_BUSCAR: String = "Gasto, comercio o persona"
+
+/** El texto de ayuda debajo de los chips, con la caja vacía y sin recientes. */
+const val PISTA_DE_BUSCAR: String =
+    "Busca movimientos, comercios, personas, categorías, cuentas o pantallas. Un número busca el monto exacto."
+
+/** El texto guía de la caja vacía, para las pruebas. */
+const val TAG_GUIA_DE_BUSCAR: String = "buscar-guia"
+
+/** El chip del período: elegido, solo el período en curso; sin elegir, todo el historial. */
+const val ESTE_PERIODO: String = "Este período"
+
+/**
  * # «Buscar» (Ola 5)
  *
  * La lupa del encabezado de Hoy abre esto. Escribir busca en toda la app ([buscarEnMovi]) con lo que
@@ -103,7 +121,7 @@ const val TITULO_DE_BUSCAR: String = "Buscar"
  * resultados salen agrupados por tipo, cada uno con su avatar. Tocar un movimiento abre su hoja acá
  * mismo; lo demás navega a su lugar.
  *
- * Los chips filtran: Gastos / Ingresos, «Este período» y una cuenta. Sin nada escrito se ven las
+ * Los chips filtran: Todo / Gastos / Ingresos, «Este período» y una cuenta. Sin nada escrito se ven las
  * búsquedas recientes ([BusquedasRecientesStore]): se anota una al tocar un resultado o al apretar
  * «Buscar» en el teclado. Los montos pasan por [formatMoney], así que «Ocultar los saldos» los tapa
  * igual que en el resto de la app.
@@ -171,7 +189,7 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
                     if (recientes.isEmpty()) {
                         item(key = "pista") {
                             Text(
-                                "Busca movimientos, comercios, personas, categorías, cuentas o pantallas. Un número busca el monto exacto.",
+                                PISTA_DE_BUSCAR,
                                 style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
                                 modifier = conMargen,
@@ -243,7 +261,14 @@ private fun CampoDeBuscar(consulta: String, alCambiar: (String) -> Unit, alBusca
         Icon(Icons.Rounded.Search, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(Icono.m))
         Box(modifier = Modifier.weight(1f)) {
             if (consulta.isEmpty()) {
-                Text("Movimientos, comercios, personas, pantallas…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, maxLines = 1)
+                Text(
+                    GUIA_DE_BUSCAR,
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.textoMedio,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag(TAG_GUIA_DE_BUSCAR),
+                )
             }
             val campo = rememberCampoConSeleccion(consulta, alCambiar)
             BasicTextField(
@@ -264,7 +289,15 @@ private fun CampoDeBuscar(consulta: String, alCambiar: (String) -> Unit, alBusca
     }
 }
 
-/** «Gastos» · «Ingresos» · «Este período» · la cuenta. Tocar un filtro activo lo apaga. */
+/**
+ * «Todo» · «Gastos» · «Ingresos» · «Este período» · la cuenta. Los tres primeros eligen el tipo
+ * ([FiltroDeTipo]): uno siempre elegido, «Todo» por defecto, y tocar el elegido de Gastos o
+ * Ingresos vuelve a «Todo». «Este período» y la cuenta se prenden y se apagan aparte.
+ *
+ * Vuelta de diseño 5: antes iba «Gastos · Ingresos · Todo · Cuenta», y ese «Todo» del medio era el
+ * chip del período (sin elegir decía «Todo»; elegido, «Este período»): se leía como el tipo. Ahora
+ * «Todo» es el tipo y el del período siempre dice «Este período». Lo que filtra cada uno no cambió.
+ */
 @Composable
 private fun ChipsDeBuscar(
     filtros: FiltrosDeBusqueda,
@@ -280,6 +313,9 @@ private fun ChipsDeBuscar(
             .padding(horizontal = Medida.margenDePantalla),
         horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
+        PildoraDeFiltro(FiltroDeTipo.TODO.rotulo, filtros.tipo == FiltroDeTipo.TODO, onClick = {
+            alCambiar(filtros.copy(tipo = FiltroDeTipo.TODO))
+        })
         PildoraDeFiltro(FiltroDeTipo.GASTOS.rotulo, filtros.tipo == FiltroDeTipo.GASTOS, onClick = {
             alCambiar(filtros.copy(tipo = if (filtros.tipo == FiltroDeTipo.GASTOS) FiltroDeTipo.TODO else FiltroDeTipo.GASTOS))
         })
@@ -287,7 +323,7 @@ private fun ChipsDeBuscar(
             alCambiar(filtros.copy(tipo = if (filtros.tipo == FiltroDeTipo.INGRESOS) FiltroDeTipo.TODO else FiltroDeTipo.INGRESOS))
         })
         if (hayPeriodo) {
-            PildoraDeFiltro(if (filtros.soloEstePeriodo) "Este período" else "Todo", filtros.soloEstePeriodo, onClick = {
+            PildoraDeFiltro(ESTE_PERIODO, filtros.soloEstePeriodo, onClick = {
                 alCambiar(filtros.copy(soloEstePeriodo = !filtros.soloEstePeriodo))
             })
         }
