@@ -1,33 +1,30 @@
 package com.jvillada.movi.ui.dashboard
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.CajaProyectada
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.BloqueEsqueleto
-import com.jvillada.movi.ui.components.ChevronRight
-import com.jvillada.movi.ui.components.Cifra
-import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.altoDeUnRenglon
-import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.TonoDeFila
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.plan.cajaDelPeriodoDe
@@ -98,59 +95,45 @@ internal fun CajaEnHoy(
     val caja = gasto?.let { cajaDelPeriodoDe(data, it, hoy) }
     val noSePudo = gasto == null && gastoLeido.terminada && !gastoLeido.actualizando
 
-    MinCard(
+    // Vuelta de diseño 19: la `Fila` del sistema en una `Superficie` de lista. Arriba lo que es
+    // («Tu día más justo del período», en `sale` si quedaría en rojo), debajo cuándo y al final la
+    // `Cifra`. Cargando, el subtítulo vacío reserva su renglón y la cifra es un bloque del mismo alto:
+    // la fila mide lo mismo con dato y sin él.
+    val fila = caja?.let { cajaDeHoy(it, hoy) }
+    Superficie(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Movi.espacios.amplio)
+            .padding(horizontal = Medida.margenDePantalla)
             .testTag(TAG_CAJA_EN_HOY),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
-        onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
-        onClickLabel = "Ver tu plata día a día en Plan",
+        relleno = RellenoDeSuperficie.Lista,
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            val fila = caja?.let { cajaDeHoy(it, hoy) }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = fila?.rotulo ?: ROTULO_CAJA_SIN_DATO,
-                    style = Movi.textos.apoyo,
-                    color = if (fila?.enRojo == true) Movi.colores.sale else Movi.colores.textoMedio,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+        Fila(
+            titulo = fila?.rotulo ?: ROTULO_CAJA_SIN_DATO,
+            subtitulo = when {
+                fila != null -> fila.cuando
+                noSePudo -> "No pudimos proyectarla: tócala para verla en Plan"
+                else -> ""
+            },
+            tonoDelTitulo = if (fila?.enRojo == true) TonoDeFila.Alerta else TonoDeFila.Normal,
+            inicio = {
+                IconoEnCirculo(
+                    Icons.AutoMirrored.Rounded.TrendingDown,
+                    tono = if (fila?.enRojo == true) TonoDeIcono.Peligro else TonoDeIcono.Marca,
                 )
+            },
+            final = {
                 when {
-                    fila != null -> Text(
-                        text = fila.cuando,
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.texto,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                    fila != null -> Cifra(fila.saldo, tono = if (fila.enRojo) TonoDeCifra.Alerta else TonoDeCifra.Neutro)
+                    noSePudo -> Chevron()
+                    else -> BloqueEsqueleto(
+                        alto = altoDeUnRenglon(Movi.textos.monto),
+                        ancho = Medida.avatar * 2,
+                        modifier = Modifier.testTag(TAG_ESQUELETO_CAJA_EN_HOY),
                     )
-                    noSePudo -> Text(
-                        text = "No pudimos proyectarla: tócala para verla en Plan",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.textoMedio,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    else -> LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.cuerpo)
                 }
-            }
-            Spacer(Modifier.size(Movi.espacios.corto))
-            when {
-                fila != null -> Cifra(
-                    formatCOP(fila.saldo),
-                    Movi.textos.monto,
-                    color = if (fila.enRojo) Movi.colores.sale else Movi.colores.texto,
-                )
-                !noSePudo -> BloqueEsqueleto(
-                    alto = altoDeUnRenglon(Movi.textos.monto),
-                    ancho = 84.dp,
-                    modifier = Modifier.testTag(TAG_ESQUELETO_CAJA_EN_HOY),
-                )
-            }
-            Spacer(Modifier.size(Movi.espacios.minimo))
-            ChevronRight()
-        }
+            },
+            onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
+            onClickLabel = "Ver tu plata día a día en Plan",
+        )
     }
 }

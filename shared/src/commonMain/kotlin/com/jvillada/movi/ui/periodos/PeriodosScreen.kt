@@ -28,7 +28,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,6 +50,10 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.CifraConRotulo
+import com.jvillada.movi.ui.components.ds.EsqueletoDeCifraConRotulo
+import com.jvillada.movi.ui.components.ds.FormaDeCifra
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.TonoDeFila
 import com.jvillada.movi.ui.components.ds.Pildora
@@ -59,7 +62,6 @@ import com.jvillada.movi.ui.components.ds.TonoDePildora
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.ChevronRight
-import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
@@ -374,17 +376,13 @@ internal fun marcasDe(resumen: ResumenDePeriodo): List<String> = buildList {
 internal fun teQuedoDe(resumen: ResumenDePeriodo): Long = resumen.entradas - resumen.salidas
 
 /**
- * «+$1,2M» / «−$1,2M» / «$0» — compacta, como Entró/Salió a su lado (misma [formatMoneyCompact]
- * que usa el hero del Inicio), con signo explícito salvo en cero.
+ * El tono de «Te quedó»: «+$1,2M» en `entra` si quedó algo, «−$1,2M» en `sale` si no alcanzó, «$0»
+ * apagado. El signo y el color los pone la [com.jvillada.movi.ui.components.ds.Cifra] con este tono.
  */
-internal fun textoDeTeQuedo(monto: Long): String =
-    if (monto > 0) "+" + formatMoneyCompact(monto) else formatMoneyCompact(monto)
-
-@Composable
-private fun colorDeTeQuedo(monto: Long): Color = when {
-    monto > 0 -> Movi.colores.entra
-    monto < 0 -> Movi.colores.sale
-    else -> Movi.colores.textoMedio
+internal fun tonoDeTeQuedo(monto: Long): TonoDeCifra = when {
+    monto > 0 -> TonoDeCifra.Ingreso
+    monto < 0 -> TonoDeCifra.Alerta
+    else -> TonoDeCifra.Apagado
 }
 
 /**
@@ -498,11 +496,18 @@ internal fun CifrasDelPeriodo(resumen: ResumenDePeriodo) {
     } else {
         Spacer(Modifier.height(Espacio.s))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            ParDeCifraDePeriodo("Entró", formatMoneyCompact(resumen.entradas), Movi.colores.entra)
+            // Vuelta de diseño 19: `CifraConRotulo`, compacta porque son tres en un renglón (§6).
+            CifraConRotulo("Entró", resumen.entradas, tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta)
             // Ola 2a: lo que salió en neutro; el rojo queda para «Te quedó» en negativo.
-            ParDeCifraDePeriodo("Salió", formatMoneyCompact(resumen.salidas), Movi.colores.texto)
+            CifraConRotulo("Salió", resumen.salidas, forma = FormaDeCifra.Compacta)
             val teQuedo = teQuedoDe(resumen)
-            ParDeCifraDePeriodo("Te quedó", textoDeTeQuedo(teQuedo), colorDeTeQuedo(teQuedo), alFinal = true)
+            CifraConRotulo(
+                "Te quedó",
+                teQuedo,
+                tono = tonoDeTeQuedo(teQuedo),
+                forma = FormaDeCifra.Compacta,
+                alFinal = true,
+            )
         }
         Spacer(Modifier.height(Espacio.xs))
         BarraDeDosTramos(
@@ -511,14 +516,6 @@ internal fun CifrasDelPeriodo(resumen: ResumenDePeriodo) {
             colorDerecha = Movi.colores.neutro,
             entrada = 1f,
         )
-    }
-}
-
-@Composable
-private fun ParDeCifraDePeriodo(rotulo: String, cifra: String, color: Color, alFinal: Boolean = false) {
-    Column(horizontalAlignment = if (alFinal) Alignment.End else Alignment.Start) {
-        Text(rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        Cifra(cifra, Movi.textos.titulo, color = color)
     }
 }
 
@@ -550,12 +547,7 @@ private fun FilaDePeriodoEsqueleto(conMarca: Boolean) {
 internal fun CifrasDelPeriodoEsqueleto() {
     Spacer(Modifier.height(Espacio.s))
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        repeat(3) {
-            Column {
-                LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
-                LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.titulo)
-            }
-        }
+        repeat(3) { i -> EsqueletoDeCifraConRotulo(alFinal = i == 2) }
     }
     Spacer(Modifier.height(Espacio.xs))
     BloqueEsqueleto(alto = Movi.espacios.corto)

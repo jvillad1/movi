@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.ds.Cifra
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -1116,12 +1117,8 @@ fun CardPaymentCandidatesSheet(
                         Text("hoy: ${event.category}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     }
                     Spacer(Modifier.width(Espacio.xs))
-                    Text(
-                        formatCOP(event.amount),
-                        style = Movi.textos.monto,
-                        color = Movi.colores.texto,
-                        modifier = Modifier.padding(end = Espacio.xs),
-                    )
+                    // Vuelta de diseño 19: la `Cifra` del sistema (letra tabular, «Ocultar los saldos»).
+                    Cifra(event.amount, modifier = Modifier.padding(end = Espacio.xs))
                     val isSavingThis = savingId == event.id
                     Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                         Boton(
