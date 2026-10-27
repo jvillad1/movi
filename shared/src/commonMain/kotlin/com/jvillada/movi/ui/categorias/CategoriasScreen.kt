@@ -35,7 +35,6 @@ import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -99,6 +98,8 @@ import com.jvillada.movi.ui.components.leadingFor
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.PieDeHoja
 
 /**
  * **«Más → Categorías»** — la pantalla para ver, arreglar y ordenar las categorías.
@@ -780,31 +781,10 @@ private fun Pastilla(texto: String, activa: Boolean, onClick: () -> Unit) {
     )
 }
 
+/** La búsqueda de la lista de categorías: un [Campo] del sistema, sin rótulo (la guía lo dice). */
 @Composable
 private fun CampoDeBusqueda(valor: String, onValorCambia: (String) -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.m))
-            .background(Movi.colores.tarjeta)
-            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-            .padding(horizontal = Espacio.s, vertical = Espacio.s),
-    ) {
-        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
-        val campo = rememberCampoConSeleccion(valor, onValorCambia)
-        BasicTextField(
-            value = campo.valor,
-            onValueChange = campo::alCambiar,
-            singleLine = true,
-            cursorBrush = SolidColor(Movi.colores.texto),
-            textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-            decorationBox = { inner ->
-                if (valor.isEmpty()) Text("Buscar categoría", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado)
-                inner()
-            },
-        )
-    }
+    Campo(valor, onValorCambia, modifier = modifier, guia = "Buscar categoría")
 }
 
 /** El `testTag` de [FilaDeCategoria], para medir su alto real en una prueba (fix round 1). */
@@ -1304,33 +1284,9 @@ private fun HojaRenombrar(
                 color = Movi.colores.texto,
                 modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(Movi.colores.tarjeta)
-                    .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
-            ) {
-                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                // [esAtajoDeSeleccionarTodo]. Acá pesa más que en otros campos: el nombre llega
-                // prellenado con el actual, y renombrar es justamente reemplazarlo entero.
-                val campo = rememberCampoConSeleccion(nombre) { nombre = it }
-                BasicTextField(
-                    value = campo.valor,
-                    onValueChange = campo::alCambiar,
-                    singleLine = true,
-                    enabled = !guardando,
-                    cursorBrush = SolidColor(Movi.colores.texto),
-                    textStyle = Movi.textos.titulo.copy(color = Movi.colores.texto),
-                    modifier = Modifier.fillMaxWidth()
-                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                    decorationBox = { inner ->
-                        if (nombre.isEmpty()) Text("Nombre nuevo", style = Movi.textos.titulo, color = Movi.colores.textoApagado)
-                        inner()
-                    },
-                )
-            }
+            // ⌘A (lo trae el [Campo]) pesa más acá que en otros campos: el nombre llega prellenado
+            // con el actual, y renombrar es justamente reemplazarlo entero.
+            Campo(nombre, { nombre = it }, rotulo = "Nombre nuevo", guia = categoria.name, habilitado = !guardando)
 
             Text(
                 text = when {
@@ -1472,20 +1428,11 @@ private fun MensajeDeErrorDeHoja(error: String?) {
 
 @Composable
 private fun BotonDeHoja(texto: String, habilitado: Boolean, onClick: () -> Unit) {
-    Text(
-        text = texto,
-        style = Movi.textos.titulo,
-        fontWeight = FontWeight.Medium,
-        color = if (habilitado) Movi.colores.fondo else Movi.colores.textoApagado,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        textAlign = TextAlign.Center,
-        modifier = Modifier
-            .padding(top = Espacio.m, bottom = Espacio.xl)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.m))
-            .background(if (habilitado) Movi.colores.marca else Movi.colores.tarjeta)
-            .clickable(enabled = habilitado, onClick = onClick)
-            .padding(vertical = Espacio.m, horizontal = Espacio.m),
+    // Vuelta de diseño 6: el pie de hoja del sistema, con el aire de antes arriba y abajo.
+    PieDeHoja(
+        texto = texto,
+        onClick = onClick,
+        habilitado = habilitado,
+        modifier = Modifier.padding(top = Espacio.m, bottom = Espacio.xl),
     )
 }

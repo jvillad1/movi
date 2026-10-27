@@ -30,6 +30,7 @@ import com.jvillada.movi.ui.primeruso.GuiaDePrimerUso
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Campo
 
 @Composable
 fun RegisterScreen(onNavigate: (Screen) -> Unit) {
@@ -90,43 +91,43 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
         Spacer(Modifier.height(Espacio.xxl))
 
         Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
-            Text("Nombre", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
-            AuthField(
-                value = name,
-                onChange = { name = it },
-                placeholder = "Tu nombre",
-                keyboardOptions = KeyboardOptions(
+            Campo(
+                rotulo = "Nombre",
+                valor = name,
+                alCambiar = { name = it },
+                guia = "Tu nombre",
+                teclado = KeyboardOptions(
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Next,
                 ),
-                keyboardActions = KeyboardActions(onNext = { emailFocus.requestFocus() }),
+                acciones = KeyboardActions(onNext = { emailFocus.requestFocus() }),
             )
             Spacer(Modifier.height(Espacio.s))
-            Text("Correo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
-            AuthField(
-                value = email,
-                onChange = { email = it },
-                placeholder = "tu@correo.com",
-                keyboardOptions = KeyboardOptions(
+            Campo(
+                rotulo = "Correo",
+                valor = email,
+                alCambiar = { email = it },
+                guia = "tu@correo.com",
+                teclado = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next,
                 ),
-                keyboardActions = KeyboardActions(onNext = { passwordFocus.requestFocus() }),
-                modifier = Modifier.focusRequester(emailFocus),
+                acciones = KeyboardActions(onNext = { passwordFocus.requestFocus() }),
+                foco = emailFocus,
             )
             Spacer(Modifier.height(Espacio.s))
-            Text("Contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
-            AuthField(
-                value = password,
-                onChange = { password = it },
-                placeholder = "•".repeat(PasswordPolicy.MIN_LENGTH),
-                isPassword = true,
-                keyboardOptions = KeyboardOptions(
+            Campo(
+                rotulo = "Contraseña",
+                valor = password,
+                alCambiar = { password = it },
+                guia = "•".repeat(PasswordPolicy.MIN_LENGTH),
+                secreto = true,
+                teclado = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done,
                 ),
-                keyboardActions = KeyboardActions(onDone = { submit() }),
-                modifier = Modifier.focusRequester(passwordFocus),
+                acciones = KeyboardActions(onDone = { submit() }),
+                foco = passwordFocus,
             )
 
             error?.let {

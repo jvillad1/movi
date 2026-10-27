@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material3.Text
@@ -53,6 +52,7 @@ import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Campo
 
 /**
  * # «Lo que Movi sabe de ti» (Ola 3 · 2)
@@ -185,21 +185,12 @@ private fun FilaDeRecuerdo(
     Superficie(modifier = Modifier.fillMaxWidth()) {
       Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
         if (editando) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(Movi.colores.capa2)
-                    .padding(Espacio.s),
-            ) {
-                BasicTextField(
-                    value = texto,
-                    onValueChange = { if (it.length <= LARGO_MAXIMO_DE_UN_RECUERDO) texto = it },
-                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                    cursorBrush = SolidColor(Movi.colores.texto),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            // Un recuerdo puede ser largo: la caja crece hasta seis renglones.
+            Campo(
+                texto,
+                { if (it.length <= LARGO_MAXIMO_DE_UN_RECUERDO) texto = it },
+                renglones = 6,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 Accion(GUARDAR, principal = true, habilitada = texto.isNotBlank() && texto.trim() != recuerdo.texto) {
                     onGuardar(texto.trim()) { editando = false }
