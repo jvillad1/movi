@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +35,9 @@ const val TAG_PILDORA: String = "ds-pildora"
 
 /** Tag estable de una [PildoraDeFiltro]. */
 const val TAG_PILDORA_DE_FILTRO: String = "ds-pildora-de-filtro"
+
+/** Tag estable de una [PildoraDeAccion]. */
+const val TAG_PILDORA_DE_ACCION: String = "ds-pildora-de-accion"
 
 /**
  * **Qué dice una píldora.** Los colores de estado van **solo** para estado: una píldora en `Aviso`
@@ -124,5 +129,44 @@ fun PildoraDeFiltro(
         inicio?.invoke()
         if (icono != null) Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(Icono.s))
         Text(text = texto, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = color, maxLines = 1)
+    }
+}
+
+/**
+ * **Una píldora que hace algo al tocarla** (vuelta de diseño 12): las preguntas para seguir la
+ * conversación debajo de una respuesta de Movi AI. Se ve como un [PildoraDeFiltro] sin elegir —capa
+ * 2, el texto en `cuerpo`, ícono opcional en la marca— pero es un botón, no algo que se elige: no
+ * dice «elegido» ni «pestaña».
+ *
+ * Alto mínimo [Medida.altoChico]; un texto largo baja a un segundo renglón en vez de cortarse (la
+ * píldora crece). [descripcion] es lo que oye el lector de pantalla cuando el texto es una versión
+ * corta («¿Cómo voy?» por «¿Cómo voy este período?»).
+ *
+ * ```
+ * PildoraDeAccion("¿Cómo voy?", onClick = ::preguntar, icono = Icons.Rounded.AutoAwesome)
+ * ```
+ */
+@Composable
+fun PildoraDeAccion(
+    texto: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icono: ImageVector? = null,
+    descripcion: String? = null,
+) {
+    Row(
+        modifier = modifier
+            .heightIn(min = Medida.altoChico)
+            .clip(RoundedCornerShape(Radio.pill))
+            .background(Movi.colores.capa2)
+            .clickable(role = Role.Button, onClick = onClick)
+            .then(if (descripcion != null && descripcion != texto) Modifier.semantics { contentDescription = descripcion } else Modifier)
+            .testTag(TAG_PILDORA_DE_ACCION)
+            .padding(horizontal = Espacio.m, vertical = Espacio.xxs),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icono != null) Icon(icono, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
+        Text(text = texto, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, maxLines = 2)
     }
 }

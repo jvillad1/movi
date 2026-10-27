@@ -4,10 +4,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -20,6 +23,7 @@ import com.jvillada.movi.shared.model.IA_SIN_CREDITO
 import com.jvillada.movi.shared.model.PreguntaSugerida
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.ds.TAG_PILDORA_DE_ACCION
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
 import org.junit.After
@@ -144,8 +148,13 @@ class LasPreguntasSugeridasEnElChatTest {
         assertEquals(2, enviados.size)
         assertNull(enviados.first().messages.last().preguntaSugerida)
         assertEquals(PreguntaSugerida.QUE_REVISAR.id, enviados.last().messages.last().preguntaSugerida)
-        // Ya contestó: las tres se van hasta el próximo aviso.
+        // Ya contestó: las tres de debajo del aviso se van hasta el próximo aviso (su texto entero ya
+        // no se ve)...
         composeRule.waitForIdle()
         assertTrue(!hay(PreguntaSugerida.COMO_VOY.texto), "con respuesta, las tres de debajo del aviso se van")
+        // ...y quedan, para seguir (vuelta de diseño 12), las que no se hicieron, en su versión corta.
+        val paraSeguir = composeRule.onAllNodesWithTag(TAG_PILDORA_DE_ACCION, useUnmergedTree = true).fetchSemanticsNodes()
+            .mapNotNull { it.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull() }
+        assertEquals(listOf(PreguntaSugerida.COMO_VOY.texto, PreguntaSugerida.EN_QUE_SE_VA.texto), paraSeguir)
     }
 }

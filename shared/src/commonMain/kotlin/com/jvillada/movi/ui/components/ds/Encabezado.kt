@@ -136,9 +136,20 @@ internal fun anchoDeLaAccionConTexto(medidor: TextMeasurer, texto: String, estil
         (Espacio.s * 2 + Icono.m + Espacio.xs).roundToPx() + anchoDelTexto
     }
 
-/** ¿Título y acción con texto caben en [disponible]? Pura: la regla de quién cede (vuelta de diseño 8). */
-fun laAccionVaConTexto(anchoDelTitulo: Int, anchoDeLaAccion: Int, separacion: Int, disponible: Int): Boolean =
-    anchoDelTitulo + separacion + anchoDeLaAccion <= disponible
+/**
+ * ¿Título, subtítulo y acción con texto caben en [disponible]? Pura: la regla de quién cede.
+ *
+ * **La prioridad es título > subtítulo > texto de la acción** (vuelta de diseño 8 para el título, 12
+ * para el subtítulo): la acción conserva su texto solo si el título **y** el subtítulo caben enteros
+ * a su lado. Movi AI decía «Conoce tus fi…» porque «Nueva conversación» se medía solo contra «Movi AI».
+ */
+fun laAccionVaConTexto(
+    anchoDelTitulo: Int,
+    anchoDeLaAccion: Int,
+    separacion: Int,
+    disponible: Int,
+    anchoDelSubtitulo: Int = 0,
+): Boolean = maxOf(anchoDelTitulo, anchoDelSubtitulo) + separacion + anchoDeLaAccion <= disponible
 
 /**
  * **El encabezado de una pantalla. El mismo alto y los mismos márgenes en todas.**
@@ -151,7 +162,8 @@ fun laAccionVaConTexto(anchoDelTitulo: Int, anchoDeLaAccion: Int, separacion: In
  * - El título en `titular`. **Nunca se corta** (vuelta de diseño 8: «Personas y comerc…»): si no
  *   cabe al lado de la acción con texto, la acción pasa a solo ícono ([AccionDelEncabezadoSoloIcono],
  *   con su texto para el lector de pantalla y el mismo tag); si ni así cabe, baja a dos renglones.
- *   El subtítulo opcional, en `apoyo`, un renglón.
+ *   El subtítulo opcional, en `apoyo`, tampoco se corta (vuelta de diseño 12): también hace ceder
+ *   el texto de la acción, y si ni así cabe baja a dos renglones. Título > subtítulo > acción.
  * - [accion] a la derecha, al final: **la** acción principal, siempre con la misma forma
  *   ([AccionDelEncabezado]: texto con ícono, o solo el ícono cuando el título lo pide). Una pantalla
  *   con dos o más acciones pone las demás en [acciones], como [BotonDeIcono] con su descripción.
@@ -216,9 +228,9 @@ private enum class PiezaDelEncabezado { Titulo, Subtitulo, Acciones, AccionConTe
 /**
  * **El título y lo que va a su derecha, con el título primero.** Se mide así:
  * 1. [acciones] (íconos, una píldora): ocupan lo suyo, siempre.
- * 2. La [accion], con texto si el título entero cabe al lado ([laAccionVaConTexto]); si no, solo el
- *    ícono. Su ancho con texto se calcula sin componerla ([anchoDeLaAccionConTexto]).
- * 3. El título con lo que queda, en hasta dos renglones; el subtítulo, en uno.
+ * 2. La [accion], con texto si el título y el subtítulo enteros caben al lado ([laAccionVaConTexto]);
+ *    si no, solo el ícono. Su ancho con texto se calcula sin componerla ([anchoDeLaAccionConTexto]).
+ * 3. El título y el subtítulo con lo que queda, en hasta dos renglones cada uno.
  */
 @Composable
 private fun TituloYAcciones(
@@ -262,6 +274,19 @@ private fun TituloYAcciones(
             )
         }.single()
         val anchoDelTitulo = tituloMedible.maxIntrinsicWidth(constraints.maxHeight)
+        // El subtítulo se compone una vez, antes de decidir la acción: también manda sobre ella.
+        val subtituloMedible = subtitulo?.let { sub ->
+            subcompose(PiezaDelEncabezado.Subtitulo) {
+                Text(
+                    text = sub,
+                    style = estiloDelSubtitulo,
+                    color = colorDelSubtitulo,
+                    maxLines = RENGLONES_DEL_SUBTITULO_DEL_ENCABEZADO,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }.single()
+        }
+        val anchoDelSubtitulo = subtituloMedible?.maxIntrinsicWidth(constraints.maxHeight) ?: 0
 
         val accionMedida = accion?.let { a ->
             val conTexto = laAccionVaConTexto(
@@ -269,6 +294,7 @@ private fun TituloYAcciones(
                 anchoDeLaAccion = anchoDeLaAccionConTexto(medidor, a.texto, estiloDelBoton, this),
                 separacion = separacion,
                 disponible = disponible - anchoDeAcciones,
+                anchoDelSubtitulo = anchoDelSubtitulo,
             )
             val pieza = if (conTexto) PiezaDelEncabezado.AccionConTexto else PiezaDelEncabezado.AccionSoloIcono
             subcompose(pieza) {
@@ -280,17 +306,7 @@ private fun TituloYAcciones(
         val anchoDelTexto = (disponible - anchoDeAcciones - anchoDeLaAccion).coerceAtLeast(0)
         val restriccionDelTexto = Constraints(maxWidth = anchoDelTexto)
         val tituloMedido = tituloMedible.measure(restriccionDelTexto)
-        val subtituloMedido = subtitulo?.let { sub ->
-            subcompose(PiezaDelEncabezado.Subtitulo) {
-                Text(
-                    text = sub,
-                    style = estiloDelSubtitulo,
-                    color = colorDelSubtitulo,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }.single().measure(restriccionDelTexto)
-        }
+        val subtituloMedido = subtituloMedible?.measure(restriccionDelTexto)
 
         val altoDelTexto = tituloMedido.height + (subtituloMedido?.height ?: 0)
         val alto = maxOf(
@@ -318,3 +334,9 @@ private fun TituloYAcciones(
 
 /** El título de un encabezado baja a dos renglones antes de cortarse (vuelta de diseño 8). */
 const val RENGLONES_DEL_TITULO_DEL_ENCABEZADO: Int = 2
+
+/**
+ * El subtítulo también (vuelta de diseño 12): si ni con la acción en su ícono cabe, baja a un segundo
+ * renglón antes de cortarse.
+ */
+const val RENGLONES_DEL_SUBTITULO_DEL_ENCABEZADO: Int = 2

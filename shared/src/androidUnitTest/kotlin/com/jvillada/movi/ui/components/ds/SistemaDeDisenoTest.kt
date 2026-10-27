@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -26,6 +27,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.marcaDelBanco
 import androidx.compose.ui.graphics.Color
 import com.jvillada.movi.theme.COLORES_CLAROS
@@ -90,6 +92,7 @@ class SistemaDeDisenoTest {
             Boton("Borrar", onClick = {}, variante = VarianteDeBoton.Peligro, tamano = TamanoDeBoton.S)
             Pildora("Vence en 2 días", TonoDePildora.Aviso)
             PildoraDeFiltro("Gastos", seleccionada = true, onClick = {})
+            PildoraDeAccion("¿Cómo voy?", onClick = {}, icono = Icons.Rounded.Add, descripcion = "¿Cómo voy este período?")
             CuadriculaDeAcciones(
                 listOf(
                     Accion("Anotar gasto", Icons.Rounded.Add, {}, destacada = true),
@@ -338,6 +341,19 @@ class SistemaDeDisenoTest {
     fun `el filtro elegido lo dice`() {
         montar { PildoraDeFiltro("Gastos", seleccionada = true, onClick = {}) }
         composeRule.onNodeWithTag(TAG_PILDORA_DE_FILTRO).assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+    }
+
+    @Test
+    fun `la pildora de accion es un boton, mide lo de un filtro y dice la pregunta entera`() {
+        var tocada = false
+        montar { PildoraDeAccion("¿Cómo voy?", onClick = { tocada = true }, descripcion = "¿Cómo voy este período?") }
+        val nodo = composeRule.onNodeWithTag(TAG_PILDORA_DE_ACCION)
+        nodo.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        nodo.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Selected))
+        nodo.assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("¿Cómo voy este período?")))
+        assertTrue(altoDe(TAG_PILDORA_DE_ACCION) >= Medida.altoChico - 0.5.dp)
+        nodo.performClick()
+        assertTrue(tocada)
     }
 
     @Test

@@ -189,6 +189,14 @@ PildoraDeFiltro("Gastos", seleccionada = filtro == Gastos, onClick = { filtro = 
 PildoraDeFiltro(marca.nombre, elegido, onClick, inicio = { CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea) })
 ```
 
+**`PildoraDeAccion`** (vuelta de diseño 12) — una píldora que **hace algo** al tocarla: se ve como un
+`PildoraDeFiltro` sin elegir (capa 2, `cuerpo`, ícono en la marca) pero es un botón, no dice «elegido».
+Alto mínimo `Medida.altoChico`; un texto largo baja a un segundo renglón. `descripcion` es lo que oye
+el lector de pantalla si el texto es una versión corta. Hoy: las preguntas para seguir de Movi AI.
+```kotlin
+PildoraDeAccion("¿Cómo voy?", onClick = ::preguntar, icono = Icons.Rounded.AutoAwesome, descripcion = "¿Cómo voy este período?")
+```
+
 **`AccionRapida`** y **`CuadriculaDeAcciones`** — la cuadrícula del camino 3: cuatro columnas, ícono en
 círculo de 56 y **rótulo de un renglón** (vuelta de diseño 2: «Gasto», «Comprobante», «Preguntar»; si uno
 no entra se achica hasta la letra de `rotulo` y recién ahí lleva «…»), con la frase entera en
@@ -299,6 +307,15 @@ texto como descripción y el mismo tag); si ni así cabe, el título baja a dos 
 `Encabezado` decide midiendo el título y calculando el ancho del botón sin componerlo
 (`anchoDeLaAccionConTexto`, `laAccionVaConTexto`). Lo vigila `LaAccionDelEncabezadoCedeAlTituloTest`
 en las siete pantallas de la tabla, a 360 dp con la letra a ×1,3.
+
+**La prioridad es título > subtítulo > texto de la acción** (vuelta de diseño 12: «Conoce tus fi…» en
+Movi AI). La acción conserva su texto solo si el título **y** el subtítulo caben enteros a su lado
+(`laAccionVaConTexto` recibe los dos anchos); si no, queda en su ícono. Si ni así cabe el subtítulo,
+baja a dos renglones (`RENGLONES_DEL_SUBTITULO_DEL_ENCABEZADO`), como el título. Nunca «…». Se eligió
+ceder antes que partir el subtítulo porque el ícono ya existe y conserva el nombre para el lector de
+pantalla; el segundo renglón queda para lo que ni así entra. Lo vigila el mismo
+`LaAccionDelEncabezadoCedeAlTituloTest` (Movi AI con «Nueva conversación», y la regla en el
+componente).
 ```kotlin
 Encabezado("Movimientos", acciones = { BotonDeIcono(Icons.Rounded.Search, "Buscar", ::buscar) })
 Encabezado("Patrimonio", accion = AccionDeEncabezado("Nueva cuenta", Icons.Rounded.Add, ::crear))
@@ -622,3 +639,33 @@ cómo llenarlo (como «Aquí van tus pagos fijos» en Plan).
 Lo vigila `ElPrimerDiaTest` (Robolectric, 360 dp con la letra a ×1,3): un solo llamado en Hoy, la
 guía debajo del héroe, ningún «$0» como cifra en Hoy ni en Plan, el subtítulo entero (y el rango de
 antes cortado, para que la prueba mida lo que dice) y «Movi propone hoy» que no aparece vacío.
+
+## 18. Vuelta de diseño 12: Movi AI conversa con formato
+
+- **Las respuestas con formato** (`ui/ai/TextoConFormato.kt` + `TextoDelAsistente.kt`). Un subconjunto
+  chico y seguro de Markdown: párrafos (un renglón vacío los separa; un salto simple se respeta),
+  listas con viñetas («- », «* », «• ») y numeradas («1. », con su número), dos niveles con sangría,
+  **negrita** y un «# título» que se pinta como párrafo en negrita. **Nada de HTML, enlaces ni
+  imágenes**: se ven tal cual, como texto, y lo que no se entiende (un «**» sin cerrar, una tabla)
+  también; el peor caso es el texto plano de antes. Las dos fuentes escriben así: el modelo y las tres
+  respuestas sin IA del server (`LasPreguntasSugeridas.kt`, que ya usan «- » y «1. », pegadas a la
+  frase que las presenta). Ningún cambio en el server.
+- **Cómo se pinta**: `cuerpo` en el color del texto; entre bloques `Espacio.s`, entre ítems
+  `Espacio.xxs`; la viñeta («•») o el número en `textoMedio`, con sangría `Espacio.xs` (y `Espacio.m`
+  más por nivel) y el texto de un ítem largo alineado debajo de sí mismo. La negrita en `SemiBold`.
+  **Las cifras en pesos** («$1.800.000», «US$1.200», «−$23.388», «$11,7M»: el signo pesos delante y los
+  miles con punto) van en la letra de las cifras (`monto`), como en el resto de la app. Un año o un
+  día no se confunden con plata.
+- **La burbuja del dueño** es el lavado de la marca con el texto del sistema encima
+  (`fondoDeLaBurbujaDelDueno` / `textoDeLaBurbujaDelDueno`). Era el color del texto (negra en el tema
+  claro). `ContrasteDeLosTokensTest` mide el par en los dos temas. Su ancho máximo sale de un respiro
+  de `Espacio.xxxl` a la izquierda (eran 280 dp sueltos) y la respuesta del asistente ocupa el ancho
+  que queda (eran 290 dp sueltos).
+- **Seguir la conversación** (`preguntasParaSeguir`, `PreguntasParaSeguir`): debajo de la última
+  respuesta, como `PildoraDeAccion`, las preguntas sugeridas que **no** se hicieron en esta
+  conversación (por id o por texto), de la misma fuente que el chat vacío (`preguntasParaTocar` y las
+  tres de respaldo para completar), como mucho tres. Dicen su versión corta («¿Cómo voy?») y mandan la
+  completa con su id (`ChatMessage.preguntaSugerida`), así que las de respaldo se siguen contestando sin
+  IA. No van mientras Movi escribe, ni cuando el aviso de «IA no disponible» ya pone las tres debajo.
+- Lo vigilan `TextoConFormatoTest` y `PreguntasParaSeguirTest` (puras) y `MoviAiConversaConFormatoTest`
+  (Robolectric: viñetas y no «- », la burbuja con los tokens en los dos temas, las píldoras y su id).
