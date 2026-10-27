@@ -164,6 +164,37 @@ class PeriodosScreenTest {
         composeRule.onNodeWithTag(TAG_VACIOS_DEL_PRINCIPIO, useUnmergedTree = true).assert(!hasClickAction())
     }
 
+    /** Vuelta de diseño 7: dos o más vacíos seguidos en el medio van en una fila, en su lugar. */
+    @Test
+    fun `una racha de vacios en el medio es una fila apagada en su lugar`() {
+        val abrilConFlujo = ResumenDePeriodo(
+            id = "2026-04", nombre = "Abril 2026", desde = "2026-03-26", hasta = "2026-04-25",
+            entradas = 100_000L, salidas = 50_000L, movimientos = 2,
+        )
+        montarConRepo(
+            ConPeriodos(
+                listOf(
+                    enCurso,
+                    conInicioPropio,
+                    sinFlujo,
+                    vacio("2026-06", "Junio 2026", "2026-05-26", "2026-06-25"),
+                    vacio("2026-05", "Mayo 2026", "2026-04-26", "2026-05-25"),
+                    abrilConFlujo,
+                ),
+            ),
+        )
+        esperarTexto("Septiembre 2026")
+
+        assertEquals(3, composeRule.onAllNodesWithTag(TAG_FILA_DE_PERIODO, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(1, composeRule.onAllNodesWithTag(TAG_RACHA_DE_VACIOS, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertTrue(hay("Mayo a julio 2026 · sin movimientos"))
+        assertTrue(!hay("Sin movimientos de flujo"), "ninguno de los tres es tarjeta")
+        composeRule.onNodeWithTag(TAG_RACHA_DE_VACIOS, useUnmergedTree = true).assert(!hasClickAction())
+        // En su lugar: entre agosto y abril.
+        val racha = arriba("Mayo a julio 2026 · sin movimientos")
+        assertTrue(arriba("Agosto 2026") < racha && racha < arriba("Abril 2026"))
+    }
+
     @Test
     fun `un periodo vacio entre dos con movimientos sigue siendo tarjeta`() {
         val mayoConFlujo = ResumenDePeriodo(

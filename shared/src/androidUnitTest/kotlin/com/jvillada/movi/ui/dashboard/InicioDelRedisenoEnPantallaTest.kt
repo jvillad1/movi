@@ -295,9 +295,14 @@ class InicioDelRedisenoEnPantallaTest {
         assertEquals(Screen.AIChat(), navegado.last())
         composeRule.onNodeWithContentDescription("Subir un comprobante", useUnmergedTree = true).performClick()
         assertTrue(subioComprobante, "elige un archivo en vez de navegar")
-        // R3 · «Repartir» lleva a Espacios.
+        // Vuelta de diseño 7 · «Repartir» abre la hoja del gasto compartido; sin espacios, la creación
+        // del espacio (los demás casos, en `RepartirDesdeElInicioTest`).
+        val antes = navegado.size
         composeRule.onNodeWithContentDescription("Repartir un gasto", useUnmergedTree = true).performClick()
-        assertEquals(Screen.Espacios, navegado.last())
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("¿Con quién compartes?", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(antes, navegado.size, "no cambia de pestaña")
     }
 
     // ── Ocultar los saldos ───────────────────────────────────────────────────

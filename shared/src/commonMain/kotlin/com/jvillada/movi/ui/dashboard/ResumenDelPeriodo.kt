@@ -13,6 +13,7 @@ import com.jvillada.movi.shared.model.ContraElAnterior
 import com.jvillada.movi.shared.model.Tendencia
 import com.jvillada.movi.shared.model.contraElAnterior
 import com.jvillada.movi.ui.components.formatMoneyCompact
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
 
 /**
  * # El Inicio contesta «¿cómo voy en este período?»
@@ -127,6 +128,59 @@ fun descripcionDeLaFlecha(c: ContraElAnterior): String = when (c.tendencia) {
     Tendencia.SUBE -> "${formatMoneyCompact(c.diferencia)} más que a esta altura del período pasado"
     Tendencia.BAJA -> "${formatMoneyCompact(c.diferencia)} menos que a esta altura del período pasado"
     Tendencia.IGUAL -> "Igual que a esta altura del período pasado"
+}
+
+/**
+ * La diferencia de una categoría contra el período pasado a la misma altura, como la dice el widget
+ * «En qué se va» del Inicio (vuelta de diseño 7): «$120.000 más», «$45.000 menos», «igual» o «nuevo».
+ *
+ * @property tono el de la cifra: [TonoDeCifra.Alerta] solo si [subeMucho]; [TonoDeCifra.Neutro] si
+ *   sube (gastar más no es una alarma); [TonoDeCifra.Apagado] si baja o queda igual.
+ * @property descripcion la frase entera, para el lector de pantalla.
+ */
+data class DiferenciaDeLaCategoria(
+    val texto: String,
+    val tono: TonoDeCifra,
+    val descripcion: String,
+)
+
+/** El rótulo de una categoría que el período pasado, a esta altura, no tuvo gasto. */
+const val CATEGORIA_NUEVA: String = "nuevo"
+
+/** La línea del widget que dice contra qué se compara. */
+const val CONTRA_EL_PERIODO_PASADO: String = "Contra el período pasado"
+
+/**
+ * **¿Sube mucho?** Con los mismos umbrales que «categoría muy por encima» de lo que se sale de lo
+ * normal (`:core` `LoQueSeSaleDeLoNormal.kt`): 1,5 veces lo de antes y $300.000 de diferencia. Así el
+ * widget no pinta en rojo algo que Movi no propondría revisar. Una categoría nueva sube mucho si pasa
+ * la diferencia.
+ */
+fun subeMucho(gastado: Long, anterior: Long): Boolean =
+    gastado - anterior >= com.jvillada.movi.shared.model.DIFERENCIA_MINIMA_DE_CATEGORIA &&
+        gastado * 10 >= anterior * com.jvillada.movi.shared.model.VECES_SOBRE_EL_PROMEDIO_X10
+
+/**
+ * La diferencia de [categoria] contra el período pasado, o `null` sin con qué comparar. **Ninguna
+ * cuenta nueva**: es [contraElAnterior] (la misma de «En qué se va») sobre lo que ya trae el Inicio.
+ *
+ * Sin «+» ni «−»: en Movi el «+» es plata que entra (sistema de diseño §4); acá la palabra dice el
+ * verbo.
+ */
+fun diferenciaDeLaCategoria(categoria: CategoriaDelPeriodo): DiferenciaDeLaCategoria? {
+    val anterior = categoria.anterior ?: return null
+    val c = categoria.contraElAnterior ?: return null
+    val tonoAlSubir = if (subeMucho(categoria.gastado, anterior)) TonoDeCifra.Alerta else TonoDeCifra.Neutro
+    return when {
+        anterior == 0L && categoria.gastado > 0 -> DiferenciaDeLaCategoria(
+            texto = CATEGORIA_NUEVA,
+            tono = tonoAlSubir,
+            descripcion = "Nuevo: a esta altura del período pasado no habías gastado aquí",
+        )
+        c.tendencia == Tendencia.SUBE -> DiferenciaDeLaCategoria("${formatMoneyCompact(c.diferencia)} más", tonoAlSubir, descripcionDeLaFlecha(c))
+        c.tendencia == Tendencia.BAJA -> DiferenciaDeLaCategoria("${formatMoneyCompact(c.diferencia)} menos", TonoDeCifra.Apagado, descripcionDeLaFlecha(c))
+        else -> DiferenciaDeLaCategoria("igual", TonoDeCifra.Apagado, descripcionDeLaFlecha(c))
+    }
 }
 
 /** «↑ $120.000», «↓ $45.000» o «= igual»: lo que la fila pinta al lado del porcentaje. */

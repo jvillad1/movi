@@ -489,6 +489,28 @@ internal fun resaltadoDelTextoDelBanco(texto: String): AnnotatedString = buildAn
     CUENTA_O_TARJETA.findAll(texto).forEach { negrita(it.range) }
 }
 
+/** Lo que va debajo del texto del banco en [TarjetaDeMensajeDelBanco], si va algo. */
+internal sealed interface BloqueDeAbajo {
+    /** «Se anota: Comida · Bancolombia Ahorros · $46.000». */
+    data class LoEntendido(val linea: String) : BloqueDeAbajo
+
+    /** El detalle que guardó el server ([SmsMessage.det]). */
+    data class Detalle(val texto: String) : BloqueDeAbajo
+}
+
+/**
+ * **El último bloque de la tarjeta de un aviso, o ninguno.** «Se anota: …» cuando Movi ya entendió
+ * el aviso; si no, el detalle del server, pero **solo si dice algo**: un detalle en blanco no se pinta,
+ * porque un `Text("")` ocupa un renglón y deja un hueco entre el mensaje y los botones (vuelta de
+ * diseño 7). El espacio entre bloques lo pone la tarjeta (`Espacio.xs`), así que sin bloque la
+ * distancia al último texto es la misma que con él.
+ */
+internal fun bloqueDeAbajo(confirmable: Boolean, entendido: String?, det: String): BloqueDeAbajo? = when {
+    confirmable && entendido != null -> BloqueDeAbajo.LoEntendido(entendido)
+    det.isNotBlank() -> BloqueDeAbajo.Detalle(det)
+    else -> null
+}
+
 /**
  * **Un mensaje del banco**, como se lee en todas partes: el banco, cuándo llegó y en qué estado
  * está; el texto tal cual; y lo que Movi entendió, con «Revisar» si todavía espera una decisión.
@@ -604,8 +626,14 @@ internal fun TarjetaDeMensajeDelBanco(
             )
         }
         LoQueDiceElBanco(sms.text, plegable = true)
-        if (confirmable) LineaDeLoEntendido(entendido!!)
-        else Text(sms.det, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+        // Vuelta de diseño 7: un bloque que falta no deja su lugar. El teléfono, el correo y los
+        // comprobantes suben `det` vacío, y ese `Text("")` era un renglón en blanco más su espacio:
+        // ~30 px de hueco entre el mensaje y los botones del aviso de Rappi. Ver [bloqueDeAbajo].
+        when (val abajo = bloqueDeAbajo(confirmable, entendido, sms.det)) {
+            is BloqueDeAbajo.LoEntendido -> LineaDeLoEntendido(abajo.linea)
+            is BloqueDeAbajo.Detalle -> Text(abajo.texto, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            null -> Unit
+        }
     }
 }
 
