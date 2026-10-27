@@ -101,10 +101,16 @@ import com.jvillada.movi.ui.dashboard.yaRecibidoEnElPeriodo
  *
  * Una sola tarjeta, con el resumen arriba (cuánto falta, cuánto ya pagaste) y estos grupos:
  *
- * - **Falta por pagar** — vence en el período y no tiene pago. Lo vencido primero.
+ * - **Por pagar** — vence en el período y no tiene pago. Lo vencido primero.
  * - **Ya pagaste** — tiene pago en el período. Cada fila dice con qué se sabe
  *   ([origenDeLoOcurrido], la misma media frase de siempre).
  * - **Por cobrar** / **Ya recibiste** — los ingresos, si hay.
+ *
+ * **Una cifra, una vez** (vuelta de diseño 1): «Por pagar» y «Ya pagaste» van sin total, porque
+ * sus dos sumas son justo las del resumen de arriba. Antes la tarjeta decía «Falta por pagar
+ * $1.812.000» y, un renglón abajo, «⏱ Falta por pagar · 3 … $1.812.000». Por eso también el grupo
+ * se llama «Por pagar» y no repite el rótulo del resumen. Los ingresos sí llevan su total: el
+ * resumen no los suma.
  * - **Del período de septiembre** — lo que un período ANTERIOR dejó sin confirmar (lo que era «Sin
  *   confirmar»). Aparte y al final, diciendo de qué período es: nunca mezclado con «Ya pagaste».
  *
@@ -136,6 +142,12 @@ const val FRASE_DEL_CHECKLIST_COMPLETO = "¡Todo pagado! Ya salieron los pagos d
 
 /** Los títulos de los grupos: los comparten Plan y el detalle de un período. */
 const val TITULO_FALTA_POR_PAGAR = "Falta por pagar"
+
+/**
+ * El título del grupo de lo que falta, debajo del resumen que ya dice «Falta por pagar $X»: sin
+ * repetir el rótulo ni la cifra, solo cuántos son («Por pagar · 3»).
+ */
+const val TITULO_GRUPO_POR_PAGAR = "Por pagar"
 const val TITULO_YA_PAGASTE = "Ya pagaste"
 const val TITULO_POR_COBRAR = "Por cobrar"
 const val TITULO_YA_RECIBISTE = "Ya recibiste"
@@ -256,10 +268,11 @@ fun SeccionChecklistDelPeriodo(
                         derecha = TITULO_YA_PAGASTE to yaPagadoEnElPeriodo(checklist),
                     )
                     GrupoDePagos(
-                        titulo = TITULO_FALTA_POR_PAGAR,
+                        titulo = TITULO_GRUPO_POR_PAGAR,
                         icono = Icons.Rounded.Schedule,
                         colorDelIcono = Movi.colores.textoMedio,
-                        total = faltaPorPagar(checklist),
+                        // Sin total: es la cifra de «Falta por pagar» del resumen, un renglón arriba.
+                        total = null,
                         // Sin nada pendiente el grupo no desaparece: dice que ya salió todo, que es
                         // la respuesta a la pregunta que el dueño vino a hacer.
                         vacio = lineaDeLoQueFalta(checklist),
@@ -270,7 +283,8 @@ fun SeccionChecklistDelPeriodo(
                             pagosPendientes(checklist).any { estimacionDeLaFila(it, planesDeCuotas) != null }
                         },
                     ) { filas.Fila(it) }
-                    OtroGrupo(TITULO_YA_PAGASTE, Icons.Rounded.CheckCircle, Movi.colores.entra, yaPagadoEnElPeriodo(checklist), pagosHechos(checklist)) { filas.Fila(it) }
+                    // Sin total, por lo mismo: «Ya pagaste» ya está en el resumen.
+                    OtroGrupo(TITULO_YA_PAGASTE, Icons.Rounded.CheckCircle, Movi.colores.entra, null, pagosHechos(checklist)) { filas.Fila(it) }
                     // Un sueldo no se paga: llega. Mismo criterio que el título de la propuesta
                     // («¿Ya te llegó?»).
                     OtroGrupo(TITULO_POR_COBRAR, Icons.Rounded.Schedule, Movi.colores.textoMedio, faltaPorCobrar(checklist), ingresosPendientes(checklist)) { filas.Fila(it) }
@@ -346,7 +360,7 @@ private fun OtroGrupo(
     titulo: String,
     icono: ImageVector,
     colorDelIcono: Color,
-    total: Long,
+    total: Long?,
     filas: List<PagoDelPeriodo>,
     fila: @Composable (PagoDelPeriodo) -> Unit,
 ) {
@@ -384,7 +398,8 @@ internal fun ResumenDeLaLista(izquierda: Pair<String, Long>, derecha: Pair<Strin
  * Genérico en la fila a propósito: lo usan Plan (con [PagoDelPeriodo] y sus acciones) y el detalle
  * de un período (con `PagoFijoDelPeriodo`, de solo lectura). Los dos tienen que verse igual.
  *
- * @param total la suma de las filas, en pesos; `null` o cero no se pinta.
+ * @param total la suma de las filas, en pesos; `null` o cero no se pinta. `null` cuando la suma ya
+ *   está en el [ResumenDeLaLista] de arriba: una cifra, una vez.
  * @param vacio lo que se dice si no hay filas; `null` esconde el grupo entero.
  * @param explicacion una línea debajo del título, para un grupo que necesita decir por qué está.
  * @param pie una línea debajo de las filas (de dónde salen las cifras estimadas), o `null`.
@@ -402,7 +417,7 @@ internal fun <T> GrupoDePagos(
     fila: @Composable (T) -> Unit,
 ) {
     if (filas.isEmpty() && vacio == null) return
-    // El rótulo del grupo: ícono, «Falta por pagar · 3» y el total. Va con el margen de la pantalla
+    // El rótulo del grupo: ícono, «Por pagar · 3» y el total (si el resumen no lo dice ya). Va con el margen de la pantalla
     // porque las filas de abajo son [Fila]s, que traen el suyo.
     Row(
         modifier = Modifier

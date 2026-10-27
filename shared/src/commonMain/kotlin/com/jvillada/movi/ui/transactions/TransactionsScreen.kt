@@ -1317,14 +1317,14 @@ fun TransactionsScreen(
             }
         }
 
-        // Lo que va arriba de la lista, cada cosa con su aire debajo.
+        // Lo que va arriba de las filas, cada cosa con su aire debajo. **Va adentro de la lista y se
+        // va con el scroll** (vuelta de diseño 1): fijos quedan solo el encabezado, el selector del
+        // período y los chips. Afuera, la tarjeta «N por revisar» (≈125 dp) se quedaba clavada arriba
+        // para siempre, se comía un tercio de la pantalla y las filas se asomaban por sus esquinas
+        // redondeadas al pasar por debajo. Lo prueba `LoDeArribaSeVaConElScrollTest`.
         val arribaDeLaLista = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Medida.dentroDeSeccion)
 
-        textoDeRechazados(rechazados)?.let { texto ->
-            Superficie(modifier = arribaDeLaLista.fillMaxWidth()) {
-                Text(text = texto, style = Movi.textos.cuerpo, color = Movi.colores.aviso)
-            }
-        }
+        val textoDeLosRechazados = textoDeRechazados(rechazados)
         // Ola C, tarea 5: **una sola propuesta** por todo lo que entró solo y espera una decisión —los
         // movimientos por confirmar, los mensajes del banco y los pagos de tarjeta sin marcar— en
         // vez de un aviso por fuente. Abre la bandeja «Por revisar», donde se resuelve cada uno.
@@ -1352,33 +1352,10 @@ fun TransactionsScreen(
         }
         SideEffect { if (conteoFresco != null) ultimoConteoPorRevisar.value = conteoFresco }
         val cuantosPorRevisarAhora = conteoFresco ?: ultimoConteoPorRevisar.value
-        if (cuantosPorRevisarAhora != null && cuantosPorRevisarAhora > 0) {
-            RenglonPorRevisar(
-                cuantos = cuantosPorRevisarAhora,
-                onClick = { onNavigate(Screen.PorRevisar) },
-                modifier = arribaDeLaLista,
-            )
-        }
         // Adentro de un modo sin chip («Entre cuentas»), el título que dice dónde está y cómo
         // salir. Hace falta porque sin chip **ningún chip queda marcado**: la lista se vería
         // filtrada sin nada que explicara por qué.
         val tituloDelModo = tituloDelModoSinChip(activeFilter)
-        if (tituloDelModo != null) {
-            Seccion(
-                titulo = tituloDelModo,
-                accion = "Ver todos",
-                onAccion = { activeFilter = CHIP_TODO },
-                modifier = arribaDeLaLista,
-            )
-        }
-
-        // Con algo ya pintado, recargar lo dice «Actualizando…» en la cabecera (arriba), como el
-        // Inicio; sin nada pintado todavía, las filas esqueleto de más abajo ya dicen «cargando» con
-        // la forma de lo que viene. Lo que sí va acá es la lectura que FALLÓ con la lista a la vista:
-        // lo que se ve es lo último que vimos, y tiene que decirlo hasta que una lectura conteste.
-        if (noSePudoActualizar) {
-            NoSePudoActualizar(onReintentar = { refreshKey++ }, modifier = arribaDeLaLista)
-        }
 
         // Tirar hacia abajo pide lo mismo que «Reintentar»: `refreshKey` (ver [TirarParaActualizar]).
         TirarParaActualizar(
@@ -1392,6 +1369,43 @@ fun TransactionsScreen(
             // El aire de abajo deja la última fila por encima del botón de Agregar.
             contentPadding = PaddingValues(bottom = Medida.botonFlotante + Medida.margenDePantalla),
         ) {
+            if (textoDeLosRechazados != null) {
+                item(contentType = "arriba") {
+                    Superficie(modifier = arribaDeLaLista.fillMaxWidth()) {
+                        Text(text = textoDeLosRechazados, style = Movi.textos.cuerpo, color = Movi.colores.aviso)
+                    }
+                }
+            }
+            if (cuantosPorRevisarAhora != null && cuantosPorRevisarAhora > 0) {
+                item(contentType = "arriba") {
+                    RenglonPorRevisar(
+                        cuantos = cuantosPorRevisarAhora,
+                        onClick = { onNavigate(Screen.PorRevisar) },
+                        modifier = arribaDeLaLista,
+                    )
+                }
+            }
+            if (tituloDelModo != null) {
+                item(contentType = "arriba") {
+                    Seccion(
+                        titulo = tituloDelModo,
+                        accion = "Ver todos",
+                        onAccion = { activeFilter = CHIP_TODO },
+                        modifier = arribaDeLaLista,
+                    )
+                }
+            }
+            // Con algo ya pintado, recargar lo dice «Actualizando…» en la cabecera (arriba), como el
+            // Inicio; sin nada pintado todavía, las filas esqueleto de más abajo ya dicen «cargando»
+            // con la forma de lo que viene. Lo que sí va acá es la lectura que FALLÓ con la lista a la
+            // vista: lo que se ve es lo último que vimos, y tiene que decirlo hasta que una lectura
+            // conteste.
+            if (noSePudoActualizar) {
+                item(contentType = "arriba") {
+                    NoSePudoActualizar(onReintentar = { refreshKey++ }, modifier = arribaDeLaLista)
+                }
+            }
+
             // Mientras carga, la forma real: dos o tres DÍAS, cada uno con su encabezado y su
             // superficie. Ver [movimientosEsqueleto].
             if (loading && visibleDays.isEmpty()) {

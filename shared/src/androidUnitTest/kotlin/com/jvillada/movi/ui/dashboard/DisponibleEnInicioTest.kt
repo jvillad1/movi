@@ -145,10 +145,10 @@ class DisponibleEnInicioTest {
         composeRule.onNodeWithText("Disponible", useUnmergedTree = true).assertIsDisplayed()
         // Ola R4b: la cifra principal es la `Cifra.Grande` del sistema, entera.
         composeRule.onNodeWithText("\$6.900.000", useUnmergedTree = true).assertIsDisplayed()
-        // Ola 3 · Hoy en una mirada: la frase «Te quedan $6,8M para 4 días · meta diaria $222.580»
+        // Ola 3 · Hoy en una mirada: la frase «Te quedan $6,8M para 4 días · $1,7M por día»
         // ya no va en la sección de Hoy: la dice el héroe, con la misma cuenta
         // (`TeQuedanEnHoyEnPantallaTest`). La frase sigue en Plan; la regla, en `fraseDelDisponible`.
-        composeRule.onNodeWithText("Te quedan \$6,8M para 4 días · meta diaria \$222.580", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Te quedan \$6,8M para 4 días · \$1,7M por día", useUnmergedTree = true).assertDoesNotExist()
         // Las tres columnas: el período, la semana (cortada a 4 días por el fin del período) y hoy.
         // Cada una dice lo que te queda en grande: $6,9M − $150.000, $890.320 − $150.000 y
         // $222.580 − $150.000. Y lo gastado chico, que en las tres es lo de hoy.

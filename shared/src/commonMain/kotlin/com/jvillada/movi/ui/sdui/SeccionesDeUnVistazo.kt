@@ -120,11 +120,12 @@ internal const val DETALLE_DEL_HEROE_VACIO: String =
     "Crea la cuenta donde te llega la plata y Movi te dice cuánto te queda para el período."
 
 /**
- * **El héroe del Inicio: «Te quedan $X», para cuántos días y la meta diaria** (ola R1, camino 1).
+ * **El héroe del Inicio: «Te quedan $X», para cuántos días y cuánto da por día** (ola R1, camino 1).
  *
  * Contesta una sola pregunta —¿cuánto me queda para el período?— con la cifra de la columna «Período»
  * de la tarjeta Disponible de Plan ([teQuedanDelInicio], la misma función) en [VarianteDeCifra.Heroe],
- * el ojo de «Ocultar los saldos» junto al rótulo y, debajo, la línea «para N días · meta diaria $X».
+ * el ojo de «Ocultar los saldos» junto al rótulo y, debajo, la línea «para N días · $X por día» (lo que
+ * queda entre los días que faltan; vuelta de diseño 1).
  * El veredicto corto de la ola 3 va al final si existe.
  *
  * **Lo que salió** (ola R1): la barra Entró/Salió y la fila «Tu plata» con su desglose. Las dos

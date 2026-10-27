@@ -227,7 +227,7 @@ fun suscripcionesQueSubieron(
  * Las categorías en las que el período actual va **muy por encima** del promedio de los anteriores:
  * desde [VECES_SOBRE_EL_PROMEDIO_X10] / 10 veces el promedio y con al menos
  * [DIFERENCIA_MINIMA_DE_CATEGORIA] de diferencia. Una categoría sin historia (promedio cero) avisa
- * con la diferencia sola.
+ * con la diferencia sola, y se dice como lo que es: «Gasto nuevo en Ropa», no «lo normal es $0».
  *
  * El período actual va a medias, así que se compara lo que ya lleva contra períodos enteros: es el
  * lado prudente — si a mitad de mes ya pasó el umbral, de verdad va por encima.
@@ -257,12 +257,21 @@ fun categoriasPorEncima(
         val diferencia = gastado - promedio
         if (diferencia < DIFERENCIA_MINIMA_DE_CATEGORIA) return@mapNotNull null
         if (promedio > 0L && gastado * 10 < promedio * VECES_SOBRE_EL_PROMEDIO_X10) return@mapNotNull null
-        val deCuantos = if (antes.size == 1) "el período anterior" else "el promedio de los ${antes.size} anteriores"
+        val llevas = "Llevas ${plata(gastado, "COP")} este período"
+        // Sin historia en la categoría, «lo normal es $0» no dice nada: es un gasto nuevo.
+        val (titulo, detalle) = if (promedio == 0L) {
+            val cuando = if (antes.size == 1) "en el período anterior" else "en los ${antes.size} períodos anteriores"
+            "Gasto nuevo en $categoria" to "$llevas; $cuando no habías gastado en $categoria."
+        } else {
+            val deCuantos = if (antes.size == 1) "el período anterior" else "el promedio de los ${antes.size} anteriores"
+            "$categoria va muy por encima de lo normal" to "$llevas; lo normal es ${plata(promedio, "COP")} ($deCuantos)."
+        }
         Anomalia(
+            // La misma huella y el mismo tipo con o sin historia: lo descartado no revive.
             huella = "categoria:$categoria:$periodoActual",
             tipo = TipoDeAnomalia.CATEGORIA_POR_ENCIMA,
-            titulo = "$categoria va muy por encima de lo normal",
-            detalle = "Llevas ${plata(gastado, "COP")} este período; lo normal es ${plata(promedio, "COP")} ($deCuantos).",
+            titulo = titulo,
+            detalle = detalle,
             evidencia = eventos.sortedByDescending { it.amount }.take(3).map { evidenciaDe(it, diaDe, nombreDeCuenta) },
         )
     }.sortedByDescending { a -> a.evidencia.sumOf { it.monto } }

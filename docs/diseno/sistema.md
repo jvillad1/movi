@@ -174,6 +174,9 @@ CuadriculaDeAcciones(listOf(
 
 **`TarjetaDePropuesta`** — el feed del camino 5 y la forma de **toda** propuesta de Movi: avisos por
 confirmar, pagos por vencer, anomalías, cuadres, saldos del hogar. Movi propone, el dueño decide.
+Una sola anatomía, cada pieza en su renglón: ícono, título, cifra opcional (`Cifra`), subtítulo
+(`cuerpo`, a todo el ancho, debajo de la cifra) y acciones. La cifra y el subtítulo nunca van lado a
+lado (vuelta de diseño 1: «y 2 pagos más por vencer» se partía en dos al lado del monto).
 ```kotlin
 TarjetaDePropuesta(
     icono = Icons.Rounded.Inbox, titulo = "Llegaron 3 avisos del banco",
@@ -278,7 +281,7 @@ arriba:
 | bloque | tipo SDUI | componente | lleva a |
 |---|---|---|---|
 | encabezado | — (chrome) | `Encabezado`: avatar, «Hola, Juan» con el período, lupa y campana | Ajustes, Buscar |
-| héroe | `HERO_BALANCE` | `Cifra.Heroe` «Te quedan», el ojo, «para N días · meta diaria $X», el veredicto | Tus períodos |
+| héroe | `HERO_BALANCE` | `Cifra.Heroe` «Te quedan», el ojo, «para N días · $X por día» (lo que queda entre los días que faltan), el veredicto | Tus períodos |
 | acciones | `ACCIONES` | `CuadriculaDeAcciones` 4 × 2 | Agregar, papeles, Por revisar, Movi AI |
 | Movi propone hoy | `PROPUESTAS` | `TarjetaDePropuesta`, una por tipo, tope 4 | su acción; «Ver todo» → Por revisar |
 | tus cuentas | `CUENTAS` | `TarjetaDeCuenta` en carrusel | el detalle de la cuenta; «Ver todo» → Patrimonio |
@@ -300,7 +303,8 @@ viejos; este cliente no los pinta.
   fecha, la cifra y el chevron se miden primero; si no cabe todo, se cae primero el rótulo «Flujo del
   día» y después se corta el «· N movimientos».
 - **«N por revisar» es una `TarjetaDePropuesta`**, como en «Movi propone hoy». «Personas y comercios»
-  ya no está arriba de la lista.
+  ya no está arriba de la lista. **Es el primer ítem de la lista y se va con el scroll** (vuelta de
+  diseño 1): fijos quedan solo el encabezado, el selector del período y los chips.
 - **La fila de un movimiento es una `Fila`** (Movimientos, Por revisar, Buscar, el detalle de una
   cuenta) y **su monto es la `Cifra` del sistema** (`CifraDelMovimiento`): el gasto `Neutro` con «−»,
   el ingreso `Ingreso` con «+», el traspaso `EntreCuentas` sin signo y lo que no movió plata
@@ -327,7 +331,7 @@ Plan es dueño de «¿cuánto puedo gastar y qué me falta pagar?», en este ord
 | Cuánto puedes gastar | `Seccion` + `Superficie`, barras con `BarraDeProgreso` | la versión completa del disponible vive acá |
 | Tus períodos | `Fila` en una `Superficie` de lista | lleva a la lista de períodos |
 | selector | «Pagos» · «Presupuestos» | era «Pagos del mes»: el período del dueño no es el mes |
-| Pagos del período | `Fila` + `Pildora` de estado (Pagado, Vencido, Por confirmar, Hoy, En N días, Falta) | «¿Ya pagaste…?» va en la superficie de las propuestas con `Boton` S |
+| Pagos del período | `Fila` + `Pildora` de estado (Pagado, Vencido, Por confirmar, Hoy, En N días, Falta) | «¿Ya pagaste…?» va en la superficie de las propuestas con `Boton` S; el resumen dice «Falta por pagar $X · Ya pagaste $Y» y los grupos («Por pagar · 3», «Ya pagaste · 2») van sin cifra |
 | Tu plata, día a día | `Seccion` + `Superficie` + `Grafica` | debajo de los pagos que la mueven |
 | Lo que se repite al mes, suscripciones | `Cifra.Grande`, `Fila` | |
 | Tus recordatorios no te van a llegar | `TarjetaDePropuesta`, al final | era un cartel en el medio de la lista |

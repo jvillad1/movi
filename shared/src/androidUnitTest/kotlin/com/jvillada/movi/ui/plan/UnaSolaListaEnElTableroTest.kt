@@ -122,7 +122,7 @@ class UnaSolaListaEnElTableroTest {
             }
         }
         esperarTexto("Pagos del período")
-        esperarTexto("Falta por pagar · ")
+        esperarTexto("Por pagar · ")
     }
 
     private fun nodos(texto: String, substring: Boolean = false) =
@@ -154,9 +154,9 @@ class UnaSolaListaEnElTableroTest {
         }
 
         val yaPagaste = arriba("Ya pagaste · 3")
-        assertTrue(arriba("Falta por pagar · 3") < arriba("Celular"))
-        assertTrue(arriba("Celular") < yaPagaste, "Celular está en «Falta por pagar»")
-        assertTrue(arriba("Cotrafa") < yaPagaste, "Cotrafa está en «Falta por pagar»")
+        assertTrue(arriba("Por pagar · 3") < arriba("Celular"))
+        assertTrue(arriba("Celular") < yaPagaste, "Celular está en «Por pagar»")
+        assertTrue(arriba("Cotrafa") < yaPagaste, "Cotrafa está en «Por pagar»")
         assertTrue(arriba("Crediágil") > yaPagaste, "Crediágil está en «Ya pagaste»")
 
         // Las dos de octubre dicen cuándo vencen, no que ya se pagaron.
@@ -164,6 +164,27 @@ class UnaSolaListaEnElTableroTest {
         // Crediágil: con qué se sabe.
         assertEquals(1, nodos("pagado el 27 de septiembre").size)
         assertEquals(1, nodos("Lo prueba un pago de \$1.204.064").size)
+    }
+
+    /**
+     * **Una cifra, una vez** (vuelta de diseño 1): el resumen dice «Falta por pagar $X · Ya pagaste
+     * $Y» y los grupos de abajo, «Por pagar · 3» y «Ya pagaste · 3», ya no repiten esas cifras en su
+     * renglón. Antes, justo debajo de «Falta por pagar $1.812.000» venía «⏱ Falta por pagar · 3 …
+     * $1.812.000».
+     */
+    @Test
+    fun `los grupos no repiten las cifras del resumen`() {
+        montar()
+
+        assertEquals(1, nodos("Falta por pagar").size, "el rótulo del resumen, una vez")
+        assertTrue(nodos("Falta por pagar · ", substring = true).isEmpty(), "el grupo ya no repite el rótulo")
+        for (encabezado in listOf("Por pagar · 3", "Ya pagaste · 3")) {
+            val renglon = composeRule.onNodeWithText(encabezado, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val cifrasEnElRenglon = composeRule.onAllNodes(hasText("$", substring = true), useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .filter { it.boundsInRoot.top < renglon.bottom && it.boundsInRoot.bottom > renglon.top }
+            assertTrue(cifrasEnElRenglon.isEmpty(), "«$encabezado» lleva una cifra al lado: $cifrasEnElRenglon")
+        }
     }
 
     @Test
