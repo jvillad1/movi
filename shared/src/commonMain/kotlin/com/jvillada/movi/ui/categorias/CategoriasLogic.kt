@@ -7,7 +7,13 @@ import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.inicioDelPeriodo
+import com.jvillada.movi.shared.model.periodoActual
+import com.jvillada.movi.shared.model.periodoSiguiente
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.plus
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.theme.COLORES_DEL_CATALOGO
 import com.jvillada.movi.ui.components.formatCOP
@@ -146,15 +152,49 @@ fun resumenDeUso(c: CategoryUsage): String {
     return partes.joinToString(" · ")
 }
 
-/** El uso de ESTE mes, en un renglón. `null` si no la usó este mes — no hay nada que decir. */
-fun resumenDelMes(c: CategoryUsage): String? {
-    if (c.monthMovements <= 0) return null
-    val cuantos = if (c.monthMovements == 1) "1 movimiento" else "${c.monthMovements} movimientos"
+/** Cómo se nombra el período de las cifras de Categorías cuando es el mes del calendario. */
+const val ROTULO_ESTE_MES: String = "Este mes"
+
+/** Cómo se nombra el período de las cifras de Categorías cuando no lo es (o no se sabe). */
+const val ROTULO_ESTE_PERIODO: String = "Este período"
+
+/**
+ * **Cómo se nombra el período de las cifras de Categorías** (vuelta de diseño 15). Las cifras salen
+ * del período del dueño, no del mes del calendario: con el corte el 25, «este mes» mentía. Dice
+ * «Este mes» solo si el período en curso va del 1 al último día del mes; si no, o si todavía no se
+ * leyó el perfil ([ajustes] `null`), «Este período», que siempre es cierto. Pura.
+ */
+fun rotuloDelPeriodoDeCategorias(ajustes: PeriodSettings?, ahoraMillis: Long): String {
+    if (ajustes == null) return ROTULO_ESTE_PERIODO
+    val periodo = periodoActual(ahoraMillis, ajustes)
+    val inicio = inicioDelPeriodo(periodo, ajustes)
+    val siguiente = inicioDelPeriodo(periodoSiguiente(periodo), ajustes)
+    val esElMes = inicio.dayOfMonth == 1 && siguiente.dayOfMonth == 1 &&
+        inicio.plus(1, DateTimeUnit.MONTH) == siguiente
+    return if (esElMes) ROTULO_ESTE_MES else ROTULO_ESTE_PERIODO
+}
+
+/**
+ * El uso del período en curso, en un renglón: «Este período: 3 movimientos · $260.000». `null` si no
+ * hay nada que decir.
+ *
+ * La plata es la de «En qué se va» (la arma el server con la regla de siempre: solo tu parte, sin
+ * traspasos ni lo que espera en «Por confirmar»); el conteo cuenta todo uso de la categoría en el
+ * período, que es lo que sirve para saber si está en uso. [rotulo] sale de
+ * [rotuloDelPeriodoDeCategorias].
+ */
+fun resumenDelMes(c: CategoryUsage, rotulo: String = ROTULO_ESTE_PERIODO): String? {
     val plata = buildList {
         if (c.monthTotal > 0) add(formatCOP(c.monthTotal))
         if (c.monthIncomeTotal > 0) add("+${formatCOP(c.monthIncomeTotal)} de ingresos")
     }
-    return (listOf("Este mes: $cuantos") + plata).joinToString(" · ")
+    if (c.monthMovements <= 0 && plata.isEmpty()) return null
+    val cuantos = when {
+        c.monthMovements <= 0 -> null
+        c.monthMovements == 1 -> "1 movimiento"
+        else -> "${c.monthMovements} movimientos"
+    }
+    return "$rotulo: " + (listOfNotNull(cuantos) + plata).joinToString(" · ")
 }
 
 /**
@@ -178,19 +218,22 @@ fun resumenDeUsoCorto(c: CategoryUsage): String {
 }
 
 /**
- * **Las cifras de este mes de una categoría**: lo gastado y lo que entró, cada una por su lado para
+ * **Las cifras del período de una categoría**: lo gastado y lo que entró, cada una por su lado para
  * que la fila las pinte con la `Cifra` del sistema (vuelta de diseño 8: el gasto en el color del
  * texto, el ingreso en `entra` con «+»). `null` la que no hubo.
+ *
+ * Vuelta de diseño 15: son las de «En qué se va» (el gasto, solo tu parte y con tu parte de lo que
+ * pagó otro) y las del chip «Ingresos»; las arma el server con su regla única.
  */
 data class CifrasDelMes(val gasto: Long?, val ingreso: Long?)
 
 /**
- * Las cifras de este mes, sin la oración de [resumenDelMes] — para el costado derecho de la fila
- * compacta, que solo tiene lugar para un número (o dos, uno debajo del otro). `null` si no la usó
- * este mes o si el mes no dejó plata que mostrar (por ejemplo, movimientos en otra moneda).
+ * Las cifras del período, sin la oración de [resumenDelMes] — para el costado derecho de la fila
+ * compacta, que solo tiene lugar para un número (o dos, uno debajo del otro). `null` si el período
+ * no dejó plata que mostrar (sin uso, solo traspasos, lo que espera en «Por confirmar» o movimientos
+ * en otra moneda). No mira el conteo: tu parte de lo que pagó otro suma sin un movimiento tuyo.
  */
 fun cifrasDelMes(c: CategoryUsage): CifrasDelMes? {
-    if (c.monthMovements <= 0) return null
     val gasto = c.monthTotal.takeIf { it > 0 }
     val ingreso = c.monthIncomeTotal.takeIf { it > 0 }
     return if (gasto == null && ingreso == null) null else CifrasDelMes(gasto, ingreso)
