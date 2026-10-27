@@ -36,6 +36,7 @@ import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.components.graficaQueSeToca
 import com.jvillada.movi.ui.fecha.MESES_DEL_ANIO
+import com.jvillada.movi.theme.Medida
 
 /**
  * # El patrimonio en el tiempo (Ola 4 · Ver la plata)
@@ -202,7 +203,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.dibujarLaCurva(
         )
     }
     elegido?.let { i ->
-        drawLine(colores.guia, Offset(x(i), 0f), Offset(x(i), size.height), strokeWidth = 1.dp.toPx())
+        drawLine(colores.guia, Offset(x(i), 0f), Offset(x(i), size.height), strokeWidth = Medida.trazo.toPx())
         drawCircle(colores.linea, radius = radio * 0.8f, center = Offset(x(i), y(valores[i])))
     }
     // Hoy, resaltado: un punto lleno con aro del color de la tarjeta.

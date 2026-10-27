@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.SaldosOcultosStore
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Icono
 
 /**
  * # «Ocultar los saldos», donde se pinta
@@ -87,7 +88,7 @@ fun OjoDeLosSaldos(modifier: Modifier = Modifier) {
         modifier = modifier
             // 24 dp, como el chevron del héroe: va en la línea del rótulo y no puede hacerla más
             // alta (la cifra de abajo no salta, ni con datos ni con esqueleto).
-            .size(24.dp)
+            .size(Icono.l)
             .testTag(TAG_OJO_DE_LOS_SALDOS)
             .clickable(role = Role.Button, onClickLabel = rotulo) {
                 SaldosOcultosStore.alternar()
@@ -99,7 +100,7 @@ fun OjoDeLosSaldos(modifier: Modifier = Modifier) {
             imageVector = if (ocultos) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
             contentDescription = rotulo,
             tint = Movi.colores.textoMedio,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(Icono.m),
         )
     }
 }

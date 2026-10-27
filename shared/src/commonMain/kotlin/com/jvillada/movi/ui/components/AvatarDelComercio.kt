@@ -38,6 +38,7 @@ import com.jvillada.movi.theme.COLOR_DE_CATEGORIA_RESPALDO
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
+import com.jvillada.movi.theme.Medida
 
 /**
  * # El comercio, protagonista de la fila
@@ -143,7 +144,7 @@ fun CirculoDeMarca(marca: Marca, modifier: Modifier = Modifier, tamano: TamanoDe
             .semantics { contentDescription = marca.nombre }
             .size(tamano.circulo)
             .background(Color(marca.fondo), CircleShape)
-            .border(1.dp, Movi.colores.hilo, CircleShape),
+            .border(Medida.trazo, Movi.colores.hilo, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Text(

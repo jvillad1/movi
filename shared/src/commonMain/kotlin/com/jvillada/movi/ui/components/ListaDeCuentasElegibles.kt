@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.CuentasDelPicker
 import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.theme.Icono
 
 /**
  * **La lista de cuentas para elegir con el dedo, en las pantallas de lo que llegó del banco.**
@@ -91,7 +92,7 @@ fun ListaDeCuentasElegibles(
                             Icons.Rounded.Check,
                             contentDescription = null,
                             tint = Movi.colores.texto,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(Icono.s),
                         )
                     }
                 }

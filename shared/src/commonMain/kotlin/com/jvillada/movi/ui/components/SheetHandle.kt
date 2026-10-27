@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Icono
 
 /**
  * F37: manija (32×4.dp, centrada) + X para cerrar (44.dp de área tocable, arriba a la derecha),
@@ -65,7 +66,7 @@ fun SheetHandleWithClose(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = "Cerrar",
                 tint = Movi.colores.textoMedio,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(Icono.m),
             )
         }
     }

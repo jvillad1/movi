@@ -54,6 +54,7 @@ import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.categorias.aparienciaDe
 import com.jvillada.movi.ui.categorias.prefDeCategoria
+import com.jvillada.movi.theme.Medida
 
 /**
  * Ola B · Task 4: cuántas frecuentes encabezan la cuadrícula — dos filas de cuatro en un teléfono.
@@ -354,7 +355,7 @@ fun SelectorDeCategoria(
                 .fillMaxWidth()
                 .clip(forma)
                 .background(Movi.colores.tarjeta)
-                .border(1.dp, Movi.colores.borde, forma)
+                .border(Medida.trazo, Movi.colores.borde, forma)
                 .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.medio),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -534,7 +535,7 @@ private fun CeldaDeLaCuadricula(
             Box(
                 modifier = Modifier
                     .size(TamanoDeIconoDeCategoria.Normal.circulo)
-                    .border(1.dp, Movi.colores.marca, RoundedCornerShape(Movi.formas.pleno)),
+                    .border(Medida.trazo, Movi.colores.marca, RoundedCornerShape(Movi.formas.pleno)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Rounded.Add, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(TamanoDeIconoDeCategoria.Normal.icono))

@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.AvatarPalette
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Medida
 
 /**
  * F41: el avatar con la inicial ya abría Perfil desde el encabezado del Dashboard, pero nada
@@ -36,7 +37,7 @@ fun AvatarButton(onClick: () -> Unit) {
             .size(32.dp)
             .clip(CircleShape)
             .background(avatarColorOrDefault(SessionManager.avatarColor))
-            .border(1.dp, Movi.colores.borde, CircleShape)
+            .border(Medida.trazo, Movi.colores.borde, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

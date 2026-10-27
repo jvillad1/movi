@@ -30,6 +30,8 @@ import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Movimiento
 import kotlinx.coroutines.launch
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Radio
 
 /** La tarjeta de la celebración, para que las pruebas la encuentren. */
 const val TAG_MOMENTO_DE_CELEBRACION = "momento-de-celebracion"
@@ -85,12 +87,12 @@ fun MomentoDeCelebracion(frase: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(Radio.l))
             .background(Movi.colores.tarjeta)
-            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .padding(horizontal = Espacio.m, vertical = 14.dp)
             .testTag(TAG_MOMENTO_DE_CELEBRACION),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         Box(
             modifier = Modifier
