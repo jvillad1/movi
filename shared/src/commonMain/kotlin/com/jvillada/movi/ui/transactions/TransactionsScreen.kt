@@ -74,6 +74,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FiltroDeMovimientos
+import com.jvillada.movi.shared.model.VistaDelAnalisis
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
@@ -1022,6 +1023,8 @@ fun TransactionsScreen(
      * cada vez que la lista se relee ([movimientoDelPanel]).
      */
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
+    /** Vuelta de diseño 9: tu parte de lo que pagaron otros, para el resumen del panel (ver abajo). */
+    var tuParteDeOtros by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
     val focusManager = LocalFocusManager.current
     /** Si [selectedEvent] se eligió en el panel de al lado (y no para abrir la hoja). */
     var elegidoEnElPanel by remember { mutableStateOf(false) }
@@ -1570,7 +1573,34 @@ fun TransactionsScreen(
         },
         panel = {
             val enElPanel = movimientoDelPanel(selectedEvent, eventos.valor)
-            if (enElPanel == null) {
+            // Vuelta de diseño 9: sin nada elegido, el resumen del período que la lista tiene a la
+            // vista (ver `ResumenEnElPanel.kt`), sobre la misma historia. Sin historia leída todavía,
+            // la invitación de siempre.
+            // Tu parte de lo que pagaron otros, para que el resumen cuente lo mismo que «En qué se va»
+            // y el widget del Inicio (R3, «solo tu parte»): la MISMA lectura que hace «En qué se va»,
+            // con la caché del repositorio. Solo con el panel a la vista: el teléfono no la pide.
+            LaunchedEffect(refreshKey, refreshTick) {
+                tuParteDeOtros = runCatching { Repositories.wallets.getTuParteDeOtros() }.getOrDefault(emptyList())
+            }
+            val historia = eventos.valor
+            val resumen = remember(historia, tuParteDeOtros, periodoVisible, ajustesDelPeriodo, hoyIso, accountTypes, perfilLeido) {
+                if (historia == null || !perfilLeido) null
+                else resumenDelPanel(
+                    historia, periodoVisible, ajustesDelPeriodo, LocalDate.parse(hoyIso), accountTypes,
+                    tuParteDeOtros = tuParteDeOtros,
+                )
+            }
+            if (enElPanel == null && resumen != null) {
+                ResumenDelPeriodoEnElPanel(
+                    resumen = resumen,
+                    // Como desde «En qué se va»: los gastos de esa categoría, con su chip y su ×.
+                    onCategoria = { fila ->
+                        filtro = FiltroDeMovimientos.deLaFila(fila, VistaDelAnalisis.CATEGORIA)
+                        activeFilter = CHIP_GASTOS
+                    },
+                    onVerEnQueSeVa = { onNavigate(Screen.EnQueSeVa(periodoVisible.prefijo)) },
+                )
+            } else if (enElPanel == null) {
                 InvitacionAElegirUnMovimiento()
             } else {
                 // `key`: otro movimiento es otro panel, con su estado desde cero (un campo a medio
