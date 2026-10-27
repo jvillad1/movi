@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
@@ -22,6 +23,8 @@ import com.jvillada.movi.shared.model.SumaYaAnotada
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.extractos.StatementReviewScreen
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBotonKey
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -101,7 +104,9 @@ class CargosDelBancoEnLaRevisionTest {
     fun el_bloque_agrupa_los_cargos_y_lo_ya_anotado_sale_destildado() {
         montar(cargosConElAnotado)
 
-        composeRule.onNodeWithText("Cargos y abonos del banco (4)").assertIsDisplayed()
+        // Vuelta de diseño 20: el bloque se titula con la `Seccion` del sistema, con su conteo aparte.
+        composeRule.onNodeWithText("Cargos y abonos del banco").assertIsDisplayed()
+        composeRule.onNodeWithText(" · 4").assertIsDisplayed()
         // Las dos líneas del 4x1000 dicen dónde ya están.
         assertEquals(
             2,
@@ -109,6 +114,11 @@ class CargosDelBancoEnLaRevisionTest {
         )
         // Dos ya anotados destildados: se anotan el IVA y los intereses.
         composeRule.onNodeWithText("Anotar los 2").assertIsDisplayed()
+        // Vuelta de diseño 20: es un `Boton` secundario del sistema (era un `OutlinedButton`).
+        assertEquals(
+            VarianteDeBoton.Secundario,
+            composeRule.onNodeWithText("Anotar los 2").fetchSemanticsNode().config.getOrNull(VarianteDeBotonKey),
+        )
         // La compra sigue en su sección; el botón de siempre cuenta la compra y los dos cargos nuevos.
         composeRule.onNodeWithText("Nuevas transacciones").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Importar 3 seleccionadas").assertIsDisplayed()
@@ -150,7 +160,9 @@ class CargosDelBancoEnLaRevisionTest {
             ),
         )
 
-        composeRule.onNodeWithText("Cargos y abonos del banco (2)").assertIsDisplayed()
+        // Vuelta de diseño 20: el bloque se titula con la `Seccion` del sistema, con su conteo aparte.
+        composeRule.onNodeWithText("Cargos y abonos del banco").assertIsDisplayed()
+        composeRule.onNodeWithText(" · 2").assertIsDisplayed()
         composeRule.onAllNodesWithTextContaining("Puede que ya lo hayas anotado sumado").let { nodos ->
             assertEquals(2, nodos.fetchSemanticsNodes().size)
         }

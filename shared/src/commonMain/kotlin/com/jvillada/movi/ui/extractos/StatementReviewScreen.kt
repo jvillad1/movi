@@ -7,21 +7,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.CheckBox
-import androidx.compose.material.icons.rounded.CheckBoxOutlineBlank
-import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material3.*
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.Role
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.theme.*
@@ -29,6 +22,17 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Casilla
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
@@ -216,19 +220,13 @@ fun StatementReviewScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Destino:", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                Text(
+                // Vuelta de diseño 20: la `Pildora` del sistema (el lavado de su tono y el texto en
+                // ese tono, lo mismo que este chip hacía a mano). `fill = false` y no un `Spacer`
+                // con peso: un segundo hijo pesado le recortaría el ancho a la mitad de la fila.
+                Pildora(
                     destinationAccount?.name ?: "Elige la cuenta",
-                    style = Movi.textos.apoyo,
-                    color = if (sinCuenta) Movi.colores.aviso else Movi.colores.marca,
-                    fontWeight = FontWeight.Medium,
-                    // `fill = false` y no un `Spacer` con peso: un segundo hijo pesado le
-                    // recortaría el ancho al chip a la mitad de la fila, y «Bancolombia Ahorros»
-                    // se partiría en dos renglones por dejar «Cambiar» pegado al borde.
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .clip(RoundedCornerShape(Radio.s))
-                        .background(Movi.colores.lavado(if (sinCuenta) Movi.colores.aviso else Movi.colores.marca))
-                        .padding(horizontal = Espacio.xs, vertical = Espacio.xxs),
+                    tono = if (sinCuenta) TonoDePildora.Aviso else TonoDePildora.Marca,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 Text(
                     if (eligiendoCuenta) "Cerrar" else "Cambiar",
@@ -274,10 +272,10 @@ fun StatementReviewScreen(
             // Matches section
             if (result.matches.isNotEmpty()) {
                 item {
-                    Text(
+                    Seccion(
                         "Posibles duplicados",
-                        style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.aviso,
-                        modifier = Modifier.padding(horizontal = Espacio.m, vertical = Espacio.xs),
+                        conteo = result.matches.size,
+                        modifier = Modifier.padding(horizontal = Espacio.m).padding(top = Espacio.s),
                     )
                 }
                 items(result.matches, key = { it.parsed.id }) { match ->
@@ -314,7 +312,7 @@ fun StatementReviewScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = Espacio.m)
-                            .padding(top = Espacio.s, bottom = Espacio.xxs),
+                            .padding(top = Espacio.s),
                     )
                 }
                 items(filasDelBanco, key = { it.id }) { tx ->
@@ -324,9 +322,7 @@ fun StatementReviewScreen(
                         onToggle = { elegidasAMano[tx.id] = tx.id !in selectedIds },
                         nota = estadosDeLosCargos[tx.id]?.let(::notaDelCargo),
                         notaEsAviso = estadosDeLosCargos[tx.id] is EstadoDelCargo.PuedeEstarSumado,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Espacio.m, vertical = Espacio.xxs),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -334,36 +330,21 @@ fun StatementReviewScreen(
             // New transactions section
             if (filasNuevas.isNotEmpty()) {
                 item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Espacio.m)
-                            .padding(top = Espacio.s, bottom = Espacio.xxs),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            "Nuevas transacciones",
-                            style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio,
-                        )
-                        val allSelected = filasNuevas.all { it.id in selectedIds }
-                        Text(
-                            if (allSelected) "Deseleccionar todas" else "Seleccionar todas",
-                            style = Movi.textos.apoyo, color = Movi.colores.marca,
-                            modifier = Modifier.clickable {
-                                filasNuevas.forEach { elegidasAMano[it.id] = !allSelected }
-                            },
-                        )
-                    }
+                    val allSelected = filasNuevas.all { it.id in selectedIds }
+                    Seccion(
+                        "Nuevas transacciones",
+                        conteo = filasNuevas.size,
+                        accion = if (allSelected) "Deseleccionar todas" else "Seleccionar todas",
+                        onAccion = { filasNuevas.forEach { elegidasAMano[it.id] = !allSelected } },
+                        modifier = Modifier.padding(horizontal = Espacio.m).padding(top = Espacio.s),
+                    )
                 }
                 items(filasNuevas, key = { it.id }) { tx ->
                     NewTransactionRow(
                         tx = tx,
                         checked = tx.id in selectedIds,
                         onToggle = { elegidasAMano[tx.id] = tx.id !in selectedIds },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Espacio.m, vertical = Espacio.xxs),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -399,26 +380,19 @@ fun StatementReviewScreen(
                     else "$sinRevisar coincidencias sin revisar no se van a importar ni a conciliar. Si son otras compras, toca «No son el mismo».",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.aviso,
-                    lineHeight = 17.sp,
                     modifier = Modifier.padding(bottom = Espacio.s),
                 )
             }
-            Button(
+            // Vuelta de diseño 20: el `Boton` principal del sistema. Era un `Button` de Material con el
+            // texto y la ruedita en `Color.White`, que en el tema oscuro (la marca es lavanda) no se
+            // leía; el `Boton` pone encima `sobreMarca`, y la ruedita no le cambia el ancho.
+            Boton(
+                "Importar $importCount seleccionada${if (importCount != 1) "s" else ""}",
                 onClick = ::import,
-                enabled = canImport,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Movi.colores.marca),
-                shape = RoundedCornerShape(Radio.m),
-            ) {
-                if (working) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(Icono.m), strokeWidth = Medida.trazoDeCarga)
-                } else {
-                    Text(
-                        "Importar $importCount seleccionada${if (importCount != 1) "s" else ""}",
-                        style = Movi.textos.titulo, fontWeight = FontWeight.Bold, color = Color.White,
-                    )
-                }
-            }
+                habilitado = canImport,
+                cargando = working,
+                anchoCompleto = true,
+            )
         }
     }
 }
@@ -436,32 +410,30 @@ private fun BloqueDeCargosDelBanco(
     onAnotar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-        Text(
-            "Cargos y abonos del banco ($cuantos)",
-            style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio,
-        )
+    // `Seccion` ya trae su espacio de abajo: el resto del bloque va separado por [Espacio.xs].
+    Column(modifier = modifier) {
+        Seccion("Cargos y abonos del banco", conteo = cuantos)
         Text(
             "Impuestos, comisiones e intereses que el banco cobra o abona solo. Destilda los que no quieras anotar.",
-            style = Movi.textos.apoyo, color = Movi.colores.textoApagado,
+            style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
         )
         if (anotados > 0) {
             Text(
                 if (anotados == 1) "Anotaste 1 cargo del banco." else "Anotaste $anotados cargos y abonos del banco.",
-                style = Movi.textos.apoyo, color = Movi.colores.entra, fontWeight = FontWeight.Medium,
+                style = Movi.textos.apoyo, color = Movi.colores.entra,
+                modifier = Modifier.padding(top = Espacio.xs),
             )
         }
         if (cuantos > 0) {
-            OutlinedButton(
+            // Vuelta de diseño 20: un `Boton` secundario chico (era un `OutlinedButton` de Material).
+            Boton(
+                if (tildados == 1) "Anotar 1" else "Anotar los $tildados",
                 onClick = onAnotar,
-                enabled = puedeAnotar,
-                shape = RoundedCornerShape(Radio.s),
-            ) {
-                Text(
-                    if (tildados == 1) "Anotar 1" else "Anotar los $tildados",
-                    style = Movi.textos.apoyo, color = if (puedeAnotar) Movi.colores.marca else Movi.colores.textoApagado,
-                )
-            }
+                variante = VarianteDeBoton.Secundario,
+                tamano = TamanoDeBoton.S,
+                habilitado = puedeAnotar,
+                modifier = Modifier.padding(top = Espacio.xs),
+            )
         }
     }
 }
@@ -474,6 +446,12 @@ private fun notaDelCargo(estado: EstadoDelCargo): String? = when (estado) {
         "Puede que ya lo hayas anotado sumado: «${estado.en.nombre}» por ${formatMoney(estado.en.monto, estado.en.moneda)}"
 }
 
+/**
+ * **Una fila del extracto, para tildar o destildar** (vuelta de diseño 20): la `Fila` del sistema con
+ * la `Cifra` y la `Casilla` al final, y la fila entera es el toque (`toggleable`, de borde a borde).
+ * Era una tarjeta con un ícono de casilla de Material y el monto en un `Text` suelto. La [nota] —«Ya
+ * anotado en…»— cuelga debajo, alineada con el título.
+ */
 @Composable
 private fun NewTransactionRow(
     tx: ParsedTransaction,
@@ -483,39 +461,33 @@ private fun NewTransactionRow(
     nota: String? = null,
     notaEsAviso: Boolean = false,
 ) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(Radio.s))
-            .background(Movi.colores.tarjeta)
-            .clickable(onClick = onToggle)
-            .padding(horizontal = Espacio.s, vertical = Espacio.s),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+    val entra = tx.type == TransactionType.INCOME
+    Column(
+        modifier = modifier.toggleable(value = checked, role = Role.Checkbox, onValueChange = { onToggle() }),
     ) {
-        Icon(
-            if (checked) Icons.Rounded.CheckBox else Icons.Rounded.CheckBoxOutlineBlank,
-            contentDescription = if (checked) "Seleccionado" else "No seleccionado",
-            tint = if (checked) Movi.colores.marca else Movi.colores.textoMedio,
-            modifier = Modifier.size(Icono.m),
+        Fila(
+            titulo = tx.merchant,
+            subtitulo = "${tx.category} · ${fechaEnPalabras(tx.date, hoyEnAppZone())}",
+            final = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
+                    // Ola 2a: el gasto en el color del texto; el signo «−» ya lo dice.
+                    Cifra(
+                        if (entra) tx.amount else -tx.amount,
+                        tono = if (entra) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
+                        moneda = tx.currency,
+                    )
+                    Casilla(checked)
+                }
+            },
         )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(tx.merchant, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            Text("${tx.category} · ${fechaEnPalabras(tx.date, hoyEnAppZone())}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            if (nota != null) {
-                Text(
-                    nota,
-                    style = Movi.textos.apoyo,
-                    color = if (notaEsAviso) Movi.colores.aviso else Movi.colores.textoApagado,
-                )
-            }
+        if (nota != null) {
+            Text(
+                nota,
+                style = Movi.textos.apoyo,
+                color = if (notaEsAviso) Movi.colores.aviso else Movi.colores.textoMedio,
+                modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.xs),
+            )
         }
-        // Ola 2a: el gasto en el color del texto; el signo «−» ya lo dice.
-        val amountColor = if (tx.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.texto
-        val prefix = if (tx.type == TransactionType.INCOME) "+" else "−"
-        Text(
-            "$prefix${formatMoney(tx.amount, tx.currency)}",
-            style = Movi.textos.monto, fontWeight = FontWeight.SemiBold, color = amountColor,
-        )
     }
 }
 
@@ -532,144 +504,114 @@ private fun ReconciliationCard(
     var merchantSource by remember { mutableStateOf(FieldSource.MANUAL) }
 
     val isDecided = decision != null
-    val borderColor = if (isDecided && decision!!.confirm) Movi.colores.entra else Movi.colores.aviso
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.m))
-            .background(Movi.colores.tarjeta)
-            .border(Medida.trazo, borderColor.copy(alpha = 0.5f), RoundedCornerShape(Radio.m))
-            .padding(Espacio.s),
-        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
-    ) {
-        // Badge + amount
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                // Ola 2 #5 (F11): glifo escrito como texto → ícono Material (salía como ▯ en la web).
-                Icon(Icons.Rounded.Warning, contentDescription = null, tint = Movi.colores.aviso, modifier = Modifier.size(Icono.s))
-                Text(
-                    "Posible duplicado",
-                    style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.aviso,
-                )
-            }
-            val amtColor = if (match.parsed.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.texto
-            val prefix = if (match.parsed.type == TransactionType.INCOME) "+" else "−"
-            Text(
-                "$prefix${formatMoney(match.parsed.amount, match.parsed.currency)}",
-                style = Movi.textos.apoyo, fontWeight = FontWeight.Bold, color = amtColor,
-            )
-        }
-
-        // Column headers
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Spacer(Modifier.width(ANCHO_DEL_ROTULO))
-            Text(
-                "Manual", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.marca,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                "Extracto", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.entreCuentas,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        // Merchant row (differs always since bank names are messy)
-        FieldRow(
-            label = "Comercio",
-            manualValue = match.existingEvent.merchant ?: match.existingEvent.description,
-            statementValue = match.parsed.merchant,
-            selected = merchantSource,
-            onSelectManual = { merchantSource = FieldSource.MANUAL },
-            onSelectStatement = { merchantSource = FieldSource.STATEMENT },
-        )
-
-        // Category row (only if different)
-        if (match.parsed.category != match.existingEvent.category) {
-            FieldRow(
-                label = "Categoría",
-                manualValue = match.existingEvent.category,
-                statementValue = match.parsed.category,
-                selected = categorySource,
-                onSelectManual = { categorySource = FieldSource.MANUAL },
-                onSelectStatement = { categorySource = FieldSource.STATEMENT },
-            )
-        }
-
-        // Description row (only if extracto has one and differs)
-        val existDesc = match.existingEvent.description
-        val parsedDesc = match.parsed.description
-        if (parsedDesc.isNotBlank() && parsedDesc != existDesc) {
-            FieldRow(
-                label = "Descripción",
-                manualValue = existDesc.ifBlank { "—" },
-                statementValue = parsedDesc,
-                selected = descriptionSource,
-                onSelectManual = { descriptionSource = FieldSource.MANUAL },
-                onSelectStatement = { descriptionSource = FieldSource.STATEMENT },
-            )
-        }
-
-        if (!isDecided) {
-            Text(
-                "Toca cada campo para cambiar la fuente",
-                style = Movi.textos.apoyo, color = Movi.colores.textoApagado,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        // Action buttons
-        if (!isDecided) {
+    // Vuelta de diseño 20: una `Superficie` sin borde. El estado lo decía el color del borde (aviso o
+    // entra, con un `copy(alpha = 0.5f)` a mano); ahora lo dice la `Pildora` de arriba, en palabras.
+    Superficie(modifier = modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedButton(
-                    onClick = onReject,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(Radio.s),
-                ) {
-                    Text("No son el mismo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                when {
+                    decision == null -> Pildora("Posible duplicado", TonoDePildora.Aviso)
+                    decision.confirm -> Pildora("Reconciliado", TonoDePildora.Exito)
+                    else -> Pildora("Se importará como nuevo", TonoDePildora.Neutra)
                 }
-                Button(
-                    onClick = {
-                        onConfirm(
-                            ReconciliationDecision(
-                                parsedId = match.parsed.id,
-                                existingEventId = match.existingEventId,
-                                confirm = true,
-                                categorySource = categorySource,
-                                descriptionSource = descriptionSource,
-                                merchantSource = merchantSource,
-                                parsed = match.parsed,
-                            )
-                        )
-                    },
-                    modifier = Modifier.weight(2f),
-                    shape = RoundedCornerShape(Radio.s),
-                    colors = ButtonDefaults.buttonColors(containerColor = Movi.colores.marca),
-                ) {
-                    Text("Confirmar reconciliación", style = Movi.textos.apoyo, color = Color.White)
-                }
-            }
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                // Ola 2 #5 (F11): "✓"/"→" como texto suelto → íconos Material.
-                if (decision!!.confirm) {
-                    Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(Icono.s))
-                } else {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(Icono.s))
-                }
-                Text(
-                    if (decision.confirm) "Reconciliado" else "Se importará como nuevo",
-                    style = Movi.textos.apoyo,
-                    color = if (decision.confirm) Movi.colores.entra else Movi.colores.textoMedio,
-                    fontWeight = FontWeight.Medium,
+                val entra = match.parsed.type == TransactionType.INCOME
+                Cifra(
+                    if (entra) match.parsed.amount else -match.parsed.amount,
+                    tono = if (entra) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
+                    moneda = match.parsed.currency,
                 )
+            }
+
+            // Column headers
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.width(ANCHO_DEL_ROTULO))
+                Text("Manual", style = Movi.textos.apoyo, color = Movi.colores.marca, modifier = Modifier.weight(1f))
+                Text("Extracto", style = Movi.textos.apoyo, color = Movi.colores.entreCuentas, modifier = Modifier.weight(1f))
+            }
+
+            // Merchant row (differs always since bank names are messy)
+            FieldRow(
+                label = "Comercio",
+                manualValue = match.existingEvent.merchant ?: match.existingEvent.description,
+                statementValue = match.parsed.merchant,
+                selected = merchantSource,
+                onSelectManual = { merchantSource = FieldSource.MANUAL },
+                onSelectStatement = { merchantSource = FieldSource.STATEMENT },
+            )
+
+            // Category row (only if different)
+            if (match.parsed.category != match.existingEvent.category) {
+                FieldRow(
+                    label = "Categoría",
+                    manualValue = match.existingEvent.category,
+                    statementValue = match.parsed.category,
+                    selected = categorySource,
+                    onSelectManual = { categorySource = FieldSource.MANUAL },
+                    onSelectStatement = { categorySource = FieldSource.STATEMENT },
+                )
+            }
+
+            // Description row (only if extracto has one and differs)
+            val existDesc = match.existingEvent.description
+            val parsedDesc = match.parsed.description
+            if (parsedDesc.isNotBlank() && parsedDesc != existDesc) {
+                FieldRow(
+                    label = "Descripción",
+                    manualValue = existDesc.ifBlank { "—" },
+                    statementValue = parsedDesc,
+                    selected = descriptionSource,
+                    onSelectManual = { descriptionSource = FieldSource.MANUAL },
+                    onSelectStatement = { descriptionSource = FieldSource.STATEMENT },
+                )
+            }
+
+            if (!isDecided) {
+                Text(
+                    "Toca cada campo para cambiar la fuente",
+                    style = Movi.textos.apoyo, color = Movi.colores.textoApagado,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            // Action buttons
+            if (!isDecided) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                ) {
+                    // Vuelta de diseño 20: dos `Boton` chicos (eran `OutlinedButton` y `Button` de Material,
+                    // con el texto en `Color.White`, que sobre la lavanda del tema oscuro no se leía).
+                    Boton(
+                        "No son el mismo",
+                        onClick = onReject,
+                        variante = VarianteDeBoton.Secundario,
+                        tamano = TamanoDeBoton.S,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Boton(
+                        "Sí, es el mismo",
+                        tamano = TamanoDeBoton.S,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            onConfirm(
+                                ReconciliationDecision(
+                                    parsedId = match.parsed.id,
+                                    existingEventId = match.existingEventId,
+                                    confirm = true,
+                                    categorySource = categorySource,
+                                    descriptionSource = descriptionSource,
+                                    merchantSource = merchantSource,
+                                    parsed = match.parsed,
+                                )
+                            )
+                        },
+                    )
+                }
             }
         }
     }
@@ -712,7 +654,8 @@ private fun FieldCell(
     modifier: Modifier = Modifier,
 ) {
     val borderColor = if (active) Movi.colores.marca else Color.Transparent
-    val bgColor = if (active) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta
+    // Sin elegir, en la capa 2: la celda va sobre la `Superficie` (capa 1) y tiene que verse tocable.
+    val bgColor = if (active) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.capa2
     Text(
         value,
         style = Movi.textos.apoyo,

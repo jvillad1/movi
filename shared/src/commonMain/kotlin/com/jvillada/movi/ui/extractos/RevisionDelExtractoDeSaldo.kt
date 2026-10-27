@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.extractos
 
+import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
@@ -106,12 +107,11 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
                 Text(
                     nombreDelExtractoDeSaldo(resumen),
                     style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                 )
                 Spacer(Modifier.height(Espacio.s))
-                Text("El extracto dice", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
-                Spacer(Modifier.height(Espacio.xs))
+                // Vuelta de diseño 20: el rótulo del sistema (era `apoyo` + `Medium` + `textoMedio` a mano).
+                RotuloDeCampo("El extracto dice")
                 Text(
                     conCifrasOcultas(fraseDelExtractoDeSaldo(resumen, elegida)),
                     style = Movi.textos.cuerpo,
@@ -131,13 +131,11 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
                 when {
                     propuesta.opciones.isEmpty() -> Unit
                     propuesta.cuentaId != null && elegida != null -> {
-                        Text("En tu cuenta", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
-                        Spacer(Modifier.height(Espacio.xxs))
+                        RotuloDeCampo("En tu cuenta")
                         Text(elegida.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto)
                     }
                     else -> {
-                        Text("¿En qué cuenta?", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
-                        Spacer(Modifier.height(Espacio.xxs))
+                        RotuloDeCampo("¿En qué cuenta?")
                         propuesta.opciones.forEach { opcion ->
                             OpcionDeCuenta(
                                 opcion = opcion,
