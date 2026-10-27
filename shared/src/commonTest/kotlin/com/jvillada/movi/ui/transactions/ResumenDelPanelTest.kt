@@ -181,4 +181,41 @@ class ResumenDelPanelTest {
         assertEquals(392_100L, panel.salio)
         assertEquals(4_000_000L - 392_100L, panel.neto)
     }
+
+    /**
+     * **El neto del héroe de Hoy y el del panel dan lo mismo** (vuelta 10). El héroe no suma nada: su
+     * «+$800.000 este período» es `ingresos − egresos` de `/api/finance-summary`, y esa ruta ahora
+     * cuenta con `movimientosDeFlujo` —lo fija `EspacioRoutesTest` con estos MISMOS tres casos: un
+     * gasto tuyo 50/50, un gasto que pagó Caro (tu parte) y su transferencia que salda, que da
+     * 1.000.000 / 200.000—. Acá, el panel con los movimientos como los baja el server (la parte
+     * ajena y lo que salda ya derivados por `conLoCompartido`) tiene que dar ese mismo neto.
+     */
+    @Test
+    fun `con un gasto repartido, uno que pago otro y la transferencia que salda, el neto es el del heroe`() {
+        val dias = dias(
+            mov("2026-09-26", 1_000_000L, "Salario", TransactionType.INCOME),
+            mov("2026-10-01", 240_000L, "Mercado").copy(parteAjena = 120_000L, espacioId = "casa"),
+            mov("2026-10-02", 30_000L, "Comida"),
+            // La transferencia de Caro que salda la casa: fuera de «Entró».
+            mov("2026-10-03", 390_000L, "Ingreso", TransactionType.INCOME)
+                .copy(saldaEspacioId = "casa", countsAsCashFlow = false),
+        )
+        val pagoCaro = GastoDelEspacio(
+            id = "g_caro", espacioId = "casa", pagadoPor = "caro", monto = 100_000L, categoria = "Mercado",
+            fecha = LocalDate.parse("2026-10-04").atStartOfDayIn(AppTimeZone.zone).toEpochMilliseconds(),
+            partes = mapOf(MIEMBRO_YO to 50_000L, "caro" to 50_000L),
+        )
+        // Lo que `/api/finance-summary` contesta con estos datos (ver `EspacioRoutesTest`).
+        val resumenDelServer = com.jvillada.movi.shared.model.FinanceSummary(
+            scope = com.jvillada.movi.shared.model.Scope.SELF, balance = 0L, ingresos = 1_000_000L, egresos = 200_000L,
+        )
+
+        val panel = resumenDelPanel(dias, octubre, corte25, hoy, tipos, tuParteDeOtros = tuParteComoEventos(listOf(pagoCaro)))
+
+        assertEquals(resumenDelServer.ingresos, panel.entro, "la transferencia que salda no entró")
+        assertEquals(resumenDelServer.egresos, panel.salio, "120.000 + 30.000 + 50.000: solo tu parte")
+        assertEquals(resumenDelServer.ingresos - resumenDelServer.egresos, panel.neto)
+        val heroe = com.jvillada.movi.ui.dashboard.veredictoCortoDelPeriodo(resumenDelServer.ingresos, resumenDelServer.egresos)!!
+        assertTrue(com.jvillada.movi.ui.components.formatMoneyCompact(panel.neto) in heroe, heroe)
+    }
 }
