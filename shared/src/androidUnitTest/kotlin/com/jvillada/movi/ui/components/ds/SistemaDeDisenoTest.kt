@@ -291,6 +291,26 @@ class SistemaDeDisenoTest {
         assertEquals("va", tocado)
     }
 
+    /**
+     * Vuelta de diseño 7: a media pantalla, el detalle de la derecha no se come el título. El título
+     * mide lo mismo con un detalle largo que sin detalle.
+     */
+    @Test
+    @org.robolectric.annotation.Config(sdk = [34], qualifiers = "w360dp-h800dp-xhdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun `el detalle de un widget no se come el titulo`() {
+        montar {
+            ParDeWidgets(
+                izquierdo = { m -> Widget("En qué se va", onClick = {}, modifier = m, detalle = "vs. período pasado") { Text("a") } },
+                derecho = { m -> Widget("En qué se va", onClick = {}, modifier = m) { Text("b") } },
+            )
+        }
+        val titulos = composeRule.onAllNodesWithText("En qué se va", useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(2, titulos.size)
+        assertTrue(titulos[0].size.width > 0)
+        assertEquals(titulos[1].size.width, titulos[0].size.width, "el título con detalle se ve entero, como el que no lo tiene")
+    }
+
     @Test
     fun `la cuadricula pone cuatro por fila y dice el conteo de la insignia`() {
         montar {

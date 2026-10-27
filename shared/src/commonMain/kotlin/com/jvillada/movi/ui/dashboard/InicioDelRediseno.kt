@@ -46,8 +46,9 @@ fun periodoDelEncabezado(data: DashboardData): String? {
 
 /**
  * **«Repartir» ya se muestra** (ola R3, Espacios). R1 la dejó apagada porque abría «Agregar» con un
- * «Pronto»; ahora lleva a Espacios, donde está «Casa con Caro», el saldo y «Anotar lo que pagó Caro».
- * Un gasto propio se reparte desde su detalle en Movimientos.
+ * «Pronto». Desde la vuelta de diseño 7 abre directo la hoja «Pagó otro» del espacio (o elige el
+ * espacio, o lo crea): ver `ui/espacios/RepartirDesdeElInicio.kt`. Un gasto propio se reparte desde su
+ * detalle en Movimientos.
  */
 const val REPARTIR_ESTA_LISTO: Boolean = true
 
@@ -76,8 +77,9 @@ fun accionesDelInicio(repartirListo: Boolean = REPARTIR_ESTA_LISTO): List<Accion
 
 /**
  * A dónde lleva cada acción: **lo que ya existe**. Las de anotar son los atajos del «+» (la hoja de
- * «Agregar» en su pestaña, `pantallaDelAtajo`); repartir es Espacios; revisar es Por revisar; preguntar
- * es Movi AI.
+ * «Agregar» en su pestaña, `pantallaDelAtajo`); revisar es Por revisar; preguntar es Movi AI.
+ * «Repartir» lo resuelve la pantalla (lee los espacios y abre la hoja que toca); Espacios es a donde va
+ * si no se pudieron leer.
  * «Subir comprobante» devuelve `null`: no es una pantalla, es elegir un archivo y dejarlo en el flujo
  * de papeles (lo hace la pantalla, como el atajo del «+»).
  */
