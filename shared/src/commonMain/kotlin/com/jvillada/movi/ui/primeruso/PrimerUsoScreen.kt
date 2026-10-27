@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -65,17 +64,14 @@ import com.jvillada.movi.platform.BackHandlerEffect
 import com.jvillada.movi.platform.hojaDeCompartirDeLaPlataforma
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
-import com.jvillada.movi.shared.model.BANCOS_CONOCIDOS
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.DireccionDeCorreo
-import com.jvillada.movi.shared.model.Marca
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
-import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.rangoLegibleDe
@@ -88,10 +84,13 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.ui.DireccionDeTransicion
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.accounts.FormularioDeCuenta
+import com.jvillada.movi.ui.accounts.SelectorDeBanco
 import com.jvillada.movi.ui.accounts.crearCuentaConSaldo
+import com.jvillada.movi.ui.accounts.rememberEstadoDelFormularioDeCuenta
+import com.jvillada.movi.ui.accounts.rotuloDelTipoDeCuenta
+import com.jvillada.movi.ui.accounts.tipoSiElNombreNoLoDice
 import com.jvillada.movi.ui.components.AvatarDeLaCuenta
-import com.jvillada.movi.ui.components.CirculoDeMarca
-import com.jvillada.movi.ui.components.TamanoDeAvatar
 import com.jvillada.movi.ui.components.ds.Casilla
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.ds.BarraDeProgreso
@@ -103,7 +102,6 @@ import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.Pildora
-import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
@@ -615,7 +613,8 @@ private fun PasoCuentas(
                 if (i > 0) Separador()
                 Fila(
                     titulo = c.name,
-                    subtitulo = rotuloDelTipo(c.type),
+                    // Lo que el nombre no dice: «Billetera» dice «Efectivo»; «Bancolombia Ahorros», nada.
+                    subtitulo = tipoSiElNombreNoLoDice(c.name, rotuloDelTipo(c.type)),
                     inicio = { AvatarDeLaCuenta(c) },
                     final = { Cifra(c.balance) },
                 )
@@ -624,40 +623,17 @@ private fun PasoCuentas(
         Spacer(Modifier.height(Medida.entreSecciones))
     }
 
-    // El formulario rápido: la misma creación que la hoja de «Crear cuenta» (ver crearCuentaConSaldo).
-    var banco by remember { mutableStateOf<String?>(null) }
-    var nombre by remember { mutableStateOf("") }
-    var tipo by remember { mutableStateOf(AccountType.SAVINGS) }
-    var saldo by remember { mutableStateOf<Long?>(null) }
+    // El mismo bloque y la misma creación que Patrimonio → «Nueva cuenta» (vuelta de diseño 16): ver
+    // [FormularioDeCuenta] y crearCuentaConSaldo. La guía no ofrece «Bien»: aquí lo que hace falta es
+    // dónde está la plata.
+    val formulario = rememberEstadoDelFormularioDeCuenta()
     var creando by remember { mutableStateOf(false) }
     var yaCreada by remember { mutableStateOf<Account?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
     Seccion(if (cuentas.isEmpty()) "Agrega una cuenta" else "Agrega otra")
     Superficie(modifier = Modifier.fillMaxWidth()) {
-        RotuloDelCampo("Banco")
-        SelectorDeBanco(
-            elegido = banco,
-            onElegir = { marca ->
-                // Tocar un banco escribe su nombre, salvo que ya se haya escrito otro a mano.
-                if (nombre.isBlank() || nombre == banco) nombre = marca
-                banco = marca
-            },
-        )
-        Spacer(Modifier.height(Medida.dentroDeSeccion))
-        CampoDeTexto("Nombre", nombre, { nombre = it }, marcador = "Ej: Bancolombia Ahorros")
-        Spacer(Modifier.height(Medida.dentroDeSeccion))
-        RotuloDelCampo("Tipo")
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) {
-            TIPOS_DE_CUENTA_DE_LA_GUIA.forEach { (rotulo, elTipo) ->
-                PildoraDeFiltro(rotulo, seleccionada = tipo == elTipo, onClick = { tipo = elTipo })
-            }
-        }
-        Spacer(Modifier.height(Medida.dentroDeSeccion))
-        MoneyField(value = saldo, onValueChange = { saldo = it }, label = "Saldo de hoy")
+        FormularioDeCuenta(formulario, habilitado = !creando)
         error?.let {
             Spacer(Modifier.height(Espacio.xs))
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
@@ -666,15 +642,16 @@ private fun PasoCuentas(
         Boton(
             "Agregar cuenta",
             onClick = {
-                if (nombre.isBlank() || creando) return@Boton
+                if (!formulario.sePuedeCrear || creando) return@Boton
                 creando = true
                 error = null
-                val cuenta = Account(id = newId("acc"), name = nombre.trim(), type = tipo, balance = saldo ?: 0L, currency = "COP")
+                val cuenta = formulario.cuentaNueva()
                 alcance.launch {
                     runCatching { crearCuentaConSaldo(cuenta, yaCreada = yaCreada) { yaCreada = it } }
                         .onSuccess { creada ->
                             onCuenta(creada.copy(balance = cuenta.balance))
-                            banco = null; nombre = ""; tipo = AccountType.SAVINGS; saldo = null; yaCreada = null
+                            formulario.limpiar()
+                            yaCreada = null
                         }
                         .onFailure {
                             error = if (yaCreada != null) {
@@ -689,7 +666,7 @@ private fun PasoCuentas(
             variante = VarianteDeBoton.Secundario,
             icono = Icons.Rounded.Add,
             cargando = creando,
-            habilitado = nombre.isNotBlank(),
+            habilitado = formulario.sePuedeCrear,
             anchoCompleto = true,
         )
     }
@@ -797,35 +774,8 @@ private fun PasoTarjetas(tarjetas: List<String>, onTarjeta: (String) -> Unit) {
     }
 }
 
-/** Los bancos de [BANCOS_DE_LA_GUIA], con su marca de `MarcasConocidas`. */
-private val MARCAS_DE_LOS_BANCOS: List<Marca> =
-    BANCOS_DE_LA_GUIA.mapNotNull { id -> BANCOS_CONOCIDOS.firstOrNull { it.id == id } }
-
-/**
- * Los bancos de un toque, cada uno con **el avatar de su marca** (vuelta de diseño 3): el mismo
- * círculo de color con la marca corta que la app pinta en las filas y las tarjetas de cuenta
- * ([CirculoDeMarca]), a [TamanoDeAvatar.Linea] dentro de la píldora.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SelectorDeBanco(elegido: String?, onElegir: (String) -> Unit) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
-    ) {
-        MARCAS_DE_LOS_BANCOS.forEach { marca ->
-            PildoraDeFiltro(
-                marca.nombre,
-                seleccionada = marca.nombre == elegido,
-                onClick = { onElegir(marca.nombre) },
-                inicio = { CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea) },
-            )
-        }
-    }
-}
-
 private fun rotuloDelTipo(tipo: AccountType): String =
-    TIPOS_DE_CUENTA_DE_LA_GUIA.firstOrNull { it.second == tipo }?.first ?: when (tipo) {
+    rotuloDelTipoDeCuenta(tipo) ?: when (tipo) {
         AccountType.CREDIT_CARD -> "Tarjeta de crédito"
         AccountType.LOAN -> "Préstamo"
         else -> "Cuenta"

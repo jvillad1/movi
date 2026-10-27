@@ -3,7 +3,6 @@ package com.jvillada.movi.ui.primeruso
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.debeAbrirseLaGuiaDePrimerUso
 import com.jvillada.movi.shared.repository.WalletRepository
 
@@ -130,27 +129,9 @@ val ATAJOS_DE_RECURRENTES: List<AtajoDeRecurrente> = listOf(
     AtajoDeRecurrente("Una suscripción", "Entretenimiento"),
 )
 
-/**
- * Los bancos que la guía ofrece de un toque, por su id de `MarcasConocidas` y en el orden en que se
- * ven. Los más comunes en Colombia; cualquier otro se escribe a mano.
- */
-val BANCOS_DE_LA_GUIA: List<String> = listOf(
-    "bancolombia", "nu", "davivienda", "nequi", "banco_de_bogota", "bbva", "daviplata",
-)
-
-/**
- * **Los tipos de cuenta que ofrece la guía**, con rótulos que entiende alguien nuevo (vuelta de
- * diseño 3). Antes eran «Dinero / Inversión», los dos grupos de Patrimonio → «Nueva cuenta», que
- * quien empieza no sabe leer. Cada rótulo va a un [AccountType] que ya existe —no se inventa
- * ninguno—: ahorros, corriente y efectivo son los tres de **Dinero** (`AccountType.group`), y se
- * suman igual en todas las cuentas de Movi; lo que cambia es que el efectivo no recibe extractos.
- */
-val TIPOS_DE_CUENTA_DE_LA_GUIA: List<Pair<String, AccountType>> = listOf(
-    "Ahorros" to AccountType.SAVINGS,
-    "Corriente" to AccountType.CHECKING,
-    "Efectivo" to AccountType.CASH,
-    "Inversión" to AccountType.INVESTMENT,
-)
+// Los bancos de un toque y los tipos de cuenta («Ahorros · Corriente · Efectivo · Inversión») viven
+// desde la vuelta de diseño 16 en `ui/accounts/FormularioDeCuenta.kt`: la guía y «Nueva cuenta»
+// pintan el mismo bloque.
 
 /**
  * Lo que quedó al terminar, para el paso «Listo». [periodo] es el texto de «Inicio del mes» si se

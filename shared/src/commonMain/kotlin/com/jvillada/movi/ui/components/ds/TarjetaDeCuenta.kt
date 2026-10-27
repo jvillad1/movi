@@ -62,7 +62,8 @@ fun coloresDeLaTarjetaDeCuenta(marca: Marca?, colores: ColoresDeMovi): ColoresDe
 /**
  * **La tarjeta de una cuenta** del carrusel «Tus cuentas» (camino 1): el color y la marca de su banco,
  * el nombre (en hasta dos renglones: nunca «Bancolombia Ah…»), el tipo («Ahorros», «Tarjeta») junto al
- * rótulo del saldo, y el saldo en [VarianteDeCifra.Grande], que se achica antes que recortarse.
+ * rótulo del saldo —salvo que el nombre ya lo diga—, y el saldo en [VarianteDeCifra.Grande], que se
+ * achica antes que recortarse.
  *
  * - Alto [Medida.altoDeTarjetaDeCuenta], radio [Radio.xl], relleno [Medida.rellenoDeSuperficie], sin
  *   borde: la marca es el color de la superficie.
@@ -85,7 +86,8 @@ fun coloresDeLaTarjetaDeCuenta(marca: Marca?, colores: ColoresDeMovi): ColoresDe
 @Composable
 fun TarjetaDeCuenta(
     nombre: String,
-    tipo: String,
+    /** «Ahorros», «Tarjeta»; `null` si el nombre ya lo dice (ver `tipoSiElNombreNoLoDice`). */
+    tipo: String?,
     rotuloDelSaldo: String,
     saldo: Long,
     marca: Marca?,
@@ -125,6 +127,9 @@ fun TarjetaDeCuenta(
             }
             Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
                 // El tipo baja junto al rótulo del saldo, para dejarle el renglón de arriba al nombre.
+                // Sin tipo (el nombre ya lo dice: «Bancolombia Ahorros», vuelta de diseño 16) el
+                // renglón queda con el rótulo solo: mide lo mismo, así que ninguna tarjeta del
+                // carrusel o de la grilla cambia de alto.
                 Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                     Text(
                         text = rotuloDelSaldo,
@@ -133,7 +138,9 @@ fun TarjetaDeCuenta(
                         color = colores.textoMedio,
                         modifier = Modifier.weight(1f),
                     )
-                    Text(text = tipo, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = colores.textoMedio, maxLines = 1)
+                    if (tipo != null) {
+                        Text(text = tipo, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = colores.textoMedio, maxLines = 1)
+                    }
                 }
                 Cifra(saldo, VarianteDeCifra.Grande, moneda = moneda)
             }
