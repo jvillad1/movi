@@ -63,7 +63,8 @@ class ElCampoLlenoSigueRotuladoTest {
     fun conElCampoVacioTambien() {
         montar(valor = "")
         composeRule.onNodeWithText("Plazo (meses)", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("60", useUnmergedTree = true)
+        // Vuelta de diseño 17: un ejemplo numérico va con «Ej:» (un «60» gris solo parece un dato).
+        composeRule.onNodeWithText("Ej: 60", useUnmergedTree = true)
             .assertIsDisplayed()
     }
 
@@ -71,7 +72,7 @@ class ElCampoLlenoSigueRotuladoTest {
     @Test
     fun elEjemploSeVaAlEscribir() {
         montar(valor = "240")
-        composeRule.onAllNodesWithText("60", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Ej: 60", useUnmergedTree = true).assertCountEquals(0)
     }
 
     /** Sin rótulo el campo se comporta como siempre: los que tienen un ejemplo por placeholder. */
