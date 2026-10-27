@@ -120,6 +120,7 @@ import com.jvillada.movi.ui.recurrentes.GrupoDePagos
 import com.jvillada.movi.ui.recurrentes.ResumenDeLaLista
 import com.jvillada.movi.ui.recurrentes.TITULO_CHECKLIST_DEL_PERIODO
 import com.jvillada.movi.ui.recurrentes.TITULO_FALTA_POR_PAGAR
+import com.jvillada.movi.ui.recurrentes.TITULO_GRUPO_POR_PAGAR
 import com.jvillada.movi.ui.recurrentes.TITULO_NO_LLEGO
 import com.jvillada.movi.ui.recurrentes.TITULO_NO_SE_PAGO
 import com.jvillada.movi.ui.recurrentes.TITULO_POR_COBRAR
@@ -784,6 +785,13 @@ internal fun tituloDeLoQueFalta(enCurso: Boolean, ingresos: Boolean): String = w
     else -> if (enCurso) TITULO_FALTA_POR_PAGAR else TITULO_NO_SE_PAGO
 }
 
+/**
+ * El título del GRUPO de lo abierto, debajo del resumen. En el período en curso el resumen ya dice
+ * «Falta por pagar $X», así que el grupo es «Por pagar» (como en Plan); lo demás no cambia.
+ */
+internal fun tituloDelGrupoQueFalta(enCurso: Boolean, ingresos: Boolean): String =
+    if (enCurso && !ingresos) TITULO_GRUPO_POR_PAGAR else tituloDeLoQueFalta(enCurso, ingresos)
+
 /** Lo que la regla dice que se paga (sin lo pagado), en pesos. */
 private fun totalDeLaRegla(pagos: List<PagoFijoDelPeriodo>): Long = pagos.sumOf { it.monto }
 
@@ -845,12 +853,16 @@ private fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: L
                     derecha = TITULO_YA_PAGASTE to totalMovido(grupos.pagados),
                 )
             }
+            // (título, filas, ya están listas) y si el grupo lleva total. Lo que falta (o no se
+            // pagó) y lo pagado tienen su cifra en el resumen de arriba, y el grupo no la repite; los
+            // ingresos sí la llevan, que el resumen no los suma.
             listOf(
-                Triple(tituloDeLoQueFalta(enCurso, false), grupos.faltan, false),
-                Triple(TITULO_YA_PAGASTE, grupos.pagados, true),
-                Triple(tituloDeLoQueFalta(enCurso, true), grupos.porCobrar, false),
-                Triple(TITULO_YA_RECIBISTE, grupos.recibidos, true),
-            ).filter { it.second.isNotEmpty() }.forEach { (titulo, filas, listos) ->
+                Triple(tituloDelGrupoQueFalta(enCurso, false), grupos.faltan, false) to false,
+                Triple(TITULO_YA_PAGASTE, grupos.pagados, true) to false,
+                Triple(tituloDeLoQueFalta(enCurso, true), grupos.porCobrar, false) to true,
+                Triple(TITULO_YA_RECIBISTE, grupos.recibidos, true) to true,
+            ).filter { it.first.second.isNotEmpty() }.forEach { (grupo, conTotal) ->
+                val (titulo, filas, listos) = grupo
                 GrupoDePagos(
                     titulo = titulo,
                     icono = when {
@@ -863,7 +875,11 @@ private fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: L
                         enCurso -> Movi.colores.textoMedio
                         else -> Movi.colores.sale
                     },
-                    total = if (listos) totalMovido(filas) else totalDeLaRegla(filas),
+                    total = when {
+                        !conTotal -> null
+                        listos -> totalMovido(filas)
+                        else -> totalDeLaRegla(filas)
+                    },
                     filas = filas,
                     fila = fila,
                 )
