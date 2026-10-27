@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
@@ -38,6 +40,7 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
 
 /** Tag estable del [Encabezado] de una pantalla. */
 const val TAG_ENCABEZADO: String = "ds-encabezado"
@@ -45,9 +48,24 @@ const val TAG_ENCABEZADO: String = "ds-encabezado"
 /** Lo que dice el lector de pantalla de la flecha de volver. */
 const val ROTULO_VOLVER: String = "Volver"
 
+/** Tag estable de un [BotonDeIcono]. */
+const val TAG_BOTON_DE_ICONO: String = "ds-boton-de-icono"
+
 /**
- * **Un ícono que se toca**: [Icono.l] en un área de [Medida.objetivoTactil]. La flecha de volver, la
- * lupa, la campana de un encabezado.
+ * **Cómo se ve un [BotonDeIcono]** (vuelta de diseño 20).
+ *
+ * - [Plano]: solo el ícono, en un círculo de toque. El de un encabezado (la flecha, la lupa).
+ * - [Secundario]: el ícono sobre la capa 2, en un cuadrado de [Medida.objetivoTactil] con el radio de
+ *   un [Boton] ([Radio.m]): es el [VarianteDeBoton.Secundario] sin texto, para ir al lado de un
+ *   [Boton] de alto `M` («Pagó otro» y «Subir comprobante» junto a «Guardar movimiento» en Agregar).
+ */
+enum class VarianteDeBotonDeIcono { Plano, Secundario }
+
+/**
+ * **Un ícono que se toca**: [Icono.l] en un área de [Medida.objetivoTactil] (48 × 48). La flecha de
+ * volver, la lupa, la campana de un encabezado; con [VarianteDeBotonDeIcono.Secundario], una acción
+ * al lado de un botón. [descripcion] es lo que dice el lector de pantalla: un ícono solo nunca va sin
+ * ella. Apagado ([habilitado] en `false`), el ícono va en texto apagado y no se toca.
  */
 @Composable
 fun BotonDeIcono(
@@ -55,15 +73,28 @@ fun BotonDeIcono(
     descripcion: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    variante: VarianteDeBotonDeIcono = VarianteDeBotonDeIcono.Plano,
+    habilitado: Boolean = true,
 ) {
+    val forma = when (variante) {
+        VarianteDeBotonDeIcono.Plano -> CircleShape
+        VarianteDeBotonDeIcono.Secundario -> RoundedCornerShape(Radio.m)
+    }
     Box(
         modifier = modifier
             .size(Medida.objetivoTactil)
-            .clip(CircleShape)
-            .clickable(role = Role.Button, onClickLabel = descripcion, onClick = onClick),
+            .clip(forma)
+            .then(if (variante == VarianteDeBotonDeIcono.Secundario) Modifier.background(Movi.colores.capa2) else Modifier)
+            .clickable(enabled = habilitado, role = Role.Button, onClickLabel = descripcion, onClick = onClick)
+            .testTag(TAG_BOTON_DE_ICONO),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icono, contentDescription = descripcion, tint = Movi.colores.texto, modifier = Modifier.size(Icono.l))
+        Icon(
+            icono,
+            contentDescription = descripcion,
+            tint = if (habilitado) Movi.colores.texto else Movi.colores.textoApagado,
+            modifier = Modifier.size(Icono.l),
+        )
     }
 }
 

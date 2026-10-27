@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.extractos
 
+import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
@@ -90,12 +91,11 @@ internal fun RevisionDelExtractoDeCredito(propuesta: PropuestaDelExtractoDeCredi
                 Text(
                     propuesta.cuentaNombre ?: "Crédito ·${propuesta.resumen.numero?.takeLast(4) ?: "sin número"}",
                     style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                 )
                 Spacer(Modifier.height(Espacio.s))
-                Text("El extracto dice", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
-                Spacer(Modifier.height(Espacio.xs))
+                // Vuelta de diseño 20: el rótulo del sistema (era `apoyo` + `Medium` + `textoMedio` a mano).
+                RotuloDeCampo("El extracto dice")
                 renglonesDelExtractoDeCredito(propuesta).forEach { renglon ->
                     Text(
                         conCifrasOcultas("· $renglon"),

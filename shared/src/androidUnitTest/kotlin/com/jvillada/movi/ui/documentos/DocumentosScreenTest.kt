@@ -114,10 +114,9 @@ class DocumentosScreenTest {
     }
 
     private fun tocar(texto: String) {
-        // A diferencia de otras pantallas, acá el `clickable` vive en el mismo `Text` —no en un
-        // contenedor que lo envuelva— así que el nodo clickeable ES el que tiene el texto, no
-        // uno con un hijo que lo tenga.
-        composeRule.onNode(hasClickAction() and hasText(texto), useUnmergedTree = true)
+        // Vuelta de diseño 20: las acciones de la fila son `Boton` del sistema, así que el nodo
+        // tocable es el botón y el texto es su hijo (antes el `clickable` vivía en el mismo `Text`).
+        composeRule.onNode(hasClickAction() and hasAnyChild(hasText(texto)), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }

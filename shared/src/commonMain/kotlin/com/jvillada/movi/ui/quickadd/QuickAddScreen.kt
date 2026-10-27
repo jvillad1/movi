@@ -2,6 +2,13 @@ package com.jvillada.movi.ui.quickadd
 
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.PildoraDeAccion
+import com.jvillada.movi.ui.components.ds.AltoDePildora
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBotonDeIcono
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Fila
@@ -34,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.UploadFile
@@ -106,14 +114,6 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import com.jvillada.movi.ui.fecha.timestampParaFecha
-
-/**
- * Cuánto de una fila de la hoja puede ocupar el valor de la derecha (ver `rightMaxFraction` en
- * `CardRow`, donde está el porqué). 55 % deja ~167 dp para el valor y ~136 dp para la etiqueta y
- * su aviso a 375 dp — medido: «Bancolombia Ahorros» entra entero, «Última usada» también, y un
- * nombre más largo se corta con «…» en vez de partir la etiqueta letra por letra.
- */
-private const val FRACCION_VALOR_FILA = 0.55f
 
 /**
  * El alto MÍNIMO de la fila de chips de categorías frecuentes (ver [CategoriaChipsRow]): a letra
@@ -1559,7 +1559,7 @@ private fun EditorBody(
     /**
      * Task 5: `"Movi la reconoce: <nombre>"` cuando la categoría de arriba la puso una sugerencia
      * automática — `null` el resto del tiempo, incluido mientras el dueño elige a mano. Se pasa
-     * como `sub` de la fila «Categoría» (ver [CardRow]), con el mismo estilo que cualquier otro
+     * como `sub` de la fila «Categoría» (ver [FilaDeLaHoja]), con el mismo estilo que cualquier otro
      * texto de apoyo de esta hoja.
      */
     categoriaSugeridaHint: String? = null,
@@ -1658,58 +1658,34 @@ private fun EditorBody(
             // (ver arriba), pero además queda donde tiene sentido leerla: pegada al monto, que
             // es lo primero que el ojo mira. Dice «Hoy» por defecto, así que quien anota en el
             // momento no tiene ni que interpretarla.
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(Radio.pill))
-                    .background(Movi.colores.tarjeta)
-                    .clickable(onClick = onPickDate)
-                    .padding(horizontal = Espacio.s, vertical = Espacio.xxs),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
-            ) {
-                Text(
-                    text = dateLabel,
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                    maxLines = 1,
-                )
-                Icon(
-                    Icons.Rounded.ChevronRight,
-                    contentDescription = "Cambiar la fecha",
-                    tint = Movi.colores.textoMedio,
-                    modifier = Modifier.size(Icono.s),
-                )
-            }
+            //
+            // Vuelta de diseño 20: la `PildoraDeAccion` del sistema (capa 2, el ícono en la marca, 36
+            // de alto con el toque de 48). Era una píldora armada a mano de 24 dp, más chica que el
+            // mínimo táctil.
+            PildoraDeAccion(
+                texto = dateLabel,
+                onClick = onPickDate,
+                icono = Icons.Rounded.Event,
+                descripcion = "Fecha: $dateLabel. Cambiar la fecha",
+                // Compacta (24 dp, lo que medía la de antes): va pegada al renglón de la moneda, y
+                // de 36 la hoja crecía y el pie se cortaba a 360 × 740.
+                alto = AltoDePildora.Compacta,
+                modifier = Modifier.testTag(TAG_FECHA_EN_AGREGAR),
+            )
         }
     }
 
     Spacer(Modifier.height(Espacio.m))
 
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.xxs),
-    ) {
-        CardRow(
-            left = { Text("Categoría", style = Movi.textos.titulo, color = Movi.colores.textoMedio) },
-            right = {
-                Text(
-                    text = category,
-                    style = Movi.textos.titulo,
-                    color = Movi.colores.texto,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            // Ver el KDoc de [rightMaxFraction] en CardRow: una categoría propia larga
-            // («Mantenimiento del carro») se llevaba la fila entera y partía la etiqueta.
-            rightMaxFraction = FRACCION_VALOR_FILA,
-            showChevron = true,
+    // Vuelta de diseño 20: una `Superficie` con relleno de lista y las `Fila` del sistema (ver
+    // [FilaDeLaHoja]). Eran una `MinCard` con `CardRow` de 48 dp y `Hairline`.
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_AGREGAR), relleno = RellenoDeSuperficie.Lista) {
+        FilaDeLaHoja(
+            titulo = "Categoría",
+            valor = category,
+            // Una categoría propia larga («Mantenimiento del carro») se corta con «…» en vez de
+            // llevarse la fila entera (ver [FRACCION_DEL_VALOR_DE_LA_HOJA]).
             onClick = onPickCategory,
-            // La línea de la sugerencia va debajo, a lo ancho, y el hairline después de ella.
-            isLast = categoriaSugeridaHint != null,
         )
         // Task 5: «Movi la reconoce: <nombre>» cuando lo de arriba lo puso una sugerencia
         // automática. Va en su propio renglón, a lo ancho de la tarjeta, y no como subtítulo de
@@ -1723,78 +1699,60 @@ private fun EditorBody(
                 color = Movi.colores.textoMedio,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().padding(bottom = Movi.espacios.corto),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.xs),
             )
         }
         // Ola A: los chips de frecuentes, entre «Categoría» y «Cuenta» — justo debajo de la
         // categoría que resumen, y antes de la fila que decide dónde sale la plata.
-        // Ola L: la fila se dibuja SIEMPRE porque lleva «+ Nueva», la puerta a crear una categoría.
+        // Ola L: la fila se dibuja SIEMPRE porque lleva «Nueva», la puerta a crear una categoría.
         // Sin datos de uso solo tiene esa pastilla.
+        // Las líneas entre las filas, como antes (eran los `Hairline` de los `CardRow`): con ellas
+        // la tarjeta mide lo mismo que en master, y sin ellas la fila de chips flotaba.
+        if (categoriaSugeridaHint == null) Separador(SangriaDeSeparador.Margen)
         CategoriaChipsRow(
             categorias = categoriasFrecuentes,
             categoriaElegida = category,
             onPick = onPickCategoriaFrecuente,
             onNueva = onNuevaCategoria,
         )
-        Hairline()
-        CardRow(
-            left = {
-                Text("Cuenta", style = Movi.textos.titulo, color = Movi.colores.textoMedio)
-                // Ola 11 — DE DÓNDE SALIÓ LA CUENTA QUE DICE AL LADO, Y POR QUÉ ESTE RENGLÓN
-                // OCUPA SU LUGAR AUNQUE NO DIGA NADA.
-                //
-                // Lo primero: con varias cuentas, el valor por defecto es una decisión de la app
-                // («la última que usaste», o «la primera de la lista» la primera vez), y esa
-                // decisión tiene que poder leerse ANTES de tocar Guardar. La fila ya mostraba el
-                // nombre, pero un nombre no dice si lo eligió el dueño o lo puso la app.
-                //
-                // Lo segundo es la disciplina de esta hoja: está anclada abajo, así que
-                // **cualquier cambio de alto le mueve el teclado bajo el dedo** (ver el bloque de
-                // la Ola 8 · V2 más arriba: 22 px de salto ya hicieron que se tipeara «8» en vez
-                // de «0»). Este renglón aparece y desaparece por su cuenta —al cargar la lista,
-                // al elegir una cuenta a mano— así que reserva su alto mientras haya más de una
-                // cuenta, que es exactamente cuando puede llegar a decir algo. Cuesta 15 dp
-                // fijos ahí, y garantiza que ni elegir una cuenta ni cambiar de pestaña corran
-                // el teclado.
-                //
-                // Con UNA sola cuenta no reserva nada y la fila queda idéntica a como estaba
-                // antes de esta rama: no hay decisión que confesar, no hay alternativa que
-                // ofrecer, y no había ningún problema que arreglarle a quien tiene una cuenta.
-                AvisoDeCuentaRow(walletHint, walletHintReserved)
-            },
-            right = {
-                Text(
-                    text = walletLabel,
-                    style = Movi.textos.titulo,
-                    color = Movi.colores.texto,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            rightMaxFraction = FRACCION_VALOR_FILA,
-            showChevron = true,
+        Separador(SangriaDeSeparador.Margen)
+        // Ola 11 — DE DÓNDE SALIÓ LA CUENTA QUE DICE AL LADO, Y POR QUÉ ESTE RENGLÓN
+        // OCUPA SU LUGAR AUNQUE NO DIGA NADA.
+        //
+        // Lo primero: con varias cuentas, el valor por defecto es una decisión de la app
+        // («la última que usaste», o «la primera de la lista» la primera vez), y esa
+        // decisión tiene que poder leerse ANTES de tocar Guardar. La fila ya mostraba el
+        // nombre, pero un nombre no dice si lo eligió el dueño o lo puso la app.
+        //
+        // Lo segundo es la disciplina de esta hoja: está anclada abajo, así que
+        // **cualquier cambio de alto le mueve el teclado bajo el dedo** (ver el bloque de
+        // la Ola 8 · V2 más arriba: 22 px de salto ya hicieron que se tipeara «8» en vez
+        // de «0»). Este renglón aparece y desaparece por su cuenta —al cargar la lista,
+        // al elegir una cuenta a mano— así que reserva su alto mientras haya más de una
+        // cuenta, que es exactamente cuando puede llegar a decir algo. Cuesta 15 dp
+        // fijos ahí, y garantiza que ni elegir una cuenta ni cambiar de pestaña corran
+        // el teclado.
+        //
+        // Con UNA sola cuenta no reserva nada y la fila queda idéntica a como estaba
+        // antes de esta rama: no hay decisión que confesar, no hay alternativa que
+        // ofrecer, y no había ningún problema que arreglarle a quien tiene una cuenta.
+        FilaDeLaHoja(
+            titulo = "Cuenta",
+            valor = walletLabel,
+            aviso = walletHint,
+            reservarAviso = walletHintReserved,
             // F10: sin cuentas no hay nada que elegir — abrir el selector solo mostraría la
             // mentira de "Cargando cuentas…" (no está cargando, no hay ninguna). En ese caso el
             // toque lleva directo a crear la cuenta, que es lo único que de verdad hace algo acá.
             onClick = if (hasNoAccounts) onCreateAccount else onPickWallet,
         )
-        CardRow(
-            left = { Text("Nota", style = Movi.textos.titulo, color = Movi.colores.textoMedio) },
-            right = {
-                Text(
-                    text = note.ifBlank { "Agregar nota…" },
-                    style = Movi.textos.titulo,
-                    color = if (note.isBlank()) Movi.colores.textoApagado else Movi.colores.texto,
-                    fontWeight = if (note.isBlank()) FontWeight.Normal else FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
+        Separador(SangriaDeSeparador.Margen)
+        FilaDeLaHoja(
+            titulo = "Nota",
+            valor = note.ifBlank { "Agregar nota…" },
+            valorVacio = note.isBlank(),
             // La nota es texto libre: sin techo, «Almuerzo con el equipo de la oficina» hacía
             // exactamente lo mismo que un nombre de cuenta largo.
-            rightMaxFraction = FRACCION_VALOR_FILA,
-            isLast = true,
             onClick = onEditNote,
         )
     }
@@ -1827,7 +1785,6 @@ private fun EditorBody(
                 Text(
                     ultimoAnotado,
                     style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -1911,47 +1868,30 @@ private fun EditorBody(
         // mismo tamaño, así la hoja no cambia de alto— va el de verdad (Ola 2): subir el papel y
         // que Movi lo lea.
         Row(
-            // Con «Pagó otro» la fila toma el alto de sus hermanos (el botón de guardar), así la
-            // hoja no cambia de alto. Sin él, la fila de siempre.
-            modifier = Modifier.fillMaxWidth().then(if (onPagoOtro != null) Modifier.height(IntrinsicSize.Min) else Modifier),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
+            // Vuelta de diseño 20: `BotonDeIcono` secundario (48 × 48, capa 2, el radio del botón de
+            // al lado). Eran dos cajas armadas a mano de 56 de ancho.
             if (onPagoOtro != null) {
-                Box(
-                    modifier = Modifier
-                        .width(Medida.accionRapida)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(Radio.m))
-                        .background(Movi.colores.capa2)
-                        .clickable(enabled = !saving, onClickLabel = "Pagó otro") { onPagoOtro() }
-                        .testTag(TAG_PAGO_OTRO_EN_AGREGAR),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Groups,
-                        contentDescription = "Pagó otro",
-                        tint = Movi.colores.texto,
-                        modifier = Modifier.size(Icono.l),
-                    )
-                }
+                BotonDeIcono(
+                    icono = Icons.Rounded.Groups,
+                    descripcion = "Pagó otro",
+                    onClick = onPagoOtro,
+                    variante = VarianteDeBotonDeIcono.Secundario,
+                    habilitado = !saving,
+                    modifier = Modifier.testTag(TAG_PAGO_OTRO_EN_AGREGAR),
+                )
             }
             if (onSubirPapel != null) {
-                Box(
-                    modifier = Modifier
-                        .size(Medida.accionRapida, Medida.objetivoTactil)
-                        .clip(RoundedCornerShape(Radio.m))
-                        .background(Movi.colores.capa2)
-                        .clickable(enabled = !saving) { onSubirPapel() }
-                        .testTag(TAG_SUBIR_PAPEL_EN_AGREGAR),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.UploadFile,
-                        contentDescription = "Subir comprobante o extracto",
-                        tint = Movi.colores.texto,
-                        modifier = Modifier.size(Icono.l),
-                    )
-                }
+                BotonDeIcono(
+                    icono = Icons.Rounded.UploadFile,
+                    descripcion = "Subir comprobante o extracto",
+                    onClick = onSubirPapel,
+                    variante = VarianteDeBotonDeIcono.Secundario,
+                    habilitado = !saving,
+                    modifier = Modifier.testTag(TAG_SUBIR_PAPEL_EN_AGREGAR),
+                )
             }
             // Ola R4: el botón principal del sistema (48 de alto, radio M), como en toda la app.
             Boton(
@@ -1990,17 +1930,18 @@ private fun EditorBody(
                 // de la Ola 8: el teclado no se mueve bajo el dedo—. En el teléfono el toque se
                 // agranda solo hasta el mínimo táctil (Compose extiende el área de un nodo chico);
                 // con teclado físico se dice el atajo.
-                Text(
-                    text = if (LocalHayTecladoFisico.current) "$GUARDAR_Y_ANOTAR_OTRO  ·  $ATAJO_GUARDAR_Y_ANOTAR_OTRO" else GUARDAR_Y_ANOTAR_OTRO,
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.marca,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    maxLines = 1,
+                //
+                // Vuelta de diseño 20: el `Boton` `Fantasma` `S` del sistema (era un `Text` tocable).
+                // Mide 36 y el renglón reservado 16: `wrapContentHeight(unbounded = true)` lo deja
+                // medir lo suyo, centrado en el renglón, sin agrandar la hoja. Como el botón de texto
+                // no tiene fondo, lo que sobresale no se ve; el toque sí llega a 48.
+                Boton(
+                    texto = if (LocalHayTecladoFisico.current) "$GUARDAR_Y_ANOTAR_OTRO  ·  $ATAJO_GUARDAR_Y_ANOTAR_OTRO" else GUARDAR_Y_ANOTAR_OTRO,
+                    onClick = onSaveYOtro,
+                    variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.S,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(Movi.formas.pleno))
-                        .clickable(role = Role.Button, onClickLabel = GUARDAR_Y_ANOTAR_OTRO, onClick = onSaveYOtro)
-                        .padding(horizontal = Movi.espacios.corto)
+                        .wrapContentHeight(unbounded = true)
                         .testTag(TAG_GUARDAR_Y_ANOTAR_OTRO),
                 )
             }
@@ -2009,25 +1950,21 @@ private fun EditorBody(
 }
 
 /**
- * «+ Nueva» y hasta 6 chips con las categorías que más se usan para este tipo — ver
+ * «Nueva» y hasta 6 chips con las categorías que más se usan para este tipo — ver
  * [categoriasFrecuentes], que es la que decide cuáles y en qué orden (Ola A). Tocar uno la elige sin
  * abrir el sub-picker de «Categoría»; la elegida se ve activa.
  *
- * Mismo lenguaje visual que [SheetChip] de `CreateRecurringRuleSheet.kt` (fondo tenue de
- * `Movi.colores.marca` cuando está activo, borde cuando no) y no el de los chips de filtro de
- * Movimientos: esta fila vive DENTRO de una `MinCard`, cuyo fondo ya es `Movi.colores.tarjeta` —
- * un chip inactivo pintado con ese mismo color sería invisible contra su propio fondo.
+ * **Vuelta de diseño 20: las píldoras del sistema.** Cada categoría es un [PildoraDeFiltro] —llena de
+ * marca la elegida, en la capa 2 las demás, que sobre la capa 1 de la tarjeta sí se ven— y «Nueva»
+ * es un [PildoraDeAccion] con el «+» como ícono en la marca: hace algo, no se elige. Eran cajas
+ * armadas a mano con `border` y `clickable`, con el borde de la marca o del `borde`.
  *
- * **Alto mínimo, no fijo, y sin relleno vertical en la fila.** La versión anterior era
- * `.height(40.dp)` con `padding(vertical = 8.dp)` en la fila Y en cada chip: quedaban 24 dp para
- * el chip, 8 dp para el texto, y una línea de 16 sp de `apoyo` salía **recortada a la mitad a
- * letra normal** — el nombre de la categoría se leía cortado por arriba y por abajo. Ahora el
- * único relleno vertical es el del chip (`corto`), el chip mide ~32 dp y entra con aire en los
- * 40 dp de [ALTO_FILA_DE_CHIPS]; si el dueño agranda la escala de letra de Movi, la fila crece
- * lo justo para que el texto se lea entero, que es preferible a un chip ilegible. Sigue siendo
- * una sola fila (`maxLines = 1` en cada chip) con desplazamiento horizontal propio: no empuja el
- * resto del formulario, la misma disciplina que ya rige toda esta hoja (ver el bloque «SI LA HOJA
- * NO ENTRA» más arriba). Lo mide `HojaAgregarChipsSeLeenEnterosTest`.
+ * **Alto mínimo, no fijo.** Las píldoras miden [Medida.altoChico] (36) y entran con aire en los 40 dp
+ * de [ALTO_FILA_DE_CHIPS]; si el dueño agranda la escala de letra la fila crece lo justo para que el
+ * texto se lea entero (lo mide `HojaAgregarChipsSeLeenEnterosTest`). Una sola fila con
+ * desplazamiento horizontal propio: no empuja el resto del formulario. Va dentro de una `Superficie`
+ * con relleno de lista, así que el margen de la pantalla lo pone la fila, adentro del desplazamiento
+ * (las píldoras se deslizan hasta el borde de la tarjeta).
  */
 @Composable
 private fun CategoriaChipsRow(
@@ -2040,101 +1977,38 @@ private fun CategoriaChipsRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = ALTO_FILA_DE_CHIPS)
-            .horizontalScroll(rememberScrollState()),
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = Medida.margenDePantalla),
         verticalAlignment = Alignment.CenterVertically,
-        // "Entre elementos hermanos apretados: chips" es literalmente lo que dice el KDoc de
-        // este token en Tokens.kt — este es el caso para el que existe.
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
-        // Ola L: «+ Nueva», PRIMERA de la fila: al final quedaba detrás de los chips, fuera de pantalla en un teléfono. Las categorías se creaban escribiendo en el selector, pero
-        // nada en esta hoja lo decía: el dueño no encontraba dónde. Abre ese mismo selector con el
-        // cursor en «Buscar o crear categoría».
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(Movi.formas.pleno))
-                .border(Medida.trazo, Movi.colores.marca, RoundedCornerShape(Movi.formas.pleno))
-                .clickable(role = Role.Button, onClick = onNueva)
-                .testTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR)
-                .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "+ Nueva",
-                style = Movi.textos.apoyo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.marca,
-                maxLines = 1,
-            )
-        }
+        // Ola L: «Nueva», PRIMERA de la fila: al final quedaba detrás de los chips, fuera de pantalla
+        // en un teléfono. Abre el selector con el cursor en «Buscar o crear categoría».
+        PildoraDeAccion(
+            texto = "Nueva",
+            onClick = onNueva,
+            icono = Icons.Rounded.Add,
+            descripcion = "Nueva categoría",
+            modifier = Modifier.testTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR),
+        )
         categorias.forEach { nombre ->
-            val activa = nombre == categoriaElegida
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(Movi.formas.pleno))
-                    .background(if (activa) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent)
-                    .then(
-                        if (!activa) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Movi.formas.pleno))
-                        else Modifier,
-                    )
-                    .clickable(role = Role.Button) { onPick(nombre) }
-                    // Horizontal: el 14dp original quedaba justo entre `medio` (12dp) y `amplio`
-                    // (16dp) — misma distancia a los dos. Se eligió `medio`, "el respiro de
-                    // adentro de una fila", que es justo lo que es esto: el respiro de adentro de
-                    // una píldora angosta (`amplio` es el relleno de una tarjeta entera, de más
-                    // aire del que necesita un chip). Vertical: `corto` (8dp) es el más cercano al
-                    // 7dp original (a 1dp; `minimo`, 4dp, quedaba a 3dp).
-                    .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = nombre,
-                    style = Movi.textos.apoyo,
-                    fontWeight = if (activa) FontWeight.Medium else FontWeight.Normal,
-                    color = if (activa) Movi.colores.marca else Movi.colores.textoMedio,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
-/** La pastilla «+ Nueva» de los chips de frecuentes de «Agregar». */
-const val TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR: String = "agregar:pastilla-nueva-categoria"
-
-/**
- * El renglón chiquito de «Última usada» / «Por defecto», debajo de la etiqueta de
- * una fila de cuenta. Lo usan la fila «Cuenta» del editor y las filas «Desde»/«Hacia» del
- * traspaso, con el mismo alto y el mismo criterio (ver [avisoDeCuenta]).
- *
- * `lineHeight` explícito y `Box` de alto fijo: el alto tiene que ser el mismo diga lo que diga,
- * y no depender de la métrica de la fuente que le toque a cada plataforma.
- */
-@Composable
-internal fun AvisoDeCuentaRow(aviso: String?, reservado: Boolean) {
-    if (aviso == null && !reservado) return
-    Box(modifier = Modifier.height(15.dp)) {
-        if (aviso != null) {
-            Text(
-                text = aviso,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoApagado,
-                // Una sola línea, y con puntos suspensivos si no entra.
-                //
-                // **Esto solo no alcanzaba, y el comentario que estaba acá antes mentía.** El
-                // renglón comparte la fila con el nombre de la cuenta, que hasta la Ola 11 se
-                // llevaba TODO el ancho que quisiera (ver `rightMaxFraction` en `CardRow`): con
-                // un nombre muy largo el aviso no se cortaba con «…», directamente no se veía, y
-                // lo que se rompía era la etiqueta «Cuenta» de al lado, partida en una letra por
-                // renglón. El arreglo de verdad es el techo del lado derecho; este `maxLines` es
-                // la segunda mitad, para que con la fila ya acotada el aviso se corte con «…» en
-                // vez de ocupar dos renglones y volver a mover el teclado.
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            PildoraDeFiltro(
+                texto = nombre,
+                seleccionada = nombre == categoriaElegida,
+                onClick = { onPick(nombre) },
             )
         }
     }
 }
+
+/** La tarjeta de Categoría · Cuenta · Nota de «Agregar»: la mide `HojaAgregarGeometriaTest`. */
+internal const val TAG_TARJETA_DE_AGREGAR: String = "agregar:tarjeta"
+
+/** La píldora de la fecha, al lado del monto. */
+internal const val TAG_FECHA_EN_AGREGAR: String = "agregar:fecha"
+
+/** La pastilla «Nueva» de los chips de frecuentes de «Agregar». */
+const val TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR: String = "agregar:pastilla-nueva-categoria"
 
 /**
  * **El encabezado de un sub-editor de «Agregar»: «‹ Categoría».** Vuelta de diseño 13.

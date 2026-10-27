@@ -11,7 +11,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Text
+import com.jvillada.movi.ui.components.ds.PildoraDeAccion
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -116,20 +119,17 @@ internal fun FilaDelAvisoPendiente(
     }
 }
 
+/**
+ * Vuelta de diseño 20: la [PildoraDeAccion] del sistema. «Es este» lleva el visto en la marca —es lo
+ * que Movi propone—; «No» y «Quitar» van sin ícono. Eran píldoras armadas a mano con borde. En el
+ * renglón de alto fijo de la hoja (32 dp) la píldora mide eso, no sus 36: el renglón manda, para que
+ * el teclado numérico no se mueva.
+ */
 @Composable
 private fun PastillaDelAviso(texto: String, destacada: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(Radio.pill))
-            .border(Medida.trazo, if (destacada) Movi.colores.marca else Movi.colores.borde, RoundedCornerShape(Radio.pill))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = Espacio.s, vertical = Espacio.xxs),
-    ) {
-        Text(
-            texto,
-            style = Movi.textos.apoyo,
-            color = if (destacada) Movi.colores.marca else Movi.colores.texto,
-            fontWeight = FontWeight.Medium,
-        )
-    }
+    PildoraDeAccion(
+        texto = texto,
+        onClick = onClick,
+        icono = if (destacada) Icons.Rounded.Check else null,
+    )
 }

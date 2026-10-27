@@ -4,6 +4,11 @@ import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Description
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
@@ -498,35 +503,30 @@ private fun DocumentosEsqueleto() {
         }
         // `Separador(SangriaDeSeparador.Ninguna)` en TODAS las filas, no solo entre ellas: es lo que hace `FilaDeDocumento`
         // de verdad (su propio `Separador(SangriaDeSeparador.Ninguna)` va siempre, incluida la última fila de la lista).
+        // Vuelta de diseño 20: lo mismo que la fila real —un `EsqueletoDeFila` sin inicio ni final
+        // (mide lo que la `Fila`), el renglón de las acciones del alto de un `Boton` chico y la
+        // línea—. El tag va en la fila, como `TAG_FILA_DE_DOCUMENTO` en la real: los dos miden el
+        // mismo punto, el borde de arriba.
         repeat(FILAS_DE_DOCUMENTO_ESQUELETO) {
-            Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // El tag va ANTES del `padding` — mismo lugar en la cadena que
-                        // `TAG_FILA_DE_DOCUMENTO` en la fila real (fix round 1: los dos tienen
-                        // que medir el mismo punto, el borde exterior de la fila).
-                        .testTag(TAG_FILA_DE_LISTA_ESQUELETO)
-                        .padding(start = Espacio.s, end = Espacio.s, top = Espacio.s, bottom = Espacio.xs),
-                ) {
-                    LineaEsqueleto(
-                        fraccionDelAncho = 0.6f,
-                        estilo = Movi.textos.cuerpo,
-                        modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
-                    )
-                    Spacer(Modifier.height(Espacio.xxs))
-                    LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
-                    Spacer(Modifier.height(Espacio.xxs))
-                    Row(horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
-                        repeat(3) { BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 44.dp) }
-                    }
+            Column {
+                Box(Modifier.testTag(TAG_FILA_DE_LISTA_ESQUELETO)) {
+                    EsqueletoDeFila(conInicio = false, conFinal = false, modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO))
                 }
-                Separador(SangriaDeSeparador.Ninguna)
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = Medida.margenDePantalla)
+                        .padding(bottom = Espacio.xs),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+                ) {
+                    repeat(3) { BloqueEsqueleto(alto = TamanoDeBoton.S.alto, ancho = Medida.accionRapida) }
+                }
+                Separador(SangriaDeSeparador.Margen)
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FilaDeDocumento(
     doc: Documento,
@@ -542,81 +542,68 @@ private fun FilaDeDocumento(
      */
     onImportar: (() -> Unit)? = null,
 ) {
-    // El texto arriba a todo el ancho y las acciones en un renglón DEBAJO. Con las tres acciones a
-    // la derecha, en un teléfono de ~390 dp se comían un tercio de la fila y el nombre del archivo
-    // se partía a mitad de palabra: «Portal_Beneficios_3037_movimi / entos_09_2026.jpeg».
-    Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Ola B, tarea 9 (fix round 1): el tag va ANTES de `clip`/`clickable`/`padding`
-                // — mismo lugar en la cadena que `TAG_FILA_DE_LISTA_ESQUELETO` en el esqueleto,
-                // para que los dos midan el mismo punto (el borde exterior de la fila) en vez de
-                // que uno mida adentro del relleno y el otro no.
-                .testTag(TAG_FILA_DE_DOCUMENTO)
-                .clip(RoundedCornerShape(Radio.m))
-                .clickable(onClick = onAbrir)
-                .padding(start = Espacio.s, end = Espacio.s, top = Espacio.s, bottom = Espacio.xs),
-        ) {
+    // Vuelta de diseño 20: la `Fila` del sistema —el nombre en el título, en hasta dos renglones, y
+    // la cuenta, el peso, la fecha y el período en el subtítulo; tocarla abre el archivo— y las
+    // acciones debajo como `Boton` chicos (eran textos tocables armados a mano). Las acciones van
+    // DEBAJO y no al final de la fila: a la derecha se comían un tercio del ancho y el nombre del
+    // archivo se partía a mitad de palabra («Portal_Beneficios_3037_movimi / entos_09_2026.jpeg»).
+    Column {
+        Fila(
             // Con cortes invisibles después de `_`, `-` y `.`: si no entra, parte en un separador.
             // Solo lo que se pinta; `doc.nombre` sigue intacto para editar y para «Abrir».
-            Text(
-                nombreQueSePartePorSusSeparadores(doc.nombre),
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.texto,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.height(Espacio.xxs))
-            // Cuenta, peso, fecha y período en un renglón: son los datos con los que uno
-            // reconoce cuál de tres extractos parecidos es el que busca. La cuenta va PRIMERO
-            // y no al final: entre «Extracto_08_2026.pdf» repetidos, lo que los distingue es
+            titulo = nombreQueSePartePorSusSeparadores(doc.nombre),
+            // La cuenta va PRIMERO: entre «Extracto_08_2026.pdf» repetidos, lo que los distingue es
             // de qué cuenta son, y es lo primero que se corta si la fila no entra.
+            subtitulo = listOfNotNull(
+                cuenta,
+                pesoLegible(doc.bytes),
+                etiquetaDeFecha(fechaDeEpoch(doc.subidoEn), hoyEnAppZone()),
+                // «agosto de 2026» si es un «2026-08»; si el dueño escribió otra cosa, tal cual.
+                doc.periodo?.let { etiquetaDePeriodo(it) ?: it },
+            ).joinToString(" · "),
+            onClick = onAbrir,
+            modifier = Modifier.testTag(TAG_FILA_DE_DOCUMENTO),
+        )
+        doc.notas?.takeIf { it.isNotBlank() }?.let { nota ->
             Text(
-                text = listOfNotNull(
-                    cuenta,
-                    pesoLegible(doc.bytes),
-                    etiquetaDeFecha(fechaDeEpoch(doc.subidoEn), hoyEnAppZone()),
-                    // «agosto de 2026» si es un «2026-08»; si el dueño escribió otra cosa, tal cual.
-                    doc.periodo?.let { etiquetaDePeriodo(it) ?: it },
-                ).joinToString(" · "),
+                nota,
                 style = Movi.textos.apoyo,
-                color = Movi.colores.textoApagado,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.xs),
             )
-            doc.notas?.takeIf { it.isNotBlank() }?.let { nota ->
-                Spacer(Modifier.height(Espacio.xxs))
-                Text(nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            }
-            Spacer(Modifier.height(Espacio.xxs))
-            // Corrido 8 dp a la izquierda para que la PALABRA «Abrir» —no su zona de toque— quede
-            // alineada con el nombre de arriba.
-            Row(
-                modifier = Modifier.offset(x = (-8).dp),
-                horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
-            ) {
-                AccionDeFila("Abrir", Movi.colores.marca, FontWeight.Medium, onAbrir)
-                AccionDeFila("Editar", Movi.colores.textoMedio, null, onEditar)
-                // «Borrar» no borra: abre la confirmación (ver `aBorrar` en la pantalla).
-                AccionDeFila("Borrar", Movi.colores.sale, null, onBorrar)
-                // Al final: es la acción menos frecuente de las cuatro, y solo en un PDF o una
-                // imagen (ver [esImportable]).
-                onImportar?.let { AccionDeFila("Importar movimientos", Movi.colores.marca, null, it) }
-            }
         }
-        Separador(SangriaDeSeparador.Ninguna)
+        // Que baje a otro renglón si las cuatro no entran (con la letra agrandada): ningún botón se
+        // corta. Corrida a la izquierda lo que el botón de texto trae de relleno, para que la
+        // PALABRA «Abrir» —no su zona de toque— quede alineada con el nombre de arriba.
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = Medida.margenDePantalla - Espacio.s, end = Medida.margenDePantalla, bottom = Espacio.xs),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
+        ) {
+            AccionDeFila("Abrir", onAbrir)
+            AccionDeFila("Editar", onEditar)
+            // «Borrar» no borra: abre la confirmación (ver `aBorrar` en la pantalla).
+            AccionDeFila("Borrar", onBorrar, peligro = true)
+            // Al final: es la acción menos frecuente de las cuatro, y solo en un PDF o una imagen
+            // (ver [esImportable]).
+            onImportar?.let { AccionDeFila("Importar movimientos", it) }
+        }
+        Separador(SangriaDeSeparador.Margen)
     }
 }
 
+/**
+ * Una acción de la fila de un documento: un [Boton] chico. `Fantasma` (el texto en la marca), y
+ * «Borrar» en `Peligro`, que abre la confirmación.
+ */
 @Composable
-private fun AccionDeFila(texto: String, color: Color, peso: FontWeight?, onClick: () -> Unit) {
-    Text(
+private fun AccionDeFila(texto: String, onClick: () -> Unit, peligro: Boolean = false) {
+    Boton(
         texto,
-        style = Movi.textos.apoyo,
-        fontWeight = peso,
-        color = color,
-        modifier = Modifier
-            .clip(RoundedCornerShape(Radio.s))
-            .clickable(onClick = onClick)
-            .padding(horizontal = Espacio.xs, vertical = Espacio.xxs),
+        onClick = onClick,
+        variante = if (peligro) VarianteDeBoton.Peligro else VarianteDeBoton.Fantasma,
+        tamano = TamanoDeBoton.S,
     )
 }
 

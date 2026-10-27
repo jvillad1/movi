@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -14,8 +15,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
 
 /**
  * **«No pudimos cargar X» no es lo mismo que «no tienes X»**, y esta tarjeta es la que lo dice.
@@ -39,12 +42,12 @@ fun NoSePudoLeer(
     MinCard(
         modifier = modifier.fillMaxWidth(),
         variant = MinCardVariant.Elevated,
-        padding = PaddingValues(32.dp),
+        padding = PaddingValues(Espacio.xxl),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(Espacio.m),
         ) {
             Text(
                 text = texto,
@@ -65,10 +68,13 @@ fun NoSePudoLeer(
 fun BotonReintentar(onReintentar: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(Movi.colores.marca.copy(alpha = 0.16f))
+            // Vuelta de diseño 20: el lavado y los tamaños del sistema (eran `copy(alpha = 0.16f)`,
+            // radio 999 y rellenos de 20 y 10 dp): alto de un botón chico, relleno de un botón.
+            .heightIn(min = Medida.altoChico)
+            .clip(RoundedCornerShape(Radio.pill))
+            .background(Movi.colores.lavado(Movi.colores.marca))
             .clickable(onClick = onReintentar)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = Espacio.l),
         contentAlignment = Alignment.Center,
     ) {
         Text(

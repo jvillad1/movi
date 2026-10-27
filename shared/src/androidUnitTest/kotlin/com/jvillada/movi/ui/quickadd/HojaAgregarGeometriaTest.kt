@@ -403,6 +403,39 @@ class HojaAgregarGeometriaTest {
         }
     }
 
+    /**
+     * **5 — a 360 × 740 el pie entero entra sin ningún gesto, y la hoja no creció** (vuelta de diseño
+     * 20). La revisión de la vuelta en el navegador lo encontró: con las filas del sistema a su alto
+     * de siempre (56 / 64) y la fecha de 36 dp la hoja medía ~30 dp más que en master, y a 360 × 740
+     * «Guardar movimiento» quedaba cortado por el borde de abajo y «Guardar y anotar otro» no se veía.
+     * Ahora las filas de la hoja son `Fila` en `DensidadDeFila.Compacta` y la fecha una
+     * `PildoraDeAccion` `AltoDePildora.Compacta`.
+     *
+     * «No más que en master» se mide en las dos piezas que la vuelta cambió, contra lo que medían en
+     * master, leído de su código: la tarjeta eran tres `CardRow` de 48 (14 + 20 + 14) con sus tres
+     * `Hairline` de 1, la fila de chips de 40 y el relleno de 4 arriba y abajo —195—; la fecha, un
+     * renglón de `apoyo` (16) con 4 arriba y 4 abajo —24—. Sin cuentas (acá no hay red) la fila
+     * «Cuenta» no reserva el renglón del aviso, como en master.
+     */
+    @Test
+    @Config(qualifiers = TELEFONO_CHICO_DE_LA_REVISION)
+    fun aLaMedidaDeLaRevisionElPieEntraYLaHojaNoCrecio() {
+        montarHoja()
+        composeRule.onNodeWithText(GUARDAR).assertSeVeEntero("«$GUARDAR» a 360 × 740")
+
+        val tarjeta = composeRule.onNodeWithTag(TAG_TARJETA_DE_AGREGAR, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(
+            "La tarjeta Categoría · Cuenta · Nota mide ${tarjeta.bottom - tarjeta.top}; en master medía " +
+                "$ALTO_DE_LA_TARJETA_EN_MASTER. La hoja está anclada abajo: lo que crezca acá empuja el pie.",
+            (tarjeta.bottom - tarjeta.top).value <= ALTO_DE_LA_TARJETA_EN_MASTER.value + TOLERANCIA_DP,
+        )
+        val fecha = composeRule.onNodeWithTag(TAG_FECHA_EN_AGREGAR, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(
+            "La fecha mide ${fecha.bottom - fecha.top}; en master medía $ALTO_DE_LA_FECHA_EN_MASTER.",
+            (fecha.bottom - fecha.top).value <= ALTO_DE_LA_FECHA_EN_MASTER.value + TOLERANCIA_DP,
+        )
+    }
+
     // ── Andamio ───────────────────────────────────────────────────────────────────────────
 
     /**
@@ -511,6 +544,18 @@ private const val IPHONE_16 = "w393dp-h852dp-xhdpi"
  * desborda de verdad. Los 520 salen de restarle ~210 dp (teclado del sistema) a los 731 del AVD.
  */
 private const val TELEFONO_CON_TECLADO = "w411dp-h520dp-xhdpi"
+
+/**
+ * El teléfono chico con el que la revisión de la vuelta de diseño 20 encontró el pie cortado:
+ * 360 × 740 (en producción, el botón se ve entero).
+ */
+private const val TELEFONO_CHICO_DE_LA_REVISION = "w360dp-h740dp-xhdpi"
+
+/** Lo que medía en master la tarjeta Categoría · Cuenta · Nota: ver [HojaAgregarGeometriaTest.aLaMedidaDeLaRevisionElPieEntraYLaHojaNoCrecio]. */
+private val ALTO_DE_LA_TARJETA_EN_MASTER = 195.dp
+
+/** Lo que medía en master la píldora de la fecha. Ídem. */
+private val ALTO_DE_LA_FECHA_EN_MASTER = 24.dp
 
 /** `MinBottomNav.kt:63` — leído del código, no estimado. */
 private val ALTO_BARRA_INFERIOR = 64.dp

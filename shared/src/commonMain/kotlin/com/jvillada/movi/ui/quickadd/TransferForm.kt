@@ -4,6 +4,7 @@ import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
@@ -65,11 +66,8 @@ import com.jvillada.movi.shared.model.validarPagoDeCuota
 import com.jvillada.movi.shared.model.validateTransfer
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.time.AppTimeZone
-import com.jvillada.movi.ui.components.CardRow
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.signedMoney
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.components.rememberVibrador
@@ -462,7 +460,7 @@ const val SIN_CONDICIONES_PARA_EL_DESGLOSE: String =
         "la cuota baja la deuda. El pago se registra bien igual: Movi separa el interés al guardarlo."
 
 /**
- * Igual que `FRACCION_VALOR_FILA` en la hoja de un movimiento, y por el mismo motivo. Un poco más
+ * Igual que [FRACCION_DEL_VALOR_DE_LA_HOJA] en la hoja de un movimiento, y por el mismo motivo. Un poco más
  * generoso porque acá las etiquetas son más cortas («Desde», «Hacia») y no llevan más que su
  * aviso debajo.
  */
@@ -1025,61 +1023,33 @@ internal fun TransferBody(
 
         Spacer(Modifier.height(Espacio.m))
 
-        MinCard(
-            modifier = Modifier.fillMaxWidth(),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.xxs),
-        ) {
-            CardRow(
-                left = {
-                    Text("Desde", style = Movi.textos.titulo, color = Movi.colores.textoMedio)
-                    // Ola 11: mismo aviso que la fila «Cuenta» del editor y por el mismo motivo
-                    // —el valor por defecto es una decisión de la app y tiene que poder leerse
-                    // antes de guardar—, con el mismo alto reservado para que elegir una cuenta
-                    // no mueva el formulario bajo el dedo. Ver [avisoDeCuenta].
-                    AvisoDeCuentaRow(avisoDeCuenta(origenFrom, elegibles.size), elegibles.size > 1)
-                },
-                right = {
-                    Text(
-                        text = from?.name ?: "Elegir cuenta",
-                        style = Movi.textos.titulo,
-                        color = if (from == null) Movi.colores.textoApagado else Movi.colores.texto,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                // Mismo techo que las filas del editor de un movimiento: sin él, un nombre de
-                // cuenta largo se lleva la fila entera y parte «Desde» letra por letra (ver
-                // `rightMaxFraction` en CardRow).
-                rightMaxFraction = FRACCION_VALOR_FILA_TRASPASO,
-                showChevron = true,
+        // Vuelta de diseño 20: las `Fila` del sistema (ver [FilaDeLaHoja]), como «Cuenta» en la hoja de
+        // un movimiento. Eran `CardRow` de 48 dp en una `MinCard`.
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            // Ola 11: mismo aviso que la fila «Cuenta» del editor y por el mismo motivo —el valor por
+            // defecto es una decisión de la app y tiene que poder leerse antes de guardar—, con el
+            // mismo alto reservado para que elegir una cuenta no mueva el formulario bajo el dedo.
+            // Ver [avisoDeCuenta].
+            FilaDeLaHoja(
+                titulo = "Desde",
+                valor = from?.name ?: "Elegir cuenta",
+                valorVacio = from == null,
+                aviso = avisoDeCuenta(origenFrom, elegibles.size),
+                reservarAviso = elegibles.size > 1,
+                fraccionDelValor = FRACCION_VALOR_FILA_TRASPASO,
                 onClick = { abrirPicker(TransferSide.FROM) },
             )
-            CardRow(
-                left = {
-                    Text("Hacia", style = Movi.textos.titulo, color = Movi.colores.textoMedio)
-                    // Menos una: el destino no puede ser el origen, así que con dos cuentas el
-                    // destino no tiene alternativa y no hay ninguna decisión que confesar —
-                    // misma regla que «con una sola cuenta el aviso no dice nada».
-                    AvisoDeCuentaRow(
-                        avisoDeCuenta(origenTo, elegibles.size - 1),
-                        elegibles.size - 1 > 1,
-                    )
-                },
-                right = {
-                    Text(
-                        text = to?.name ?: "Elegir cuenta",
-                        style = Movi.textos.titulo,
-                        color = if (to == null) Movi.colores.textoApagado else Movi.colores.texto,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                rightMaxFraction = FRACCION_VALOR_FILA_TRASPASO,
-                showChevron = true,
-                isLast = true,
+            Separador(SangriaDeSeparador.Margen)
+            // Menos una: el destino no puede ser el origen, así que con dos cuentas el destino no
+            // tiene alternativa y no hay ninguna decisión que confesar — misma regla que «con una
+            // sola cuenta el aviso no dice nada».
+            FilaDeLaHoja(
+                titulo = "Hacia",
+                valor = to?.name ?: "Elegir cuenta",
+                valorVacio = to == null,
+                aviso = avisoDeCuenta(origenTo, elegibles.size - 1),
+                reservarAviso = elegibles.size - 1 > 1,
+                fraccionDelValor = FRACCION_VALOR_FILA_TRASPASO,
                 onClick = { abrirPicker(TransferSide.TO) },
             )
         }

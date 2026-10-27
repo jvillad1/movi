@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
@@ -73,33 +76,14 @@ fun RecurringOfferBar(
                         color = Movi.colores.texto,
                     )
                 }
-                // Ícono, no el carácter "✕": la fuente del canvas no trae ese glifo y salía un
-                // cuadradito. Es el mismo Close que usan las hojas de la app.
-                Icon(
-                    imageVector = Icons.Rounded.Close,
-                    contentDescription = "Cerrar",
-                    tint = Movi.colores.textoMedio,
-                    modifier = Modifier
-                        .clickable(onClick = onDismiss)
-                        .padding(start = Espacio.s, top = Espacio.xxs, bottom = Espacio.xxs)
-                        .size(Icono.m),
-                )
+                // Vuelta de diseño 20: `BotonDeIcono` (el toque de 48 y la descripción). Ícono, no el
+                // carácter "✕": la fuente del canvas no trae ese glifo y salía un cuadradito.
+                BotonDeIcono(Icons.Rounded.Close, descripcion = "Cerrar", onClick = onDismiss)
             }
-            Spacer(Modifier.height(Espacio.s))
+            Spacer(Modifier.height(Espacio.xs))
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(Radio.pill))
-                        .background(Movi.colores.lavado(Movi.colores.marca))
-                        .clickable(onClick = onAccept)
-                        .padding(horizontal = Espacio.m, vertical = Espacio.xs),
-                ) {
-                    Text(
-                        text = "Sí, anótalo",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.marca,
-                    )
-                }
+                // Vuelta de diseño 20: un `Boton` chico (era una píldora armada a mano).
+                Boton("Sí, anótalo", onClick = onAccept, tamano = TamanoDeBoton.S)
             }
         }
     }

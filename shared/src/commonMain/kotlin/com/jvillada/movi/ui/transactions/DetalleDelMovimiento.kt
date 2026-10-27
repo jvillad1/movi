@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.ds.PildoraDeAccion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -209,27 +210,18 @@ internal fun ChipDeCategoria(
     habilitado: Boolean,
     onClick: () -> Unit,
 ) {
-    val color = colorDeCategoria(nombre)
-    Row(
-        modifier = Modifier
-            .testTag(TAG_CHIP_DE_CATEGORIA)
-            .heightIn(min = Medida.altoChico)
-            .clip(RoundedCornerShape(Radio.pill))
-            .background(Movi.colores.lavado(color))
-            .clickable(enabled = habilitado, role = Role.Button, onClickLabel = "Cambiar la categoría", onClick = onClick)
-            .padding(start = Espacio.xxs, end = Espacio.s),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-    ) {
-        IconoDeCategoria(nombre, tamano = TamanoDeIconoDeCategoria.Chico)
-        Text(nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Icon(
-            imageVector = if (abierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
-            contentDescription = null,
-            tint = Movi.colores.textoMedio,
-            modifier = Modifier.size(Icono.s),
-        )
-    }
+    // Vuelta de diseño 20: la `PildoraDeAccion` del sistema, con el ícono de la categoría (en su
+    // color) adelante y la flecha de lo que se despliega al final. Era una fila armada a mano sobre
+    // el lavado del color de la categoría.
+    PildoraDeAccion(
+        texto = nombre,
+        onClick = onClick,
+        modifier = Modifier.testTag(TAG_CHIP_DE_CATEGORIA),
+        descripcion = "Cambiar la categoría: $nombre",
+        inicio = { IconoDeCategoria(nombre, tamano = TamanoDeIconoDeCategoria.Chico) },
+        iconoFinal = if (abierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+        habilitada = habilitado,
+    )
 }
 
 /** «4 veces este período · $142.800», tocable: lleva a Movimientos con la búsqueda puesta. */

@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -75,6 +76,42 @@ class HojaAgregarChipsSeLeenEnterosTest {
     fun con_la_letra_agrandada_el_chip_crece_y_el_texto_sigue_entero() {
         montarHojaConChips(escalaDeLetra = 1.5f)
         assertChipSinRecortar("Transporte")
+    }
+
+    /**
+     * **«+ Nueva» se lee entera, en un renglón y del alto de los demás chips** (vuelta de diseño 20).
+     * Con la `PildoraDeAccion` dentro de la fila con desplazamiento horizontal, el texto tenía
+     * `weight`: con el ancho máximo infinito de esa fila un hijo con peso se queda en cero, y en la
+     * web se veía un «+» con una «N» chiquita. Se mide a 390 y a 360 dp.
+     */
+    @Test
+    @Config(sdk = [34], qualifiers = "w390dp-h844dp-xhdpi")
+    fun nueva_se_lee_entera_a_390() = assertNuevaEntera()
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h740dp-xhdpi")
+    fun nueva_se_lee_entera_a_360() = assertNuevaEntera()
+
+    private fun assertNuevaEntera() {
+        montarHojaConChips(escalaDeLetra = 1f)
+        val textos = composeRule.onAllNodesWithText("Nueva", useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue("«Nueva» tendría que aparecer una sola vez", textos.size == 1)
+        val texto = textos.single()
+        val layout = layoutDe(texto)
+        assertTrue("«Nueva» se partió en ${layout.lineCount} renglones", layout.lineCount == 1)
+        // El ancho, comparado a mano: con ancho máximo infinito `didOverflowWidth` da `true` por
+        // redondeo aunque el texto mida exactamente lo que pide.
+        assertTrue(
+            "«Nueva» mide ${texto.boundsInRoot.width}px y su renglón pide ${layout.multiParagraph.getLineWidth(0)}px",
+            texto.boundsInRoot.width + 0.5f >= layout.multiParagraph.getLineWidth(0),
+        )
+        val pildora = composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR).fetchSemanticsNode().boundsInRoot
+        assertTrue("«Nueva» (${texto.boundsInRoot}) se sale de su píldora ($pildora)", contiene(pildora, texto.boundsInRoot))
+        val chip = composeRule.onAllNodesWithText("Transporte").fetchSemanticsNodes().single().boundsInRoot
+        assertTrue(
+            "«Nueva» mide ${pildora.height}px de alto y el chip «Transporte» ${chip.height}px",
+            kotlin.math.abs(pildora.height - chip.height) < 0.5f,
+        )
     }
 
     // ── Andamio ───────────────────────────────────────────────────────────────────────────
