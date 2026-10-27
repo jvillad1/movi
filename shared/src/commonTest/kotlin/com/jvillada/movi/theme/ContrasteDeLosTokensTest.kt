@@ -2,6 +2,8 @@ package com.jvillada.movi.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import com.jvillada.movi.ui.ai.fondoDeLaBurbujaDelDueno
+import com.jvillada.movi.ui.ai.textoDeLaBurbujaDelDueno
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -263,6 +265,23 @@ class ContrasteDeLosTokensTest {
             }
         }
         if (fallas.isNotEmpty()) fail("Hay estados que no se leen sobre su lavado:\n" + fallas.joinToString("\n"))
+    }
+
+    /**
+     * **La burbuja del dueño en Movi AI** (vuelta de diseño 12): el lavado de la marca sobre el fondo
+     * del chat, con el texto del sistema encima. Era el color del texto con el fondo encima (negra
+     * en claro); ahora es un par de tokens y se mide como uno: 4,5:1 en los dos temas.
+     */
+    @Test
+    fun `lo que escribe el dueno se lee sobre su burbuja, en los dos temas`() {
+        val fallas = mutableListOf<String>()
+        for ((tema, c) in temas) {
+            val burbuja = fondoDeLaBurbujaDelDueno(c).compositeOver(c.fondo)
+            val r = contraste(textoDeLaBurbujaDelDueno(c), burbuja)
+            if (r < TEXTO_AA) fallas += "  $tema · texto sobre la burbuja del dueño: ${r.legible()}:1"
+            assertTrue(burbuja != c.fondo, "En el tema $tema la burbuja del dueño no se distingue del fondo")
+        }
+        if (fallas.isNotEmpty()) fail("La burbuja del dueño no se lee:\n" + fallas.joinToString("\n"))
     }
 
     /**
