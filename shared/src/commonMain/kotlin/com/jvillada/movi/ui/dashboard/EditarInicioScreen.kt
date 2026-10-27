@@ -8,6 +8,7 @@ import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -357,18 +358,15 @@ private fun Flecha(
  */
 @Composable
 internal fun BotonEditarInicio(onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Movi.espacios.amplio)
-            .clip(RoundedCornerShape(Movi.formas.pleno))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(vertical = Movi.espacios.medio),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Rounded.Tune, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(Icono.m))
-        Spacer(Modifier.size(Movi.espacios.corto))
-        Text(TITULO_EDITAR_INICIO, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+    // Vuelta de diseño 20: el `Boton` de texto del sistema (`Fantasma` `S`), centrado, con el ícono de
+    // ajustes. Era un renglón armado a mano con `clickable` y el texto en gris.
+    Box(modifier = Modifier.fillMaxWidth().padding(vertical = Espacio.xs), contentAlignment = Alignment.Center) {
+        Boton(
+            TITULO_EDITAR_INICIO,
+            onClick = onClick,
+            variante = VarianteDeBoton.Fantasma,
+            tamano = TamanoDeBoton.S,
+            icono = Icons.Rounded.Tune,
+        )
     }
 }
