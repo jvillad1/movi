@@ -141,7 +141,7 @@ class ElMismoPagoEnLaBandejaTest {
         montarLaBandeja()
 
         assertEquals(1, tarjetasDelPago())
-        assertEquals(1, cuantos("Mismo pago avisado 3 veces"))
+        assertEquals(1, cuantos("Avisado 3 veces"))
         // Por dónde llegó cada aviso, en el orden en que llegaron.
         assertEquals(1, cuantos("SMS · Google Wallet · Bancolombia"))
         // Dos «Revisar»: el del pago y el de la otra compra. No cuatro.

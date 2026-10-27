@@ -5,6 +5,8 @@ import com.jvillada.movi.shared.model.AccountType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -21,11 +23,29 @@ class LaFilaDiceSiLaPlataEsCondicionadaTest {
     private fun cuenta(nombre: String, tipo: AccountType, condicion: String? = null) =
         Account(id = nombre, name = nombre, type = tipo, balance = 1_000L, condicionadaA = condicion)
 
+    /**
+     * Vuelta de diseño 2: dentro de la sección «Dinero · 2» cada cuenta decía «Dinero». Ahora dice su
+     * tipo, y nada si el nombre ya lo dice o si es una inversión (la sección ya lo dice).
+     */
     @Test
-    fun `una cuenta libre dice su grupo, como siempre`() {
-        val fila = subtituloDeLaCuenta(cuenta("Bancolombia Ahorros", AccountType.SAVINGS))
-        assertEquals("Dinero", fila)
+    fun `una cuenta libre dice su tipo, no el grupo que ya dice la seccion`() {
+        assertEquals("Ahorros", subtituloDeLaCuenta(cuenta("Nu", AccountType.SAVINGS)))
+        assertEquals("Corriente", subtituloDeLaCuenta(cuenta("Davivienda", AccountType.CHECKING)))
+        assertEquals("Efectivo", subtituloDeLaCuenta(cuenta("Billetera", AccountType.CASH)))
         assertFalse(esDeUsoCondicionado(cuenta("Bancolombia Ahorros", AccountType.SAVINGS)))
+    }
+
+    @Test
+    fun `si el nombre ya dice el tipo, o es una inversion, no hay subtitulo`() {
+        assertNull(subtituloDeLaCuenta(cuenta("Bancolombia Ahorros", AccountType.SAVINGS)))
+        assertNull(subtituloDeLaCuenta(cuenta("Cuenta de ahorros 8133", AccountType.SAVINGS)))
+        assertNull(subtituloDeLaCuenta(cuenta("Efectivo", AccountType.CASH)))
+        assertNull(subtituloDeLaCuenta(cuenta("Skandia", AccountType.INVESTMENT)))
+        listOf("Dinero", "Inversión").forEach { grupo ->
+            listOf(AccountType.SAVINGS, AccountType.CHECKING, AccountType.CASH, AccountType.INVESTMENT).forEach { tipo ->
+                assertNotEquals(grupo, subtituloDeLaCuenta(cuenta("Nu", tipo)))
+            }
+        }
     }
 
     @Test
@@ -42,6 +62,6 @@ class LaFilaDiceSiLaPlataEsCondicionadaTest {
     @Test
     fun `una condicion en blanco es plata libre`() {
         assertFalse(esDeUsoCondicionado(cuenta("Glim", AccountType.SAVINGS, "  ")))
-        assertEquals("Dinero", subtituloDeLaCuenta(cuenta("Glim", AccountType.SAVINGS, "  ")))
+        assertEquals("Ahorros", subtituloDeLaCuenta(cuenta("Glim", AccountType.SAVINGS, "  ")))
     }
 }

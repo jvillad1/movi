@@ -280,23 +280,23 @@ class InicioDelRedisenoEnPantallaTest {
     @Test
     fun `la cuadricula abre cada destino`() {
         montar(conTodoPendiente)
-        composeRule.onNodeWithContentDescription("Anotar gasto", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Anotar un gasto", useUnmergedTree = true).performClick()
         assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.GASTO), navegado.last())
-        composeRule.onNodeWithContentDescription("Anotar ingreso", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Anotar un ingreso", useUnmergedTree = true).performClick()
         assertEquals(Screen.QuickAdd(presetEsIngreso = true, presetPestana = PestanaDeAgregar.INGRESO), navegado.last())
-        composeRule.onNodeWithContentDescription("Traspasar", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Anotar un traspaso", useUnmergedTree = true).performClick()
         assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.TRASPASO), navegado.last())
-        composeRule.onNodeWithContentDescription("Pagar tarjeta", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Pagar una tarjeta", useUnmergedTree = true).performClick()
         assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.PAGO_DE_TARJETA), navegado.last())
         // La insignia dice cuánto espera en Por revisar: 3 avisos y 1 débito.
-        composeRule.onNodeWithContentDescription("Revisar avisos, 4", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Revisar los avisos, 4", useUnmergedTree = true).performClick()
         assertEquals(Screen.PorRevisar, navegado.last())
-        composeRule.onNodeWithContentDescription("Preguntar a Movi", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Preguntarle a Movi", useUnmergedTree = true).performClick()
         assertEquals(Screen.AIChat(), navegado.last())
-        composeRule.onNodeWithContentDescription("Subir comprobante", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Subir un comprobante", useUnmergedTree = true).performClick()
         assertTrue(subioComprobante, "elige un archivo en vez de navegar")
         // R3 · «Repartir» lleva a Espacios.
-        composeRule.onNodeWithContentDescription("Repartir", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Repartir un gasto", useUnmergedTree = true).performClick()
         assertEquals(Screen.Espacios, navegado.last())
     }
 

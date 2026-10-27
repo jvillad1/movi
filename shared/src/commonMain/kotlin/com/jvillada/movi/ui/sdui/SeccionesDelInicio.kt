@@ -156,6 +156,7 @@ internal fun AccionesDelInicioSection(
                 onClick = { destinoDeLaAccion(accion)?.let(onNavigate) ?: onSubirComprobante() },
                 destacada = accion == AccionDelInicio.ANOTAR_GASTO,
                 insignia = if (accion == AccionDelInicio.REVISAR_AVISOS) insignia else null,
+                descripcion = accion.descripcion,
             )
         },
         modifier = Modifier.padding(horizontal = Medida.margenDePantalla),

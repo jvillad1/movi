@@ -1,0 +1,138 @@
+package com.jvillada.movi.ui.sms
+
+import com.jvillada.movi.shared.model.AvisoSinLeer
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
+import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import kotlinx.datetime.LocalDate
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+
+/**
+ * # La cabeza de una tarjeta de aviso se lee primero (vuelta de diseño 2)
+ *
+ * En producción la tarjeta de «Por revisar» se titulaba con el banco («Falabella») y llevaba la marca
+ * del comercio (la R de Rappi), con el monto enterrado en el texto del SMS. Ahora: el comercio con su
+ * marca, el monto a la derecha y «banco · hora» debajo.
+ */
+class LaCabezaDelAvisoTest {
+
+    private val hoy = LocalDate(2026, 10, 26)
+
+    private fun aviso(bank: String, texto: String, time: String = "2026-10-26 11:02", id: String = "s1") =
+        SmsMessage(id = id, time = time, bank = bank, text = texto, state = SMS_STATE_PENDING, det = "")
+
+    private val deFalabella = aviso("Falabella", "Compra aprobada por \$42.500 en RAPPI el 02/09/2026.")
+
+    @Test
+    fun `el titulo es el comercio con su marca, no el banco`() {
+        val cabeza = cabezaDelAviso(
+            listOf(deFalabella),
+            ParsedSms(42_500.0, "Rappi", TransactionType.EXPENSE, "Restaurantes"),
+            hoy,
+        )
+        assertEquals("Rappi", cabeza.titulo)
+        assertEquals("rappi", cabeza.marca?.id)
+        assertEquals("Falabella · 11:02 a. m.", cabeza.subtitulo)
+        assertEquals(42_500L, cabeza.monto)
+        assertEquals(-42_500L, cabeza.montoConSigno, "un gasto va con «−», en el color del texto")
+        assertEquals(TonoDeCifra.Neutro, cabeza.tono)
+    }
+
+    @Test
+    fun `sin lectura, el comercio que nombra el texto, y el banco nunca es un comercio`() {
+        val cabeza = cabezaDelAviso(listOf(deFalabella), leido = null, hoy = hoy)
+        assertEquals("Rappi", cabeza.titulo)
+        assertNull(cabeza.monto, "sin lectura no se inventa un monto: lo dice el texto")
+        val soloElBanco = cabezaDelAviso(listOf(aviso("Bancolombia", "Bancolombia le informa un retiro.")), null, hoy)
+        assertEquals("Bancolombia", soloElBanco.titulo)
+    }
+
+    @Test
+    fun `si Movi no entendio el comercio, el titulo es el banco con su marca y abajo la hora`() {
+        val cabeza = cabezaDelAviso(
+            listOf(aviso("Notificación · Bancolombia", "Transferiste \$50.000 desde tu cuenta *8133.")),
+            ParsedSms(50_000.0, "Movimiento", TransactionType.EXPENSE, "Otros"),
+            hoy,
+        )
+        assertEquals("Bancolombia", cabeza.titulo)
+        assertEquals("bancolombia", cabeza.marca?.id)
+        assertEquals("11:02 a. m.", cabeza.subtitulo)
+        assertEquals(50_000L, cabeza.monto)
+    }
+
+    @Test
+    fun `un comercio sin marca va con el icono de su categoria`() {
+        val cabeza = cabezaDelAviso(
+            listOf(aviso("85540", "Bancolombia: Compraste \$12.300,00 en PANADERIA LA ESQ con tu T.Deb *1111.")),
+            ParsedSms(12_300.0, "PANADERIA LA ESQ", TransactionType.EXPENSE, "Comida"),
+            hoy,
+        )
+        assertEquals("PANADERIA LA ESQ", cabeza.titulo)
+        assertNull(cabeza.marca)
+        assertEquals("Comida", cabeza.categoria)
+        assertEquals("SMS · 11:02 a. m.", cabeza.subtitulo, "el código del remitente no dice nada: «SMS»")
+    }
+
+    @Test
+    fun `un ingreso va en entra y un pago de tarjeta entre cuentas`() {
+        val ingreso = cabezaDelAviso(
+            listOf(aviso("Nu", "Te llegó dinero de CAROLINA por \$200.000")),
+            ParsedSms(200_000.0, "Carolina", TransactionType.INCOME, "Ingreso"),
+            hoy,
+        )
+        assertEquals(TonoDeCifra.Ingreso, ingreso.tono)
+        assertEquals(200_000L, ingreso.montoConSigno)
+        val pago = cabezaDelAviso(
+            listOf(aviso("Nu", "Pagaste tu tarjeta de crédito Nu por \$1.998.960")),
+            ParsedSms(1_998_960.0, "Nu", TransactionType.EXPENSE, CARD_PAYMENT_CATEGORY),
+            hoy,
+        )
+        assertEquals(TonoDeCifra.EntreCuentas, pago.tono)
+    }
+
+    @Test
+    fun `un aviso sin leer muestra el monto que se puede anotar igual`() {
+        val cabeza = cabezaDelAviso(
+            listOf(aviso("Notificación · Google Wallet", "COP27,500 with Debito Mastercard")),
+            leido = null,
+            hoy = hoy,
+            sinLeer = AvisoSinLeer(monto = 27_500.0),
+        )
+        assertEquals("Google Wallet", cabeza.titulo)
+        assertEquals(27_500L, cabeza.monto)
+    }
+
+    @Test
+    fun `un aviso de otro dia dice el dia`() {
+        val cabeza = cabezaDelAviso(listOf(aviso("Nu", "Compraste en Éxito", time = "2026-10-25 09:15")), null, hoy)
+        assertEquals("Nu · Ayer, 9:15 a. m.", cabeza.subtitulo)
+    }
+
+    @Test
+    fun `un pago avisado varias veces dice por donde llego cada aviso`() {
+        val cabeza = cabezaDelAviso(
+            listOf(
+                aviso("Notificación · Google Wallet", "PANADERIA LA ESQUINA: COP12,300", id = "w"),
+                aviso("85540", "Bancolombia: Compraste \$12.300,00 en PANADERIA LA ESQ", id = "s"),
+            ),
+            ParsedSms(12_300.0, "PANADERIA LA ESQUINA", TransactionType.EXPENSE, "Comida"),
+            hoy,
+        )
+        assertEquals("PANADERIA LA ESQUINA", cabeza.titulo)
+        assertEquals("Google Wallet · SMS · 11:02 a. m.", cabeza.subtitulo)
+    }
+
+    @Test
+    fun `el banco del aviso como se nombra en una linea`() {
+        assertEquals("Nu", bancoDelAviso("Notificación · Nu"))
+        assertEquals("Bancolombia", bancoDelAviso("Correo · Bancolombia"))
+        assertEquals("Comprobante", bancoDelAviso("Comprobante · transferencia.png"))
+        assertEquals("SMS", bancoDelAviso("85540"))
+        assertEquals("Falabella", bancoDelAviso("Falabella"))
+    }
+}

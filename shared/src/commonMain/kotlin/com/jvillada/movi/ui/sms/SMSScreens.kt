@@ -111,11 +111,9 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
-import com.jvillada.movi.shared.model.marcaDelAviso
 import com.jvillada.movi.ui.quickadd.simboloDeMoneda
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
-import com.jvillada.movi.shared.model.fechaCortaDeSms
 import com.jvillada.movi.shared.model.fechaLegibleDeSms
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
@@ -511,29 +509,40 @@ internal fun TarjetaDeMensajeDelBanco(
     onIgnorar: (() -> Unit)? = null,
     /** Una acción de esta tarjeta está en curso: los botones se apagan. */
     trabajando: Boolean = false,
+    /**
+     * Lo que Movi leyó del aviso (la propuesta de la bandeja): el comercio y el monto de la cabeza.
+     * El historial de «Captura del banco» no lo tiene; ahí la cabeza sale del texto.
+     */
+    leido: ParsedSms? = null,
+    sinLeer: AvisoSinLeer? = null,
+    /**
+     * Si un aviso pendiente lleva la píldora «Pendiente». En el historial sí (hay de todo); en la
+     * bandeja no: ahí todo está pendiente y la píldora no dice nada.
+     */
+    conPildoraDePendiente: Boolean = true,
 ) {
     val apartado = loApartoMovi(sms)
     val pendiente = sms.state == SMS_STATE_PENDING
     val estado = when {
         apartado -> "Apartado" to TonoDePildora.Neutra
         else -> when (sms.state) {
-            SMS_STATE_PENDING -> "Pendiente" to TonoDePildora.Aviso
+            SMS_STATE_PENDING -> if (conPildoraDePendiente) "Pendiente" to TonoDePildora.Aviso else null
             SMS_STATE_CONFIRMED -> "Confirmado" to TonoDePildora.Exito
             SMS_STATE_IGNORED -> "Ignorado" to TonoDePildora.Neutra
             else -> sms.state.lowercase().replaceFirstChar { it.uppercase() } to TonoDePildora.Neutra
         }
     }
     val confirmable = pendiente && entendido != null && onConfirmar != null
-    // Ola 2a: la marca del comercio que nombra el aviso o, si no nombra ninguno, la del banco que
-    // lo mandó. Sin marca, el ícono de los avisos.
-    val marca = remember(sms.text, sms.bank) { marcaDelAviso(sms.text, sms.bank) }
+    // Vuelta de diseño 2: la cabeza se lee primero —el comercio (o lo que Movi entendió) con su
+    // marca, el monto a la derecha y «banco · hora» debajo—; el texto del banco va después, apagado.
+    // Sin comercio, el banco y su marca (o el ícono de los avisos). Ver [cabezaDelAviso].
+    val cabeza = remember(sms, leido, sinLeer) { cabezaDelAviso(listOf(sms), leido, hoyEnAppZone(), sinLeer) }
     TarjetaDeAviso(
-        // El banco (o «Comprobante · transferencia.png»), en un renglón; la fecha en palabras
-        // («Hoy, 8:10 a. m.») y no el «2026-09-29 08:10» guardado.
-        titulo = sms.bank,
-        subtitulo = fechaCortaDeSms(sms.time, hoyEnAppZone()),
+        titulo = cabeza.titulo,
+        subtitulo = cabeza.subtitulo,
         modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
-        inicio = marca?.let { m -> { CirculoDeMarca(m, tamano = TamanoDeAvatar.Fila) } },
+        inicio = { AvatarDeLaCabeza(cabeza, pideDecision = pendiente) },
+        cifra = cabeza.monto?.let { { CifraDeLaCabeza(cabeza) } },
         estado = estado,
         pideDecision = pendiente,
         acciones = when {
@@ -575,7 +584,7 @@ internal fun TarjetaDeMensajeDelBanco(
                 modifier = Modifier.testTag(TAG_MOTIVO_DEL_APARTADO),
             )
         }
-        LoQueDiceElBanco(sms.text)
+        LoQueDiceElBanco(sms.text, plegable = true)
         if (confirmable) LineaDeLoEntendido(entendido!!)
         else Text(sms.det, style = Movi.textos.cuerpo, color = Movi.colores.texto)
     }

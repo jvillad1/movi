@@ -154,8 +154,16 @@ class InicioDelRedisenoTest {
     fun `con la ola de Espacios Repartir se muestra en su lugar, y apagado se salta`() {
         assertEquals(true, REPARTIR_ESTA_LISTO)
         assertEquals(
-            listOf("Anotar gasto", "Anotar ingreso", "Traspasar", "Pagar tarjeta", "Repartir", "Subir comprobante", "Revisar avisos", "Preguntar a Movi"),
+            listOf("Gasto", "Ingreso", "Traspaso", "Pagar tarjeta", "Repartir", "Comprobante", "Avisos", "Preguntar"),
             accionesDelInicio().map { it.rotulo },
+        )
+        // Vuelta de diseño 2: el rótulo es corto; la frase entera es la del lector de pantalla.
+        assertEquals(
+            listOf(
+                "Anotar un gasto", "Anotar un ingreso", "Anotar un traspaso", "Pagar una tarjeta",
+                "Repartir un gasto", "Subir un comprobante", "Revisar los avisos", "Preguntarle a Movi",
+            ),
+            accionesDelInicio().map { it.descripcion },
         )
         assertEquals(7, accionesDelInicio(repartirListo = false).size)
         assertTrue(accionesDelInicio(repartirListo = false).none { it == AccionDelInicio.REPARTIR })

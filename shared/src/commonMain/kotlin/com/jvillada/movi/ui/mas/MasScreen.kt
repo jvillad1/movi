@@ -23,6 +23,7 @@ import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.ds.Accion
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.CuadriculaDeAcciones
+import com.jvillada.movi.ui.components.ds.RenglonesDelRotulo
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
 import com.jvillada.movi.ui.profile.BORRAR_MI_CUENTA
@@ -125,7 +126,11 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
             // Ola R4: las fichas son la cuadrícula de acciones del sistema (cuatro columnas, el
             // círculo de 56 y el rótulo de dos renglones), la misma del Inicio. Antes eran tarjetas
             // con un color por ficha y un radio y un relleno propios.
-            CuadriculaDeAcciones(visibleItems.map { item -> Accion(item.label, item.icon, onClick = { onNavigate(item.screen) }) })
+            CuadriculaDeAcciones(
+                visibleItems.map { item -> Accion(item.label, item.icon, onClick = { onNavigate(item.screen) }) },
+                // Las fichas son nombres de pantallas («Personas y comercios»): van en dos renglones.
+                renglones = RenglonesDelRotulo.Dos,
+            )
             // Abajo de todo, separado de las fichas: se usa una vez, si es que se usa, y no puede
             // quedar a un toque distraído de «Categorías». Es un botón de peligro del sistema:
             // el color de lo que sale sobre su lavado, nunca lleno de rojo.

@@ -53,7 +53,9 @@ const val TAG_FILA: String = "ds-fila"
  * - [titulo]: hasta [LINEAS_DEL_TITULO_DE_FILA] renglones, y recién ahí «…»: un nombre largo
  *   («Bancolombia Ahorros» al lado de «$13.845.800» a 360 dp) baja a un segundo renglón en vez de
  *   cortarse. La fila crece; el mínimo de alto sigue siendo el de arriba.
- * - [subtitulo]: un renglón, con «…» si no entra.
+ * - [subtitulo]: un renglón, con «…» si no entra. Donde el subtítulo es la razón de la fila y no
+ *   se puede acortar («Hace más de un mes que no cuadras Bancolombia Ahorros», en Herramientas),
+ *   [lineasDelSubtitulo] = 2: la fila crece en vez de cortar la frase (vuelta de diseño 2).
  * - El [final] se mide primero y entero: un monto nunca se recorta; lo que cede es el texto.
  * - [final]: un monto ([Cifra]), una [Pildora] o un [Chevron].
  *
@@ -76,6 +78,7 @@ fun Fila(
     final: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
+    lineasDelSubtitulo: Int = 1,
 ) {
     Row(
         modifier = modifier
@@ -103,7 +106,7 @@ fun Fila(
                     text = subtitulo,
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    maxLines = 1,
+                    maxLines = lineasDelSubtitulo,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

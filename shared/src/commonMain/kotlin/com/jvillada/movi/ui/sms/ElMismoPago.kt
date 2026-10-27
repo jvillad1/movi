@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.sms
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,9 +30,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import com.jvillada.movi.shared.model.AvisoSinLeer
+import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SmsMessage
-import com.jvillada.movi.shared.model.fechaCortaDeSms
 import com.jvillada.movi.shared.model.horaLegibleDeSms
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
@@ -103,8 +105,11 @@ internal fun canalLegibleDelAviso(bank: String): String {
     }
 }
 
-/** «Mismo pago avisado 3 veces». */
-internal fun tituloDelMismoPago(cuantos: Int): String = "Mismo pago avisado $cuantos veces"
+/**
+ * «Avisado 3 veces»: la píldora de un pago que llegó por varios canales. Antes era el título de la
+ * tarjeta; desde la vuelta de diseño 2 el título es el comercio y esto dice lo que tiene de raro.
+ */
+internal fun pildoraDelMismoPago(cuantos: Int): String = "Avisado $cuantos veces"
 
 /** «SMS · Bancolombia · Google Wallet», en el orden en que llegaron. */
 internal fun canalesDelMismoPago(miembros: List<SmsMessage>): String =
@@ -207,6 +212,9 @@ internal fun TarjetaDelMismoPago(
      */
     entendido: String? = null,
     onConfirmar: (() -> Unit)? = null,
+    /** Lo que Movi leyó del pago (la propuesta de la bandeja): el comercio y el monto de la cabeza. */
+    leido: ParsedSms? = null,
+    sinLeer: AvisoSinLeer? = null,
     modifier: Modifier = Modifier,
 ) {
     var abiertos by remember { mutableStateOf(false) }
@@ -214,11 +222,16 @@ internal fun TarjetaDelMismoPago(
     val anotado = yaAnotadoCon != null || avisos.any { it.state == SMS_STATE_CONFIRMED }
     val primero = avisos.first()
     val confirmable = !anotado && entendido != null && onConfirmar != null
+    val cabeza = remember(avisos, leido, sinLeer) { cabezaDelAviso(avisos, leido, hoyEnAppZone(), sinLeer) }
     TarjetaDeAviso(
-        titulo = tituloDelMismoPago(avisos.size),
-        subtitulo = "${canalesDelMismoPago(avisos)} · ${fechaCortaDeSms(primero.time, hoyEnAppZone())}",
+        titulo = cabeza.titulo,
+        subtitulo = cabeza.subtitulo,
         modifier = modifier.testTag(TAG_TARJETA_DEL_MISMO_PAGO),
-        estado = if (anotado) "Ya anotado" to TonoDePildora.Exito else "Pendiente" to TonoDePildora.Aviso,
+        inicio = { AvatarDeLaCabeza(cabeza) },
+        cifra = cabeza.monto?.let { { CifraDeLaCabeza(cabeza) } },
+        // Sin «Pendiente»: en la bandeja todo lo está. Lo que sí dice algo: que ya se anotó, o que
+        // llegó varias veces.
+        estado = if (anotado) "Ya anotado" to TonoDePildora.Exito else pildoraDelMismoPago(avisos.size) to TonoDePildora.Info,
         acciones = {
             if (anotado) {
                 PastillaDelPago("Cerrar", principal = true, habilitada = !trabajando, onClick = onCerrar)
@@ -238,8 +251,8 @@ internal fun TarjetaDelMismoPago(
     ) {
         if (anotado) Text(avisoYaAnotado(yaAnotadoCon), style = Movi.textos.apoyo, color = Movi.colores.aviso)
         // El texto del primero siempre; los demás, plegados: dicen lo mismo con otras palabras.
-        TextoDelAviso(primero)
-        if (abiertos) avisos.drop(1).forEach { aviso -> TextoDelAviso(aviso) }
+        TextoDelAviso(primero, plegable = true)
+        if (abiertos) avisos.drop(1).forEach { aviso -> TextoDelAviso(aviso, plegable = true) }
         Boton(
             texto = if (abiertos) "Ocultar los otros avisos" else "Ver los ${avisos.size} avisos",
             onClick = { abiertos = !abiertos },
@@ -253,10 +266,14 @@ internal fun TarjetaDelMismoPago(
 /**
  * **Un aviso del banco que espera una decisión, con la forma de una propuesta de Movi** (ola R4):
  * la superficie de la propuesta ([NivelDeSuperficie.Propuesta]) cuando pide algo, la capa 1 cuando
- * ya es historial; arriba el inicio (la marca, o el ícono de los avisos), el título, el subtítulo
- * (por dónde y cuándo llegó) y el estado en una [Pildora]; en el medio lo que dice el banco; abajo
- * las acciones en botones chicos. La usan la bandeja «Por revisar», «Captura del banco» y
- * Reconciliar, para que un aviso se vea igual en todas partes —y como las propuestas del Inicio—.
+ * ya es historial; en el medio lo que dice el banco; abajo las acciones en botones chicos. La usan
+ * la bandeja «Por revisar», «Captura del banco» y Reconciliar, para que un aviso se vea igual en
+ * todas partes —y como las propuestas del Inicio—.
+ *
+ * **La cabeza se lee primero** (vuelta de diseño 2, como el detalle de un movimiento): el inicio (la
+ * marca del comercio, o el ícono), el título (el comercio, en hasta dos renglones) con el subtítulo
+ * (banco · hora) debajo, y a la derecha la [cifra] y, debajo de ella, el [estado] —solo si dice algo:
+ * «Pendiente» en la bandeja sobra, porque ahí todo lo está—.
  */
 @Composable
 internal fun TarjetaDeAviso(
@@ -266,6 +283,8 @@ internal fun TarjetaDeAviso(
     inicio: (@Composable () -> Unit)? = null,
     estado: Pair<String, TonoDePildora>? = null,
     pideDecision: Boolean = true,
+    /** El monto, a la derecha de la cabeza: una [com.jvillada.movi.ui.components.ds.Cifra]. */
+    cifra: (@Composable () -> Unit)? = null,
     acciones: (@Composable RowScope.() -> Unit)? = null,
     pie: (@Composable () -> Unit)? = null,
     contenido: @Composable ColumnScope.() -> Unit,
@@ -284,8 +303,9 @@ internal fun TarjetaDeAviso(
                     titulo,
                     style = Movi.textos.titulo,
                     color = Movi.colores.texto,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag(TAG_TITULO_DE_LA_TARJETA_DE_AVISO),
                 )
                 if (subtitulo != null) {
                     Text(
@@ -297,7 +317,15 @@ internal fun TarjetaDeAviso(
                     )
                 }
             }
-            if (estado != null) Pildora(estado.first, estado.second)
+            if (cifra != null || estado != null) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
+                ) {
+                    cifra?.invoke()
+                    if (estado != null) Pildora(estado.first, estado.second)
+                }
+            }
         }
         Column(
             modifier = Modifier.padding(top = Medida.dentroDeSeccion),
@@ -322,9 +350,12 @@ internal fun TarjetaDeAviso(
     }
 }
 
-/** Un aviso dentro de la tarjeta: por dónde y cuándo llegó, y su texto con lo importante en negrita. */
+/**
+ * Un aviso dentro de la tarjeta: por dónde y cuándo llegó, y su texto con lo importante en negrita.
+ * [plegable]: el texto en dos renglones, que se abren al tocarlo (ver [LoQueDiceElBanco]).
+ */
 @Composable
-internal fun TextoDelAviso(aviso: SmsMessage, accion: (@Composable () -> Unit)? = null) {
+internal fun TextoDelAviso(aviso: SmsMessage, plegable: Boolean = false, accion: (@Composable () -> Unit)? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -336,24 +367,54 @@ internal fun TextoDelAviso(aviso: SmsMessage, accion: (@Composable () -> Unit)? 
             )
             accion?.invoke()
         }
-        LoQueDiceElBanco(aviso.text)
+        LoQueDiceElBanco(aviso.text, plegable = plegable)
     }
 }
+
+/** Cuántos renglones del texto del banco se ven en una tarjeta antes de tocarlo. */
+const val RENGLONES_DEL_TEXTO_PLEGADO: Int = 2
+
+/** El tag del texto del banco dentro de una tarjeta. */
+const val TAG_LO_QUE_DICE_EL_BANCO: String = "lo-que-dice-el-banco"
+
+/** El tag del título de una [TarjetaDeAviso]. */
+const val TAG_TITULO_DE_LA_TARJETA_DE_AVISO: String = "titulo-de-la-tarjeta-de-aviso"
 
 /**
  * **Lo que dijo el banco, tal cual**, con lo importante en negrita ([resaltadoDelTextoDelBanco]) y
  * una raya a la izquierda que lo marca como cita. En la letra monoespaciada: es un dato crudo.
+ *
+ * [plegable] (las tarjetas de «Por revisar», vuelta de diseño 2): es la evidencia, no el titular —el
+ * comercio y el monto ya están arriba—, así que va en [RENGLONES_DEL_TEXTO_PLEGADO] renglones con
+ * «…» y se abre entero al tocarlo (solo si de verdad se cortó). Reconciliar lo muestra entero.
  */
 @Composable
-internal fun LoQueDiceElBanco(texto: String, modifier: Modifier = Modifier) {
-    Row(modifier = modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+internal fun LoQueDiceElBanco(texto: String, modifier: Modifier = Modifier, plegable: Boolean = false) {
+    var abierto by remember(texto) { mutableStateOf(false) }
+    var seCorto by remember(texto) { mutableStateOf(false) }
+    val tocable = plegable && (seCorto || abierto)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .then(
+                if (tocable) {
+                    Modifier.clickable(onClickLabel = if (abierto) "Plegar el mensaje" else "Ver el mensaje entero") { abierto = !abierto }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
         Box(modifier = Modifier.width(Medida.trazo).fillMaxHeight().background(Movi.colores.hilo))
         Text(
             resaltadoDelTextoDelBanco(texto),
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             fontFamily = FontFamily.Monospace,
-            modifier = Modifier.padding(start = Espacio.s),
+            maxLines = if (plegable && !abierto) RENGLONES_DEL_TEXTO_PLEGADO else Int.MAX_VALUE,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (plegable && !abierto) seCorto = it.hasVisualOverflow },
+            modifier = Modifier.padding(start = Espacio.s).testTag(TAG_LO_QUE_DICE_EL_BANCO),
         )
     }
 }
