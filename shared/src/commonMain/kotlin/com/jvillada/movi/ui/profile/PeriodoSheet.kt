@@ -47,6 +47,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.CardRow
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 
 /**
  * Elegir el día en que arranca el período financiero.
@@ -99,20 +100,11 @@ fun PeriodoSheet(
                 .weight(1f, fill = false),
         ) {
 
-            Text(
-                text = "¿Qué día empieza tu mes?",
-                style = Movi.textos.titulo,
-                color = Movi.colores.texto,
-                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.xs),
-            )
-            Text(
-                text = "Movi cuenta tus ingresos, gastos y presupuestos sobre esta ventana. " +
+            EncabezadoDeHoja(
+                "¿Qué día empieza tu mes?",
+                subtitulo = "Movi cuenta tus ingresos, gastos y presupuestos sobre esta ventana. " +
                     "Si te pagan el 26, elige 26 y el mes te va a cuadrar con el sueldo.",
-                // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Normal,
-                color = Movi.colores.textoMedio,
-                modifier = Modifier.padding(bottom = Espacio.m),
+                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.m),
             )
 
             // La consecuencia, en vivo: sin esto «26» es un número sin significado.

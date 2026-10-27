@@ -92,7 +92,6 @@ import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.NoSePudoLeer
-import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.CirculoEsqueleto
@@ -107,6 +106,10 @@ import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
 /**
  * **«Más → Categorías»** — la pantalla para ver, arreglar y ordenar las categorías.
@@ -755,16 +758,15 @@ private fun HojaDeOrden(
                     onClick = { onUnificarConOtra(propuesta.categoria) },
                 )
             }
-            Text(
+            Boton(
                 "Ahora no",
-                style = Movi.textos.apoyo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.textoMedio,
-                textAlign = TextAlign.Center,
+                onClick = onAhoraNo,
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                habilitado = !guardando,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = Movi.espacios.margen)
-                    .clickable(enabled = !guardando, onClick = onAhoraNo),
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = Movi.espacios.margen),
             )
         }
     }
@@ -1005,7 +1007,7 @@ private fun HojaDetalle(
             )
 
             Column(modifier = Modifier.padding(top = Espacio.l, bottom = Espacio.l)) {
-                Hairline()
+                Separador(SangriaDeSeparador.Ninguna)
                 if (nombreSostieneReglasDePlata(categoria.name)) {
                     // La cuota y el desembolso de un crédito cuentan por su nombre exacto: el
                     // server rechaza renombrarlas o unificarlas, así que ni se ofrecen.
@@ -1016,7 +1018,7 @@ private fun HojaDetalle(
                         lineHeight = 15.sp,
                         modifier = Modifier.padding(vertical = Espacio.s),
                     )
-                    Hairline()
+                    Separador(SangriaDeSeparador.Ninguna)
                 } else {
                     if (categoria.scope == CategoryScope.CUSTOM) {
                         AccionDeHoja(
@@ -1024,7 +1026,7 @@ private fun HojaDetalle(
                             detalle = "Cambia el nombre en todos tus movimientos, tu presupuesto y tus recurrentes.",
                             onClick = onRenombrar,
                         )
-                        Hairline()
+                        Separador(SangriaDeSeparador.Ninguna)
                     } else {
                         Text(
                             "Las categorías del catálogo de Movi no se renombran: el catálogo es el " +
@@ -1035,14 +1037,14 @@ private fun HojaDetalle(
                             lineHeight = 15.sp,
                             modifier = Modifier.padding(vertical = Espacio.s),
                         )
-                        Hairline()
+                        Separador(SangriaDeSeparador.Ninguna)
                     }
                     AccionDeHoja(
                         titulo = "Unificar en otra",
                         detalle = "Todo lo que dice «${categoria.name}» pasa a decir la que elijas. No se borra nada.",
                         onClick = onUnificar,
                     )
-                    Hairline()
+                    Separador(SangriaDeSeparador.Ninguna)
                 }
                 AccionDeHoja(
                     titulo = if (categoria.hidden) "Volver a sugerirla" else "Esconder",
@@ -1051,7 +1053,7 @@ private fun HojaDetalle(
                     else "Deja de sugerirse al escribir. Tus movimientos viejos no se tocan.",
                     onClick = { onCambiarVisibilidad(!categoria.hidden) },
                 )
-                Hairline()
+                Separador(SangriaDeSeparador.Ninguna)
             }
         }
     }
@@ -1120,14 +1122,12 @@ private fun SeccionApariencia(
         // Solo si el dueño de verdad eligió algo: sin esto, el link aparecería siempre y
         // «volver» a lo que ya se está mostrando no tiene sentido.
         if (categoria.icono != null || categoria.color != null) {
-            Text(
+            Boton(
                 "Volver al de Movi",
-                style = Movi.textos.apoyo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.marca,
-                modifier = Modifier
-                    .padding(top = Espacio.s)
-                    .clickable(onClick = onVolverAlDeMovi),
+                onClick = onVolverAlDeMovi,
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                modifier = Modifier.padding(top = Espacio.s),
             )
         }
     }

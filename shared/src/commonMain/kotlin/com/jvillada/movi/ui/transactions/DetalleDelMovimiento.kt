@@ -16,7 +16,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Category
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -60,6 +59,9 @@ import com.jvillada.movi.ui.components.AvatarDelComercio
 import com.jvillada.movi.ui.components.TamanoDeAvatar
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 
 /**
  * # El detalle de un movimiento, para leerlo primero (Ola 2b)
@@ -249,8 +251,8 @@ internal fun LineaEnEsteComercio(resumen: EnEsteComercio, onVer: (() -> Unit)?) 
             modifier = Modifier.weight(1f),
         )
         if (onVer != null) {
-            Text("Ver", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
-            Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
+            // Vuelta de diseño 18: el botón de texto del sistema (era «Ver ›» en texto suelto).
+            Boton("Ver", onClick = onVer, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
         }
     }
 }
@@ -277,7 +279,7 @@ internal fun PreguntaDelTercero(pregunta: String, onAbrir: () -> Unit) {
             // El tag en la fila que se toca.
             modifier = Modifier.testTag(TAG_PREGUNTA_DEL_TERCERO),
             inicio = { IconoEnCirculo(Icons.Rounded.Person, tono = TonoDeIcono.Aviso) },
-            final = { Text("Responder", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca) },
+            final = { Boton("Responder", onClick = onAbrir, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S) },
             onClick = onAbrir,
         )
     }

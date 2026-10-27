@@ -35,6 +35,9 @@ import com.jvillada.movi.shared.model.ReminderChannels
 import com.jvillada.movi.ui.components.ds.Casilla
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 
 /**
  * Decide si la pantalla de Recurrentes debe mostrar el aviso de
@@ -311,11 +314,11 @@ fun ReminderWarningBanner(
                 )
                 if (!denied) {
                     Spacer(Modifier.height(Espacio.xs))
-                    Text(
-                        text = "Activar notificaciones",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.marca,
-                        modifier = Modifier.clickable(onClick = onEnable),
+                    Boton(
+                        "Activar notificaciones",
+                        onClick = onEnable,
+                        variante = VarianteDeBoton.Fantasma,
+                        tamano = TamanoDeBoton.S,
                     )
                 }
             }

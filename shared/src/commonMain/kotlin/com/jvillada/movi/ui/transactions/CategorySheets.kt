@@ -1230,7 +1230,7 @@ private fun PorConfirmar(event: FinancialEvent, onError: (String?) -> Unit, onCo
     Text(
         "Entró solo y todavía no cuenta en tus gastos ni ingresos. Revisa el monto, la categoría y el " +
             "nombre, y confírmalo.",
-        style = Movi.textos.monto,
+        style = Movi.textos.cuerpo,
         color = Movi.colores.textoMedio,
     )
     Spacer(Modifier.height(Espacio.s))
@@ -1659,7 +1659,7 @@ private fun SelectorDeCuentaDelMovimiento(
                 // Sin la lista de cuentas no se sabe el nombre — se dice, en vez de inventarlo o
                 // de mostrar el id. El monto y el concepto se siguen pudiendo guardar igual.
                 text = seleccionada?.name ?: "No pudimos cargar tus cuentas",
-                style = Movi.textos.monto,
+                style = Movi.textos.cuerpo,
                 color = if (seleccionada != null) Movi.colores.texto else Movi.colores.textoMedio,
                 modifier = Modifier.weight(1f),
             )

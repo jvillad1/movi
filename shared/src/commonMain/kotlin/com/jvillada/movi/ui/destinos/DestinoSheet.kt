@@ -2,7 +2,6 @@ package com.jvillada.movi.ui.destinos
 
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,8 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AgregarIdentificador
@@ -57,13 +54,19 @@ import com.jvillada.movi.shared.model.tipoParaGuardar
 import com.jvillada.movi.shared.model.todosLosIdentificadores
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ConfirmacionEnLinea
-import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.credits.FieldBox
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.Seccion
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import androidx.compose.foundation.layout.width
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
 /**
  * # Guardar o editar una persona o comercio
@@ -196,18 +199,18 @@ fun DestinoSheet(
                 modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.m),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = if (editando) "Editar «${existente!!.nombre}»" else NUEVA_PERSONA_O_COMERCIO,
-                    style = Movi.textos.titulo,
-                    color = Movi.colores.texto,
+                EncabezadoDeHoja(
+                    if (editando) "Editar «${existente!!.nombre}»" else NUEVA_PERSONA_O_COMERCIO,
                     modifier = Modifier.weight(1f),
                 )
                 if (editando) {
-                    Text(
-                        text = if (guardando) "…" else "Eliminar",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.sale,
-                        modifier = Modifier.clickable(enabled = !guardando) { pidiendoBorrar = true },
+                    Spacer(Modifier.width(Espacio.xs))
+                    Boton(
+                        "Eliminar",
+                        onClick = { pidiendoBorrar = true },
+                        variante = VarianteDeBoton.Peligro,
+                        tamano = TamanoDeBoton.S,
+                        habilitado = !guardando,
                     )
                 }
             }
@@ -258,14 +261,12 @@ fun DestinoSheet(
             }
 
             Spacer(Modifier.height(Espacio.m))
-            BotonDeGuardar(
-                texto = when {
-                    guardando -> "Guardando…"
-                    editando -> "Guardar cambios"
-                    else -> "Guardar"
-                },
-                habilitado = sePuedeGuardar,
+            Boton(
+                if (editando) "Guardar cambios" else "Guardar",
                 onClick = { guardar() },
+                habilitado = loQueFalta == null,
+                cargando = guardando,
+                anchoCompleto = true,
             )
             // Lo PRIMERO que falta, no un botón gris sin explicación.
             if (!sePuedeGuardar && !guardando && loQueFalta != null) {
@@ -281,7 +282,7 @@ fun DestinoSheet(
             val base = actual
             if (editando && base != null) {
                 Spacer(Modifier.height(Espacio.l))
-                Hairline()
+                Separador(SangriaDeSeparador.Ninguna)
                 Spacer(Modifier.height(Espacio.m))
                 ComoLoReconoceMovi(
                     destino = base,
@@ -293,7 +294,7 @@ fun DestinoSheet(
 
                 if (otros.isNotEmpty()) {
                     Spacer(Modifier.height(Espacio.l))
-                    Hairline()
+                    Separador(SangriaDeSeparador.Ninguna)
                     Spacer(Modifier.height(Espacio.m))
                     val elegido = unirCon
                     when {
@@ -485,28 +486,5 @@ internal fun ListaDeTerceros(
                 )
             }
         }
-    }
-}
-
-/** El botón ancho de guardar de las hojas de esta pantalla. */
-@Composable
-internal fun BotonDeGuardar(texto: String, habilitado: Boolean, onClick: () -> Unit, alto: Int = 54) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(alto.dp)
-            .clip(RoundedCornerShape(Radio.pill))
-            // Sólido, como «Confirmar» en Reconciliar: el tonal de antes (marca al 16 %) se leía como un
-            // botón apagado aun habilitado (auditoría de Personas y comercios, 4-oct-2026).
-            .background(if (habilitado) Movi.colores.texto else Movi.colores.tarjeta)
-            .clickable(enabled = habilitado, role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = texto,
-            style = Movi.textos.titulo,
-            fontWeight = FontWeight.Medium,
-            color = if (habilitado) Movi.colores.fondo else Movi.colores.textoApagado,
-        )
     }
 }
