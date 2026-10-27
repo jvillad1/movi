@@ -68,7 +68,7 @@ fun SimuladorDeAbonoSheet(
 
     MarcoDeHoja(onDismiss = onDismiss) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            SectionLabel(TITULO_DEL_SIMULADOR)
+            Text(TITULO_DEL_SIMULADOR, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
             Spacer(Modifier.height(Espacio.xs))
             Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Spacer(Modifier.height(Espacio.m))

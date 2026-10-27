@@ -61,7 +61,8 @@ import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.credits.FieldBox
-import com.jvillada.movi.ui.credits.SectionLabel
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.Seccion
 import kotlinx.coroutines.launch
 
 /**
@@ -223,17 +224,16 @@ fun DestinoSheet(
                 )
             }
 
-            SectionLabel("Nombre")
-            Spacer(Modifier.height(Espacio.xs))
-            FieldBox("Ej: Ana, Cancha El Gol", nombre, { nombre = it })
+            Campo(nombre, { nombre = it }, rotulo = "Nombre", guia = "Ej: Ana, Cancha El Gol")
 
             if (!editando) {
                 Spacer(Modifier.height(Espacio.m))
-                SectionLabel("Número o llave")
-                Spacer(Modifier.height(Espacio.xs))
                 // Se acepta pegado como lo mandó el banco («*00012345678», con guiones o espacios):
                 // Movi se queda con lo que identifica y dice qué entendió.
-                FieldBox("Ej: *00012345678, 3001234567 o @usuario", escrito, { escrito = it; leidoAlReves = false })
+                Campo(
+                    escrito, { escrito = it; leidoAlReves = false },
+                    rotulo = "Número o llave", guia = "Ej: *00012345678, 3001234567 o @usuario",
+                )
                 if (identificador != null) {
                     Spacer(Modifier.height(Espacio.xs))
                     LoQueEntendio(identificador, puedeDarseVuelta = leido?.let(::otraLecturaDe) != null) { leidoAlReves = !leidoAlReves }
@@ -247,9 +247,7 @@ fun DestinoSheet(
             // La nota (`deQuien`) casi nunca hace falta: el nombre ya dice de quién es.
             if (conNota) {
                 Spacer(Modifier.height(Espacio.xs))
-                SectionLabel("NOTA (OPCIONAL)")
-                Spacer(Modifier.height(Espacio.xs))
-                FieldBox("Ej: esposa, papá", deQuien, { deQuien = it })
+                Campo(deQuien, { deQuien = it }, rotulo = "Nota (opcional)", guia = "Ej: esposa, papá")
             } else {
                 Enlace(AGREGAR_UNA_NOTA, { conNota = true }, enabled = !guardando)
             }
@@ -410,8 +408,7 @@ private fun ComoLoReconoceMovi(
     val propia = nuevo?.takeIf { it.tipo == TipoDeIdentificador.NUMERO }?.let { cuentaPropiaConEseNumero(it.valor, cuentas) }
     val rechazo = nuevo?.let(::rechazoDelIdentificador) ?: propia?.let { mensajeDeNumeroPropio(it.name) }
 
-    SectionLabel("Cómo lo reconoce Movi")
-    Spacer(Modifier.height(Espacio.xs))
+    Seccion("Cómo lo reconoce Movi")
     Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs), modifier = Modifier.testTag(TAG_COMO_LO_RECONOCE)) {
         ids.forEach { id ->
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
