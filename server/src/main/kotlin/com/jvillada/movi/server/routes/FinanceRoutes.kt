@@ -8,21 +8,16 @@ import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
-import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
-import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.DeleteBudgetRequest
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.RenameBudgetRequest
 import com.jvillada.movi.shared.model.Scope
-import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.esperaEnPorConfirmar
-import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.movementCount
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -220,32 +215,16 @@ fun Route.financeRoutes() {
                 .map { it[VoidEvents.originalEventId] }
                 .toSet()
 
-            val monthEvents = Events.selectAll().where {
-                (Events.userId eq uid) and
-                (Events.timestamp greaterEq monthStart) and
-                (Events.timestamp less monthEnd)
-            }.filterNot { it[Events.id] in voidedIds }
-                // «Por confirmar» no entra en ingresos ni egresos del período: la misma regla que
-                // `monthCashFlow` del Inicio y que los chips de Movimientos.
-                .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
-
-            val accountTypeById = accountTypesFor(uid)
-            // Movimientos de cuentas de deuda NO son flujo de caja del mes (ver isCashFlow):
-            // bajar la deuda de un crédito al saldo real del banco no es un ingreso, y subirla
-            // no es un gasto — es la misma plata cambiando de periodo. Esto también corrige la
-            // "Deuda inicial" de apertura, que venía contándose como egreso del mes.
-            val cashFlow = monthEvents.filter { row ->
-                val accountType = accountTypeById[row[Events.accountId]]
-                accountType == null ||
-                    isCashFlow(accountType, TransactionType.valueOf(row[Events.type]), row[Events.category])
-            }
-
-            val ingresos = cashFlow
-                .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.currency] == "COP" }
-                .sumOf { it[Events.amount] }
-            val egresos = cashFlow
-                .filter { it[Events.type] == TransactionType.EXPENSE.name && it[Events.currency] == "COP" }
-                .sumOf { it[Events.amount] }
+            // **Solo tu parte** (R3, decisión del dueño del 26-oct-2026): ingresos y egresos salen de
+            // `monthCashFlow`, o sea de `movimientosDeFlujo` —la MISMA lista de la que salen «Salió»,
+            // las categorías, los presupuestos, Tus períodos y el cierre—. Antes acá había una
+            // segunda copia de la regla que sumaba el monto entero de cada gasto: un mercado de
+            // $240.000 repartido 50/50 pesaba $240.000 en el héroe de Hoy y $120.000 en «En qué se
+            // va», tu parte de lo que pagó otro no sumaba, y la transferencia con que Caro saldaba
+            // la casa entraba como ingreso. Mismos campos y mismo wire: el APK instalado lee igual.
+            val (ingresos, gastoPorCategoria) =
+                monthCashFlow(uid, monthStart, monthEnd, voidedIds, accountTypesFor(uid))
+            val egresos = gastoPorCategoria.values.sum()
 
             FinanceSummary(
                 scope = scope,

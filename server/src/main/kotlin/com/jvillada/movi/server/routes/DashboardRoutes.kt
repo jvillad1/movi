@@ -383,8 +383,12 @@ internal class MovimientoDeFlujo(
     val id: String,
     val timestamp: Long,
     val type: TransactionType,
+    /** Lo que suma: **solo tu parte** ([montoContado]), no el monto del movimiento. */
     val amount: Long,
     val category: String,
+    /** La cuenta del movimiento; `null` en tu parte de un gasto que pagó otro (no es de tus cuentas). */
+    val accountId: String? = null,
+    val description: String = "",
 )
 
 /**
@@ -409,7 +413,7 @@ internal fun Transaction.movimientosDeFlujo(
     val compartido = loCompartidoDelUsuario(uid)
     val propios = Events.select(
         Events.id, Events.accountId, Events.type, Events.amount, Events.category,
-        Events.reconciliationStatus, Events.timestamp,
+        Events.reconciliationStatus, Events.timestamp, Events.description,
     )
         .where {
             (Events.userId eq uid) and
@@ -438,11 +442,18 @@ internal fun Transaction.movimientosDeFlujo(
                 type = tipo,
                 amount = (monto - ajena).coerceIn(0L, monto),
                 category = row[Events.category],
+                accountId = row[Events.accountId],
+                description = row[Events.description],
             )
         }
     val deOtros = compartido.tuParteDeOtros
         .filter { it.timestamp >= desde && it.timestamp < hastaExclusivo }
-        .map { MovimientoDeFlujo(id = it.id, timestamp = it.timestamp, type = it.type, amount = montoContado(it), category = it.category) }
+        .map {
+            MovimientoDeFlujo(
+                id = it.id, timestamp = it.timestamp, type = it.type, amount = montoContado(it),
+                category = it.category, description = it.description,
+            )
+        }
     return propios + deOtros
 }
 
