@@ -2,14 +2,15 @@ package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -36,6 +37,21 @@ const val LINEAS_DEL_TITULO_DE_FILA: Int = 2
  * subtítulo pide algo al dueño («Faltan datos: tócala para completarlos», en Créditos).
  */
 enum class TonoDeSubtitulo { Normal, Aviso }
+
+/** Entre el `inicio` de una [Fila] (el avatar) y su texto: [Espacio.s]. */
+val ESPACIO_ANTES_DEL_TEXTO_DE_FILA = Espacio.s
+
+/**
+ * **Entre el texto de una [Fila] y su `final`: [Espacio.xs]** (vuelta de diseño 15). Era
+ * [Espacio.s], como entre el avatar y el texto. A 390 dp «Bancolombia Ahorros» al lado de
+ * «$13.845.800» se partía en dos renglones con la fila medio vacía: con la letra de la app (×1,12)
+ * el título pide ~154 dp y le quedaban ~155 en Android, y en la web, un par de px menos. Los px no
+ * estaban en el relleno de la fila (16, el margen de la pantalla, el mismo de toda lista), ni en el
+ * avatar (40, el de toda fila) ni en la [Cifra] (Martian Mono, que no se recorta): estaban en el aire
+ * entre el título y el monto, que se lee igual de separado con 8. El avatar sigue a 12 del texto:
+ * esa sangría la usan las líneas que cuelgan de una fila (`SANGRIA_DEL_TEXTO_DE_LA_FILA`).
+ */
+val ESPACIO_ANTES_DEL_FINAL_DE_FILA = Espacio.xs
 
 /** Tag estable de una [Fila]. */
 const val TAG_FILA: String = "ds-fila"
@@ -88,6 +104,7 @@ fun colorDelTituloDeFila(tono: TonoDeFila, colores: ColoresDeMovi): Color = when
  * - [tonoDelSubtitulo]: [TonoDeSubtitulo.Aviso] pinta el subtítulo en el color de aviso, para el
  *   que pide algo (vuelta de diseño 4). El color nunca es la única pista: la frase lo dice.
  * - El [final] se mide primero y entero: un monto nunca se recorta; lo que cede es el texto.
+ *   Va a [ESPACIO_ANTES_DEL_FINAL_DE_FILA] (8) del texto; el inicio, a 12 (vuelta de diseño 15).
  * - [final]: un monto ([Cifra]), una [Pildora] o un [Chevron].
  * - [tonoDelTitulo]: [TonoDeFila.Alerta] para lo que no tiene vuelta («Borrar mi cuenta»),
  *   [TonoDeFila.Apagado] para una fila que solo informa. Nunca un `Color` suelto.
@@ -123,10 +140,10 @@ fun Fila(
             .testTag(TAG_FILA)
             .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         if (inicio != null) {
             Box(modifier = Modifier.size(Medida.avatar), contentAlignment = Alignment.Center) { inicio() }
+            Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -149,7 +166,10 @@ fun Fila(
                 )
             }
         }
-        if (final != null) final()
+        if (final != null) {
+            Spacer(Modifier.width(ESPACIO_ANTES_DEL_FINAL_DE_FILA))
+            final()
+        }
     }
 }
 
