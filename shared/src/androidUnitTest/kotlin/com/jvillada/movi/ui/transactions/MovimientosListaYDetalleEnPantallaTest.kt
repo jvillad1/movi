@@ -225,9 +225,9 @@ class MovimientosListaYDetalleEnPantallaTest {
         // 1280 − 216 del rail − 420 de la lista − 1 del divisor.
         assertEquals(643f, panel.width, 0.5f, "el panel se lleva lo que sobra")
         assertTrue(panel.left >= lista.right, "$lista / $panel")
-        // La lista es la de siempre, con su «Flujo del día».
+        // La lista es la de siempre (desde la vuelta de diseño 14, el día sin el rótulo «Flujo del día»).
         assertTrue(hayEnLaLista("Señor Gol"))
-        assertTrue(hayEnLaLista("Flujo del día"))
+        assertTrue(!hayEnLaLista("Flujo del día"))
         // Nada elegido: el resumen del período (vuelta de diseño 9), y ninguna hoja abierta.
         assertTrue(hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL))
         assertTrue(!hayTag(TAG_PANEL_DE_HOJA), "no se abrió ninguna hoja")
