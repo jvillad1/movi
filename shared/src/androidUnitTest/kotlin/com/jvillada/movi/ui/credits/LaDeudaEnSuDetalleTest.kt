@@ -108,7 +108,7 @@ class LaDeudaEnSuDetalleTest {
         composeRule.montarElDetalleDe(hipotecario.account, RepositorioDeLaDeuda(creditos = listOf(hipotecario)))
 
         tocar(EDITAR_LAS_CONDICIONES)
-        assertTrue(hay("TÉRMINOS"))
+        assertTrue(hay("Guardar crédito"))
     }
 
     @Test
@@ -140,7 +140,7 @@ class LaDeudaEnSuDetalleTest {
         assertTrue(hay(FALTAN_DATOS_DE_LA_DEUDA))
         assertEquals(1, tocables(AJUSTAR_EL_SALDO))
         tocar(FALTAN_LAS_CONDICIONES)
-        assertTrue(hay("TÉRMINOS"))
+        assertTrue(hay("Guardar crédito"))
     }
 
     @Test
@@ -152,6 +152,6 @@ class LaDeudaEnSuDetalleTest {
         assertTrue(hay("Disponible"))
         assertTrue(hay("De un cupo de \$20.000.000"))
         tocar(EDITAR_LAS_CONDICIONES)
-        assertTrue(hay("TARJETA"), "la hoja de los términos de la tarjeta")
+        assertTrue(hay("Guardar tarjeta"), "la hoja de los términos de la tarjeta")
     }
 }

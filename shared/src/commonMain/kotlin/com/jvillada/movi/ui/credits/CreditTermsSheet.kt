@@ -2,6 +2,11 @@ package com.jvillada.movi.ui.credits
 
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.CampoDeMonto
+import com.jvillada.movi.ui.components.ds.GrupoDeCampos
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Icono
@@ -12,7 +17,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -384,11 +388,11 @@ fun CreditTermsSheet(
     ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             if (editing != null) {
-                SectionLabel("CRÉDITO")
-                Spacer(Modifier.height(Espacio.xs))
-                // Editable, no un rótulo: ver [nombreEditado].
-                FieldBox("Nombre del crédito", nombreEditado, { nombreEditado = it })
-                Spacer(Modifier.height(Espacio.m))
+                GrupoDeCampos("El crédito") {
+                    // Editable, no un rótulo: ver [nombreEditado].
+                    Campo(nombreEditado, { nombreEditado = it }, rotulo = "Nombre del crédito")
+                }
+                Spacer(Modifier.height(Medida.entreSecciones))
             } else {
                 // F25: el selector "CUENTA DEL PRÉSTAMO · + Nueva cuenta de préstamo"
                 // desapareció del flujo normal — era la estructura interna (cuenta +
@@ -469,7 +473,7 @@ fun CreditTermsSheet(
                     )
                     Spacer(Modifier.height(Espacio.s))
 
-                    FieldBox("Nombre (p.ej. Crédito Vehículo Santander)", newAccountName, { newAccountName = it })
+                    Campo(newAccountName, { newAccountName = it }, rotulo = "Nombre", guia = "Ej: Crédito Vehículo Santander")
                     // La deuda actual solo tiene sentido en el crédito que ya venía: en el
                     // recién recibido la deuda la arma el desembolso, y pedir las dos cosas
                     // es exactamente cómo se contaba dos veces. Sigue siendo opcional, igual
@@ -477,36 +481,36 @@ fun CreditTermsSheet(
                     // saldo exacto y cuadrarlo después con «Ajustar saldo».
                     if (recienRecibido == false) {
                         Spacer(Modifier.height(Espacio.xs))
-                        MoneyField(newAccountDebt, { newAccountDebt = it }, placeholder = "Deuda actual (COP, opcional)")
-                        Spacer(Modifier.height(Espacio.xs))
-                        Text(
-                            "Lo que tu banco dice que debes hoy. Si no lo tienes a mano, " +
-                                "déjalo en blanco y cuádralo después con «Ajustar saldo».",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
+                        CampoDeMonto(
+                            newAccountDebt, { newAccountDebt = it },
+                            rotulo = "Deuda actual (opcional)",
+                            ayuda = "Lo que tu banco dice que debes hoy.",
+                            masAyuda = "Si no lo tienes a mano, déjalo en blanco y cuádralo después " +
+                                "con «Ajustar saldo».",
                         )
                     }
                 }
-                Spacer(Modifier.height(Espacio.m))
+                Spacer(Modifier.height(Medida.entreSecciones))
             }
 
-            SectionLabel("TÉRMINOS")
-            Spacer(Modifier.height(Espacio.xs))
-            FieldBox("Banco", bank, { bank = it })
-            Spacer(Modifier.height(Espacio.xs))
-            MoneyField(principal, { principal = it }, placeholder = "Capital original (COP)")
-            Spacer(Modifier.height(Espacio.xs))
+            GrupoDeCampos("Términos") {
+            Campo(bank, { bank = it }, rotulo = "Banco", guia = "Ej: Bancolombia")
+            CampoDeMonto(principal, { principal = it }, rotulo = "Capital original")
             Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 // Sin intereses no hay tasa que pedir: el campo se va y el plazo ocupa la fila.
                 if (!sinIntereses) {
                     Box(Modifier.weight(1f)) {
-                        // F23/F24: solo dígitos y un único punto — el "%" lo pinta RateFieldBox,
-                        // nunca lo escribe la persona.
-                        RateFieldBox("18,5", rateEa, { rateEa = filterRateInput(it) }, rotulo = "Tasa % EA")
+                        // F23/F24: solo dígitos y un único punto — el "%" lo pinta el campo
+                        // (`sufijo`), nunca lo escribe la persona.
+                        CampoDeTasa(rateEa, { rateEa = filterRateInput(it) }, rotulo = "Tasa E.A.", guia = "18,5")
                     }
                 }
                 Box(Modifier.weight(1f)) {
-                    FieldBox("60", termMonths, { termMonths = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number, rotulo = "Plazo (meses)")
+                    Campo(
+                        termMonths, { termMonths = it.filter { ch -> ch.isDigit() } },
+                        rotulo = "Plazo (meses)", guia = "60",
+                        teclado = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
                 }
             }
             // Pegada a la tasa, que es lo que reemplaza.
@@ -523,45 +527,42 @@ fun CreditTermsSheet(
                 habilitada = !saving,
                 alCambiar = { sinIntereses = !sinIntereses },
             )
-            Spacer(Modifier.height(Espacio.xs))
             Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                Box(Modifier.weight(1f)) { MoneyField(installment, { installment = it }, label = "Cuota mensual", placeholder = "$ 0") }
+                Box(Modifier.weight(1f)) { CampoDeMonto(installment, { installment = it }, rotulo = "Cuota mensual") }
                 Box(Modifier.weight(1f)) {
-                    FieldBox("5", dayOfMonth, { dayOfMonth = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number, rotulo = "Día de pago")
+                    Campo(
+                        dayOfMonth, { dayOfMonth = it.filter { ch -> ch.isDigit() } },
+                        rotulo = "Día de pago", guia = "5",
+                        teclado = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
                 }
             }
-            Spacer(Modifier.height(Espacio.xs))
             // El seguro va PEGADO a la cuota, no al final con las notas: es plata que está
             // adentro de la cifra de arriba, y leerlas juntas es lo que hace evidente qué se
             // está declarando. Ver `desglosarCuota` en :core para qué hace con él.
-            MoneyField(seguroMensual, { seguroMensual = it }, placeholder = "Seguro mensual (COP, opcional)")
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                "Si tu cuota incluye seguro de vida deudor, escríbelo aquí. Esa parte no baja " +
-                    "la deuda, así que sin este dato Movi te mostraría menos deuda de la que tienes.",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
+            CampoDeMonto(
+                seguroMensual, { seguroMensual = it },
+                rotulo = "Seguro mensual (opcional)",
+                ayuda = "El seguro de vida deudor que va dentro de la cuota.",
+                masAyuda = "Esa parte no baja la deuda, así que sin este dato Movi te mostraría " +
+                    "menos deuda de la que tienes.",
             )
-            Spacer(Modifier.height(Espacio.xs))
             // El cuarto renglón, pegado al seguro y no al final: los dos son plata que está
             // adentro de la cuota de arriba, y se leen juntos o no se entienden. Campo aparte
             // del seguro porque el extracto los nombra distinto, y un dato que no se puede
             // contrastar contra el papel del banco es un dato que nadie verifica.
-            MoneyField(otrosCargos, { otrosCargos = it }, placeholder = "Otros cargos mensuales (COP, opcional)")
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                "Algunos créditos cobran algo más dentro de la cuota que no es interés, ni " +
-                    "seguro, ni abono: en el extracto suele decir «otros conceptos». Escríbelo " +
-                    "aquí para que Movi no lo cuente como abono a tu deuda.",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
+            CampoDeMonto(
+                otrosCargos, { otrosCargos = it },
+                rotulo = "Otros cargos mensuales (opcional)",
+                ayuda = "En el extracto suele decir «otros conceptos».",
+                masAyuda = "Algunos créditos cobran algo más dentro de la cuota que no es interés, " +
+                    "ni seguro, ni abono. Escríbelo aquí para que Movi no lo cuente como abono a tu deuda.",
             )
-            Spacer(Modifier.height(Espacio.xs))
             // F23/F24: solo dígitos y guiones — sin selector de calendario todavía
             // (pendiente, ver KDoc de isValidCreditDate más abajo).
-            FieldBox("Desembolso (AAAA-MM-DD)", startDate, { startDate = filterDateInput(it) })
-            Spacer(Modifier.height(Espacio.xs))
-            FieldBox("Notas (opcional)", notes, { notes = it })
+            Campo(startDate, { startDate = filterDateInput(it) }, rotulo = "Fecha del desembolso", guia = "AAAA-MM-DD")
+            Campo(notes, { notes = it }, rotulo = "Notas (opcional)")
+            }
 
             // ── El desembolso ────────────────────────────────────────────────────────
             //
@@ -571,9 +572,8 @@ fun CreditTermsSheet(
             // el campo aparece con la cifra correcta y el caso común —desembolso completo—
             // es no tocar nada. La pregunta, arriba, ya anunció que esto venía.
             if (preguntaVisible && recienRecibido == true) {
-                Spacer(Modifier.height(Espacio.l))
-                SectionLabel("LA PLATA QUE TE ENTRÓ")
-                Spacer(Modifier.height(Espacio.xs))
+                Spacer(Modifier.height(Medida.entreSecciones))
+                Seccion("La plata que te entró")
                 when {
                     !cuentasCargadas -> Text("Cargando tus cuentas…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     // Un fallo de red NO es «no tienes cuentas»: acá se dice lo que pasó y se
@@ -614,10 +614,10 @@ fun CreditTermsSheet(
                             Spacer(Modifier.height(Espacio.xs))
                         }
                         Spacer(Modifier.height(Espacio.xs))
-                        MoneyField(
+                        CampoDeMonto(
                             montoDesembolso,
                             { montoDesembolsoEditado = it },
-                            placeholder = "Cuánto te entró (COP)",
+                            rotulo = "Cuánto te entró",
                         )
                         Spacer(Modifier.height(Espacio.xs))
                         // La aritmética, antes de guardar y con las dos cifras a la vista.
@@ -667,13 +667,6 @@ fun CreditTermsSheet(
             // pensión voluntaria, su esposa, su papá.
             if (!esLibranza) {
                 Spacer(Modifier.height(Espacio.m))
-                Text(
-                    "¿LA PAGA ALGUIEN MÁS?",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    fontWeight = FontWeight.Medium,
-                )
-                Spacer(Modifier.height(Espacio.xs))
                 // El tope es el de la columna (`varchar(60)`). Sin él, un nombre más largo
                 // hacía fallar el INSERT en Postgres y se caía el guardado ENTERO del
                 // crédito con un 500 sin mensaje —no hay StatusPages—: el dueño perdía la
@@ -690,31 +683,24 @@ fun CreditTermsSheet(
                 //
                 // El campo tiene dos estados —vacío o un nombre— y el vacío es el normal. Un
                 // marcador que empieza nombrando el caso normal invita a escribirlo.
-                FieldBox(
-                    "Skandia, Caro, mi papá…",
+                //
+                // La ayuda cambia según el estado, en vez de aparecer solo cuando ya se escribió
+                // algo: la duda («¿esto qué hace?») llega ANTES de escribir.
+                Campo(
                     quienPaga,
                     { quienPaga = it.take(60) },
+                    rotulo = "¿La paga alguien más?",
+                    guia = "Skandia, Caro, mi papá…",
+                    ayuda = if (quienPaga.isBlank()) "Déjalo vacío si la pagas tú." else "La deuda sigue siendo tuya y suma entera.",
+                    masAyuda = if (quienPaga.isBlank()) {
+                        "Escribe un nombre solo si la cuota la paga otra persona o sale de otra " +
+                            "bolsa — una pensión voluntaria, tu pareja, un familiar."
+                    } else {
+                        "Suma entera en tu deuda total. Lo que cambia es que la cuota deja de " +
+                            "contar como gasto tuyo del mes y Movi deja de recordártela — en su " +
+                            "lugar te ofrece bajar la deuda con un toque."
+                    },
                 )
-                // El texto de abajo cambia según el estado, en vez de aparecer solo cuando ya
-                // se escribió algo: la duda («¿esto qué hace?») llega ANTES de escribir.
-                Spacer(Modifier.height(Espacio.xs))
-                if (quienPaga.isBlank()) {
-                    Text(
-                        text = "Déjalo vacío si la pagas tú. Escribe un nombre solo si la cuota la " +
-                            "paga otra persona o sale de otra bolsa — una pensión voluntaria, tu " +
-                            "pareja, un familiar.",
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                    )
-                } else {
-                    Text(
-                        text = "La deuda sigue siendo tuya y suma entera en tu deuda total. Lo que " +
-                            "cambia es que la cuota deja de contar como gasto tuyo del mes y Movi " +
-                            "deja de recordártela — en su lugar te ofrece bajar la deuda con un toque.",
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                    )
-                }
             }
 
             // ¿El banco la cobra solo? Va después de «¿la paga alguien más?» porque solo se
@@ -811,35 +797,17 @@ fun CreditTermsSheet(
         // El aviso de «falta tal campo» de acá abajo ya vivía afuera y por eso sí se veía.
         // Que el error del server, que es MÁS importante, estuviera adentro era la asimetría.
         // Mismo defecto que la hoja de editar documentos, y la misma cura.
-        error?.let {
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = it,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.sale,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
+        //
+        // F24: antes el botón se apagaba en silencio. Ahora dice la primera cosa que falta,
+        // justo debajo (el pie de hoja del sistema, [PieDeHoja]).
         Spacer(Modifier.height(Espacio.m))
-        Boton(
+        PieDeHoja(
             texto = if (saving) "Guardando…" else "Guardar crédito",
             onClick = { save() },
             habilitado = canSave,
-            anchoCompleto = true,
+            razon = if (saving) null else missingFieldMessage,
+            error = error,
         )
-        // F24: antes el botón se apagaba en silencio. Ahora dice la primera cosa que falta.
-        if (!canSave && !saving && missingFieldMessage != null) {
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = missingFieldMessage,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
         if (editing?.terms != null) {
             Spacer(Modifier.height(Espacio.xs))
             if (pidiendoBorrar) {
@@ -869,68 +837,26 @@ fun CreditTermsSheet(
 /** El título de la casilla del débito automático en la hoja del crédito. */
 const val TITULO_DEL_DEBITO_AUTOMATICO: String = "El banco la cobra solo"
 
-@Composable
-internal fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = Movi.textos.apoyo,
-        color = Movi.colores.textoMedio,
-        fontWeight = FontWeight.Medium,
-    )
-}
-
+/**
+ * El campo de texto de siempre de las hojas de créditos, con su API de siempre. **Vuelta de diseño
+ * 6: delega en [Campo]**, el del sistema. [placeholder] es el texto guía (un ejemplo); [rotulo], el
+ * nombre del campo, arriba y siempre. Para lo nuevo, usa [Campo] directo.
+ */
 @Composable
 internal fun FieldBox(
     placeholder: String,
     value: String,
     onValueChange: (String) -> Unit,
     keyboardType: KeyboardType = KeyboardType.Text,
-    /**
-     * El nombre del campo, **arriba y siempre** (ver [com.jvillada.movi.ui.components.RotuloDeCampo]).
-     * Se pone donde el valor solo no se explica —«240», «5»— y no donde el placeholder es un
-     * ejemplo («Ej: Viaje»), que ahí sí tiene sentido que desaparezca al escribir.
-     *
-     * **Los dos campos de una misma fila lo llevan o no lo llevan juntos**: uno con rótulo y otro
-     * sin él quedan a distinta altura.
-     */
     rotulo: String? = null,
 ) {
-    Column {
-    if (rotulo != null) RotuloDeCampo(rotulo)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.m))
-            .background(Movi.colores.tarjeta)
-            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-            .padding(horizontal = Espacio.s, vertical = Espacio.s),
-    ) {
-        // Una sola línea SIEMPRE, igual que en [MoneyField] y por lo mismo: estos campos se usan
-        // a media fila (los dos días de la tarjeta) y un placeholder que se parte en dos renglones
-        // infla la caja y desalinea al campo de al lado. Visto a ojo a 360dp.
-        if (value.isEmpty()) {
-            Text(
-                placeholder,
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.textoApagado,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
-        val campo = rememberCampoConSeleccion(value, onValueChange)
-        BasicTextField(
-            value = campo.valor,
-            onValueChange = campo::alCambiar,
-            textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-            cursorBrush = SolidColor(Movi.colores.texto),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-        )
-    }
-    }
+    Campo(
+        valor = value,
+        alCambiar = onValueChange,
+        rotulo = rotulo,
+        guia = placeholder,
+        teclado = KeyboardOptions(keyboardType = keyboardType),
+    )
 }
 
 /**
@@ -1181,53 +1107,34 @@ private fun CasillaConExplicacion(
 }
 
 /**
- * Como [FieldBox], pero para la tasa: pinta un "%" fijo después del número — la persona nunca
- * lo escribe, así que nunca puede terminar en el estado ("12%") que rompía el parseo (F23/F24).
+ * El campo de una tasa: pinta un «%» fijo después del número —la persona nunca lo escribe, así que
+ * nunca puede terminar en el estado («12%») que rompía el parseo (F23/F24)—. Es un [Campo] con
+ * `sufijo` y el teclado decimal.
  */
 @Composable
-internal fun RateFieldBox(
-    placeholder: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    /** Ver [FieldBox]: va con el de al lado, o los dos quedan a distinta altura. */
-    rotulo: String? = null,
+internal fun CampoDeTasa(
+    valor: String,
+    alCambiar: (String) -> Unit,
+    rotulo: String,
+    guia: String,
+    ayuda: String? = null,
+    masAyuda: String? = null,
 ) {
-    Column {
-    if (rotulo != null) RotuloDeCampo(rotulo)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.m))
-            .background(Movi.colores.tarjeta)
-            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-            .padding(horizontal = Espacio.s, vertical = Espacio.s),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.weight(1f)) {
-                if (value.isEmpty()) Text(placeholder, style = Movi.textos.cuerpo, color = Movi.colores.textoApagado)
-                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                // [esAtajoDeSeleccionarTodo].
-                val campo = rememberCampoConSeleccion(value, onValueChange)
-                BasicTextField(
-                    value = campo.valor,
-                    onValueChange = campo::alCambiar,
-                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                    cursorBrush = SolidColor(Movi.colores.texto),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                )
-            }
-            if (value.isNotEmpty()) Text("%", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-        }
-    }
-    }
+    Campo(
+        valor = valor,
+        alCambiar = alCambiar,
+        rotulo = rotulo,
+        guia = guia,
+        ayuda = ayuda,
+        masAyuda = masAyuda,
+        sufijo = "%",
+        teclado = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+    )
 }
 
 /**
  * F23: la tasa aceptaba "12%" y no se leía como número. Filtra todo lo que no sea dígito o un
- * único punto decimal — el "%" queda a cargo de [RateFieldBox], nunca del texto escrito.
+ * único punto decimal — el "%" queda a cargo de [CampoDeTasa], nunca del texto escrito.
  */
 fun filterRateInput(input: String): String {
     var sawDot = false

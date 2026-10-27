@@ -405,7 +405,7 @@ const val TAG_BARRA_DE_PROGRESO: String = "barra-de-progreso-del-credito"
 const val ACCION_SIMULAR_ABONO: String = "¿Y si abonas de más?"
 
 /** El encabezado de la hoja del simulador. */
-const val TITULO_DEL_SIMULADOR: String = "SIMULAR UN ABONO"
+const val TITULO_DEL_SIMULADOR: String = "Simular un abono"
 
 /**
  * **El supuesto propio del abono**, además del que ya arrastra toda proyección de esta pantalla

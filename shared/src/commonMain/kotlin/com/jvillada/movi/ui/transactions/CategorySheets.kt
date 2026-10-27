@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -88,6 +87,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.CampoDeMonto
 
 /**
  * Mismo armazón visual que [com.jvillada.movi.ui.credits.CreditBalanceSheet]: fondo oscuro
@@ -1324,48 +1325,25 @@ private fun SeccionDelMovimiento(
     if (!abierto) return
 
     Spacer(Modifier.height(Espacio.s))
-    MoneyField(
-        value = monto,
-        onValueChange = { monto = it },
-        label = "Monto",
-        prefix = if (event.currency == "COP") "$" else "US$",
+    CampoDeMonto(
+        monto, { monto = it },
+        rotulo = "Monto",
+        moneda = if (event.currency == "COP") "$" else "US$",
     )
 
     Spacer(Modifier.height(Espacio.m))
-    SheetLabel("Concepto")
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = Medida.objetivoTactil)
-            .clip(RoundedCornerShape(Radio.s))
-            .background(Movi.colores.capa2)
-            .padding(horizontal = Espacio.s, vertical = Espacio.s),
-    ) {
-        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
-        // Este campo llega prellenado con la descripción del movimiento, así que reescribirlo
-        // entero con el teclado es el gesto normal, no el raro.
-        val campo = rememberCampoConSeleccion(concepto) {
-            // El tope es el de la COLUMNA, no uno inventado más corto: con 120 aquí, abrir un
-            // movimiento cuya descripción viene de un extracto largo y tocar una tecla le habría
-            // recortado el texto en silencio.
-            concepto = it.take(MAX_CONCEPTO_LENGTH)
-        }
-        BasicTextField(
-            value = campo.valor,
-            onValueChange = campo::alCambiar,
-            enabled = !guardando,
-            cursorBrush = SolidColor(Movi.colores.texto),
-            textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-            decorationBox = { inner ->
-                if (concepto.isEmpty()) {
-                    Text("Ej: Mesada de la hija", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                }
-                inner()
-            },
-        )
-    }
+    // Este campo llega prellenado con la descripción del movimiento, así que reescribirlo entero
+    // con el teclado (⌘A, que el [Campo] trae) es el gesto normal, no el raro.
+    Campo(
+        concepto,
+        // El tope es el de la COLUMNA, no uno inventado más corto: con 120 aquí, abrir un
+        // movimiento cuya descripción viene de un extracto largo y tocar una tecla le habría
+        // recortado el texto en silencio.
+        { concepto = it.take(MAX_CONCEPTO_LENGTH) },
+        rotulo = "Concepto",
+        guia = "Ej: Mesada de la hija",
+        habilitado = !guardando,
+    )
 
     Spacer(Modifier.height(Espacio.m))
     if (esPataDeUnPar) {

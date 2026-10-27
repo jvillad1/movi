@@ -2,6 +2,12 @@ package com.jvillada.movi.ui.credits
 
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.CampoDeMonto
+import com.jvillada.movi.ui.components.ds.GrupoDeCampos
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.RotuloDeCampo
+import androidx.compose.foundation.text.KeyboardOptions
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
@@ -147,18 +153,17 @@ fun CardTermsSheet(
     ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             if (editing != null) {
-                SectionLabel("TARJETA")
-                Spacer(Modifier.height(Espacio.xs))
-                Text(editing.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                Spacer(Modifier.height(Espacio.m))
+                GrupoDeCampos("La tarjeta") {
+                    Text(editing.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                }
+                Spacer(Modifier.height(Medida.entreSecciones))
             } else {
-                FieldBox("Nombre (p.ej. Visa Bancolombia)", name, { name = it })
-                Spacer(Modifier.height(Espacio.xs))
+                GrupoDeCampos("La tarjeta") {
+                Campo(name, { name = it }, rotulo = "Nombre", guia = "Ej: Visa Bancolombia")
                 // Opcional a propósito: una tarjeta recién sacada no debe nada.
-                MoneyField(initialDebt, { initialDebt = it }, placeholder = "Deuda actual ($currency, opcional)")
-                Spacer(Modifier.height(Espacio.s))
-                SectionLabel("MONEDA")
-                Spacer(Modifier.height(Espacio.xs))
+                CampoDeMonto(initialDebt, { initialDebt = it }, rotulo = "Deuda actual (opcional)", moneda = simboloDeLaMoneda(currency))
+                Column {
+                RotuloDeCampo("Moneda")
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
@@ -171,57 +176,56 @@ fun CardTermsSheet(
                         )
                     }
                 }
-                Spacer(Modifier.height(Espacio.m))
+                }
+                }
+                Spacer(Modifier.height(Medida.entreSecciones))
             }
 
-            SectionLabel("TÉRMINOS")
-            Spacer(Modifier.height(Espacio.xs))
-            FieldBox("Banco", bank, { bank = it })
-            Spacer(Modifier.height(Espacio.xs))
-            MoneyField(
-                creditLimit, { creditLimit = it },
-                placeholder = "Cupo total (${editing?.account?.currency ?: currency}, opcional)",
-            )
-            Spacer(Modifier.height(Espacio.xs))
+            val moneda = simboloDeLaMoneda(editing?.account?.currency ?: currency)
+            GrupoDeCampos("Términos") {
+            Campo(bank, { bank = it }, rotulo = "Banco", guia = "Ej: Bancolombia")
+            CampoDeMonto(creditLimit, { creditLimit = it }, rotulo = "Cupo total (opcional)", moneda = moneda)
             Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 Box(Modifier.weight(1f)) {
-                    FieldBox("20", cutoffDay, { cutoffDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number, rotulo = "Corte (opcional)")
+                    Campo(
+                        cutoffDay, { cutoffDay = it.filter { ch -> ch.isDigit() }.take(2) },
+                        rotulo = "Corte (opcional)", guia = "20",
+                        teclado = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
                 }
                 Box(Modifier.weight(1f)) {
-                    FieldBox("5", paymentDay, { paymentDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number, rotulo = "Día de pago")
+                    Campo(
+                        paymentDay, { paymentDay = it.filter { ch -> ch.isDigit() }.take(2) },
+                        rotulo = "Día de pago", guia = "5",
+                        teclado = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
                 }
             }
-            Spacer(Modifier.height(Espacio.xs))
             // **El único campo de esta hoja que Movi no puede deducir de nada.** El cupo
             // disponible sale del cupo menos la deuda, la deuda sale de los eventos; el mínimo
             // no sale de ningún lado, y estimarlo con el 5 % de Bancolombia sería un número
             // sobre su plata que él no puede verificar contra el extracto. Opcional a
             // propósito: vacío significa «no lo sé», que se dice, no se rellena.
-            MoneyField(
+            CampoDeMonto(
                 pagoMinimo, { pagoMinimo = it },
-                placeholder = "Pago mínimo del extracto (${editing?.account?.currency ?: currency}, opcional)",
+                rotulo = "Pago mínimo del extracto (opcional)",
+                moneda = moneda,
+                ayuda = AYUDA_CORTA_DEL_MINIMO,
+                masAyuda = TEXTO_DE_AYUDA_DEL_MINIMO,
             )
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = TEXTO_DE_AYUDA_DEL_MINIMO,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoApagado,
-            )
-            Spacer(Modifier.height(Espacio.xs))
-            RateFieldBox("29,6", tasaEa, { tasaEa = filterRateInput(it).replace('.', ',') }, rotulo = "Tasa % E.A. (opcional)")
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = TEXTO_DE_AYUDA_DE_LA_TASA,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoApagado,
+            CampoDeTasa(
+                tasaEa, { tasaEa = filterRateInput(it).replace('.', ',') },
+                rotulo = "Tasa E.A. (opcional)", guia = "29,6",
+                ayuda = AYUDA_CORTA_DE_LA_TASA,
+                masAyuda = TEXTO_DE_AYUDA_DE_LA_TASA,
             )
 
-            Spacer(Modifier.height(Espacio.xs))
             // Último renglón de los términos, igual que en la hoja de crédito: lo que la
             // tarjeta tiene de particular y no cabe en ningún campo —«difiere a 36 cuotas
             // toda compra internacional», el cupo que el banco todavía no sube—. Es el único
             // dato de esta hoja que Movi no vuelve a derivar de nada si se pierde.
-            FieldBox("Notas (opcional)", notes, { notes = it })
+            Campo(notes, { notes = it }, rotulo = "Notas (opcional)", guia = "Ej: el cupo sube en diciembre")
+            }
 
             Spacer(Modifier.height(Espacio.m))
             // El pago de esta tarjeta entra al barrido de recordatorios salvo que el dueño
@@ -232,29 +236,18 @@ fun CardTermsSheet(
                 enabled = !saving,
             )
 
-            error?.let {
-                Spacer(Modifier.height(Espacio.xs))
-                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-            }
         }
 
+        // El error del guardado va en el pie, junto al botón y fuera del scroll: adentro se pintaba
+        // debajo de lo que se ve (ver la hoja del crédito).
         Spacer(Modifier.height(Espacio.m))
-        Boton(
+        PieDeHoja(
             texto = if (saving) "Guardando…" else "Guardar tarjeta",
             onClick = { save() },
             habilitado = canSave,
-            anchoCompleto = true,
+            razon = if (saving) null else missingFieldMessage,
+            error = error,
         )
-        if (!canSave && !saving && missingFieldMessage != null) {
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = missingFieldMessage,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
         if (editing?.terms != null) {
             Spacer(Modifier.height(Espacio.xs))
             if (pidiendoBorrar) {
@@ -331,6 +324,15 @@ const val TEXTO_DE_AYUDA_DEL_MINIMO: String =
     "Con esto, el «Flujo libre» descuenta lo que esta tarjeta te obliga a pagar. Cambia con cada " +
         "extracto: no lo estimamos, revísalo cuando te llegue. Si tu tarjeta maneja pesos y " +
         "dólares, el extracto trae un mínimo por cada moneda: aquí va solo el de esta cuenta."
+
+/** La línea de ayuda del pago mínimo; el resto ([TEXTO_DE_AYUDA_DEL_MINIMO]) va en «¿Qué es esto?». */
+const val AYUDA_CORTA_DEL_MINIMO: String = "Cambia con cada extracto: no lo estimamos."
+
+/** La línea de ayuda de la tasa; el resto ([TEXTO_DE_AYUDA_DE_LA_TASA]) va en «¿Qué es esto?». */
+const val AYUDA_CORTA_DE_LA_TASA: String = "La del extracto, como tasa efectiva anual."
+
+/** «$» para pesos, «US$» para dólares: en Colombia «$20» se lee veinte pesos. */
+internal fun simboloDeLaMoneda(moneda: String): String = if (moneda == "USD") "US$" else "$"
 
 /**
  * Lo que la hoja dice debajo de la tasa (Ola 4): para qué sirve. Sin ella, la tarjeta no entra al

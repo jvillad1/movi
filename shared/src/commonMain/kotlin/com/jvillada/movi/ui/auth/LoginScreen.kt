@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -56,6 +55,7 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Campo
 
 @Composable
 fun LoginScreen(onNavigate: (Screen) -> Unit) {
@@ -242,30 +242,30 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         }
 
         Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
-            Text("Correo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
-            AuthField(
-                value = email,
-                onChange = { email = it },
-                placeholder = "tu@correo.com",
-                keyboardOptions = KeyboardOptions(
+            Campo(
+                rotulo = "Correo",
+                valor = email,
+                alCambiar = { email = it },
+                guia = "tu@correo.com",
+                teclado = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next,
                 ),
-                keyboardActions = KeyboardActions(onNext = { passwordFocus.requestFocus() }),
+                acciones = KeyboardActions(onNext = { passwordFocus.requestFocus() }),
             )
             Spacer(Modifier.height(Espacio.m))
-            Text("Contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
-            AuthField(
-                value = password,
-                onChange = { password = it },
-                placeholder = "••••••",   // login: no se insinúa longitud, la cuenta puede ser vieja
-                isPassword = true,
-                keyboardOptions = KeyboardOptions(
+            Campo(
+                rotulo = "Contraseña",
+                valor = password,
+                alCambiar = { password = it },
+                guia = "••••••",   // login: no se insinúa longitud, la cuenta puede ser vieja
+                secreto = true,
+                teclado = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done,
                 ),
-                keyboardActions = KeyboardActions(onDone = { submit() }),
-                modifier = Modifier.focusRequester(passwordFocus),
+                acciones = KeyboardActions(onDone = { submit() }),
+                foco = passwordFocus,
             )
 
             error?.let {
@@ -300,59 +300,6 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         Spacer(Modifier.height(Espacio.m))
         Boton("¿No tienes cuenta? Regístrate", onClick = { onNavigate(Screen.Register) }, variante = VarianteDeBoton.Fantasma)
     }
-}
-
-@Composable
-internal fun AuthField(
-    value: String,
-    onChange: (String) -> Unit,
-    placeholder: String,
-    isPassword: Boolean = false,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    keyboardActions: KeyboardActions = KeyboardActions.Default,
-    modifier: Modifier = Modifier,
-) {
-    var passwordVisible by remember { mutableStateOf(false) }
-    val showAsPassword = isPassword && !passwordVisible
-    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
-    val campo = rememberCampoConSeleccion(value, onChange)
-    BasicTextField(
-        value = campo.valor,
-        onValueChange = campo::alCambiar,
-        textStyle = Movi.textos.titulo.copy(color = Movi.colores.texto),
-        cursorBrush = SolidColor(Movi.colores.marca),
-        singleLine = true,
-        visualTransformation = if (showAsPassword) PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = keyboardOptions,
-        keyboardActions = keyboardActions,
-        decorationBox = { inner ->
-            Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radio.s))
-                    .background(Movi.colores.tarjeta).padding(horizontal = Espacio.s, vertical = Espacio.s),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    if (value.isEmpty()) Text(placeholder, color = Movi.colores.textoApagado, style = Movi.textos.titulo)
-                    inner()
-                }
-                if (isPassword) {
-                    Spacer(Modifier.width(Espacio.xs))
-                    Icon(
-                        // `Rounded`, como el resto de la app: 33 íconos distintos en 63 usos. Estos dos
-                        // eran los ÚNICOS `Outlined` del repo, y por eso se leían como de otro juego
-                        // al lado de los checks y las equis: `Rounded` tiene extremos redondeados y
-                        // trazos más suaves.
-                        imageVector = if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                        contentDescription = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña",
-                        tint = Movi.colores.textoMedio,
-                        modifier = Modifier.size(Icono.m)
-                            .noRippleClickable { passwordVisible = !passwordVisible },
-                    )
-                }
-            }
-        },
-        modifier = modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-    )
 }
 
 internal fun Modifier.noRippleClickable(onClick: () -> Unit) = this.then(

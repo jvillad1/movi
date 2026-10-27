@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -53,6 +52,10 @@ import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.dashboard.apartadoEfectivoDe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.CampoDeMonto
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 
 /** Lo que se dice cuando apartar (o quitar) no llegó al server por falta de red. */
 const val APARTAR_SIN_CONEXION: String = "Para apartar plata necesitas conexión"
@@ -177,57 +180,35 @@ fun ApartadoSheet(
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.texto,
                 )
-                MensajeDeError(error)
                 Spacer(Modifier.height(Espacio.l))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                    BotonDeHoja("Cancelar", habilitado = !trabajando, destacado = false, modifier = Modifier.weight(1f)) {
+                PieDeHoja(
+                    texto = if (trabajando) "Quitando…" else "Quitar",
+                    onClick = { quitar() },
+                    habilitado = !trabajando,
+                    variante = VarianteDeBoton.Peligro,
+                    error = error,
+                    secundaria = "Cancelar",
+                    secundariaHabilitada = !trabajando,
+                    onSecundaria = {
                         confirmandoQuitar = false
                         error = null
-                    }
-                    BotonDeHoja(
-                        if (trabajando) "Quitando…" else "Quitar",
-                        habilitado = !trabajando,
-                        destacado = true,
-                        colorDestacado = Movi.colores.sale,
-                        modifier = Modifier.weight(1.4f),
-                    ) { quitar() }
-                }
+                    },
+                )
                 Spacer(Modifier.height(Espacio.xl))
                 return@Column
             }
 
             Spacer(Modifier.height(Espacio.m))
-            RotuloDeLaHoja("¿Para qué?")
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(Movi.colores.tarjeta)
-                    .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
-            ) {
-                if (proposito.isEmpty()) {
-                    Text("Colegio nov-dic", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
-                }
-                val campo = rememberCampoConSeleccion(proposito) { proposito = it.take(MAX_PROPOSITO_APARTADO) }
-                BasicTextField(
-                    value = campo.valor,
-                    onValueChange = campo::alCambiar,
-                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                    cursorBrush = SolidColor(Movi.colores.texto),
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    singleLine = true,
-                    enabled = !trabajando,
-                    modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                )
-            }
+            Campo(
+                proposito, { proposito = it.take(MAX_PROPOSITO_APARTADO) },
+                rotulo = "¿Para qué?",
+                guia = "Colegio nov-dic",
+                teclado = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                habilitado = !trabajando,
+            )
 
             Spacer(Modifier.height(Espacio.m))
-            MoneyField(
-                value = monto,
-                onValueChange = { monto = it },
-                label = "Monto",
-            )
+            CampoDeMonto(monto, { monto = it }, rotulo = "Monto")
 
             Spacer(Modifier.height(Espacio.m))
             CategoryField(
@@ -261,70 +242,24 @@ fun ApartadoSheet(
                 )
             }
 
-            MensajeDeError(error)
             Spacer(Modifier.height(Espacio.l))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                if (existente != null) {
-                    BotonDeHoja("Quitar", habilitado = !trabajando, destacado = false, modifier = Modifier.weight(1f)) {
+            PieDeHoja(
+                texto = if (trabajando) "Guardando…" else "Guardar",
+                onClick = { guardar() },
+                habilitado = puedeGuardar,
+                error = error,
+                secundaria = if (existente != null) "Quitar" else "Cancelar",
+                secundariaHabilitada = !trabajando,
+                onSecundaria = {
+                    if (existente != null) {
                         confirmandoQuitar = true
                         error = null
+                    } else {
+                        onDismiss()
                     }
-                } else {
-                    BotonDeHoja("Cancelar", habilitado = !trabajando, destacado = false, modifier = Modifier.weight(1f), onClick = onDismiss)
-                }
-                BotonDeHoja(
-                    if (trabajando) "Guardando…" else "Guardar",
-                    habilitado = puedeGuardar,
-                    destacado = true,
-                    modifier = Modifier.weight(1.4f),
-                ) { guardar() }
-            }
+                },
+            )
             Spacer(Modifier.height(Espacio.xl))
         }
-    }
-}
-
-@Composable
-private fun RotuloDeLaHoja(texto: String) {
-    Text(texto, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
-    Spacer(Modifier.height(Espacio.xs))
-}
-
-@Composable
-private fun MensajeDeError(error: String?) {
-    if (error == null) return
-    Spacer(Modifier.height(Espacio.s))
-    Text(text = error, style = Movi.textos.apoyo, color = Movi.colores.sale)
-}
-
-@Composable
-private fun BotonDeHoja(
-    texto: String,
-    habilitado: Boolean,
-    destacado: Boolean,
-    modifier: Modifier = Modifier,
-    colorDestacado: androidx.compose.ui.graphics.Color = Movi.colores.marca,
-    onClick: () -> Unit,
-) {
-    val activo = destacado && habilitado
-    Box(
-        modifier = modifier
-            .height(Medida.objetivoTactil)
-            .clip(RoundedCornerShape(Radio.pill))
-            .background(if (activo) Movi.colores.lavado(colorDestacado) else Movi.colores.tarjeta)
-            .clickable(enabled = habilitado, role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = texto,
-            style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
-            color = when {
-                activo -> colorDestacado
-                habilitado -> Movi.colores.texto
-                else -> Movi.colores.textoApagado
-            },
-        )
     }
 }

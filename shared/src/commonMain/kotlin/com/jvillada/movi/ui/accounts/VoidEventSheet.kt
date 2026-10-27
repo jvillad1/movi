@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
@@ -34,6 +33,9 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 
 /**
  * Confirmar la anulación de un movimiento — la única acción de la app que no tiene deshacer.
@@ -250,62 +252,18 @@ fun VoidEventSheet(
 
             Spacer(Modifier.height(Espacio.m))
 
-            // Reason label
-            Text(
-                text = "MOTIVO (OPCIONAL)",
-                style = Movi.textos.apoyo, fontWeight = FontWeight.Medium,
-                color = Movi.colores.textoMedio,
-            )
-            Spacer(Modifier.height(Espacio.xs))
-
-            // Reason input
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(Movi.colores.tarjeta)
-                    .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
-            ) {
-                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                // [esAtajoDeSeleccionarTodo].
-                val campo = rememberCampoConSeleccion(reason) { reason = it }
-                BasicTextField(
-                    value = campo.valor,
-                    onValueChange = campo::alCambiar,
-                    cursorBrush = SolidColor(Movi.colores.texto),
-                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                    decorationBox = { inner ->
-                        if (reason.isEmpty()) {
-                            Text("Ej: Movimiento duplicado", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                        }
-                        inner()
-                    },
-                )
-            }
+            Campo(reason, { reason = it }, rotulo = "Motivo (opcional)", guia = "Ej: Movimiento duplicado")
 
             Spacer(Modifier.height(Espacio.l))
 
-            // CTA
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(Medida.objetivoTactil)
-                    .clip(RoundedCornerShape(Radio.pill))
-                    .background(if (!voiding) Movi.colores.lavado(Movi.colores.sale) else Movi.colores.tarjeta)
-                    .clickable(enabled = !voiding) { doVoid() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (voiding) "Anulando…" else "Anular movimiento",
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = if (!voiding) Movi.colores.sale else Movi.colores.textoApagado,
-                )
-            }
+            // CTA: el pie de hoja del sistema, en `Peligro` (anular). El error sigue afuera del
+            // scroll, en [BarraDeError] (ver abajo).
+            PieDeHoja(
+                texto = if (voiding) "Anulando…" else "Anular movimiento",
+                onClick = { doVoid() },
+                habilitado = !voiding,
+                variante = VarianteDeBoton.Peligro,
+            )
 
             Spacer(Modifier.height(Espacio.s))
         }

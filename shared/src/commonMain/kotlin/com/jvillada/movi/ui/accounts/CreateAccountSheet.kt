@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -32,6 +31,10 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.CampoDeMonto
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 
 private data class TypeOption(val type: AccountType, val label: String, val description: String, val icon: ImageVector)
 
@@ -166,41 +169,12 @@ fun CreateAccountSheet(
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         // --- NOMBRE ---
-        SectionLabel("Nombre")
-        Spacer(Modifier.height(Espacio.xs))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(Radio.m))
-                .background(Movi.colores.tarjeta)
-                .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-                .padding(horizontal = Espacio.s, vertical = Espacio.s),
-        ) {
-            // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-            // [esAtajoDeSeleccionarTodo].
-            val campo = rememberCampoConSeleccion(name) { name = it }
-            BasicTextField(
-                value = campo.valor,
-                onValueChange = campo::alCambiar,
-                cursorBrush = SolidColor(Movi.colores.texto),
-                textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-                    .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                decorationBox = { inner ->
-                    if (name.isEmpty()) {
-                        Text("Ej: Bancolombia Ahorros", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                    }
-                    inner()
-                },
-            )
-        }
+        Campo(name, { name = it }, rotulo = "Nombre", guia = "Ej: Bancolombia Ahorros")
 
         Spacer(Modifier.height(Espacio.m))
 
         // --- TIPO ---
-        SectionLabel("Tipo")
-        Spacer(Modifier.height(Espacio.xs))
+        RotuloDeCampo("Tipo")
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(Espacio.xs),
@@ -232,52 +206,18 @@ fun CreateAccountSheet(
         Spacer(Modifier.height(Espacio.m))
 
         // --- SALDO INICIAL --- (ya no hay tipo de deuda en este selector, ver F51/F52)
-        SectionLabel("Saldo inicial")
-        Spacer(Modifier.height(Espacio.xs))
-        MoneyField(
-            value = initialBalance,
-            onValueChange = { initialBalance = it },
-        )
-
-
-        // Inline error display
-        if (error != null) {
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = error!!,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.sale,
-            )
-        }
+        CampoDeMonto(initialBalance, { initialBalance = it }, rotulo = "Saldo inicial")
 
         Spacer(Modifier.height(Espacio.l))
 
-        // --- CTA ---
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(Medida.objetivoTactil)
-                .clip(RoundedCornerShape(Radio.pill))
-                .background(if (canSave) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
-                .clickable(enabled = canSave) { save() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = if (saving) "Creando…" else "Crear cuenta",
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
-            )
-        }
-        if (!canSave && !saving && missingFieldMessage != null) {
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = missingFieldMessage,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
-        }
+        // --- CTA --- el pie de hoja del sistema: el error del guardado arriba, la razón abajo.
+        PieDeHoja(
+            texto = if (saving) "Creando…" else "Crear cuenta",
+            onClick = { save() },
+            habilitado = canSave,
+            razon = if (saving) null else missingFieldMessage,
+            error = error,
+        )
 
         Spacer(Modifier.height(Espacio.s))
     }
@@ -312,16 +252,6 @@ internal suspend fun crearCuentaConSaldo(
         if (apertura != null) Repositories.wallets.postEvent(apertura)
     }
     return creada
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = Movi.textos.apoyo,
-        color = Movi.colores.textoMedio,
-        fontWeight = FontWeight.Medium,
-    )
 }
 
 /** Selectable rounded chip that fills its share of the enclosing [Row]. */

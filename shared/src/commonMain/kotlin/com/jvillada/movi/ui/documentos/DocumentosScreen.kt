@@ -95,7 +95,6 @@ import kotlinx.serialization.json.Json
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import com.jvillada.movi.shared.model.EdicionDeDocumento
@@ -105,6 +104,9 @@ import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.fecha.etiquetaDePeriodo
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 
 /**
  * **«Documentos»** — los papeles del dueño, guardados en Movi.
@@ -729,7 +731,7 @@ internal fun EditarDocumentoSheet(
     }
 
     HojaDeDocumento(onDismiss = onDismiss, cerrarHabilitado = !guardando) {
-        CampoDeTexto("Nombre", nombre, { nombre = it.take(255) }, "Extracto agosto.pdf")
+        Campo(nombre, { nombre = it.take(255) }, rotulo = "Nombre", guia = "Extracto agosto.pdf")
         Spacer(Modifier.height(Espacio.s))
 
         SelectorDeTipo(tipo, enabled = !guardando) { tipo = it }
@@ -738,52 +740,22 @@ internal fun EditarDocumentoSheet(
         SelectorDeCuenta(cuentas, cuenta, enabled = !guardando) { cuenta = it }
 
         Spacer(Modifier.height(Espacio.s))
-        CampoDeTexto("Período", periodo, { periodo = it.take(50) }, "agosto 2026")
+        Campo(periodo, { periodo = it.take(50) }, rotulo = "Período", guia = "agosto 2026")
         Spacer(Modifier.height(Espacio.s))
-        CampoDeTexto("Notas", notas, { notas = it.take(500) }, "Para qué lo guardaste")
+        // Las notas son el único campo de varios renglones: la caja crece hasta cuatro.
+        Campo(notas, { notas = it.take(500) }, rotulo = "Notas", guia = "Para qué lo guardaste", renglones = 4)
 
         Spacer(Modifier.height(Espacio.l))
-        BotonDeLaHoja(
+        // El pie de hoja del sistema: el error del guardado justo encima del botón, y por qué está
+        // apagado justo debajo.
+        PieDeHoja(
             texto = if (guardando) "Guardando…" else "Guardar",
+            onClick = { guardar() },
             habilitado = !guardando && nombre.isNotBlank(),
-        ) { guardar() }
-        error?.let {
-            Spacer(Modifier.height(Espacio.s))
-            Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-        }
-        Spacer(Modifier.height(Espacio.l))
-    }
-}
-
-@Composable
-private fun CampoDeTexto(
-    etiqueta: String,
-    valor: String,
-    onCambio: (String) -> Unit,
-    marcador: String,
-) {
-    Text(etiqueta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
-    Spacer(Modifier.height(Espacio.xs))
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.m))
-            .background(Movi.colores.tarjeta)
-            .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-            .padding(horizontal = Espacio.s, vertical = Espacio.s),
-    ) {
-        if (valor.isEmpty()) {
-            Text(marcador, style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
-        }
-        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
-        val campo = rememberCampoConSeleccion(valor, onCambio)
-        BasicTextField(
-            value = campo.valor,
-            onValueChange = campo::alCambiar,
-            textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-            cursorBrush = SolidColor(Movi.colores.marca),
-            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
+            razon = if (nombre.isBlank()) "Falta el nombre" else null,
+            error = error,
         )
+        Spacer(Modifier.height(Espacio.l))
     }
 }
 
@@ -843,7 +815,7 @@ internal fun SubirDocumentoSheet(
         SelectorDeCuenta(cuentas, cuenta, enabled = true) { cuenta = it }
 
         Spacer(Modifier.height(Espacio.l))
-        BotonDeLaHoja(texto = "Subir", habilitado = true) { onSubir(tipo, cuenta) }
+        PieDeHoja(texto = "Subir", onClick = { onSubir(tipo, cuenta) })
         Spacer(Modifier.height(Espacio.l))
     }
 }
@@ -855,8 +827,7 @@ private fun SelectorDeTipo(
     enabled: Boolean,
     onElegir: (TipoDeDocumento) -> Unit,
 ) {
-    EtiquetaDeCampo("Tipo")
-    Spacer(Modifier.height(Espacio.xs))
+    RotuloDeCampo("Tipo")
     TipoDeDocumento.entries.forEach { t ->
         FilaElegible(nombreDeTipo(t), elegida = t == elegido, enabled = enabled) { onElegir(t) }
     }
@@ -879,8 +850,7 @@ private fun SelectorDeCuenta(
     enabled: Boolean,
     onElegir: (String?) -> Unit,
 ) {
-    EtiquetaDeCampo("Cuenta")
-    Spacer(Modifier.height(Espacio.xs))
+    RotuloDeCampo("Cuenta")
     FilaElegible("Sin cuenta", elegida = elegida == null, enabled = enabled) { onElegir(null) }
     ListaDeCuentasElegibles(
         // `conservar` sostiene la cuenta ya puesta aunque hoy no se ofreciera —el papel puede ser
@@ -890,17 +860,6 @@ private fun SelectorDeCuenta(
         selectedId = elegida,
         onPick = { if (enabled) onElegir(it) },
         modifier = Modifier.padding(horizontal = Espacio.xs),
-    )
-}
-
-/** El rótulo de un campo de las hojas de documentos, en frase (ola R4: nada en mayúsculas). */
-@Composable
-private fun EtiquetaDeCampo(texto: String) {
-    Text(
-        texto,
-        style = Movi.textos.apoyo,
-        color = Movi.colores.textoMedio,
-        fontWeight = FontWeight.Medium,
     )
 }
 
@@ -938,12 +897,6 @@ private fun FilaElegible(
             )
         }
     }
-}
-
-/** El botón ancho del pie de una hoja. */
-@Composable
-private fun BotonDeLaHoja(texto: String, habilitado: Boolean, onClick: () -> Unit) {
-    Boton(texto = texto, onClick = onClick, habilitado = habilitado, anchoCompleto = true)
 }
 
 /**

@@ -51,7 +51,6 @@ import com.jvillada.movi.shared.model.confirmaElBorrado
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.auth.AuthField
 import com.jvillada.movi.ui.components.CardRow
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinCard
@@ -59,6 +58,7 @@ import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Campo
 
 /** El título de la pantalla y el rótulo de la fila de Ajustes que la abre: el mismo, como toda ficha. */
 const val BORRAR_MI_CUENTA: String = "Borrar mi cuenta"
@@ -217,28 +217,23 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
             // 3 — La contraseña y la palabra.
             Spacer(Modifier.height(Medida.entreSecciones))
             Seccion(titulo = "Confirma que eres tú")
-            Text("Tu contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
-            AuthField(
-                value = contrasena,
-                onChange = { contrasena = it; error = null },
-                placeholder = "La que usas para entrar",
-                isPassword = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-                modifier = Modifier.testTag(TAG_CONTRASENA_PARA_BORRAR),
+            Campo(
+                rotulo = "Tu contraseña",
+                valor = contrasena,
+                alCambiar = { contrasena = it; error = null },
+                guia = "La que usas para entrar",
+                secreto = true,
+                teclado = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                tag = TAG_CONTRASENA_PARA_BORRAR,
             )
             Spacer(Modifier.height(Movi.espacios.medio))
-            Text(
-                "Escribe $PALABRA_PARA_BORRAR_LA_CUENTA para confirmar",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                modifier = Modifier.padding(bottom = Espacio.xs),
-            )
-            AuthField(
-                value = confirmacion,
-                onChange = { confirmacion = it; error = null },
-                placeholder = PALABRA_PARA_BORRAR_LA_CUENTA,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Done),
-                modifier = Modifier.testTag(TAG_CONFIRMACION_PARA_BORRAR),
+            Campo(
+                valor = confirmacion,
+                alCambiar = { confirmacion = it; error = null },
+                rotulo = "Escribe $PALABRA_PARA_BORRAR_LA_CUENTA para confirmar",
+                guia = PALABRA_PARA_BORRAR_LA_CUENTA,
+                teclado = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Done),
+                tag = TAG_CONFIRMACION_PARA_BORRAR,
             )
 
             error?.let {
