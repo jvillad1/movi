@@ -24,11 +24,14 @@ class HoyEnUnaMiradaTest {
 
     // ── El veredicto corto ───────────────────────────────────────────────────
 
-    /** El ejemplo de la revisión del 22-oct: la frase larga pasa a una línea con cifras. */
+    /**
+     * Vuelta de diseño 22: la línea de respaldo dice el flujo con su verbo. La Ola 3 la había dejado en
+     * «−$893.300 este período · Mercado $392.100», y no se entendía si era neto, gasto o déficit.
+     */
     @Test
     fun `el veredicto corto con la categoria que mas peso`() {
         assertEquals(
-            "−\$893.300 este período · Mercado \$392.100",
+            "Salió \$893.300 más de lo que entró · lo que más: Mercado \$392.100",
             veredictoCortoDelPeriodo(ingresos = 4_000_000, egresos = 4_893_300, mayorGasto = "Mercado" to 392_100L),
         )
         // La larga sigue igual: es la que oye el lector de pantalla.
@@ -41,18 +44,18 @@ class HoyEnUnaMiradaTest {
     @Test
     fun `con cuotas de credito las nombra antes que cualquier categoria`() {
         assertEquals(
-            "−\$11,7M este período · Cuotas \$12,9M",
+            "Salió \$11,7M más de lo que entró · cuotas de crédito: \$12,9M",
             veredictoCortoDelPeriodo(22_152_488, 33_882_000, cuotasDeCredito = 12_915_000, mayorGasto = "Vivienda" to 14_000_000L),
         )
     }
 
     @Test
     fun `a favor, parejo, sin datos y con el disponible en rojo`() {
-        assertEquals("+\$3M este período", veredictoCortoDelPeriodo(10_000_000, 7_000_000))
-        assertEquals("\$0 este período · entró lo mismo que salió", veredictoCortoDelPeriodo(2_000_000, 2_000_000))
+        assertEquals("Entró \$3M más de lo que salió", veredictoCortoDelPeriodo(10_000_000, 7_000_000))
+        assertEquals("Entró lo mismo que salió", veredictoCortoDelPeriodo(2_000_000, 2_000_000))
         assertNull(veredictoCortoDelPeriodo(0, 0))
         assertEquals(
-            "+\$3M este período · te pasaste del disponible por \$563.456",
+            "Entró \$3M más de lo que salió · te pasaste del disponible por \$563.456",
             veredictoCortoDelPeriodo(10_000_000, 7_000_000, avisoDelDisponible = "te pasaste del disponible por \$563.456"),
         )
     }
@@ -64,9 +67,45 @@ class HoyEnUnaMiradaTest {
             summary = FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 22_152_488, egresos = 33_882_000),
             spentByCategory = mapOf(CUOTA_CATEGORY to 12_915_000L, "Vivienda" to 14_000_000L),
         )
-        assertEquals("−\$11,7M este período · Cuotas \$12,9M", veredictoCortoDelInicio(data, hoy))
+        assertEquals("Salió \$11,7M más de lo que entró · cuotas de crédito: \$12,9M", veredictoCortoDelInicio(data, hoy))
+        // Sin el Disponible (faltan sus lecturas) la frase del héroe es esta misma, con la larga al lado.
+        assertEquals(veredictoCortoDelInicio(data, hoy), fraseDelHeroe(data, hoy)?.corta)
+        assertEquals(veredictoDelInicio(data, hoy)?.frase, fraseDelHeroe(data, hoy)?.larga)
         assertNull(veredictoCortoDelInicio(DashboardData(), hoy))
         assertNull(veredictoDelInicio(DashboardData(), hoy), "los dos aparecen y desaparecen juntos")
+        assertNull(fraseDelHeroe(DashboardData(), hoy))
+    }
+
+    // ── La frase del héroe usa la cifra de Plan (vuelta de diseño 22) ────────
+
+    /** Octubre (mes de calendario), hoy 27: $1,7M de gasto del día a día, como dice la columna de Plan. */
+    private val hoyDeOctubre = LocalDate(2026, 10, 27)
+    private val conDisponible = DashboardData(
+        summary = FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 5_000_000, egresos = 5_893_300),
+        spentByCategory = mapOf("Mercado" to 316_050L, "Vivienda" to 1_800_000L, "Comida" to 210_000L),
+        periodoActual = com.jvillada.movi.shared.model.PeriodoFinanciero(2026, 10),
+        ajustesDePeriodo = com.jvillada.movi.shared.model.PeriodSettings(),
+        upcoming = emptyList(),
+        ocurrencias = emptyList(),
+        gastoVariablePorDia = mapOf("2026-10-05" to 1_000_000L, "2026-10-20" to 700_000L),
+    )
+
+    @Test
+    fun `la frase del heroe dice lo que gastaste con la misma cifra que Plan`() {
+        val gastadoEnPlan = disponibleDelInicio(conDisponible, hoyDeOctubre)!!.periodo.gastado
+        val frase = fraseDelHeroe(conDisponible, hoyDeOctubre)!!
+        // La columna «Período» del Disponible de Plan escribe esta cifra con `formatMoneyCompact`.
+        assertTrue(com.jvillada.movi.ui.components.formatMoneyCompact(gastadoEnPlan) in frase.corta, frase.corta)
+        // «Lo que más» es la categoría más grande que cabe en lo gastado: la Vivienda de $1,8M es un
+        // fijo, no gasto del día a día, y no puede ser más grande que el todo.
+        assertEquals("Gastaste \$1,7M · lo que más: Mercado \$316.050", frase.corta)
+        assertEquals("Este período gastaste \$1,7M en el día a día; lo que más pesó fue Mercado, con \$316.050", frase.larga)
+    }
+
+    @Test
+    fun `sin gasto del dia a dia lo dice, sin cifra inventada`() {
+        val sinGasto = conDisponible.copy(gastoVariablePorDia = emptyMap())
+        assertEquals(SIN_GASTO_EN_EL_PERIODO, fraseDelHeroe(sinGasto, hoyDeOctubre)?.corta)
     }
 
     // ── Los chips de «Pregúntale a Movi» ─────────────────────────────────────

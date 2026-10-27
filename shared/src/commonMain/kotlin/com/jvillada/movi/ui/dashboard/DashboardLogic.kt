@@ -43,6 +43,8 @@ import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.renderableSections
+import com.jvillada.movi.shared.model.Pendiente
+import com.jvillada.movi.shared.model.loQueSeCobra
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
@@ -119,6 +121,12 @@ data class DashboardData(
     val spentByCategory: Map<String, Long>? = null,
     val cardCandidates: Int = 0,
     val pendingSms: Int = 0,
+    /**
+     * Vuelta de diseño 22: los movimientos que entraron solos y esperan en «Por confirmar», contados
+     * como renglones (`DashboardSummary.movimientosPorConfirmar`). Con esto el Inicio cuenta «Por
+     * revisar» igual que Movimientos (ver [conteoPorRevisarDelInicio]).
+     */
+    val movimientosPorConfirmar: Int = 0,
     /**
      * Qué se sabe de la captura de SMS: cuántos mensajes del banco llegaron alguna vez y cuándo
      * llegó el último (ver [CapturaDeSms] en `:core`). `null` = el resumen todavía no contestó.
@@ -893,8 +901,14 @@ enum class TipoDeNotificacion {
     /** Pagos de tarjeta que Movi encontró y esperan que el dueño los confirme. */
     PagoDeTarjetaPorConfirmar,
 
-    /** Mensajes del banco por confirmar en «Por revisar». */
+    /**
+     * Lo que espera en «Por revisar»: los mensajes del banco por confirmar y, desde la vuelta de
+     * diseño 22, todo lo que entró solo (movimientos, pagos de tarjeta) en un solo aviso.
+     */
     MensajesDelBanco,
+
+    /** Algo que el banco cobró solo y falta confirmar (vuelta de diseño 22: entra a la campana). */
+    DebitoPorConfirmar,
 
     /** Nunca llegó un mensaje del banco. */
     CapturaSinMensajes,
@@ -921,17 +935,24 @@ data class NotificationRow(
 
 /**
  * **Qué tan urgente es un aviso**, menor primero: lo vencido, lo que vence hoy, el banco que se
- * calló (sin captura se pierde todo lo demás), el presupuesto pasado, lo que vence en unos días, lo
- * que espera confirmación y, al final, que nunca llegó un mensaje (un estado, no un apuro).
+ * calló (sin captura se pierde todo lo demás), el presupuesto pasado, lo que el banco cobró solo, lo
+ * que espera en «Por revisar», lo que vence en unos días y, al final, que nunca llegó un mensaje (un
+ * estado, no un apuro).
+ *
+ * Vuelta de diseño 22: los pagos, los débitos y «Por revisar» van en el orden de la cola
+ * (`colaDePendientes`, en `:core`) —lo cobrado y lo que entró solo antes que lo que vence en unos
+ * días, como en «Movi propone hoy»—; los otros avisos se intercalan donde estaban. A igual urgencia
+ * manda el orden de la cola (el monto más grande primero).
  */
 fun urgenciaDeLaNotificacion(tipo: TipoDeNotificacion, diasParaVencer: Int? = null): Int = when (tipo) {
     TipoDeNotificacion.PagoVencido -> 0
-    TipoDeNotificacion.PagoPorVencer -> if (diasParaVencer != null && diasParaVencer <= 0) 1 else 4
+    TipoDeNotificacion.PagoPorVencer -> if (diasParaVencer != null && diasParaVencer <= 0) 1 else 6
     TipoDeNotificacion.BancoMudo -> 2
     TipoDeNotificacion.PresupuestoSuperado -> 3
+    TipoDeNotificacion.DebitoPorConfirmar -> 4
     TipoDeNotificacion.PagoDeTarjetaPorConfirmar -> 5
     TipoDeNotificacion.MensajesDelBanco -> 5
-    TipoDeNotificacion.CapturaSinMensajes -> 6
+    TipoDeNotificacion.CapturaSinMensajes -> 7
 }
 
 /** «Internet venció ayer», «Carro vence hoy», «Colegio vence en 2 días»: el pago, en una frase. */
@@ -945,43 +966,73 @@ fun tituloDelPagoQueVence(nombre: String, diasParaVencer: Int): String = when {
 
 /**
  * Todo lo que la campana muestra — una vista DERIVADA de los datos que el Inicio ya carga,
- * sin modelo de notificaciones persistente ni "marcar leído". Combina los pagos que vencen
- * pronto (cada uno a su propio destino, Recurrentes o Créditos según de qué regla venga) con
- * las mismas alertas que ya calcula [dashboardAlerts] — candidatos de pago de tarjeta, SMS
- * pendientes y presupuestos superados —, así el punto rojo y el panel nunca dicen algo que la
- * campana no pueda resolver.
+ * sin modelo de notificaciones persistente ni "marcar leído".
+ *
+ * **Vuelta de diseño 22: la campana lee la cola de lo pendiente** ([colaDelInicio]), la misma de
+ * «Movi propone hoy» y de Plan: los pagos vencidos y de la semana del checklist del período, lo que el
+ * banco cobró solo y lo que espera en «Por revisar» (una sola fila, con el mismo número que la insignia
+ * y que Movimientos). Antes leía el vencimiento VIGENTE de `/api/payments/upcoming`, que rueda al
+ * período siguiente pasados los días de gracia: el Arriendo vencido hace 22 días ya figuraba «vence en
+ * 9 días» y quedaba afuera, mientras Internet $3.000 sí salía. Los demás avisos —el banco que se calló,
+ * los presupuestos pasados, la captura— siguen saliendo de [dashboardAlerts].
  *
  * Vuelta de diseño 8: cada fila sabe de qué habla ([TipoDeNotificacion]) para llevar su ícono y su
  * tono, dice su título en frase y su monto aparte, y lo urgente va primero ([NotificationRow.urgencia];
- * a igual urgencia, el orden de siempre).
+ * a igual urgencia, el orden de la cola).
  */
 fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
-    upcomingPaymentsWithin(data.upcoming.orEmpty()).forEach { p ->
-        // F20: las cuotas de crédito y los pagos de tarjeta son sintéticos (UpcomingPayment
-        // generado por el server, no una regla que viva en Recurrentes) — se resuelven en
-        // Créditos, no en Recurrentes.
-        // Ola C: una regla se resuelve en Plan · Pagos del mes — ahí está su «¿ya ocurrió?». La
-        // campana habla de UN pago, y caer en la lista completa de movimientos no responde nada.
-        val target = if (p.rule.id.startsWith(CREDIT_RULE_PREFIX) || p.rule.id.startsWith(CARD_RULE_PREFIX)) {
-            Screen.Credits
-        } else {
-            Screen.Plan(SEGMENTO_PAGOS)
+    val conteo = conteoPorRevisarDelInicio(data)
+    colaDelInicio(data).forEach { pendiente ->
+        when (pendiente) {
+            is Pendiente.Pago -> {
+                val p = pendiente.pago
+                // F20: las cuotas de crédito y los pagos de tarjeta son sintéticos —se resuelven en
+                // Créditos—; una regla se resuelve en Plan · Pagos del mes, donde está su «¿ya ocurrió?».
+                val target = if (p.ruleId.startsWith(CREDIT_RULE_PREFIX) || p.ruleId.startsWith(CARD_RULE_PREFIX)) {
+                    Screen.Credits
+                } else {
+                    Screen.Plan(SEGMENTO_PAGOS)
+                }
+                val tipo = if (p.diasParaVencer < 0) TipoDeNotificacion.PagoVencido else TipoDeNotificacion.PagoPorVencer
+                add(
+                    NotificationRow(
+                        titulo = tituloDelPagoQueVence(p.nombre, p.diasParaVencer),
+                        target = target,
+                        tipo = tipo,
+                        monto = pendiente.cifra?.takeIf { it > 0 },
+                        moneda = p.moneda,
+                        urgencia = urgenciaDeLaNotificacion(tipo, p.diasParaVencer),
+                    ),
+                )
+            }
+            is Pendiente.Debito -> add(
+                NotificationRow(
+                    titulo = "¿Se cobró ${loQueSeCobra(pendiente.debito)}?",
+                    target = Screen.PorRevisar,
+                    tipo = TipoDeNotificacion.DebitoPorConfirmar,
+                    subtitulo = "Desde ${pendiente.debito.cuentaNombre}",
+                    monto = pendiente.debito.monto.takeIf { it > 0 },
+                    moneda = pendiente.debito.moneda,
+                ),
+            )
+            is Pendiente.PorRevisar -> tituloDeLoQueEntroSolo(conteo)?.let { titulo ->
+                add(
+                    NotificationRow(
+                        titulo = titulo,
+                        target = Screen.PorRevisar,
+                        tipo = TipoDeNotificacion.MensajesDelBanco,
+                        // De varias fuentes, de qué es el número; de una, dónde se resuelve.
+                        subtitulo = cuerpoDeLoQueEntroSolo(conteo)?.takeIf { it.contains(" · ") } ?: "En Por revisar",
+                    ),
+                )
+            }
         }
-        val tipo = if (p.daysUntil < 0) TipoDeNotificacion.PagoVencido else TipoDeNotificacion.PagoPorVencer
-        add(
-            NotificationRow(
-                titulo = tituloDelPagoQueVence(p.rule.name, p.daysUntil),
-                target = target,
-                tipo = tipo,
-                monto = p.rule.amount.takeIf { it > 0 },
-                moneda = p.rule.currency,
-                urgencia = urgenciaDeLaNotificacion(tipo, p.daysUntil),
-            ),
-        )
     }
+    // Lo que no es un pendiente de la cola: el banco que se calló, los presupuestos, la captura. Los
+    // pagos de tarjeta y los mensajes del banco ya entraron arriba, como «Por revisar».
     dashboardAlerts(
-        overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
-        data.captura, data.capturaSilenciada, data.bancosMudos,
+        overBudgetCategories(data.budgets, data.spentByCategory), cardCandidates = 0, pendingSms = 0,
+        captura = data.captura, capturaSilenciada = data.capturaSilenciada, bancosMudos = data.bancosMudos,
     ).forEach { alerta ->
         val tipo = alerta.tipo ?: TipoDeNotificacion.MensajesDelBanco
         add(NotificationRow(titulo = alerta.titulo, target = alerta.target, tipo = tipo, subtitulo = alerta.subtitulo))
@@ -1203,6 +1254,7 @@ internal fun DashboardData.conResumenDelInicio(s: DashboardSummary): DashboardDa
     spentByCategory = s.spentByCategory,
     cardCandidates = s.cardPaymentCandidates,
     pendingSms = s.pendingSms,
+    movimientosPorConfirmar = s.movimientosPorConfirmar,
     // Lo que se sabe de la captura de SMS. Viene en esta MISMA respuesta —no es una llamada
     // nueva— y es lo que le permite al Inicio decir «Movi nunca ha recibido un mensaje de tu
     // banco». Ver CapturaDeSms en :core: la captura estuvo muda semanas y el único lugar que

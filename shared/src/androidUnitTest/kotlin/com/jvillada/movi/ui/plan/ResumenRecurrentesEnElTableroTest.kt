@@ -103,7 +103,7 @@ class ResumenRecurrentesEnElTableroTest {
         }
         // El card de «Flujo libre» espera a sus dos lecturas: es la señal de que las cargas
         // iniciales (todas async) terminaron.
-        esperarTexto("Flujo libre")
+        esperarTexto(TITULO_LO_QUE_SE_REPITE)
     }
 
     @After
@@ -127,7 +127,7 @@ class ResumenRecurrentesEnElTableroTest {
 
     @Test
     fun `el flujo libre y las candidatas aparecen en el tablero`() {
-        composeRule.onNodeWithText("Flujo libre", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(TITULO_LO_QUE_SE_REPITE, useUnmergedTree = true).assertIsDisplayed()
         esperarTexto("Disney+")
         composeRule.onNodeWithText("Disney+", useUnmergedTree = true).assertIsDisplayed()
         // MinSectionHeader pinta el título en mayúsculas.
@@ -142,7 +142,7 @@ class ResumenRecurrentesEnElTableroTest {
      */
     @Test
     fun `buscar cobros corre el detector y muestra lo que encuentra`() {
-        esperarTexto("Flujo libre")
+        esperarTexto(TITULO_LO_QUE_SE_REPITE)
         composeRule.onNodeWithText("Spotify", useUnmergedTree = true).assertDoesNotExist()
 
         composeRule.onNodeWithText("Buscar cobros", useUnmergedTree = true).performClick()

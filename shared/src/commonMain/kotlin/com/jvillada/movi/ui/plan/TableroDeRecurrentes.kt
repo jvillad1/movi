@@ -5,6 +5,7 @@ import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import com.jvillada.movi.shared.model.TransactionType
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -253,6 +254,18 @@ class EstadoDelTableroDeRecurrentes internal constructor(
      * `Boolean` y no una tercera variable de edición porque acá no hay nada que prellenar.
      */
     internal var nuevoRecurrenteAbierto by mutableStateOf(false)
+
+    /**
+     * Con qué tipo abre la hoja de alta: Gasto, salvo «Agregar mi salario» del flujo libre (vuelta de
+     * diseño 22), que la abre en Ingreso. Vuelve a Gasto al cerrarla.
+     */
+    internal var tipoDelNuevoRecurrente by mutableStateOf(TransactionType.EXPENSE)
+
+    /** «Agregar mi salario»: la hoja de alta, ya en Ingreso. */
+    internal fun agregarSalario() {
+        tipoDelNuevoRecurrente = TransactionType.INCOME
+        nuevoRecurrenteAbierto = true
+    }
     /**
      * ¿Está abierta la lista de suscripciones activas? **Arranca cerrada**, y por lo mismo que el
      * grupo de ajustes de Movimientos es transitorio: abrir el inventario es un vistazo, no una
@@ -656,10 +669,10 @@ fun LazyListScope.tableroDeRecurrentes(
     despuesDeLaLista: (LazyListScope.() -> Unit)? = null,
 ) {
     // ── Aviso: pediste recordatorios y no hay por dónde mandártelos ──────────
-    // Ola R4: era un cartel ámbar ARRIBA de la lista del período, en el medio de «¿qué me falta
-    // pagar?». Ahora es una propuesta al FINAL del segmento (ver [propuestaDeRecordatorios]): no
-    // es un pago, es una decisión sobre cómo avisar. No se muda a Perfil porque Perfil no sabe si
-    // hay recordatorios pedidos ni si el canal falta — lo sabe este tablero.
+    // Ola R4 lo había llevado al FINAL del segmento, como propuesta (ver [propuestaDeRecordatorios]).
+    // Vuelta de diseño 22: ahí se descubría tarde —después de las suscripciones— y sube junto a
+    // «Pagos del período», justo encima, que es donde importa: son esos pagos los que no van a avisar.
+    // Una sola vez en Plan; Ajustes → Avisos lo dice en su fila («Apagado: no te va a llegar»).
     val avisarRecordatorios =
         shouldShowReminderWarning(estado.pushStatus, estado.pidieronRecordatorios, ReminderChannelsCache.canales)
 
@@ -713,6 +726,7 @@ fun LazyListScope.tableroDeRecurrentes(
     // `/api/payments/upcoming` y `/api/payments/occurrences` contestan sobre HOY: pintar sus filas
     // bajo el rótulo de agosto sería afirmar sobre un mes cerrado con los datos de otro. En un
     // período que no es el de hoy, el checklist no se pinta.
+    if (avisarRecordatorios) propuestaDeRecordatorios(estado, onNavigate)
     if (periodoVisible == periodoDeHoy) {
         item {
             /**
@@ -841,6 +855,7 @@ fun LazyListScope.tableroDeRecurrentes(
                 onAccion = { estado.buscarCobros() },
             )
             ResumenFlujoLibreCard(
+                onAgregarSalario = { estado.agregarSalario() },
                 // **Sin los vencimientos no hay cifra.** Las cuotas de los créditos
                 // llegan solo por ahí y son la mitad del mes del dueño: si esa
                 // llamada falló, el total saldría plausible y $5.445.772 más alto
@@ -890,8 +905,6 @@ fun LazyListScope.tableroDeRecurrentes(
                 )
             }
         }
-
-    if (avisarRecordatorios) propuestaDeRecordatorios(estado, onNavigate)
 }
 
 /**
@@ -984,12 +997,17 @@ fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes) {
     // Sin `existing` ni `existingSub` ni `prefill`: la misma hoja, en su modo de alta.
     if (estado.nuevoRecurrenteAbierto) {
         CreateRecurringRuleSheet(
-            onDismiss = { estado.nuevoRecurrenteAbierto = false },
+            onDismiss = {
+                estado.nuevoRecurrenteAbierto = false
+                estado.tipoDelNuevoRecurrente = TransactionType.EXPENSE
+            },
             onSaved = {
                 estado.nuevoRecurrenteAbierto = false
+                estado.tipoDelNuevoRecurrente = TransactionType.EXPENSE
                 RecurringOfferGate.olvidarLoCacheado()
                 estado.recargar()
             },
+            tipoNuevo = estado.tipoDelNuevoRecurrente,
         )
     }
 }
@@ -1128,8 +1146,61 @@ fun resumenPlegadoDeSuscripciones(cuantas: Int, totalMensual: Long): String {
 @Composable
 private fun ResumenFlujoLibreCard(
     cifras: ResumenRecurrentes?,
+    onAgregarSalario: () -> Unit,
 ) {
     Superficie(modifier = Modifier.fillMaxWidth()) {
+        // Vuelta de diseño 22: sin ningún ingreso recurrente el flujo libre es solo los gastos con
+        // signo menos («Ingresos recurrentes $0 · Flujo libre −$1.875.159»), un número que asusta y no
+        // dice nada. En su lugar, la invitación a anotar el salario (ver [pideElSalario]).
+        if (cifras != null && pideElSalario(cifras)) {
+            InvitacionAlSalario(cifras, onAgregarSalario)
+        } else {
+            CifrasDelFlujoLibre(cifras)
+        }
+        NotasDelFlujoLibre(cifras)
+    }
+}
+
+/**
+ * **¿El flujo libre pide el salario?** Sin un solo ingreso recurrente, «Flujo libre» sería los gastos
+ * recurrentes con signo menos: no hay nada libre que medir todavía (vuelta de diseño 22).
+ */
+internal fun pideElSalario(cifras: ResumenRecurrentes): Boolean = cifras.ingresos <= 0L
+
+/** El título de la invitación del flujo libre sin ingresos recurrentes. */
+const val AGREGA_TU_SALARIO: String = "Agrega tu salario para ver tu flujo libre"
+
+/** El tag de la invitación, para sus pruebas. */
+const val TAG_INVITACION_AL_SALARIO: String = "plan-invitacion-al-salario"
+
+/**
+ * La invitación en lugar del flujo libre negativo: qué falta, por qué, la acción que abre la hoja de un
+ * recurrente ya en Ingreso, y los gastos recurrentes, que sí son un dato.
+ */
+@Composable
+private fun InvitacionAlSalario(cifras: ResumenRecurrentes, onAgregarSalario: () -> Unit) {
+    Column(modifier = Modifier.testTag(TAG_INVITACION_AL_SALARIO)) {
+        Text(AGREGA_TU_SALARIO, style = Movi.textos.titulo, color = Movi.colores.texto)
+        Spacer(Modifier.height(Espacio.xxs))
+        Text(
+            text = "El flujo libre es lo que te entra cada mes menos lo que se repite. Sin un ingreso " +
+                "que se repita, solo verías tus gastos con signo menos.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+        )
+        Spacer(Modifier.height(Espacio.s))
+        Boton("Agregar mi salario", onClick = onAgregarSalario, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
+        Spacer(Modifier.height(Espacio.s))
+        Separador(SangriaDeSeparador.Ninguna)
+        Spacer(Modifier.height(Espacio.s))
+        CifraConRotulo("Gastos recurrentes", cifras.gastos)
+    }
+}
+
+/** El flujo libre con sus cifras: lo de siempre, con un ingreso recurrente (o sin datos todavía). */
+@Composable
+private fun CifrasDelFlujoLibre(cifras: ResumenRecurrentes?) {
+    Column {
         // **La cifra grande es [ResumenRecurrentes.disponible], no `flujoLibre`.** El mínimo de una
         // tarjeta no es un gasto del mes —eso sigue igual, ver `cuentaComoCompromisoMensual`— pero
         // es plata que hay que pagar sí o sí, y mientras el número grande la ignoraba el dueño leía
@@ -1173,6 +1244,17 @@ private fun ResumenFlujoLibreCard(
             Spacer(Modifier.height(Espacio.s))
             Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso)
         }
+    }
+}
+
+/**
+ * Las notas del total —lo que no se pudo convertir, la TRM, el prorrateo de lo anual, las cuotas y los
+ * pagos únicos—: valen igual con flujo libre o con la invitación al salario, porque hablan de
+ * «Gastos recurrentes».
+ */
+@Composable
+private fun NotasDelFlujoLibre(cifras: ResumenRecurrentes?) {
+    Column {
         // Mismo criterio que la pantalla vieja: un total al que le faltan filas se dice, no se
         // disimula. Ver el KDoc de [ResumenRecurrentes.sinConvertir].
         if (cifras != null && cifras.sinConvertir > 0) {

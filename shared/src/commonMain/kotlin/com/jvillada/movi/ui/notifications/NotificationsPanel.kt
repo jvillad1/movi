@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Inbox
@@ -59,6 +60,8 @@ fun iconoDelAviso(tipo: TipoDeNotificacion): Pair<ImageVector, TonoDeIcono> = wh
     TipoDeNotificacion.PresupuestoSuperado -> Icons.AutoMirrored.Rounded.TrendingUp to TonoDeIcono.Peligro
     TipoDeNotificacion.PagoDeTarjetaPorConfirmar -> Icons.Rounded.CreditCard to TonoDeIcono.Aviso
     TipoDeNotificacion.MensajesDelBanco -> Icons.Rounded.Inbox to TonoDeIcono.Aviso
+    // El ícono de su tarjeta en «Movi propone hoy»: lo que el banco cobró solo.
+    TipoDeNotificacion.DebitoPorConfirmar -> Icons.Rounded.AccountBalance to TonoDeIcono.Aviso
     TipoDeNotificacion.CapturaSinMensajes -> Icons.Rounded.Sms to TonoDeIcono.Neutro
 }
 
