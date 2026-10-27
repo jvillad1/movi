@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.HistoriaDelPatrimonio
+import com.jvillada.movi.shared.model.MESES_DE_HISTORIA
 import com.jvillada.movi.shared.model.PuntoDelPatrimonio
 import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.theme.LocalMovimientoReducido
@@ -70,8 +71,37 @@ internal fun leyendaDelPunto(punto: PuntoDelPatrimonio): String =
     if (punto.esHoy) "Hoy: ${formatCOP(punto.neto)}"
     else "Al cierre de ${nombreDelPunto(punto)}: ${formatCOP(punto.neto)}"
 
-/** Lo que dice sin nada elegido: de dónde a dónde. */
-internal fun leyendaDeLaCurva(puntos: List<PuntoDelPatrimonio>): String {
+/**
+ * **La curva arranca donde hay saldos de verdad** (vuelta de diseño 23). En la cuenta demo decía
+ * «Desde oct 2025, subió $10,9M» con una línea plana que saltaba de golpe: los meses de antes eran
+ * movimientos viejos sin las cuentas cargadas, y el salto era el día que se cargaron los saldos, no una
+ * ganancia. El server ya omite los meses antes del primer movimiento, pero ahí sí había movimientos.
+ *
+ * Se descartan los puntos del principio que son cero o que siguen planos —un mes que cierra igual que
+ * el anterior no tuvo ningún movimiento— hasta el primero que cambia. Un primer punto distinto de cero
+ * y seguido de otro distinto se queda: ya era un saldo que se movía. No es una regla de plata: cada
+ * punto sigue siendo el que armó el server con `patrimonioDe`; solo cambia desde dónde se mira.
+ */
+internal fun puntosConSaldos(puntos: List<PuntoDelPatrimonio>): List<PuntoDelPatrimonio> {
+    val primero = puntos.firstOrNull()?.neto ?: return puntos
+    val cambia = puntos.indexOfFirst { it.neto != primero }
+    if (cambia <= 0) return puntos // todo igual (o vacío): no hay arranque que descartar
+    return if (primero == 0L || cambia >= 2) puntos.drop(cambia) else puntos
+}
+
+/**
+ * ¿La curva arranca cuando el dueño empezó a usar Movi? Sí si se descartó un arranque plano, o si el
+ * server trajo menos cierres que la ventana (empezó a cortar en su primer movimiento). Si trajo la
+ * ventana entera, la curva solo muestra los últimos meses.
+ */
+internal fun arrancaConElDueno(historia: HistoriaDelPatrimonio, puntos: List<PuntoDelPatrimonio>): Boolean =
+    puntos.size < historia.puntos.size || historia.puntos.size < MESES_DE_HISTORIA + 1
+
+/**
+ * Lo que dice sin nada elegido: de dónde a dónde. «Desde que usas Movi (ago 2026), subió $5M» si la
+ * curva arranca con el dueño ([arrancaConElDueno]); si no, «Desde oct 2025, subió $5M».
+ */
+internal fun leyendaDeLaCurva(puntos: List<PuntoDelPatrimonio>, desdeQueUsasMovi: Boolean = false): String {
     val primero = puntos.first()
     val cambio = puntos.last().neto - primero.neto
     val hacia = when {
@@ -79,11 +109,12 @@ internal fun leyendaDeLaCurva(puntos: List<PuntoDelPatrimonio>): String {
         cambio < 0 -> "bajó ${formatMoneyCompact(-cambio)}"
         else -> "sigue igual"
     }
-    return "Desde ${nombreDelPunto(primero)}, $hacia"
+    val desde = if (desdeQueUsasMovi) "Desde que usas Movi (${nombreDelPunto(primero)})" else "Desde ${nombreDelPunto(primero)}"
+    return "$desde, $hacia"
 }
 
-/** ¿Hay curva que dibujar? Con un solo punto (hoy) no hay historia. */
-internal fun hayCurva(historia: HistoriaDelPatrimonio?): Boolean = (historia?.puntos?.size ?: 0) >= 2
+/** ¿Hay curva que dibujar? Con un solo punto con saldos (hoy) no hay historia. */
+internal fun hayCurva(historia: HistoriaDelPatrimonio?): Boolean = puntosConSaldos(historia?.puntos.orEmpty()).size >= 2
 
 /**
  * La curva y su leyenda. Sin historia ([hayCurva] falso) no pinta nada.
@@ -91,7 +122,8 @@ internal fun hayCurva(historia: HistoriaDelPatrimonio?): Boolean = (historia?.pu
 @Composable
 internal fun CurvaDelPatrimonio(historia: HistoriaDelPatrimonio, modifier: Modifier = Modifier) {
     if (!hayCurva(historia)) return
-    val puntos = historia.puntos
+    val puntos = remember(historia) { puntosConSaldos(historia.puntos) }
+    val leyenda = leyendaDeLaCurva(puntos, desdeQueUsasMovi = arrancaConElDueno(historia, puntos))
     var elegido by remember(historia) { mutableStateOf<Int?>(null) }
     // Los colores se leen acá: una lambda de dibujo no puede leer un CompositionLocal. La curva va en
     // el color del texto (el patrimonio es neutro en los dos signos, como su cifra de arriba).
@@ -114,7 +146,7 @@ internal fun CurvaDelPatrimonio(historia: HistoriaDelPatrimonio, modifier: Modif
                 .height(ALTO_DE_LA_CURVA)
                 .testTag(TAG_CURVA_DEL_PATRIMONIO)
                 .semantics {
-                    contentDescription = "Tu patrimonio neto en el tiempo: ${leyendaDeLaCurva(puntos)}. " +
+                    contentDescription = "Tu patrimonio neto en el tiempo: $leyenda. " +
                         "${nombreDelPunto(puntos.first())}: ${formatMoneyCompact(puntos.first().neto)}; " +
                         "hoy: ${formatMoneyCompact(puntos.last().neto)}."
                 }
@@ -123,7 +155,7 @@ internal fun CurvaDelPatrimonio(historia: HistoriaDelPatrimonio, modifier: Modif
         Spacer(Modifier.height(Movi.espacios.corto))
         // Un renglón de alto fijo: elegir un punto cambia el texto, no mueve la tarjeta.
         Text(
-            text = elegido?.let { puntos.getOrNull(it) }?.let(::leyendaDelPunto) ?: leyendaDeLaCurva(puntos),
+            text = elegido?.let { puntos.getOrNull(it) }?.let(::leyendaDelPunto) ?: leyenda,
             style = Movi.textos.apoyo,
             color = if (elegido != null) Movi.colores.texto else Movi.colores.textoMedio,
             maxLines = 1,

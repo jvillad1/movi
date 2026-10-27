@@ -13,6 +13,7 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.HistoriaDelPatrimonio
+import com.jvillada.movi.shared.model.MESES_DE_HISTORIA
 import com.jvillada.movi.shared.model.PuntoDelPatrimonio
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.patrimonioDe
@@ -53,9 +54,6 @@ fun Route.patrimonioRoutes() {
         call.respond(historiaDelPatrimonioDe(call.userId(), AppClock.today()))
     }
 }
-
-/** Cuántos cierres de mes muestra la curva, además del punto de hoy. */
-const val MESES_DE_HISTORIA: Int = 12
 
 /**
  * **La historia del patrimonio de [uid]** a [hoy]. Ver el KDoc del archivo.

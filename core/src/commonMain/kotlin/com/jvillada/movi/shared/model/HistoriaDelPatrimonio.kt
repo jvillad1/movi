@@ -20,6 +20,14 @@ import kotlinx.serialization.Serializable
  *
  * Todos los campos con valor por defecto: un cliente viejo no revienta con uno nuevo.
  */
+
+/**
+ * Cuántos cierres de mes trae la historia, además del punto de hoy. Lo usa el server para armarla y
+ * la app para saber si la curva arranca donde arrancó el dueño (menos puntos) o donde la corta la
+ * ventana (vuelta de diseño 23).
+ */
+const val MESES_DE_HISTORIA: Int = 12
+
 @Serializable
 data class HistoriaDelPatrimonio(
     /** Del más viejo al más nuevo; el último es hoy. Vacía si el dueño no tiene movimientos. */
