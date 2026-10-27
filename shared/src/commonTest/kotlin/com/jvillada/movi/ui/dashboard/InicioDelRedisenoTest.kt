@@ -105,7 +105,6 @@ class InicioDelRedisenoTest {
     @Test
     fun `sin nada pendiente no hay propuestas`() {
         assertEquals(emptyList(), propuestasDelInicio(DashboardData()))
-        assertEquals("Nada por decidir hoy", NADA_POR_DECIDIR)
     }
 
     @Test
@@ -203,10 +202,19 @@ class InicioDelRedisenoTest {
     fun `el periodo del encabezado`() {
         assertNull(periodoDelEncabezado(DashboardData()))
         assertEquals("Septiembre 2026", periodoDelEncabezado(DashboardData(periodoActual = septiembre)))
+        // Vuelta de diseño 11: con un corte a mitad de mes, el nombre corto, no el rango entero (que
+        // a 360 dp se cortaba en «Del 25 de agosto al 24 de sep…»).
         assertEquals(
-            "Del 25 de agosto al 24 de septiembre",
+            "Septiembre 2026",
             periodoDelEncabezado(DashboardData(periodoActual = septiembre, ajustesDePeriodo = PeriodSettings(cutoffDay = 25))),
         )
+    }
+
+    @Test
+    fun `el heroe pide la cuenta solo cuando las cuentas contestaron vacias`() {
+        assertEquals(false, elHeroePideLaCuenta(DashboardData()))
+        assertEquals(true, elHeroePideLaCuenta(DashboardData(accounts = emptyList())))
+        assertEquals(false, elHeroePideLaCuenta(DashboardData(accounts = listOf(Account("a1", "Nu", AccountType.SAVINGS, 0)))))
     }
 
     // ── Tus cuentas ──────────────────────────────────────────────────────────
