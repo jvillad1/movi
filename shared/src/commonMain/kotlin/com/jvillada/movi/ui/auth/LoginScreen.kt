@@ -199,8 +199,9 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Tamaño suelto a propósito: es el logotipo de la entrada, no un título; `titular` (19) lo apaga y `cifra` es para montos.
-        Text("Movi", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Movi.colores.texto)
+        // El logotipo de la entrada: `portada`, el estilo de una pantalla de una sola cosa (era un
+        // tamaño suelto de 32; `titular`, 19, lo apagaba y `cifra` es para montos).
+        Text("Movi", style = Movi.textos.portada, color = Movi.colores.texto)
         Text("Finanzas personales", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(Espacio.xxxl))
 

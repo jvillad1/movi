@@ -92,6 +92,11 @@ fun Pildora(
  * ```
  * PildoraDeFiltro("Gastos", seleccionada = filtro == Gastos, onClick = { filtro = Gastos })
  * ```
+ *
+ * [inicio] (vuelta de diseño 3) es lo que va antes del texto cuando un ícono no alcanza: el
+ * avatar de la marca de un banco (`CirculoDeMarca` en `TamanoDeAvatar.Linea`, 20 dp) en la guía de
+ * primer uso. Con él la píldora arranca a [Espacio.xs] del borde —un círculo pegado a la curva de
+ * la píldora— en vez de [Espacio.m]; el alto no cambia.
  */
 @Composable
 fun PildoraDeFiltro(
@@ -100,6 +105,7 @@ fun PildoraDeFiltro(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icono: ImageVector? = null,
+    inicio: (@Composable () -> Unit)? = null,
 ) {
     val fondo = if (seleccionada) Movi.colores.marca else Movi.colores.capa2
     val color = if (seleccionada) Movi.colores.sobreMarca else Movi.colores.texto
@@ -111,10 +117,11 @@ fun PildoraDeFiltro(
             .clickable(role = Role.Tab, onClick = onClick)
             .semantics { selected = seleccionada }
             .testTag(TAG_PILDORA_DE_FILTRO)
-            .padding(horizontal = Espacio.m),
-        horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
+            .padding(start = if (inicio != null) Espacio.xs else Espacio.m, end = Espacio.m),
+        horizontalArrangement = Arrangement.spacedBy(if (inicio != null) Espacio.xs else Espacio.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        inicio?.invoke()
         if (icono != null) Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(Icono.s))
         Text(text = texto, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = color, maxLines = 1)
     }

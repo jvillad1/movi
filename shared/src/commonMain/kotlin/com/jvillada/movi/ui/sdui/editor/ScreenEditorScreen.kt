@@ -104,7 +104,7 @@ internal val NAVIGATE_TARGET_LABELS = mapOf(
     // "investments"/"subscriptions" acá arriba.
     "extractos" to "Documentos (extractos)",
     "aichat" to "Movi AI",
-    "profile" to "Perfil",
+    "profile" to "Ajustes (perfil)",
 )
 
 /**
@@ -117,7 +117,8 @@ internal val NAVIGATE_TARGET_LABELS = mapOf(
  * definición guardada de antes de esta tanda con target "goals" no se rompe— así que no sale de
  * `NAVIGATE_TARGETS`, solo de lo que este selector propone para una tarjeta nueva.
  */
-internal val NAVEGABLES_DESDE_EL_EDITOR = ScreenTaxonomy.NAVIGATE_TARGETS - "goals"
+// Vuelta de diseño 3: tampoco "profile", que ahora es Ajustes —ya está "mas"— y sigue siendo válido.
+internal val NAVEGABLES_DESDE_EL_EDITOR = ScreenTaxonomy.NAVIGATE_TARGETS - "goals" - "profile"
 
 /**
  * Extrae el mensaje legible del server para un 422 (`{"error": "..."}`, ver
@@ -248,7 +249,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
         // destino de reserva si no hay historial.
         MinScreenHeader(
             title = "Editor de pantallas",
-            leading = HeaderLeading.Back(fallback = Screen.Profile),
+            leading = HeaderLeading.Back(fallback = Screen.Mas),
             action = { if (saved) Text("Guardado", style = Movi.textos.apoyo, color = Movi.colores.entra, fontWeight = FontWeight.Medium) },
         )
         Spacer(Modifier.height(12.dp))

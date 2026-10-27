@@ -85,7 +85,7 @@ import java.time.LocalDate
  *   «Ingresos» y «Gastos» del Inicio (`monthCashFlow`).
  * - **Contra el período pasado a la misma altura**: [gastoDelAnteriorAMismaAltura] y
  *   [contraElAnterior], las flechas de «¿En qué se va?».
- * - **Te quedan, la meta diaria y «te pasaste»**: [disponibleAlDia], la MISMA `disponibleDelPeriodo`
+ * - **Te quedan, cuánto da por día y «te pasaste»**: [disponibleAlDia], la MISMA `disponibleDelPeriodo`
  *   que pinta Hoy, sobre [disponibleDelServidor] (lo que el resumen del Inicio le manda) y el
  *   checklist del período.
  * - **Los pagos del período**: [checklistDelPeriodo] sobre [proximosPagos] y [ocurrenciasDelPeriodo]
@@ -285,8 +285,8 @@ internal fun respuestaSinModelo(pregunta: PreguntaSugerida, d: DatosDeLasSugerid
 }
 
 /**
- * **¿Cómo voy este período?** Cuánto te queda y para cuántos días con la meta diaria (la frase de la
- * tarjeta Disponible), lo que entró y salió, cómo va el gasto contra los mismos días del período
+ * **¿Cómo voy este período?** Cuánto te queda, para cuántos días y cuánto da por día (la frase del
+ * héroe de Hoy), lo que entró y salió, cómo va el gasto contra los mismos días del período
  * pasado, y los pagos que faltan con su total.
  */
 internal fun comoVoy(d: DatosDeLasSugeridas): String = buildList {
@@ -315,14 +315,17 @@ private fun fraseDelDisponible(disponible: DisponibleDelPeriodo?): String {
             "Hoy te pasaste de la meta del día por ${pesosDelCierre(-d.hoy.teQuedan)}. " +
                 "A la semana le quedan ${pesosDelCierre(d.semana.teQuedan)}."
         periodo.teQuedan == 0L -> "Ya usaste todo el disponible del período."
-        d.diasQueQuedan <= 1 -> "Te quedan ${pesosDelCierre(periodo.teQuedan)} para cerrar el período."
-        else -> buildString {
-            append("Te quedan ${pesosDelCierre(periodo.teQuedan)} para ${d.diasQueQuedan} días. ")
-            append("Tu meta diaria es ${pesosDelCierre(d.metaPorDia)}.")
-            if (periodo.contraElRitmo > 0L) {
-                append(" Vas ${pesosDelCierre(periodo.contraElRitmo)} por encima de lo previsto a hoy.")
-            }
-        }
+        // Vuelta de diseño 3: la misma frase que el héroe de Hoy (`teQuedanDeHoy` en `:shared`), con
+        // la misma cifra diaria —lo que queda entre los días que faltan, hoy incluido
+        // ([DisponibleDelPeriodo.porDiaParaLoQueQueda])—. Hasta acá decía «Tu meta diaria es $Y»
+        // con la meta del período ENTERO, y el héroe decía otra cifra «por día» al mismo tiempo.
+        d.diasQueQuedan <= 1 -> "Te quedan ${pesosDelCierre(periodo.teQuedan)} para hoy."
+        periodo.contraElRitmo > 0L ->
+            "Te quedan ${pesosDelCierre(periodo.teQuedan)} para ${d.diasQueQuedan} días · " +
+                "vas ${pesosDelCierre(periodo.contraElRitmo)} por encima de lo previsto a hoy."
+        else ->
+            "Te quedan ${pesosDelCierre(periodo.teQuedan)} para ${d.diasQueQuedan} días · " +
+                "${pesosDelCierre(d.porDiaParaLoQueQueda ?: 0L)} por día."
     }
 }
 

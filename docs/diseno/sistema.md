@@ -108,6 +108,11 @@ nuevo: **`cifraDeTarjeta`** (Martian Mono, 24 sp), la cifra de una tarjeta de cu
 cifra héroe es `cifra` (Martian Mono, 42 sp). Ningún `fontSize` suelto (lo vigila
 `LosTamanosSueltosSoloBajanTest`).
 
+**Vuelta de diseño 3: `portada`** (Space Grotesk bold, 32 sp), el título de una pantalla de una sola
+cosa: el logotipo «Movi» de la entrada (era el `fontSize` suelto de `LoginScreen`) y «Te damos la
+bienvenida a Movi» en la guía de primer uso. No es para una cifra ni para el título de una pantalla
+con contenido (`titular`).
+
 **Ola R1: toda cifra de plata va en Martian Mono.** `monto` —el de una fila, una propuesta, un
 widget— pasó de Space Grotesk tabular a Martian Mono a 12,5 sp (la monoespaciada es más ancha: un
 punto menos que el cuerpo se lee del mismo tamaño). Así las cifras de la app se ven de la misma familia
@@ -160,13 +165,15 @@ y filtro que se elige.
 ```kotlin
 Pildora("Vence en 2 días", TonoDePildora.Aviso)
 PildoraDeFiltro("Gastos", seleccionada = filtro == Gastos, onClick = { filtro = Gastos })
+// Vuelta 3: con `inicio`, lo que no es un ícono (el avatar de la marca de un banco, 20 dp).
+PildoraDeFiltro(marca.nombre, elegido, onClick, inicio = { CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea) })
 ```
 
 **`AccionRapida`** y **`CuadriculaDeAcciones`** — la cuadrícula del camino 3: cuatro columnas, ícono en
 círculo de 56 y **rótulo de un renglón** (vuelta de diseño 2: «Gasto», «Comprobante», «Preguntar»; si uno
 no entra se achica hasta la letra de `rotulo` y recién ahí lleva «…»), con la frase entera en
 `descripcion` para el lector de pantalla («Anotar un gasto»). Una destacada como mucho, insignia
-opcional. Las fichas de Ajustes, que son nombres de pantallas, van con `RenglonesDelRotulo.Dos`.
+opcional. `RenglonesDelRotulo.Dos` es para rótulos que son nombres de pantallas (eran las fichas de Ajustes, que desde la vuelta 3 es una lista de `Fila`).
 ```kotlin
 CuadriculaDeAcciones(listOf(
     Accion("Gasto", Icons.Rounded.Edit, ::anotar, destacada = true, descripcion = "Anotar un gasto"),
@@ -386,7 +393,7 @@ pasaron al sistema. Lo que se decidió y vale para las que vengan:
 |---|---|---|
 | Patrimonio | ¿cuánto tengo y cuánto debo? | los subtotales de cada grupo («DINERO · 5 · $20,9M»): repetían la resta de la tarjeta de arriba; «Personas y comercios» (no es tuyo) |
 | Personas y comercios | ¿a quién le mandé plata? | de cuatro puertas quedan dos: la fila al final de **Espacios** y la ficha de **Ajustes** |
-| Ajustes | ¿dónde se ajusta X? | las fichas son la `CuadriculaDeAcciones` del Inicio; sin color propio por ficha |
+| Ajustes | ¿dónde se ajusta X? | **vuelta de diseño 3: una sola pantalla.** Arriba la tarjeta del perfil; debajo `Seccion` + `Fila` en orden —Tu plata, Movi, Cómo se ve, Avisos, Tus datos, (Entrar), Cuenta— y al final, aparte, «Borrar mi cuenta» como `Fila` (sin relleno rojo). «Perfil» dejó de ser pantalla; la cuadrícula de fichas se fue |
 | Metas, Extractos | — | **borradas**; los destinos SDUI `goals` y `extractos` llevan a Patrimonio y a Documentos |
 
 - **Grupos de cuentas**: `Seccion(titulo, conteo)` + `Superficie(relleno = Lista)` con una `Fila` por

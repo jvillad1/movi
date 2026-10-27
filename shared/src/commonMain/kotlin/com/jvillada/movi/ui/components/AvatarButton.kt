@@ -58,7 +58,7 @@ fun AvatarButton(onClick: () -> Unit) {
  * Convierte un hex `"#RRGGBB"` de [AvatarPalette] a [Color]. `null` (todavía sin cargar el
  * perfil) o cualquier cosa que no parsee cae a [AvatarPalette.DEFAULT] — nunca a un color
  * inventado: la paleta es la única fuente de colores válidos (ver AvatarPalette.kt).
- * `internal`: se usa también desde `ui.profile` (PerfilScreen y sus hojas), en el mismo módulo.
+ * `internal`: se usa también desde Ajustes (`ui.mas.MasScreen`) y las hojas de `ui.profile`, en el mismo módulo.
  */
 internal fun avatarColorOrDefault(hex: String?): Color {
     val safe = hex?.takeIf { AvatarPalette.isValid(it) } ?: AvatarPalette.DEFAULT

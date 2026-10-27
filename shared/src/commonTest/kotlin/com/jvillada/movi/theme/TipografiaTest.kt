@@ -39,6 +39,7 @@ class TipografiaTest {
     @Test
     fun `todo lo demas va en la de la interfaz`() {
         mapOf(
+            "portada" to textos.portada,
             "titular" to textos.titular,
             "titulo" to textos.titulo,
             "cuerpo" to textos.cuerpo,

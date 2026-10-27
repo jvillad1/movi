@@ -22,6 +22,7 @@ import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.mas.MasScreen
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -33,7 +34,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * # Perfil no inventa tus ajustes
+ * # Ajustes no inventa tus ajustes
+ *
+ * (Vuelta de diseño 3: lo que era Perfil vive ahora en Ajustes, `MasScreen`; la prueba sigue igual.)
  *
  * El corte del dueño es **25**. Con la lectura del perfil caída —o todavía en vuelo— esta pantalla
  * mostraba «Mes de calendario» en «Inicio del mes» como si fuera *su* ajuste guardado, y la fila
@@ -48,7 +51,7 @@ import kotlin.test.assertTrue
  * sola, que es donde vivía el `remember` sin clave.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(qualifiers = "w411dp-h2000dp-xhdpi")
+@Config(qualifiers = "w411dp-h3200dp-xhdpi")
 class PerfilNoInventaTusAjustesTest {
 
     @get:Rule val composeRule = createComposeRule()
@@ -101,7 +104,7 @@ class PerfilNoInventaTusAjustesTest {
         montar(object : RepositorioDePrueba() {
             override suspend fun getUserProfile(): UserProfile = throw caida
             override suspend fun isScreenAdmin(): Boolean = false
-        }) { PerfilScreen(onNavigate = {}, onLogout = {}) }
+        }) { MasScreen(onNavigate = {}, onLogout = {}) }
 
         esperar(AJUSTES_NO_LEIDOS)
 
@@ -129,7 +132,7 @@ class PerfilNoInventaTusAjustesTest {
             override suspend fun getUserProfile(): UserProfile =
                 if (hayRed) perfilDelDueno else throw caida
             override suspend fun isScreenAdmin(): Boolean = false
-        }) { PerfilScreen(onNavigate = {}, onLogout = {}) }
+        }) { MasScreen(onNavigate = {}, onLogout = {}) }
 
         esperar(AJUSTES_NO_LEIDOS)
         hayRed = true
@@ -154,7 +157,7 @@ class PerfilNoInventaTusAjustesTest {
                 guardado = request
                 return perfilDelDueno
             }
-        }) { PerfilScreen(onNavigate = {}, onLogout = {}) }
+        }) { MasScreen(onNavigate = {}, onLogout = {}) }
 
         esperar("Cada día 25")
         tocarFila("Inicio del mes")

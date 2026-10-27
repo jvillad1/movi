@@ -47,6 +47,19 @@ class SduiRendererTest {
         assertEquals(Screen.Mas, screenForTarget("mas"))
     }
 
+    /**
+     * Vuelta de diseño 3: «Perfil» se mudó dentro de Ajustes y `Screen.Profile` ya no existe. El
+     * target `"profile"` sigue siendo válido (puede venir en una definición guardada) y lleva a
+     * Ajustes; y **ningún** target válido se queda sin pantalla.
+     */
+    @Test
+    fun profile_lleva_a_Ajustes_y_ningun_target_valido_se_queda_sin_pantalla() {
+        assertEquals(Screen.Mas, screenForTarget("profile"))
+        com.jvillada.movi.shared.model.ScreenTaxonomy.NAVIGATE_TARGETS.forEach { target ->
+            kotlin.test.assertNotNull(screenForTarget(target), "«$target» no lleva a ninguna pantalla")
+        }
+    }
+
     @Test
     fun un_target_desconocido_no_explota() {
         assertEquals(null, screenForTarget("algo-que-no-existe"))

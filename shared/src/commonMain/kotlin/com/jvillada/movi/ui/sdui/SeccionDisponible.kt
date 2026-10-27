@@ -62,7 +62,8 @@ import com.jvillada.movi.ui.Screen
  * El dueño la pidió así: *«Disponible en el periodo · por semana · por día»*. Se queda, pero baja de
  * lugar (debajo de «Falta por pagar», que son justamente los fijos que resta) y se achica: la cifra
  * del disponible, **una** frase de cómo viene y tres columnas —el período, la semana, hoy— con lo
- * que te queda por gastar en cada una, lo que ya gastaste y una barra que crece al cargar.
+ * que te queda por gastar en la semana y hoy, lo que ya gastaste y una barra que crece al cargar.
+ * En el período, lo gastado y de cuánto: lo que le queda ya lo dice la frase (ver [ColumnaDeVentana]).
  *
  * **Una sola frase, no tres.** Cada fila decía la suya, y con el período pasado el dueño leía «Te
  * pasaste por $563.456» en rojo y, un renglón abajo, «Vas bien: te quedan … para esta semana». La
@@ -181,7 +182,7 @@ private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
     ) {
-        ColumnaDeVentana("Período", disponible.periodo, disponible.hayMargen, entrada, Modifier.weight(1f))
+        ColumnaDeVentana("Período", disponible.periodo, disponible.hayMargen, entrada, Modifier.weight(1f), delPeriodo = true)
         ColumnaDeVentana(rotuloDeLaSemana(disponible), disponible.semana, disponible.hayMargen, entrada, Modifier.weight(1f))
         ColumnaDeVentana("Hoy", disponible.hoy, disponible.hayMargen, entrada, Modifier.weight(1f))
     }
@@ -224,7 +225,7 @@ private fun CuerpoDelDisponibleEsqueleto() {
 
 /**
  * Una ventana en su columna: el rótulo, **lo que te queda por gastar en ella**, lo que ya gastaste
- * y la barra.
+ * y la barra. La columna del período ([delPeriodo]) es la excepción, ver abajo.
  *
  * El dueño, el 28-sep: *«yo quiero que esto me marque cuánto me puedo gastar por cada una de esas
  * unidades de tiempo no cuánto me gasté, son cosas muy diferentes»*. La cifra grande era lo gastado
@@ -237,6 +238,13 @@ private fun CuerpoDelDisponibleEsqueleto() {
  *
  * **La barra sí se va sin margen**: mide lo gastado contra la meta, y contra cero no tiene largo que
  * signifique algo.
+ *
+ * **La columna del período no repite «te quedan»** (vuelta de diseño 3). Lo que le queda al período
+ * ya lo dice la frase de arriba en Plan («Te quedan $10,9M para 5 días · …») y el héroe en Hoy; en
+ * su columna salía otra vez, y la meta del período es la cifra grande de la tarjeta. Así que el
+ * período dice lo que la barra mide: **cuánto gastaste y de cuánto** («$1,7M · gastaste · de
+ * $12,5M»). Los mismos cuatro renglones y los mismos estilos que las otras dos columnas: las tres
+ * miden lo mismo de alto y sus barras quedan a la misma altura (`PlanScreenTest` mide que nada salte).
  */
 @Composable
 private fun ColumnaDeVentana(
@@ -245,13 +253,15 @@ private fun ColumnaDeVentana(
     hayMargen: Boolean,
     entrada: Float,
     modifier: Modifier,
+    delPeriodo: Boolean = false,
 ) {
     Column(modifier = modifier) {
         Text(text = rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
         // Rojo cuando la ventana está PASADA, que es exactamente cuando lo que queda es negativo
-        // (sin margen: gastó algo contra una meta de cero).
+        // (sin margen: gastó algo contra una meta de cero). En el período la cifra es lo gastado, y
+        // va en rojo con el mismo criterio: gastaste más de lo que había.
         Cifra(
-            formatMoneyCompact(ventana.teQuedan),
+            formatMoneyCompact(if (delPeriodo) ventana.gastado else ventana.teQuedan),
             Movi.textos.monto,
             color = if (ventana.nivel == NivelDelGasto.PASADO) Movi.colores.sale else Movi.colores.texto,
         )
@@ -262,7 +272,7 @@ private fun ColumnaDeVentana(
         // `LasCifrasDelDisponibleEntranTest`.
         Text(text = "gastaste", style = Movi.textos.apoyo, color = Movi.colores.textoApagado, maxLines = 1)
         Text(
-            text = formatMoneyCompact(ventana.gastado),
+            text = if (delPeriodo) "de ${formatMoneyCompact(ventana.meta)}" else formatMoneyCompact(ventana.gastado),
             style = Movi.textos.apoyo,
             color = Movi.colores.textoApagado,
             maxLines = 1,

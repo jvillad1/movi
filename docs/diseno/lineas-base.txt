@@ -5,4 +5,4 @@
 dp_sueltos = 282
 radios_con_numero = 26
 colores_literales = 0
-# fontSize sueltos (LosTamanosSueltosSoloBajanTest): 3
+# fontSize sueltos (LosTamanosSueltosSoloBajanTest): 2

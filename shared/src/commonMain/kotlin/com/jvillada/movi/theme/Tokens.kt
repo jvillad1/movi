@@ -478,7 +478,8 @@ data class FormasDeMovi(
 
 /**
  * Los siete estilos de texto, contra los 25 tamaños sueltos que hay hoy — y desde la ola R0 un
- * octavo, [cifraDeTarjeta], el único que el camino 1 necesitaba y no estaba.
+ * octavo, [cifraDeTarjeta], el único que el camino 1 necesitaba y no estaba. Desde la vuelta de
+ * diseño 3, un noveno: [portada], el título de una pantalla de una sola cosa.
  *
  * ### Las cifras van tabulares, no monoespaciadas
  *
@@ -518,6 +519,19 @@ data class TextosDeMovi(
         fontWeight = FontWeight.Medium,
         letterSpacing = (-0.6).sp,
         fontFeatureSettings = "tnum",
+    ),
+    /**
+     * **El título de una pantalla de una sola cosa** (vuelta de diseño 3): el logotipo de la
+     * entrada («Movi») y la bienvenida de la guía de primer uso («Te damos la bienvenida a Movi»).
+     * Era el `fontSize = 32.sp` suelto de `LoginScreen`; la bienvenida, en [titular], se veía chica
+     * en media pantalla vacía. No es para una cifra —eso es [cifra]— ni para el título de una
+     * pantalla con contenido —eso es [titular]—.
+     */
+    val portada: TextStyle = TextStyle(
+        fontSize = 32.sp,
+        lineHeight = 38.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-0.6).sp,
     ),
     /** El título de una pantalla. */
     val titular: TextStyle = TextStyle(

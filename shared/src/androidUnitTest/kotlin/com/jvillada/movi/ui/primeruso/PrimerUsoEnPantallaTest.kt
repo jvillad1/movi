@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -34,6 +35,7 @@ import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.auth.RegisterScreen
+import com.jvillada.movi.ui.components.TAG_AVATAR_DE_MARCA
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
@@ -105,6 +107,22 @@ class PrimerUsoEnPantallaTest {
         composeRule.waitForIdle()
     }
 
+    /** «Saltar este paso»: el botón de texto, no el principal. */
+    private fun saltar() {
+        composeRule.onNodeWithTag(TAG_SALTAR_EN_LA_GUIA).assertTextContains(SALTAR_ESTE_PASO)
+        composeRule.onNodeWithTag(TAG_SALTAR_EN_LA_GUIA).performClick()
+        composeRule.waitForIdle()
+    }
+
+    /** El principal dice «Siguiente» y está apagado: no hay nada que guardar todavía. */
+    private fun principalApagado() {
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains("Siguiente")
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertIsNotEnabled()
+    }
+
+    private fun sinSaltar(): Boolean =
+        composeRule.onAllNodesWithTag(TAG_SALTAR_EN_LA_GUIA).fetchSemanticsNodes().isEmpty()
+
     private fun seVe(texto: String, parcial: Boolean = false): Boolean =
         composeRule.onAllNodesWithText(texto, substring = parcial).fetchSemanticsNodes().isNotEmpty()
 
@@ -168,15 +186,18 @@ class PrimerUsoEnPantallaTest {
         montar(repo)
         assertTrue(seVe("Te propone, pero nunca hace nada sin ti"))
         composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains("Empezar")
+        assertTrue(sinSaltar(), "la bienvenida no tiene nada que saltar")
         avanzar()
 
+        // El principal dice «Siguiente» y se apaga sin un día elegido; saltar es el botón de texto.
         assertTrue(seVe("Paso 2 de 6"))
-        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains("Saltar")
-        avanzar()
+        principalApagado()
+        saltar()
         assertTrue(repo.perfiles.isEmpty(), "saltar el período no guarda nada")
 
         assertTrue(seVe("Paso 3 de 6"))
         composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertIsNotEnabled()
+        assertTrue(sinSaltar(), "las cuentas se saltan con «Ahora no»")
         assertTrue(seVe("Agrega al menos una cuenta para seguir", parcial = true))
         composeRule.onNodeWithText(AHORA_NO).performClick()
         composeRule.waitForIdle()
@@ -190,13 +211,14 @@ class PrimerUsoEnPantallaTest {
     fun `captura y pagos de cada mes se saltan y el final lleva al Inicio marcando la guia`() {
         val repo = RepoDeLaGuia()
         montar(repo, paso = PasoDePrimerUso.CAPTURA)
-        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains("Saltar")
-        avanzar()
+        principalApagado()
+        saltar()
         assertTrue(seVe("Paso 5 de 6"))
-        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains("Saltar")
-        avanzar()
+        principalApagado()
+        saltar()
 
         assertTrue(seVe("Paso 6 de 6"))
+        assertTrue(sinSaltar(), "el final no tiene nada que saltar")
         assertTrue(seVe("Ninguna todavía"), "el resumen dice que no quedó ninguna cuenta")
         assertTrue(seVe("Primeros pasos", parcial = true), "lo saltado queda en Primeros pasos")
         assertFalse(seVe(AHORA_NO), "en el final ya no hay «Ahora no»")
@@ -326,6 +348,66 @@ class PrimerUsoEnPantallaTest {
         montar(repo, paso = PasoDePrimerUso.CAPTURA)
         assertTrue(seVe("todavía no está disponible", parcial = true))
         assertNull(composeRule.onAllNodesWithText("Copiar").fetchSemanticsNodes().firstOrNull())
-        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains("Saltar")
+        principalApagado()
+        saltar()
+        assertTrue(seVe("Paso 5 de 6"))
+    }
+
+    // ── Vuelta de diseño 3 ─────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `la bienvenida lleva la marca de Movi y el titulo grande`() {
+        montar(RepoDeLaGuia())
+        composeRule.onNodeWithTag(TAG_MARCA_DE_MOVI).assertExists()
+        assertEquals(1, composeRule.onAllNodesWithText(TITULO_DE_LA_BIENVENIDA).fetchSemanticsNodes().size, "un solo título")
+    }
+
+    @Test
+    fun `la bienvenida queda centrada en el espacio entre la barra y los botones`() {
+        montar(RepoDeLaGuia())
+        val marca = composeRule.onNodeWithTag(TAG_MARCA_DE_MOVI).fetchSemanticsNode().boundsInRoot
+        val boton = composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).fetchSemanticsNode().boundsInRoot
+        val nota = composeRule.onNodeWithText("Son unos pasos cortos", substring = true).fetchSemanticsNode().boundsInRoot
+        val encabezado = composeRule.onNodeWithText("Paso 1 de 6").fetchSemanticsNode().boundsInRoot
+        // Arriba de la marca y debajo de la nota queda el mismo aire (± unos dp por el redondeo).
+        val arriba = marca.top - encabezado.bottom
+        val abajo = boton.top - nota.bottom
+        assertTrue(arriba > 0f && abajo > 0f)
+        assertTrue(kotlin.math.abs(arriba - abajo) < arriba * 0.5f, "arriba $arriba px, abajo $abajo px: el bloque no está centrado")
+    }
+
+    @Test
+    fun `el periodo con un dia elegido sigue con Siguiente y saltarlo no guarda nada`() {
+        val repo = RepoDeLaGuia()
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertIsEnabled()
+        saltar()
+        assertTrue(repo.perfiles.isEmpty(), "«Saltar este paso» no guarda el día elegido")
+        assertTrue(seVe("Paso 3 de 6"))
+    }
+
+    @Test
+    fun `los bancos llevan el avatar de su marca`() {
+        montar(RepoDeLaGuia(), paso = PasoDePrimerUso.CUENTAS)
+        val avatares = composeRule.onAllNodesWithTag(TAG_AVATAR_DE_MARCA, useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(BANCOS_DE_LA_GUIA.size, avatares.size, "un avatar de marca por banco")
+    }
+
+    @Test
+    fun `los tipos de cuenta se entienden y van a los tipos que ya existen`() {
+        val repo = RepoDeLaGuia()
+        montar(repo, paso = PasoDePrimerUso.CUENTAS)
+        listOf("Ahorros", "Corriente", "Efectivo", "Inversión").forEach { assertTrue(seVe(it), "falta «$it»") }
+        assertFalse(seVe("Dinero"), "«Dinero» no lo entiende alguien nuevo")
+
+        composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("Billetera")
+        composeRule.onNodeWithText("Efectivo").performClick()
+        composeRule.onNodeWithText("Agregar cuenta").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(AccountType.CASH, repo.cuentasCreadas.single().type)
+        assertTrue(seVe("Efectivo"), "la fila de la cuenta creada dice su tipo")
     }
 }
