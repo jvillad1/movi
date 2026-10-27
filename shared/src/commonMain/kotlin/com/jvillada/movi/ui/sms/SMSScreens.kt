@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.shared.model.nombreParaMostrar
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
@@ -1268,7 +1269,7 @@ fun SMSReconcileScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(comercio ?: p.merchant, style = Movi.textos.titulo, color = Movi.colores.texto)
+                                    Text(nombreParaMostrar(comercio ?: p.merchant), style = Movi.textos.titulo, color = Movi.colores.texto)
                                     Text(
                                         "${(selectedCategory ?: p.category).ifBlank { "Elige la categoría" }} · ${resolvedAccount?.name ?: "Elige la cuenta"}",
                                         style = Movi.textos.apoyo,
