@@ -1,6 +1,10 @@
 package com.jvillada.movi.ui.fecha
 
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -86,13 +90,15 @@ fun SelectorDeFecha(
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
+            // Vuelta de diseño 20: los `PildoraDeFiltro` del sistema, a medias del ancho. Eran cajas
+            // armadas a mano de 44 dp, con radio 999 y el lavado escrito con `copy(alpha = 0.16f)`.
             AtajoDeFecha("Hoy", seleccionada == hoy, enabled, Modifier.weight(1f)) { onPick(hoy) }
             AtajoDeFecha("Ayer", seleccionada == ayer, enabled, Modifier.weight(1f)) { onPick(ayer) }
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(Espacio.s))
 
         // Encabezado del mes. La flecha de avanzar se apaga cuando el mes siguiente es entero
         // futuro (ver [puedeAvanzarMes]) — y se apaga, no desaparece: un control que se va deja
@@ -165,28 +171,19 @@ private fun AtajoDeFecha(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    Box(
-        modifier = modifier
-            .height(44.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(if (activo) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
-            .then(if (activo) Modifier else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp)))
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = texto,
-            style = Movi.textos.cuerpo,
-            color = if (activo) Movi.colores.marca else Movi.colores.texto,
-        )
-    }
+    PildoraDeFiltro(
+        texto = texto,
+        seleccionada = activo,
+        onClick = { if (enabled) onClick() },
+        modifier = modifier,
+    )
 }
 
 @Composable
 private fun FlechaDeMes(izquierda: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(Medida.altoChico)
             .clip(CircleShape)
             .background(if (enabled) Movi.colores.tarjeta else Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick),
@@ -196,7 +193,7 @@ private fun FlechaDeMes(izquierda: Boolean, enabled: Boolean, onClick: () -> Uni
             imageVector = if (izquierda) Icons.Rounded.ChevronLeft else Icons.Rounded.ChevronRight,
             contentDescription = if (izquierda) "Mes anterior" else "Mes siguiente",
             tint = if (enabled) Movi.colores.texto else Movi.colores.textoApagado,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(Icono.m),
         )
     }
 }
@@ -221,9 +218,9 @@ private fun CasillaDeDia(
             modifier = Modifier
                 .size(34.dp)
                 .clip(CircleShape)
-                .background(if (seleccionada) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
+                .background(if (seleccionada) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent)
                 .then(
-                    if (esHoy && !seleccionada) Modifier.border(1.dp, Movi.colores.borde, CircleShape)
+                    if (esHoy && !seleccionada) Modifier.border(Medida.trazo, Movi.colores.borde, CircleShape)
                     else Modifier,
                 )
                 .clickable(enabled = habilitado, onClick = onClick),
@@ -232,7 +229,6 @@ private fun CasillaDeDia(
             Text(
                 text = dia.dayOfMonth.toString(),
                 style = Movi.textos.cuerpo,
-                fontWeight = if (seleccionada) FontWeight.Medium else FontWeight.Normal,
                 color = when {
                     seleccionada -> Movi.colores.marca
                     !habilitado -> Movi.colores.textoApagado

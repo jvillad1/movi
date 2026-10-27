@@ -111,7 +111,7 @@ class CrearCategoriaEnAgregarTest {
     fun la_pastilla_nueva_abre_el_selector_con_el_cursor_en_la_busqueda() {
         montar(conFrecuentes = true)
 
-        tocar("+ Nueva")
+        tocar("Nueva")
 
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed().assertIsFocused()
     }
@@ -120,7 +120,7 @@ class CrearCategoriaEnAgregarTest {
     fun crear_desde_la_pastilla_nueva_tambien_guarda() {
         montar(conFrecuentes = true)
 
-        tocar("+ Nueva")
+        tocar("Nueva")
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performTextInput("Mascota")
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(TAG_CREAR_CATEGORIA).performSemanticsAction(SemanticsActions.OnClick)
@@ -138,7 +138,7 @@ class CrearCategoriaEnAgregarTest {
         montar(conFrecuentes = false)
 
         composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR).assertIsDisplayed()
-        tocar("+ Nueva")
+        tocar("Nueva")
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed().assertIsFocused()
     }
 
@@ -147,9 +147,10 @@ class CrearCategoriaEnAgregarTest {
         montar(conFrecuentes = true)
 
         val nueva = composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR).getUnclippedBoundsInRoot()
-        // «Hija» también es el valor de la fila «Categoría»: el chip es el que tiene rol de botón.
-        val hija = composeRule.onNode(hasText("Hija") and hasRole(Role.Button)).getUnclippedBoundsInRoot()
-        assertTrue(nueva.left < hija.left, "«+ Nueva» tiene que ir primera")
+        // «Hija» también es el valor de la fila «Categoría»: el chip es el que tiene rol de filtro
+        // (vuelta de diseño 20: los chips son `PildoraDeFiltro`, que se eligen).
+        val hija = composeRule.onNode(hasText("Hija") and hasRole(Role.Tab)).getUnclippedBoundsInRoot()
+        assertTrue(nueva.left < hija.left, "«Nueva» tiene que ir primera")
     }
 
     @Test

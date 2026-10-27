@@ -123,7 +123,9 @@ fun PildoraDeFiltro(
             .semantics { selected = seleccionada }
             .testTag(TAG_PILDORA_DE_FILTRO)
             .padding(start = if (inicio != null) Espacio.xs else Espacio.m, end = Espacio.m),
-        horizontalArrangement = Arrangement.spacedBy(if (inicio != null) Espacio.xs else Espacio.xxs),
+        // Centrado: una píldora que ocupa más que su texto (los atajos «Hoy · Ayer» del selector de
+        // fecha, a medias del ancho) lo lleva al medio. Del ancho de su texto, no cambia nada.
+        horizontalArrangement = Arrangement.spacedBy(if (inicio != null) Espacio.xs else Espacio.xxs, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         inicio?.invoke()
