@@ -284,13 +284,23 @@ private val PATRONES: Map<String, List<List<String>>> =
 private val PATRONES_DE_CUENTA: Map<String, List<List<String>>> =
     MARCAS_CONOCIDAS.associate { m -> m.id to m.patronesDeCuenta.map(::palabrasDeMarca).filter { it.isNotEmpty() } }
 
-/** Dónde casó una marca: el tramo de palabras `[desde, hasta)`. */
-private class Coincidencia(val marca: Marca, val orden: Int, val desde: Int, val hasta: Int) {
+/**
+ * Dónde casó una marca: el tramo de palabras `[desde, hasta)` de [palabrasDeMarca]. Interna: la usa
+ * `nombreParaMostrar` para saber qué palabras del texto son la marca y cuáles vienen después.
+ */
+internal class Coincidencia(val marca: Marca, val orden: Int, val desde: Int, val hasta: Int) {
     fun estaDentroDe(otra: Coincidencia): Boolean =
         otra !== this && otra.desde <= desde && hasta <= otra.hasta && (otra.hasta - otra.desde) > (hasta - desde)
 }
 
-private fun buscarMarca(texto: String, orden: List<Marca>, conPatronesDeCuenta: Boolean): Marca? {
+private fun buscarMarca(texto: String, orden: List<Marca>, conPatronesDeCuenta: Boolean): Marca? =
+    buscarCoincidencia(texto, orden, conPatronesDeCuenta)?.marca
+
+/** La coincidencia de [marcaDelTexto], con su tramo: los comercios antes que los bancos. */
+internal fun coincidenciaEnElTexto(texto: String): Coincidencia? =
+    buscarCoincidencia(texto, ORDEN_PARA_TEXTO, conPatronesDeCuenta = false)
+
+private fun buscarCoincidencia(texto: String, orden: List<Marca>, conPatronesDeCuenta: Boolean): Coincidencia? {
     val palabras = palabrasDeMarca(texto)
     if (palabras.isEmpty()) return null
     val coincidencias = mutableListOf<Coincidencia>()
@@ -311,5 +321,4 @@ private fun buscarMarca(texto: String, orden: List<Marca>, conPatronesDeCuenta: 
     return coincidencias
         .filter { c -> coincidencias.none { c.estaDentroDe(it) } }
         .minByOrNull { it.orden }
-        ?.marca
 }

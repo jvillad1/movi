@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.espacios
 
+import androidx.compose.material.icons.rounded.Add
+import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -116,7 +118,15 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
-        MinScreenHeader(title = "Espacios", leading = HeaderLeading.Avatar(onNavigate))
+        // Con un espacio o más, crear otro va arriba (antes solo se podía desde el vacío: con uno ya
+        // creado no había cómo hacer el segundo). Sin ninguno, el vacío ya lo ofrece.
+        MinScreenHeader(
+            title = "Espacios",
+            leading = HeaderLeading.Avatar(onNavigate),
+            accion = if (lectura?.detalles?.isNotEmpty() == true) {
+                AccionDeEncabezado("Nuevo espacio", Icons.Rounded.Add, onClick = { creando = true })
+            } else null,
+        )
         Column(
             modifier = Modifier
                 .weight(1f)

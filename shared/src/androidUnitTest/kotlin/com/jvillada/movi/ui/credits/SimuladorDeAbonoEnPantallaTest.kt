@@ -117,17 +117,16 @@ class SimuladorDeAbonoEnPantallaTest {
         Repositories.sustitutoDePrueba = null
     }
 
+    /**
+     * Vuelta de diseño 4: «¿Y si abonas de más?» es una fila del detalle de la deuda (la lista de
+     * Créditos ya no lleva botones). Se monta ese detalle, con el único crédito de [creditos].
+     */
     private fun montar(creditos: List<CreditSummary>) {
-        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
-            override suspend fun getCredits(): List<CreditSummary> = creditos
-            override suspend fun getCards(): List<CardSummary> = emptyList()
-        }
-        composeRule.setContent { MoviTheme { CreditosScreen(onNavigate = {}) } }
-        composeRule.waitForIdle()
+        composeRule.montarElDetalleDe(creditos.single().account, RepositorioDeLaDeuda(creditos = creditos))
     }
 
     /**
-     * Abre la hoja desde la tarjeta del único crédito montado.
+     * Abre la hoja desde la fila «¿Y si abonas de más?» del detalle.
      *
      * Dos precauciones, y las dos se pagaron con pruebas en verde que no abrían nada:
      *
@@ -140,8 +139,8 @@ class SimuladorDeAbonoEnPantallaTest {
      *   abierto la hoja.
      */
     private fun abrirElSimulador() {
-        // Ola R4: el enlace es un `Boton` del sistema, que funde su texto con su toque. Se busca el
-        // nodo que tiene las dos cosas.
+        // La acción es una `Fila` tocable, que funde su texto con su toque. Se busca el nodo que
+        // tiene las dos cosas.
         composeRule.onNode(hasText(ACCION_SIMULAR_ABONO) and hasClickAction())
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
@@ -169,13 +168,28 @@ class SimuladorDeAbonoEnPantallaTest {
      * cualquiera de las dos solo podría contestar «no se sabe». Ver [ComoVaLaDeuda.seProyecta].
      */
     @Test
-    fun `la pregunta solo aparece donde hay una proyeccion que acortar`() {
-        montar(listOf(libreInversion, sinTasa, sinTerminos))
+    fun `la pregunta aparece donde hay una proyeccion que acortar`() {
+        montar(listOf(libreInversion))
 
-        assertEquals(1, cuantasVeces(ACCION_SIMULAR_ABONO), "una sola de las tres tarjetas puede contestarla")
-        // Y las otras dos siguen diciendo lo suyo: la del Techo, que no se sabe cuánto es interés.
-        composeRule.onNodeWithText("Sin términos registrados", useUnmergedTree = true).assertExists()
+        assertEquals(1, cuantasVeces(ACCION_SIMULAR_ABONO))
+    }
+
+    /** Con términos y sin tasa (el Techo): no hay nada que acortar, y dice por qué. */
+    @Test
+    fun `sin tasa la pregunta no aparece`() {
+        montar(listOf(sinTasa))
+
+        assertEquals(0, cuantasVeces(ACCION_SIMULAR_ABONO))
         composeRule.onNodeWithText("Sin tasa registrada", substring = true, useUnmergedTree = true).assertExists()
+    }
+
+    /** Sin términos no hay ni tasa ni cuota: el detalle pide completarlos. */
+    @Test
+    fun `sin terminos la pregunta no aparece y se piden los datos`() {
+        montar(listOf(sinTerminos))
+
+        assertEquals(0, cuantasVeces(ACCION_SIMULAR_ABONO))
+        composeRule.onNodeWithText(FALTAN_LAS_CONDICIONES, useUnmergedTree = true).assertExists()
     }
 
     /**
@@ -208,9 +222,9 @@ class SimuladorDeAbonoEnPantallaTest {
 
         composeRule.onNodeWithText(SUPUESTO_DEL_ABONO, useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText(SUPUESTO_DE_LA_ESTIMACION, useUnmergedTree = true).assertExists()
-        // Dos veces en la pantalla: la tarjeta de resumen de atrás ya lo declara, y la hoja lo
-        // repite porque para cuando el dueño llega acá el de atrás está tapado por la hoja misma.
-        assertEquals(2, cuantasVeces(SUPUESTO_DE_LA_PROYECCION), "la hoja trae su propia copia")
+        // La hoja trae su propia copia: se abre desde el detalle de la deuda, donde el resumen de
+        // Créditos (que también lo declara) no está a la vista.
+        assertEquals(1, cuantasVeces(SUPUESTO_DE_LA_PROYECCION), "la hoja trae su propia copia")
     }
 
     /**

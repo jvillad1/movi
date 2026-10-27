@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -44,15 +45,12 @@ import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinScreenHeader
-import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TamanoDeBoton
-import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.PanelDeTablero
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
@@ -255,16 +253,10 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                             maxLines = 1,
                         )
                     }
-                    if (!enPagos && presupuestos.nuevoEnElEncabezado) {
-                        Boton(
-                            texto = "Nuevo",
-                            onClick = { presupuestos.abrirNuevo() },
-                            variante = VarianteDeBoton.Secundario,
-                            tamano = TamanoDeBoton.S,
-                            icono = Icons.Rounded.Add,
-                        )
-                    }
                 },
+                accion = if (!enPagos && presupuestos.nuevoEnElEncabezado) {
+                    AccionDeEncabezado("Nuevo", Icons.Rounded.Add, onClick = { presupuestos.abrirNuevo() })
+                } else null,
             )
             if (dosColumnas) {
                 // Las mismas piezas que en una columna, en los mismos lugares relativos: cargando o

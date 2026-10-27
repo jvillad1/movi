@@ -42,6 +42,9 @@ import com.jvillada.movi.ui.components.ds.TAG_FILA
 import com.jvillada.movi.ui.components.ds.TAG_PILDORA
 import com.jvillada.movi.ui.components.ds.TAG_SECCION
 import com.jvillada.movi.ui.credits.CreditosScreen
+import com.jvillada.movi.ui.accounts.AccountDetailScreen
+import com.jvillada.movi.shared.model.AccountGroup
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.ui.periodos.PeriodosScreen
 import kotlinx.datetime.Clock
 import org.junit.After
@@ -117,6 +120,8 @@ class LasPantallasDePlanUsanElSistemaTest {
         override suspend fun getEventsByDay(): List<EventDay> = emptyList()
         override suspend fun getCredits(): List<CreditSummary> = listOf(libreInversion, hipotecario)
         override suspend fun getCards(): List<CardSummary> = emptyList()
+        override suspend fun getAccount(id: String): Account = hipotecario.account
+        override suspend fun getEvents(accountId: String?): List<FinancialEvent> = emptyList()
         override suspend fun getPeriodos(): List<ResumenDePeriodo> = listOf(
             ResumenDePeriodo(
                 id = "2026-10", nombre = "Octubre 2026", desde = "2026-09-25", hasta = "2026-10-24",
@@ -224,10 +229,18 @@ class LasPantallasDePlanUsanElSistemaTest {
     }
 
     @Test
-    fun `Creditos usa el sistema, con la pildora de quien paga`() {
+    fun `Creditos usa el sistema`() {
         montar { CreditosScreen(onNavigate = {}) }
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Hipotecario 2334") }
         usaElSistema("Créditos", minimoDeSecciones = 1)
+    }
+
+    /** Vuelta de diseño 4: quién paga la cuota lo dice el detalle de la deuda, en una píldora. */
+    @Test
+    fun `el detalle de la deuda usa el sistema, con la pildora de quien paga`() {
+        montar { AccountDetailScreen(onNavigate = {}, accountId = hipotecario.account.id, group = AccountGroup.DEUDA) }
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("La paga Skandia") }
+        usaElSistema("Detalle de la deuda", minimoDeSecciones = 2)
         assertTrue(nodos(TAG_PILDORA).any { "La paga Skandia" in textosDentro(it) }, "«la paga Skandia» va en una píldora")
     }
 }

@@ -1,5 +1,6 @@
 package com.jvillada.movi.avisos
 
+import com.jvillada.movi.shared.model.nombreParaMostrar
 import com.jvillada.movi.shared.model.AvisoPorRevisar
 import com.jvillada.movi.shared.model.CATEGORIAS_DE_DOS_PATAS
 import com.jvillada.movi.shared.model.TransactionType
@@ -79,7 +80,7 @@ fun textoDelAvisoSuelto(
     llevasHoy: String?,
     ocultos: Boolean,
 ): TextoDeAviso {
-    val nombre = aviso.descripcion.trim().ifBlank { origenParaElAviso(aviso.origen) ?: "Movimiento" }
+    val nombre = nombreParaMostrar(aviso.descripcion).ifBlank { origenParaElAviso(aviso.origen) ?: "Movimiento" }
     val titulo = "$nombre · ${montoVisibleEnElAviso(aviso.monto, aviso.moneda, ocultos)}"
     val texto = if (anotacion != null) {
         "${anotacion.categoria} · ${anotacion.cuenta.name}"
