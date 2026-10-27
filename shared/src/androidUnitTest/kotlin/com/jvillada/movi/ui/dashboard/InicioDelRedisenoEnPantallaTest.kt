@@ -53,7 +53,6 @@ import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.sdui.TAG_CARRUSEL_DE_CUENTAS
 import com.jvillada.movi.ui.sdui.TAG_ESQUELETO_DEL_CARRUSEL
 import com.jvillada.movi.ui.sdui.TAG_ESQUELETO_DE_PROPUESTA
-import com.jvillada.movi.ui.sdui.TAG_NADA_POR_DECIDIR
 import com.jvillada.movi.ui.sdui.TAG_PROPUESTAS_DEL_INICIO
 import com.jvillada.movi.ui.sdui.TAG_TARJETA_EN_QUE_SE_VA
 import com.jvillada.movi.ui.sdui.TAG_WIDGET_FALTA_POR_PAGAR
@@ -232,18 +231,24 @@ class InicioDelRedisenoEnPantallaTest {
         assertEquals(Screen.CuadreDeSaldos, navegado.last())
     }
 
+    /**
+     * Vuelta de diseño 11: sin nada que decidir, «Movi propone hoy» no ocupa una sección para decir
+     * «Nada por decidir hoy». Las cuentas suben a su lugar.
+     */
     @Test
-    fun `sin pendientes, la linea tranquila`() {
+    fun `sin pendientes, Movi propone hoy no se pinta`() {
         montar(sinPendientes)
         assertEquals(0, cuantosTags(TAG_TARJETA_DE_PROPUESTA))
-        composeRule.onNodeWithTag(TAG_NADA_POR_DECIDIR, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText(NADA_POR_DECIDIR, useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(0, cuantosTags(TAG_PROPUESTAS_DEL_INICIO))
+        composeRule.onNodeWithText("Movi propone hoy", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Nada por decidir hoy", useUnmergedTree = true).assertDoesNotExist()
+        assertTrue(arribaDelTag(TAG_CUADRICULA_DE_ACCIONES) < arribaDelTag(TAG_CARRUSEL_DE_CUENTAS))
     }
 
     @Test
     fun `mientras carga, el feed no afirma nada y muestra un esqueleto`() {
         montar(DashboardData(), cargando = true)
-        assertEquals(0, cuantosTags(TAG_NADA_POR_DECIDIR))
+        composeRule.onNodeWithText("Nada por decidir hoy", useUnmergedTree = true).assertDoesNotExist()
         assertEquals(1, cuantosTags(TAG_ESQUELETO_DE_PROPUESTA))
         assertEquals(1, cuantosTags(TAG_ESQUELETO_DEL_CARRUSEL))
     }
@@ -262,8 +267,9 @@ class InicioDelRedisenoEnPantallaTest {
         // La de más plata primero, y tocarla abre su detalle.
         composeRule.onAllNodesWithTag(TAG_TARJETA_DE_CUENTA)[0].performClick()
         assertEquals(Screen.AccountDetail("a1", AccountGroup.DINERO), navegado.last())
-        // «Ver todo» del carrusel (el segundo; el primero es el del feed) lleva a Patrimonio.
-        composeRule.onAllNodesWithText("Ver todo", useUnmergedTree = true)[1].performClick()
+        // «Ver todo» del carrusel lleva a Patrimonio. Sin pendientes es el único: «Movi propone hoy»
+        // sin nada no se pinta (vuelta de diseño 11).
+        composeRule.onNodeWithText("Ver todo", useUnmergedTree = true).performClick()
         assertEquals(Screen.Accounts, navegado.last())
     }
 

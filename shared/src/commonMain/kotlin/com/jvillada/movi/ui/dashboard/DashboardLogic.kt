@@ -1001,9 +1001,14 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
     val hayAcciones = renderizables.any { it.type == "ACCIONES" }
     return renderizables.filter { section ->
         when (section.type) {
-            // Fijos: la cuadrícula siempre; las propuestas siempre (sin nada, la línea tranquila); el
-            // carrusel mientras las cuentas no contestan (su esqueleto) o si hay alguna que mostrar.
-            "ACCIONES", "PROPUESTAS" -> true
+            // Fijos: la cuadrícula siempre; el carrusel mientras las cuentas no contestan (su
+            // esqueleto) o si hay alguna que mostrar.
+            "ACCIONES" -> true
+            // «Movi propone hoy» con algo que decidir, o mientras no se puede afirmar que no hay nada
+            // (su esqueleto). Vuelta de diseño 11: sin nada, la sección sale entera —era un título y
+            // «Nada por decidir hoy», una sección para decir que no había sección—. Por revisar sigue
+            // a un toque, en «Avisos» de la cuadrícula.
+            "PROPUESTAS" -> !data.puedeAfirmarVacio || propuestasDelInicio(data).isNotEmpty()
             "CUENTAS" -> data.accounts == null || !cuentasDelCarrusel(data.accounts).isNullOrEmpty()
             "UPCOMING_PAYMENTS" -> upcomingPaymentsWithin(data.upcoming.orEmpty()).isNotEmpty()
             // «Para revisar» se pinta con lo mismo que antes eran las alertas, más lo que el

@@ -10,6 +10,9 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Sms
+import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -617,6 +620,9 @@ fun DashboardScreen(
                                 data = data,
                                 onNavigate = onNavigate,
                                 onShowCreateSheet = { showCreateSheet = true },
+                                onSubirUnPapel = elegirComprobante,
+                                // El héroe vacío ya pide la cuenta, justo arriba: no se repite.
+                                conElPasoDeLaCuenta = !elHeroePideLaCuenta(data),
                             )
                         }
                     } else if (ofertaDeAvisos != null) {
@@ -673,8 +679,15 @@ fun DashboardScreen(
  * ni cuotas no tiene por qué ver esta guía para siempre esperando un casillero que jamás se
  * cumple. Cuando la tarjeta se apaga (cuenta + movimiento), se apaga entera.
  *
- * El pie ("Deja que la app se llene sola") no tiene "hecho" propio: no es una acción puntual
- * sino un hábito (subir extractos / dejar el SMS corriendo). Se muestra como acceso puro.
+ * El pie no tiene "hecho" propio: no es una acción puntual sino un hábito (subir extractos / dejar el
+ * SMS corriendo). Vuelta de diseño 11: era «Deja que la app se llene sola · Documentos», que no decía
+ * qué pasaba al tocarlo; ahora cada hábito es una fila que dice lo que hace —«Sube un extracto y Movi
+ * anota los movimientos» elige el archivo y lo deja en la misma puerta de papeles que «Comprobante» del
+ * Inicio ([onSubirUnPapel])— y, en Android, los SMS del banco.
+ *
+ * [conElPasoDeLaCuenta] en `false` saca «Crea tu primera cuenta» (y su cuenta del «N de M») cuando el
+ * héroe del Inicio ya lo está pidiendo con su botón, justo arriba (ver `elHeroePideLaCuenta`): un solo
+ * llamado, no dos seguidos.
  *
  * Ola 14 — **la misma tarjeta la usa [PrimerosPasosScreen]**, que es la puerta de vuelta desde
  * «Más» (el dueño: «no veo el onboarding o FTU que tenía ciertas tareas, quisiera poder verlo si
@@ -687,8 +700,15 @@ internal fun PrimerosPasosCard(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
     onShowCreateSheet: () -> Unit,
+    onSubirUnPapel: () -> Unit,
+    conElPasoDeLaCuenta: Boolean = true,
 ) {
-    val steps = listOf(data.hasAccount, data.hasRecurringRule, data.hasCredit, data.hasMovement)
+    val steps = listOfNotNull(
+        data.hasAccount.takeIf { conElPasoDeLaCuenta },
+        data.hasRecurringRule,
+        data.hasCredit,
+        data.hasMovement,
+    )
     // Ola R1: con los componentes del sistema —una superficie con filas—, como el resto del Inicio.
     Superficie(
         modifier = Modifier
@@ -704,8 +724,10 @@ internal fun PrimerosPasosCard(
             Text("${steps.count { it }} de ${steps.size}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
 
-        PasoRow(done = data.hasAccount, title = "Crea tu primera cuenta", onClick = onShowCreateSheet)
-        Separador()
+        if (conElPasoDeLaCuenta) {
+            PasoRow(done = data.hasAccount, title = "Crea tu primera cuenta", onClick = onShowCreateSheet)
+            Separador()
+        }
         PasoRow(
             done = data.hasRecurringRule,
             title = "Anota tus gastos recurrentes",
@@ -719,20 +741,43 @@ internal fun PrimerosPasosCard(
         PasoRow(done = data.hasMovement, title = "Registra un movimiento", onClick = { onNavigate(Screen.QuickAdd()) })
         Separador()
 
-        // Pie — sin tilde a propósito (ver KDoc). Extractos en todas las plataformas; el SMS
-        // del banco solo en Android (no existe en iOS/web).
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-        ) {
-            Text("Deja que la app se llene sola", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.weight(1f))
-            // Ola B, tarea 7: era «Extractos» → Screen.Extractos; esa pantalla salió de la
-            // navegación y «Importar movimientos» vive ahora en Documentos.
-            AccesoLink("Documentos") { onNavigate(Screen.Documentos) }
-            if (isAndroid) AccesoLink("SMS del banco") { onNavigate(Screen.CapturaDelBanco) }
+        // Pie — sin tilde a propósito (ver KDoc). El extracto en todas las plataformas; el SMS del
+        // banco solo en Android (no existe en iOS/web).
+        HabitoRow(
+            icon = Icons.Rounded.UploadFile,
+            title = SUBIR_UN_EXTRACTO,
+            onClick = onSubirUnPapel,
+        )
+        if (isAndroid) {
+            Separador()
+            HabitoRow(
+                icon = Icons.Rounded.Sms,
+                title = "Activa los SMS del banco y Movi anota cada compra",
+                onClick = { onNavigate(Screen.CapturaDelBanco) },
+            )
         }
     }
+}
+
+/** El hábito del pie de «Primeros pasos» que llena Movi con un papel (vuelta de diseño 11). */
+internal const val SUBIR_UN_EXTRACTO: String = "Sube un extracto y Movi anota los movimientos"
+
+/** Un hábito del pie: como un paso, pero sin tilde —no se «hace» una vez—, con su ícono en la marca. */
+@Composable
+private fun HabitoRow(icon: ImageVector, title: String, onClick: () -> Unit) {
+    Fila(
+        titulo = title,
+        inicio = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Movi.colores.marca,
+                modifier = Modifier.size(Icono.m),
+            )
+        },
+        final = { Chevron() },
+        onClick = onClick,
+    )
 }
 
 /** Un paso de la guía: una [Fila] con su tilde (o el círculo vacío) y la flecha si falta hacerlo. */
@@ -756,16 +801,5 @@ private fun PasoRow(
         },
         final = if (done) null else ({ Chevron() }),
         onClick = onClick,
-    )
-}
-
-@Composable
-private fun AccesoLink(label: String, onClick: () -> Unit) {
-    Text(
-        text = label,
-        style = Movi.textos.apoyo,
-        fontWeight = FontWeight.Medium,
-        color = Movi.colores.marca,
-        modifier = Modifier.clickable(onClick = onClick).padding(vertical = Espacio.xxs),
     )
 }

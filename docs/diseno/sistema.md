@@ -361,7 +361,7 @@ arriba:
 | encabezado | — (chrome) | `Encabezado`: avatar, «Hola, Juan» con el período, lupa y campana | Ajustes, Buscar |
 | héroe | `HERO_BALANCE` | `Cifra.Heroe` «Te quedan», el ojo, «para N días · $X por día» (lo que queda entre los días que faltan), el veredicto | Tus períodos |
 | acciones | `ACCIONES` | `CuadriculaDeAcciones` 4 × 2 | Agregar, papeles, Por revisar, Movi AI; «Repartir» abre la hoja «Pagó otro» del espacio (vuelta 7: elige el espacio si hay varios, lo crea si no hay) |
-| Movi propone hoy | `PROPUESTAS` | `TarjetaDePropuesta`, una por tipo, tope 4 | su acción; «Ver todo» → Por revisar |
+| Movi propone hoy | `PROPUESTAS` | `TarjetaDePropuesta`, una por tipo, tope 4; sin nada, no se pinta (vuelta 11) | su acción; «Ver todo» → Por revisar |
 | tus cuentas | `CUENTAS` | `TarjetaDeCuenta` en carrusel (en grilla fuera del teléfono) | el detalle de la cuenta; «Ver todo» → Patrimonio |
 | widgets | `CHECKLIST_DEL_PERIODO`, `GASTO_POR_CATEGORIA` | `ParDeWidgets` | Plan, En qué se va |
 
@@ -587,3 +587,38 @@ Reconciliar, que se edita en su lugar dentro de una `Fila`.
   11:02 a. m.») y una línea de `AyudaDeCampo`; lo largo (lo que llegó, por qué este aparato no lee
   mensajes) se abre con «¿Qué es esto?» (`elUltimoMensaje`). «Avisarme si un banco se calla», igual
   (`ayudaDelBancoQueSeCalla`). Se pliega, no se pierde.
+
+## 17. Vuelta de diseño 11: el primer día de alguien nuevo
+
+Revisado con una cuenta nueva (sin cuentas, sin movimientos, corte el 25) que saltó la guía de primer
+uso. La regla que sale de acá: **ningún cero se muestra como si fuera un dato.** Una sección que sin
+datos solo puede decir «$0» o «nada» no se pinta, o es un `Vacio` que enseña qué va a aparecer ahí y
+cómo llenarlo (como «Aquí van tus pagos fijos» en Plan).
+
+- **El subtítulo del Inicio es corto siempre** (`periodoDelEncabezado`): el nombre del período,
+  «Noviembre 2026» (`tituloDelPeriodo`, el mismo de «Tus períodos»), también con un corte a mitad de
+  mes. El rango entero («Del 23 de octubre al 24 de noviembre») se cortaba a 360 dp; sigue en la línea
+  del período de Plan y de Movimientos, donde tiene lugar.
+- **Un solo llamado a crear la primera cuenta** (`elHeroePideLaCuenta`): sin cuentas, el héroe es el
+  vacío «Aquí vas a ver tu plata» con «Crear mi primera cuenta» y va primero; «Primeros pasos» va
+  debajo de él (`SduiRenderer`, `despuesDelHeroe`) y sin el paso de la cuenta, contando solo lo que
+  lista («0 de 3»). Desde Ajustes («Primeros pasos» como pantalla) la tarjeta sigue con sus cuatro.
+- **El pie de «Primeros pasos» dice lo que hace**: «Sube un extracto y Movi anota los movimientos»
+  elige el archivo y lo deja en la misma puerta de papeles que «Comprobante» de la cuadrícula (era
+  «Deja que la app se llene sola · Documentos»); en Android, «Activa los SMS del banco y Movi anota
+  cada compra» lleva a Captura del banco. Son `Fila` con el ícono en la marca y sin tilde: son
+  hábitos, no pasos.
+- **«Movi propone hoy» sin nada no se pinta** (`visibleSections`): mientras las lecturas no alcanzan
+  para afirmarlo, su esqueleto; con todo leído y nada que decidir, la sección sale entera (era un
+  título y «Nada por decidir hoy»). Por revisar sigue en «Avisos» de la cuadrícula.
+- **Sin cuentas no hay caja** (`cajaDelPeriodoDe`): «Tu plata, día a día» de Plan decía «Hoy es tu
+  día más justo: tienes $0» sobre una línea plana en cero. Con las cuentas leídas y vacías no se
+  dibuja, ni su esqueleto; tampoco «Tu día más justo» de Hoy, que sale de la misma función.
+- **Patrimonio y Espacios ya cumplían**: sin cuentas, Patrimonio es su `Vacio` («Aquí vive lo que
+  tienes y lo que debes»), Deudas dice «Sin deudas registradas» sin cifra y Herramientas sigue (la
+  Ola D lo decidió así: cada fila enseña o navega); Espacios es su `Vacio` («Comparte gastos con
+  alguien») y la fila de Personas y comercios invita a guardar. Ningún «$0».
+
+Lo vigila `ElPrimerDiaTest` (Robolectric, 360 dp con la letra a ×1,3): un solo llamado en Hoy, la
+guía debajo del héroe, ningún «$0» como cifra en Hoy ni en Plan, el subtítulo entero (y el rango de
+antes cortado, para que la prueba mida lo que dice) y «Movi propone hoy» que no aparece vacío.
