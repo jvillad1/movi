@@ -197,6 +197,14 @@ el lector de pantalla si el texto es una versión corta. Hoy: las preguntas para
 ```kotlin
 PildoraDeAccion("¿Cómo voy?", onClick = ::preguntar, icono = Icons.Rounded.AutoAwesome, descripcion = "¿Cómo voy este período?")
 ```
+Vuelta de diseño 20: `inicio` (lo que no es un ícono: el ícono de una categoría en su color, como en
+`PildoraDeFiltro`), `iconoFinal` (la flecha de algo que se despliega) y `habilitada`. Las usan la
+categoría de un movimiento, la fecha y «Nueva» en Agregar, las sugerencias de un presupuesto y el
+«Es este» de un aviso pendiente.
+```kotlin
+PildoraDeAccion(nombre, onClick = ::alternar, inicio = { IconoDeCategoria(nombre, tamano = TamanoDeIconoDeCategoria.Chico) },
+    iconoFinal = if (abierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown)
+```
 
 **`AccionRapida`** y **`CuadriculaDeAcciones`** — la cuadrícula del camino 3: cuatro columnas, ícono en
 círculo de 56 y **rótulo de un renglón** (vuelta de diseño 2: «Gasto», «Comprobante», «Preguntar»; si uno
@@ -922,3 +930,61 @@ Lo vigilan `HojasYConfirmacionesDelSistemaTest` (Robolectric: la confirmación p
 `Fantasma` y `Peligro`, el de borrar en el `sale` del tema, «Cancelar» apagado mientras borra; eliminar
 una cuenta, ajustar el saldo de un crédito y el inicio del mes abren con `EncabezadoDeHoja`), la guarda
 nueva y `ContrasteDeLosTokensTest`.
+
+## 25. Vuelta de diseño 20: Agregar, la revisión de extractos y los chips, al sistema
+
+La misma auditoría de la vuelta 18 dejó una lista de lo que seguía hecho a mano. Esta vuelta la toma.
+
+- **La revisión de un extracto** (`extractos/StatementReviewScreen.kt`) era el archivo más fuera del
+  sistema, y se usa cada mes. Sus dos `Button` y dos `OutlinedButton` de Material son `Boton`
+  («Importar N seleccionadas» principal a todo el ancho, con la ruedita de `cargando`; «Anotar los N»
+  y «No son el mismo» secundarios chicos; **«Sí, es el mismo»** —era «Confirmar reconciliación», que
+  no entraba en un botón chico al lado de «No son el mismo»— principal chico). El texto iba en
+  `Color.White`, que sobre la lavanda del tema oscuro no pasa AA; el `Boton` pone `sobreMarca`. Cada
+  fila del extracto es una `Fila` con la `Cifra` y la `Casilla` al final, tocable de borde a borde
+  (`toggleable`, `Role.Checkbox`), y la nota («Ya anotado en…») cuelga debajo alineada con el título.
+  Los títulos son `Seccion` con su conteo («Cargos y abonos del banco · 4», «Nuevas transacciones ·
+  12» con «Seleccionar todas» como su acción). La coincidencia es una `Superficie` sin borde y su
+  estado lo dice una `Pildora` («Posible duplicado» en aviso, «Reconciliado» en éxito, «Se importará
+  como nuevo» neutra); era el color de un borde con `copy(alpha = 0.5f)`. La cuenta destino es una
+  `Pildora` (marca, o aviso si falta). Las revisiones de saldo y de crédito usan `RotuloDeCampo`
+  para «El extracto dice», «En tu cuenta» y «¿En qué cuenta?»: el estilo `rotulo` es el de mayúsculas
+  espaciadas, y en frase el rótulo del sistema es ese.
+- **Agregar**, solo lo que quedaba a mano (el teclado, el monto y guardar no se tocaron):
+  - los chips de categorías frecuentes son `PildoraDeFiltro` y «Nueva» una `PildoraDeAccion` con el «+»
+    como ícono; la fecha es una `PildoraDeAccion` con el ícono de calendario (era una píldora de 24 dp,
+    debajo del mínimo táctil);
+  - «Guardar y anotar otro» es un `Boton` `Fantasma` `S`. Su renglón reservado mide 16 y el botón 36:
+    `wrapContentHeight(unbounded = true)` lo deja medir lo suyo centrado en el renglón, y como el
+    botón de texto no tiene fondo, lo que sobresale no se ve. La hoja no cambia de alto;
+  - «Pagó otro» y «Subir comprobante» son **`BotonDeIcono` `Secundario`** (nuevo: 48 × 48 en la capa 2
+    con el radio de un `Boton`, para ir al lado de uno de alto `M`); `BotonDeIcono` ganó también
+    `habilitado`;
+  - Categoría, Cuenta, Nota y Desde / Hacia del traspaso son `Fila` (`FilaDeLaHoja`: el valor a la
+    derecha con su techo de ancho y el `Chevron`; el renglón de «Última usada» se reserva como antes
+    para que el teclado no se mueva). Eran `CardRow` de 48 dp;
+  - el aviso pendiente («Es este / No») usa `PildoraDeAccion`, y los atajos «Hoy · Ayer» del selector
+    de fecha, `PildoraDeFiltro` (que ahora centra su texto si ocupa más que él) y `lavado()`.
+- **Chips y filas de otras pantallas.** Categorías: los filtros y el tipo (en un `FlowRow`, que ya no
+  corta «Automático») son `PildoraDeFiltro`, y Renombrar / Unificar / Esconder son `Fila` en una
+  `Superficie` de capa 2. La categoría de un movimiento y las sugerencias de un presupuesto,
+  `PildoraDeAccion`. En la hoja de un crédito, `SelectRow` y `OpcionDeAlta` son una `Fila` en capa 2
+  con el visto en la marca (semántica de radio) y la casilla es la `Casilla`. La fila de un documento
+  es una `Fila` (tocarla abre el archivo) con sus acciones como `Boton` chicos —«Borrar» en
+  `Peligro`— en un `FlowRow`. «Editar inicio» es un `Boton` `Fantasma` `S`; `NewItemButton` delega en
+  `Boton`; el ofrecimiento de recurrente usa `Boton` y `BotonDeIcono`; «Reintentar», `lavado()`.
+  `ScopeToggle` no lo usaba nadie y se borró.
+
+**Las líneas base**, antes → después: botones de Material 4 → **0**, `Color.White`/`Black` 3 → **0**
+(fuera del velo de `MarcoDeHoja`, exceptuado), `Hairline` 14 → 13, `MinCard` 22 → 20,
+`Text(formatCOP…)` 10 → 10, `fontWeight =` 190 → 145; `.dp` sueltos 242 → 213 y radios con número
+19 → 16.
+
+Lo vigilan `LaRevisionDelExtractoEsDelSistemaTest` (cada botón es un `Boton` con su variante, una
+`Casilla` por fila que se destilda al tocarla, los montos son `Cifra`, y el texto del botón
+principal pasa AA en el tema oscuro mientras el blanco de antes no), `AgregarEnElSistemaTest` (los
+chips son `PildoraDeFiltro` y dicen el elegido, «Nueva» y la fecha son `PildoraDeAccion`, «Guardar
+y anotar otro» es un `Boton` `Fantasma` que aparece sin mover el teclado, las filas miden lo de una
+`Fila`, «Subir comprobante» es un `BotonDeIcono` de 48 con su descripción),
+`CategoriasConPildorasYFilasTest`, `FilaDeDocumentoTest`, dos más en `SistemaDeDisenoTest`, y las de
+siempre de la hoja de Agregar (`HojaAgregarGeometriaTest`, `AgregarPorDentroTest`, el teclado).
