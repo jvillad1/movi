@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FilaDelAnalisis
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.VistaDelAnalisis
@@ -26,6 +27,7 @@ import com.jvillada.movi.shared.model.analisisDelPeriodo
 import com.jvillada.movi.shared.model.filasDelAnalisis
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.montoContado
+import com.jvillada.movi.shared.model.movimientosDelAnalisis
 import com.jvillada.movi.shared.model.tituloDelPeriodo
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.Espacio
@@ -59,9 +61,12 @@ import kotlinx.datetime.LocalDate
  * que desde «En qué se va». Al elegir un movimiento el panel vuelve a ser su detalle.
  *
  * **Ninguna cuenta nueva.** Lo que salió y las categorías son [analisisDelPeriodo] y
- * [filasDelAnalisis] (la regla de «Gastos», solo tu parte); lo que entró es la regla del chip
- * «Ingresos» ([matchesChip], con el mismo [isCashFlow] que el gasto) en pesos, en los mismos días. Todo sobre la historia que la lista ya
- * leyó: ninguna lectura más. En el teléfono no hay panel, y nada de esto se pinta.
+ * [filasDelAnalisis] sobre [movimientosDelAnalisis]: los MISMOS movimientos que «En qué se va» (la
+ * historia más tu parte de lo que pagaron otros, y solo tu parte de lo que repartiste). Lo que entró
+ * es la regla del chip «Ingresos» ([matchesChip], con el mismo [isCashFlow] que el gasto) en pesos,
+ * en los mismos días. Todo sobre la historia que la lista ya leyó, más la lectura de tu parte de
+ * otros que ya hace «En qué se va» (la misma llamada, con su caché; solo con el panel a la vista).
+ * En el teléfono no hay panel, y nada de esto se pinta.
  */
 
 /** El tag del resumen del período en el panel de Movimientos. */
@@ -108,6 +113,8 @@ data class ResumenDelPanel(
  *
  * @param hoy el día de hoy en la zona de la app (la «altura» de la comparación).
  * @param tiposDeCuenta el tipo de cada cuenta, por id (ver `esGastoDelPeriodo`).
+ * @param tuParteDeOtros tu parte de los gastos que pagó otro en un espacio (`getTuParteDeOtros`, la
+ *   misma lectura de «En qué se va»): suma en lo que salió y en su categoría, solo tu parte.
  */
 fun resumenDelPanel(
     dias: List<EventDay>,
@@ -115,9 +122,11 @@ fun resumenDelPanel(
     settings: PeriodSettings,
     hoy: LocalDate,
     tiposDeCuenta: Map<String, AccountType> = emptyMap(),
+    tuParteDeOtros: List<FinancialEvent> = emptyList(),
 ): ResumenDelPanel {
     val eventos = dias.flatMap { it.items }
-    val analisis = analisisDelPeriodo(eventos, periodo, settings, hoy, tiposDeCuenta)
+    // Lo MISMO que analiza «En qué se va»: la historia más tu parte de lo que pagaron otros.
+    val analisis = analisisDelPeriodo(movimientosDelAnalisis(dias, tuParteDeOtros), periodo, settings, hoy, tiposDeCuenta)
     // Los mismos días que cuenta el análisis (por la fecha del movimiento en la zona de la app).
     val entro = eventos
         .filter { it.currency == "COP" && matchesChip(it, CHIP_INGRESOS) }

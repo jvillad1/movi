@@ -2,6 +2,13 @@ package com.jvillada.movi.ui.transactions
 
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
+import com.jvillada.movi.shared.model.GastoDelEspacio
+import com.jvillada.movi.shared.model.MIEMBRO_YO
+import com.jvillada.movi.shared.model.VistaDelAnalisis
+import com.jvillada.movi.shared.model.analisisDelPeriodo
+import com.jvillada.movi.shared.model.filasDelAnalisis
+import com.jvillada.movi.shared.model.movimientosDelAnalisis
+import com.jvillada.movi.shared.model.tuParteComoEventos
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -125,5 +132,53 @@ class ResumenDelPanelTest {
         assertEquals(TonoDeCifra.Ingreso, tonoDelNeto(1))
         assertEquals(TonoDeCifra.Alerta, tonoDelNeto(-1))
         assertEquals(TonoDeCifra.Apagado, tonoDelNeto(0))
+    }
+
+    // ── Las mismas cifras que «En qué se va» (revisión de la vuelta 9) ─────────────────────
+
+    /**
+     * El defecto que vio el coordinador: con «Mercado del sábado · Pagó Caro · Tu parte $120.000» en
+     * el período, el panel decía Mercado $196.050 y «En qué se va» (y el widget del Inicio)
+     * $316.050. Ahora el panel cuenta los MISMOS movimientos ([movimientosDelAnalisis]): tu parte de
+     * lo que pagó otro suma, y de lo que pagaste tú y repartiste, solo tu parte.
+     */
+    @Test
+    fun `con un gasto que pago otro el panel da las mismas cifras por categoria que En que se va`() {
+        val dias = dias(
+            mov("2026-08-01", 1_000_000L, OPENING_CATEGORY, TransactionType.INCOME),
+            mov("2026-09-26", 4_000_000L, "Salario", TransactionType.INCOME),
+            // Período pasado, a la misma altura.
+            mov("2026-08-27", 150_000L, "Mercado"),
+            mov("2026-08-28", 90_000L, "Comida"),
+            // Este período: un mercado tuyo, y una comida que pagaste tú y repartiste (Caro pone la mitad).
+            mov("2026-09-27", 196_050L, "Mercado"),
+            mov("2026-10-01", 152_100L, "Comida").copy(parteAjena = 76_050L),
+        )
+        // «Mercado del sábado · Pagó Caro · Tu parte $120.000».
+        val pagoCaro = GastoDelEspacio(
+            id = "g1", espacioId = "casa", pagadoPor = "caro", monto = 240_000L, categoria = "Mercado",
+            descripcion = "Mercado del sábado",
+            fecha = LocalDate.parse("2026-10-04").atStartOfDayIn(AppTimeZone.zone).toEpochMilliseconds(),
+            partes = mapOf(MIEMBRO_YO to 120_000L, "caro" to 120_000L),
+        )
+        val tuParte = tuParteComoEventos(listOf(pagoCaro))
+
+        val panel = resumenDelPanel(dias, octubre, corte25, hoy, tipos, tuParteDeOtros = tuParte)
+        // Lo que pinta «En qué se va» (EnQueSeVaScreen), con la misma lectura de tu parte de otros.
+        val enQueSeVa = analisisDelPeriodo(movimientosDelAnalisis(dias, tuParte), octubre, corte25, hoy, tipos)
+        val filasDeEnQueSeVa = filasDelAnalisis(enQueSeVa, VistaDelAnalisis.CATEGORIA)
+
+        assertEquals(
+            filasDeEnQueSeVa.map { Triple(it.nombre, it.gasto, it.anterior) },
+            panel.categorias.map { Triple(it.nombre, it.gasto, it.anterior) },
+            "categoría por categoría, lo mismo que «En qué se va»",
+        )
+        assertEquals(enQueSeVa.total, panel.salio, "lo que salió es el «Llevas gastado» de «En qué se va»")
+        val porNombre = panel.categorias.associateBy { it.nombre }
+        assertEquals(316_050L, porNombre.getValue("Mercado").gasto, "tu mercado + tu parte del de Caro")
+        assertEquals(76_050L, porNombre.getValue("Comida").gasto, "de la comida repartida, solo tu parte")
+        assertEquals("\$166.050 más", diferenciaDeLaFila(porNombre.getValue("Mercado"))!!.texto)
+        assertEquals(392_100L, panel.salio)
+        assertEquals(4_000_000L - 392_100L, panel.neto)
     }
 }

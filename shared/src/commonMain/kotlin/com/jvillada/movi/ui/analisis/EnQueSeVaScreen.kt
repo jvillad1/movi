@@ -64,6 +64,7 @@ import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.analisisDelPeriodo
 import com.jvillada.movi.shared.model.contraElAnterior
 import com.jvillada.movi.shared.model.filasDelAnalisis
+import com.jvillada.movi.shared.model.movimientosDelAnalisis
 import com.jvillada.movi.shared.model.periodoAnterior
 import com.jvillada.movi.shared.model.periodoDeLaFecha
 import com.jvillada.movi.shared.model.periodoDelPrefijo
@@ -167,7 +168,7 @@ fun EnQueSeVaScreen(
     val p = periodo
     val analisis = remember(dias, p, ajustes, hoy, tipos, tuParteDeOtros) {
         if (dias == null || p == null || ajustes == null) null
-        else analisisDelPeriodo(dias.flatMap { it.items } + tuParteDeOtros, p, ajustes, hoy, tipos)
+        else analisisDelPeriodo(movimientosDelAnalisis(dias, tuParteDeOtros), p, ajustes, hoy, tipos)
     }
     val laVista = VistaDelAnalisis.entries[vista]
     val filas = remember(analisis, laVista, nombres) { analisis?.let { filasDelAnalisis(it, laVista, nombres) }.orEmpty() }

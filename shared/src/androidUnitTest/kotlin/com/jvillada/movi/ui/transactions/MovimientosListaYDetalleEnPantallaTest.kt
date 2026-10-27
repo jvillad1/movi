@@ -113,6 +113,9 @@ class MovimientosListaYDetalleEnPantallaTest {
             eventos = eventos.map { if (it.id == id) it.copy(category = category) else it }
             return eventos.first { it.id == id }
         }
+        /** Tu parte de lo que pagaron otros (R3); por defecto, nada. */
+        var tuParte: List<FinancialEvent> = emptyList()
+        override suspend fun getTuParteDeOtros(): List<FinancialEvent> = tuParte
         /** Los «parecidos» que el server devolvería por movimiento; por defecto, ninguno. */
         var parecidos: Map<String, List<FinancialEvent>> = emptyMap()
         override suspend fun getParecidos(id: String): List<FinancialEvent> = parecidos[id].orEmpty()
@@ -262,6 +265,36 @@ class MovimientosListaYDetalleEnPantallaTest {
         val panel = limites(TAG_PANEL_DEL_MOVIMIENTO)
         val resumen = limites(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL)
         assertTrue(resumen.left >= panel.left - 0.5f && resumen.right <= panel.right + 0.5f, "$panel / $resumen")
+    }
+
+    /**
+     * Revisión de la vuelta 9: el resumen cuenta tu parte de lo que pagó otro, como «En qué se va» y
+     * el widget del Inicio. Caro pagó un mercado y tu parte es $120.000: Mercado dice $240.000 (los
+     * $120.000 del supermercado más tu parte) y Salió $309.489.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `el resumen cuenta tu parte de lo que pago otro, como En que se va`() {
+        montar2("Señor Gol") { repo ->
+            repo.tuParte = listOf(
+                FinancialEvent(
+                    id = "espacio:g1", accountId = "espacio:casa", type = TransactionType.EXPENSE, amount = 120_000L,
+                    category = "Mercado", description = "Mercado del sábado", timestamp = ahora,
+                    reconciliationStatus = ReconciliationStatus.RECONCILED, countsAsCashFlow = true, espacioId = "casa",
+                ),
+            )
+        }
+        esperar { hayEnElResumen("\$309.489") }
+        assertTrue(
+            composeRule.onAllNodes(
+                hasTestTag(TAG_CATEGORIA_DEL_RESUMEN) and hasAnyDescendant(hasText("Mercado")) and
+                    hasAnyDescendant(hasText("\$240.000")),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().isNotEmpty(),
+            "Mercado con tu parte del de Caro",
+        )
+        // Tu parte no es un movimiento de tus cuentas: la lista no la muestra.
+        assertTrue(filaDe("Mercado del sábado").fetchSemanticsNodes().isEmpty())
     }
 
     @Test
