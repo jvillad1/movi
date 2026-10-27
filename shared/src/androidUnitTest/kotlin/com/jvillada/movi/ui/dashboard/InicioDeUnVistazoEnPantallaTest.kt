@@ -131,7 +131,7 @@ class InicioDeUnVistazoEnPantallaTest {
      * El veredicto es único en la pantalla: sirve para ubicar el hero. Ola 3: en pantalla va la línea
      * corta; la frase larga es su `contentDescription` (ver la prueba del veredicto corto, abajo).
      */
-    private val veredicto = "−\$11,7M este período · Cuotas \$12,9M"
+    private val veredicto = "Salió \$11,7M más de lo que entró · cuotas de crédito: \$12,9M"
     private val veredictoLargo =
         "Este período salieron \$11,7M más de los que entraron — las cuotas de crédito fueron \$12,9M"
 

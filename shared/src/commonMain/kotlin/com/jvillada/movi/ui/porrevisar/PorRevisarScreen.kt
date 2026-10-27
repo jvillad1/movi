@@ -123,11 +123,17 @@ const val TAG_AVISO_DE_CAPTURA_EN_LA_BANDEJA: String = "aviso-de-captura-en-la-b
  * que llegó solo y espera que el dueño decida.
  */
 @Composable
-fun RenglonPorRevisar(cuantos: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun RenglonPorRevisar(
+    cuantos: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** De qué es el número («2 avisos · 1 movimiento», ver [desgloseDePorRevisar]); vuelta de diseño 22. */
+    desglose: String? = null,
+) {
     TarjetaDePropuesta(
         icono = Icons.Rounded.Inbox,
         titulo = textoDePorRevisar(cuantos),
-        cuerpo = "Avisos y movimientos por confirmar",
+        cuerpo = desglose ?: "Avisos y movimientos por confirmar",
         accion = "Revisar",
         onAccion = onClick,
         modifier = modifier.testTag(TAG_RENGLON_POR_REVISAR),

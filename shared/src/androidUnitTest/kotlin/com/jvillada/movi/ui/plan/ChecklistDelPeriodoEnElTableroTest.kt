@@ -347,7 +347,7 @@ class ChecklistDelPeriodoEnElTableroTest {
         montar()
         esperarTexto("Pagos del período")
 
-        composeRule.onNodeWithText("Flujo libre", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(TITULO_LO_QUE_SE_REPITE, useUnmergedTree = true).assertIsDisplayed()
         for (seccion in listOf("PRÓXIMOS", "SIN CONFIRMAR", "YA OCURRIERON")) {
             assertTrue(
                 composeRule.onAllNodesWithText(seccion, substring = true, useUnmergedTree = true)

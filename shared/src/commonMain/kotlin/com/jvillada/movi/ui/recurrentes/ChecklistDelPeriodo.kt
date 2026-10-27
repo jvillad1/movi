@@ -41,6 +41,7 @@ import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PlanDelCredito
+import com.jvillada.movi.shared.model.pagosEnOrdenDeUrgencia
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
@@ -100,7 +101,8 @@ import com.jvillada.movi.ui.dashboard.yaRecibidoEnElPeriodo
  *
  * Una sola tarjeta, con el resumen arriba (cuánto falta, cuánto ya pagaste) y estos grupos:
  *
- * - **Por pagar** — vence en el período y no tiene pago. Lo vencido primero.
+ * - **Por pagar** — vence en el período y no tiene pago. En el orden de la cola de lo pendiente
+ *   (vuelta de diseño 22): lo vencido primero, y dentro de cada grupo el monto más grande primero.
  * - **Ya pagaste** — tiene pago en el período. Cada fila dice con qué se sabe
  *   ([origenDeLoOcurrido], la misma media frase de siempre).
  * - **Por cobrar** / **Ya recibiste** — los ingresos, si hay.
@@ -275,7 +277,10 @@ fun SeccionChecklistDelPeriodo(
                         // Sin nada pendiente el grupo no desaparece: dice que ya salió todo, que es
                         // la respuesta a la pregunta que el dueño vino a hacer.
                         vacio = lineaDeLoQueFalta(checklist),
-                        filas = pagosPendientes(checklist),
+                        // Vuelta de diseño 22: en el orden de la cola de lo pendiente (lo vencido
+                        // primero y el monto más grande primero), el mismo de la campana, «Movi propone
+                        // hoy» y el widget del Inicio. Lo que vence más adelante, por fecha.
+                        filas = pagosEnOrdenDeUrgencia(checklist),
                         // De dónde salen las estimaciones de las cuotas: una vez por grupo, debajo de
                         // las filas que las muestran, y solo si alguna la muestra.
                         pie = ESTIMADO_SOBRE_LA_DEUDA_DE_HOY.takeIf {

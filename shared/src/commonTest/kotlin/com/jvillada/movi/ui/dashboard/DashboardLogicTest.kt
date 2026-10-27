@@ -884,22 +884,25 @@ class DashboardLogicTest {
                 upcoming("${CARD_RULE_PREFIX}c1", "Pago Visa", 500_000, daysUntil = 0),
                 upcoming("r-lejos", "Gimnasio", 90_000, daysUntil = 20), // fuera de la ventana de 7 días
             ),
+            // Vuelta de diseño 22: la campana lee la cola, que sale del checklist del período.
+            ocurrencias = emptyList(),
+            periodoActual = agosto,
+            ajustesDePeriodo = PeriodSettings(),
             budgets = listOf(Budget("Mercado", 100_000)),
             spentByCategory = mapOf("Mercado" to 150_000L),
             cardCandidates = 1,
             pendingSms = 2,
         )
         val rows = notificationRows(d)
-        // Vuelta de diseño 8: el título en frase y lo urgente primero (lo vencido, lo de hoy, el
-        // presupuesto pasado, lo de dentro de unos días y al final lo que espera confirmación).
+        // Lo urgente primero: lo vencido, lo de hoy, el presupuesto pasado, lo que espera en «Por
+        // revisar» (UNA fila, con el número de la insignia) y lo de dentro de unos días.
         assertEquals(
             listOf(
                 "Cuota Carro venció ayer" to Screen.Credits,       // synthetic de crédito -> Créditos
                 "Pago Visa vence hoy" to Screen.Credits,            // synthetic de tarjeta -> Créditos
                 "Presupuesto de Mercado superado" to Screen.Plan(SEGMENTO_PRESUPUESTOS),
+                "3 por revisar" to Screen.PorRevisar,
                 "Colegio vence en 2 días" to Screen.Plan(SEGMENTO_PAGOS), // regla real -> Plan · Pagos del mes
-                "1 pago de tarjeta por confirmar" to Screen.PorRevisar,
-                "2 mensajes del banco por confirmar" to Screen.PorRevisar,
             ),
             rows.map { it.titulo to it.target },
         )
@@ -908,14 +911,15 @@ class DashboardLogicTest {
                 TipoDeNotificacion.PagoVencido,
                 TipoDeNotificacion.PagoPorVencer,
                 TipoDeNotificacion.PresupuestoSuperado,
-                TipoDeNotificacion.PagoPorVencer,
-                TipoDeNotificacion.PagoDeTarjetaPorConfirmar,
                 TipoDeNotificacion.MensajesDelBanco,
+                TipoDeNotificacion.PagoPorVencer,
             ),
             rows.map { it.tipo },
         )
+        // De qué es el número de «Por revisar»: el mismo desglose que la insignia y Movimientos.
+        assertEquals("2 avisos · 1 pago de tarjeta", rows[3].subtitulo)
         // El monto del pago va aparte, para la Cifra; las alertas no tienen monto.
-        assertEquals(listOf(800_000L, 500_000L, null, 700_000L, null, null), rows.map { it.monto })
+        assertEquals(listOf(800_000L, 500_000L, null, null, 700_000L), rows.map { it.monto })
     }
 
     @Test
@@ -931,18 +935,23 @@ class DashboardLogicTest {
     fun `la campana no cambia que avisos hay, solo como se dicen`() {
         val d = DashboardData(
             upcoming = listOf(upcoming("rr_1", "Internet", 90_000, daysUntil = -1)),
+            ocurrencias = emptyList(),
+            periodoActual = agosto,
+            ajustesDePeriodo = PeriodSettings(),
             budgets = listOf(Budget("Mercado", 100_000), Budget("Ropa", 50_000)),
             spentByCategory = mapOf("Mercado" to 150_000L, "Ropa" to 60_000L),
             cardCandidates = 2,
             pendingSms = 1,
         )
-        val alertas = dashboardAlerts(
-            overBudgetCategories(d.budgets, d.spentByCategory), d.cardCandidates, d.pendingSms,
-        )
+        val alertas = dashboardAlerts(overBudgetCategories(d.budgets, d.spentByCategory), cardCandidates = 0, pendingSms = 0)
         val rows = notificationRows(d)
-        // Un pago y las mismas alertas del Inicio, ni una más ni una menos.
-        assertEquals(1 + alertas.size, rows.size)
-        assertEquals(alertas.map { it.target }.toSet() + Screen.Plan(SEGMENTO_PAGOS), rows.map { it.target }.toSet())
+        // Un pago, una fila de «Por revisar» (los 2 pagos de tarjeta y el aviso juntos) y las alertas
+        // que no son pendientes de la cola, ni una más ni una menos.
+        assertEquals(1 + 1 + alertas.size, rows.size)
+        assertEquals(
+            alertas.map { it.target }.toSet() + Screen.Plan(SEGMENTO_PAGOS) + Screen.PorRevisar,
+            rows.map { it.target }.toSet(),
+        )
         assertEquals("Internet venció ayer", rows.first().titulo)
         assertEquals(
             rows.map { it.urgencia }.sorted(),
@@ -950,6 +959,8 @@ class DashboardLogicTest {
             "lo urgente va primero",
         )
     }
+
+    private val agosto = com.jvillada.movi.shared.model.PeriodoFinanciero(2026, 8)
 }
 
 // ── El Inicio no afirma vacío antes de saber (fix/inicio-no-miente-vacio) ──────────

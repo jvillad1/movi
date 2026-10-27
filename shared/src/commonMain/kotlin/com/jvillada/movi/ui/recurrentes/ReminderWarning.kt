@@ -89,9 +89,27 @@ fun shouldShowReminderWarning(
     hayRecordatoriosPedidos: Boolean,
     canales: ReminderChannels?,
 ): Boolean =
-    hayRecordatoriosPedidos &&
-        canales != null && !canales.email &&
-        pushStatus != "enabled" && pushStatus != "unsupported"
+    hayRecordatoriosPedidos && estadoDeLosRecordatorios(pushStatus, canales) == EstadoDeLosRecordatorios.APAGADOS
+
+/**
+ * **¿Hay por dónde llegar un recordatorio?** (vuelta de diseño 22). La regla de siempre de este archivo,
+ * con nombre, para que Ajustes la diga sin copiarla:
+ *
+ * - [SIN_SABER] — el server todavía no dijo qué canales tiene (`canales == null`): no se afirma nada.
+ * - [CON_CANAL] — hay correo, o las notificaciones push están activas, o la plataforma no tiene push que
+ *   pedir (`"unsupported"`: el teléfono avisa con sus propias notificaciones, ver `Captura del banco`).
+ * - [APAGADOS] — ni correo ni push: lo que el dueño pidió no le va a llegar.
+ */
+enum class EstadoDeLosRecordatorios { SIN_SABER, CON_CANAL, APAGADOS }
+
+fun estadoDeLosRecordatorios(pushStatus: String, canales: ReminderChannels?): EstadoDeLosRecordatorios = when {
+    canales == null -> EstadoDeLosRecordatorios.SIN_SABER
+    canales.email || pushStatus == "enabled" || pushStatus == "unsupported" -> EstadoDeLosRecordatorios.CON_CANAL
+    else -> EstadoDeLosRecordatorios.APAGADOS
+}
+
+/** Lo que dice la fila de recordatorios de Ajustes cuando no hay canal (vuelta de diseño 22). */
+const val RECORDATORIOS_APAGADOS: String = "Apagado: no te va a llegar"
 
 /**
  * La misma pregunta, hecha desde la hoja de crear/editar en vez de desde la pantalla.

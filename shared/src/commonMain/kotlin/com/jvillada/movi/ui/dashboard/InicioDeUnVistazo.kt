@@ -126,19 +126,21 @@ fun veredictoDelInicio(
 }
 
 /**
- * **El veredicto en una línea corta, con cifras** (Ola 3 · Hoy en una mirada, 22-oct-2026).
+ * **El veredicto en una línea corta, con cifras y con verbo** (Ola 3 · Hoy en una mirada, 22-oct-2026;
+ * vuelta de diseño 22).
  *
- * «Este período salieron $893.300 más de los que entraron — lo que más pesó fue Mercado: $392.100»
- * eran dos renglones antes de la primera cifra útil. Hoy pinta esta línea —«−$893.300 este período ·
- * Mercado $392.100»— y deja la frase larga de [veredictoDelPeriodo] como `contentDescription`, para
- * el lector de pantalla. **La misma regla, los mismos datos**: sale de [veredictoDelPeriodo] su tono
- * y de acá solo la forma corta; si una cambia sin la otra, `InicioDeUnVistazoTest` lo nota.
+ * Es la línea de respaldo de [fraseDelHeroe]: la que va cuando el Disponible no se puede calcular y no
+ * hay un «gastaste» de Plan que repetir. Dice el flujo del período con su verbo —la Ola 3 lo había dejado
+ * en «−$893.300 este período · Mercado $392.100», y la revisión del 27-oct encontró que no se entendía si
+ * era neto, gasto o déficit, ni por qué aparecía Mercado—:
  *
- * Solo la pinta Hoy. Movi AI, el correo y la tarjeta de cierre tienen sus propias frases y no se tocan.
+ * - En contra: «Salió $893.300 más de lo que entró · lo que más: Mercado $392.100» (o las cuotas).
+ * - A favor: «Entró $3M más de lo que salió», y si el disponible está en rojo, «· te pasaste…».
+ * - Parejo: «Entró lo mismo que salió».
  *
- * - En contra: «−$11,7M este período · Cuotas $12,9M» (las cuotas de crédito), o la categoría que más pesó.
- * - A favor: «+$3M este período», y si el disponible está en rojo, «· te pasaste del disponible…».
- * - Parejo: «$0 este período · entró lo mismo que salió».
+ * **La misma regla, los mismos datos** que [veredictoDelPeriodo] (la frase larga, para el lector de
+ * pantalla): si una cambia sin la otra, `HoyEnUnaMiradaTest` lo nota. Movi AI, el correo y la tarjeta
+ * de cierre tienen sus propias frases y no se tocan.
  */
 fun veredictoCortoDelPeriodo(
     ingresos: Long,
@@ -151,18 +153,14 @@ fun veredictoCortoDelPeriodo(
     val flujo = ingresos - egresos
     if (flujo < 0L) {
         val porque = when {
-            cuotasDeCredito > 0L -> " · Cuotas ${formatMoneyCompact(cuotasDeCredito)}"
-            mayorGasto != null && mayorGasto.second > 0L -> " · ${mayorGasto.first} ${formatMoneyCompact(mayorGasto.second)}"
+            cuotasDeCredito > 0L -> " · cuotas de crédito: ${formatMoneyCompact(cuotasDeCredito)}"
+            mayorGasto != null && mayorGasto.second > 0L -> " · lo que más: ${mayorGasto.first} ${formatMoneyCompact(mayorGasto.second)}"
             else -> ""
         }
-        // `formatMoneyCompact` pone su propio signo menos (o tapa la cifra si los saldos están ocultos).
-        return "${formatMoneyCompact(flujo)} este período$porque"
+        return "Salió ${formatMoneyCompact(-flujo)} más de lo que entró$porque"
     }
-    if (flujo == 0L) return "${formatMoneyCompact(0L)} este período · entró lo mismo que salió"
-    val cifra = formatMoneyCompact(flujo)
-    // Con los saldos ocultos la cifra es «$•••»: un «+» delante no agrega nada.
-    val conSigno = if (cifra.any { it.isDigit() }) "+$cifra" else cifra
-    return "$conSigno este período" + (avisoDelDisponible?.let { " · $it" } ?: "")
+    if (flujo == 0L) return "Entró lo mismo que salió"
+    return "Entró ${formatMoneyCompact(flujo)} más de lo que salió" + (avisoDelDisponible?.let { " · $it" } ?: "")
 }
 
 /**
@@ -184,6 +182,52 @@ fun veredictoCortoDelInicio(
         avisoDelDisponible = if (conAvisoDelDisponible) disponibleDelInicio(data, hoy)?.let(::avisoDelDisponible) else null,
     )
 }
+
+/**
+ * **La frase de abajo del héroe de Hoy**: lo que se ve ([corta]) y lo que oye el lector de pantalla
+ * ([larga]), que dicen lo mismo.
+ */
+data class FraseDelHeroe(val corta: String, val larga: String)
+
+/**
+ * **La frase de abajo del héroe, con la misma cifra que Plan** (vuelta de diseño 22).
+ *
+ * La revisión del 27-oct: Hoy decía «−$893.300 este período · Mercado $316.050» y Plan, en la tarjeta
+ * del Disponible, «gastaste $1,7M». Dos cifras del mismo período sin decir qué era cada una. Ahora, si
+ * el Disponible se puede calcular, Hoy dice **lo que Plan dice**: «Gastaste $1,7M · lo que más: Mercado
+ * $316.050» —[DisponibleDelPeriodo.periodo] `.gastado`, el gasto del día a día del período (sin los
+ * pagos fijos, que el Disponible ya restó), escrito igual que la columna «Período» de Plan
+ * (`formatMoneyCompact`)—. «Lo que más» es la categoría más grande **que cabe en esa cifra**: el
+ * arriendo o una cuota son fijos, no gasto del día a día, y «Gastaste $1,7M · lo que más: Vivienda
+ * $1,8M» sería una parte más grande que el todo.
+ *
+ * Sin Disponible (sin ingresos ni plata, o con una lectura que no llegó), la línea de respaldo
+ * ([veredictoCortoDelPeriodo]) con su verbo. `null` mientras el resumen no contesta, o sin nada que
+ * medir. El héroe («Te quedan…») no se toca: su definición es una decisión pendiente del dueño.
+ */
+fun fraseDelHeroe(
+    data: DashboardData,
+    hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
+    conAvisoDelDisponible: Boolean = true,
+): FraseDelHeroe? {
+    // Sin resumen o sin nada que medir (ni entró ni salió nada) no hay frase: lo decide el veredicto.
+    val larga = veredictoDelInicio(data, hoy, conAvisoDelDisponible)?.frase ?: return null
+    val disponible = disponibleDelInicio(data, hoy)
+        ?: return veredictoCortoDelInicio(data, hoy, conAvisoDelDisponible)?.let { FraseDelHeroe(it, larga) }
+    val gastado = disponible.periodo.gastado
+    if (gastado <= 0L) return FraseDelHeroe(SIN_GASTO_EN_EL_PERIODO, "Este período todavía no gastaste nada en el día a día")
+    val mayor = mayorGastoDelPeriodo(
+        data.spentByCategory.orEmpty().filter { (categoria, monto) -> categoria != CUOTA_CATEGORY && monto <= gastado },
+    )
+    val cifra = formatMoneyCompact(gastado)
+    val corta = "Gastaste $cifra" + (mayor?.let { " · lo que más: ${it.first} ${formatMoneyCompact(it.second)}" } ?: "")
+    val larguisima = "Este período gastaste $cifra en el día a día" +
+        (mayor?.let { "; lo que más pesó fue ${it.first}, con ${formatMoneyCompact(it.second)}" } ?: "")
+    return FraseDelHeroe(corta, larguisima)
+}
+
+/** Lo que dice la frase del héroe cuando el período todavía no tiene gasto del día a día. */
+const val SIN_GASTO_EN_EL_PERIODO: String = "Todavía no gastas nada este período"
 
 /**
  * La categoría que más pesó, sin contar «Otros»: «lo que más pesó fue Otros» no le dice nada a nadie.
