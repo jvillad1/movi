@@ -43,7 +43,6 @@ import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.tipoOPersona
 import com.jvillada.movi.theme.Movi
-import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
@@ -53,6 +52,14 @@ import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
 /**
  * # La ficha de una persona o comercio: **para leer**
@@ -147,25 +154,28 @@ fun DetalleDelDestinoSheet(
                 .weight(1f, fill = false)
                 .testTag(TAG_FICHA_DEL_TERCERO),
         ) {
+            // Vuelta de diseño 18: el nombre y, debajo, qué es y cómo lo reconoce Movi, con el
+            // encabezado de toda hoja; «Editar» es un botón de texto del sistema.
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.xxs),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
             ) {
-                Text(actual.nombre, style = Movi.textos.titulo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
+                EncabezadoDeHoja(
+                    actual.nombre,
+                    subtitulo = queEsYComoLoReconoce(actual),
+                    modifier = Modifier.weight(1f),
+                )
                 if (onEditar != null) {
-                    Text(
+                    Spacer(Modifier.width(Espacio.xs))
+                    Boton(
                         "Editar",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.marca,
-                        modifier = Modifier.clickable(onClick = onEditar).testTag(TAG_EDITAR_EL_TERCERO),
+                        onClick = onEditar,
+                        variante = VarianteDeBoton.Fantasma,
+                        tamano = TamanoDeBoton.S,
+                        modifier = Modifier.testTag(TAG_EDITAR_EL_TERCERO),
                     )
                 }
             }
-            Text(
-                queEsYComoLoReconoce(actual),
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-            )
 
             Spacer(Modifier.height(Espacio.m))
             Text("Este período", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
@@ -187,7 +197,7 @@ fun DetalleDelDestinoSheet(
                                 color = Movi.colores.texto,
                                 modifier = Modifier.weight(1f),
                             )
-                            Text(formatMoney(envio.monto, envio.moneda), style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                            Cifra(envio.monto, moneda = envio.moneda)
                         }
                     }
                 }
@@ -236,7 +246,7 @@ fun DetalleDelDestinoSheet(
             }
 
             Spacer(Modifier.height(Espacio.m))
-            Hairline()
+            Separador(SangriaDeSeparador.Ninguna)
             Spacer(Modifier.height(Espacio.s))
 
             Text("Movimientos", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
@@ -265,11 +275,10 @@ fun DetalleDelDestinoSheet(
                                 )
                             }
                             Spacer(Modifier.width(Espacio.xs))
-                            Text(
-                                (if (entro) "+" else "") + formatMoney(ev.amount, ev.currency),
-                                style = Movi.textos.monto,
-                                fontWeight = FontWeight.Medium,
-                                color = if (entro) Movi.colores.entra else Movi.colores.texto,
+                            Cifra(
+                                ev.amount,
+                                moneda = ev.currency,
+                                tono = if (entro) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
                             )
                         }
                     }
@@ -337,12 +346,7 @@ private fun ColumnaDeCifra(rotulo: String, totales: Map<String, Long>, modifier:
             Text("Nada", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         } else {
             conPlata.entries.sortedBy { it.key }.forEach { (moneda, total) ->
-                Text(
-                    formatMoney(total, moneda),
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = if (entra) Movi.colores.entra else Movi.colores.texto,
-                )
+                Cifra(total, moneda = moneda, tono = if (entra) TonoDeCifra.Ingreso else TonoDeCifra.Neutro)
             }
         }
     }

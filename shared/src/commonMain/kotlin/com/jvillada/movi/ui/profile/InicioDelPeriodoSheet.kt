@@ -42,6 +42,10 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 
 /**
  * **La única escritura de los arranques propios**: vuelve a leer el perfil, le aplica [cambio] a
@@ -134,19 +138,10 @@ fun InicioDelPeriodoSheet(
         Column(
             modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false),
         ) {
-            Text(
-                text = "¿Cuándo empezó ${nombreDe(periodo)}?",
-                style = Movi.textos.titulo,
-                color = Movi.colores.texto,
-            )
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = "Normalmente arranca el ${diaLegible(deSiempre)}. Si este mes tu sueldo entró " +
+            EncabezadoDeHoja(
+                "¿Cuándo empezó ${nombreDe(periodo)}?",
+                subtitulo = "Normalmente arranca el ${diaLegible(deSiempre)}. Si este mes tu sueldo entró " +
                     "antes o después, dilo aquí: el mes anterior se cierra solo ese mismo día.",
-                // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Normal,
-                color = Movi.colores.textoMedio,
             )
             Spacer(Modifier.height(Espacio.m))
 
@@ -189,33 +184,26 @@ fun InicioDelPeriodoSheet(
             }
 
             Spacer(Modifier.height(Espacio.m))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(Medida.objetivoTactil)
-                    .clip(RoundedCornerShape(Radio.pill))
-                    .background(if (!saving) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
-                    .clickable(enabled = !saving) { onSave(elegido.toString()) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (saving) "Guardando…" else "Este mes empezó el $dia",
-                    style = Movi.textos.cuerpo,
-                    color = if (!saving) Movi.colores.marca else Movi.colores.textoApagado,
-                )
-            }
+            // Vuelta de diseño 18: era una píldora con el lavado de la marca hecha a mano.
+            Boton(
+                "Este mes empezó el $dia",
+                onClick = { onSave(elegido.toString()) },
+                cargando = saving,
+                anchoCompleto = true,
+            )
 
             // La vuelta atrás, y solo cuando hay algo que deshacer: quitar la excepción es tan
             // necesario como ponerla —«me equivoqué, este mes sí empezó cuando siempre»— y sin
             // esta fila la única salida sería declarar a mano el día natural.
             if (periodo.prefijo in ajustes.iniciosPropios) {
                 Spacer(Modifier.height(Espacio.s))
-                Text(
-                    text = if (saving) "Guardando…" else "Volver al ${diaLegible(deSiempre)}, como siempre",
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = if (saving) Movi.colores.textoApagado else Movi.colores.marca,
-                    modifier = Modifier.clickable(enabled = !saving) { onSave(null) },
+                Boton(
+                    "Volver al ${diaLegible(deSiempre)}, como siempre",
+                    onClick = { onSave(null) },
+                    variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !saving,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
             }
 
@@ -224,12 +212,13 @@ fun InicioDelPeriodoSheet(
             // anteriores.
             if (onVerPeriodos != null) {
                 Spacer(Modifier.height(Espacio.s))
-                Text(
-                    text = "Ver tus períodos",
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.marca,
-                    modifier = Modifier.clickable(enabled = !saving, onClick = onVerPeriodos),
+                Boton(
+                    "Ver tus períodos",
+                    onClick = onVerPeriodos,
+                    variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !saving,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
             }
             Spacer(Modifier.height(Espacio.xl))

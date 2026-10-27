@@ -148,6 +148,16 @@ data class ColoresDeMovi(
      * a 4,35:1).
      */
     val alfaDelLavado: Float,
+    /**
+     * **Lo que va encima del círculo de un avatar** (vuelta de diseño 18): las iniciales y la
+     * verificación del color elegido. Blanco **en los dos temas**, a propósito: el color del círculo
+     * no es del tema sino del dueño (`AvatarPalette`, en `:core`), y esa paleta se armó entera con
+     * tonos «600» para llevar blanco encima. [sobreMarca] no sirve: en oscuro es casi negro y sobre
+     * el índigo de la paleta daba 2,3:1. Eran tres `Color.White` sueltos (Ajustes, editar el
+     * perfil, el botón del avatar); `ContrasteDeLosTokensTest` mide cada color de la paleta contra
+     * este.
+     */
+    val sobreAvatar: Color = Color(0xFFFFFFFF),
 ) {
     /**
      * El color de una categoría **por su clave** (`"naranja"`, `"ambar"`…): el del ícono, y el de

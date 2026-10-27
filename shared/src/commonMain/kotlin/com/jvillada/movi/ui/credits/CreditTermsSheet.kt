@@ -53,6 +53,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.recurrentes.ReminderOptInField
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 
 /**
  * Crea o edita los términos de un crédito.
@@ -827,12 +828,15 @@ fun CreditTermsSheet(
                     onCancelar = { pidiendoBorrar = false },
                 )
             } else {
-                Text(
+                // Vuelta de diseño 18: era un texto rojo tocable. Es destructivo, así que `Peligro`
+                // (no `Fantasma`, que es la marca), chico y centrado debajo del pie.
+                Boton(
                     "Eliminar términos",
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.sale,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = Espacio.xs),
+                    onClick = { pidiendoBorrar = true },
+                    variante = VarianteDeBoton.Peligro,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !saving,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
             }
         }

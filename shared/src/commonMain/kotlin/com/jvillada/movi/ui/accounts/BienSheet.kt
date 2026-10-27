@@ -55,6 +55,7 @@ import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.RotuloDeCampo
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 
 /**
  * # La hoja de un bien: crearlo, y actualizarle el valor cuando llega el avalúo nuevo
@@ -162,17 +163,9 @@ fun BienSheet(
         onEscape = { if (eligiendoFecha) eligiendoFecha = false else if (!guardando) onDismiss() },
     ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            Text(
-                text = if (existente == null) "Nuevo bien" else "Actualizar bien",
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-            )
-            Spacer(Modifier.height(Movi.espacios.minimo))
-            Text(
-                text = "Suma a tu patrimonio, no a Tu plata: con la casa no se paga el mercado.",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
+            EncabezadoDeHoja(
+                if (existente == null) "Nuevo bien" else "Actualizar bien",
+                subtitulo = "Suma a tu patrimonio, no a Tu plata: con la casa no se paga el mercado.",
             )
 
             Spacer(Modifier.height(Movi.espacios.margen))

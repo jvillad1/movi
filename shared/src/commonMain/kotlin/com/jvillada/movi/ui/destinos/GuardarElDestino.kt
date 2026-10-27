@@ -66,6 +66,7 @@ import com.jvillada.movi.shared.model.pareceDe
 import com.jvillada.movi.shared.model.sumarIdentificador
 import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Boton
 
 /** El tag de la fila «¿De quién es la cuenta ·1234?», se muestre donde se muestre. */
 const val TAG_GUARDAR_EL_DESTINO: String = "guardar-el-destino"
@@ -351,11 +352,12 @@ internal fun FilaGuardarElDestino(
             Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
             Spacer(Modifier.height(Espacio.xs))
         }
-        BotonDeGuardar(
-            texto = if (guardando) "Guardando…" else GUARDAR,
-            habilitado = sePuedeGuardar,
+        Boton(
+            GUARDAR,
             onClick = { guardar() },
-            alto = 46,
+            habilitado = loQueFalta == null,
+            cargando = guardando,
+            anchoCompleto = true,
         )
         // Lo primero que falta — no un botón gris sin explicación.
         if (loQueFalta != null && !guardando) {

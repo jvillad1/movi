@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -97,7 +98,9 @@ class FilaDeDocumentoTest {
 
     /** La acción con ese texto, tocable. Si hay varias («Borrar» en la fila y en la confirmación), la última. */
     private fun accion(texto: String): SemanticsNodeInteraction {
-        val nodos = composeRule.onAllNodes(hasText(texto) and hasClickAction(), useUnmergedTree = true)
+        // El texto puede ser del nodo tocable (las acciones de la fila) o de su hijo (un `Boton` del
+        // sistema, como el «Borrar» de la confirmación desde la vuelta de diseño 18).
+        val nodos = composeRule.onAllNodes(hasClickAction() and (hasText(texto) or hasAnyChild(hasText(texto))), useUnmergedTree = true)
         val cuantos = nodos.fetchSemanticsNodes().size
         assertTrue(cuantos > 0, "no hay una acción tocable «$texto»")
         return nodos[cuantos - 1]

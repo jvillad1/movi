@@ -1,6 +1,5 @@
 package com.jvillada.movi.ui.profile
 
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.AvatarPalette
@@ -31,6 +29,9 @@ import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.avatarColorOrDefault
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 
 /**
  * F42 · F46 — editar alias y color de avatar. Se abre desde el "Editar" del encabezado de
@@ -74,18 +75,21 @@ fun EditProfileSheet(
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            Text("Alias", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(Espacio.xs))
+            // Vuelta de diseño 18: la hoja abre con su encabezado, como las demás; «Alias» era un
+            // rótulo suelto que hacía de título.
+            EncabezadoDeHoja("Tu perfil", subtitulo = "Cómo te llama Movi y el color de tu avatar.")
+            Spacer(Modifier.height(Medida.entreSecciones))
             FieldBox(
                 placeholder = "Tu nombre",
                 value = name,
                 onValueChange = { name = it },
                 keyboardType = KeyboardType.Text,
+                rotulo = "Alias",
             )
 
             Spacer(Modifier.height(Espacio.l))
-            Text("Color del avatar", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(Espacio.s))
+            RotuloDeCampo("Color del avatar")
+            Spacer(Modifier.height(Espacio.xs))
             for (row in AvatarPalette.COLORS.chunked(4)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -105,27 +109,14 @@ fun EditProfileSheet(
         }
 
         Spacer(Modifier.height(Espacio.m))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(Radio.m))
-                .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
-                .clickable(enabled = canSave) { save() }
-                .padding(vertical = Espacio.m),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(if (saving) "Guardando…" else "Guardar", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
-        }
-        if (!canSave && !saving && missingFieldMessage != null) {
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = missingFieldMessage,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
+        // El pie del sistema: el botón y, si está apagado, la primera cosa que falta debajo.
+        PieDeHoja(
+            texto = "Guardar",
+            onClick = { save() },
+            habilitado = missingFieldMessage == null,
+            razon = missingFieldMessage,
+            cargando = saving,
+        )
         Spacer(Modifier.height(Espacio.l))
     }
 }
@@ -142,7 +133,7 @@ private fun ColorSwatch(hex: String, selected: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         if (selected) {
-            Icon(Icons.Rounded.Check, contentDescription = "Elegido", tint = Color.White, modifier = Modifier.size(Icono.m))
+            Icon(Icons.Rounded.Check, contentDescription = "Elegido", tint = Movi.colores.sobreAvatar, modifier = Modifier.size(Icono.m))
         }
     }
 }

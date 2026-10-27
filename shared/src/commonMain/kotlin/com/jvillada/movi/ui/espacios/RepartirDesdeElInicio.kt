@@ -18,7 +18,6 @@ import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Espacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
-import com.jvillada.movi.theme.Espacio as EspacioDeDiseno
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
@@ -33,6 +32,7 @@ import com.jvillada.movi.ui.components.ds.Superficie
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 
 /**
  * # «Repartir» desde el Inicio (vuelta de diseño 7)
@@ -169,12 +169,9 @@ internal fun HojaElegirEspacio(espacios: List<Espacio>, onDismiss: () -> Unit, o
                 .weight(1f, fill = false)
                 .testTag(TAG_HOJA_ELEGIR_ESPACIO),
         ) {
-            Text(TITULO_ELEGIR_ESPACIO, style = Movi.textos.titulo, color = Movi.colores.texto)
-            Spacer(Modifier.height(EspacioDeDiseno.xxs))
-            Text(
-                "Anota lo que pagó otra persona. Tu parte cuenta en tus gastos.",
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.textoMedio,
+            EncabezadoDeHoja(
+                TITULO_ELEGIR_ESPACIO,
+                subtitulo = "Anota lo que pagó otra persona. Tu parte cuenta en tus gastos.",
             )
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             Superficie(nivel = NivelDeSuperficie.Capa2, relleno = RellenoDeSuperficie.Lista) {

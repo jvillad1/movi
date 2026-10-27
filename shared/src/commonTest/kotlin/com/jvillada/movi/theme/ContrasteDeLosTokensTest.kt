@@ -2,7 +2,9 @@ package com.jvillada.movi.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import com.jvillada.movi.shared.model.AvatarPalette
 import com.jvillada.movi.ui.ai.fondoDeLaBurbujaDelDueno
+import com.jvillada.movi.ui.components.avatarColorOrDefault
 import com.jvillada.movi.ui.ai.textoDeLaBurbujaDelDueno
 import kotlin.math.max
 import kotlin.math.min
@@ -175,6 +177,25 @@ class ContrasteDeLosTokensTest {
                     "(mínimo ${TEXTO_AA.legible()})",
             )
         }
+    }
+
+    /**
+     * **Las iniciales de un avatar se leen sobre cada color de la paleta** (vuelta de diseño 18).
+     * `sobreAvatar` reemplazó tres `Color.White` sueltos. El piso es el de un gráfico / texto
+     * grande (3:1), no el de texto normal: la paleta (`AvatarPalette`, en `:core`, compartida con el
+     * server) tiene tonos «600» que dan entre 3,3 y 7,7 contra blanco, y las iniciales van grandes y
+     * con peso en un círculo de 40-48 dp. Si alguien agrega a la paleta un color claro, esto cae.
+     */
+    @Test
+    fun `las iniciales se leen sobre cada color de avatar, en los dos temas`() {
+        val fallas = mutableListOf<String>()
+        for ((tema, c) in temas) {
+            for (hex in AvatarPalette.COLORS) {
+                val r = contraste(c.sobreAvatar, avatarColorOrDefault(hex))
+                if (r < GRAFICO_AA) fallas += "En el tema $tema, las iniciales sobre $hex dan ${r.legible()}:1"
+            }
+        }
+        if (fallas.isNotEmpty()) fail(fallas.joinToString("\n"))
     }
 
     /**

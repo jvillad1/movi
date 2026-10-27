@@ -123,6 +123,34 @@ def clase(nombre, codigo):
     return "otro"
 
 
+# La misma regla que LoQueNoEsDelSistemaSoloBajaTest (vuelta de diseño 18): sobre el archivo entero
+# sin comentarios, para que `Text(\n text = formatCOP(…)` cuente aunque baje de renglón.
+NO_ES_DEL_SISTEMA = {
+    "botones_de_material": re.compile(r"(?<![\w.])(?:Button|OutlinedButton|TextButton)\("),
+    "blanco_o_negro": re.compile(r"\bColor\.(?:White|Black)\b"),
+    "hairline": re.compile(r"(?<![\w.])Hairline\("),
+    "mincard": re.compile(r"(?<![\w.])MinCard\("),
+    "cifra_en_text": re.compile(r"(?<![\w.])Text\(\s*(?:text\s*=\s*)?(?:formatCOP|formatMoney)\("),
+    "font_weight": re.compile(r"\bfontWeight\s*="),
+}
+# Por clave, los archivos (relativos a ui/) que no se cuentan. El velo de una hoja es negro con alfa.
+EXCEPCIONES_DEL_SISTEMA = {"blanco_o_negro": {"components/MarcoDeHoja.kt"}}
+
+
+def lo_que_no_es_del_sistema():
+    cuentas = {clave: 0 for clave in NO_ES_DEL_SISTEMA}
+    for rel, ruta in archivos():
+        texto = "\n".join(codigo for _, codigo in lineas_de_codigo(ruta))
+        for clave, regex in NO_ES_DEL_SISTEMA.items():
+            if rel in EXCEPCIONES_DEL_SISTEMA.get(clave, ()):
+                continue
+            for m in regex.finditer(texto):
+                if re.search(r"fun\s+$", texto[max(0, m.start() - 8): m.start()]):
+                    continue  # la definición de la función no cuenta
+                cuentas[clave] += 1
+    return cuentas
+
+
 def main():
     solo_resumen = "--resumen" in sys.argv
 
@@ -263,6 +291,9 @@ def main():
         print(f"radios_con_numero = {radios_guarda}")
         print(f"colores_literales = {colores_guarda}")
         print(f"# fontSize sueltos (LosTamanosSueltosSoloBajanTest): {sum(font_sizes.values())}")
+        print("# Lo que no es del sistema (LoQueNoEsDelSistemaSoloBajaTest, vuelta de diseño 18):")
+        for clave, n in lo_que_no_es_del_sistema().items():
+            print(f"{clave} = {n}")
         return
 
     out = []

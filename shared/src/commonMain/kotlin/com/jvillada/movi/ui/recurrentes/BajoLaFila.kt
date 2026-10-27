@@ -76,7 +76,8 @@ fun MontoDeFila(
 
 /**
  * **Un número en el círculo del inicio de una fila**: el día del cobro de una suscripción, el orden
- * de una deuda en el plan de salida. Mide [Medida.avatar], en la capa 2, con el número en `monto`.
+ * de una deuda en el plan de salida. Mide [Medida.avatar], en la capa 2, con el número en `cuerpo`
+ * (vuelta de diseño 18: un día o un orden no es plata, y `monto` es la letra de las cifras).
  */
 @Composable
 fun NumeroEnCirculo(numero: Int, modifier: Modifier = Modifier) {
@@ -86,6 +87,6 @@ fun NumeroEnCirculo(numero: Int, modifier: Modifier = Modifier) {
             .background(Movi.colores.capa2, CircleShape),
         contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
-        Text(text = "$numero", style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+        Text(text = "$numero", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
     }
 }

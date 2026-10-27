@@ -43,13 +43,13 @@ fun AvatarButton(onClick: () -> Unit) {
     ) {
         Text(
             text = SessionManager.userName?.firstOrNull()?.uppercaseChar()?.toString() ?: "U",
-            // Blanco literal y a propósito, no un token: la paleta de avatares está construida
-            // entera para contrastar contra blanco (ver AvatarPalette.kt), y el color del círculo
-            // lo elige el dueño, no el tema. Un token de texto acá se rompería con la mitad de
-            // los colores de la paleta.
+            // Blanco en los dos temas: la paleta de avatares está construida entera para contrastar
+            // contra blanco (ver AvatarPalette.kt), y el color del círculo lo elige el dueño, no el
+            // tema. Un token de texto acá se rompería con la mitad de los colores de la paleta; por
+            // eso es `sobreAvatar` y no `sobreMarca` (vuelta de diseño 18).
             style = Movi.textos.cuerpo,
             fontWeight = FontWeight.SemiBold,
-            color = Color.White,
+            color = Movi.colores.sobreAvatar,
         )
     }
 }

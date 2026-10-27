@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.recurrentes.reminderLeadHint
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 
 /**
  * Con cuántos días de anticipación avisar un vencimiento.
@@ -70,19 +71,10 @@ fun DiasDeAvisoSheet(
                 .weight(1f, fill = false),
         ) {
 
-            Text(
-                text = "¿Con cuánta anticipación te avisamos?",
-                style = Movi.textos.titulo,
-                color = Movi.colores.texto,
-                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.xs),
-            )
-            Text(
-                text = reminderLeadHint(dias),
-                // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Normal,
-                color = Movi.colores.textoMedio,
-                modifier = Modifier.padding(bottom = Espacio.m),
+            EncabezadoDeHoja(
+                "¿Con cuánta anticipación te avisamos?",
+                subtitulo = reminderLeadHint(dias),
+                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.m),
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs), modifier = Modifier.fillMaxWidth()) {

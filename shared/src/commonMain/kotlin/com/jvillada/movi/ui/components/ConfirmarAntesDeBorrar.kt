@@ -1,9 +1,7 @@
 package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,10 +12,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 
 /**
  * **Borrar pregunta antes, en todas partes.**
@@ -44,18 +50,23 @@ fun ConfirmacionEnLinea(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(Radio.l))
             .background(Movi.colores.fondo)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(Medida.rellenoDeSuperficie),
     ) {
         Text(pregunta, style = Movi.textos.cuerpo, color = Movi.colores.texto)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(Espacio.xxs))
         Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        Spacer(Modifier.height(12.dp))
-        BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar)
+        Spacer(Modifier.height(Espacio.s))
+        // Dentro de un bloque de la hoja: los botones chicos, como los de una tarjeta.
+        BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar, TamanoDeBoton.S)
     }
 }
 
+/**
+ * La confirmación como hoja propia. La pregunta y su detalle son el [EncabezadoDeHoja] (vuelta de
+ * diseño 18): «¿Borrar el enlace?» en `titulo` y lo que se borra y lo que no, debajo, en `cuerpo`.
+ */
 @Composable
 fun ConfirmarEnHoja(
     pregunta: String,
@@ -68,38 +79,51 @@ fun ConfirmarEnHoja(
     MarcoDeHoja(
         onDismiss = onCancelar,
         dismissEnabled = !ocupado,
-        relleno = PaddingValues(horizontal = 20.dp, vertical = 22.dp),
+        relleno = PaddingValues(horizontal = Medida.margenDePantalla, vertical = Espacio.xl),
         conCierre = false,
     ) {
-        Text(pregunta, style = Movi.textos.titulo, color = Movi.colores.texto)
-        Spacer(Modifier.height(8.dp))
-        Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        Spacer(Modifier.height(20.dp))
-        BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar)
+        EncabezadoDeHoja(pregunta, subtitulo = detalle)
+        Spacer(Modifier.height(Medida.entreSecciones))
+        BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar, TamanoDeBoton.M)
     }
 }
 
+/** El `testTag` de la fila de botones de una confirmación. */
+const val TAG_BOTONES_DE_CONFIRMAR: String = "botones-de-confirmar"
+
+/**
+ * **«Cancelar · Borrar», con los botones del sistema** (vuelta de diseño 18). Eran dos `Text`
+ * tocables de 10/14 dp a mano, con «Borrar» en `sale` sin fondo: el botón que no tiene vuelta se
+ * veía igual de liviano que el que cierra. Ahora «Cancelar» es un [Boton] `Fantasma` y la acción un
+ * [Boton] `Peligro` (el `sale` sobre su lavado), al final de la fila. Mientras se borra, la ruedita
+ * del `Peligro` (`cargando`) y «Cancelar» apagado: no se cierra a medias.
+ */
 @Composable
-private fun BotonesDeConfirmar(textoConfirmar: String, ocupado: Boolean, onConfirmar: () -> Unit, onCancelar: () -> Unit) {
-    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-        Text(
+private fun BotonesDeConfirmar(
+    textoConfirmar: String,
+    ocupado: Boolean,
+    onConfirmar: () -> Unit,
+    onCancelar: () -> Unit,
+    tamano: TamanoDeBoton,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().testTag(TAG_BOTONES_DE_CONFIRMAR),
+    ) {
+        Boton(
             "Cancelar",
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.textoMedio,
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .clickable(enabled = !ocupado, onClick = onCancelar)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+            onClick = onCancelar,
+            variante = VarianteDeBoton.Fantasma,
+            tamano = tamano,
+            habilitado = !ocupado,
         )
-        Spacer(Modifier.padding(horizontal = 4.dp))
-        Text(
-            if (ocupado) "…" else textoConfirmar,
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.sale,
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .clickable(enabled = !ocupado, onClick = onConfirmar)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+        Boton(
+            textoConfirmar,
+            onClick = onConfirmar,
+            variante = VarianteDeBoton.Peligro,
+            tamano = tamano,
+            cargando = ocupado,
         )
     }
 }
