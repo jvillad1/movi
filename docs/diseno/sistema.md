@@ -135,7 +135,9 @@ Seccion(titulo = "Tarjetas", conteo = 3, accion = "Ver todo", onAccion = ::verTo
 lados, toque de borde a borde. El título va en hasta dos renglones antes del «…» (la fila crece) y el
 subtítulo en uno —o en dos con `lineasDelSubtitulo = 2`, solo donde el subtítulo es la razón de la fila
 y no se puede acortar («Hace más de un mes que no cuadras Bancolombia Ahorros», vuelta de diseño 2)—;
-el final se mide primero, así que un monto nunca se recorta. **El subtítulo dice algo que el título y la
+el final se mide primero, así que un monto nunca se recorta. `tonoDelSubtitulo = TonoDeSubtitulo.Aviso`
+pinta el subtítulo en el color de aviso cuando pide algo al dueño («Faltan datos: tócala para
+completarlos», vuelta de diseño 4). **El subtítulo dice algo que el título y la
 sección no dicen**: dentro de «Dinero · 2» una cuenta no dice «Dinero» (dice «Ahorros», o nada si su
 nombre ya lo dice). Va directo sobre el fondo o en una `Superficie` con relleno `Lista`.
 ```kotlin
@@ -226,10 +228,33 @@ ParDeWidgets(
 )
 ```
 
-**`Encabezado`** — el de toda pantalla: 56 de alto, 16 de margen, título, flecha o avatar, acciones
-(`BotonDeIcono`). Sin línea debajo. `MinScreenHeader` delega acá.
+**`Encabezado`** — el de toda pantalla: 56 de alto, 16 de margen, título (y subtítulo), flecha o
+avatar, y a la derecha `acciones` (`BotonDeIcono`, una `Pildora` como «Beta», «Actualizando…») y
+`accion`. Sin línea debajo. `MinScreenHeader` delega acá (con `action` y `accion`).
+
+**La acción principal de un encabezado tiene una sola forma** (vuelta de diseño 4): `accion =
+AccionDeEncabezado(texto, icono, onClick)`, que el `Encabezado` pinta con `AccionDelEncabezado` —un
+`Boton` `Fantasma` `S` con su ícono: texto e ícono en la marca, sin relleno, toque de 48— al final de
+la fila, con el tag `ds-accion-del-encabezado`. Ninguna pantalla arma su propio botón de encabezado
+(Patrimonio lo tenía como texto morado y Créditos como botón tonal con relleno). Si una pantalla tiene
+dos o más acciones, la principal va en `accion` y las demás como `BotonDeIcono` con su descripción en
+`acciones`. Mientras dice «Actualizando…», la acción no va (las dos juntas cortan el título a 390 dp).
+
+| pantalla | `accion` |
+|---|---|
+| Patrimonio | «Nueva cuenta» |
+| Créditos | «Nuevo crédito» |
+| Personas y comercios | «Nueva» |
+| Espacios | «Nuevo espacio» (con uno o más; sin ninguno, lo ofrece el vacío) |
+| Presupuestos, Plan (segmento Presupuestos) | «Nuevo» |
+| Documentos | «Subir archivo» |
+| Movi AI | «Nueva conversación» con conversación; sin ella, la `Pildora` «Beta» |
+
+Movimientos (la lupa), Por revisar y Captura del banco (actualizar) e Inicio (lupa y campana) solo
+llevan íconos. Lo vigila `LaAccionDelEncabezadoEsUnaSolaTest`.
 ```kotlin
 Encabezado("Movimientos", acciones = { BotonDeIcono(Icons.Rounded.Search, "Buscar", ::buscar) })
+Encabezado("Patrimonio", accion = AccionDeEncabezado("Nueva cuenta", Icons.Rounded.Add, ::crear))
 ```
 
 **`Vacio`** (es `VacioQueEnsena`), **`EsqueletoDeFila`** (mide lo mismo que la `Fila`), **`Separador`**
@@ -336,9 +361,9 @@ Plan es dueño de «¿cuánto puedo gastar y qué me falta pagar?», en este ord
 | Lo que se repite al mes, suscripciones | `Cifra.Grande`, `Fila` | |
 | Tus recordatorios no te van a llegar | `TarjetaDePropuesta`, al final | era un cartel en el medio de la lista |
 
-**Lo que cuelga de una fila** (`ui/recurrentes/BajoLaFila.kt`): una fila de Plan, de Créditos o de un
-período ofrece acciones («Anotar este pago», «Editar», «Ajustar saldo») o trae una línea más (la
-evidencia, la barra de un presupuesto). Va debajo de la `Fila`, con `BajoLaFila`: alineado con el
+**Lo que cuelga de una fila** (`ui/recurrentes/BajoLaFila.kt`): una fila de Plan o de un período
+ofrece acciones («Anotar este pago») o trae una línea más (la evidencia, la barra de un presupuesto,
+el avance de una deuda). Va debajo de la `Fila`, con `BajoLaFila`: alineado con el
 texto de la fila (`SANGRIA_DEL_TEXTO_DE_LA_FILA` = margen + avatar + 12), nunca con una sangría
 propia. `MontoDeFila` es la letra de `Cifra.Fila` para un monto ya escrito (en dólares, «al año»), y
 `NumeroEnCirculo`, el inicio de una fila que se nombra por un número (el día de un cobro, el orden de
@@ -380,3 +405,28 @@ pasaron al sistema. Lo que se decidió y vale para las que vengan:
   `TarjetaDePropuesta`, igual que en el Inicio.
 - **Botones de una tarjeta**: `Boton` tamaño `S` (Personas y comercios, Lo que Movi sabe, Movi AI); los
   de pie de hoja, `Boton` `M` a todo el ancho; «Borrar», «Revocar», «Cerrar sesión» en `Peligro`.
+
+## 14. Vuelta de diseño 4: Créditos es una lista, y los nombres no gritan
+
+- **Cada deuda es una `Fila`, no un formulario** (`FilaDeDeuda` en `ui/credits/CreditosScreen.kt`):
+  ícono, nombre, el próximo pago de subtítulo («Cuota $1.250.000 · 5 de noviembre», «Pago mínimo
+  $412.300 · 14 de noviembre», hasta dos renglones) y el saldo con `Cifra`. Las de un grupo van en
+  una `Superficie` de lista, como las cuentas de Patrimonio. Debajo, con `BajoLaFila`, solo lo
+  verdadero: la `BarraDeProgreso` con «50 % pagado» cuando hay términos que la sostengan y algo
+  pagado, o la nota que la barra no dice (la deuda que crece, en `sale`; el desembolso que falta, en
+  `aviso`). **Nunca un «0 % pagado» suelto.** Sin términos: «Faltan datos: tócala para completarlos»,
+  en aviso y sin cortarse, y tocarla abre la hoja de completarlos; en cero y con movimientos, la
+  `Pildora` «Pagado» en vez del saldo. La regla es pura: `prestamoEnLaLista` / `tarjetaEnLaLista`.
+- **Ningún botón dentro de una lista.** Tocar la deuda abre el detalle de su cuenta, que trae la
+  sección de la deuda (`ui/credits/LaDeudaEnSuDetalle.kt`): «El préstamo» / «La tarjeta» (la cuota
+  con quién la paga, la tasa, el plazo, el interés, cómo va, el avance; el pago, el corte y el cupo)
+  y «Qué puedes hacer», una `Fila` por acción: «¿Y si abonas de más?», «Registrar pago de …»,
+  «Registrar descuento», «Ajustar saldo», «Editar las condiciones». Lo vigilan
+  `LaListaDeCreditosEsDeFilasTest` (a 360 dp) y `LaDeudaEnSuDetalleTest` (ninguna acción se perdió).
+- **El comercio de un aviso se muestra con su nombre** (`nombreParaMostrar` en `:core`
+  `NombreParaMostrar.kt`): «RAPPI» → «Rappi», «EXITO SUBA» → «Éxito Suba», «PAYU*NETFLIX» →
+  «Netflix», «UBER *TRIP» → «Uber», «TIENDA D1 CALLE 80» → «D1 Calle 80»; sin marca conocida, en
+  «Tipo Título» con las siglas sin vocales («CRV») y los números en mayúscula. Lo que ya viene con
+  mayúsculas y minúsculas se deja. **Solo para mostrar**: la cabeza de la tarjeta de aviso,
+  Reconciliar, el lote de Por revisar y la notificación; lo que se guarda, las huellas y la memoria
+  de categorías siguen con el texto crudo.

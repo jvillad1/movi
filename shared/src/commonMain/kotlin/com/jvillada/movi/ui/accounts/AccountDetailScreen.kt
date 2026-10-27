@@ -59,6 +59,9 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.homeScreenFor
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.ui.credits.HojasDeLaDeuda
+import com.jvillada.movi.ui.credits.SeccionDeLaDeuda
+import com.jvillada.movi.ui.credits.rememberDeudaDelDetalle
 import com.jvillada.movi.ui.credits.textosDeLosPagosQueNoFueronLaCuota
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import com.jvillada.movi.ui.transactions.MovementSingleRow
@@ -110,7 +113,10 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
      * ningún viaje de más. Si no llega, la línea no se dibuja: es una
      * explicación de más, no un dato sin el cual la pantalla mienta.
      */
-    var condiciones by remember { mutableStateOf<CreditTerms?>(null) }
+    // Vuelta de diseño 4: la deuda de esta cuenta (préstamo o tarjeta) con sus términos y sus
+    // acciones, que dejaron de vivir en la lista de Créditos. Las mismas lecturas que Créditos.
+    val deuda = rememberDeudaDelDetalle(accountId, account?.type, reintento = refreshKey)
+    val condiciones: CreditTerms? = deuda?.prestamo?.terms
     // Con «Ocultar los saldos» en la llave: son textos con plata adentro, y guardados con la cifra
     // a la vista no se taparían al tocar el ojo.
     val lineasDeLaCuota = remember(days, condiciones, SaldosOcultosStore.ocultos) {
@@ -181,17 +187,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             account = acc
             days = grouped
             leida = true
-            // La cuota pactada, solo si esta cuenta es un préstamo. `runCatching` y no un `try`
-            // que corte la lectura: sin la cuota la pantalla se ve como siempre, y hacer fallar el
-            // detalle entero por una línea explicativa sería cambiar un dato que falta por una
-            // pantalla que no carga.
-            condiciones = if (acc.type == AccountType.LOAN) {
-                runCatching { Repositories.wallets.getCredits() }.getOrNull()
-                    ?.firstOrNull { it.account.id == accountId }
-                    ?.terms
-            } else {
-                null
-            }
+            // La cuota pactada ([condiciones]) llega con la deuda ([rememberDeudaDelDetalle]): si
+            // esa lectura falla, la pantalla se ve como siempre, sin la línea que la explica.
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
@@ -324,6 +321,16 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             onCuadrar = { onNavigate(Screen.CuadreDeSaldos) },
                         )
                         Spacer(Modifier.height(Medida.entreSecciones))
+                    }
+
+                    // **La deuda** (vuelta de diseño 4): sus condiciones y sus acciones —«Editar las
+                    // condiciones», «Ajustar saldo», «¿Y si abonas de más?», registrar el pago de un
+                    // tercero—, que antes eran botones dentro de la tarjeta de Créditos.
+                    if (deuda != null && (deuda.prestamo != null || deuda.tarjeta != null)) {
+                        item(key = "deuda") {
+                            SeccionDeLaDeuda(deuda)
+                            Spacer(Modifier.height(Medida.entreSecciones))
+                        }
                     }
 
                     // **El camino de escritura de `Account.condicionadaA`.** Sin esta fila el
@@ -500,6 +507,14 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     selectedEvent = null
                     refreshKey++
                 },
+            )
+        }
+
+        deuda?.let {
+            HojasDeLaDeuda(
+                deuda = it,
+                onCambiada = { refreshKey++ },
+                onError = { mensaje -> error = mensaje },
             )
         }
 

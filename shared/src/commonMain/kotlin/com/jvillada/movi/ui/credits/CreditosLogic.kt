@@ -16,6 +16,12 @@ import com.jvillada.movi.shared.model.mas
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.simularAbonoUnico
 import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.formatMoney
+import com.jvillada.movi.ui.fecha.fechaEnPalabras
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 import kotlin.math.round
 
 /**
@@ -766,4 +772,109 @@ fun gruposDelResumen(resumen: ResumenDeDeudas): List<Int> = buildList {
     val porPagar = (if (resumen.interesPorPagarPropio > 0L) 1 else 0) + (if (resumen.interesPorPagarAjeno > 0L) 1 else 0)
     if (porPagar > 0) add(porPagar)
     if (resumen.mesesHastaLaUltimaCuota != null || resumen.creditosQueNoSeTerminan > 0) add(1)
+}
+
+// ── La deuda como una fila de la lista (vuelta de diseño 4) ─────────────────────────────────────
+
+/**
+ * Lo que dice una deuda sin términos en la lista de Créditos. Tocarla abre la hoja de completarlos.
+ * Antes se leía «Sin términos registrados · $0 · 0% pagado», que se contradecía.
+ */
+const val FALTAN_DATOS_DE_LA_DEUDA: String = "Faltan datos: tócala para completarlos"
+
+/** La píldora de una deuda en cero que llegó ahí con movimientos. */
+const val DEUDA_PAGADA: String = "Pagado"
+
+/**
+ * Un renglón que cuelga de la fila de una deuda: lo que la barra no puede decir. La deuda que crece
+ * sola ([esAlerta]) o un aviso del avance («Falta registrar el desembolso», «$4.183.376 más que al
+ * inicio»).
+ */
+data class NotaDeLaDeuda(val texto: String, val esAlerta: Boolean)
+
+/**
+ * **Cómo se dice una deuda en la lista de Créditos** (vuelta de diseño 4): una `Fila` tocable con su
+ * saldo, no una tarjeta con botones. Todo lo demás —el plan, los botones— vive en su detalle.
+ *
+ * @property subtitulo el próximo pago («Cuota $1.250.000 · 5 de noviembre»), [FALTAN_DATOS_DE_LA_DEUDA]
+ *   o, si ya está pagada, el banco.
+ * @property faltanDatos sin términos: el subtítulo va en el tono de aviso y tocarla los completa.
+ * @property pagada en cero y con movimientos: la píldora [DEUDA_PAGADA] en vez del saldo.
+ * @property fraccionPagada la barra, **solo** cuando es verdadera (ver [progresoDeCredito]) y hay algo
+ *   pagado: nunca un «0% pagado» suelto.
+ * @property nota lo que cuelga debajo de la fila, si hay algo que la barra no dice.
+ */
+data class DeudaEnLaLista(
+    val subtitulo: String?,
+    val faltanDatos: Boolean = false,
+    val pagada: Boolean = false,
+    val fraccionPagada: Float? = null,
+    val nota: NotaDeLaDeuda? = null,
+) {
+    /** Lo que dice la barra al lado: «18 % pagado». `null` sin barra. */
+    val avance: String? get() = fraccionPagada?.let { "${porcentajeEntero(it)} % pagado" }
+}
+
+private fun porcentajeEntero(fraccion: Float): Int = (fraccion * 100).toInt()
+
+/**
+ * **El próximo día [dia] desde [hoy]**, hoy incluido. En un mes más corto que [dia] cae el último
+ * día del mes (el 31 de un pago, en noviembre, es el 30).
+ */
+fun proximaFechaDelDia(dia: Int, hoy: LocalDate): LocalDate {
+    fun enElMes(anio: Int, mes: Int): LocalDate {
+        val primero = LocalDate(anio, mes, 1)
+        val ultimo = primero.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY).dayOfMonth
+        return LocalDate(anio, mes, dia.coerceIn(1, ultimo))
+    }
+    val esteMes = enElMes(hoy.year, hoy.monthNumber)
+    if (esteMes >= hoy) return esteMes
+    val siguiente = LocalDate(hoy.year, hoy.monthNumber, 1).plus(1, DateTimeUnit.MONTH)
+    return enElMes(siguiente.year, siguiente.monthNumber)
+}
+
+/** Un préstamo en la lista de Créditos. [plan] y [periodoActual] dicen si su deuda crece sola. */
+fun prestamoEnLaLista(
+    credit: CreditSummary,
+    plan: PlanDelCredito?,
+    periodoActual: PeriodoFinanciero,
+    hoy: LocalDate,
+): DeudaEnLaLista {
+    val terms = credit.terms ?: return DeudaEnLaLista(FALTAN_DATOS_DE_LA_DEUDA, faltanDatos = true)
+    if (credit.account.balance == 0L && credit.hasMovements && !deudaEnOtraMoneda(credit)) {
+        return DeudaEnLaLista(subtitulo = terms.bank.takeIf { it.isNotBlank() }, pagada = true)
+    }
+    val proxima = proximaFechaDelDia(terms.dayOfMonth, hoy)
+    val progreso = progresoDeCredito(credit)
+    // Con menos de un punto pagado la barra diría «0 % pagado»: se calla.
+    val barra = progreso.fraccion.takeIf {
+        !progreso.esAviso && progreso.mostrarBarra && terms.principal > 0L && porcentajeEntero(it) >= 1
+    }
+    val alerta = plan?.let { comoVaEstaDeuda(it, periodoActual) }?.takeIf { it.esAlerta }
+    val nota = when {
+        alerta != null -> NotaDeLaDeuda(alerta.texto, esAlerta = true)
+        progreso.esAviso -> NotaDeLaDeuda(progreso.etiqueta, esAlerta = false)
+        else -> null
+    }
+    return DeudaEnLaLista(
+        subtitulo = "Cuota ${formatCOP(terms.installment)} · ${fechaEnPalabras(proxima, hoy)}",
+        fraccionPagada = barra,
+        nota = nota,
+    )
+}
+
+/** Una tarjeta de crédito en la lista de Créditos: el pago mínimo y su fecha, en su moneda. */
+fun tarjetaEnLaLista(card: CardSummary, hoy: LocalDate): DeudaEnLaLista {
+    val terms = card.terms ?: return DeudaEnLaLista(FALTAN_DATOS_DE_LA_DEUDA, faltanDatos = true)
+    val moneda = card.account.currency
+    val deuda = card.account.balancesByCurrency[moneda] ?: card.account.balance
+    if (deuda == 0L) {
+        val disponible = card.available?.let { "Disponible ${formatMoney(it, moneda)}" }
+        return DeudaEnLaLista(subtitulo = disponible ?: terms.bank.takeIf { it.isNotBlank() }, pagada = true)
+    }
+    val fecha = fechaEnPalabras(proximaFechaDelDia(terms.paymentDay, hoy), hoy)
+    val minimo = terms.pagoMinimo?.takeIf { deuda > 0L }
+    return DeudaEnLaLista(
+        subtitulo = if (minimo != null) "Pago mínimo ${formatMoney(minimo, moneda)} · $fecha" else "Fecha de pago · $fecha",
+    )
 }
