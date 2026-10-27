@@ -11,6 +11,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.DensidadDeFila
 import com.jvillada.movi.ui.components.ds.Fila
 
 /**
@@ -23,10 +24,11 @@ internal const val FRACCION_DEL_VALOR_DE_LA_HOJA = 0.55f
 
 /**
  * **Una fila de la hoja de Agregar que abre un sub-editor** —«Categoría», «Cuenta», «Nota», y
- * «Desde» / «Hacia» del traspaso— (vuelta de diseño 20). Es la [Fila] del sistema: 56 dp, 64 con el
- * aviso, el margen de la pantalla a los lados y el toque de borde a borde. Eran `CardRow`, de 48 dp
- * con su propio relleno y una línea debajo, lo único de la hoja que no medía lo que mide toda fila
- * de la app.
+ * «Desde» / «Hacia» del traspaso— (vuelta de diseño 20). Es la [Fila] del sistema, en su densidad
+ * [DensidadDeFila.Compacta]: 48 dp —lo que medían los `CardRow` armados a mano que reemplaza—, el
+ * margen de la pantalla a los lados y el toque de borde a borde. Con la densidad de siempre (56 / 64)
+ * la hoja crecía ~30 dp y a 360 × 740 «Guardar movimiento» quedaba cortado por el borde: esta hoja
+ * está anclada abajo y no puede medir más que antes (lo mide `HojaAgregarGeometriaTest`).
  *
  * - [titulo]: qué se elige («Categoría»).
  * - [valor]: lo elegido, a la derecha, con «…» si no entra y nunca más de
@@ -36,7 +38,7 @@ internal const val FRACCION_DEL_VALOR_DE_LA_HOJA = 0.55f
  * - [aviso] / [reservarAviso]: el renglón de «Última usada» debajo del título. **Reserva su alto**
  *   mientras pueda llegar a decir algo (con más de una cuenta): la hoja está anclada abajo y un
  *   cambio de alto mueve el teclado numérico bajo el dedo (ver la Ola 8 en `QuickAddScreen`). Con
- *   el renglón reservado y vacío la fila mide 64, igual que con el aviso escrito.
+ *   el renglón reservado y vacío la fila mide lo mismo que con el aviso escrito.
  */
 @Composable
 internal fun FilaDeLaHoja(
@@ -72,5 +74,6 @@ internal fun FilaDeLaHoja(
         },
         onClick = onClick,
         modifier = modifier,
+        densidad = DensidadDeFila.Compacta,
     )
 }

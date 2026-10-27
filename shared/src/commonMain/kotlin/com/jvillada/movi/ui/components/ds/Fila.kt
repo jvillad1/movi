@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
@@ -72,6 +73,23 @@ enum class TonoDeFila {
     Apagado,
 }
 
+/**
+ * **Qué tan alta es una [Fila]** (vuelta de diseño 20).
+ *
+ * - [Normal]: [Medida.altoDeFila] (56), [Medida.altoDeFilaDoble] (64) con subtítulo. Toda lista.
+ * - [Compacta]: [Medida.objetivoTactil] (48) con o sin subtítulo —crece si el texto lo pide—. Solo
+ *   para el formulario de una hoja anclada abajo donde cada dp de más mueve un teclado numérico bajo
+ *   el dedo y empuja el botón de guardar fuera de la pantalla (las filas de Agregar). Sigue siendo la
+ *   misma fila: los mismos márgenes, letras, ranuras y toque de borde a borde.
+ */
+enum class DensidadDeFila { Normal, Compacta }
+
+/** El alto mínimo de una [Fila] con [densidad], con subtítulo o sin él. Pura. */
+fun altoMinimoDeFila(densidad: DensidadDeFila, conSubtitulo: Boolean): Dp = when (densidad) {
+    DensidadDeFila.Normal -> if (conSubtitulo) Medida.altoDeFilaDoble else Medida.altoDeFila
+    DensidadDeFila.Compacta -> Medida.objetivoTactil
+}
+
 /** El color del título de una [Fila] con [tono], en la paleta del tema. Pura, para probarla en los dos. */
 fun colorDelTituloDeFila(tono: TonoDeFila, colores: ColoresDeMovi): Color = when (tono) {
     TonoDeFila.Normal -> colores.texto
@@ -108,6 +126,7 @@ fun colorDelTituloDeFila(tono: TonoDeFila, colores: ColoresDeMovi): Color = when
  * - [final]: un monto ([Cifra]), una [Pildora] o un [Chevron].
  * - [tonoDelTitulo]: [TonoDeFila.Alerta] para lo que no tiene vuelta («Borrar mi cuenta»),
  *   [TonoDeFila.Apagado] para una fila que solo informa. Nunca un `Color` suelto.
+ * - [densidad]: [DensidadDeFila.Compacta] (48) solo en el formulario de Agregar; ver su KDoc.
  *
  * ```
  * Fila(
@@ -131,11 +150,12 @@ fun Fila(
     lineasDelSubtitulo: Int = 1,
     tonoDelTitulo: TonoDeFila = TonoDeFila.Normal,
     tonoDelSubtitulo: TonoDeSubtitulo = TonoDeSubtitulo.Normal,
+    densidad: DensidadDeFila = DensidadDeFila.Normal,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = if (subtitulo != null) Medida.altoDeFilaDoble else Medida.altoDeFila)
+            .heightIn(min = altoMinimoDeFila(densidad, conSubtitulo = subtitulo != null))
             .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
             .testTag(TAG_FILA)
             .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),

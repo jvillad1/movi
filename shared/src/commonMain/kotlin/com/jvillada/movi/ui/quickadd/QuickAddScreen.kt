@@ -3,6 +3,8 @@ package com.jvillada.movi.ui.quickadd
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import com.jvillada.movi.ui.components.ds.PildoraDeAccion
+import com.jvillada.movi.ui.components.ds.AltoDePildora
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
@@ -1665,6 +1667,10 @@ private fun EditorBody(
                 onClick = onPickDate,
                 icono = Icons.Rounded.Event,
                 descripcion = "Fecha: $dateLabel. Cambiar la fecha",
+                // Compacta (24 dp, lo que medía la de antes): va pegada al renglón de la moneda, y
+                // de 36 la hoja crecía y el pie se cortaba a 360 × 740.
+                alto = AltoDePildora.Compacta,
+                modifier = Modifier.testTag(TAG_FECHA_EN_AGREGAR),
             )
         }
     }
@@ -1673,7 +1679,7 @@ private fun EditorBody(
 
     // Vuelta de diseño 20: una `Superficie` con relleno de lista y las `Fila` del sistema (ver
     // [FilaDeLaHoja]). Eran una `MinCard` con `CardRow` de 48 dp y `Hairline`.
-    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_AGREGAR), relleno = RellenoDeSuperficie.Lista) {
         FilaDeLaHoja(
             titulo = "Categoría",
             valor = category,
@@ -1700,12 +1706,16 @@ private fun EditorBody(
         // categoría que resumen, y antes de la fila que decide dónde sale la plata.
         // Ola L: la fila se dibuja SIEMPRE porque lleva «Nueva», la puerta a crear una categoría.
         // Sin datos de uso solo tiene esa pastilla.
+        // Las líneas entre las filas, como antes (eran los `Hairline` de los `CardRow`): con ellas
+        // la tarjeta mide lo mismo que en master, y sin ellas la fila de chips flotaba.
+        if (categoriaSugeridaHint == null) Separador(SangriaDeSeparador.Margen)
         CategoriaChipsRow(
             categorias = categoriasFrecuentes,
             categoriaElegida = category,
             onPick = onPickCategoriaFrecuente,
             onNueva = onNuevaCategoria,
         )
+        Separador(SangriaDeSeparador.Margen)
         // Ola 11 — DE DÓNDE SALIÓ LA CUENTA QUE DICE AL LADO, Y POR QUÉ ESTE RENGLÓN
         // OCUPA SU LUGAR AUNQUE NO DIGA NADA.
         //
@@ -1736,6 +1746,7 @@ private fun EditorBody(
             // toque lleva directo a crear la cuenta, que es lo único que de verdad hace algo acá.
             onClick = if (hasNoAccounts) onCreateAccount else onPickWallet,
         )
+        Separador(SangriaDeSeparador.Margen)
         FilaDeLaHoja(
             titulo = "Nota",
             valor = note.ifBlank { "Agregar nota…" },
@@ -1989,6 +2000,12 @@ private fun CategoriaChipsRow(
         }
     }
 }
+
+/** La tarjeta de Categoría · Cuenta · Nota de «Agregar»: la mide `HojaAgregarGeometriaTest`. */
+internal const val TAG_TARJETA_DE_AGREGAR: String = "agregar:tarjeta"
+
+/** La píldora de la fecha, al lado del monto. */
+internal const val TAG_FECHA_EN_AGREGAR: String = "agregar:fecha"
 
 /** La pastilla «Nueva» de los chips de frecuentes de «Agregar». */
 const val TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR: String = "agregar:pastilla-nueva-categoria"

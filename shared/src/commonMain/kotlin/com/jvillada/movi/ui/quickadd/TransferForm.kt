@@ -4,6 +4,7 @@ import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
@@ -1038,6 +1039,7 @@ internal fun TransferBody(
                 fraccionDelValor = FRACCION_VALOR_FILA_TRASPASO,
                 onClick = { abrirPicker(TransferSide.FROM) },
             )
+            Separador(SangriaDeSeparador.Margen)
             // Menos una: el destino no puede ser el origen, así que con dos cuentas el destino no
             // tiene alternativa y no hay ninguna decisión que confesar — misma regla que «con una
             // sola cuenta el aviso no dice nada».

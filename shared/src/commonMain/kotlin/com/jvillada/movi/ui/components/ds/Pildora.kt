@@ -155,6 +155,15 @@ fun PildoraDeFiltro(
  * («▾» al lado de la categoría), en texto medio. [habilitada] en `false` apaga el texto y el toque.
  * Un texto que no entra en dos renglones se corta con «…».
  */
+/**
+ * **El alto de una [PildoraDeAccion]** (vuelta de diseño 20). [Normal] es [Medida.altoChico] con el
+ * texto en `cuerpo`; [Compacta] es [Medida.altoDePildora] con el texto en `apoyo`, para una píldora
+ * que va pegada a un renglón de texto y no puede agrandarlo —la fecha al lado del monto en Agregar,
+ * una hoja anclada abajo donde cada dp de más mueve el teclado—. El toque igual llega a 48: Compose
+ * extiende el área de un elemento chico sin ocupar lugar.
+ */
+enum class AltoDePildora { Normal, Compacta }
+
 @Composable
 fun PildoraDeAccion(
     texto: String,
@@ -165,29 +174,35 @@ fun PildoraDeAccion(
     inicio: (@Composable () -> Unit)? = null,
     iconoFinal: ImageVector? = null,
     habilitada: Boolean = true,
+    alto: AltoDePildora = AltoDePildora.Normal,
 ) {
+    val compacta = alto == AltoDePildora.Compacta
+    val horizontal = if (compacta) Espacio.s else Espacio.m
     Row(
         modifier = modifier
-            .heightIn(min = Medida.altoChico)
+            .heightIn(min = if (compacta) Medida.altoDePildora else Medida.altoChico)
             .clip(RoundedCornerShape(Radio.pill))
             .background(Movi.colores.capa2)
             .clickable(enabled = habilitada, role = Role.Button, onClick = onClick)
             .then(if (descripcion != null && descripcion != texto) Modifier.semantics { contentDescription = descripcion } else Modifier)
             .testTag(TAG_PILDORA_DE_ACCION)
-            .padding(start = if (inicio != null) Espacio.xxs else Espacio.m, end = Espacio.m, top = Espacio.xxs, bottom = Espacio.xxs),
-        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+            .padding(start = if (inicio != null) Espacio.xxs else horizontal, end = horizontal)
+            .then(if (compacta) Modifier else Modifier.padding(vertical = Espacio.xxs)),
+        horizontalArrangement = Arrangement.spacedBy(if (compacta) Espacio.xxs else Espacio.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         inicio?.invoke()
         if (icono != null) Icon(icono, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
+        // Sin `weight`: dentro de una fila con desplazamiento horizontal (los chips de Agregar) el
+        // ancho máximo es infinito, y un hijo con peso se quedaba en cero —«+ Nueva» se veía como
+        // un «+» y una «N»—. El texto mide lo suyo, como el de [PildoraDeFiltro].
         Text(
             text = texto,
-            style = Movi.textos.cuerpo,
+            style = if (compacta) Movi.textos.apoyo else Movi.textos.cuerpo,
             fontWeight = FontWeight.Medium,
             color = if (habilitada) Movi.colores.texto else Movi.colores.textoApagado,
-            maxLines = 2,
+            maxLines = if (compacta) 1 else 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
         )
         if (iconoFinal != null) Icon(iconoFinal, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(Icono.s))
     }

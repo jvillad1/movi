@@ -29,7 +29,6 @@ import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.ds.TAG_BOTON
 import com.jvillada.movi.ui.components.ds.TAG_FILA
-import com.jvillada.movi.ui.components.ds.TAG_PILDORA_DE_ACCION
 import com.jvillada.movi.ui.components.ds.TAG_PILDORA_DE_FILTRO
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
@@ -53,7 +52,7 @@ import kotlin.test.assertTrue
  *   fecha son `PildoraDeAccion`;
  * - **«Guardar y anotar otro» es un `Boton` `Fantasma`** (era un `Text` tocable) y no le cambia el
  *   alto a la hoja: su renglón reservado mide lo mismo con el botón o con «Falta el monto»;
- * - **«Categoría», «Cuenta» y «Nota» son `Fila`**, de al menos el alto de toda fila;
+ * - **«Categoría», «Cuenta» y «Nota» son `Fila`** compactas, de al menos el objetivo táctil;
  * - **«Subir comprobante» es un `BotonDeIcono`** de 48 × 48 con su descripción.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -118,7 +117,7 @@ class AgregarEnElSistemaTest {
 
         // «Nueva» y la fecha hacen algo: son PildoraDeAccion.
         composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR).assertExists()
-        composeRule.onNode(hasTestTag(TAG_PILDORA_DE_ACCION) and hasText("Hoy")).assertExists()
+        composeRule.onNode(hasTestTag(TAG_FECHA_EN_AGREGAR) and hasText("Hoy")).assertExists()
     }
 
     @Test
@@ -143,7 +142,9 @@ class AgregarEnElSistemaTest {
         listOf("Categoría", "Cuenta", "Nota").forEach { titulo ->
             val fila = composeRule.onNode(hasTestTag(TAG_FILA) and hasText(titulo)).fetchSemanticsNode()
             val alto = with(composeRule.density) { fila.size.height.toDp() }
-            assertTrue(alto >= Medida.altoDeFila - 0.5.dp, "«$titulo» mide $alto, menos que una fila (${Medida.altoDeFila})")
+            // Compacta (48, lo que medían los `CardRow` de antes): la hoja no puede crecer (ver
+            // `HojaAgregarGeometriaTest`); igual llega al objetivo táctil.
+            assertTrue(alto >= Medida.objetivoTactil - 0.5.dp, "«$titulo» mide $alto, menos que el objetivo táctil")
         }
     }
 

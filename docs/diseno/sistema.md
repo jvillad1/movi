@@ -1017,17 +1017,26 @@ La misma auditoría de la vuelta 18 dejó una lista de lo que seguía hecho a ma
   espaciadas, y en frase el rótulo del sistema es ese.
 - **Agregar**, solo lo que quedaba a mano (el teclado, el monto y guardar no se tocaron):
   - los chips de categorías frecuentes son `PildoraDeFiltro` y «Nueva» una `PildoraDeAccion` con el «+»
-    como ícono; la fecha es una `PildoraDeAccion` con el ícono de calendario (era una píldora de 24 dp,
-    debajo del mínimo táctil);
+    como ícono. La `PildoraDeAccion` no le pone `weight` a su texto: dentro de una fila con
+    desplazamiento horizontal el ancho máximo es infinito y un hijo con peso se quedaba en cero —en la
+    web «+ Nueva» se veía como un «+» y una «N»— (lo fija `HojaAgregarChipsSeLeenEnterosTest` a 390 y
+    360 dp). La fecha es una `PildoraDeAccion` con el ícono de calendario en **`AltoDePildora.Compacta`**
+    (24 dp, el texto en `apoyo`: lo que medía la de antes; el toque igual llega a 48);
   - «Guardar y anotar otro» es un `Boton` `Fantasma` `S`. Su renglón reservado mide 16 y el botón 36:
     `wrapContentHeight(unbounded = true)` lo deja medir lo suyo centrado en el renglón, y como el
     botón de texto no tiene fondo, lo que sobresale no se ve. La hoja no cambia de alto;
   - «Pagó otro» y «Subir comprobante» son **`BotonDeIcono` `Secundario`** (nuevo: 48 × 48 en la capa 2
     con el radio de un `Boton`, para ir al lado de uno de alto `M`); `BotonDeIcono` ganó también
     `habilitado`;
-  - Categoría, Cuenta, Nota y Desde / Hacia del traspaso son `Fila` (`FilaDeLaHoja`: el valor a la
-    derecha con su techo de ancho y el `Chevron`; el renglón de «Última usada» se reserva como antes
-    para que el teclado no se mueva). Eran `CardRow` de 48 dp;
+  - Categoría, Cuenta, Nota y Desde / Hacia del traspaso son `Fila` en **`DensidadDeFila.Compacta`**
+    (`FilaDeLaHoja`: 48 dp con o sin subtítulo, el valor a la derecha con su techo de ancho y el
+    `Chevron`, un `Separador` entre filas como los `Hairline` de antes; el renglón de «Última usada» se
+    reserva como antes para que el teclado no se mueva). Eran `CardRow` de 48 dp. **La hoja de Agregar
+    no puede medir más que antes**: con la densidad de siempre (56 / 64) y la fecha de 36 crecía ~30 dp
+    y a 360 × 740 «Guardar movimiento» quedaba cortado y «Guardar y anotar otro» no se veía. La
+    densidad compacta es solo para un formulario así; toda lista sigue en 56 / 64.
+    `HojaAgregarGeometriaTest` lo fija a 360 × 740: el botón entero sin gestos, la tarjeta ≤ 195 dp y
+    la fecha ≤ 24 dp, lo que medían en master;
   - el aviso pendiente («Es este / No») usa `PildoraDeAccion`, y los atajos «Hoy · Ayer» del selector
     de fecha, `PildoraDeFiltro` (que ahora centra su texto si ocupa más que él) y `lavado()`.
 - **Chips y filas de otras pantallas.** Categorías: los filtros y el tipo (en un `FlowRow`, que ya no
