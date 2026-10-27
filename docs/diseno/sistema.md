@@ -151,11 +151,31 @@ Fila(
 )
 ```
 
+**Vuelta de diseño 5: el tono del título** (`tonoDelTitulo: TonoDeFila`). `Normal` (el color del texto)
+casi siempre; `Alerta` (`sale`) para lo que no tiene vuelta —«Borrar mi cuenta» en Ajustes, con su
+ícono en `TonoDeIcono.Peligro`—; `Apagado` (`textoMedio`) para una fila que solo informa y no se toca
+(«Antes de agosto 2026 no hay movimientos» en Tus períodos). Sale del tema (`colorDelTituloDeFila`),
+nunca un `Color` suelto en la pantalla.
+```kotlin
+Fila(titulo = "Borrar mi cuenta", tonoDelTitulo = TonoDeFila.Alerta,
+    inicio = { IconoEnCirculo(Icons.Rounded.DeleteForever, tono = TonoDeIcono.Peligro) },
+    final = { Chevron() }, onClick = ::borrar)
+```
+
 **`Boton`** — `Principal`, `Secundario`, `Fantasma`, `Peligro`; tamaño `M` (48) o `S` (36, solo dentro
 de una tarjeta; su toque igual llega a 48). Ícono opcional y `cargando`.
 ```kotlin
 Boton("Guardar", onClick = ::guardar, anchoCompleto = true, cargando = guardando)
 Boton("Borrar", onClick = ::borrar, variante = VarianteDeBoton.Peligro)
+```
+
+**`Fantasma` es el botón de texto**: solo el texto en marca, sin fondo, **tampoco apagado** (vuelta de
+diseño 5: los demás se apagan sobre la capa 2; uno de texto que se rellena de gris parece otro botón,
+ver `coloresDelBotonApagado`). Va debajo o al lado de la acción con peso, nunca a todo el ancho: «Saltar
+este paso» en la guía de primer uso es `Fantasma`, tamaño `S`, centrado debajo de «Atrás · Siguiente».
+```kotlin
+Boton("Saltar este paso", onClick = ::saltar, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S,
+    modifier = Modifier.align(Alignment.CenterHorizontally))
 ```
 
 **`Pildora`** y **`PildoraDeFiltro`** — estado (`Neutra`, `Info`, `Aviso`, `Peligro`, `Exito`, `Marca`)
@@ -301,7 +321,11 @@ viejos; este cliente no los pinta.
 
 ## 11. Movimientos y los avisos (ola R4a)
 
-- **Una sola búsqueda.** La lupa de Movimientos abre «Buscar». Lo que otra pantalla pide filtrar (un
+- **Una sola búsqueda.** La lupa de Movimientos abre «Buscar». Su texto guía es corto y cabe a 360
+  dp con la letra agrandada («Gasto, comercio o persona», con la lupa al lado); lo que se puede buscar
+  entero lo dice el texto de ayuda de abajo. Sus chips van «Todo · Gastos · Ingresos · Este período ·
+  Cuenta»: los tres primeros eligen el tipo, con «Todo» elegido por defecto (vuelta de diseño 5).
+  Lo que otra pantalla pide filtrar (un
   comercio tocado en Buscar, «En este comercio», una categoría de «En qué se va») llega como un
   `PildoraDeFiltro` elegido con su ×, al lado de los filtros de tipo.
 - **El día en un renglón**: la fecha como se escribe («Hoy», «23 de agosto») con el estilo de `Seccion`
@@ -351,6 +375,12 @@ propia. `MontoDeFila` es la letra de `Cifra.Fila` para un monto ya escrito (en d
 `NumeroEnCirculo`, el inicio de una fila que se nombra por un número (el día de un cobro, el orden de
 una deuda).
 
+**Los meses vacíos del principio no son tarjetas** (vuelta de diseño 5, `separarLosVaciosDelPrincipio`):
+los períodos sin movimientos de flujo que quedan antes del primero con movimientos se juntan al final de
+Tus períodos en una sola `Fila` apagada y sin toque («Antes de agosto 2026 no hay movimientos»). Un
+período vacío **entre** dos con movimientos sigue siendo tarjeta («Sin movimientos de flujo»): ahí sí
+dice algo. Ningún período desaparece ni cambia sus cifras; solo cómo se pintan.
+
 **El período en curso no repite Plan**: su detalle muestra cómo va (entró, salió, en qué se fue) y,
 en vez de sus pagos fijos y presupuestos, dos filas que llevan a Plan. Un período cerrado sí los
 pinta: mirar atrás es lo que contesta esa pantalla.
@@ -368,7 +398,7 @@ pasaron al sistema. Lo que se decidió y vale para las que vengan:
 |---|---|---|
 | Patrimonio | ¿cuánto tengo y cuánto debo? | los subtotales de cada grupo («DINERO · 5 · $20,9M»): repetían la resta de la tarjeta de arriba; «Personas y comercios» (no es tuyo) |
 | Personas y comercios | ¿a quién le mandé plata? | de cuatro puertas quedan dos: la fila al final de **Espacios** y la ficha de **Ajustes** |
-| Ajustes | ¿dónde se ajusta X? | **vuelta de diseño 3: una sola pantalla.** Arriba la tarjeta del perfil; debajo `Seccion` + `Fila` en orden —Tu plata, Movi, Cómo se ve, Avisos, Tus datos, (Entrar), Cuenta— y al final, aparte, «Borrar mi cuenta» como `Fila` (sin relleno rojo). «Perfil» dejó de ser pantalla; la cuadrícula de fichas se fue |
+| Ajustes | ¿dónde se ajusta X? | **vuelta de diseño 3: una sola pantalla.** Arriba la tarjeta del perfil; debajo `Seccion` + `Fila` en orden —Tu plata, Movi, Cómo se ve, Avisos, Tus datos, (Entrar), Cuenta— y al final, aparte, «Borrar mi cuenta» como `Fila` (sin relleno rojo; desde la vuelta 5, con el título en `TonoDeFila.Alerta`). «Perfil» dejó de ser pantalla; la cuadrícula de fichas se fue |
 | Metas, Extractos | — | **borradas**; los destinos SDUI `goals` y `extractos` llevan a Patrimonio y a Documentos |
 
 - **Grupos de cuentas**: `Seccion(titulo, conteo)` + `Superficie(relleno = Lista)` con una `Fila` por

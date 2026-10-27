@@ -35,6 +35,29 @@ const val LINEAS_DEL_TITULO_DE_FILA: Int = 2
 const val TAG_FILA: String = "ds-fila"
 
 /**
+ * **El tono del título de una [Fila].** Casi siempre [Normal]. Vuelta de diseño 5: «Borrar mi
+ * cuenta» no podía ir en rojo porque la fila no dejaba cambiar el color del título, y la única salida
+ * era un `Color` suelto en la pantalla.
+ */
+enum class TonoDeFila {
+    /** El color del texto: toda fila. */
+    Normal,
+
+    /** `sale`: una acción que no tiene vuelta —borrar la cuenta—. Con su ícono en `Peligro`. */
+    Alerta,
+
+    /** `textoMedio`: una fila que solo informa y no pide nada («Antes de agosto no hay movimientos»). */
+    Apagado,
+}
+
+/** El color del título de una [Fila] con [tono], en la paleta del tema. Pura, para probarla en los dos. */
+fun colorDelTituloDeFila(tono: TonoDeFila, colores: ColoresDeMovi): Color = when (tono) {
+    TonoDeFila.Normal -> colores.texto
+    TonoDeFila.Alerta -> colores.sale
+    TonoDeFila.Apagado -> colores.textoMedio
+}
+
+/**
  * **La fila de lista. Una sola para toda la app.**
  *
  * La auditoría contó filas tocables con nueve rellenos verticales distintos (2, 5, 6, 8, 9, 10, 12,
@@ -58,6 +81,8 @@ const val TAG_FILA: String = "ds-fila"
  *   [lineasDelSubtitulo] = 2: la fila crece en vez de cortar la frase (vuelta de diseño 2).
  * - El [final] se mide primero y entero: un monto nunca se recorta; lo que cede es el texto.
  * - [final]: un monto ([Cifra]), una [Pildora] o un [Chevron].
+ * - [tonoDelTitulo]: [TonoDeFila.Alerta] para lo que no tiene vuelta («Borrar mi cuenta»),
+ *   [TonoDeFila.Apagado] para una fila que solo informa. Nunca un `Color` suelto.
  *
  * ```
  * Fila(
@@ -79,6 +104,7 @@ fun Fila(
     onClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
     lineasDelSubtitulo: Int = 1,
+    tonoDelTitulo: TonoDeFila = TonoDeFila.Normal,
 ) {
     Row(
         modifier = modifier
@@ -97,7 +123,7 @@ fun Fila(
             Text(
                 text = titulo,
                 style = Movi.textos.cuerpo,
-                color = Movi.colores.texto,
+                color = colorDelTituloDeFila(tonoDelTitulo, Movi.colores),
                 maxLines = LINEAS_DEL_TITULO_DE_FILA,
                 overflow = TextOverflow.Ellipsis,
             )
