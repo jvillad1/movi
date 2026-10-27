@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
@@ -28,7 +29,8 @@ const val TAG_WIDGET: String = "ds-widget"
  * **Un widget del Inicio**: un bloque compacto que **resume** una cifra que vive en otra pantalla y
  * lleva allá (camino 1: «Falta por pagar» lleva a Plan, «En qué se va» a su pantalla). Es una
  * [Superficie] tocable entera con su título arriba, un [detalle] opcional a la derecha («4 de 7»,
- * «período») y lo que el widget resume debajo.
+ * «período») y lo que el widget resume debajo. **El título nunca se pierde**: se mide primero, y el
+ * detalle se queda con lo que sobra (y se corta con «…» si no cabe).
  *
  * El título no es una [Seccion]: el widget es una tarjeta dentro de la sección, y dos van lado a lado
  * ([ParDeWidgets]). La regla de la casa sigue: el widget no repite la cifra con otra suma al lado, la
@@ -58,16 +60,26 @@ fun Widget(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
+            // El título se mide primero y el detalle se queda con lo que sobra (vuelta de diseño 7): a
+            // media pantalla, «vs. período pasado» a la derecha se comía «En qué se va» entero.
             Text(
                 text = titulo,
                 style = Movi.textos.titulo,
                 color = Movi.colores.texto,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).semantics { heading() },
+                modifier = Modifier.semantics { heading() },
             )
             if (detalle != null) {
-                Text(text = detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
+                Text(
+                    text = detalle,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
         Column(

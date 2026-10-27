@@ -247,7 +247,17 @@ pantalla y lleva allá (ola R1: «Falta por pagar» → Plan, «En qué se va» 
 fila de widget el monto va sin peso (se mide primero, entero) y lo que se achica es la barra o el nombre
 (el único que lleva «…»); lo vigila `NadaSeRecortaEnElInicioTest` a 360 y 390 dp, también con la letra
 agrandada. Dos van lado a lado y del mismo alto
-con `ParDeWidgets`; uno solo va a todo el ancho.
+con `ParDeWidgets`; uno solo va a todo el ancho. **El título nunca se pierde** (vuelta de diseño 7): se
+mide primero y el `detalle` se queda con lo que sobra; a media pantalla, «vs. período pasado» a la
+derecha se comía «En qué se va» entero.
+
+**«En qué se va» contesta «¿en qué gasto más que el período pasado?»** (vuelta de diseño 7): debajo del
+título, una vez, «Contra el período pasado»; por categoría, el ícono y el nombre, el monto con `Cifra`
+y la diferencia a la misma altura en palabras —«$120.000 más», «$45.000 menos», «igual», «nuevo»—
+(`diferenciaDeLaCategoria`, sobre `contraElAnterior`: ninguna cuenta nueva). **Sin «+»**, que en Movi
+es plata que entra. En `sale` solo si sube mucho (los umbrales de «categoría muy por encima»: 1,5× y
+$300.000), en el color del texto si sube, apagada si baja. Sin barra: la que había medía contra el
+total del período y no decía contra qué.
 ```kotlin
 ParDeWidgets(
     izquierdo = { m -> Widget("Falta por pagar", onClick = ::abrirPlan, modifier = m) { Cifra(falta, VarianteDeCifra.Grande) } },
@@ -340,7 +350,7 @@ arriba:
 |---|---|---|---|
 | encabezado | — (chrome) | `Encabezado`: avatar, «Hola, Juan» con el período, lupa y campana | Ajustes, Buscar |
 | héroe | `HERO_BALANCE` | `Cifra.Heroe` «Te quedan», el ojo, «para N días · $X por día» (lo que queda entre los días que faltan), el veredicto | Tus períodos |
-| acciones | `ACCIONES` | `CuadriculaDeAcciones` 4 × 2 | Agregar, papeles, Por revisar, Movi AI |
+| acciones | `ACCIONES` | `CuadriculaDeAcciones` 4 × 2 | Agregar, papeles, Por revisar, Movi AI; «Repartir» abre la hoja «Pagó otro» del espacio (vuelta 7: elige el espacio si hay varios, lo crea si no hay) |
 | Movi propone hoy | `PROPUESTAS` | `TarjetaDePropuesta`, una por tipo, tope 4 | su acción; «Ver todo» → Por revisar |
 | tus cuentas | `CUENTAS` | `TarjetaDeCuenta` en carrusel | el detalle de la cuenta; «Ver todo» → Patrimonio |
 | widgets | `CHECKLIST_DEL_PERIODO`, `GASTO_POR_CATEGORIA` | `ParDeWidgets` | Plan, En qué se va |
@@ -383,6 +393,10 @@ viejos; este cliente no los pinta.
   banco con su marca. El texto del banco va después, apagado y en dos renglones que se abren al tocarlo.
   **En la bandeja no va la píldora «Pendiente»**: ahí todo lo está; quedan las que dicen algo («Ya
   anotado», «Avisado 3 veces»). El historial de Captura del banco sí la lleva.
+- **Un bloque que falta no deja su lugar** (vuelta de diseño 7, `bloqueDeAbajo`): debajo del texto del
+  banco va «Se anota: …» o el detalle del server, y si el detalle está en blanco no va nada (un
+  `Text("")` era un renglón vacío: ~30 px de hueco antes de los botones). Entre bloques, `Espacio.xs`
+  de la tarjeta; la distancia del último texto a los botones es la misma con «Se anota» y sin él.
 
 ## 12. Plan, Presupuestos, Tus períodos y Créditos (ola R4b)
 
@@ -406,11 +420,14 @@ propia. `MontoDeFila` es la letra de `Cifra.Fila` para un monto ya escrito (en d
 `NumeroEnCirculo`, el inicio de una fila que se nombra por un número (el día de un cobro, el orden de
 una deuda).
 
-**Los meses vacíos del principio no son tarjetas** (vuelta de diseño 5, `separarLosVaciosDelPrincipio`):
+**Los meses vacíos no son tarjetas** (vuelta de diseño 5, generalizada en la 7: `piezasDeLosPeriodos`):
 los períodos sin movimientos de flujo que quedan antes del primero con movimientos se juntan al final de
-Tus períodos en una sola `Fila` apagada y sin toque («Antes de agosto 2026 no hay movimientos»). Un
-período vacío **entre** dos con movimientos sigue siendo tarjeta («Sin movimientos de flujo»): ahí sí
-dice algo. Ningún período desaparece ni cambia sus cifras; solo cómo se pintan.
+Tus períodos en una sola `Fila` apagada y sin toque («Antes de agosto 2026 no hay movimientos»), y
+**toda racha de dos o más vacíos seguidos en el medio** va en una `Fila` igual, en su lugar («Octubre
+2025 a julio 2026 · sin movimientos»; el año una vez si es el mismo: «Mayo a julio 2026»). Un vacío
+**solo** entre dos con movimientos sigue siendo tarjeta («Sin movimientos de flujo»): ahí sí dice
+algo. El en curso es siempre tarjeta. Ningún período desaparece ni cambia sus cifras; solo cómo se
+pintan.
 
 **El período en curso no repite Plan**: su detalle muestra cómo va (entró, salió, en qué se fue) y,
 en vez de sus pagos fijos y presupuestos, dos filas que llevan a Plan. Un período cerrado sí los

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -14,8 +13,6 @@ import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material.icons.rounded.ArrowUpward
-import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Edit
@@ -25,7 +22,6 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.UploadFile
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,7 +35,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.theme.Espacio
-import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
@@ -47,7 +42,6 @@ import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.conCifrasOcultas
 import com.jvillada.movi.ui.components.ds.Accion
-import com.jvillada.movi.ui.components.ds.BarraDeProgreso
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.CuadriculaDeAcciones
 import com.jvillada.movi.ui.components.ds.FRACCION_DE_TARJETA_DE_CUENTA
@@ -57,7 +51,6 @@ import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TarjetaDeCuenta
 import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
-import com.jvillada.movi.ui.components.ds.TonoDeBarra
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
@@ -79,16 +72,20 @@ import com.jvillada.movi.ui.dashboard.avanceDelChecklist
 import com.jvillada.movi.ui.dashboard.categoriasDelPeriodo
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe
 import com.jvillada.movi.ui.dashboard.cuentasDelCarrusel
-import com.jvillada.movi.ui.dashboard.descripcionDeLaFlecha
 import com.jvillada.movi.ui.dashboard.destinoDeLaAccion
+import com.jvillada.movi.ui.espacios.HojasDeRepartir
+import com.jvillada.movi.ui.espacios.rememberEstadoDeRepartir
+import com.jvillada.movi.ui.dashboard.CONTRA_EL_PERIODO_PASADO
+import com.jvillada.movi.ui.dashboard.DiferenciaDeLaCategoria
+import com.jvillada.movi.ui.dashboard.diferenciaDeLaCategoria
+import com.jvillada.movi.ui.components.ds.colorDeLaCifra
+import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
 import com.jvillada.movi.ui.dashboard.dueLabel
 import com.jvillada.movi.ui.dashboard.faltaPorPagar
 import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.pendientesPorRevisar
 import com.jvillada.movi.ui.dashboard.propuestasALaVista
 import com.jvillada.movi.ui.dashboard.propuestasDelInicio
-import com.jvillada.movi.shared.model.ContraElAnterior
-import com.jvillada.movi.shared.model.Tendencia
 import kotlinx.coroutines.launch
 
 /**
@@ -139,7 +136,8 @@ private fun iconoDe(accion: AccionDelInicio): ImageVector = when (accion) {
 /**
  * **La cuadrícula de acciones** (camino 3): cuatro columnas, dos filas. «Anotar gasto» es la destacada
  * —lo que más se hace— y «Revisar avisos» lleva la insignia de lo que espera en Por revisar. Cada una
- * abre lo que ya existe (ver `destinoDeLaAccion`); «Subir comprobante» elige el archivo.
+ * abre lo que ya existe (ver `destinoDeLaAccion`); «Subir comprobante» elige el archivo, y «Repartir»
+ * abre la hoja del gasto compartido (`RepartirDesdeElInicio.kt`).
  */
 @Composable
 internal fun AccionesDelInicioSection(
@@ -148,12 +146,19 @@ internal fun AccionesDelInicioSection(
     onSubirComprobante: () -> Unit,
 ) {
     val insignia = pendientesPorRevisar(data)
+    // Vuelta de diseño 7: «Repartir» abre directo la hoja de anotar el gasto compartido (o elige el
+    // espacio, o lo crea) en vez de solo cambiar de pestaña. Ver `RepartirDesdeElInicio.kt`.
+    val repartir = rememberEstadoDeRepartir(onNavigate)
+    HojasDeRepartir(repartir)
     CuadriculaDeAcciones(
         acciones = accionesDelInicio().map { accion ->
             Accion(
                 rotulo = accion.rotulo,
                 icono = iconoDe(accion),
-                onClick = { destinoDeLaAccion(accion)?.let(onNavigate) ?: onSubirComprobante() },
+                onClick = {
+                    if (accion == AccionDelInicio.REPARTIR) repartir.tocar()
+                    else destinoDeLaAccion(accion)?.let(onNavigate) ?: onSubirComprobante()
+                },
                 destacada = accion == AccionDelInicio.ANOTAR_GASTO,
                 insignia = if (accion == AccionDelInicio.REVISAR_AVISOS) insignia else null,
                 descripcion = accion.descripcion,
@@ -411,14 +416,16 @@ internal fun WidgetFaltaPorPagar(data: DashboardData, onNavigate: (Screen) -> Un
 private const val CATEGORIAS_EN_EL_WIDGET = 3
 
 /**
- * **«En qué se va»** compacto: las categorías que más pesan del período, con una barra chica sobre el
- * gasto total (`categoriasDelPeriodo`, la misma del análisis) y la flecha contra el período pasado.
- * Lleva a «En qué se va».
+ * **«En qué se va»** compacto: las categorías que más pesan del período (`categoriasDelPeriodo`, la
+ * misma del análisis), cada una con su monto y **cuánto más o menos que el período pasado a la misma
+ * altura** (`diferenciaDeLaCategoria`). Lleva a «En qué se va».
  *
- * **Un monto nunca se recorta** (revisión de la R1 a 390 px: se veía «Merca… ↑ $392.1»). Cada
- * categoría va en dos renglones: arriba el ícono, el nombre (lo único que puede cortarse con «…») y la
- * flecha como ícono chico; abajo la barra y el monto entero. El monto se mide primero y la barra se
- * queda con lo que sobra, así que en un widget de media pantalla a 360 dp la cifra siempre entra.
+ * Vuelta de diseño 7: contesta «¿en qué gasto más que el período pasado?». Antes el rótulo «vs.
+ * período pasado» iba a la derecha del título y, a media pantalla, se lo comía entero; cada fila
+ * llevaba una flecha sin número y una barra casi vacía que no decía contra qué se medía. Ahora el
+ * título se ve, la comparación se dice una vez debajo, y cada categoría va en tres renglones: el
+ * ícono y el nombre (lo único que puede cortarse con «…»), el monto con [Cifra] entero, y la
+ * diferencia en palabras («$120.000 más», «nuevo»), en `sale` solo si sube mucho.
  */
 @Composable
 internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, modifier: Modifier = Modifier) {
@@ -428,14 +435,22 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
         cuantas = CATEGORIAS_EN_EL_WIDGET,
         gastoDelAnterior = data.gastoDelAnterior,
     ).take(CATEGORIAS_EN_EL_WIDGET)
+    val diferencias = categorias.map(::diferenciaDeLaCategoria)
     Widget(
         titulo = "En qué se va",
-        // Contra qué comparan las flechas, dicho una vez (cada flecha dice la frase entera al lector).
-        detalle = if (categorias.any { it.contraElAnterior != null }) "vs. período pasado" else null,
         onClick = { onNavigate(Screen.EnQueSeVa()) },
         modifier = modifier.testTag(TAG_TARJETA_EN_QUE_SE_VA),
     ) {
-        categorias.forEach { categoria ->
+        // Contra qué se compara, dicho una vez (cada diferencia dice la frase entera al lector).
+        if (diferencias.any { it != null }) {
+            Text(
+                CONTRA_EL_PERIODO_PASADO,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.testTag(TAG_CONTRA_EL_PERIODO_PASADO),
+            )
+        }
+        categorias.zip(diferencias).forEach { (categoria, diferencia) ->
             Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
                     // El ícono de la categoría, como en Movimientos (ola B): «Comida» se reconoce igual
@@ -449,46 +464,37 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    categoria.contraElAnterior?.let { FlechaDelWidget(it) }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                    BarraDeProgreso(
-                        fraccion = categoria.fraccion,
-                        tono = if (categoria.superada) TonoDeBarra.Peligro else TonoDeBarra.Neutro,
-                        modifier = Modifier.weight(1f),
-                    )
-                    // Sin peso: se mide primero, entera; la barra se queda con el resto.
-                    Cifra(
-                        categoria.gastado,
-                        VarianteDeCifra.Fila,
-                        tono = if (categoria.superada) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
-                    )
-                }
+                // En su renglón: entero siempre, aun a media pantalla y con la letra agrandada.
+                Cifra(
+                    categoria.gastado,
+                    VarianteDeCifra.Fila,
+                    tono = if (categoria.superada) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
+                )
+                if (diferencia != null) DiferenciaDelWidget(diferencia)
             }
         }
     }
 }
 
+/** El tag de la línea «Contra el período pasado» del widget. */
+const val TAG_CONTRA_EL_PERIODO_PASADO: String = "inicio-contra-el-periodo-pasado"
+
+/** El tag de la diferencia de una categoría en el widget («$120.000 más», «nuevo»). */
+const val TAG_DIFERENCIA_DEL_WIDGET: String = "inicio-diferencia-del-widget"
+
 /**
- * La flecha «vs. período pasado» de una fila del widget: un ícono chico, no texto, para no quitarle
- * lugar al monto. Gastar más no es una alarma (va en el color del texto); gastar menos va en `entra`.
- * La frase entera es para el lector de pantalla.
+ * «$120.000 más», «$45.000 menos», «igual» o «nuevo», con la letra de una cifra chica y el color de su
+ * tono (`colorDeLaCifra`). La frase entera es para el lector de pantalla.
  */
 @Composable
-private fun FlechaDelWidget(flecha: ContraElAnterior) {
-    val descripcion = descripcionDeLaFlecha(flecha)
-    Icon(
-        imageVector = when (flecha.tendencia) {
-            Tendencia.SUBE -> Icons.Rounded.ArrowUpward
-            Tendencia.BAJA -> Icons.Rounded.ArrowDownward
-            Tendencia.IGUAL -> Icons.Rounded.Remove
-        },
-        contentDescription = descripcion,
-        tint = when (flecha.tendencia) {
-            Tendencia.SUBE -> Movi.colores.texto
-            Tendencia.BAJA -> Movi.colores.entra
-            Tendencia.IGUAL -> Movi.colores.textoApagado
-        },
-        modifier = Modifier.size(Icono.s).testTag(TAG_FLECHA_CONTRA_EL_ANTERIOR),
+private fun DiferenciaDelWidget(diferencia: DiferenciaDeLaCategoria) {
+    Text(
+        text = diferencia.texto,
+        style = estiloDeLaCifra(VarianteDeCifra.Chica, Movi.textos),
+        color = colorDeLaCifra(diferencia.tono, Movi.colores),
+        modifier = Modifier
+            .testTag(TAG_DIFERENCIA_DEL_WIDGET)
+            .semantics { contentDescription = diferencia.descripcion },
     )
 }
