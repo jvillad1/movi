@@ -88,7 +88,7 @@ internal fun DisponibleDelPeriodoSection(
 ) {
     val disponible = disponibleDelInicio(data, hoy) ?: return
     Column {
-        // Ola 3 · Hoy en una mirada: sin la frase. «Te quedan $X para N días · meta diaria $Y» (o
+        // Ola 3 · Hoy en una mirada: sin la frase. «Te quedan $X para N días · $Y por día» (o
         // la que mande: te pasaste, sin margen…) ya la dice el héroe de arriba con la MISMA cuenta
         // (`teQuedanDeHoy` sobre el mismo `disponibleDelInicio`), y la sección solo se pinta cuando
         // el héroe la tiene. En Hoy quedan la cifra y las tres columnas; en Plan, la frase sigue.

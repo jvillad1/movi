@@ -191,6 +191,9 @@ data class DisponibleDelPeriodo(
     /**
      * Lo que falta gastar del disponible, repartido entre los días que quedan (hoy incluido).
      * `null` cuando ya no queda nada que repartir.
+     *
+     * Es la cifra diaria que va pegada a «para N días» en el héroe del Inicio y en la frase de Plan
+     * («para 6 días · $1,8M por día»); la meta diaria ([metaPorDia]) es la de la columna «Hoy».
      */
     val porDiaParaLoQueQueda: Long? get() {
         val resto = disponible - periodo.gastado

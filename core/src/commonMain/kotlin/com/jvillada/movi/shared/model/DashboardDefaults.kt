@@ -98,7 +98,7 @@ package com.jvillada.movi.shared.model
 // cuadrícula del camino 3 y el feed del camino 5). Cada bloque contesta una sola pregunta y una cifra
 // que vive en otra pantalla no se repite acá:
 //
-// - HERO_BALANCE: «Te quedan», para cuántos días y la meta diaria. La barra Entró/Salió y el desglose
+// - HERO_BALANCE: «Te quedan», para cuántos días y cuánto da por día. La barra Entró/Salió y el desglose
 //   de «Tu plata» salen (viven en Plan y en Patrimonio).
 // - ACCIONES: la cuadrícula de lo que se hace desde el Inicio (anotar, traspasar, pagar, subir un
 //   comprobante, revisar avisos, preguntarle a Movi). Reemplaza a PREGUNTALE_A_MOVI: preguntar es una
