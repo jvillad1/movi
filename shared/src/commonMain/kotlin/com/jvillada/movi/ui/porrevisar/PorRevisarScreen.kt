@@ -473,6 +473,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                     },
                                     entendido = entendidos[sms.id]?.linea,
                                     onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
+                                    leido = propuestaDelPago(propuestas, sms)?.leido,
+                                    sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
                                 )
                             }
                             return@forEach
@@ -489,6 +491,10 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                     }
                                 },
                                 trabajando = pagoEnCurso == sms.id,
+                                leido = propuestaDelPago(propuestas, sms)?.leido,
+                                sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
+                                // En la bandeja todo está pendiente: la píldora no diría nada.
+                                conPildoraDePendiente = false,
                                 // El otro aviso puede estar ya confirmado: se busca en la lista
                                 // entera, no solo entre los pendientes.
                                 parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
@@ -707,4 +713,19 @@ private fun EsqueletoDePorRevisar() {
             }
         }
     }
+}
+
+/**
+ * **Lo que Movi leyó de un pago de la bandeja**: la propuesta del server para ese aviso suelto o para
+ * su pago entero (la misma búsqueda que [loQueMoviEntendio]). La cabeza de la tarjeta saca de acá el
+ * comercio y el monto; `null` mientras la lectura no llega o si no hay propuesta.
+ */
+internal fun propuestaDelPago(
+    propuestas: com.jvillada.movi.shared.model.PropuestasDeLaBandeja?,
+    cabeza: com.jvillada.movi.shared.model.SmsMessage,
+): com.jvillada.movi.shared.model.PropuestaDelAviso? {
+    val todas = propuestas?.propuestas ?: return null
+    val grupo = cabeza.grupoId
+    return (if (grupo != null) todas.firstOrNull { it.grupoId == grupo } else null)
+        ?: todas.firstOrNull { it.avisoId == cabeza.id }
 }
