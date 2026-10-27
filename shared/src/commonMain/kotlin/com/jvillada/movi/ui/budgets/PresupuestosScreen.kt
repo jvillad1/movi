@@ -586,9 +586,10 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
             ) {
                 Text(estado.tituloDelGasto, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(Espacio.xs))
-                // La protagonista de esta pantalla, como «Tu plata» en el Inicio y la deuda
-                // total en Créditos: misma letra y un renglón siempre.
-                Cifra(estado.totalSpent, VarianteDeCifra.Heroe)
+                // Vuelta de diseño 14: `Grande`, no `Heroe`. En Plan esta tarjeta va debajo de
+                // «Disponible del período» (también `Grande`), y dos cifras gigantes competían; una
+                // sola héroe por pantalla (`UnaSolaCifraHeroePorPantallaTest`). Un renglón siempre.
+                Cifra(estado.totalSpent, VarianteDeCifra.Grande)
                 Spacer(Modifier.height(Espacio.xxs))
                 Text(
                     text = "de ${formatCOP(estado.totalLimit)}",
@@ -778,43 +779,81 @@ internal fun colorDelEstadoDePresupuesto(estado: EstadoDePresupuesto): Color = w
     EstadoDePresupuesto.DENTRO -> Movi.colores.entra
 }
 
-/** El tono de la píldora y de la barra de un presupuesto: el mismo semáforo de [colorDelEstadoDePresupuesto]. */
-private fun tonoDelPresupuesto(estado: EstadoDePresupuesto): Pair<TonoDePildora, TonoDeBarra> = when (estado) {
-    EstadoDePresupuesto.EXCEDIDO_MUCHO -> TonoDePildora.Peligro to TonoDeBarra.Peligro
+/** El tono de la barra de un presupuesto: el mismo semáforo de [colorDelEstadoDePresupuesto]. */
+internal fun tonoDeLaBarraDelPresupuesto(estado: EstadoDePresupuesto): TonoDeBarra = when (estado) {
+    EstadoDePresupuesto.EXCEDIDO_MUCHO -> TonoDeBarra.Peligro
     EstadoDePresupuesto.EXCEDIDO_POCO,
     EstadoDePresupuesto.AL_LIMITE,
-    EstadoDePresupuesto.CERCA -> TonoDePildora.Aviso to TonoDeBarra.Aviso
-    EstadoDePresupuesto.DENTRO -> TonoDePildora.Exito to TonoDeBarra.Exito
+    EstadoDePresupuesto.CERCA -> TonoDeBarra.Aviso
+    EstadoDePresupuesto.DENTRO -> TonoDeBarra.Exito
 }
 
 /**
+ * **Lo que importa de un presupuesto, en palabras** (vuelta de diseño 14): «Te pasaste por $120.700»
+ * o «Te quedan $16.100». Al límite, «Llegaste justo al límite» (ni se pasó ni le queda). Pura.
+ */
+internal fun loQueDiceElPresupuesto(p: BudgetProgress): String = when (p.state) {
+    EstadoDePresupuesto.EXCEDIDO_MUCHO,
+    EstadoDePresupuesto.EXCEDIDO_POCO -> "Te pasaste por ${formatCOP(-p.remaining)}"
+    EstadoDePresupuesto.AL_LIMITE -> "Llegaste justo al límite"
+    EstadoDePresupuesto.CERCA,
+    EstadoDePresupuesto.DENTRO -> "Te quedan ${formatCOP(p.remaining)}"
+}
+
+/**
+ * El color de [loQueDiceElPresupuesto]: el del estado **solo cuando es un aviso**. Lo pasado y lo
+ * que está cerca van en `sale` / `aviso`, como su barra; lo que va bien va en el texto medio, porque
+ * gastar no es una alarma ni un éxito: el verde ya lo dice la barra.
+ */
+@Composable
+internal fun colorDeLoQueDiceElPresupuesto(estado: EstadoDePresupuesto): Color = when (estado) {
+    EstadoDePresupuesto.DENTRO -> Movi.colores.textoMedio
+    else -> colorDelEstadoDePresupuesto(estado)
+}
+
+/** El texto de lo que queda o lo que se pasó, debajo de la barra de un presupuesto. */
+const val TAG_LO_QUE_DICE_EL_PRESUPUESTO: String = "lo-que-dice-el-presupuesto"
+
+/** El porcentaje gastado, al final de la fila de un presupuesto. */
+const val TAG_PORCENTAJE_DEL_PRESUPUESTO: String = "porcentaje-del-presupuesto"
+
+/**
  * **Un presupuesto, como fila del sistema** (ola R4; era una tarjeta por categoría): el ícono de la
- * categoría, su nombre, «$290.340 de $200.000» y el porcentaje en una [Pildora] del semáforo. Debajo,
- * colgando de la fila, la barra y lo que queda o lo que se pasó. Tocarla abre la hoja de editar.
+ * categoría, su nombre, «$290.340 de $200.000» y el porcentaje. Debajo, colgando de la fila, la
+ * barra y lo que importa. Tocarla abre la hoja de editar.
+ *
+ * **Una señal por estado** (vuelta de diseño 14): una categoría pasada llevaba tres rojos a la vez
+ * —la píldora «273%», la barra y «Sobrepasado · $120.700»—. Ahora el estado lo dicen **la barra**
+ * (su color) y **el texto de abajo** («Te pasaste por $120.700», en su tono). El porcentaje va
+ * neutro y chico al final de la fila, sin píldora: es un dato, no una alarma.
  */
 @Composable
 private fun FilaDePresupuesto(p: BudgetProgress, onClick: () -> Unit) {
-    val (tonoDePildora, tonoDeBarra) = tonoDelPresupuesto(p.state)
     Fila(
         titulo = p.budget.category,
         // «de» y no «/»: deja explícito que el límite es del período. Sin «este mes»: con corte 25
         // ninguno de los dos montos es «este mes»; el rango está en el título de la tarjeta de arriba.
         subtitulo = "${formatCOP(p.spent)} de\u00A0${formatCOP(p.budget.monthlyLimit)}",
         inicio = { IconoDeCategoria(p.budget.category) },
-        final = { Pildora("${p.pct}%", tonoDePildora) },
+        final = {
+            Text(
+                "${p.pct}\u00A0%",
+                style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
+                color = Movi.colores.textoMedio,
+                maxLines = 1,
+                modifier = Modifier.testTag(TAG_PORCENTAJE_DEL_PRESUPUESTO),
+            )
+        },
         onClick = onClick,
     )
     BajoLaFila {
-        BarraDeProgreso(fraccion = p.pctRaw, tono = tonoDeBarra)
-        val tail = when (p.state) {
-            EstadoDePresupuesto.EXCEDIDO_MUCHO,
-            EstadoDePresupuesto.EXCEDIDO_POCO -> "Sobrepasado · ${formatCOP(-p.remaining)}"
-            // Ni «sobrepasado» (no se pasó) ni «cerca» (no está cerca, está justo ahí).
-            EstadoDePresupuesto.AL_LIMITE -> "Sin margen · gastaste justo el límite"
-            EstadoDePresupuesto.CERCA -> "Cerca del límite"
-            else -> "${formatCOP(p.remaining)} disponibles"
-        }
-        Text(tail, style = Movi.textos.apoyo, color = colorDelEstadoDePresupuesto(p.state))
+        BarraDeProgreso(fraccion = p.pctRaw, tono = tonoDeLaBarraDelPresupuesto(p.state))
+        Text(
+            loQueDiceElPresupuesto(p),
+            style = Movi.textos.apoyo,
+            color = colorDeLoQueDiceElPresupuesto(p.state),
+            modifier = Modifier.testTag(TAG_LO_QUE_DICE_EL_PRESUPUESTO),
+        )
     }
 }
 
@@ -1227,7 +1266,8 @@ private fun LazyListScope.presupuestosEsqueleto() {
             Spacer(Modifier.height(Espacio.xs))
             LineaEsqueleto(
                 fraccionDelAncho = 0.55f,
-                estilo = Movi.textos.cifra,
+                // La letra de `Cifra.Grande`, la de la tarjeta real (vuelta de diseño 14).
+                estilo = Movi.textos.cifraDeTarjeta,
                 modifier = Modifier.testTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO),
             )
             Spacer(Modifier.height(Espacio.xxs))
@@ -1271,7 +1311,8 @@ private fun FilaDePresupuestoEsqueleto() {
                 )
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
             }
-            BloqueEsqueleto(alto = Medida.altoDePildora, ancho = Medida.avatar)
+            // El porcentaje, chico y neutro (vuelta de diseño 14: ya no es una píldora).
+            BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = Medida.avatar)
         }
         BajoLaFila {
             BloqueEsqueleto(alto = Medida.altoDeBarraDeProgreso)

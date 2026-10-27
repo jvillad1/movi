@@ -228,6 +228,13 @@ TarjetaDePropuesta(
 la héroe hasta `Grande`), `Fila`, `Chica`; tono `Neutro`, `Ingreso`,
 `Alerta`, `Apagado` y `EntreCuentas` (un traspaso: en `entreCuentas` y sin signo); signo y «Ocultar
 los saldos» incluidos.
+
+**Una sola `Cifra` Héroe por pantalla** (vuelta de diseño 14). La héroe es la pregunta de la pantalla
+(«Te quedan» en Hoy, el patrimonio neto, la deuda total); todo lo demás —el resumen de una tarjeta
+secundaria, como «Gastado en este período» en Presupuestos— va en `Grande`. Dos cifras gigantes
+compiten y ninguna se lee primero. Cada `Cifra` dice su variante en la semántica (`VarianteDeCifraKey`;
+`CifraProtagonista`, la héroe ya escrita, también) y `UnaSolaCifraHeroePorPantallaTest` las cuenta en
+Hoy, Plan (Pagos y Presupuestos), Patrimonio, Créditos, Movimientos y Espacios.
 ```kotlin
 Cifra(-27_500)
 Cifra(4_500_000, tono = TonoDeCifra.Ingreso)        // +$4.500.000
@@ -326,6 +333,24 @@ Encabezado("Patrimonio", accion = AccionDeEncabezado("Nueva cuenta", Icons.Round
 (`hilo`, con sangría `Ninguna`, `Margen` o `ConInicio`) y **`BarraDeProgreso`** (pista en capa 3, tono
 del relleno; con `marca` opcional, una raya vertical en esa fracción: «la mitad» de «Quién puso qué»).
 
+**`Casilla`** (vuelta de diseño 14, `ds/Casilla.kt`) — marcar o desmarcar algo de una lista. La caja
+mide `Icono.l` con `Radio.s`: **marcada**, rellena de la marca con el visto en `sobreMarca`; **sin
+marcar**, vacía con el borde (`Medida.trazo`) en `textoMedio`. Se distingue de lejos (la de antes,
+`CasillaDeSeleccion`, era un cuadradito lavanda de 20 dp que casi no cambiaba; se borró, y Primeros
+pasos, «Recordarme unos días antes» y la hoja del recurrente usan esta). **El toque es de 48
+siempre**: con `onCambiar` la casilla se toca sola y mide `Medida.objetivoTactil` por lado; sin él va
+dentro de algo que se marca entero —una `Fila` envuelta en `toggleable` con `Role.Checkbox`— y ese algo
+es el toque (de borde a borde, 56 o más de alto); la casilla solo dice el estado y no ocupa el ancho
+de un toque que no es suyo, como el `Checkbox` de Material sin `onCheckedChange`.
+```kotlin
+Casilla(marcada = aceptado, onCambiar = { aceptado = it })
+Box(Modifier.toggleable(marcada, role = Role.Checkbox, onValueChange = { alternar() })) {
+    Fila(titulo = "Mercado", subtitulo = "Gastaste $1.020.000 el período pasado",
+        inicio = { IconoDeCategoria("Mercado") },
+        final = { Row { Cifra(1_050_000); Casilla(marcada) } })
+}
+```
+
 **`AvatarDePersona`** (R3) — una persona: su inicial en un círculo de `Medida.avatar`, en el lavado de
 su tono (`TonoDeIcono`). Los miembros de un espacio y quien pagó un gasto.
 ```kotlin
@@ -357,7 +382,8 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 | `LosCamposSonDelSistemaTest` | ningún `BasicTextField` / `TextField` / `OutlinedTextField` en `ui/` fuera de `ui/components/` y de seis excepciones con nombre (§15) |
 | `LosRotulosNoGritanTest` | ninguna función `…SectionLabel` en `ui/`, y ningún `Seccion` / `GrupoDeCampos` / `RotuloDeCampo` / `rotulo =` / `label =` con un texto entero en mayúsculas |
 | `LosCamposDelSistemaTest` (Robolectric) | el rótulo en frase, la guía de un monto en la letra de cuerpo y el valor en la de cifras, el error en `sale`, «¿Qué es esto?» abre y cierra, la caja llega a 48, y nada se recorta a 360 dp con la letra a ×1,3 (también en las hojas de crédito y tarjeta) |
-| `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en los dos temas; la fila mide 56/64; el botón llega a 48 de toque; la cifra se oculta; la tarjeta de cuenta mide 128 con marca y sin ella; dos widgets de un par miden lo mismo |
+| `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en los dos temas; la fila mide 56/64; el botón llega a 48 de toque; la cifra se oculta; la tarjeta de cuenta mide 128 con marca y sin ella; dos widgets de un par miden lo mismo; la casilla que se toca sola mide 48 y dice su estado |
+| `UnaSolaCifraHeroePorPantallaTest` (Robolectric) | a lo sumo una `Cifra` `Heroe` en Hoy, Plan (Pagos y Presupuestos), Patrimonio, Créditos, Movimientos y Espacios; exactamente una donde la pantalla tiene su protagonista (Hoy, Patrimonio, Créditos) |
 
 ## 9. Migrar una pantalla
 
@@ -400,8 +426,9 @@ viejos; este cliente no los pinta.
 - **El día en un renglón**: la fecha como se escribe («Hoy», «23 de agosto») con el estilo de `Seccion`
   y el flujo del día a la derecha; todo el renglón pliega el día (alto `Medida.objetivoTactil`). La
   comparación «Día a día» salió: es de Plan. **La fecha nunca se recorta** (vuelta de diseño 2): la
-  fecha, la cifra y el chevron se miden primero; si no cabe todo, se cae primero el rótulo «Flujo del
-  día» y después se corta el «· N movimientos».
+  fecha, la cifra y el chevron se miden primero; si no cabe todo, se corta el «· N movimientos».
+  **Sin el rótulo «Flujo del día»** (vuelta de diseño 14): la cifra del día sola —`Cifra` `Chica`, con
+  su signo, en `entra` si entró plata— se entiende en todos los anchos; el rótulo sobraba en cada día.
 - **«N por revisar» es una `TarjetaDePropuesta`**, como en «Movi propone hoy». «Personas y comercios»
   ya no está arriba de la lista. **Es el primer ítem de la lista y se va con el scroll** (vuelta de
   diseño 1): fijos quedan solo el encabezado, el selector del período y los chips.
@@ -710,7 +737,35 @@ caja de la nota, el botón encendido con texto, Enter y «Listo» que guardan, l
 debajo y el toque que no pasa durante la vuelta. `SelectorDeCuentaTest` mira la `Fila`, la `Cifra`, la
 marca y la elegida.
 
-## 20. Vuelta de diseño 15: filas que respiran y la misma cifra en Categorías
+## 20. Vuelta de diseño 14: Presupuestos con jerarquía y una sola señal por estado
+
+Revisado en Plan → Presupuestos a 390 px con la cuenta demo, sin presupuestos (las propuestas) y con
+los cuatro propuestos creados.
+
+- **Una sola héroe** (§6): «Gastado en este período» es `Cifra` `Grande` (y su esqueleto, la letra de
+  `cifraDeTarjeta`); en Plan iba debajo de «Disponible del período» en una letra más grande que él.
+- **Una señal por estado en cada presupuesto** (`FilaDePresupuesto`): una categoría pasada llevaba tres
+  rojos —la píldora «273%», la barra y «Sobrepasado · $120.700»—. Ahora el estado lo dicen **la barra**
+  (su color: `Exito`, `Aviso` o `Peligro`, el semáforo del dueño) y **el texto de abajo**, que dice lo
+  que importa (`loQueDiceElPresupuesto`): «Te pasaste por $120.700» en `sale` (o `aviso` si se pasó
+  poco), «Te quedan $16.100» en `aviso` si está cerca y en `textoMedio` si va bien —el verde ya lo dice
+  la barra: gastar no es un éxito ni una alarma—, «Llegaste justo al límite» en `aviso`. El porcentaje
+  («273 %») va neutro, en `apoyo` y `textoMedio`, al final de la fila, sin píldora. En el resumen se
+  quedan las `Pildora` «Sobrepasados · N» y «Sin margen o cerca · N»: son el resumen, una de cada una.
+- **Las propuestas son `Fila`** (`FilaDePropuesta`): el ícono de la categoría, el nombre, «Gastaste $X
+  el período pasado» (hasta tres renglones: es la razón de la fila y no se corta; a 390 dp entra en dos,
+  a 360 con un tope de siete cifras necesita tres), el tope
+  con `Cifra` a la derecha y la `Casilla` del sistema. Se marca la fila entera. Van de borde a borde
+  de la tarjeta del vacío (`VacioQueEnsena(contenidoDeBordeABorde = true)`: con el relleno de la
+  tarjeta más el de la fila no le quedaba lugar al nombre), separadas con `Separador(ConInicio)`.
+  «Crear estos N» y «Crear uno a mano» quedan igual.
+- **Movimientos sin «Flujo del día»** (§11).
+
+Lo vigilan `UnaSolaCifraHeroePorPantallaTest` y `PresupuestosConJerarquiaTest` (a 360 dp: la cifra
+`Grande` del resumen, una sola señal roja sin píldora, el tope a la derecha y la casilla, nada
+recortado).
+
+## 21. Vuelta de diseño 15: filas que respiran y la misma cifra en Categorías
 
 - **«Bancolombia Ahorros» va en un renglón a 390 dp.** Con la marca, el nombre y «$13.845.800», el
   título se partía en dos con la fila medio vacía. Medido con la letra de la app (×1,12): el título

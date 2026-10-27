@@ -115,8 +115,8 @@ class PresupuestosNoAfirmanMientrasCarganTest {
         montar()
 
         assertTrue(!hay("\$0"), "sin el gasto no puede decir \$0")
-        assertTrue(!hay("0%"))
-        assertTrue(!hay("disponibles"))
+        assertTrue(!hay("0 %"))
+        assertTrue(!hay("Te quedan"))
         assertTrue(!hay("Mercado"), "la lista espera al gasto: si se pinta antes, se reordena al llegar")
         assertTrue(!hay("Gastado en"))
         assertEquals(1, contarTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO))

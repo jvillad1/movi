@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.budgets
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,22 +9,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import com.jvillada.movi.shared.model.diaLegible
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
-import com.jvillada.movi.ui.components.CasillaDeSeleccion
+import com.jvillada.movi.ui.components.ds.Casilla
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.ds.Boton
@@ -80,40 +81,49 @@ internal fun VacioDePresupuestos(estado: EstadoDePresupuestos) {
             VacioQueEnsena(
                 titulo = TITULO_DEL_VACIO,
                 detalle = textoDeLasPropuestas(propuestas),
+                // Las propuestas son `Fila`s: van de borde a borde de la tarjeta, con su propio margen.
+                contenidoDeBordeABorde = true,
                 contenido = {
-                    Column(verticalArrangement = Arrangement.spacedBy(Movi.espacios.minimo)) {
-                        propuestas.forEach { p ->
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        propuestas.forEachIndexed { i, p ->
                             FilaDePropuesta(
                                 propuesta = p,
                                 marcada = p.category !in estado.desmarcadas,
                                 habilitada = !estado.creandoPropuestas,
                                 onAlternar = { estado.alternarPropuesta(p.category) },
                             )
+                            if (i < propuestas.lastIndex) Separador(SangriaDeSeparador.ConInicio)
                         }
                     }
-                    Spacer(Modifier.height(Movi.espacios.amplio))
-                    // Adentro de la tarjeta y junto al botón: con cuatro propuestas la tarjeta es
-                    // alta, y un aviso debajo de ella quedaba fuera de la pantalla justo cuando el
-                    // dueño acababa de tocar «Crear» — parecía que no había pasado nada.
-                    if (estado.propuestasQueFallaron.isNotEmpty()) {
-                        AvisoDePropuestasQueFallaron(estado)
+                    // Los botones quedan como estaban: con el relleno de la tarjeta, como el título.
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.xxl),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                         Spacer(Modifier.height(Movi.espacios.amplio))
+                        // Adentro de la tarjeta y junto al botón: con cuatro propuestas la tarjeta es
+                        // alta, y un aviso debajo de ella quedaba fuera de la pantalla justo cuando el
+                        // dueño acababa de tocar «Crear» — parecía que no había pasado nada.
+                        if (estado.propuestasQueFallaron.isNotEmpty()) {
+                            AvisoDePropuestasQueFallaron(estado)
+                            Spacer(Modifier.height(Movi.espacios.amplio))
+                        }
+                        Boton(
+                            texto = rotuloDeCrearPropuestas(marcadas),
+                            onClick = { estado.crearPropuestas() },
+                            modifier = Modifier.testTag(TAG_CREAR_PROPUESTAS),
+                            icono = Icons.Rounded.Add,
+                            anchoCompleto = true,
+                            habilitado = marcadas > 0 && !estado.creandoPropuestas,
+                        )
+                        Spacer(Modifier.height(Espacio.xs))
+                        Boton(
+                            texto = "Crear uno a mano",
+                            onClick = { estado.abrirNuevo() },
+                            variante = VarianteDeBoton.Fantasma,
+                            icono = Icons.Rounded.Add,
+                        )
                     }
-                    Boton(
-                        texto = rotuloDeCrearPropuestas(marcadas),
-                        onClick = { estado.crearPropuestas() },
-                        modifier = Modifier.testTag(TAG_CREAR_PROPUESTAS),
-                        icono = Icons.Rounded.Add,
-                        anchoCompleto = true,
-                        habilitado = marcadas > 0 && !estado.creandoPropuestas,
-                    )
-                    Spacer(Modifier.height(Espacio.xs))
-                    Boton(
-                        texto = "Crear uno a mano",
-                        onClick = { estado.abrirNuevo() },
-                        variante = VarianteDeBoton.Fantasma,
-                        icono = Icons.Rounded.Add,
-                    )
                 },
             )
         }
@@ -132,8 +142,18 @@ internal fun textoDeLasPropuestas(propuestas: List<PropuestaDePresupuesto>): Str
 }
 
 /**
- * Una propuesta: el ícono de la categoría, su nombre, cuánto se gastó y el tope que se propone, y la
- * casilla. Se toca la fila entera —con semántica de casilla— y no solo el cuadrito de 20 dp.
+ * **Una propuesta, como `Fila` del sistema** (vuelta de diseño 14): el ícono de la categoría, su
+ * nombre, «Gastaste $X el período pasado» y, a la derecha, el tope que se propone con [Cifra] y la
+ * [Casilla]. Era una fila a mano con el tope metido en el subtítulo («Gastaste $1.850.000 · tope
+ * $1.850.000», partido en dos renglones) y un cuadradito lavanda de 20 dp.
+ *
+ * **Se marca la fila entera**: el toque va de borde a borde y mide 64 de alto (más de los 48 del
+ * sistema), con semántica de casilla; la [Casilla] de la derecha solo dice el estado.
+ *
+ * El subtítulo puede bajar hasta [RENGLONES_DEL_SUBTITULO_DE_LA_PROPUESTA]: es la razón de la
+ * propuesta y no se corta. A 390 dp entra en dos; a 360, al lado de un tope de siete cifras
+ * («$1.850.000»), «Gastaste $1.850.000 el período pasado» necesita tres (lo mide
+ * `PresupuestosConJerarquiaTest`). La fila crece en vez de cortar la frase.
  */
 @Composable
 private fun FilaDePropuesta(
@@ -142,34 +162,38 @@ private fun FilaDePropuesta(
     habilitada: Boolean,
     onAlternar: () -> Unit,
 ) {
-    Row(
+    // El toque va en una caja alrededor de la fila (y no en el `modifier` de la `Fila`) para que el
+    // nodo de la casilla y el de la fila no se pisen el tag.
+    Box(
         modifier = Modifier
-            .testTag(tagDePropuestaDePresupuesto(propuesta.category))
             .fillMaxWidth()
-            .clip(RoundedCornerShape(Movi.formas.normal))
-            .toggleable(value = marcada, enabled = habilitada, role = Role.Checkbox, onValueChange = { onAlternar() })
-            .padding(vertical = Movi.espacios.corto),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+            .testTag(tagDePropuestaDePresupuesto(propuesta.category))
+            .toggleable(value = marcada, enabled = habilitada, role = Role.Checkbox, onValueChange = { onAlternar() }),
     ) {
-        IconoDeCategoria(propuesta.category)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                propuesta.category,
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.texto,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                "Gastaste ${formatCOP(propuesta.gastado.roundToLong())} · tope ${formatCOP(propuesta.amount.roundToLong())}",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-            )
-        }
-        CasillaDeSeleccion(marcada = marcada)
+        Fila(
+            titulo = propuesta.category,
+            subtitulo = subtituloDeLaPropuesta(propuesta),
+            lineasDelSubtitulo = RENGLONES_DEL_SUBTITULO_DE_LA_PROPUESTA,
+            inicio = { IconoDeCategoria(propuesta.category) },
+            final = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
+                    Cifra(propuesta.amount.roundToLong(), modifier = Modifier.testTag(TAG_TOPE_DE_LA_PROPUESTA))
+                    Casilla(marcada = marcada)
+                }
+            },
+        )
     }
 }
+
+/** Hasta cuántos renglones baja el subtítulo de una propuesta antes de cortarse. Ver [FilaDePropuesta]. */
+private const val RENGLONES_DEL_SUBTITULO_DE_LA_PROPUESTA: Int = 3
+
+/** El tope que se propone, a la derecha de la fila de una propuesta. */
+const val TAG_TOPE_DE_LA_PROPUESTA: String = "tope-de-la-propuesta"
+
+/** «Gastaste $1.020.000 el período pasado»: lo que se gastó, que es de donde sale el tope. */
+internal fun subtituloDeLaPropuesta(propuesta: PropuestaDePresupuesto): String =
+    "Gastaste ${formatCOP(propuesta.gastado.roundToLong())} el período pasado"
 
 /**
  * «Crear este presupuesto» con una sola marcada; «Crear estos N» con varias (y con cero, apagado).

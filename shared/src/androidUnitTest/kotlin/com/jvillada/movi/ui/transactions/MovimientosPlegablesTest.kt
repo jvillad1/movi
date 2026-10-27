@@ -106,7 +106,7 @@ class MovimientosPlegablesTest {
 
     @Test
     fun `un dia plegado esconde sus renglones pero sigue diciendo su flujo`() {
-        composeRule.onNodeWithText("Flujo del día", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("−$69.489", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Las Doce", useUnmergedTree = true).assertIsDisplayed()
 
         composeRule.onNode(hasText("Hoy"), useUnmergedTree = true).performClick()
@@ -114,7 +114,8 @@ class MovimientosPlegablesTest {
 
         composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Las Doce", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Flujo del día", useUnmergedTree = true).assertIsDisplayed()
+        // El flujo del día, con la cifra sola: sin el rótulo «Flujo del día» (vuelta de diseño 14).
+        composeRule.onNodeWithText("Flujo del día", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("−$69.489", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("2 movimientos", substring = true, useUnmergedTree = true).assertIsDisplayed()
         assertTrue(HOY_ISO in DiasPlegadosStore.plegados(), "el pliegue tiene que quedar recordado por fecha")

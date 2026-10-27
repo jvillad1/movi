@@ -6,6 +6,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.theme.ColoresDeMovi
@@ -56,6 +59,18 @@ enum class TonoDeCifra {
      */
     EntreCuentas,
 }
+
+/**
+ * **La variante de una [Cifra], en su semántica** (vuelta de diseño 14). La regla «una sola
+ * [VarianteDeCifra.Heroe] por pantalla» se vigila contando este dato en el árbol de semántica
+ * (`UnaSolaCifraHeroePorPantallaTest`): no depende del texto, del tamaño de la letra ni de un tag por
+ * variante, y no le cambia nada al lector de pantalla. `CifraProtagonista` (la cifra ya escrita, en
+ * `ui/components`) lo marca como [VarianteDeCifra.Heroe], porque lo es.
+ */
+val VarianteDeCifraKey: SemanticsPropertyKey<VarianteDeCifra> = SemanticsPropertyKey("VarianteDeCifra")
+
+/** Ver [VarianteDeCifraKey]. */
+var SemanticsPropertyReceiver.varianteDeCifra: VarianteDeCifra by VarianteDeCifraKey
 
 /** El estilo de una variante, en la escala de textos. Pura. */
 fun estiloDeLaCifra(variante: VarianteDeCifra, textos: TextosDeMovi): TextStyle = when (variante) {
@@ -111,7 +126,7 @@ fun Cifra(
 ) {
     val texto = textoDeLaCifra(monto, moneda, tono, LocalSaldosOcultos.current)
     val estilo = estiloDeLaCifra(variante, Movi.textos).copy(color = colorDeLaCifra(tono, Movi.colores))
-    val conTag = modifier.testTag(TAG_CIFRA)
+    val conTag = modifier.testTag(TAG_CIFRA).semantics { varianteDeCifra = variante }
     // Un renglón siempre: Martian Mono es ancha y a 42 sp «$8.550.000» se partía en un teléfono de
     // 390 dp. La héroe se achica hasta el tamaño de la cifra de tarjeta, no más; la grande (ola R1),
     // hasta el de un monto de fila, porque va en un widget de media pantalla.

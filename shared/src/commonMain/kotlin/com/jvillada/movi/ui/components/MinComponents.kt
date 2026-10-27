@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +28,8 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.components.ds.varianteDeCifra
 import com.jvillada.movi.ui.components.ds.SuperficieConRellenoLibre
 
 /**
@@ -333,7 +336,8 @@ fun CifraProtagonista(text: String, color: Color, modifier: Modifier = Modifier)
     val estilo = Movi.textos.cifra
     BasicText(
         text = text,
-        modifier = modifier,
+        // Es una héroe aunque llegue escrita: cuenta para «una sola por pantalla» (ver `VarianteDeCifraKey`).
+        modifier = modifier.semantics { varianteDeCifra = VarianteDeCifra.Heroe },
         style = estilo.copy(color = color),
         maxLines = 1,
         softWrap = false,

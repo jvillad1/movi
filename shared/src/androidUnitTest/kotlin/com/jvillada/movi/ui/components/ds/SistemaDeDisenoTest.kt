@@ -12,6 +12,11 @@ import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -19,6 +24,8 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -32,6 +39,7 @@ import com.jvillada.movi.shared.model.marcaDelBanco
 import androidx.compose.ui.graphics.Color
 import com.jvillada.movi.theme.COLORES_CLAROS
 import com.jvillada.movi.theme.COLORES_OSCUROS
+import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.LocalSaldosOcultos
@@ -111,6 +119,9 @@ class SistemaDeDisenoTest {
             )
             Cifra(3_240_000, VarianteDeCifra.Heroe)
             BarraDeProgreso(0.4f)
+            // Vuelta de diseño 14: la casilla, sola (con su toque) y dentro de algo que se marca entero.
+            Casilla(marcada = true, onCambiar = {})
+            Casilla(marcada = false)
             EsqueletoDeFila()
             // Ola R1: la tarjeta de cuenta del carrusel y los widgets del Inicio.
             TarjetaDeCuenta(
@@ -174,6 +185,37 @@ class SistemaDeDisenoTest {
         assertTrue(altoDe(TAG_BOTON, 0) >= Medida.objetivoTactil, "el botón M mide ${altoDe(TAG_BOTON, 0)}")
         assertEquals(Medida.altoChico, altoDe(TAG_BOTON, 1), "el botón S se dibuja a 36")
         assertTrue(altoTactilDe(TAG_BOTON, 1) >= Medida.objetivoTactil, "el toque del botón S mide ${altoTactilDe(TAG_BOTON, 1)}")
+    }
+
+    /**
+     * Vuelta de diseño 14: la casilla que se toca sola mide 48 × 48 (la caja, [Icono.l]), dice
+     * «casilla» y su estado, y cambia al tocarla. La de adentro de una fila que se marca entera no se
+     * toca: solo dice el estado, con la misma caja.
+     */
+    @Test
+    fun `la casilla mide 48 de toque, dice su estado y cambia`() {
+        var marcada by mutableStateOf(false)
+        montar {
+            Column {
+                Casilla(marcada = marcada, onCambiar = { marcada = it }, modifier = Modifier.testTag("sola"))
+                Casilla(marcada = true, modifier = Modifier.testTag("en-una-fila"))
+            }
+        }
+        val sola = composeRule.onNodeWithTag("sola")
+        sola.assertIsOff()
+        with(composeRule.density) {
+            val tamano = sola.fetchSemanticsNode().size
+            assertEquals(Medida.objetivoTactil, tamano.width.toDp(), "ancho de la casilla")
+            assertEquals(Medida.objetivoTactil, tamano.height.toDp(), "alto de la casilla")
+            assertEquals(Icono.l, composeRule.onAllNodesWithTag(TAG_CASILLA, useUnmergedTree = true)[0].fetchSemanticsNode().size.width.toDp())
+        }
+        assertEquals(Role.Checkbox, sola.fetchSemanticsNode().config[SemanticsProperties.Role])
+        sola.performClick()
+        composeRule.waitForIdle()
+        sola.assertIsOn()
+        assertTrue(marcada)
+        // La de la fila no tiene toque propio.
+        assertTrue(SemanticsActions.OnClick !in composeRule.onNodeWithTag("en-una-fila").fetchSemanticsNode().config)
     }
 
     /** Vuelta de diseño 5: el tono del título de una fila sale del tema, nunca de un `Color` suelto. */

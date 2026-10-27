@@ -32,7 +32,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.DEBITO_DE_REGLA_SIN_CUENTA
-import com.jvillada.movi.ui.components.CasillaDeSeleccion
+import com.jvillada.movi.ui.components.ds.Casilla
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.sirvePara
 import com.jvillada.movi.shared.model.cuentasPara
@@ -916,7 +916,7 @@ private fun CasillaDelDebitoAutomatico(marcada: Boolean, enabled: Boolean, onCam
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
-        CasillaDeSeleccion(marcada = marcada)
+        Casilla(marcada = marcada)
         Column(modifier = Modifier.weight(1f)) {
             Text(TITULO_DEL_DEBITO_DE_LA_REGLA, style = Movi.textos.cuerpo, color = Movi.colores.texto)
             Spacer(Modifier.height(Espacio.xxs))
