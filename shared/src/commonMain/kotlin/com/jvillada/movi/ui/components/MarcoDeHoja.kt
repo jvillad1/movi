@@ -477,18 +477,31 @@ private fun HojaDesdeAbajo(
     fun reclamarFoco() {
         alcance.launch { runCatching { foco.requestFocus() } }
     }
+    val pila = LocalPilaDeFocoDeHojas.current ?: remember { PilaDeFocoDeHojas() }
+    // **El panel con teclas también entra a la pila del foco** (vuelta de diseño 23). Antes recuperaba
+    // el foco *siempre* que lo perdía; con otra hoja abierta encima —«Repartir este gasto» sobre
+    // Agregar— la de arriba lo pedía, este lo recuperaba, la de arriba lo volvía a pedir… sin fin: en
+    // la web la página dejaba de responder. Ahora solo lo recupera si es la hoja de arriba, y cuando
+    // la de arriba se cierra la pila se lo devuelve ([PilaDeFocoDeHojas.cerrar]).
+    val panelConTeclas = remember { PilaDeFocoDeHojas.Hoja(reclamar = { reclamarFoco() }) }
     val conTeclado = if (onTecla == null) {
         Modifier
     } else {
         Modifier
             .onPreviewKeyEvent { teclaActual?.invoke(it) ?: false }
             // Si el foco se va del panel —se cerró el sub-editor cuyo campo lo tenía—, vuelve:
-            // si no, la tecla siguiente no le llega a nadie.
-            .onFocusChanged { if (!it.hasFocus) reclamarFoco() }
+            // si no, la tecla siguiente no le llega a nadie. Solo si nadie se abrió encima.
+            .onFocusChanged { if (!it.hasFocus && pila.esLaDeArriba(panelConTeclas)) reclamarFoco() }
             .focusRequester(foco)
             .focusable()
     }
-    if (onTecla != null) LaunchedEffect(Unit) { reclamarFoco() }
+    if (onTecla != null) {
+        DisposableEffect(pila) {
+            pila.abrir(panelConTeclas)
+            onDispose { pila.cerrar(panelConTeclas) }
+        }
+        LaunchedEffect(Unit) { reclamarFoco() }
+    }
     // Con teclado físico y sin [onTecla] (que ya le da el foco al panel), el velo es un destino de
     // foco para que Escape le llegue a alguien aunque nadie haya tocado un campo. Lo pide al abrir
     // **solo si nadie de adentro lo tomó** (un buscador que se enfoca solo se lo queda), y lo
@@ -496,7 +509,6 @@ private fun HojaDesdeAbajo(
     val veloConFoco = onTecla == null && LocalHayTecladoFisico.current
     val focoDelVelo = remember { FocusRequester() }
     var adentroHayFoco by remember { mutableStateOf(false) }
-    val pila = LocalPilaDeFocoDeHojas.current ?: remember { PilaDeFocoDeHojas() }
     val estaHoja = remember {
         PilaDeFocoDeHojas.Hoja(reclamar = { alcance.launch { runCatching { focoDelVelo.requestFocus() } } })
     }

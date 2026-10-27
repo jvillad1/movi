@@ -6,7 +6,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import com.jvillada.movi.ui.components.CascaraDeAncho
+import com.jvillada.movi.ui.components.LocalHayTecladoFisico
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
@@ -159,15 +167,39 @@ class RepartirEnAgregarTest {
         composeRule.waitUntil(5_000) { cerrada == 1 }
     }
 
+    /**
+     * **Con teclado físico (la web), abrir la hoja no cuelga la página.** La hoja de Agregar atiende
+     * las teclas y recuperaba el foco *siempre* que lo perdía; la de «Repartir este gasto», encima,
+     * recupera el suyo cuando es la de arriba y lo pierde. Las dos se lo quitaban sin fin: el
+     * navegador dejaba de responder al tocar el ícono (Robolectric sin teclado no lo veía). Con la
+     * cáscara de la app (la pila del foco de las hojas) y el teclado puesto, la hoja abre, el foco se
+     * queda quieto y las teclas son de la hoja de arriba; al cerrarla vuelven a Agregar.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun con_teclado_fisico_abrir_la_hoja_no_se_queda_peleando_el_foco() {
+        montarYEscribir45000(tecladoFisico = true)
+        abrirLaHoja()
+
+        composeRule.onNodeWithText(TITULO_REPARTIR_ESTE_GASTO).assertIsDisplayed()
+        assertEquals(1, pedidosDeEspacios, "los espacios se piden una vez, no en cada vuelta")
+        // Un dígito ahora es del campo de la hoja (la de arriba), no de las teclas de Agregar.
+        composeRule.onRoot().performKeyInput { pressKey(Key.Seven) }
+        composeRule.waitForIdle()
+        assertEquals("45000", textoDelMontoDeLaHoja().filter(Char::isDigit), "Agregar no se quedó con la tecla")
+    }
+
     // ── Andamio ───────────────────────────────────────────────────────────────────────────
+
+    private var pedidosDeEspacios = 0
 
     /** Cuántas veces falla `repartirMovimiento` antes de funcionar (sin red, o el movimiento sin subir). */
     private var fallosDelReparto = 0
 
-    private fun montarYEscribir45000() {
+    private fun montarYEscribir45000(tecladoFisico: Boolean = false) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(nu)
-            override suspend fun getEspacios(): List<Espacio> = listOf(casa)
+            override suspend fun getEspacios(): List<Espacio> = listOf(casa).also { pedidosDeEspacios++ }
             override suspend fun postEvent(event: FinancialEvent): FinancialEvent = event.also { guardados += it }
             override suspend fun repartirMovimiento(espacioId: String, eventoId: String): GastoDelEspacio {
                 if (fallosDelReparto > 0) {
@@ -181,18 +213,21 @@ class RepartirEnAgregarTest {
                 gasto.also { anotados += it }
         }
         composeRule.setContent {
-            MoviTheme {
-                Column(Modifier.fillMaxSize()) {
-                    Box(Modifier.fillMaxWidth().weight(1f)) {
-                        QuickAddScreen(
-                            onDismiss = {},
-                            onSaved = { cerrada++ },
-                            onSavedEvent = { ofrecidos += it },
-                        )
+            // La cáscara de la app: la pila del foco de las hojas es una sola, como en `App.kt`.
+            CompositionLocalProvider(LocalHayTecladoFisico provides tecladoFisico) { MoviTheme {
+                CascaraDeAncho(Modifier.fillMaxSize()) {
+                    Column(Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxWidth().weight(1f)) {
+                            QuickAddScreen(
+                                onDismiss = {},
+                                onSaved = { cerrada++ },
+                                onSavedEvent = { ofrecidos += it },
+                            )
+                        }
+                        Spacer(Modifier.height(64.dp))
                     }
-                    Spacer(Modifier.height(64.dp))
                 }
-            }
+            } }
         }
         composeRule.waitForIdle()
         composeRule.waitUntil(5_000) {
