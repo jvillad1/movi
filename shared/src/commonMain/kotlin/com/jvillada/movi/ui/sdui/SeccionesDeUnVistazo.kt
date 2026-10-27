@@ -98,6 +98,7 @@ import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_DETALLE_DEL_HERO
 import com.jvillada.movi.ui.dashboard.TeQuedanDeHoy
 import com.jvillada.movi.ui.dashboard.alcanzaParaElDisponible
 import com.jvillada.movi.ui.dashboard.teQuedanDelInicio
+import com.jvillada.movi.ui.dashboard.elHeroePideLaCuenta
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 
@@ -153,7 +154,7 @@ internal fun HeroDeUnVistazo(
     // Con la forma del héroe y no la de un vacío de pantalla entera: el héroe mide un renglón, una
     // cifra, un detalle y el veredicto, y el vacío ocupa lo mismo (título, detalle y un botón chico),
     // así ver que no hay cuentas no lo agranda (la regla de los 8 dp de `EsqueletosDelInicioTest`).
-    if (data.accounts != null && data.accounts.isEmpty()) {
+    if (elHeroePideLaCuenta(data)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

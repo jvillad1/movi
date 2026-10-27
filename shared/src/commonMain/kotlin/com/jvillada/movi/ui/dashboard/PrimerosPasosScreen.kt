@@ -36,6 +36,10 @@ import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.extractos.TiposDeArchivo
+import com.jvillada.movi.ui.extractos.rememberFilePicker
+import com.jvillada.movi.ui.papeles.ArchivoCompartido
+import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
@@ -103,6 +107,11 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
     // debajo de ella. Acá duele más que en ninguna: esta pantalla existe para contestar «¿me
     // falta algo?».
     val refreshTick = LocalRefreshTick.current
+    // «Sube un extracto y Movi anota los movimientos»: la misma puerta de papeles que «Comprobante» del
+    // Inicio (la hoja «Movi está leyendo…» de App.kt lo toma).
+    val elegirUnPapel = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
+        PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
+    }
 
     LaunchedEffect(refreshKey, refreshTick) {
         fallo = false
@@ -179,6 +188,7 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
                     data = data,
                     onNavigate = onNavigate,
                     onShowCreateSheet = { showCreateSheet = true },
+                    onSubirUnPapel = elegirUnPapel,
                 )
             }
             Spacer(Modifier.height(Espacio.xl))

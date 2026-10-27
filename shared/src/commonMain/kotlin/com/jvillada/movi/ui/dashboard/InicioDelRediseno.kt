@@ -7,7 +7,6 @@ import com.jvillada.movi.shared.model.TipoDeAnomalia
 import com.jvillada.movi.shared.model.fraseDelCierre
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.tituloDelPeriodo
-import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ANCHO_DE_LECTURA
 import com.jvillada.movi.ui.components.WindowWidthClass
@@ -37,13 +36,23 @@ fun saludoDelInicio(nombre: String?): String {
 }
 
 /**
- * El período, debajo del saludo: «Del 25 de octubre al 24 de noviembre» con un corte propio, «Octubre
- * 2026» con el mes de calendario, o `null` mientras el perfil no contesta.
+ * El período, debajo del saludo: su nombre, «Noviembre 2026», con cualquier corte; o `null` mientras el
+ * perfil no contesta.
+ *
+ * **Corto siempre** (vuelta de diseño 11). Con un corte a mitad de mes era el rango entero, «Del 23 de
+ * octubre al 24 de noviembre», y a 360 dp el subtítulo de un renglón se cortaba en «Del 23 de octubre
+ * al 24 de no…». El rango completo sigue donde se lee con lugar: la línea del período de Plan y de
+ * Movimientos. Es el mismo nombre que dicen «Tus períodos» y el server ([tituloDelPeriodo]).
  */
-fun periodoDelEncabezado(data: DashboardData): String? {
-    val periodo = data.periodoActual ?: return null
-    return rangoLegibleDe(periodo, data.ajustesDePeriodo) ?: tituloDelPeriodo(periodo)
-}
+fun periodoDelEncabezado(data: DashboardData): String? = data.periodoActual?.let(::tituloDelPeriodo)
+
+/**
+ * **El héroe pide la primera cuenta**: las cuentas ya contestaron y no hay ninguna (`null` es que
+ * todavía no se sabe, y ahí va el esqueleto). Con esto el héroe es el vacío que enseña con «Crear mi
+ * primera cuenta», y es el ÚNICO llamado a crearla en el Inicio (vuelta de diseño 11): «Primeros pasos»
+ * va debajo del héroe y sin ese paso, en vez de arriba repitiendo el mismo botón.
+ */
+fun elHeroePideLaCuenta(data: DashboardData): Boolean = data.accounts?.isEmpty() == true
 
 // ── La cuadrícula de acciones ────────────────────────────────────────────────
 
@@ -107,9 +116,6 @@ fun pendientesPorRevisar(data: DashboardData): Int = data.pendingSms + data.debi
 
 /** Cuántas propuestas pinta el Inicio como mucho. El resto está en «Ver todo» (Por revisar). */
 const val TOPE_DE_PROPUESTAS: Int = 4
-
-/** La línea tranquila de «Movi propone hoy» cuando no hay nada que decidir. */
-const val NADA_POR_DECIDIR: String = "Nada por decidir hoy"
 
 /** De qué es una propuesta. Una tarjeta por tipo: varias cosas del mismo tipo se dicen en una. */
 enum class TipoDePropuesta { PAGO, DEBITO, AVISOS, CUADRE, ANOMALIA, CIERRE }

@@ -51,6 +51,7 @@ import com.jvillada.movi.ui.dashboard.upcomingPaymentsWithin
 import com.jvillada.movi.ui.dashboard.visibleSections
 import com.jvillada.movi.ui.dashboard.TIPOS_DE_WIDGET
 import com.jvillada.movi.ui.dashboard.bloquesDelInicio
+import com.jvillada.movi.ui.dashboard.elHeroePideLaCuenta
 
 /** La guía de primeros pasos cuando el Inicio va en dos columnas: arriba de la izquierda. */
 const val TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA: String = "inicio-guia-en-la-columna-izquierda"
@@ -110,6 +111,13 @@ fun SduiRenderer(
     // Re-tocar «Hoy» estando en Hoy vuelve arriba (ver [SubirAlRetocarLaPestana]).
     SubirAlRetocarLaPestana(scroll)
 
+    // Vuelta de diseño 11: sin cuentas, el héroe ES el llamado a crear la primera («Aquí vas a ver tu
+    // plata»), así que va primero y la guía va debajo de él (sin ese paso, ver `PrimerosPasosCard`).
+    // Con la guía arriba, el Inicio de alguien nuevo decía «Crea tu primera cuenta» dos veces seguidas.
+    val guiaDebajoDelHeroe = header != null && elHeroePideLaCuenta(data) && sections.any { it.type == "HERO_BALANCE" }
+    val guiaArriba = header.takeUnless { guiaDebajoDelHeroe }
+    val guiaDespuesDelHeroe = header.takeIf { guiaDebajoDelHeroe }
+
     BoxWithConstraints(modifier = modifier) {
         val columnas = columnasDelInicio(sections, maxWidth)
         Column(
@@ -122,25 +130,26 @@ fun SduiRenderer(
             // En una columna, la guía va arriba con el ancho de la columna. En dos (Ola W3) va arriba
             // de la IZQUIERDA —la del estado, la que se lee primero—, alineada con sus bordes: centrada
             // en 720 encima de dos columnas que suman 1.064 no caía sobre ninguna de las dos.
-            if (header != null && !columnas.sonDos) {
-                Box(Modifier.widthIn(max = ANCHO_DE_UNA_COLUMNA)) { header() }
+            if (guiaArriba != null && !columnas.sonDos) {
+                Box(Modifier.widthIn(max = ANCHO_DE_UNA_COLUMNA)) { guiaArriba() }
                 Spacer(Modifier.height(Movi.espacios.margen))
             }
             if (columnas.sonDos) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                     Column(modifier = Modifier.weight(1f)) {
-                        if (header != null) {
-                            Box(Modifier.fillMaxWidth().testTag(TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA)) { header() }
+                        if (guiaArriba != null) {
+                            Box(Modifier.fillMaxWidth().testTag(TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA)) { guiaArriba() }
                             Spacer(Modifier.height(Movi.espacios.margen))
                         }
-                        ColumnaDeSecciones(columnas.izquierda, data, acciones, Modifier.fillMaxWidth())
+                        ColumnaDeSecciones(columnas.izquierda, data, acciones, Modifier.fillMaxWidth(), guiaDespuesDelHeroe)
                     }
-                    ColumnaDeSecciones(columnas.derecha, data, acciones, Modifier.weight(1f))
+                    ColumnaDeSecciones(columnas.derecha, data, acciones, Modifier.weight(1f), guiaDespuesDelHeroe)
                 }
             } else {
                 ColumnaDeSecciones(
                     columnas.izquierda, data, acciones,
                     Modifier.fillMaxWidth().widthIn(max = ANCHO_DE_UNA_COLUMNA),
+                    guiaDespuesDelHeroe,
                 )
             }
             if (footer != null) {
@@ -164,6 +173,9 @@ private class AccionesDelRenderer(
  * Una columna de secciones, con [com.jvillada.movi.theme.Medida.entreSecciones] entre bloques: el
  * Inicio se lee de a una pregunta por vez. Los widgets seguidos («Falta por pagar», «En qué se va») van
  * juntos en un bloque, lado a lado (ver [bloquesDelInicio]).
+ *
+ * [despuesDelHeroe] va justo debajo del héroe, como un bloque más (la guía de primeros pasos sin
+ * cuentas); en una columna sin héroe no se pinta.
  */
 @Composable
 private fun ColumnaDeSecciones(
@@ -171,6 +183,7 @@ private fun ColumnaDeSecciones(
     data: DashboardData,
     acciones: AccionesDelRenderer,
     modifier: Modifier,
+    despuesDelHeroe: (@Composable () -> Unit)? = null,
 ) {
     Column(modifier = modifier) {
         bloquesDelInicio(sections).forEachIndexed { index, bloque ->
@@ -179,6 +192,10 @@ private fun ColumnaDeSecciones(
                 WidgetsDelInicio(bloque.map { it.type }, data, acciones.onNavigate)
             } else {
                 SduiSection(bloque.single(), data, acciones)
+            }
+            if (despuesDelHeroe != null && bloque.any { it.type == "HERO_BALANCE" }) {
+                Spacer(Modifier.height(Medida.entreSecciones))
+                despuesDelHeroe()
             }
         }
     }

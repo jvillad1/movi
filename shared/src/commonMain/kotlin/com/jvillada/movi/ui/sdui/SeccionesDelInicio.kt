@@ -73,7 +73,6 @@ import com.jvillada.movi.ui.dashboard.AccionDelInicio
 import com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.LocalCargandoElInicio
-import com.jvillada.movi.ui.dashboard.NADA_POR_DECIDIR
 import com.jvillada.movi.ui.dashboard.PropuestaDelInicio
 import com.jvillada.movi.ui.dashboard.TOPE_DE_PROPUESTAS
 import com.jvillada.movi.ui.dashboard.TipoDePropuesta
@@ -110,9 +109,6 @@ import kotlinx.coroutines.launch
 
 /** La sección «Movi propone hoy». */
 const val TAG_PROPUESTAS_DEL_INICIO: String = "inicio-propuestas"
-
-/** La línea tranquila «Nada por decidir hoy». */
-const val TAG_NADA_POR_DECIDIR: String = "inicio-nada-por-decidir"
 
 /** El esqueleto de una propuesta, mientras las lecturas no llegan. */
 const val TAG_ESQUELETO_DE_PROPUESTA: String = "inicio-esqueleto-de-propuesta"
@@ -194,9 +190,10 @@ private fun iconoDe(tipo: TipoDePropuesta): ImageVector = when (tipo) {
 
 /**
  * **«Movi propone hoy»** (camino 5): una [TarjetaDePropuesta] por cosa que pide decisión, de la más
- * urgente a la menos, hasta [TOPE_DE_PROPUESTAS]. «Ver todo» lleva a Por revisar. Sin nada pendiente,
- * una línea tranquila — y solo si las lecturas alcanzan para afirmarlo (`puedeAfirmarVacio`):
- * mientras cargan va el esqueleto de una tarjeta, nunca un «nada» que todavía no se sabe.
+ * urgente a la menos, hasta [TOPE_DE_PROPUESTAS]. «Ver todo» lleva a Por revisar. Mientras las
+ * lecturas cargan va el esqueleto de una tarjeta. Sin nada pendiente y con todo leído
+ * (`puedeAfirmarVacio`) la sección no se pinta (vuelta de diseño 11, ver `visibleSections`): antes
+ * decía «Nada por decidir hoy», una sección entera para decir que no había nada.
  */
 @Composable
 internal fun PropuestasDelInicioSection(
@@ -235,12 +232,7 @@ internal fun PropuestasDelInicioSection(
             aLaVista.isNotEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                 aLaVista.forEach { propuesta -> TarjetaDelFeed(propuesta, hacer) }
             }
-            data.puedeAfirmarVacio -> Text(
-                text = NADA_POR_DECIDIR,
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.textoMedio,
-                modifier = Modifier.testTag(TAG_NADA_POR_DECIDIR),
-            )
+            // Sin nada que decidir y con todo leído, la sección no llega hasta acá (`visibleSections`).
             cargando -> EsqueletoDePropuesta()
             else -> Unit
         }

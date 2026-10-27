@@ -91,12 +91,18 @@ const val TAG_GRAFICA_DE_LA_CAJA = "grafica-de-la-caja"
 /**
  * Lo que la sección necesita de [DashboardData] para proyectar, o `null` si todavía falta algo: el
  * período, la lista del período (vencimientos y ocurrencias) y Tu plata.
+ *
+ * **Sin cuentas no hay caja** (vuelta de diseño 11): las cuentas contestaron vacías y Tu plata sería
+ * un $0 que nadie anotó. La sección decía «Hoy es tu día más justo: tienes $0» sobre una línea plana
+ * en cero, una frase falsa para quien no cargó nada. Lo mismo vale para «Tu día más justo» de Hoy, que
+ * sale de acá.
  */
 internal fun cajaDelPeriodoDe(
     data: DashboardData,
     gasto: GastoDelDiaADia,
     hoy: LocalDate,
 ): CajaProyectada? {
+    if (sinCuentas(data)) return null
     val periodo = data.periodoActual ?: return null
     if (data.upcoming == null || data.ocurrencias == null) return null
     val pagos = checklistDelPeriodoDe(data)
@@ -117,6 +123,9 @@ internal fun cajaDelPeriodoDe(
         ultimoDia = ultimoDia.toString(),
     )
 }
+
+/** Las cuentas ya contestaron y no hay ninguna (`null` es que todavía no se sabe). */
+private fun sinCuentas(data: DashboardData): Boolean = data.accounts?.isEmpty() == true
 
 // ── Lo que dice ─────────────────────────────────────────────────────────────
 //
@@ -193,6 +202,9 @@ internal fun SeccionCajaProyectada(
     /** El aire de abajo, solo cuando la sección se pinta: en la lista la sigue el resto del tablero. */
     aireAbajo: Boolean = false,
 ) {
+    // Sin cuentas no hay nada que proyectar, y se sabe sin esperar el gasto del día a día: ni el
+    // esqueleto, ni el error de esa lectura (ver [cajaDelPeriodoDe]).
+    if (sinCuentas(data)) return
     var reintento by remember { mutableStateOf(0) }
     val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = recarga + reintento) {
         Repositories.wallets.getGastoDelDiaADia()
