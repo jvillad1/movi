@@ -53,7 +53,8 @@ import kotlin.test.assertTrue
  *   pasaste por $120.700», en `sale`). El porcentaje va neutro y chico, sin píldora; la única píldora
  *   es la del resumen («Sobrepasados · 1»). Una que va bien dice «Te quedan $16.100» en el texto medio;
  * - cada propuesta es una `Fila`: el tope con `Cifra` a la derecha, la casilla del sistema después,
- *   y la fila entera se marca (toque de 48 o más, con semántica de casilla);
+ *   y la fila entera se marca (toque de 48 o más, con semántica de casilla); su subtítulo, «Gastaste
+ *   $X», entra en un renglón (vuelta de diseño 16);
  * - nada se recorta.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -195,6 +196,10 @@ class PresupuestosConJerarquiaTest {
             val tope = adentro.single { it.config.getOrNull(SemanticsProperties.TestTag) == TAG_TOPE_DE_LA_PROPUESTA }
             val casilla = adentro.single { it.config.getOrNull(SemanticsProperties.TestTag) == TAG_CASILLA }
             assertEquals(subtituloDeLaPropuesta(p), texto(subtitulo))
+            // Vuelta de diseño 16: «Gastaste $X», sin «el período pasado» (el párrafo de arriba ya
+            // dice las fechas), entra en un renglón aun al lado de un tope de siete cifras.
+            assertEquals("Gastaste ${'$'}", texto(subtitulo).take(10))
+            assertEquals(1, disposicion(subtitulo).lineCount, "${p.category}: «${texto(subtitulo)}» en un renglón a 360 dp")
             assertEquals(VarianteDeCifra.Fila, tope.config[VarianteDeCifraKey])
             assertTrue(texto(tope).startsWith("$"), "el tope es una cifra: «${texto(tope)}»")
             assertTrue(tope.boundsInRoot.left >= titulo.boundsInRoot.right, "${p.category}: el tope va a la derecha del nombre")
