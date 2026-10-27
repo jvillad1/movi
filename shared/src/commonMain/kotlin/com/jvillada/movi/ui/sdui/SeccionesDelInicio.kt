@@ -1,6 +1,16 @@
 package com.jvillada.movi.ui.sdui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.key
+import com.jvillada.movi.ui.components.LocalWindowWidthClass
+import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.ui.dashboard.CuentaDelCarrusel
+import com.jvillada.movi.ui.dashboard.tarjetasPorRenglon
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -109,6 +119,9 @@ const val TAG_ESQUELETO_DE_PROPUESTA: String = "inicio-esqueleto-de-propuesta"
 
 /** El carrusel «Tus cuentas». */
 const val TAG_CARRUSEL_DE_CUENTAS: String = "inicio-carrusel-de-cuentas"
+
+/** La grilla «Tus cuentas» de pantalla ancha (vuelta de diseño 9). */
+const val TAG_GRILLA_DE_CUENTAS: String = "inicio-grilla-de-cuentas"
 
 /** El esqueleto del carrusel. */
 const val TAG_ESQUELETO_DEL_CARRUSEL: String = "inicio-esqueleto-del-carrusel"
@@ -273,7 +286,9 @@ private fun EsqueletoDePropuesta() {
 /**
  * **«Tus cuentas»**: el carrusel de tarjetas con el color y la marca de cada banco (camino 1), la
  * siguiente asomando. Tocar una abre su detalle; «Ver todo» lleva a Patrimonio. Mientras las cuentas
- * no contestan, una tarjeta esqueleto del mismo alto.
+ * no contestan, una tarjeta esqueleto del mismo alto. Fuera del teléfono (vuelta de diseño 9), una
+ * grilla de tarjetas enteras en vez del carrusel ([tarjetasPorRenglon]): el tipo SDUI no cambia, es
+ * cómo el cliente pinta la sección.
  */
 @Composable
 internal fun CuentasDelInicioSection(data: DashboardData, onNavigate: (Screen) -> Unit) {
@@ -296,24 +311,78 @@ internal fun CuentasDelInicioSection(data: DashboardData, onNavigate: (Screen) -
             )
             return@Column
         }
-        LazyRow(
-            modifier = Modifier.fillMaxWidth().testTag(TAG_CARRUSEL_DE_CUENTAS),
-            contentPadding = PaddingValues(horizontal = Medida.margenDePantalla),
-            horizontalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
-        ) {
-            items(cuentas, key = { it.cuenta.id }) { c ->
-                TarjetaDeCuenta(
-                    nombre = c.cuenta.name,
-                    tipo = c.tipo,
-                    rotuloDelSaldo = c.rotuloDelSaldo,
-                    saldo = c.saldo,
-                    moneda = c.moneda,
-                    marca = marcaDelBanco(c.cuenta.name),
-                    icono = iconoDelTipoDeCuenta(c.cuenta.type).first,
-                    onClick = { onNavigate(c.destino) },
-                    // Con una sola cuenta no hay siguiente que asome: la tarjeta va a todo el ancho.
-                    modifier = Modifier.fillParentMaxWidth(if (cuentas.size == 1) 1f else FRACCION_DE_TARJETA_DE_CUENTA),
-                )
+        // Vuelta de diseño 9: fuera del teléfono, una grilla (ver [tarjetasPorRenglon]). En el
+        // teléfono no se mide nada: el carrusel de siempre, sin un `SubcomposeLayout` de más.
+        if (LocalWindowWidthClass.current == WindowWidthClass.Compact) {
+            CarruselDeCuentas(cuentas, onNavigate)
+        } else {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val porRenglon = tarjetasPorRenglon(LocalWindowWidthClass.current, maxWidth, cuentas.size)
+                if (porRenglon == 0) CarruselDeCuentas(cuentas, onNavigate)
+                else GrillaDeCuentas(cuentas, porRenglon, onNavigate)
+            }
+        }
+    }
+}
+
+/** La tarjeta de una cuenta del Inicio, en el carrusel o en la grilla. */
+@Composable
+private fun TarjetaDelInicio(c: CuentaDelCarrusel, onNavigate: (Screen) -> Unit, modifier: Modifier) {
+    TarjetaDeCuenta(
+        nombre = c.cuenta.name,
+        tipo = c.tipo,
+        rotuloDelSaldo = c.rotuloDelSaldo,
+        saldo = c.saldo,
+        moneda = c.moneda,
+        marca = marcaDelBanco(c.cuenta.name),
+        icono = iconoDelTipoDeCuenta(c.cuenta.type).first,
+        onClick = { onNavigate(c.destino) },
+        modifier = modifier,
+    )
+}
+
+/** El carrusel del teléfono: la siguiente tarjeta asoma a la derecha. */
+@Composable
+private fun CarruselDeCuentas(cuentas: List<CuentaDelCarrusel>, onNavigate: (Screen) -> Unit) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_CARRUSEL_DE_CUENTAS),
+        contentPadding = PaddingValues(horizontal = Medida.margenDePantalla),
+        horizontalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
+    ) {
+        items(cuentas, key = { it.cuenta.id }) { c ->
+            TarjetaDelInicio(
+                c, onNavigate,
+                // Con una sola cuenta no hay siguiente que asome: la tarjeta va a todo el ancho.
+                Modifier.fillParentMaxWidth(if (cuentas.size == 1) 1f else FRACCION_DE_TARJETA_DE_CUENTA),
+            )
+        }
+    }
+}
+
+/**
+ * La grilla de pantalla ancha: [porRenglon] tarjetas enteras por renglón, con la misma separación
+ * del carrusel (`Medida.dentroDeSeccion`) a lo ancho y a lo alto. Las de un renglón miden lo mismo
+ * de alto (un nombre en dos renglones no deja a su vecina más baja), y el último renglón deja sus
+ * lugares vacíos en vez de estirar sus tarjetas.
+ */
+@Composable
+private fun GrillaDeCuentas(cuentas: List<CuentaDelCarrusel>, porRenglon: Int, onNavigate: (Screen) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Medida.margenDePantalla)
+            .testTag(TAG_GRILLA_DE_CUENTAS),
+        verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
+    ) {
+        cuentas.chunked(porRenglon).forEach { renglon ->
+            Row(
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
+            ) {
+                renglon.forEach { c ->
+                    key(c.cuenta.id) { TarjetaDelInicio(c, onNavigate, Modifier.weight(1f).fillMaxHeight()) }
+                }
+                repeat(porRenglon - renglon.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
