@@ -294,8 +294,8 @@ class InicioDelRedisenoEnPantallaTest {
         assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.TRASPASO), navegado.last())
         composeRule.onNodeWithContentDescription("Pagar una tarjeta", useUnmergedTree = true).performClick()
         assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.PAGO_DE_TARJETA), navegado.last())
-        // La insignia dice cuánto espera en Por revisar: 3 avisos y 1 débito.
-        composeRule.onNodeWithContentDescription("Revisar los avisos, 4", useUnmergedTree = true).performClick()
+        // La insignia dice cuánto espera en Por revisar, y de qué es (vuelta de diseño 22): 3 avisos y 1 débito.
+        composeRule.onNodeWithContentDescription("Revisar los avisos (3 avisos · 1 débito automático), 4", useUnmergedTree = true).performClick()
         assertEquals(Screen.PorRevisar, navegado.last())
         composeRule.onNodeWithContentDescription("Preguntarle a Movi", useUnmergedTree = true).performClick()
         assertEquals(Screen.AIChat(), navegado.last())

@@ -95,6 +95,11 @@ import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.pendientesPorRevisar
 import com.jvillada.movi.ui.dashboard.propuestasALaVista
 import com.jvillada.movi.ui.dashboard.propuestasDelInicio
+import com.jvillada.movi.ui.dashboard.EL_PAGO_ESTA_ARRIBA
+import com.jvillada.movi.ui.dashboard.descripcionDeLaInsignia
+import com.jvillada.movi.ui.dashboard.filasDelWidgetDeFalta
+import com.jvillada.movi.ui.dashboard.yNMas
+import com.jvillada.movi.shared.model.cifraDelPago
 import kotlinx.coroutines.launch
 
 /**
@@ -124,6 +129,9 @@ const val TAG_ESQUELETO_DEL_CARRUSEL: String = "inicio-esqueleto-del-carrusel"
 
 /** El widget «Falta por pagar». */
 const val TAG_WIDGET_FALTA_POR_PAGAR: String = "inicio-widget-falta-por-pagar"
+
+/** El renglón «y N más» (o «Está arriba…») del widget «Falta por pagar». */
+const val TAG_RESTO_DEL_WIDGET_FALTA_POR_PAGAR: String = "inicio-widget-falta-por-pagar-resto"
 
 /** El título de la fila de los widgets. */
 const val TITULO_DE_LOS_WIDGETS: String = "Tus widgets"
@@ -170,7 +178,8 @@ internal fun AccionesDelInicioSection(
                 },
                 destacada = accion == AccionDelInicio.ANOTAR_GASTO,
                 insignia = if (accion == AccionDelInicio.REVISAR_AVISOS) insignia else null,
-                descripcion = accion.descripcion,
+                // Vuelta de diseño 22: la insignia dice de qué es su número («2 avisos · 1 movimiento»).
+                descripcion = if (accion == AccionDelInicio.REVISAR_AVISOS) descripcionDeLaInsignia(data) else accion.descripcion,
             )
         },
         modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
@@ -392,10 +401,12 @@ internal fun WidgetsDelInicio(
     tipos: List<String>,
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
+    /** «Movi propone hoy» está en el Inicio: el widget no repite su pago (ver [filasDelWidgetDeFalta]). */
+    conPropuestas: Boolean = false,
 ) {
     @Composable
     fun Uno(tipo: String, modifier: Modifier) = when (tipo) {
-        "CHECKLIST_DEL_PERIODO" -> WidgetFaltaPorPagar(data, onNavigate, modifier)
+        "CHECKLIST_DEL_PERIODO" -> WidgetFaltaPorPagar(data, onNavigate, modifier, conPropuestas)
         else -> WidgetEnQueSeVa(data, onNavigate, modifier)
     }
     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
@@ -419,18 +430,22 @@ const val TODO_PAGADO: String = "Ya salió todo lo del período"
 internal fun lineaCortaDeLoQueFalta(pendientes: Int, total: Int): String =
     if (pendientes == 1) "Falta 1 de $total pagos" else "Faltan $pendientes de $total pagos"
 
-/** Cuántos pagos lista el widget de «Falta por pagar»: los dos que vencen primero. */
-private const val PAGOS_EN_EL_WIDGET = 2
-
 /**
  * **«Falta por pagar»** compacto: cuánto falta (`faltaPorPagar`, la misma de Plan), de cuántos pagos es
- * eso y los dos que vencen primero. Lleva a Plan · Pagos del mes.
+ * eso y los dos primeros de la cola —sin el que ya está en «Movi propone hoy»—, con «y N más» si quedan
+ * sin fila (vuelta de diseño 22, ver [filasDelWidgetDeFalta]). Lleva a Plan · Pagos del mes.
  */
 @Composable
-internal fun WidgetFaltaPorPagar(data: DashboardData, onNavigate: (Screen) -> Unit, modifier: Modifier = Modifier) {
+internal fun WidgetFaltaPorPagar(
+    data: DashboardData,
+    onNavigate: (Screen) -> Unit,
+    modifier: Modifier = Modifier,
+    conPropuestas: Boolean = false,
+) {
     val checklist = checklistDelPeriodoDe(data)
     val total = avanceDelChecklist(checklist).second
-    val pendientes = pagosPendientes(checklist).sortedBy { it.diasParaVencer }
+    val pendientes = pagosPendientes(checklist)
+    val lista = filasDelWidgetDeFalta(data, conPropuestas)
     Widget(
         titulo = "Falta por pagar",
         onClick = { onNavigate(Screen.Plan(com.jvillada.movi.ui.plan.SEGMENTO_PAGOS)) },
@@ -444,7 +459,7 @@ internal fun WidgetFaltaPorPagar(data: DashboardData, onNavigate: (Screen) -> Un
         // Dice que lo de abajo es lo que FALTA, y de cuántos pagos del período (el reclamo del dueño
         // sobre la tarjeta vieja: «solo muestra los faltantes; debería indicarlo»).
         Text(lineaCortaDeLoQueFalta(pendientes.size, total), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        pendientes.take(PAGOS_EN_EL_WIDGET).forEach { pago ->
+        lista.filas.forEach { pago ->
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                     Text(
@@ -456,7 +471,7 @@ internal fun WidgetFaltaPorPagar(data: DashboardData, onNavigate: (Screen) -> Un
                         modifier = Modifier.weight(1f),
                     )
                     // Una tarjeta no tiene cuota: su monto es el saldo, y no se muestra como un pago.
-                    val monto = if (pago.montoEsSaldo) pago.pagoMinimo else pago.monto
+                    val monto = cifraDelPago(pago)
                     if (monto != null) Cifra(monto, VarianteDeCifra.Chica, moneda = pago.moneda)
                 }
                 Text(
@@ -466,6 +481,16 @@ internal fun WidgetFaltaPorPagar(data: DashboardData, onNavigate: (Screen) -> Un
                     maxLines = 1,
                 )
             }
+        }
+        // Las filas más este renglón dan lo que dice «Faltan N»: ninguna lista se recorta callada.
+        val resto = if (lista.soloElDeArriba) EL_PAGO_ESTA_ARRIBA else yNMas(lista.masSinFila)
+        if (resto != null) {
+            Text(
+                text = resto,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.testTag(TAG_RESTO_DEL_WIDGET_FALTA_POR_PAGAR),
+            )
         }
     }
 }

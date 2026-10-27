@@ -56,6 +56,10 @@ class LaCampanaHablaElSistemaTest {
 
     private val datos = DashboardData(
         upcoming = listOf(pago("rr_col", "Colegio", 700_000, 3), pago("rr_int", "Internet", 90_000, -1)),
+        // Vuelta de diseño 22: la campana lee la cola, que sale del checklist del período.
+        ocurrencias = emptyList(),
+        periodoActual = com.jvillada.movi.shared.model.PeriodoFinanciero(2026, 10),
+        ajustesDePeriodo = com.jvillada.movi.shared.model.PeriodSettings(),
         budgets = listOf(Budget("Mercado", 100_000)),
         spentByCategory = mapOf("Mercado" to 150_000L),
         pendingSms = 2,
@@ -118,6 +122,7 @@ class LaCampanaHablaElSistemaTest {
         assertEquals(TonoDeIcono.Peligro, iconoDelAviso(TipoDeNotificacion.BancoMudo).second)
         assertEquals(TonoDeIcono.Peligro, iconoDelAviso(TipoDeNotificacion.PresupuestoSuperado).second)
         assertEquals(TonoDeIcono.Aviso, iconoDelAviso(TipoDeNotificacion.MensajesDelBanco).second)
+        assertEquals(TonoDeIcono.Aviso, iconoDelAviso(TipoDeNotificacion.DebitoPorConfirmar).second)
         assertEquals(TonoDeIcono.Aviso, iconoDelAviso(TipoDeNotificacion.PagoDeTarjetaPorConfirmar).second)
         // Cada tipo tiene su ícono: ninguno se queda sin forma propia.
         assertEquals(

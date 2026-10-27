@@ -17,6 +17,8 @@ import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.soloLoQueLlegoSolo
 import com.jvillada.movi.shared.model.unoPorPago
+import com.jvillada.movi.shared.model.PataPorConfirmar
+import com.jvillada.movi.shared.model.renglonesPorConfirmar
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.sms.mensajesMasRecientesPrimero
 import com.jvillada.movi.ui.transactions.MovementRow
@@ -66,22 +68,72 @@ fun entraronSolos(dias: List<EventDay>): List<FinancialEvent> =
 fun renglonesQueEntraronSolos(dias: List<EventDay>): List<MovementRow> = collapseTransfers(entraronSolos(dias))
 
 /**
- * **Cuánto hay por revisar**, sumando las tres fuentes. Una fuente en `null` —su lectura no
- * contestó— no suma: el número es una invitación a entrar, y adentro la bandeja dice cuál fuente
- * no se pudo leer. Lo que nunca hace es inventar pendientes que no se leyeron.
+ * **Lo que hay por revisar, fuente por fuente** (vuelta de diseño 22). Es el único contador de «Por
+ * revisar»: la insignia de «Avisos» y «Movi propone hoy» en el Inicio, el renglón «N por revisar» de
+ * Movimientos y la campana leen esto, así que no pueden decir números distintos —en la revisión del
+ * diseñador la insignia decía 2, la propuesta «Llegaron 2 avisos» y Movimientos «3 por revisar»: el
+ * tercero era un movimiento que entró solo, y nadie lo decía—. Donde se ve el total se dice también
+ * de qué es ([desgloseDePorRevisar]).
  */
-fun cuantosPorRevisar(
+data class ConteoPorRevisar(
+    /** Avisos del banco por confirmar, **uno por pago** (el mismo pago avisado tres veces cuenta uno). */
+    val avisos: Int = 0,
+    /** Movimientos que entraron solos y esperan en «Por confirmar», contados como renglones. */
+    val movimientos: Int = 0,
+    /** Pagos de tarjeta que Movi encontró y esperan que el dueño los confirme. */
+    val pagosDeTarjeta: Int = 0,
+    /** Lo que el banco cobró solo y Movi propone armado. */
+    val debitos: Int = 0,
+) {
+    /** Todo lo que espera en la bandeja. */
+    val total: Int get() = avisos + movimientos + pagosDeTarjeta + debitos
+
+    /**
+     * Lo que **entró solo** —avisos, movimientos, pagos de tarjeta—, sin los débitos: en «Movi propone
+     * hoy» y en la cola los débitos van aparte, uno por uno, porque la plata ya salió.
+     */
+    val loQueEntroSolo: Int get() = avisos + movimientos + pagosDeTarjeta
+}
+
+/**
+ * **De qué es el número**, en una línea: «2 avisos · 1 movimiento», «1 pago de tarjeta · 1 débito
+ * automático». Solo las fuentes que tienen algo; `null` sin nada. [conDebitos] en `false` deja afuera
+ * los débitos (cuando la cifra que acompaña es [ConteoPorRevisar.loQueEntroSolo]).
+ */
+fun desgloseDePorRevisar(conteo: ConteoPorRevisar, conDebitos: Boolean = true): String? = listOfNotNull(
+    conteo.avisos.takeIf { it > 0 }?.let { if (it == 1) "1 aviso" else "$it avisos" },
+    conteo.movimientos.takeIf { it > 0 }?.let { if (it == 1) "1 movimiento" else "$it movimientos" },
+    conteo.pagosDeTarjeta.takeIf { it > 0 }?.let { if (it == 1) "1 pago de tarjeta" else "$it pagos de tarjeta" },
+    conteo.debitos.takeIf { it > 0 && conDebitos }?.let { if (it == 1) "1 débito automático" else "$it débitos automáticos" },
+).joinToString(" · ").ifEmpty { null }
+
+/**
+ * **Cuánto hay por revisar**, fuente por fuente, sobre lo que la bandeja bajó. Una fuente en `null`
+ * —su lectura no contestó— no suma: el número es una invitación a entrar, y adentro la bandeja dice
+ * cuál fuente no se pudo leer. Lo que nunca hace es inventar pendientes que no se leyeron.
+ */
+fun conteoPorRevisar(
     mensajes: List<SmsMessage>?,
     dias: List<EventDay>?,
     candidatos: List<FinancialEvent>?,
     /** Lo que el banco cobró solo y Movi propone armado (ver [DebitoAutomaticoPorConfirmar]). */
     debitos: List<DebitoAutomaticoPorConfirmar>? = null,
-): Int =
+): ConteoPorRevisar = ConteoPorRevisar(
     // Pagos, no avisos: el mismo pago avisado tres veces cuenta una.
-    (mensajes?.let { pagosPorRevisar(it).size } ?: 0) +
-        (dias?.let { renglonesQueEntraronSolos(it).size } ?: 0) +
-        (candidatos?.size ?: 0) +
-        (debitos?.size ?: 0)
+    avisos = mensajes?.let { pagosPorRevisar(it).size } ?: 0,
+    // Con la regla de `:core` que usa el server para el Inicio: un traspaso es un renglón.
+    movimientos = dias?.let { d -> renglonesPorConfirmar(entraronSolos(d).map { PataPorConfirmar(it.id, it.transferId, it.type) }) } ?: 0,
+    pagosDeTarjeta = candidatos?.size ?: 0,
+    debitos = debitos?.size ?: 0,
+)
+
+/** El total de [conteoPorRevisar]: lo que dice «N por revisar». */
+fun cuantosPorRevisar(
+    mensajes: List<SmsMessage>?,
+    dias: List<EventDay>?,
+    candidatos: List<FinancialEvent>?,
+    debitos: List<DebitoAutomaticoPorConfirmar>? = null,
+): Int = conteoPorRevisar(mensajes, dias, candidatos, debitos).total
 
 /** Lo que dice el renglón de Movimientos. Sin plural que conjugar: «1 por revisar», «4 por revisar». */
 fun textoDePorRevisar(cuantos: Int): String = "$cuantos por revisar"

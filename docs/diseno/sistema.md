@@ -1133,3 +1133,54 @@ de las cifras (Martian Mono), como toda cifra de plata —el del encabezado de �
 pasó de `titulo` (15,5) a la cifra de una fila (12,5)—; el total de un presupuesto es la `Cifra`
 `Chica`, que es la misma letra que tenía. La negrita de un aviso del banco es SemiBold (era Bold sobre la
 monoespaciada del sistema, que la sintetiza igual).
+
+## 28. Vuelta de diseño 22: una sola verdad en Hoy
+
+Un diseñador recorrió la app con la cuenta demo y la encontró contradiciéndose. Esta vuelta no cambia
+qué cuenta como plata ni qué es un pendiente: cambia el **orden**, el **origen** de cada contador y el
+**texto**.
+
+- **Una sola cola de lo pendiente** (`colaDePendientes`, `:core` `ColaDePendientes.kt`). Junta los pagos
+  del checklist del período (vencidos y de la semana), lo que el banco cobró solo y lo que espera en «Por
+  revisar» (una sola entrada), ordenados por urgencia —vencido, hoy, débito por confirmar, por revisar,
+  por vencer— y, dentro de cada grupo, **el monto más grande primero** (lo de más adelante, por fecha).
+  La leen la campana (`notificationRows`), «Movi propone hoy» (`colaDelInicio`, `pagoPropuestoHoy`), el
+  widget «Falta por pagar» y la lista «Por pagar» de Plan (`pagosEnOrdenDeUrgencia`).
+  - **Por qué el Arriendo no entraba a la campana**: la campana leía el vencimiento VIGENTE de
+    `/api/payments/upcoming`, que rueda al período siguiente pasados los días de gracia (`dueDateFor`).
+    Vencido hace 22 días, el Arriendo figuraba «vence en 9 días» y la ventana de 7 lo dejaba afuera; el
+    checklist, donde manda la ocurrencia, sí lo veía. Ahora la campana sale del checklist.
+  - **Hoy no repite un pago**: el widget no lista como fila el pago que ya está en «Movi propone hoy»
+    (`filasDelWidgetDeFalta`, solo si esa sección está en el Inicio) y dice «y N más» cuando recorta; las
+    filas más ese número dan lo que dice «Faltan N». Si el único pendiente es el de arriba, lo dice
+    («Está arriba, en «Movi propone hoy»»).
+- **Los contadores cuadran** (`ConteoPorRevisar`, `ui/porrevisar/PorRevisar.kt`): avisos (uno por pago),
+  movimientos que entraron solos (renglones: un traspaso es uno, `renglonesPorConfirmar` en `:core`),
+  pagos de tarjeta y débitos. La insignia de «Avisos», «Movi propone hoy», la campana y «N por revisar»
+  de Movimientos dicen el mismo total, y donde se ve el total se dice de qué es («2 avisos · 1
+  movimiento», `desgloseDePorRevisar`). El Inicio no se baja la historia: el server manda
+  `DashboardSummary.movimientosPorConfirmar` con la misma regla (default 0 para un server viejo).
+- **La frase de abajo del héroe** (`fraseDelHeroe`): con el Disponible calculable, «Gastaste $1,7M · lo
+  que más: Mercado $316.050» —la MISMA cifra que la columna «Período» del Disponible de Plan, escrita
+  igual—; «lo que más» es la categoría más grande que cabe en esa cifra (un fijo no es gasto del día a
+  día). Sin Disponible, el flujo con su verbo («Salió $893.300 más de lo que entró · lo que más: …»).
+  El lector de pantalla oye la frase larga, que dice lo mismo. El héroe («Te quedan…») no se tocó.
+- **Los avisos apagados se ven a tiempo**: en Ajustes → Avisos, la fila «Avisarme antes de un
+  vencimiento» dice «Apagado: no te va a llegar» en `TonoDeSubtitulo.Aviso`, con «Activar» (salvo si el
+  navegador las bloqueó), mientras no haya canal (`estadoDeLosRecordatorios`, la regla de
+  `ReminderWarning` con nombre). En Plan, «Tus recordatorios no te van a llegar» sube justo encima de
+  «Pagos del período» (antes, al final del segmento); una vez.
+- **Sin salario no hay flujo libre negativo**: sin ingresos recurrentes (`pideElSalario`), la tarjeta de
+  «Lo que se repite al mes» invita «Agrega tu salario para ver tu flujo libre» con «Agregar mi salario»,
+  que abre la hoja del recurrente ya en Ingreso (`CreateRecurringRuleSheet(tipoNuevo = …)`), y deja
+  «Gastos recurrentes» a la vista.
+
+**Las líneas base** no cambian (todo con componentes y tokens): `dp_sueltos` 119, `radios_con_numero` 3, y
+las guardas en 0 siguen en 0.
+
+Lo vigilan `ColaDePendientesTest` (`:core`: el orden, la urgencia, el mínimo de una tarjeta, el Arriendo
+con su vencimiento rodado, los renglones por confirmar), `UnaSolaVerdadEnHoyTest` (la campana con el
+Arriendo primero, la campana y la propuesta priorizan igual, Hoy no repite un pago, «y N más», y con 2
+avisos y 1 movimiento los cuatro lugares dicen lo mismo), `HoyEnUnaMiradaTest` (la frase usa la cifra de
+Plan), `LosAvisosApagadosSeVenTest`, `ElFlujoLibrePideElSalarioTest`, `ChecklistEnInicioTest` y
+`DashboardRoutesTest` (el server cuenta los movimientos por confirmar como renglones).

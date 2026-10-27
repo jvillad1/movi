@@ -61,12 +61,12 @@ class ChecklistEnInicioTest {
 
     private var navegoA: Screen? = null
 
-    private fun montar(data: DashboardData) {
+    private fun montar(data: DashboardData, conPropuestas: Boolean = false) {
         navegoA = null
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    WidgetFaltaPorPagar(data = data, onNavigate = { navegoA = it })
+                    WidgetFaltaPorPagar(data = data, onNavigate = { navegoA = it }, conPropuestas = conPropuestas)
                 }
             }
         }
@@ -169,5 +169,41 @@ class ChecklistEnInicioTest {
         )
 
         composeRule.onNodeWithText("Falta 1 de 3 pagos", useUnmergedTree = true).assertIsDisplayed()
+    }
+    /**
+     * Vuelta de diseño 22: «Faltan 3 de 3 pagos» listaba dos y callaba el tercero. Una lista que se
+     * recorta lo dice; y con «Movi propone hoy» en el Inicio, el pago que ya está arriba no se repite.
+     */
+    private fun conTresPendientes() = DashboardData(
+        upcoming = listOf(
+            pago(regla("rr_arriendo", "Arriendo", 1_850_000, 5), "2026-09-05", -3),
+            pago(regla("rr_cel", "Celular", 53_000, 10), "2026-09-10", 2),
+            pago(regla("rr_gym", "Gimnasio", 139_900, 12), "2026-09-12", 4),
+        ),
+        ocurrencias = emptyList(),
+        ajustesDePeriodo = mesDeCalendario,
+        periodoActual = septiembre,
+    )
+
+    @Test
+    fun `una lista recortada dice y N mas`() {
+        montar(conTresPendientes())
+
+        composeRule.onNodeWithText("Faltan 3 de 3 pagos", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Arriendo", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Gimnasio", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("y 1 más", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `el pago de Movi propone hoy no se repite en el widget`() {
+        montar(conTresPendientes(), conPropuestas = true)
+
+        // El Arriendo vencido es la propuesta de arriba: acá no tiene fila.
+        composeRule.onNodeWithText("Arriendo", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Gimnasio", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Celular", useUnmergedTree = true).assertIsDisplayed()
+        // Las dos filas y «y 1 más» dan los tres de «Faltan 3 de 3 pagos».
+        composeRule.onNodeWithText("y 1 más", useUnmergedTree = true).assertIsDisplayed()
     }
 }

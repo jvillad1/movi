@@ -100,7 +100,9 @@ import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.ui.porrevisar.RenglonPorRevisar
-import com.jvillada.movi.ui.porrevisar.cuantosPorRevisar
+import com.jvillada.movi.ui.porrevisar.ConteoPorRevisar
+import com.jvillada.movi.ui.porrevisar.conteoPorRevisar
+import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
 import com.jvillada.movi.ui.porrevisar.rememberLecturasPorRevisar
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
@@ -1068,7 +1070,7 @@ fun TransactionsScreen(
     // lo que hay en «Por revisar» (ver [RenglonPorRevisar]). Se revisan allá, no acá.
     val porRevisar = rememberLecturasPorRevisar(recarga = refreshKey)
     // El último número del renglón que salió de lecturas terminadas; `null` hasta la primera.
-    val ultimoConteoPorRevisar = remember { mutableStateOf<Int?>(null) }
+    val ultimoConteoPorRevisar = remember { mutableStateOf<ConteoPorRevisar?>(null) }
 
     // Lo que hace falta para el ícono de repetición de cada fila. Ola C: el tablero de Recurrentes
     // se mudó a Plan y esta pantalla ya no lo pinta; de él solo lee estas dos listas (ver
@@ -1341,7 +1343,7 @@ fun TransactionsScreen(
         // DESPUÉS de la lista y la empujaría hacia abajo.
         val lasTresALaVista = perfilLeido && diasLeidos && porRevisar.mensajes != null && porRevisar.candidatos != null
         val conteoFresco = if ((!loading && porRevisar.terminaron) || lasTresALaVista) {
-            cuantosPorRevisar(
+            conteoPorRevisar(
                 mensajes = porRevisar.mensajes,
                 dias = if (diasLeidos) allDays else null,
                 candidatos = porRevisar.candidatos,
@@ -1376,10 +1378,13 @@ fun TransactionsScreen(
                     }
                 }
             }
-            if (cuantosPorRevisarAhora != null && cuantosPorRevisarAhora > 0) {
+            if (cuantosPorRevisarAhora != null && cuantosPorRevisarAhora.total > 0) {
                 item(contentType = "arriba") {
                     RenglonPorRevisar(
-                        cuantos = cuantosPorRevisarAhora,
+                        cuantos = cuantosPorRevisarAhora.total,
+                        // Vuelta de diseño 22: de qué es el número («2 avisos · 1 movimiento»), el
+                        // mismo desglose que la insignia y «Movi propone hoy» del Inicio.
+                        desglose = desgloseDePorRevisar(cuantosPorRevisarAhora),
                         onClick = { onNavigate(Screen.PorRevisar) },
                         modifier = arribaDeLaLista,
                     )

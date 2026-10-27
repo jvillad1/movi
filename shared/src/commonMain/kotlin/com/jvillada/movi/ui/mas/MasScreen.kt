@@ -36,6 +36,7 @@ import com.jvillada.movi.data.EXPLICACION_HUELLA
 import com.jvillada.movi.data.EstadoDeHuella
 import com.jvillada.movi.data.PreferenciaDeTema
 import com.jvillada.movi.data.PropositoDeHuella
+import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ResultadoDeHuella
 import com.jvillada.movi.data.SaldosOcultosStore
@@ -93,7 +94,6 @@ import com.jvillada.movi.ui.profile.NotaDeSeccion
 import com.jvillada.movi.ui.profile.PeriodoSheet
 import com.jvillada.movi.ui.profile.guardarElInicioDelMes
 import com.jvillada.movi.ui.profile.textoDelInicioDelMes
-import com.jvillada.movi.ui.recurrentes.reminderLeadHint
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
 import kotlinx.coroutines.launch
 
@@ -326,6 +326,8 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                             }
                         }
                     }
+                    // Qué canales tiene el server para los recordatorios (correo): una lectura por sesión.
+                    LaunchedEffect(Unit) { ReminderChannelsCache.cargar() }
                     val cierrePorCorreo = profile?.cierrePorCorreo
                     val alternarCierre: () -> Unit = alternarCierre@{
                         val actual = cierrePorCorreo ?: return@alternarCierre
@@ -368,14 +370,18 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                                 )
                                 Separador(SangriaDeSeparador.Margen)
                             }
-                            // Cuántos días antes avisar. Sin el perfil no se afirma: sería el default.
-                            val diasDeAviso = profile?.reminderLeadDays
-                            Fila(
-                                titulo = "Avisarme antes de un vencimiento",
-                                subtitulo = diasDeAviso?.let { reminderLeadHint(it) }
-                                    ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
-                                final = if (diasDeAviso != null) ({ Chevron() }) else null,
-                                onClick = if (diasDeAviso == null) null else ({ errorAviso = null; showAviso = true }),
+                            // Vuelta de diseño 22: la fila dice «Apagado: no te va a llegar» mientras no
+                            // haya ningún canal, con la acción de activarlo (ver [FilaDeRecordatorios]).
+                            FilaDeRecordatorios(
+                                pushStatus = pushStatus,
+                                canales = ReminderChannelsCache.canales,
+                                diasDeAviso = profile?.reminderLeadDays,
+                                falloElPerfil = falloElPerfil,
+                                onActivar = {
+                                    PushOptIn.enable()
+                                    refreshTick++
+                                },
+                                onElegirDias = { errorAviso = null; showAviso = true },
                             )
                             Separador(SangriaDeSeparador.Margen)
                             // «Cerró tu período» por correo: de la cuenta (sale del server), no del

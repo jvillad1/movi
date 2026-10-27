@@ -100,8 +100,7 @@ import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_CIFRA_DEL_HERO
 import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_VEREDICTO_DEL_HERO
 import com.jvillada.movi.ui.dashboard.TAG_TARJETA_DEL_HERO
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
-import com.jvillada.movi.ui.dashboard.veredictoDelInicio
-import com.jvillada.movi.ui.dashboard.veredictoCortoDelInicio
+import com.jvillada.movi.ui.dashboard.fraseDelHeroe
 import com.jvillada.movi.ui.dashboard.NivelDelGasto
 import com.jvillada.movi.ui.dashboard.TAG_CIFRA_TE_QUEDAN
 import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_DETALLE_DEL_HERO
@@ -182,11 +181,10 @@ internal fun HeroDeUnVistazo(
 
     val teQuedan = teQuedanDelInicio(data, hoy)
     val entradaDeLaCifra = rememberProgresoDeEntrada("hero.cifra", listo = teQuedan != null || data.accounts != null)
-    // Con «Te pasaste por $X» ya arriba, el veredicto no lo repite (ver [veredictoDelInicio]).
-    val veredicto = veredictoDelInicio(data, hoy, conAvisoDelDisponible = teQuedan == null)
-    // Ola 3 · Hoy en una mirada: en pantalla va la línea corta con cifras; la frase larga queda para
-    // el lector de pantalla (ver [veredictoCortoDelInicio]).
-    val veredictoCorto = veredictoCortoDelInicio(data, hoy, conAvisoDelDisponible = teQuedan == null)
+    // Vuelta de diseño 22: la frase de abajo dice lo que gastaste con la MISMA cifra que Plan (ver
+    // [fraseDelHeroe]); la larga, que dice lo mismo, es para el lector de pantalla. Con «Te pasaste
+    // por $X» ya arriba, no lo repite.
+    val frase = fraseDelHeroe(data, hoy, conAvisoDelDisponible = teQuedan == null)
     // Cada pieza se gatilla con SU propio dato, y solo con una carga en vuelo ([LocalCargandoElInicio]):
     // una carga en frío sin red que ya se rindió no puede quedar pulsando para siempre.
     val hayCargaEnVuelo = LocalCargandoElInicio.current
@@ -260,17 +258,17 @@ internal fun HeroDeUnVistazo(
                 estilo = Movi.textos.cuerpo,
                 modifier = Modifier.testTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO),
             )
-        } else if (veredicto != null && veredictoCorto != null) {
+        } else if (frase != null) {
             Spacer(Modifier.height(Espacio.xs))
             Text(
-                text = veredictoCorto,
+                text = frase.corta,
                 style = Movi.textos.cuerpo,
                 color = Movi.colores.texto,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .testTag(TAG_VEREDICTO_DEL_HERO)
-                    .semantics { contentDescription = veredicto.frase },
+                    .semantics { contentDescription = frase.larga },
             )
         }
     }

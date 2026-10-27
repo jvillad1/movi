@@ -16,6 +16,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -121,6 +123,11 @@ fun CreateRecurringRuleSheet(
      * puede corregir antes de guardar**: es un formulario prellenado, no una confirmación.
      */
     prefill: RecurringPrefill? = null,
+    /**
+     * El tipo con el que arranca un alta sin [existing] ni [prefill] (vuelta de diseño 22): «Agrega tu
+     * salario» del flujo libre de Plan abre la hoja ya en Ingreso. El dueño lo puede cambiar.
+     */
+    tipoNuevo: TransactionType = TransactionType.EXPENSE,
 ) {
     val coroutine = rememberCoroutineScope()
 
@@ -137,7 +144,7 @@ fun CreateRecurringRuleSheet(
         mutableStateOf(existingSub?.dayOfMonth ?: existing?.dayOfMonth ?: prefill?.dayOfMonth)
     }
     var selectedType by remember {
-        mutableStateOf(existing?.type ?: prefill?.type ?: TransactionType.EXPENSE)
+        mutableStateOf(existing?.type ?: prefill?.type ?: tipoNuevo)
     }
     // Ola 10 (revisión): una regla NUEVA arranca en «Otros» como siempre, salvo que el dueño la
     // haya escondido o fijado del otro lado — ahí se cae a la primera que sí se le va a ofrecer.
@@ -146,7 +153,7 @@ fun CreateRecurringRuleSheet(
     // de un movimiento) conserva la suya: esa la eligió una persona.
     var category by remember {
         val propia = existing?.category ?: prefill?.category
-        val tipoInicial = existing?.type ?: prefill?.type ?: TransactionType.EXPENSE
+        val tipoInicial = existing?.type ?: prefill?.type ?: tipoNuevo
         val prefsAhora = UsedCategoriesCache.prefs
         val usadasAhora = UsedCategoriesCache.used
         mutableStateOf(
@@ -1167,6 +1174,8 @@ private fun RowScope.SheetChip(
                 if (!selected) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)) else Modifier,
             )
             .clickable(enabled = enabled, onClick = onClick)
+            // El lector de pantalla (y las pruebas) saben cuál está elegido, no solo el color.
+            .semantics { this.selected = selected }
             .padding(vertical = Espacio.s),
         contentAlignment = Alignment.Center,
     ) {

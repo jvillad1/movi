@@ -30,6 +30,7 @@ import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.plan.TableroDeRecurrentesDePrueba
+import com.jvillada.movi.ui.plan.TITULO_LO_QUE_SE_REPITE
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -208,7 +209,7 @@ class CuotasRecurrentesEnMovimientosTest {
                 }
             }
         }
-        esperarTexto("Flujo libre")
+        esperarTexto(TITULO_LO_QUE_SE_REPITE)
     }
 
     @After
