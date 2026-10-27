@@ -107,7 +107,12 @@ class DebitoAutomaticoEnLaBandejaTest {
     fun `la propuesta se ve armada y no dice todo al dia`() {
         montar()
         assertTrue(hay(TITULO_DE_LOS_DEBITOS))
-        assertTrue(hay("Débito automático: Cuota Libre inversión 9695 · \$1.204.064 desde Bancolombia Ahorros — ¿se cobró?"))
+        // Vuelta de diseño 2: la cabeza de un aviso —lo que se cobró, el monto y de dónde sale—, sin
+        // la píldora «Por confirmar» (en la bandeja todo lo está).
+        assertTrue(hay("Cuota Libre inversión 9695"))
+        assertTrue(hay("−\$1.204.064"))
+        assertTrue(hay("Débito automático · Bancolombia Ahorros · vence el"))
+        assertFalse(hay("Por confirmar"))
         assertTrue(hay(SI_SE_COBRO) && hay(CAMBIAR_MONTO) && hay(NO_SE_COBRO))
         assertFalse(hay(TODO_AL_DIA), "con un débito por confirmar la bandeja no está al día")
     }

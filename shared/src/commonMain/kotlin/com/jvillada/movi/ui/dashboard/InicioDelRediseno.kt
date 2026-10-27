@@ -51,16 +51,23 @@ fun periodoDelEncabezado(data: DashboardData): String? {
  */
 const val REPARTIR_ESTA_LISTO: Boolean = true
 
-/** Las acciones de la cuadrícula del Inicio (camino 3), en su orden. */
-enum class AccionDelInicio(val rotulo: String) {
-    ANOTAR_GASTO("Anotar gasto"),
-    ANOTAR_INGRESO("Anotar ingreso"),
-    TRASPASAR("Traspasar"),
-    PAGAR_TARJETA("Pagar tarjeta"),
-    REPARTIR("Repartir"),
-    SUBIR_COMPROBANTE("Subir comprobante"),
-    REVISAR_AVISOS("Revisar avisos"),
-    PREGUNTAR_A_MOVI("Preguntar a Movi"),
+/**
+ * Las acciones de la cuadrícula del Inicio (camino 3), en su orden.
+ *
+ * [rotulo] es lo que se lee debajo del círculo: **una palabra o dos, en un renglón** (vuelta de diseño
+ * 2: «Anotar ingreso», «Subir comprobante» y «Preguntar a Movi» iban en dos renglones y el resto en
+ * uno, y la cuadrícula quedaba despareja). [descripcion] es la frase entera, la que dice el lector de
+ * pantalla. Los pinta el cliente: la definición SDUI solo trae la sección `ACCIONES`, no los rótulos.
+ */
+enum class AccionDelInicio(val rotulo: String, val descripcion: String) {
+    ANOTAR_GASTO("Gasto", "Anotar un gasto"),
+    ANOTAR_INGRESO("Ingreso", "Anotar un ingreso"),
+    TRASPASAR("Traspaso", "Anotar un traspaso"),
+    PAGAR_TARJETA("Pagar tarjeta", "Pagar una tarjeta"),
+    REPARTIR("Repartir", "Repartir un gasto"),
+    SUBIR_COMPROBANTE("Comprobante", "Subir un comprobante"),
+    REVISAR_AVISOS("Avisos", "Revisar los avisos"),
+    PREGUNTAR_A_MOVI("Preguntar", "Preguntarle a Movi"),
 }
 
 /** Las acciones que se ven: todas (con [REPARTIR_ESTA_LISTO] en `false`, todas menos «Repartir»). */

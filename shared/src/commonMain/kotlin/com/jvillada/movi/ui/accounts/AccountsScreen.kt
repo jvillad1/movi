@@ -30,6 +30,7 @@ import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.ClaseDeBien
 import com.jvillada.movi.shared.model.CreditSummary
@@ -37,7 +38,6 @@ import com.jvillada.movi.shared.model.claseDeBien
 import com.jvillada.movi.shared.model.deudaDelBien
 import com.jvillada.movi.shared.model.esBien
 import com.jvillada.movi.shared.model.group
-import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
@@ -432,13 +432,45 @@ fun esDeUsoCondicionado(account: Account): Boolean =
     !account.esBien && !account.condicionadaA.isNullOrBlank()
 
 /**
- * El renglón de abajo de cada cuenta: su grupo («Dinero», «Inversión»), o —si es plata con
- * destino— para qué es, con las palabras que puso el dueño («Uso condicionado · vivienda»). Mismo
- * rótulo que el tramo de la tarjeta de patrimonio del Inicio.
+ * El tipo de una cuenta como lo dice el banco: «Ahorros», «Corriente», «Efectivo». `null` para una
+ * inversión: en su sección («Inversión · 2») decir «Inversión» otra vez no agrega nada.
  */
-fun subtituloDeLaCuenta(account: Account): String =
-    if (esDeUsoCondicionado(account)) "Uso condicionado · ${account.condicionadaA!!.trim()}"
-    else account.type.groupLabel
+fun tipoLegibleDeLaCuenta(type: AccountType): String? = when (type) {
+    AccountType.SAVINGS -> "Ahorros"
+    AccountType.CHECKING -> "Corriente"
+    AccountType.CASH -> "Efectivo"
+    AccountType.CREDIT_CARD -> "Tarjeta"
+    AccountType.LOAN -> "Préstamo"
+    AccountType.INVESTMENT -> null
+}
+
+/** Sin tildes ni mayúsculas, para ver si el nombre ya dice el tipo («Bancolombia Ahorros»). */
+private fun palabrasSinTildes(texto: String): List<String> =
+    texto.lowercase()
+        .map { c -> when (c) { 'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; else -> c } }
+        .joinToString("")
+        .split(Regex("[^a-z0-9ñ]+"))
+        .filter { it.isNotEmpty() }
+
+/**
+ * **El renglón de abajo de cada cuenta**: algo que el título no dice.
+ *
+ * - Si es plata con destino, para qué es, con las palabras que puso el dueño («Uso condicionado ·
+ *   vivienda»). Mismo rótulo que el tramo de la tarjeta de patrimonio del Inicio.
+ * - Si no, su tipo («Ahorros», «Corriente», «Efectivo»), **salvo que el nombre ya lo diga**
+ *   («Bancolombia Ahorros») o que sea una inversión: entonces nada (`null`) y la fila va en un
+ *   renglón.
+ *
+ * Vuelta de diseño 2: antes decía el grupo («Dinero») dentro de la sección «Dinero · 2», y cada fila
+ * repetía el título de la sección. Los últimos cuatro de la cuenta no se agregan: Movi no guarda el
+ * número aparte del nombre, y cuando el dueño lo tiene es porque lo escribió en el nombre
+ * («Master Black 3684»), que ya se lee arriba.
+ */
+fun subtituloDeLaCuenta(account: Account): String? {
+    if (esDeUsoCondicionado(account)) return "Uso condicionado · ${account.condicionadaA!!.trim()}"
+    val tipo = tipoLegibleDeLaCuenta(account.type) ?: return null
+    return tipo.takeIf { palabrasSinTildes(tipo).first() !in palabrasSinTildes(account.name) }
+}
 
 /** Qué bien tiene abierta la hoja: uno que existe, o uno nuevo con el nombre ya escrito. */
 private data class BienAbierto(val existente: Account?, val nombre: String = "")
@@ -533,7 +565,10 @@ private fun GrupoDeCuentas(titulo: String, cuentas: List<Account>, onNavigate: (
                         )
                     },
                     onClick = { onNavigate(Screen.AccountDetail(cuenta.id, cuenta.type.group)) },
-                    modifier = Modifier.testTag(TAG_FILA_DE_CUENTA),
+                    // Con o sin subtítulo (vuelta de diseño 2: «Bancolombia Ahorros» ya no lleva uno),
+                    // todas las filas del grupo miden lo mismo: la lista no queda despareja y el
+                    // esqueleto de la carga, que reserva filas dobles, no salta.
+                    modifier = Modifier.heightIn(min = Medida.altoDeFilaDoble).testTag(TAG_FILA_DE_CUENTA),
                 )
             }
         }
@@ -753,6 +788,9 @@ private fun Herramientas(atrasadas: String?, onCuadre: () -> Unit, onEntreCuenta
                 },
                 final = { Chevron() },
                 onClick = onCuadre,
+                // «Hace más de un mes que no cuadras Bancolombia Ahorros» es la razón de la fila: a
+                // 360 dp se cortaba en «…no cuadras …». Va en dos renglones (vuelta de diseño 2).
+                lineasDelSubtitulo = 2,
                 modifier = Modifier.testTag(TAG_TARJETA_DE_CUADRE),
             )
             Separador()
@@ -762,6 +800,7 @@ private fun Herramientas(atrasadas: String?, onCuadre: () -> Unit, onEntreCuenta
                 inicio = { IconoEnCirculo(Icons.Rounded.SwapHoriz, tono = TonoDeIcono.Info) },
                 final = { Chevron() },
                 onClick = onEntreCuentas,
+                lineasDelSubtitulo = 2,
             )
         }
     }
