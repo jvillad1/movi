@@ -136,6 +136,27 @@ class LoQueSeSaleDeLoNormalTest {
     }
 
     @Test
+    fun `una categoria sin historia es un gasto nuevo, no lo normal es cero`() {
+        val actual = listOf(gasto("r1", "Zara", 212_000L, 1.0, categoria = "Ropa"), gasto("r2", "H&M", 100_000L, 2.0, categoria = "Ropa"))
+        val tres = listOf(periodo("Comida" to 500_000L), periodo("Comida" to 400_000L), periodo("Comida" to 600_000L))
+        val aviso = categoriasPorEncima(actual, tres, "2026-10", cuentas, diaDe).single()
+        assertEquals("Gasto nuevo en Ropa", aviso.titulo)
+        assertEquals("Llevas \$312.000 este período; en los 3 períodos anteriores no habías gastado en Ropa.", aviso.detalle)
+        assertTrue("lo normal" !in aviso.detalle)
+        // Misma huella y mismo tipo que cuando había historia: lo descartado no revive.
+        assertEquals("categoria:Ropa:2026-10", aviso.huella)
+        assertEquals(TipoDeAnomalia.CATEGORIA_POR_ENCIMA, aviso.tipo)
+    }
+
+    @Test
+    fun `con un solo periodo anterior el gasto nuevo dice el periodo anterior`() {
+        val actual = listOf(gasto("r1", "Zara", 312_000L, 1.0, categoria = "Ropa"))
+        val aviso = categoriasPorEncima(actual, listOf(periodo("Comida" to 500_000L)), "p", cuentas, diaDe).single()
+        assertEquals("Gasto nuevo en Ropa", aviso.titulo)
+        assertEquals("Llevas \$312.000 este período; en el período anterior no habías gastado en Ropa.", aviso.detalle)
+    }
+
+    @Test
     fun `sin periodos anteriores no hay normal y no se avisa`() {
         assertTrue(categoriasPorEncima(listOf(gasto("a", "x", 9_000_000L, 1.0)), emptyList(), "p", cuentas, diaDe).isEmpty())
     }
