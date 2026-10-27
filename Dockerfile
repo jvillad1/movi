@@ -59,7 +59,9 @@ RUN echo "── recursos ──" && (free -m || true) && df -h /app && nproc
 #
 # Lo que queda, y por qué:
 #
-# 1. LA PURGA, atada a la versión de Kotlin. No fue la causa, pero es barata: corre
+# 1. LA PURGA, atada a la versión de Kotlin (y a un número: el 26-oct-2026 el wasm
+#    falló dos veces en Railway en 4 min y armó bien desde cero en GitHub; el «-2»
+#    fuerza otra purga). No fue la causa, pero es barata: corre
 #    una vez por versión y borra solo el caché de build, no las dependencias ni el
 #    caché de Kotlin, que son lo que mantiene el build debajo de los 20 minutos.
 # 2. LA GUARDA de fuentes. Esta sí vale: habría frenado ese despliegue, que subió un
@@ -67,13 +69,13 @@ RUN echo "── recursos ──" && (free -m || true) && df -h /app && nproc
 #    despliegue anterior; uno exitoso con el código equivocado lo reemplaza sin ruido.
 RUN --mount=type=cache,id=s/8fdd793e-509a-42a8-ae98-e1fc6be27577-gradle,target=/root/.gradle \
     KOTLIN=$(sed -n 's/^kotlin = "\(.*\)"$/\1/p' gradle/libs.versions.toml) && \
-    MARCA=/root/.gradle/.cache-de-build-purgado-kotlin-$KOTLIN && \
+    MARCA=/root/.gradle/.cache-de-build-purgado-kotlin-$KOTLIN-2 && \
     if [ ! -f "$MARCA" ]; then \
         echo "── purgando el caché de build (primera vez con Kotlin $KOTLIN) ──" && \
         rm -rf /root/.gradle/caches/build-cache-1 && touch "$MARCA"; \
     fi && \
     gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain --build-cache > /tmp/wasm.log 2>&1 \
-    || (echo "══ FALLÓ EL WASM ══" && tail -120 /tmp/wasm.log && false)
+    || (echo "══ FALLÓ EL WASM ══" >&2 && tail -120 /tmp/wasm.log >&2 && sleep 5 && false)
 
 RUN sh scripts/el-paquete-web-trae-las-fuentes.sh webApp/build/dist/wasmJs/productionExecutable
 
