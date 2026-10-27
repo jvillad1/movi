@@ -8,6 +8,7 @@ import com.jvillada.movi.shared.model.MiembroDelEspacio
 import com.jvillada.movi.shared.model.RepartoDelEspacio
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.repository.ApiException
+import com.jvillada.movi.shared.repository.MovimientoSinSubir
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,7 +50,11 @@ class RepartirDesdeAgregarTest {
     private val repartidos = mutableListOf<Pair<String, String>>()
     private val anotados = mutableListOf<Pair<String, GastoDelEspacio>>()
 
-    private fun caminos(guardarFalla: Boolean = false, repartirFalla: Boolean = false) = CaminosDeRepartir(
+    private fun caminos(
+        guardarFalla: Boolean = false,
+        repartirFalla: Boolean = false,
+        fallaDelReparto: Throwable = ApiException(404, "Movimiento no encontrado"),
+    ) = CaminosDeRepartir(
         guardarElGasto = {
             llamadas += "guardar"
             if (guardarFalla) throw ApiException(400, "El monto no puede ser cero")
@@ -57,7 +62,7 @@ class RepartirDesdeAgregarTest {
         },
         repartirMovimiento = { espacioId, eventoId ->
             llamadas += "repartir"
-            if (repartirFalla) throw ApiException(404, "Movimiento no encontrado")
+            if (repartirFalla) throw fallaDelReparto
             repartidos += espacioId to eventoId
         },
         anotarGastoDeOtro = { espacioId, g ->
@@ -136,5 +141,37 @@ class RepartirDesdeAgregarTest {
             queFaltaParaRepartir(gasto.copy(moneda = "USD"), pagueYo = true),
         )
         assertNull(queFaltaParaRepartir(gasto, pagueYo = true))
+    }
+
+    /*
+     * Vuelta de diseño 24: lo que dice la hoja cuando el gasto quedó anotado y el reparto no. En el
+     * teléfono, sin señal, el gasto no sube y `LocalRepository.repartirMovimiento` lanza
+     * [MovimientoSinSubir] sin pedir el reparto.
+     */
+
+    @Test
+    fun `sin señal el gasto queda anotado y la hoja pide conexion para repartir`() = runBlocking<Unit> {
+        val r = repartirDesdeAgregar(
+            gasto, DecisionDeRepartir(casa, MIEMBRO_YO), "gde_1", null,
+            caminos(repartirFalla = true, fallaDelReparto = MovimientoSinSubir("ev_1")),
+        )
+        val sinRepartir = assertIs<ResultadoDeRepartir.GuardadoSinRepartir>(r)
+        assertEquals(REPARTO_SIN_CONEXION, sinRepartir.motivo)
+        assertEquals(guardado, sinRepartir.evento, "el reintento reparte este, no guarda otro")
+        assertEquals(listOf("guardar", "repartir"), llamadas)
+    }
+
+    @Test
+    fun `el motivo dice lo que paso con el gasto`() {
+        assertEquals(REPARTO_SIN_CONEXION, motivoDelRepartoPendiente(java.io.IOException("sin red")))
+        assertEquals(REPARTO_SIN_CONEXION, motivoDelRepartoPendiente(MovimientoSinSubir("ev_1")))
+        assertEquals(
+            "El gasto quedó anotado en este teléfono, pero el servidor no lo recibió: La categoría no existe",
+            motivoDelRepartoPendiente(MovimientoSinSubir("ev_1", rechazo = "La categoría no existe")),
+        )
+        assertTrue(
+            motivoDelRepartoPendiente(ApiException(404, "Movimiento no encontrado"))
+                .startsWith("El gasto quedó anotado, pero no se pudo repartir: "),
+        )
     }
 }

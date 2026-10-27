@@ -39,6 +39,7 @@ import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.PropuestaDeSaldar
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.repository.ApiException
+import com.jvillada.movi.shared.repository.MovimientoSinSubir
 import com.jvillada.movi.theme.Espacio as EspacioDeDiseno
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
@@ -76,7 +77,12 @@ const val TAG_GASTO_DEL_ESPACIO: String = "espacios:gasto"
 const val TAG_LO_QUE_PAGA_OTRA_PERSONA: String = "espacios:lo-que-paga-otra-persona"
 
 /** Lo que una escritura falló, dicho para el dueño. */
-internal fun mensajeDelEspacio(e: Throwable): String = if (e is ApiException) e.toUserMessage() else ESPACIOS_SIN_CONEXION
+internal fun mensajeDelEspacio(e: Throwable): String = when {
+    e is ApiException -> e.toUserMessage()
+    // El movimiento no subió y el server dijo por qué (vuelta de diseño 24): eso, no «sin conexión».
+    e is MovimientoSinSubir && e.rechazo != null -> "El servidor no recibió ese movimiento: ${e.rechazo}"
+    else -> ESPACIOS_SIN_CONEXION
+}
 
 /** Lo que la pestaña lee: los espacios con su detalle y los créditos que paga otra persona. */
 private class LecturaDeEspacios(

@@ -14,6 +14,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 
 class SyncEngine(
@@ -23,19 +25,37 @@ class SyncEngine(
 ) {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
+    /** Una subida a la vez: el ciclo de 30 s y la que pide [subirLoPendiente] no se cruzan. */
+    private val subiendo = Mutex()
+
     fun start() {
         scope.launch {
             while (true) {
                 delay(30_000L)
-                // syncAccounts ANTES que syncEvents: una cuenta creada offline (ver
-                // LocalRepository.createAccount) tiene que existir en el server antes que sus
-                // eventos, o EventRoutes.kt POST la rechaza con 404 "Account not found" — y ese
-                // 404 quedaba tragado en silencio por el catch de syncEvents, así que el evento
-                // (y la cuenta) nunca llegaban al server aunque hubiera red.
-                try { syncAccounts() } catch (e: Exception) { logSyncFailure("syncAccounts", e) }
-                try { syncEvents() } catch (e: Exception) { logSyncFailure("syncEvents", e) }
-                try { syncVoids() } catch (e: Exception) { logSyncFailure("syncVoids", e) }
+                subirLoPendiente()
             }
+        }
+    }
+
+    /**
+     * **Una vuelta del ciclo, ya**: lo mismo que hace [start] cada 30 segundos, para quien no puede
+     * esperar al próximo (vuelta de diseño 24: «Repartir» necesita que el server ya tenga el
+     * movimiento, ver `LocalRepository.repartirMovimiento`). No lanza: lo que no sube se queda
+     * pendiente, igual que en el ciclo, y quien llama mira el sello de la fila para saberlo.
+     *
+     * Con el candado, una vuelta pedida y la del ciclo no empujan la misma fila a la vez (el server
+     * lo aguantaría —`POST /api/events` es idempotente por id—, pero sería un POST de más).
+     */
+    suspend fun subirLoPendiente() {
+        subiendo.withLock {
+            // syncAccounts ANTES que syncEvents: una cuenta creada offline (ver
+            // LocalRepository.createAccount) tiene que existir en el server antes que sus
+            // eventos, o EventRoutes.kt POST la rechaza con 404 "Account not found" — y ese
+            // 404 quedaba tragado en silencio por el catch de syncEvents, así que el evento
+            // (y la cuenta) nunca llegaban al server aunque hubiera red.
+            try { syncAccounts() } catch (e: Exception) { logSyncFailure("syncAccounts", e) }
+            try { syncEvents() } catch (e: Exception) { logSyncFailure("syncEvents", e) }
+            try { syncVoids() } catch (e: Exception) { logSyncFailure("syncVoids", e) }
         }
     }
 
