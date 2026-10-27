@@ -61,6 +61,7 @@ import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.ds.AvatarDePersona
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
@@ -83,14 +84,10 @@ const val TAG_GUARDAR_PAGO_OTRO: String = "espacios:guardar-pago-otro"
 const val TAG_CONFIRMAR_SALDADO: String = "espacios:confirmar-saldado"
 const val TAG_NOTA_PAGO_OTRO: String = "espacios:nota-pago-otro"
 
-/** El título de una hoja, igual en las tres. */
+/** El título de una hoja, igual en las tres: el encabezado de hojas del sistema. */
 @Composable
 private fun TituloDeLaHoja(texto: String, detalle: String?) {
-    Text(texto, style = Movi.textos.titulo, color = Movi.colores.texto)
-    detalle?.let {
-        Spacer(Modifier.height(EspacioDeDiseno.xxs))
-        Text(it, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-    }
+    EncabezadoDeHoja(texto, subtitulo = detalle)
     Spacer(Modifier.height(Medida.dentroDeSeccion))
 }
 

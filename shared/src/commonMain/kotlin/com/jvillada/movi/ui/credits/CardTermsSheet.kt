@@ -4,7 +4,9 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.GrupoDeCampos
+import com.jvillada.movi.ui.accounts.tipoLegibleDeLaCuenta
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 import androidx.compose.foundation.text.KeyboardOptions
@@ -153,9 +155,12 @@ fun CardTermsSheet(
     ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             if (editing != null) {
-                GrupoDeCampos("La tarjeta") {
-                    Text(editing.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                }
+                // Vuelta de diseño 17: el encabezado de las hojas («Nu» · «Tarjeta»), no «La
+                // tarjeta» como título de grupo con el nombre suelto debajo.
+                EncabezadoDeHoja(
+                    editing.account.name,
+                    subtitulo = tipoLegibleDeLaCuenta(editing.account.type) ?: "Tarjeta",
+                )
                 Spacer(Modifier.height(Medida.entreSecciones))
             } else {
                 GrupoDeCampos("La tarjeta") {
@@ -189,14 +194,14 @@ fun CardTermsSheet(
                 Box(Modifier.weight(1f)) {
                     Campo(
                         cutoffDay, { cutoffDay = it.filter { ch -> ch.isDigit() }.take(2) },
-                        rotulo = "Corte (opcional)", guia = "20",
+                        rotulo = "Corte (opcional)", ejemplo = "20",
                         teclado = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                 }
                 Box(Modifier.weight(1f)) {
                     Campo(
                         paymentDay, { paymentDay = it.filter { ch -> ch.isDigit() }.take(2) },
-                        rotulo = "Día de pago", guia = "5",
+                        rotulo = "Día de pago", ejemplo = "5",
                         teclado = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                 }
@@ -215,7 +220,7 @@ fun CardTermsSheet(
             )
             CampoDeTasa(
                 tasaEa, { tasaEa = filterRateInput(it).replace('.', ',') },
-                rotulo = "Tasa E.A. (opcional)", guia = "29,6",
+                rotulo = "Tasa E.A. (opcional)", ejemplo = "29,6",
                 ayuda = AYUDA_CORTA_DE_LA_TASA,
                 masAyuda = TEXTO_DE_AYUDA_DE_LA_TASA,
             )

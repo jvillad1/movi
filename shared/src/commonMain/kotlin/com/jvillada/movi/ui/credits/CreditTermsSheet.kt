@@ -4,7 +4,9 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.GrupoDeCampos
+import com.jvillada.movi.ui.accounts.tipoLegibleDeLaCuenta
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
@@ -388,10 +390,14 @@ fun CreditTermsSheet(
     ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             if (editing != null) {
-                GrupoDeCampos("El crédito") {
-                    // Editable, no un rótulo: ver [nombreEditado].
-                    Campo(nombreEditado, { nombreEditado = it }, rotulo = "Nombre del crédito")
-                }
+                // Vuelta de diseño 17: el encabezado de las hojas («Vehículo 4083» · «Préstamo»), como
+                // la de la tarjeta. El nombre sigue editable justo debajo: ver [nombreEditado].
+                EncabezadoDeHoja(
+                    editing.account.name,
+                    subtitulo = tipoLegibleDeLaCuenta(editing.account.type) ?: "Préstamo",
+                )
+                Spacer(Modifier.height(Medida.entreSecciones))
+                Campo(nombreEditado, { nombreEditado = it }, rotulo = "Nombre del crédito")
                 Spacer(Modifier.height(Medida.entreSecciones))
             } else {
                 // F25: el selector "CUENTA DEL PRÉSTAMO · + Nueva cuenta de préstamo"
@@ -502,13 +508,13 @@ fun CreditTermsSheet(
                     Box(Modifier.weight(1f)) {
                         // F23/F24: solo dígitos y un único punto — el "%" lo pinta el campo
                         // (`sufijo`), nunca lo escribe la persona.
-                        CampoDeTasa(rateEa, { rateEa = filterRateInput(it) }, rotulo = "Tasa E.A.", guia = "18,5")
+                        CampoDeTasa(rateEa, { rateEa = filterRateInput(it) }, rotulo = "Tasa E.A.", ejemplo = "18,5")
                     }
                 }
                 Box(Modifier.weight(1f)) {
                     Campo(
                         termMonths, { termMonths = it.filter { ch -> ch.isDigit() } },
-                        rotulo = "Plazo (meses)", guia = "60",
+                        rotulo = "Plazo (meses)", ejemplo = "60",
                         teclado = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                 }
@@ -532,7 +538,7 @@ fun CreditTermsSheet(
                 Box(Modifier.weight(1f)) {
                     Campo(
                         dayOfMonth, { dayOfMonth = it.filter { ch -> ch.isDigit() } },
-                        rotulo = "Día de pago", guia = "5",
+                        rotulo = "Día de pago", ejemplo = "5",
                         teclado = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                 }
@@ -1116,15 +1122,18 @@ internal fun CampoDeTasa(
     valor: String,
     alCambiar: (String) -> Unit,
     rotulo: String,
-    guia: String,
+    guia: String? = null,
     ayuda: String? = null,
     masAyuda: String? = null,
+    /** La tasa de ejemplo («18,5»): se pinta «Ej: 18,5». Ver `textoGuiaDelCampo`. */
+    ejemplo: String? = null,
 ) {
     Campo(
         valor = valor,
         alCambiar = alCambiar,
         rotulo = rotulo,
         guia = guia,
+        ejemplo = ejemplo,
         ayuda = ayuda,
         masAyuda = masAyuda,
         sufijo = "%",

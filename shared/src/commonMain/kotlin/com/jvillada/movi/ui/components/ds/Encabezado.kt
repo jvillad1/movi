@@ -3,6 +3,9 @@ package com.jvillada.movi.ui.components.ds
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -340,3 +343,42 @@ const val RENGLONES_DEL_TITULO_DEL_ENCABEZADO: Int = 2
  * renglón antes de cortarse.
  */
 const val RENGLONES_DEL_SUBTITULO_DEL_ENCABEZADO: Int = 2
+
+/** El `testTag` de [EncabezadoDeHoja]. */
+const val TAG_ENCABEZADO_DE_HOJA: String = "ds-encabezado-de-hoja"
+
+/**
+ * **El encabezado de una hoja** (vuelta de diseño 17): el nombre de lo que se edita en `titulo`
+ * medio y, debajo, qué es («Tarjeta», «Préstamo») o una frase corta, en `cuerpo` y `textoMedio`.
+ * Va primero en el contenido, debajo del renglón de la X que pone `MarcoDeHoja`, y declara el título
+ * como encabezado para el lector de pantalla.
+ *
+ * Es el patrón que las hojas con título ya escribían a mano (Apartado, Bien, «¿Con quién
+ * compartes?»). La hoja de la tarjeta decía «La tarjeta» como título de grupo y «Nu» suelto debajo:
+ * el nombre parecía un dato más y el título, una sección.
+ *
+ * ```
+ * EncabezadoDeHoja("Nu", subtitulo = "Tarjeta")
+ * Spacer(Modifier.height(Medida.entreSecciones))
+ * ```
+ */
+@Composable
+fun EncabezadoDeHoja(
+    titulo: String,
+    modifier: Modifier = Modifier,
+    subtitulo: String? = null,
+) {
+    Column(modifier = modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_HOJA)) {
+        Text(
+            titulo,
+            style = Movi.textos.titulo,
+            fontWeight = FontWeight.Medium,
+            color = Movi.colores.texto,
+            modifier = Modifier.semantics { heading() },
+        )
+        if (subtitulo != null) {
+            Spacer(Modifier.height(Espacio.xxs))
+            Text(subtitulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+        }
+    }
+}
