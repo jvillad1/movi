@@ -186,8 +186,8 @@ class SelectorDeCategoriaTest {
     }
 
     @Test
-    fun `modo achicado cuando la palabra mas larga no entra al tamano de siempre`() {
-        assertEquals(ModoDelRotulo.ACHICADO, modoDelRotulo(anchoDePalabra = 100f, anchoDisponible = 80f))
+    fun `un renglon cuando la palabra mas larga no entra ni con la cuadricula en su minimo`() {
+        assertEquals(ModoDelRotulo.UN_RENGLON, modoDelRotulo(anchoDePalabra = 100f, anchoDisponible = 80f))
     }
 
     @Test
@@ -212,16 +212,34 @@ class SelectorDeCategoriaTest {
         assertFalse(esLaCeldaElegida(CeldaDeCategoria.Usar("Colegio", porQue = "x"), "Colegio"))
     }
 
+    // ── Una sola letra: la cuadrícula cede columnas (vuelta de diseño 13) ─────
+
     /**
-     * «Entretenimien…» a 1.280 dp en la web: `TextAutoSize` no achicaba. El tamaño lo calcula ahora
-     * [tamanoQueEntra], con un ancho proporcional al tamaño (como una letra de verdad).
+     * A 390 dp la cuadrícula da 4 columnas de ~78 dp útiles, y «Entretenimiento» a la letra de
+     * `apoyo` mide más: antes se achicaba sola. Ahora la cuadrícula baja a 3, donde entra.
      */
     @Test
-    fun el_rotulo_achicado_baja_hasta_que_entra() {
-        // 15 letras de 0,6 em: a 12,5 sp mide 112,5; en 100 de ancho entra a 11 sp (99).
-        val anchoA = { sp: Float -> 15 * 0.6f * sp }
-        assertEquals(11f, tamanoQueEntra(base = 12.5f, minimo = 9f, paso = 0.5f, disponible = 100f, anchoA = anchoA))
-        assertEquals(12.5f, tamanoQueEntra(12.5f, 9f, 0.5f, disponible = 200f, anchoA = anchoA), "si entra, no se toca")
-        assertEquals(9f, tamanoQueEntra(12.5f, 9f, 0.5f, disponible = 10f, anchoA = anchoA), "nunca por debajo del mínimo")
+    fun `la cuadricula baja de columnas hasta que la palabra mas ancha entra`() {
+        // 358 de ancho (390 − 2 × 16), 4 de espacio y 4 de relleno: 4 columnas dejan 78,5 útiles.
+        assertEquals(3, columnasParaQueEntrenLasPalabras(4, ancho = 358f, espacio = 4f, relleno = 4f, palabraMasAncha = 90f))
+        assertEquals(4, columnasParaQueEntrenLasPalabras(4, ancho = 358f, espacio = 4f, relleno = 4f, palabraMasAncha = 78f), "si entra, no se toca")
+    }
+
+    @Test
+    fun `la cuadricula nunca baja de su minimo ni sube de lo que da el ancho`() {
+        assertEquals(
+            COLUMNAS_MINIMAS_DE_LA_CUADRICULA,
+            columnasParaQueEntrenLasPalabras(5, ancho = 560f, espacio = 4f, relleno = 4f, palabraMasAncha = 10_000f),
+            "una palabra que no entra en ningún lado no deja la cuadrícula en una columna",
+        )
+        assertEquals(2, columnasParaQueEntrenLasPalabras(2, ancho = 160f, espacio = 4f, relleno = 4f, palabraMasAncha = 10_000f), "con dos de entrada, quedan dos")
+        assertEquals(5, columnasParaQueEntrenLasPalabras(5, ancho = 560f, espacio = 4f, relleno = 4f, palabraMasAncha = 10f))
+    }
+
+    @Test
+    fun `el rotulo de las celdas especiales dice lo que hace`() {
+        assertEquals("Comida", rotuloDeLaCelda(CeldaDeCategoria.Existente("Comida")))
+        assertEquals("Crear \"Colegio\"", rotuloDeLaCelda(CeldaDeCategoria.Crear("Colegio")))
+        assertEquals("Usar \"Carro\"", rotuloDeLaCelda(CeldaDeCategoria.Usar("Carro", porQue = "x")))
     }
 }

@@ -609,9 +609,10 @@ entrada, el registro, cambiar la contraseña, borrar la cuenta y la ficha de una
 Agregar (traspaso), Reconciliar, Cuadre, Perfil y Primeros pasos también pintan el campo nuevo.
 
 **Se quedan con su campo propio** (lo vigila `LosCamposSonDelSistemaTest`, que también falla si una
-excepción ya no tiene campo): la caja de Buscar, el compositor de Movi AI, Agregar (su teclado
-numérico y la nota), el Editor de pantallas (admin), la guía de primer uso y la fila «Comercio» de
-Reconciliar, que se edita en su lugar dentro de una `Fila`.
+excepción ya no tiene campo): la caja de Buscar, el compositor de Movi AI, el Editor de pantallas
+(admin), la guía de primer uso y la fila «Comercio» de Reconciliar, que se edita en su lugar dentro de
+una `Fila`. Agregar salió de la lista en la vuelta de diseño 13 (§19): su nota es un `Campo`, y lo que le
+queda propio —el teclado numérico y el monto grande— no es un campo de texto.
 
 ## 16. Vuelta de diseño 8: títulos enteros, cifras del sistema y avisos de un vistazo
 
@@ -697,7 +698,45 @@ antes cortado, para que la prueba mida lo que dice) y «Movi propone hoy» que n
 - Lo vigilan `TextoConFormatoTest` y `PreguntasParaSeguirTest` (puras) y `MoviAiConversaConFormatoTest`
   (Robolectric: viñetas y no «- », la burbuja con los tokens en los dos temas, las píldoras y su id).
 
-## 19. Vuelta de diseño 14: Presupuestos con jerarquía y una sola señal por estado
+## 19. Vuelta de diseño 13: Agregar, por dentro
+
+Agregar es la pantalla que más se usa, y sus sub-editores (Categoría, Cuenta, Fecha, Nota) se habían
+quedado atrás de la hoja. El teclado numérico, el monto, los chips de categoría rápida, el pie y el
+guardado no cambiaron.
+
+- **Un sub-editor se sale volviendo** (`PickerHeader` en `ui/quickadd/`): arriba a la izquierda la
+  flecha del `Encabezado` (`BotonDeIcono` con `ROTULO_VOLVER`, 48 de toque) y el título, «‹ Categoría».
+  La única «×» es la de la hoja, y la cierra entera (antes había dos cruces apiladas). **Escape y el atrás
+  de Android vuelven al formulario**, no cierran la hoja: el sub-editor se anota en la pila de hojas
+  (`AtrasCierraEstaHoja`) encima de la hoja, y en la hoja desde abajo Escape llega por `onTecla`. Vale
+  también para «Desde», «Hacia» y la fecha de Traspaso y Cuota.
+- **La cuadrícula de categorías habla con una sola letra** (`SelectorDeCategoria`, en toda la app): todos
+  los rótulos en `apoyo`, hasta dos renglones partidos entre palabras, sin achicarse. Antes cada rótulo que
+  no entraba se achicaba solo («Entretenimiento» diminuto a 390 dp). Ahora cede la cuadrícula: baja de
+  columnas hasta que la palabra más ancha entra (`columnasParaQueEntrenLasPalabras`, nunca menos de
+  `COLUMNAS_MINIMAS_DE_LA_CUADRICULA` = 3). Solo una palabra que ni así entra (una categoría propia
+  larguísima) va en un renglón con «…», a la misma letra. Las celdas de un renglón miden lo mismo.
+- **La nota es el `Campo` del sistema**, con el foco al abrir, el cursor al final de lo que había, el
+  `Boton` principal «Guardar nota» encendido con texto (y vacío solo para quitar una nota que había), y
+  Enter —o «Listo» en el teléfono— guarda. **Mide lo que necesita**: ya no se le fija el alto del
+  formulario.
+- **Mientras la hoja vuelve de un sub-editor, el formulario no toma toques** (`volviendoDeUnSubEditor`,
+  `Movimiento.LARGO_MS`). Con la nota más corta la hoja se estira al volver, y bajo el dedo que tocó
+  «Guardar nota» queda «Guardar movimiento»; bajo una celda de la cuadrícula o un día del calendario, una
+  tecla. El segundo toque de un doble toque no le llega a nadie. El teclado físico y la accesibilidad no
+  pasan por ahí.
+- **La Cuenta se elige como en Patrimonio**: una `Fila` por cuenta con la marca de su banco
+  (`AvatarDeLaCuenta`), el nombre, el saldo con `Cifra` en su moneda y la elegida con la verificación en
+  la marca (y `selected` para el lector de pantalla), sobre una `Superficie` de capa 2. Una deuda dice
+  «Debes» (o «A favor») en el subtítulo, con la cifra sin signo.
+
+Lo vigila `AgregarPorDentroTest` (Robolectric, motor de texto real, 360 y 390 dp): la flecha y una sola
+«×», el atrás que vuelve con el monto intacto, los rótulos a la misma letra y sin palabras partidas, la
+caja de la nota, el botón encendido con texto, Enter y «Listo» que guardan, la nota sin hoja vacía
+debajo y el toque que no pasa durante la vuelta. `SelectorDeCuentaTest` mira la `Fila`, la `Cifra`, la
+marca y la elegida.
+
+## 20. Vuelta de diseño 14: Presupuestos con jerarquía y una sola señal por estado
 
 Revisado en Plan → Presupuestos a 390 px con la cuenta demo, sin presupuestos (las propuestas) y con
 los cuatro propuestos creados.
