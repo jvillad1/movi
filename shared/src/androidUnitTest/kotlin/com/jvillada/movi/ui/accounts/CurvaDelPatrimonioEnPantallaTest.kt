@@ -43,7 +43,7 @@ class CurvaDelPatrimonioEnPantallaTest {
     private val historia = HistoriaDelPatrimonio(
         puntos = listOf(
             PuntoDelPatrimonio("2026-08", "2026-08-31", 4_050_000L),
-            PuntoDelPatrimonio("2026-09", "2026-09-30", 4_050_000L),
+            PuntoDelPatrimonio("2026-09", "2026-09-30", 4_300_000L),
             PuntoDelPatrimonio("2026-10", "2026-10-20", 9_050_000L, esHoy = true),
         ),
         conLaTrmDeHoy = true,
@@ -78,7 +78,8 @@ class CurvaDelPatrimonioEnPantallaTest {
     fun `con historia pinta la curva, de donde a donde fue y la TRM de hoy`() {
         montar { historia }
         composeRule.waitUntil(timeoutMillis = 5_000) { curvas() == 1 }
-        assertTrue(hay("Desde ago 2026, subió"))
+        // Tres puntos (menos que la ventana de doce meses): la curva arranca con el dueño.
+        assertTrue(hay("Desde que usas Movi (ago 2026), subió"))
         assertTrue(hay(CON_LA_TRM_DE_HOY))
     }
 

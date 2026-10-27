@@ -65,6 +65,9 @@ import com.jvillada.movi.ui.credits.textosDeLosPagosQueNoFueronLaCuota
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import com.jvillada.movi.ui.transactions.MovementSingleRow
 import com.jvillada.movi.ui.transactions.TonoDelMonto
+import com.jvillada.movi.ui.cuadre.CUADRAR_EFECTIVO
+import com.jvillada.movi.ui.cuadre.EFECTIVO_EN_NEGATIVO
+import com.jvillada.movi.ui.cuadre.efectivoImposible
 import com.jvillada.movi.ui.cuadre.textoDelUltimoCuadre
 import com.jvillada.movi.shared.model.sePuedeCuadrar
 import kotlinx.coroutines.CancellationException
@@ -318,6 +321,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                         EncabezadoDeLaCuenta(
                             acc = acc,
                             onCuadrar = { onNavigate(Screen.CuadreDeSaldos) },
+                            onCuadrarEsta = { onNavigate(Screen.CuadrarLaCuenta(acc.id)) },
                         )
                         Spacer(Modifier.height(Medida.entreSecciones))
                     }
@@ -648,6 +652,9 @@ private fun SeccionDeApartados(
 /** El `testTag` del encabezado del detalle de una cuenta. */
 const val TAG_ENCABEZADO_DE_LA_CUENTA: String = "encabezado-de-la-cuenta"
 
+/** La línea del detalle de un efectivo en negativo (vuelta de diseño 23). */
+const val TAG_EFECTIVO_EN_NEGATIVO: String = "efectivo-en-negativo"
+
 /**
  * El encabezado del detalle de una cuenta: su avatar (la marca del banco, o el ícono del tipo), el
  * saldo en la cifra protagonista, el tipo y desde cuándo no se cuadra, y «Cuadrar con el banco», que
@@ -658,7 +665,7 @@ const val TAG_ENCABEZADO_DE_LA_CUENTA: String = "encabezado-de-la-cuenta"
  * de una tarjeta sí va en verde, porque es plata tuya.
  */
 @Composable
-private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit) {
+private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit, onCuadrarEsta: () -> Unit) {
     val isCard = isDebtAccount(acc.type)
     val typeLabel = accountTypeIcon(acc.type).second
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_LA_CUENTA)) {
@@ -700,7 +707,23 @@ private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit) {
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             CurrencyBreakdown(acc)
         }
-        if (sePuedeCuadrar(acc)) {
+        if (efectivoImposible(acc)) {
+            // Vuelta de diseño 23: «Efectivo −$26.500» se pintaba en rojo sin explicar nada. Un saldo
+            // imposible dice por qué y ofrece el cuadre de siempre, con esta cuenta arriba.
+            Spacer(Modifier.height(Medida.dentroDeSeccion))
+            Text(
+                text = EFECTIVO_EN_NEGATIVO,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.aviso,
+                modifier = Modifier.testTag(TAG_EFECTIVO_EN_NEGATIVO),
+            )
+            Spacer(Modifier.height(Espacio.xs))
+            Boton(
+                texto = CUADRAR_EFECTIVO,
+                onClick = onCuadrarEsta,
+                tamano = TamanoDeBoton.S,
+            )
+        } else if (sePuedeCuadrar(acc)) {
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             Row(
                 modifier = Modifier.fillMaxWidth(),

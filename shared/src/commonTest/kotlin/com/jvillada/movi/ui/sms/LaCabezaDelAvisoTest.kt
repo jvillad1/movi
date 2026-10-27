@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AvisoSinLeer
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.ParsedSms
@@ -110,7 +112,83 @@ class LaCabezaDelAvisoTest {
     @Test
     fun `un aviso de otro dia dice el dia`() {
         val cabeza = cabezaDelAviso(listOf(aviso("Nu", "Compraste en Éxito", time = "2026-10-25 09:15")), null, hoy)
-        assertEquals("Nu · Ayer, 9:15 a. m.", cabeza.subtitulo)
+        assertEquals("Nu · Ayer", cabeza.subtitulo)
+    }
+
+    // ── Vuelta de diseño 23: cuándo fue, dicho corto ──────────────────────────────────────
+
+    @Test
+    fun `la fecha relativa hoy ayer hace N dias y la fecha`() {
+        assertEquals("11:02 a. m.", fechaRelativaDelAviso(hoy, hoy, hora = "11:02 a. m."))
+        assertEquals("Hoy", fechaRelativaDelAviso(hoy, hoy, hora = null))
+        assertEquals("Ayer", fechaRelativaDelAviso(LocalDate(2026, 10, 25), hoy, hora = "9:15 a. m."))
+        assertEquals("hace 2 días", fechaRelativaDelAviso(LocalDate(2026, 10, 24), hoy, hora = null))
+        assertEquals("hace 6 días", fechaRelativaDelAviso(LocalDate(2026, 10, 20), hoy, hora = null))
+        assertEquals("19 oct", fechaRelativaDelAviso(LocalDate(2026, 10, 19), hoy, hora = null), "de una semana para atrás, la fecha")
+        assertEquals("2 sep", fechaRelativaDelAviso(LocalDate(2026, 9, 2), hoy, hora = null))
+        assertEquals("28 dic 2025", fechaRelativaDelAviso(LocalDate(2025, 12, 28), hoy, hora = null), "con el año si es de otro")
+    }
+
+    @Test
+    fun `un aviso de hace dos meses no dice solo la hora`() {
+        val viejo = aviso("Falabella", "Compra aprobada por \$42.500 en RAPPI el 02/09/2026.", time = "2026-09-02 11:02")
+        val cabeza = cabezaDelAviso(listOf(viejo), ParsedSms(42_500.0, "Rappi", TransactionType.EXPENSE, "Restaurantes"), hoy)
+        assertEquals("Falabella · 2 sep", cabeza.subtitulo)
+    }
+
+    @Test
+    fun `la fecha que leyo Movi gana sobre la de llegada`() {
+        // El correo de PSE llegó hoy, pero el pago fue hace tres días.
+        val cabeza = cabezaDelAviso(
+            listOf(aviso("Correo · Bancolombia", "Pago PSE a EPM", time = "2026-10-26 08:00")),
+            ParsedSms(120_000.0, "EPM", TransactionType.EXPENSE, "Servicios", fecha = "2026-10-23"),
+            hoy,
+        )
+        assertEquals("Bancolombia · hace 3 días", cabeza.subtitulo)
+    }
+
+    @Test
+    fun `sin hora de llegada legible vale la fecha escrita en el texto`() {
+        // La cuenta demo: el `time` es «11:02» a secas y el SMS dice «el 02/09/2026».
+        val demo = aviso("Falabella", "Compra aprobada por \$42.500 en RAPPI el 02/09/2026.", time = "11:02")
+        val cabeza = cabezaDelAviso(listOf(demo), ParsedSms(42_500.0, "Rappi", TransactionType.EXPENSE, "Restaurantes"), hoy)
+        assertEquals("Falabella · 2 sep", cabeza.subtitulo)
+        assertEquals(LocalDate(2026, 9, 2), fechaEnElTexto("el 02/09/2026."))
+        assertEquals(LocalDate(2026, 9, 2), fechaEnElTexto("el 2/9/26"))
+        assertNull(fechaEnElTexto("el 31/02/2026"), "una fecha que no existe no se inventa")
+        assertNull(fechaEnElTexto("sin fecha"))
+        // Sin nada que leer, el `time` tal cual (como antes).
+        assertEquals("11:02", cuandoFueElAviso("11:02", "sin fecha", null, hoy))
+    }
+
+    // ── Vuelta de diseño 23: la cuenta es de otro banco ───────────────────────────────────
+
+    private fun cuenta(nombre: String) = Account(nombre.lowercase(), nombre, AccountType.SAVINGS, 0)
+
+    @Test
+    fun `un aviso de Falabella con una cuenta de Bancolombia lo advierte`() {
+        assertEquals(
+            "Ojo: el aviso es de Falabella y la cuenta es de Bancolombia",
+            advertenciaDeBancos(listOf("Falabella"), cuenta("Bancolombia Ahorros")),
+        )
+        assertEquals(
+            "Ojo: el aviso es de Nu y la cuenta es de Bancolombia",
+            advertenciaDeBancos(listOf("Notificación · Nu"), cuenta("Bancolombia Ahorros")),
+        )
+    }
+
+    @Test
+    fun `sin con que comparar o del mismo banco no dice nada`() {
+        assertNull(advertenciaDeBancos(listOf("Correo · Bancolombia"), cuenta("Bancolombia Ahorros")), "el mismo banco")
+        assertNull(advertenciaDeBancos(listOf("Notificación · Bancolombia"), cuenta("AMEX 9208")), "la AMEX es de Bancolombia")
+        assertNull(advertenciaDeBancos(listOf("85540"), cuenta("Nu")), "el código del remitente no dice el banco")
+        assertNull(advertenciaDeBancos(listOf("Comprobante · transferencia.png"), cuenta("Nu")), "un comprobante no es un banco")
+        assertNull(advertenciaDeBancos(listOf("Falabella"), cuenta("Efectivo")), "una cuenta que no dice su banco")
+        assertNull(advertenciaDeBancos(listOf("Falabella"), null), "sin cuenta")
+        assertNull(
+            advertenciaDeBancos(listOf("Notificación · Google Wallet", "Notificación · Nu"), cuenta("Nu")),
+            "en un pago avisado varias veces basta con que uno sea del banco de la cuenta",
+        )
     }
 
     @Test

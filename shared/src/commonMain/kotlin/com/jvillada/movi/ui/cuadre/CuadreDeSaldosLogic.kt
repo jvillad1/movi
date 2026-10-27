@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.cuadre
 
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.saldoEnSuMoneda
 import com.jvillada.movi.ui.components.signedMoney
@@ -57,6 +58,35 @@ fun sePuedeCuadrar(cuenta: Account): Boolean = com.jvillada.movi.shared.model.se
 
 /** Las cuentas que la pantalla «Cuadre de saldos» lista, en el orden en que vienen. */
 fun cuentasParaCuadrar(cuentas: List<Account>): List<Account> = cuentas.filter { sePuedeCuadrar(it) }
+
+/**
+ * **Las cuentas del cuadre con [primeraId] arriba** (vuelta de diseño 23): «Cuadrar efectivo» abre el
+ * cuadre de siempre con esa cuenta preseleccionada, la primera de la lista. Sin [primeraId] (o si no
+ * está), el orden de siempre.
+ */
+fun cuentasConLaPrimera(cuentas: List<Account>, primeraId: String?): List<Account> {
+    val primera = cuentas.firstOrNull { it.id == primeraId } ?: return cuentas
+    return listOf(primera) + cuentas.filter { it.id != primera.id }
+}
+
+/**
+ * **Un saldo imposible** (vuelta de diseño 23): efectivo en negativo. No se puede tener menos de cero
+ * billetes; es un gasto anotado de más, uno que faltó por anotar al revés, o el efectivo que nunca se
+ * cuadró. Se pintaba en rojo sin explicar nada: ahora la fila lo dice y el detalle ofrece
+ * [CUADRAR_EFECTIVO].
+ */
+fun efectivoImposible(cuenta: Account): Boolean =
+    cuenta.type == AccountType.CASH && saldoEnSuMoneda(cuenta).first < 0 && sePuedeCuadrar(cuenta)
+
+/** La acción del detalle de un efectivo en negativo: el cuadre de saldos con esa cuenta arriba. */
+const val CUADRAR_EFECTIVO: String = "Cuadrar efectivo"
+
+/** Lo que dice la fila de un efectivo en negativo. */
+const val EFECTIVO_EN_NEGATIVO_CORTO: String = "No puede quedar en negativo: cuádralo"
+
+/** Lo que dice el detalle de un efectivo en negativo, al lado de [CUADRAR_EFECTIVO]. */
+const val EFECTIVO_EN_NEGATIVO: String =
+    "El efectivo no puede quedar en negativo. Cuenta lo que tienes en la mano y cuádralo."
 
 /**
  * **Lo que Movi cree que hay en esta cuenta**, en la moneda de la cuenta — el mismo par

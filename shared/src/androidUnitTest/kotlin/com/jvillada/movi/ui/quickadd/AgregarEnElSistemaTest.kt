@@ -155,7 +155,7 @@ class AgregarEnElSistemaTest {
         val lado = with(composeRule.density) { nodo.size.width.toDp() }
         assertEquals(Medida.objetivoTactil.value, lado.value, 0.5f)
         val descripcion = nodo.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
-        assertTrue("Subir comprobante o extracto" in descripcion, "el ícono solo dice qué hace: $descripcion")
+        assertTrue(DESCRIPCION_DE_SUBIR_PAPEL_EN_AGREGAR in descripcion, "el ícono solo dice qué hace: $descripcion")
         // El botón principal sigue siendo el `Boton` de siempre.
         composeRule.onNode(hasTestTag(TAG_BOTON) and hasText("Guardar movimiento")).assertExists()
     }

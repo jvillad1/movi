@@ -254,15 +254,19 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     }
     val destinosParaGuardar = rememberDestinosParaGuardar(hacenFalta = aQuienFue.isNotEmpty())
     /** Cabeza de cada pago → lo que Movi va a anotar, para los pagos que entendió (ver [loQueMoviEntendio]). */
-    val entendidos: Map<String, AnotacionEntendida> = remember(mensajes, propuestas, cuentas, fallaronAca) {
+    val entendimientos: Map<String, LoQueMoviEntendio> = remember(mensajes, propuestas, cuentas, fallaronAca) {
         val todos = mensajes ?: return@remember emptyMap()
         val leidas = propuestas ?: return@remember emptyMap()
         val ahora = Clock.System.now().toEpochMilliseconds()
         pagosPorRevisar(todos)
             .filter { it.id !in fallaronAca }
-            .mapNotNull { cabeza -> loQueMoviEntendio(cabeza, todos, leidas, cuentas, ahora).anotacion?.let { cabeza.id to it } }
-            .toMap()
+            .associate { cabeza -> cabeza.id to loQueMoviEntendio(cabeza, todos, leidas, cuentas, ahora) }
     }
+    val entendidos: Map<String, AnotacionEntendida> =
+        entendimientos.mapNotNull { (id, e) -> e.anotacion?.let { id to it } }.toMap()
+    /** Vuelta de diseño 23: la cuenta que propone Movi es de otro banco que el del aviso. */
+    val advertencias: Map<String, String> =
+        entendimientos.mapNotNull { (id, e) -> e.advertencia?.let { id to it } }.toMap()
     val dias = diasLeidos?.map { dia ->
         dia.copy(items = dia.items.filterNot { (it.transferId ?: it.id) in movimientosResueltos })
     }
@@ -481,6 +485,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                     onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
                                     leido = propuestaDelPago(propuestas, sms)?.leido,
                                     sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
+                                    advertencia = advertencias[sms.id],
                                 )
                             }
                             return@forEach
@@ -501,6 +506,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                 sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
                                 // En la bandeja todo está pendiente: la píldora no diría nada.
                                 conPildoraDePendiente = false,
+                                advertencia = advertencias[sms.id],
                                 // El otro aviso puede estar ya confirmado: se busca en la lista
                                 // entera, no solo entre los pendientes.
                                 parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },

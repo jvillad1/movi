@@ -106,6 +106,9 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.espacios.CaminosDeRepartir
+import com.jvillada.movi.ui.espacios.GastoParaRepartir
+import com.jvillada.movi.ui.espacios.HojaRepartirEsteGasto
 import kotlinx.coroutines.withTimeoutOrNull
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
@@ -131,8 +134,15 @@ internal const val TAG_VOLVER_DEL_SUB_EDITOR = "quickadd:volver-del-sub-editor"
 /** El campo de texto del sub-picker «Nota» — para encontrarlo en una prueba (Task 5). */
 internal const val TAG_CAMPO_DE_NOTA = "quickadd:campo-de-nota"
 
-/** El botón «Pagó otro» de Agregar (R3): un gasto que pagó otro miembro de un espacio. */
-const val TAG_PAGO_OTRO_EN_AGREGAR: String = "pago-otro-en-agregar"
+/**
+ * El botón «Repartir este gasto» de Agregar (vuelta de diseño 23; antes «Pagó otro», R3): abre la hoja
+ * que reparte el gasto escrito en un espacio, lo haya pagado el dueño u otro miembro.
+ */
+const val TAG_REPARTIR_EN_AGREGAR: String = "quickadd:repartir"
+
+/** Lo que dicen los dos íconos de la fila de guardar (vuelta de diseño 23: «Pagó otro» no decía qué hacía). */
+const val DESCRIPCION_DE_REPARTIR_EN_AGREGAR: String = "Repartir este gasto"
+const val DESCRIPCION_DE_SUBIR_PAPEL_EN_AGREGAR: String = "Subir comprobante o extracto"
 
 /** El botón «Subir comprobante o extracto» de Agregar (Ola 2). */
 const val TAG_SUBIR_PAPEL_EN_AGREGAR: String = "quickadd:subir-papel"
@@ -590,11 +600,12 @@ fun QuickAddScreen(
     // decir «Hoy» y guardar la fecha de mañana.
     // Ola 2 · «Compartir con Movi»: el papel elegido va a la cola de lo compartido y la hoja se
     // cierra; `App()` abre la de lectura encima de la pantalla.
-    // R3 · «Pagó otro»: con algún espacio, un gasto que pagó otro miembro se anota en su espacio
-    // (no es un movimiento de tus cuentas). Sin espacios no aparece nada.
-    var espaciosParaPagoOtro by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Espacio>>(emptyList()) }
+    // Vuelta de diseño 23 · «Repartir este gasto»: con algún espacio, el gasto escrito se reparte en
+    // él —lo hayas pagado tú o lo haya pagado otro— sin salir de la hoja. Sin espacios no aparece nada.
+    var espaciosParaRepartir by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Espacio>>(emptyList()) }
+    var repartiendo by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        espaciosParaPagoOtro = runCatching { Repositories.wallets.getEspacios() }.getOrDefault(emptyList())
+        espaciosParaRepartir = runCatching { Repositories.wallets.getEspacios() }.getOrDefault(emptyList())
     }
     val elegirPapel = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
         PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
@@ -965,8 +976,13 @@ fun QuickAddScreen(
         conElAviso = false
     }
 
-    fun save(yAnotarOtro: Boolean = false) {
-        if (!canSave) return
+    /**
+     * **Guarda el movimiento de la hoja**, con todo lo que pasa después de un guardado bueno (el
+     * aviso que se confirma con él, el id nuevo del borrador, las memorias de la sesión), y lo
+     * devuelve. Lanza si el guardado falla. No cierra nada: eso lo decide quien llama —[save], o
+     * «Repartir este gasto» (vuelta de diseño 23), que después reparte el mismo movimiento—.
+     */
+    suspend fun guardarElMovimiento(): FinancialEvent {
         /*
          * **La misma guarda, dicha donde de verdad decide.**
          *
@@ -981,68 +997,74 @@ fun QuickAddScreen(
          * justamente el motivo para sacarlo y no para dejarlo: el único renglón que decide contra
          * qué cuenta se guarda afirmaba que hay un plan B cuando no lo hay, y el día que alguien
          * afloje `canSave` —agregar un tipo de movimiento, mover la validación— el plan B vuelve
-         * a la vida sin que nadie lo haya elegido. Con el `?: return` el compilador ya no deja
+         * a la vida sin que nadie lo haya elegido. Con el `?: error(…)` el compilador ya no deja
          * escribir un `accountId` que no salga de la elección del dueño.
          */
-        val cuenta = selectedAccountId ?: return
-        saving = true
-        error = null
+        val cuenta = selectedAccountId ?: error("Falta la cuenta")
         // Ola 2 #2: recortada — canSave ya exige no-vacío, pero "  Comida  " pasaba esa guarda
         // y se guardaba con espacios.
         val trimmedCategory = category.trim()
-        // Se lee acá, antes del `launch`: un toque en «Quitar» a mitad del guardado no cambia lo que
+        // Se lee acá, antes de escribir: un toque en «Quitar» a mitad del guardado no cambia lo que
         // ya se decidió guardar.
         val elAviso = avisoParecido?.takeIf { conElAviso }
+        val deLaHoja = movimientoDeLaHoja(
+            // El id sale del BORRADOR, no de acá adentro: ver [idDelBorrador] más arriba.
+            id = idDelBorrador,
+            cuentaId = cuenta,
+            cuentas = accounts,
+            tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
+            monto = amount.toLongOrNull() ?: 0L,
+            categoria = trimmedCategory,
+            nota = note,
+            // Ola 13: la fecha elegida, no «ahora» a secas. Con «Hoy» (el default) sigue
+            // siendo `Clock.System.now()` exactamente como antes — ver [timestampParaFecha],
+            // que explica por qué otro día va al mediodía de Bogotá y hoy no.
+            timestamp = timestampParaFecha(fecha, hoy),
+        )
+        val event = elAviso?.let { movimientoConElAviso(deLaHoja, it, ahora = Clock.System.now().toEpochMilliseconds()) }
+            ?: deLaHoja
+        Repositories.wallets.postEvent(event)
+        // El aviso queda confirmado CON este movimiento: no se anota dos veces. Si esto falla,
+        // el movimiento ya está guardado y el aviso sigue en «Por revisar», donde «¿Ya lo
+        // anotaste?» lo encuentra (lleva el mismo texto) y ofrece «Es este».
+        elAviso?.let { aviso -> runCatching { Repositories.wallets.confirmSmsCon(aviso.id, event.id) } }
+        // Id nuevo recién ACÁ: el movimiento siguiente es otro movimiento. Mismo reflejo
+        // que `TransferForm` — ver [idDelBorrador].
+        idDelBorrador = newId("ev")
+        // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
+        // "usada" en el resto de la sesión. Ola 9 · A3: con el tipo con que la usó.
+        UsedCategoriesCache.record(trimmedCategory, event.type)
+        // Ola 11: la próxima vez, «Agregar» arranca en esta cuenta. Va DESPUÉS del
+        // guardado exitoso y no antes: un guardado que falló no movió plata de ninguna
+        // cuenta, y no tiene por qué mover el valor por defecto de la próxima apertura.
+        //
+        // Precisión que importa en el teléfono: en Android `Repositories.wallets` es
+        // `LocalRepository` (offline-first), así que «exitoso» acá significa **guardado
+        // en la base local**, no confirmado por el server — el `SyncEngine` lo empuja
+        // después. Es lo correcto para esta preferencia: el dueño anotó el gasto en esa
+        // cuenta, y que el server todavía no se haya enterado no cambia en cuál lo anotó.
+        LastAccountStore.recordAccount(event.accountId)
+        // Task 5 (fix round 1): la memoria de categorías que trajo esta hoja puede quedar
+        // vieja apenas se guarda este movimiento — se invalida, SIN pedir nada, para que
+        // la próxima hoja de «Agregar» de esta sesión vuelva a preguntar. Síncrono y no un
+        // `coroutine.launch { … }`: eso relanzaba la petición en el scope de ESTA hoja, que
+        // `onSaved()` —dos líneas más abajo— cierra en el mismo instante; la petición se
+        // cancelaba a mitad de camino y ninguna sugerencia posterior alcanzaba a llegar en
+        // toda la sesión. Ver el KDoc de `MemoriaDeCategoriasCache` para la historia entera.
+        MemoriaDeCategoriasCache.invalidar()
+        vibrador.confirmar()
+        return event
+    }
+
+    fun save(yAnotarOtro: Boolean = false) {
+        if (!canSave || selectedAccountId == null) return
+        saving = true
+        error = null
         ultimoAnotado = null
         coroutine.launch {
-            val deLaHoja = movimientoDeLaHoja(
-                // El id sale del BORRADOR, no de acá adentro: ver [idDelBorrador] más arriba.
-                id = idDelBorrador,
-                cuentaId = cuenta,
-                cuentas = accounts,
-                tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
-                monto = amount.toLongOrNull() ?: 0L,
-                categoria = trimmedCategory,
-                nota = note,
-                // Ola 13: la fecha elegida, no «ahora» a secas. Con «Hoy» (el default) sigue
-                // siendo `Clock.System.now()` exactamente como antes — ver [timestampParaFecha],
-                // que explica por qué otro día va al mediodía de Bogotá y hoy no.
-                timestamp = timestampParaFecha(fecha, hoy),
-            )
-            val event = elAviso?.let { movimientoConElAviso(deLaHoja, it, ahora = Clock.System.now().toEpochMilliseconds()) }
-                ?: deLaHoja
-            val result = runCatching { Repositories.wallets.postEvent(event) }
+            val result = runCatching { guardarElMovimiento() }
             saving = false
-            result.onSuccess {
-                // El aviso queda confirmado CON este movimiento: no se anota dos veces. Si esto falla,
-                // el movimiento ya está guardado y el aviso sigue en «Por revisar», donde «¿Ya lo
-                // anotaste?» lo encuentra (lleva el mismo texto) y ofrece «Es este».
-                elAviso?.let { aviso -> runCatching { Repositories.wallets.confirmSmsCon(aviso.id, event.id) } }
-                // Id nuevo recién ACÁ: el movimiento siguiente es otro movimiento. Mismo reflejo
-                // que `TransferForm` — ver [idDelBorrador].
-                idDelBorrador = newId("ev")
-                // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
-                // "usada" en el resto de la sesión. Ola 9 · A3: con el tipo con que la usó.
-                UsedCategoriesCache.record(trimmedCategory, event.type)
-                // Ola 11: la próxima vez, «Agregar» arranca en esta cuenta. Va DESPUÉS del
-                // guardado exitoso y no antes: un guardado que falló no movió plata de ninguna
-                // cuenta, y no tiene por qué mover el valor por defecto de la próxima apertura.
-                //
-                // Precisión que importa en el teléfono: en Android `Repositories.wallets` es
-                // `LocalRepository` (offline-first), así que «exitoso» acá significa **guardado
-                // en la base local**, no confirmado por el server — el `SyncEngine` lo empuja
-                // después. Es lo correcto para esta preferencia: el dueño anotó el gasto en esa
-                // cuenta, y que el server todavía no se haya enterado no cambia en cuál lo anotó.
-                LastAccountStore.recordAccount(event.accountId)
-                // Task 5 (fix round 1): la memoria de categorías que trajo esta hoja puede quedar
-                // vieja apenas se guarda este movimiento — se invalida, SIN pedir nada, para que
-                // la próxima hoja de «Agregar» de esta sesión vuelva a preguntar. Síncrono y no un
-                // `coroutine.launch { … }`: eso relanzaba la petición en el scope de ESTA hoja, que
-                // `onSaved()` —dos líneas más abajo— cierra en el mismo instante; la petición se
-                // cancelaba a mitad de camino y ninguna sugerencia posterior alcanzaba a llegar en
-                // toda la sesión. Ver el KDoc de `MemoriaDeCategoriasCache` para la historia entera.
-                MemoriaDeCategoriasCache.invalidar()
-                vibrador.confirmar()
+            result.onSuccess { event ->
                 // Ola 9 · B: el movimiento YA está guardado; recién ahora se ofrece el
                 // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
                 // paso, así que un ofrecimiento suyo se iría con ella).
@@ -1082,7 +1104,8 @@ fun QuickAddScreen(
             if (evento.type == KeyEventType.KeyDown) volverAlFormulario()
             return true
         }
-        if (pickers.typeIndex >= TIPO_TRASPASO || pickers.hayPicker || saving) return false
+        // Con «Repartir este gasto» abierta, las teclas son de esa hoja (su campo de monto, su botón).
+        if (pickers.typeIndex >= TIPO_TRASPASO || pickers.hayPicker || saving || repartiendo) return false
         val conModificador = evento.isCtrlPressed || evento.isMetaPressed || evento.isAltPressed
         return when (val accion = accionDeTecla(evento.key, evento.type, conModificador, conShift = evento.isShiftPressed)) {
             null -> false
@@ -1504,11 +1527,8 @@ fun QuickAddScreen(
                                 hasNoAccounts = accountsLoaded && accounts.isEmpty(),
                                 onCreateAccount = { showCreateSheet = true },
                                 onSubirPapel = elegirPapel,
-                                onPagoOtro = if (pickers.typeIndex == PestanaDeAgregar.GASTO.indice && espaciosParaPagoOtro.isNotEmpty()) {
-                                    {
-                                        val unico = espaciosParaPagoOtro.singleOrNull()
-                                        onNavigate(if (unico != null) Screen.Espacio(unico.id, pagoOtro = true) else Screen.Espacios)
-                                    }
+                                onRepartir = if (pickers.typeIndex == PestanaDeAgregar.GASTO.indice && espaciosParaRepartir.isNotEmpty()) {
+                                    { repartiendo = true }
                                 } else {
                                     null
                                 },
@@ -1526,6 +1546,36 @@ fun QuickAddScreen(
             CreateAccountSheet(
                 onDismiss = { showCreateSheet = false },
                 onAccountCreated = { showCreateSheet = false; accountsRefreshKey++ },
+            )
+        }
+
+        if (repartiendo && espaciosParaRepartir.isNotEmpty()) {
+            HojaRepartirEsteGasto(
+                // Lo escrito viaja tal cual: el monto, la categoría, la nota y la fecha elegida.
+                gasto = GastoParaRepartir(
+                    monto = parsedAmount.toLong(),
+                    categoria = category,
+                    nota = note,
+                    momento = timestampParaFecha(fecha, hoy),
+                    fecha = etiquetaDeFecha(fecha, hoy),
+                    cuenta = selectedAccount?.name,
+                    moneda = monedaDeLaHoja,
+                    faltaParaGuardar = missingFieldMessage,
+                ),
+                espacios = espaciosParaRepartir,
+                caminos = CaminosDeRepartir(
+                    guardarElGasto = { guardarElMovimiento() },
+                    repartirMovimiento = { espacioId, eventoId -> Repositories.wallets.repartirMovimiento(espacioId, eventoId) },
+                    anotarGastoDeOtro = { espacioId, gasto -> Repositories.wallets.anotarGastoDeOtro(espacioId, gasto) },
+                ),
+                // El campo de la hoja es el monto de Agregar, no una copia.
+                onMonto = { amount = it?.toString().orEmpty() },
+                onDismiss = { repartiendo = false },
+                onListo = { guardado ->
+                    repartiendo = false
+                    guardado?.let(onSavedEvent)
+                    onSaved()
+                },
             )
         }
     }
@@ -1608,8 +1658,8 @@ private fun EditorBody(
      * Va en el lugar que tenía la cámara falsa, al lado de guardar, para no mover nada de la hoja.
      */
     onSubirPapel: (() -> Unit)? = null,
-    /** R3 · «Pagó otro»: lo pagó otro miembro de un espacio. `null` sin espacios o fuera de «Gasto». */
-    onPagoOtro: (() -> Unit)? = null,
+    /** «Repartir este gasto» (vuelta de diseño 23). `null` sin espacios o fuera de «Gasto». */
+    onRepartir: (() -> Unit)? = null,
 ) {
     // Ola 13 — DE DÓNDE SALIERON ESTOS DOS SPACERS MÁS CHICOS (22→16 y 8→2).
     //
@@ -1871,20 +1921,20 @@ private fun EditorBody(
         ) {
             // Vuelta de diseño 20: `BotonDeIcono` secundario (48 × 48, capa 2, el radio del botón de
             // al lado). Eran dos cajas armadas a mano de 56 de ancho.
-            if (onPagoOtro != null) {
+            if (onRepartir != null) {
                 BotonDeIcono(
                     icono = Icons.Rounded.Groups,
-                    descripcion = "Pagó otro",
-                    onClick = onPagoOtro,
+                    descripcion = DESCRIPCION_DE_REPARTIR_EN_AGREGAR,
+                    onClick = onRepartir,
                     variante = VarianteDeBotonDeIcono.Secundario,
                     habilitado = !saving,
-                    modifier = Modifier.testTag(TAG_PAGO_OTRO_EN_AGREGAR),
+                    modifier = Modifier.testTag(TAG_REPARTIR_EN_AGREGAR),
                 )
             }
             if (onSubirPapel != null) {
                 BotonDeIcono(
                     icono = Icons.Rounded.UploadFile,
-                    descripcion = "Subir comprobante o extracto",
+                    descripcion = DESCRIPCION_DE_SUBIR_PAPEL_EN_AGREGAR,
                     onClick = onSubirPapel,
                     variante = VarianteDeBotonDeIcono.Secundario,
                     habilitado = !saving,

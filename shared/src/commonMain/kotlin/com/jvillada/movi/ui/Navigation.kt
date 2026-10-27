@@ -228,6 +228,13 @@ sealed class Screen {
     data object CuadreDeSaldos : Screen()
 
     /**
+     * **El cuadre de saldos con [cuentaId] preseleccionada** (vuelta de diseño 23): la misma pantalla
+     * que [CuadreDeSaldos], con esa cuenta arriba. La abre «Cuadrar efectivo» en el detalle de un
+     * efectivo en negativo.
+     */
+    data class CuadrarLaCuenta(val cuentaId: String) : Screen()
+
+    /**
      * **«Por revisar»** (ola C): la única bandeja de lo que entró solo y espera una decisión — los
      * mensajes del banco por confirmar, los movimientos que entraron solos y los candidatos a pago
      * de tarjeta. Antes eran dos lugares (la pantalla de Mensajes del banco y un aviso de
@@ -340,7 +347,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     // revisar»): marcan esa pestaña, no Ajustes.
     is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile -> NavTab.MOVIMIENTOS
     is Screen.Plan, Screen.Budgets, Screen.Periodos, is Screen.DetalleDePeriodo -> NavTab.PLAN
-    Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos -> NavTab.PATRIMONIO
+    Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos, is Screen.CuadrarLaCuenta -> NavTab.PATRIMONIO
     Screen.Espacios, is Screen.Espacio, is Screen.Destinos -> NavTab.ESPACIOS
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse. Hoy las dos (Cuentas y Créditos) son Patrimonio.
