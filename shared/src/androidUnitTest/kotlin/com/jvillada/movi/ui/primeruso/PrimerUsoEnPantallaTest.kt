@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -32,7 +33,14 @@ import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
+import androidx.compose.ui.graphics.Color
+import com.jvillada.movi.theme.COLORES_CLAROS
+import com.jvillada.movi.theme.COLORES_OSCUROS
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.coloresDelBoton
+import com.jvillada.movi.ui.components.ds.coloresDelBotonApagado
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.components.TAG_AVATAR_DE_MARCA
@@ -386,6 +394,30 @@ class PrimerUsoEnPantallaTest {
         saltar()
         assertTrue(repo.perfiles.isEmpty(), "«Saltar este paso» no guarda el día elegido")
         assertTrue(seVe("Paso 3 de 6"))
+    }
+
+    // ── Vuelta de diseño 5 ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * «Saltar este paso» es un botón de texto chico y centrado debajo de «Atrás» y «Siguiente»: más
+     * bajo y más angosto que la fila de botones, para que «Siguiente» sea la única acción con peso.
+     */
+    @Test
+    fun `Saltar este paso es un boton de texto chico y centrado`() {
+        montar(RepoDeLaGuia(), paso = PasoDePrimerUso.PERIODO)
+        val saltar = composeRule.onNodeWithTag(TAG_SALTAR_EN_LA_GUIA).fetchSemanticsNode().boundsInRoot
+        val avanzar = composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).fetchSemanticsNode().boundsInRoot
+        val ancho = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.width
+        val densidad = composeRule.density.density
+        assertEquals(Medida.altoChico.value, saltar.height / densidad, 0.5f, "el tamaño S, no el M de «Siguiente»")
+        assertTrue(saltar.height < avanzar.height, "más bajo que «Siguiente»")
+        assertTrue(saltar.width < avanzar.width, "no va a todo el ancho")
+        assertTrue(saltar.top >= avanzar.bottom, "debajo de los botones")
+        // Centrado bajo la fila «Atrás · Siguiente», que tiene el mismo margen a los dos lados.
+        assertEquals(ancho / 2f, saltar.center.x, densidad, "centrado")
+        // El botón de texto no tiene fondo, ni siquiera apagado.
+        assertEquals(Color.Transparent, coloresDelBoton(VarianteDeBoton.Fantasma, COLORES_OSCUROS).first)
+        assertEquals(Color.Transparent, coloresDelBotonApagado(VarianteDeBoton.Fantasma, COLORES_CLAROS).first)
     }
 
     @Test

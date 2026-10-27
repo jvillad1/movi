@@ -3,6 +3,12 @@ package com.jvillada.movi.ui.buscar
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -25,6 +31,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.ds.TAG_PILDORA_DE_FILTRO
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -165,5 +172,48 @@ class BuscarScreenTest {
 
         assertTrue(BusquedasRecientesStore.recientes.isEmpty())
         assertTrue(BusquedasRecientesStore.leer().isEmpty(), "y no queda nada guardado")
+    }
+
+    // ── Vuelta de diseño 5 ─────────────────────────────────────────────────────────────────────
+
+    private fun textos(nodo: SemanticsNode): String =
+        (nodo.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()) +
+            nodo.children.joinToString("") { textos(it) }
+
+    /** Los chips de izquierda a derecha: su texto y si está elegido. */
+    private fun chips(): List<Pair<String, Boolean>> =
+        composeRule.onAllNodesWithTag(TAG_PILDORA_DE_FILTRO, useUnmergedTree = true).fetchSemanticsNodes()
+            .sortedBy { it.boundsInRoot.left }
+            .map { textos(it) to (it.config.getOrNull(SemanticsProperties.Selected) == true) }
+
+    @Test
+    fun `los chips van Todo, Gastos, Ingresos, Este periodo y Cuenta, con Todo elegido`() {
+        montar()
+        composeRule.waitUntil(5_000) { conTag(TAG_PILDORA_DE_FILTRO) == 5 }
+        assertEquals(
+            listOf("Todo" to true, "Gastos" to false, "Ingresos" to false, ESTE_PERIODO to false, "Cuenta" to false),
+            chips(),
+        )
+    }
+
+    @Test
+    fun `elegir Gastos lo elige solo a el, y tocar Todo vuelve a todo`() {
+        montar()
+        composeRule.waitUntil(5_000) { conTag(TAG_PILDORA_DE_FILTRO) == 5 }
+        composeRule.onNode(hasTestTag(TAG_PILDORA_DE_FILTRO) and hasAnyDescendant(hasText("Gastos")), useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf(false, true, false), chips().take(3).map { it.second })
+        // El gasto sigue saliendo con Gastos elegido.
+        escribir("rappi")
+        assertTrue(conTag(TAG_RESULTADO_DE_BUSCAR + "mov:r1") > 0)
+
+        composeRule.onNode(hasTestTag(TAG_PILDORA_DE_FILTRO) and hasAnyDescendant(hasText("Todo")), useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf(true, false, false), chips().take(3).map { it.second })
+
+        // El chip del período dice siempre «Este período», elegido o no.
+        composeRule.onNode(hasTestTag(TAG_PILDORA_DE_FILTRO) and hasAnyDescendant(hasText(ESTE_PERIODO)), useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        assertEquals(ESTE_PERIODO to true, chips()[3])
     }
 }

@@ -75,6 +75,7 @@ import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeFila
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
@@ -495,12 +496,13 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                 }
 
                 // Al final y aparte: se usa una vez, si es que se usa, y no puede quedar a un toque
-                // distraído de nada. Sin relleno rojo: una fila más, con el ícono en el color de
-                // alerta (ver el reporte de la vuelta 3 sobre el color del texto).
+                // distraído de nada. Sin relleno rojo: una fila más, con el ícono y el título en el
+                // color de alerta (vuelta de diseño 5: `Fila` ya deja elegir el tono del título).
                 item(key = "borrar") {
                     Superficie(relleno = RellenoDeSuperficie.Lista) {
                         Fila(
                             titulo = BORRAR_MI_CUENTA,
+                            tonoDelTitulo = TonoDeFila.Alerta,
                             inicio = { IconoEnCirculo(Icons.Rounded.DeleteForever, tono = TonoDeIcono.Peligro) },
                             final = { Chevron() },
                             onClick = { onNavigate(Screen.BorrarLaCuenta) },

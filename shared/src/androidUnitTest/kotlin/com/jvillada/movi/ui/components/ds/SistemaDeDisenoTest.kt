@@ -27,6 +27,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.shared.model.marcaDelBanco
+import androidx.compose.ui.graphics.Color
+import com.jvillada.movi.theme.COLORES_CLAROS
+import com.jvillada.movi.theme.COLORES_OSCUROS
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.LocalSaldosOcultos
@@ -79,6 +82,8 @@ class SistemaDeDisenoTest {
                 Fila(titulo = "Nu", subtitulo = "Ahorros", inicio = { IconoEnCirculo(Icons.Rounded.Inbox) }, final = { Cifra(1_500_000) })
                 Separador()
                 Fila(titulo = "Bancolombia", final = { Chevron() }, onClick = {})
+                Separador()
+                Fila(titulo = "Borrar mi cuenta", tonoDelTitulo = TonoDeFila.Alerta, onClick = {})
             }
             Superficie(nivel = NivelDeSuperficie.Capa2) { Text("Anidada") }
             Boton("Guardar", onClick = {}, icono = Icons.Rounded.Add)
@@ -166,6 +171,26 @@ class SistemaDeDisenoTest {
         assertTrue(altoDe(TAG_BOTON, 0) >= Medida.objetivoTactil, "el botón M mide ${altoDe(TAG_BOTON, 0)}")
         assertEquals(Medida.altoChico, altoDe(TAG_BOTON, 1), "el botón S se dibuja a 36")
         assertTrue(altoTactilDe(TAG_BOTON, 1) >= Medida.objetivoTactil, "el toque del botón S mide ${altoTactilDe(TAG_BOTON, 1)}")
+    }
+
+    /** Vuelta de diseño 5: el tono del título de una fila sale del tema, nunca de un `Color` suelto. */
+    @Test
+    fun `el titulo de la fila toma su tono del tema, en los dos`() {
+        listOf(COLORES_OSCUROS, COLORES_CLAROS).forEach { c ->
+            assertEquals(c.texto, colorDelTituloDeFila(TonoDeFila.Normal, c))
+            assertEquals(c.sale, colorDelTituloDeFila(TonoDeFila.Alerta, c))
+            assertEquals(c.textoMedio, colorDelTituloDeFila(TonoDeFila.Apagado, c))
+        }
+    }
+
+    /** El botón de texto no se rellena al apagarse; los demás sí, con la capa 2. */
+    @Test
+    fun `el boton de texto apagado sigue sin fondo`() {
+        listOf(COLORES_OSCUROS, COLORES_CLAROS).forEach { c ->
+            assertEquals(Color.Transparent, coloresDelBotonApagado(VarianteDeBoton.Fantasma, c).first)
+            assertEquals(c.textoApagado, coloresDelBotonApagado(VarianteDeBoton.Fantasma, c).second)
+            assertEquals(c.capa2, coloresDelBotonApagado(VarianteDeBoton.Principal, c).first)
+        }
     }
 
     @Test

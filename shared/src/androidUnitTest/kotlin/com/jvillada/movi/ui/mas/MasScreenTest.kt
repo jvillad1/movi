@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -25,7 +26,9 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.MoviTheme
+import androidx.compose.ui.text.TextLayoutResult
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.WindowWidthClass
@@ -76,6 +79,8 @@ class MasScreenTest {
     }
 
     private var navegoA: Screen? = null
+    private var colorDeAlerta: Color = Color.Unspecified
+    private var colorDelTexto: Color = Color.Unspecified
     private var sesionesCerradas = 0
 
     private fun montar(ancho: WindowWidthClass? = null) {
@@ -83,6 +88,8 @@ class MasScreenTest {
         composeRule.setContent {
             val pantalla = @androidx.compose.runtime.Composable {
                 MoviTheme {
+                    colorDeAlerta = Movi.colores.sale
+                    colorDelTexto = Movi.colores.texto
                     Box(Modifier.fillMaxSize()) {
                         MasScreen(onNavigate = { navegoA = it }, onLogout = { sesionesCerradas++ })
                     }
@@ -192,6 +199,22 @@ class MasScreenTest {
         assertTrue(borrar > arribaDe(CERRAR_SESION_EN_TODOS), "después de todo lo demás")
         // Es una fila (se toca entera), no un botón lleno.
         composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText(BORRAR_MI_CUENTA)), useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /** Vuelta de diseño 5: el título de «Borrar mi cuenta» va en el color de alerta del tema. */
+    @Test
+    fun `el titulo de Borrar mi cuenta usa el color de alerta del tema`() {
+        montar()
+        val nodo = composeRule.onNodeWithText(BORRAR_MI_CUENTA, useUnmergedTree = true).fetchSemanticsNode()
+        val resultados = mutableListOf<TextLayoutResult>()
+        nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(resultados)
+        val color = resultados.single().layoutInput.style.color
+        assertEquals(colorDeAlerta, color, "«Borrar mi cuenta» en `sale`")
+        // Las demás filas siguen en el color del texto.
+        val otra = composeRule.onNodeWithText(CERRAR_SESION_EN_TODOS, useUnmergedTree = true).fetchSemanticsNode()
+        val deLaOtra = mutableListOf<TextLayoutResult>()
+        otra.config[SemanticsActions.GetTextLayoutResult].action?.invoke(deLaOtra)
+        assertEquals(colorDelTexto, deLaOtra.single().layoutInput.style.color)
     }
 
     @Test

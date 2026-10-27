@@ -2,7 +2,6 @@ package com.jvillada.movi.ui.accounts
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,29 +22,43 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.MAX_ACCOUNT_CONDITION_LENGTH
 import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.MarcoDeHoja
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
+/** El título de la fila del detalle de la cuenta y de esta hoja (vuelta de diseño 5). */
+const val PARA_QUE_ES_ESTA_PLATA: String = "Para qué es esta plata"
+
+/** Lo que dice la fila de una cuenta sin condición: su plata se usa para lo que sea. */
+const val PLATA_LIBRE: String = "Libre: para cualquier gasto"
+
 /**
- * «¿Esta plata solo se puede usar para algo?» — el único camino por el que el dueño puede marcar
- * una cuenta como condicionada.
+ * **El subtítulo de «Para qué es esta plata»**: el estado, en palabras. Sin condición,
+ * [PLATA_LIBRE]; con una, para qué es y la consecuencia que tiene en la app («Solo para vivienda ·
+ * no suma en «Tu plata»»). Misma regla que [esDeUsoCondicionado]: una condición en blanco es libre.
+ */
+fun subtituloDeParaQueEs(account: Account): String =
+    if (esDeUsoCondicionado(account)) "Solo para ${account.condicionadaA!!.trim()} · no suma en «Tu plata»"
+    else PLATA_LIBRE
+
+/**
+ * «Para qué es esta plata» — el único camino por el que el dueño puede marcar una cuenta como
+ * condicionada (de uso condicionado, ver [esDeUsoCondicionado]).
  *
  * **Existe porque el campo nacía muerto.** `Account.condicionadaA` se podía guardar solo al crear
  * la cuenta, y la cuenta que motivó el campo —la pensión voluntaria en Skandia, $106.000.000 que
@@ -95,7 +108,7 @@ fun CondicionDeCuentaSheet(
                 .weight(1f, fill = false),
         ) {
             Text(
-                text = "¿Esta plata solo sirve para algo?",
+                text = PARA_QUE_ES_ESTA_PLATA,
                 style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
@@ -106,8 +119,8 @@ fun CondicionDeCuentaSheet(
             // exactamente lo que el campo cambia en la app, y decir de más acá sería
             // prometerle al dueño un efecto que no existe.
             Text(
-                text = "Hay plata tuya que no puedes usar para cualquier cosa: una pensión " +
-                    "voluntaria, las cesantías, una cuenta AFC. Si escribes para qué sirve, " +
+                text = "Si esta plata es libre, déjalo vacío. Si solo puedes usarla para algo " +
+                    "—una pensión voluntaria, las cesantías, una cuenta AFC—, escribe para qué: " +
                     "esta cuenta deja de sumar en «Tu plata» y aparece en su propio renglón. " +
                     "Tu patrimonio no cambia: la plata sigue siendo tuya.",
                 style = Movi.textos.cuerpo,
@@ -153,9 +166,9 @@ fun CondicionDeCuentaSheet(
             Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = if (account.condicionadaA != null) {
-                    "Déjalo vacío para quitar la condición."
+                    "Déjalo vacío para que vuelva a ser libre: para cualquier gasto."
                 } else {
-                    "Déjalo vacío si puedes usar esta plata para lo que quieras."
+                    "Vacío es libre: para cualquier gasto."
                 },
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
@@ -172,33 +185,20 @@ fun CondicionDeCuentaSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(Medida.objetivoTactil)
-                        .clip(RoundedCornerShape(Radio.pill))
-                        .background(Movi.colores.tarjeta)
-                        .clickable(enabled = !guardando, onClick = onDismiss),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("Cancelar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                }
-                Box(
-                    modifier = Modifier
-                        .weight(1.4f)
-                        .height(Medida.objetivoTactil)
-                        .clip(RoundedCornerShape(Radio.pill))
-                        .background(if (cambio && !guardando) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
-                        .clickable(enabled = cambio && !guardando) { guardar() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = if (guardando) "Guardando…" else "Guardar",
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = if (cambio && !guardando) Movi.colores.marca else Movi.colores.textoApagado,
-                    )
-                }
+                Boton(
+                    "Cancelar",
+                    onClick = onDismiss,
+                    variante = VarianteDeBoton.Secundario,
+                    habilitado = !guardando,
+                    modifier = Modifier.weight(1f),
+                )
+                Boton(
+                    "Guardar",
+                    onClick = { guardar() },
+                    habilitado = cambio,
+                    cargando = guardando,
+                    modifier = Modifier.weight(1.4f),
+                )
             }
 
             Spacer(Modifier.height(Espacio.xl))
