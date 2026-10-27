@@ -207,7 +207,7 @@ class LaListaDeCreditosEsDeFilasTest {
         assertEquals(Screen.AccountDetail("acc_9695", AccountGroup.DEUDA), destinos.single())
 
         tocar("Vehículo 4083")
-        assertTrue(hay("TÉRMINOS"), "sin términos, tocarla abre la hoja de completarlos")
+        assertTrue(hay("Guardar crédito"), "sin términos, tocarla abre la hoja de completarlos")
         assertEquals(1, destinos.size, "y no navega")
     }
 }

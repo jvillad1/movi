@@ -72,7 +72,7 @@ fun CreditBalanceSheet(
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            SectionLabel("AJUSTAR SALDO")
+            Text("Ajustar saldo", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
             Spacer(Modifier.height(Espacio.xs))
             Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Spacer(Modifier.height(Espacio.m))

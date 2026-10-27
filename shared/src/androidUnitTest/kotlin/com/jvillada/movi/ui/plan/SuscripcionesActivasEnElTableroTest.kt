@@ -332,10 +332,10 @@ class SuscripcionesActivasEnElTableroTest {
         composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)[3].performClick()
 
         esperarTexto("Editar suscripción")
-        composeRule.onAllNodesWithText("MONEDA", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Moneda", useUnmergedTree = true).assertCountEquals(0)
         // Pero «cada cuánto» sí, porque el PUT sí la escribe — y una detectada nace mensual, así
         // que un cobro anual mal clasificado solo se arregla acá.
-        composeRule.onAllNodesWithText("CADA CUÁNTO", useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onAllNodesWithText("Cada cuánto", useUnmergedTree = true).assertCountEquals(1)
     }
 
     /** Toca el clickable que CONTIENE ese texto — el toque sobre el texto suelto no llega. */
@@ -422,7 +422,7 @@ class SuscripcionesActivasEnElTableroTest {
         // en pesos, acá habría cero nodos.
         composeRule.onAllNodesWithText("US$", useUnmergedTree = true).assertCountEquals(1)
         // Y el campo NO ofrece cambiar la moneda: cambiarla no sería corregir un dato.
-        composeRule.onAllNodesWithText("MONEDA", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Moneda", useUnmergedTree = true).assertCountEquals(0)
     }
 
     /**

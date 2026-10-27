@@ -477,17 +477,15 @@ fun CategoryField(
     prefs: Map<String, CategoryPref> = emptyMap(),
     /** Ola B: usos de los últimos 60 días, para poner las frecuentes primero (ver `UsedCategoriesCache.usosRecientes`). */
     usos: Map<String, Int> = emptyMap(),
-    label: String? = "CATEGORÍA",
+    label: String? = "Categoría",
     placeholder: String = "Ej: Vivienda, Suscripción, Salud",
 ) {
     var abierto by remember { mutableStateOf(false) }
     val forma = RoundedCornerShape(Movi.formas.normal)
 
     Column(modifier = modifier) {
-        if (label != null) {
-            Text(label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
-            Spacer(Modifier.height(Movi.espacios.corto))
-        }
+        // El rótulo de los campos del sistema (vuelta de diseño 6): en frase, el mismo de [Campo].
+        if (label != null) com.jvillada.movi.ui.components.ds.RotuloDeCampo(label)
         Row(
             modifier = Modifier
                 .fillMaxWidth()

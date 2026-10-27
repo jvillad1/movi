@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -40,6 +39,8 @@ import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.PieDeHoja
 
 /** El título de la fila del detalle de la cuenta y de esta hoja (vuelta de diseño 5). */
 const val PARA_QUE_ES_ESTA_PLATA: String = "Para qué es esta plata"
@@ -131,75 +132,34 @@ fun CondicionDeCuentaSheet(
 
             Spacer(Modifier.height(Espacio.m))
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(Movi.colores.tarjeta)
-                    .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
-            ) {
-                if (texto.isEmpty()) {
-                    Text("Vivienda", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
-                }
-                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                // [esAtajoDeSeleccionarTodo]. El recorte de abajo sigue siendo el de siempre:
-                // el campo avisa el texto, la pantalla decide con cuánto se queda.
-                val campo = rememberCampoConSeleccion(texto) {
-                    // El recorte va acá y no solo al guardar: un campo que acepta teclas que
-                    // después se tiran en silencio es peor que uno que deja de aceptarlas.
-                    texto = it.take(MAX_ACCOUNT_CONDITION_LENGTH)
-                }
-                BasicTextField(
-                    value = campo.valor,
-                    onValueChange = campo::alCambiar,
-                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                    cursorBrush = SolidColor(Movi.colores.texto),
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    singleLine = true,
-                    enabled = !guardando,
-                    modifier = Modifier.fillMaxWidth()
-                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                )
-            }
-
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = if (account.condicionadaA != null) {
+            Campo(
+                texto,
+                // El recorte va acá y no solo al guardar: un campo que acepta teclas que después se
+                // tiran en silencio es peor que uno que deja de aceptarlas.
+                { texto = it.take(MAX_ACCOUNT_CONDITION_LENGTH) },
+                rotulo = "Solo se puede usar para",
+                guia = "Vivienda",
+                ayuda = if (account.condicionadaA != null) {
                     "Déjalo vacío para que vuelva a ser libre: para cualquier gasto."
                 } else {
                     "Vacío es libre: para cualquier gasto."
                 },
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoApagado,
+                teclado = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                habilitado = !guardando,
             )
-
-            if (error != null) {
-                Spacer(Modifier.height(Espacio.s))
-                Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
-            }
 
             Spacer(Modifier.height(Espacio.l))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-            ) {
-                Boton(
-                    "Cancelar",
-                    onClick = onDismiss,
-                    variante = VarianteDeBoton.Secundario,
-                    habilitado = !guardando,
-                    modifier = Modifier.weight(1f),
-                )
-                Boton(
-                    "Guardar",
-                    onClick = { guardar() },
-                    habilitado = cambio,
-                    cargando = guardando,
-                    modifier = Modifier.weight(1.4f),
-                )
-            }
+            PieDeHoja(
+                texto = "Guardar",
+                onClick = { guardar() },
+                habilitado = cambio,
+                cargando = guardando,
+                error = error,
+                secundaria = "Cancelar",
+                onSecundaria = onDismiss,
+                secundariaHabilitada = !guardando,
+            )
 
             Spacer(Modifier.height(Espacio.xl))
         }

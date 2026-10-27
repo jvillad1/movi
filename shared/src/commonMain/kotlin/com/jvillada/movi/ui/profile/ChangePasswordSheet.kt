@@ -22,11 +22,11 @@ import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.auth.AuthField
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Campo
 
 /**
  * F42 — cambiar contraseña estando adentro de la app. Distinto del reset por correo de
@@ -113,32 +113,32 @@ fun ChangePasswordSheet(
             }
         } else {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                Text("Contraseña actual", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
-                AuthField(
-                    value = current,
-                    onChange = { current = it },
-                    placeholder = "Tu contraseña de hoy",
-                    isPassword = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                Campo(
+                    rotulo = "Contraseña actual",
+                    valor = current,
+                    alCambiar = { current = it },
+                    guia = "Tu contraseña de hoy",
+                    secreto = true,
+                    teclado = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                 )
                 Spacer(Modifier.height(Espacio.s))
-                Text("Contraseña nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
-                AuthField(
-                    value = new,
-                    onChange = { new = it },
-                    placeholder = "•".repeat(PasswordPolicy.MIN_LENGTH),
-                    isPassword = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                Campo(
+                    rotulo = "Contraseña nueva",
+                    valor = new,
+                    alCambiar = { new = it },
+                    guia = "•".repeat(PasswordPolicy.MIN_LENGTH),
+                    secreto = true,
+                    teclado = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                 )
                 Spacer(Modifier.height(Espacio.s))
-                Text("Repetir la nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = Espacio.xs))
-                AuthField(
-                    value = repeat,
-                    onChange = { repeat = it },
-                    placeholder = "Escríbela de nuevo",
-                    isPassword = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { save() }),
+                Campo(
+                    rotulo = "Repetir la nueva",
+                    valor = repeat,
+                    alCambiar = { repeat = it },
+                    guia = "Escríbela de nuevo",
+                    secreto = true,
+                    teclado = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    acciones = KeyboardActions(onDone = { save() }),
                 )
 
                 error?.let {
