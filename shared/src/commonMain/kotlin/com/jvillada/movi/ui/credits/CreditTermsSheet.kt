@@ -2,6 +2,11 @@ package com.jvillada.movi.ui.credits
 
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Casilla
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
@@ -21,6 +26,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
@@ -884,23 +893,35 @@ private fun OpcionDeAlta(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.m))
-            .background(if (selected) Movi.colores.tarjeta else Color.Transparent)
-            .border(Medida.trazo, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(Radio.m))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = Espacio.s, vertical = Espacio.s),
-    ) {
-        Text(
-            titulo,
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.texto,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+    OpcionElegible(titulo = titulo, detalle = detalle, selected = selected, enabled = enabled, onClick = onClick)
+}
+
+/**
+ * **Una opción de una lista de las que se elige una** (vuelta de diseño 20): la [Fila] del sistema
+ * en una [Superficie] de capa 2 —como toda lista dentro de una hoja—, con el visto en la marca al
+ * final la elegida y la semántica de un botón de radio. Eran filas armadas a mano con borde, que se
+ * distinguían solo por el color del borde. [detalle] va en el subtítulo, en hasta dos renglones.
+ */
+@Composable
+private fun OpcionElegible(
+    titulo: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    detalle: String? = null,
+    enabled: Boolean = true,
+) {
+    Superficie(nivel = NivelDeSuperficie.Capa2, relleno = RellenoDeSuperficie.Lista, modifier = Modifier.fillMaxWidth()) {
+        Fila(
+            titulo = titulo,
+            subtitulo = detalle,
+            lineasDelSubtitulo = 2,
+            final = {
+                if (selected) {
+                    Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.m))
+                }
+            },
+            modifier = Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),
         )
-        Spacer(Modifier.height(Espacio.xxs))
-        Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
     }
 }
 
@@ -1039,18 +1060,7 @@ fun explicacionDelDesembolso(capital: Long?, entro: Long?, destino: String?): Ex
 
 @Composable
 private fun SelectRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.m))
-            .background(if (selected) Movi.colores.tarjeta else Color.Transparent)
-            .border(Medida.trazo, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(Radio.m))
-            .clickable(onClick = onClick)
-            .padding(horizontal = Espacio.s, vertical = Espacio.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
-    }
+    OpcionElegible(titulo = label, selected = selected, onClick = onClick)
 }
 
 /**
@@ -1065,48 +1075,21 @@ private fun CasillaConExplicacion(
     habilitada: Boolean,
     alCambiar: () -> Unit,
 ) {
+    // Vuelta de diseño 20: la `Casilla` del sistema (era una caja armada a mano de 20 dp, con el
+    // visto en el color del fondo). El renglón entero es el toque, con la semántica de una casilla.
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = Medida.objetivoTactil)
             .clip(RoundedCornerShape(Radio.m))
-            .clickable(enabled = habilitada) { alCambiar() }
+            .toggleable(value = marcada, enabled = habilitada, role = Role.Checkbox, onValueChange = { alCambiar() })
             .padding(vertical = Espacio.xs),
         verticalAlignment = Alignment.Top,
     ) {
-        Box(
-            modifier = Modifier
-                .size(Icono.m)
-                .clip(RoundedCornerShape(Radio.s))
-                .background(if (marcada) Movi.colores.marca else Movi.colores.tarjeta)
-                // **Sin marcar, la casilla no se veía.** Se pintaba del color de la tarjeta encima
-                // de una hoja del mismo color: quedaban el texto y su sangría, sin el cuadro que
-                // dice que eso se marca. Visto en la web. Lleva borde como la de «Recordarme», que
-                // siempre se vio.
-                .then(
-                    if (marcada) Modifier
-                    else Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.s)),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            // Ícono, no el carácter «✓».
-            //
-            // La fuente que usa Compose en el navegador no trae U+2713, así que la casilla marcada
-            // salía como un rectángulo vacío — el dueño mandó la foto. Es el mismo problema que ya
-            // está documentado en `CategoryRow` con los emojis del catálogo («en la web sale como
-            // ▯»), y la misma solución: un ícono de Material, que viaja en el binario y se ve igual
-            // en las tres plataformas.
-            if (marcada) {
-                Icon(
-                    Icons.Rounded.Check,
-                    contentDescription = null,
-                    tint = Movi.colores.fondo,
-                    modifier = Modifier.size(Icono.s),
-                )
-            }
-        }
+        Casilla(marcada)
         Spacer(Modifier.width(Espacio.s))
         Column {
-            Text(titulo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Text(titulo, style = Movi.textos.cuerpo, color = Movi.colores.texto)
             Text(
                 text = explicacion,
                 style = Movi.textos.apoyo,
