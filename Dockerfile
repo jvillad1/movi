@@ -64,6 +64,12 @@ RUN echo "── recursos ──" && (free -m || true) && df -h /app && nproc
 #    fuerza otra purga). No fue la causa, pero es barata: corre
 #    una vez por versión y borra solo el caché de build, no las dependencias ni el
 #    caché de Kotlin, que son lo que mantiene el build debajo de los 20 minutos.
+# 3. YARN Y NODE NUEVOS en cada build (27-oct-2026). El wasm falló en Railway con
+#    «Waiting for the other yarn instance to finish» y después
+#    «:kotlinWasmStoreYarnLock … /app/build/wasm/yarn.lock doesn't exist»: la copia de
+#    yarn/node que el plugin de Kotlin guarda en el montaje de caché quedó trabada
+#    (un build cortado a la mitad la deja así). Es el mismo mal que en GitHub Actions se
+#    curó con `rm -rf ~/.gradle/yarn ~/.gradle/nodejs`. Bajarlos cuesta segundos.
 # 2. LA GUARDA de fuentes. Esta sí vale: habría frenado ese despliegue, que subió un
 #    código anterior a las fuentes. Un build fallido en Railway deja arriba el
 #    despliegue anterior; uno exitoso con el código equivocado lo reemplaza sin ruido.
@@ -74,6 +80,7 @@ RUN --mount=type=cache,id=s/8fdd793e-509a-42a8-ae98-e1fc6be27577-gradle,target=/
         echo "── purgando el caché de build (primera vez con Kotlin $KOTLIN) ──" && \
         rm -rf /root/.gradle/caches/build-cache-1 && touch "$MARCA"; \
     fi && \
+    rm -rf /root/.gradle/yarn /root/.gradle/nodejs && \
     gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain --build-cache > /tmp/wasm.log 2>&1 \
     || (echo "══ FALLÓ EL WASM ══" >&2 && tail -120 /tmp/wasm.log >&2 && sleep 5 && false)
 
