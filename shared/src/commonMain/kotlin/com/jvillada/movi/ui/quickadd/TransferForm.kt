@@ -926,7 +926,7 @@ internal fun TransferBody(
             // Mismo sub-picker que la pestaña Gasto/Ingreso, adentro del mismo Box de alto
             // fijado: abrirlo no cambia el alto de la hoja.
             Column(modifier = Modifier.fillMaxWidth()) {
-                PickerHeader("Fecha", onClose = { cerrarFecha() })
+                PickerHeader("Fecha", onVolver = { cerrarFecha() })
                 SelectorDeFecha(
                     seleccionada = fecha,
                     hoy = hoy,

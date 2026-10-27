@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -45,7 +44,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.MAX_CATEGORIA_LENGTH
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
@@ -215,56 +213,74 @@ internal fun columnasDeLaCuadricula(ancho: Dp, espacio: Dp): Int {
 }
 
 /**
- * El tamaño mínimo legible al que se achica el rótulo de una celda cuando su palabra más larga
- * no entra al tamaño normal — Ola B, tarea 4. Más chico que esto deja de leerse.
- */
-internal val TAMANO_MINIMO_DEL_ROTULO = 9.sp
-
-/**
  * Las palabras de [rotulo], para medir el ANCHO de cada una y decidir con la más ancha —no con la
  * que tiene más caracteres, que no es lo mismo: «WWWWWWWWWW» pesa menos letras que
  * «iiiiiiiiiiiiiiiiiiii» pero es bastante más ancha al dibujarse. Sin espacio (una sola palabra,
  * como «Entretenimiento») devuelve una lista de una. Pura, para probarla sin Compose — la
  * medición real de anchos (con el estilo y el peso que se van a pintar) vive en
- * [CeldaDeLaCuadricula], que mide cada una con `TextMeasurer` y se queda con la más ancha.
+ * [CuadriculaDeCategorias], que mide cada una con `TextMeasurer` y se queda con la más ancha.
  */
 internal fun palabrasDe(rotulo: String): List<String> =
     rotulo.split(" ").filter { it.isNotEmpty() }
 
 /**
- * Cómo dibujar el rótulo de una celda, según si su palabra más larga entra en el ancho
- * disponible ([anchoDisponible]) al tamaño normal ([anchoDePalabra]). Pura, para probarla sin
- * Compose — la medición real del ancho vive en [CeldaDeLaCuadricula].
+ * Cómo dibujar el rótulo de una celda, según si su palabra más ancha entra en el ancho disponible
+ * ([anchoDisponible]). Pura, para probarla sin Compose — la medición real vive en
+ * [CuadriculaDeCategorias].
  *
- * - [ModoDelRotulo.NORMAL]: como siempre, dos renglones a tamaño normal.
- * - [ModoDelRotulo.ACHICADO]: **un solo renglón**, con `autoSize` (`BasicText`) bajando hasta
- *   [TAMANO_MINIMO_DEL_ROTULO] y «…» si ni así entra. Nunca dos renglones: con `maxLines = 2` una
- *   palabra sin espacios entra «sin desborde» partiéndola entre los dos —Compose no necesita
- *   achicar nada para lograrlo—, que es exactamente el corte a mitad de palabra que esto corrige.
- *   Un solo renglón no le deja esa salida.
+ * - [ModoDelRotulo.NORMAL]: hasta dos renglones, partidos entre palabras. Es el de casi todas: la
+ *   cuadrícula baja de columnas para que las palabras entren ([columnasParaQueEntrenLasPalabras]).
+ * - [ModoDelRotulo.UN_RENGLON]: la palabra no entra ni con la cuadrícula en su mínimo de columnas
+ *   (una categoría propia de una sola palabra larguísima). Va en **un renglón** con «…», a la misma
+ *   letra que las demás: nunca partida a la mitad («Entretenimient / o», Ola B) y nunca más chica que
+ *   sus vecinas (vuelta de diseño 13).
  */
-internal enum class ModoDelRotulo { NORMAL, ACHICADO }
+internal enum class ModoDelRotulo { NORMAL, UN_RENGLON }
 
 internal fun modoDelRotulo(anchoDePalabra: Float, anchoDisponible: Float): ModoDelRotulo =
-    if (anchoDePalabra <= anchoDisponible) ModoDelRotulo.NORMAL else ModoDelRotulo.ACHICADO
+    if (anchoDePalabra <= anchoDisponible) ModoDelRotulo.NORMAL else ModoDelRotulo.UN_RENGLON
 
 /**
- * **El tamaño (en sp) al que entra el rótulo en un renglón**: el más grande entre [base] y
- * [minimo], bajando de a [paso], con el que [anchoA] cabe en [disponible]. Si ni en [minimo] entra,
- * [minimo] (y el renglón termina en «…»).
- *
- * Antes esto lo hacía `TextAutoSize` de `BasicText`, y en la web no achicaba: a 1.280 dp la celda
- * decía «Entretenimien…» a tamaño normal (visto con Playwright, revisión del 29-sep). Ahora se mide
- * con el mismo `TextMeasurer` que ya decide el [ModoDelRotulo], y el `Text` se pinta con el tamaño
- * que salió. Pura, para probarla sin Compose.
+ * Hasta cuántas columnas baja la cuadrícula para que las palabras de los rótulos entren enteras. Tres
+ * es lo que da un teléfono de 360 dp sin bajar nada; menos que eso, la cuadrícula deja de serlo.
  */
-internal fun tamanoQueEntra(base: Float, minimo: Float, paso: Float, disponible: Float, anchoA: (Float) -> Float): Float {
-    var tamano = base
-    while (tamano > minimo) {
-        if (anchoA(tamano) <= disponible) return tamano
-        tamano -= paso
+internal const val COLUMNAS_MINIMAS_DE_LA_CUADRICULA: Int = 3
+
+/**
+ * **Cuántas columnas usar para que la palabra más ancha de la cuadrícula entre entera en su celda.**
+ * Vuelta de diseño 13. Pura, para probarla sin Compose (todo en la misma unidad, px o dp).
+ *
+ * Antes cada rótulo que no entraba se achicaba por su cuenta hasta entrar en un renglón, así que en
+ * una misma cuadrícula «Entretenimiento», «Suscripciones» y «Restaurantes» salían cada uno a un tamaño
+ * distinto, y «Entretenimiento» diminuto. Ahora la letra es una sola (`apoyo`, la de los rótulos de
+ * dos renglones de [CuadriculaDeAcciones]) y lo que cede es la cuadrícula: parte de las [columnas]
+ * que da el ancho ([columnasDeLaCuadricula]) y baja de a una, hasta
+ * [COLUMNAS_MINIMAS_DE_LA_CUADRICULA], mientras [palabraMasAncha] no entre en lo que le queda a una
+ * celda ([ancho] menos los [espacio]s entre columnas, repartido, menos el [relleno] de cada lado).
+ * Nunca sube de lo que da el ancho.
+ */
+internal fun columnasParaQueEntrenLasPalabras(
+    columnas: Int,
+    ancho: Float,
+    espacio: Float,
+    relleno: Float,
+    palabraMasAncha: Float,
+): Int {
+    val minimo = minOf(columnas, COLUMNAS_MINIMAS_DE_LA_CUADRICULA).coerceAtLeast(1)
+    var actuales = columnas.coerceAtLeast(1)
+    while (actuales > minimo) {
+        val disponible = (ancho - espacio * (actuales - 1)) / actuales - relleno * 2
+        if (palabraMasAncha <= disponible) return actuales
+        actuales--
     }
-    return minimo
+    return actuales
+}
+
+/** Lo que dice una celda: el nombre, o «Crear "…"» / «Usar "…"» para las especiales. */
+internal fun rotuloDeLaCelda(celda: CeldaDeCategoria): String = when (celda) {
+    is CeldaDeCategoria.Existente -> celda.nombre
+    is CeldaDeCategoria.Crear -> "Crear \"${celda.nombre}\""
+    is CeldaDeCategoria.Usar -> "Usar \"${celda.nombre}\""
 }
 
 /**
@@ -432,12 +448,36 @@ internal fun CuadriculaDeCategorias(
     onElegir: (String) -> Unit,
 ) {
     val espacio = Movi.espacios.minimo
+    val relleno = Movi.espacios.minimo
+    // Una sola letra para todos los rótulos (vuelta de diseño 13). Se mide en Medium, el peso de la
+    // elegida y de «Crear»/«Usar», que es el más ancho: así elegir otra no cambia las columnas.
+    val estilo = Movi.textos.apoyo.copy(fontWeight = FontWeight.Medium)
+    val medidor = rememberTextMeasurer()
+    val rotulos = remember(celdas) { celdas.map(::rotuloDeLaCelda) }
+    // El ancho, en px, de la palabra más ancha de cada rótulo: decide las columnas y el modo de cada
+    // celda. La más ancha y no la de más letras (ver [palabrasDe]).
+    val palabraMasAnchaDe: Map<String, Float> = remember(rotulos, estilo) {
+        rotulos.distinct().associateWith { rotulo ->
+            palabrasDe(rotulo).maxOfOrNull { palabra ->
+                medidor.measure(palabra, estilo, softWrap = false, maxLines = 1).size.width.toFloat()
+            } ?: 0f
+        }
+    }
+    val densidad = LocalDensity.current
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val columnas = columnasDeLaCuadricula(maxWidth, espacio)
-        // El ancho real de una celda, la misma cuenta que hace `GridCells.Adaptive` por dentro:
-        // lo necesita [CeldaDeLaCuadricula] para decidir si el nombre entra en dos renglones o si
-        // la palabra más larga no cabe y hay que achicar la letra (Ola B, tarea 4).
+        val porAncho = columnasDeLaCuadricula(maxWidth, espacio)
+        val columnas = with(densidad) {
+            columnasParaQueEntrenLasPalabras(
+                columnas = porAncho,
+                ancho = maxWidth.toPx(),
+                espacio = espacio.toPx(),
+                relleno = relleno.toPx(),
+                palabraMasAncha = palabraMasAnchaDe.values.maxOrNull() ?: 0f,
+            )
+        }
+        // El ancho real de una celda, la misma cuenta que hace `GridCells.Adaptive` por dentro.
         val anchoDeCelda = (maxWidth - espacio * (columnas - 1)) / columnas
+        val disponiblePx = with(densidad) { (anchoDeCelda - relleno * 2).toPx() }
         Column(verticalArrangement = Arrangement.spacedBy(espacio)) {
             celdas.chunked(columnas).forEach { fila ->
                 Row(
@@ -445,12 +485,14 @@ internal fun CuadriculaDeCategorias(
                     horizontalArrangement = Arrangement.spacedBy(espacio),
                 ) {
                     fila.forEach { celda ->
+                        val rotulo = rotuloDeLaCelda(celda)
                         CeldaDeLaCuadricula(
                             celda = celda,
+                            rotulo = rotulo,
+                            modo = modoDelRotulo(palabraMasAnchaDe[rotulo] ?: 0f, disponiblePx),
                             elegida = esLaCeldaElegida(celda, elegida),
                             prefs = prefs,
                             onClick = { onElegir(celda.nombre) },
-                            anchoDeCelda = anchoDeCelda,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -462,13 +504,17 @@ internal fun CuadriculaDeCategorias(
     }
 }
 
+/** El rótulo de una celda de la cuadrícula: para encontrarlo en una prueba. */
+internal const val TAG_ROTULO_DE_CELDA: String = "categoria:rotulo"
+
 @Composable
 private fun CeldaDeLaCuadricula(
     celda: CeldaDeCategoria,
+    rotulo: String,
+    modo: ModoDelRotulo,
     elegida: Boolean,
     prefs: Map<String, CategoryPref>,
     onClick: () -> Unit,
-    anchoDeCelda: Dp,
     modifier: Modifier = Modifier,
 ) {
     val forma = RoundedCornerShape(Movi.formas.normal)
@@ -476,11 +522,6 @@ private fun CeldaDeLaCuadricula(
         is CeldaDeCategoria.Existente -> tagDeCeldaDeCategoria(celda.nombre)
         is CeldaDeCategoria.Crear -> TAG_CREAR_CATEGORIA
         is CeldaDeCategoria.Usar -> TAG_USAR_CATEGORIA
-    }
-    val rotulo = when (celda) {
-        is CeldaDeCategoria.Existente -> celda.nombre
-        is CeldaDeCategoria.Crear -> "Crear \"${celda.nombre}\""
-        is CeldaDeCategoria.Usar -> "Usar \"${celda.nombre}\""
     }
     Column(
         modifier = modifier
@@ -509,80 +550,38 @@ private fun CeldaDeLaCuadricula(
         Spacer(Modifier.height(Movi.espacios.minimo))
         val colorDelRotulo = if (elegida || celda !is CeldaDeCategoria.Existente) Movi.colores.marca else Movi.colores.texto
         val pesoDelRotulo = if (elegida || celda !is CeldaDeCategoria.Existente) FontWeight.Medium else FontWeight.Normal
-        // Ola B, tarea 4: «Entretenimiento» se partía a mitad de palabra («Entretenimient / o»)
-        // porque el `Text` de siempre ajusta a dos renglones sin mirar si la palabra más larga
-        // entra. Se mide la palabra más larga contra el ancho real de la celda al tamaño normal;
-        // si no entra, [modoDelRotulo] manda al renglón único con `autoSize` — nunca a los dos
-        // renglones de siempre con `maxLines = 2`: con una sola palabra (sin espacio en el medio),
-        // Compose la cuenta como «entra sin desborde» partiéndola entre los dos renglones, así que
-        // `autoSize` ni se molesta en achicar la letra. Un solo renglón no le deja esa salida:
-        // `autoSize` achica hasta el mínimo legible, y si ni así entra, «…» — nunca la palabra
-        // partida a la mitad.
-        val medidor = rememberTextMeasurer()
-        val densidad = LocalDensity.current
-        val estiloDelRotulo = Movi.textos.apoyo
-        val anchoDisponiblePx = with(densidad) { (anchoDeCelda - Movi.espacios.minimo * 2).toPx() }
-        val palabras = remember(rotulo) { palabrasDe(rotulo) }
-        // Fix round 1, hallazgo 1: se medía con el peso NORMAL siempre, pero la celda elegida (y
-        // «Crear»/«Usar») se dibuja en Medium — más ancho. La categoría puesta es justo la que el
-        // dueño ve cada vez que reabre el selector, así que medir con el peso que de verdad se va
-        // a pintar no es un detalle: es el caso que más se ve.
-        //
-        // Whole-branch review, final fix wave: se medía UNA palabra —la de más caracteres— y no
-        // necesariamente la más ANCHA («WWWWWWWWWW» tiene menos letras que
-        // «iiiiiiiiiiiiiiiiiiii» pero es más ancha al dibujarse). Ahora se mide cada palabra y se
-        // usa la que de verdad pesa más en píxeles.
-        val (modo, tamanoAchicado) = remember(rotulo, palabras, anchoDisponiblePx, estiloDelRotulo, pesoDelRotulo) {
-            val estiloDeRenderizado = estiloDelRotulo.copy(fontWeight = pesoDelRotulo)
-            val anchoDeLaPalabraMasAncha = palabras.maxOfOrNull { palabra ->
-                medidor.measure(palabra, estiloDeRenderizado, softWrap = false, maxLines = 1).size.width.toFloat()
-            } ?: 0f
-            val modo = modoDelRotulo(anchoDeLaPalabraMasAncha, anchoDisponiblePx)
-            // En ACHICADO el rótulo va en UN renglón: se mide entero, no por palabra.
-            val tamano = if (modo == ModoDelRotulo.NORMAL) estiloDelRotulo.fontSize.value else tamanoQueEntra(
-                base = estiloDelRotulo.fontSize.value,
-                minimo = TAMANO_MINIMO_DEL_ROTULO.value,
-                paso = 0.5f,
-                disponible = anchoDisponiblePx,
-            ) { sp ->
-                medidor.measure(rotulo, estiloDeRenderizado.copy(fontSize = sp.sp), softWrap = false, maxLines = 1).size.width.toFloat()
-            }
-            modo to tamano
-        }
+        // Vuelta de diseño 13: **todas a la misma letra** (`apoyo`), en hasta dos renglones y con
+        // dos renglones reservados siempre, así las celdas de un renglón miden lo mismo y el borde de
+        // la elegida no queda más bajo que sus vecinas. Que una palabra no se parta a la mitad lo
+        // cuida la cuadrícula, bajando de columnas ([columnasParaQueEntrenLasPalabras]); solo la que
+        // ni así entra va en un renglón con «…» ([ModoDelRotulo.UN_RENGLON]), a la misma letra.
+        val estilo = Movi.textos.apoyo
         when (modo) {
             ModoDelRotulo.NORMAL -> Text(
                 rotulo,
-                style = estiloDelRotulo,
+                style = estilo,
                 fontWeight = pesoDelRotulo,
                 color = colorDelRotulo,
                 textAlign = TextAlign.Center,
-                // Dos renglones siempre: así todas las celdas de una fila miden lo mismo y el borde
-                // de la elegida no queda más bajo que sus vecinas.
                 minLines = 2,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag(TAG_ROTULO_DE_CELDA),
             )
-            // Fix round 1, hallazgo 2: un solo renglón sin alto reservado dejaba esta celda más
-            // baja que sus vecinas NORMAL (que sí reservan dos con `minLines = 2`) cuando las dos
-            // conviven en la misma fila. El `Box` reserva el mismo alto de dos renglones del
-            // tamaño base y centra adentro el renglón único, ya achicado.
-            ModoDelRotulo.ACHICADO -> Box(
-                modifier = Modifier.fillMaxWidth().height(altoDeUnRenglon(estiloDelRotulo) * 2),
+            ModoDelRotulo.UN_RENGLON -> Box(
+                modifier = Modifier.fillMaxWidth().height(altoDeUnRenglon(estilo) * 2),
                 contentAlignment = Alignment.Center,
             ) {
-                // El tamaño lo calculó [tamanoQueEntra] arriba: `TextAutoSize` no achicaba en la web.
-                BasicText(
-                    text = rotulo,
-                    style = estiloDelRotulo.copy(
-                        color = colorDelRotulo,
-                        fontWeight = pesoDelRotulo,
-                        textAlign = TextAlign.Center,
-                        fontSize = tamanoAchicado.sp,
-                    ),
+                Text(
+                    rotulo,
+                    style = estilo,
+                    fontWeight = pesoDelRotulo,
+                    color = colorDelRotulo,
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_ROTULO_DE_CELDA),
                 )
             }
         }

@@ -1,6 +1,24 @@
 package com.jvillada.movi.ui.quickadd
 
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.accounts.esDeUsoCondicionado
+import com.jvillada.movi.ui.accounts.subtituloDeLaCuenta
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import com.jvillada.movi.ui.components.ds.ROTULO_VOLVER
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,15 +28,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material.icons.rounded.Groups
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
@@ -32,12 +48,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
@@ -46,12 +61,12 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.runtime.withFrameNanos
 import com.jvillada.movi.platform.devolverElTecladoAlLienzo
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -78,6 +93,7 @@ import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.AtrasCierraEstaHoja
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.flow.first
@@ -109,8 +125,8 @@ private const val FRACCION_VALOR_FILA = 0.55f
  */
 private val ALTO_FILA_DE_CHIPS = 40.dp
 
-/** La X del encabezado de un sub-picker. Ver el porqué en [PickerHeader]. */
-internal const val TAG_CERRAR_SUB_PICKER = "quickadd:cerrar-sub-picker"
+/** La flecha «‹» del encabezado de un sub-editor, que vuelve al formulario. Ver [PickerHeader]. */
+internal const val TAG_VOLVER_DEL_SUB_EDITOR = "quickadd:volver-del-sub-editor"
 
 /** El campo de texto del sub-picker «Nota» — para encontrarlo en una prueba (Task 5). */
 internal const val TAG_CAMPO_DE_NOTA = "quickadd:campo-de-nota"
@@ -438,6 +454,29 @@ fun QuickAddScreen(
     var scrollAntesDelPicker by remember { mutableStateOf(0) }
 
     /**
+     * **Mientras la hoja vuelve de un sub-editor, el formulario no toma toques.** Vuelta de diseño 13.
+     *
+     * La Nota ya no ocupa el alto del formulario (ocupaba media pantalla vacía): mide lo que
+     * necesita, y la hoja —anclada abajo— se acorta mientras está abierta y se vuelve a estirar al
+     * salir. Lo que había bajo el dedo al tocar «Guardar nota» pasa a ser, un cuadro después, «Guardar
+     * movimiento»; y bajo la flecha, una tecla del teclado. Un segundo toque impaciente guardaría el
+     * movimiento o metería un dígito en el monto: el «escribías 0 y salía 8» de la Ola 8, por otro
+     * camino. Lo mismo, con la hoja del mismo alto, pasaba ya al elegir una categoría o un día del
+     * calendario: la celda de abajo de la cuadrícula cae sobre el teclado.
+     *
+     * Por eso, al volver, el formulario ignora los toques durante [Movimiento.LARGO_MS] —lo que dura
+     * la transición más larga de la app—. No toca el teclado ni el guardado: ni una tecla ni un botón
+     * cambian; solo no les llega el toque que el dedo dio sobre otra cosa. El teclado físico y la
+     * accesibilidad no pasan por acá.
+     */
+    var volviendoDeUnSubEditor by remember { mutableStateOf(false) }
+    LaunchedEffect(volviendoDeUnSubEditor) {
+        if (!volviendoDeUnSubEditor) return@LaunchedEffect
+        kotlinx.coroutines.delay(Movimiento.LARGO_MS.toLong())
+        volviendoDeUnSubEditor = false
+    }
+
+    /**
      * Guardar el desplazamiento — la mitad de la disciplina de la Ola 8 que el scroll podía
      * romper.
      *
@@ -466,8 +505,28 @@ fun QuickAddScreen(
      */
     fun pasarA(siguiente: PickersDeLaHoja) {
         if (siguiente.hayPicker && !pickers.hayPicker) recordarScroll()
+        if (!siguiente.hayPicker && pickers.hayPicker) volviendoDeUnSubEditor = true
         pickers = siguiente
     }
+
+    /**
+     * **Volver del sub-editor abierto al formulario** — Vuelta de diseño 13. Lo mismo hacen la flecha
+     * «‹» del encabezado del sub-editor ([PickerHeader]), Escape y el atrás de Android: un sub-editor
+     * es un paso adentro de la hoja, no otra hoja, así que ninguno de los tres la cierra mientras haya
+     * uno abierto. El de Traspaso vive adentro de [TransferBody], así que se le pide que lo cierre.
+     */
+    fun volverAlFormulario() {
+        when {
+            pickers.propio != Picker.None -> pasarA(pickers.cerrar())
+            pickers.deTraspaso -> pedidosDeCerrarElDeTraspaso++
+        }
+    }
+
+    // El atrás de Android con un sub-editor abierto vuelve al formulario: el sub-editor se anota en
+    // la pila de hojas ENCIMA de esta hoja (que se anotó al abrirse, en `App.kt`), así que el «atrás»
+    // lo cierra a él primero y la hoja —con el monto escrito— se queda. Sin sub-editor no se anota
+    // nada y el atrás cierra la hoja, como siempre.
+    if (hayPicker) AtrasCierraEstaHoja { volverAlFormulario() }
 
     // Al cerrarse un sub-editor (la Nota, el buscador de categorías) en la web, el foco del navegador
     // se queda en el `<body>` y el teclado físico deja de escribir el monto. Se le devuelve al
@@ -1016,6 +1075,13 @@ fun QuickAddScreen(
      * la composición vigente— guarda con los valores de ahora.
      */
     fun alTeclear(evento: KeyEvent): Boolean {
+        // Escape con un sub-editor abierto vuelve al formulario también en la hoja desde abajo (la
+        // web angosta con teclado físico), que no atiende Escape por su cuenta. En la hoja centrada
+        // no llega acá: la atrapa antes `MarcoDeHoja` y la pasa por `onEscape`, que hace lo mismo.
+        if (evento.key == Key.Escape && pickers.hayPicker) {
+            if (evento.type == KeyEventType.KeyDown) volverAlFormulario()
+            return true
+        }
         if (pickers.typeIndex >= TIPO_TRASPASO || pickers.hayPicker || saving) return false
         val conModificador = evento.isCtrlPressed || evento.isMetaPressed || evento.isAltPressed
         return when (val accion = accionDeTecla(evento.key, evento.type, conModificador, conShift = evento.isShiftPressed)) {
@@ -1050,8 +1116,7 @@ fun QuickAddScreen(
             // movimiento entero. Mismo destino que la X de cada sub-editor.
             onEscape = {
                 when {
-                    pickers.propio != Picker.None -> pasarA(pickers.cerrar())
-                    pickers.deTraspaso -> pedidosDeCerrarElDeTraspaso++
+                    pickers.hayPicker -> volverAlFormulario()
                     !saving -> onDismiss()
                 }
             },
@@ -1258,7 +1323,18 @@ fun QuickAddScreen(
                         // Mira el picker DE ESTA PANTALLA y no `hayPicker` a propósito: el
                         // de traspaso no reemplaza este `Box`, vive adentro del cuerpo y se
                         // fija su propio alto con el mismo tope (`alturaVisible`).
-                        .then(if (pickers.propio == Picker.None) Modifier else Modifier.heightIn(min = pinnedHeight)),
+                        //
+                        // Vuelta de diseño 13: **la Nota tampoco.** Es un campo y un botón, y con el
+                        // alto fijado dejaba media pantalla vacía debajo; mide lo que necesita. Lo que
+                        // ese alto cuidaba —que lo que quede bajo el dedo al volver no sea una tecla—
+                        // lo cuida ahora `volviendoDeUnSubEditor`, que también cubre a los demás.
+                        .then(
+                            if (pickers.propio == Picker.None || pickers.propio == Picker.Note) {
+                                Modifier
+                            } else {
+                                Modifier.heightIn(min = pinnedHeight)
+                            },
+                        ),
                 ) {
                 when (pickers.propio) {
                     // Ola B · Task 4: la cuadrícula de categorías, con la búsqueda SIN foco al
@@ -1270,7 +1346,7 @@ fun QuickAddScreen(
                     // un chip de frecuentes ([elegirCategoriaAMano]). Con la cuadrícula no hay
                     // cambios de texto que filtrar: lo único que llega acá es un toque.
                     Picker.Category -> Column(modifier = Modifier.fillMaxWidth()) {
-                        PickerHeader("Categoría", onClose = { pasarA(pickers.cerrar()) })
+                        PickerHeader("Categoría", onVolver = { pasarA(pickers.cerrar()) })
                         SelectorDeCategoria(
                             elegida = category,
                             onElegir = {
@@ -1309,7 +1385,7 @@ fun QuickAddScreen(
                     // la acción completa (no hay nada más que decidir), así que cierra al toque,
                     // como una sugerencia de categoría.
                     Picker.Date -> Column(modifier = Modifier.fillMaxWidth()) {
-                        PickerHeader("Fecha", onClose = { pasarA(pickers.cerrar()) })
+                        PickerHeader("Fecha", onVolver = { pasarA(pickers.cerrar()) })
                         SelectorDeFecha(
                             seleccionada = fecha,
                             hoy = hoy,
@@ -1320,11 +1396,12 @@ fun QuickAddScreen(
                     Picker.Note -> NoteEditor(
                         initial = note,
                         onSave = { note = it; pasarA(pickers.cerrar()) },
-                        onClose = { pasarA(pickers.cerrar()) },
+                        onVolver = { pasarA(pickers.cerrar()) },
                     )
                     Picker.None -> Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(if (volviendoDeUnSubEditor) Modifier.ignoraLosToques() else Modifier)
                             // El alto que los sub-pickers van a respetar (ver el comentario de
                             // arriba). Se mide acá y no se calcula a mano: así sigue siendo
                             // correcto si mañana el cuerpo gana o pierde una fila.
@@ -1450,6 +1527,19 @@ fun QuickAddScreen(
                 onDismiss = { showCreateSheet = false },
                 onAccountCreated = { showCreateSheet = false; accountsRefreshKey++ },
             )
+        }
+    }
+}
+
+/**
+ * Se queda con todos los toques de lo que tiene adentro antes de que les lleguen (en el pase
+ * `Initial`, de afuera hacia adentro). Ver `volviendoDeUnSubEditor` en [QuickAddScreen]: es lo que
+ * deja sin efecto el segundo toque de un doble toque al volver de un sub-editor.
+ */
+private fun Modifier.ignoraLosToques(): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
         }
     }
 }
@@ -2045,31 +2135,47 @@ internal fun AvisoDeCuentaRow(aviso: String?, reservado: Boolean) {
     }
 }
 
+/**
+ * **El encabezado de un sub-editor de «Agregar»: «‹ Categoría».** Vuelta de diseño 13.
+ *
+ * Antes era el título a la izquierda y una «×» propia a la derecha, justo debajo de la «×» de la
+ * hoja: dos cruces apiladas, y no quedaba claro cuál cerraba qué. Un sub-editor (Categoría, Cuenta,
+ * Fecha, Nota, y «Desde»/«Hacia»/Fecha de Traspaso) no es otra hoja: es un paso adentro de la misma,
+ * así que se sale **volviendo**, como de cualquier pantalla de la app —la flecha del [Encabezado],
+ * [ROTULO_VOLVER], en su área de toque de 48—. La única «×» que queda es la de la hoja, y esa sí la
+ * cierra entera. Escape y el atrás de Android hacen lo mismo que la flecha (ver `volverAlFormulario`
+ * en [QuickAddScreen]).
+ *
+ * La flecha no se corre al margen como en el [Encabezado]: la hoja recorta lo que se desplaza en su
+ * propio margen, y correrla le cortaría 12 dp del área de toque (lo mide `HojaAgregarGeometriaTest`).
+ *
+ * Debajo de la flecha, con el formulario a la vista, está el monto: un `Text` sin `clickable`, así
+ * que un segundo toque impaciente tras volver no hace nada (ver «La posición de la X» en
+ * [QuickAddScreen]).
+ */
 @Composable
-internal fun PickerHeader(title: String, onClose: () -> Unit) {
+internal fun PickerHeader(title: String, onVolver: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = Espacio.xxs, bottom = Espacio.s),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = Espacio.xs),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
     ) {
-        Text(title, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-        Box(modifier = Modifier.weight(1f))
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                // Lo único que este archivo cambió por los tests. La X de la hoja
-                // (`SheetHandleWithClose`) y esta X dicen las dos «Cerrar», así que con un
-                // sub-picker abierto hay DOS nodos con esa descripción y elegir «el segundo»
-                // sería una prueba que se rompe sola el día que el orden cambie. Ver
-                // `HojaAgregarGeometriaTest`, que abre y cierra sub-pickers para afirmar que el
-                // teclado no se mueve.
-                .testTag(TAG_CERRAR_SUB_PICKER)
-                .clip(CircleShape)
-                .background(Movi.colores.tarjeta)
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.Close, contentDescription = "Cerrar", tint = Movi.colores.texto, modifier = Modifier.size(Icono.s))
-        }
+        BotonDeIcono(
+            Icons.AutoMirrored.Rounded.ArrowBack,
+            ROTULO_VOLVER,
+            onVolver,
+            modifier = Modifier.testTag(TAG_VOLVER_DEL_SUB_EDITOR),
+        )
+        Text(
+            title,
+            style = Movi.textos.titulo,
+            fontWeight = FontWeight.Medium,
+            color = Movi.colores.texto,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -2121,42 +2227,33 @@ internal fun WalletPicker(
             Text("No tienes cuentas todavía.", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, modifier = Modifier.padding(vertical = Espacio.m))
         } else {
             val visibles = if (verTodas) cuentas.todas else cuentas.principales
-            LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                items(visibles) { account ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPick(account.id) }
-                            .padding(vertical = Espacio.s),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                account.name,
-                                style = Movi.textos.titulo,
-                                color = Movi.colores.texto,
-                                fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
-                            )
-                            Text(
-                                saldoDeLaCuenta(account),
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
+            // Vuelta de diseño 13: cada cuenta es una [Fila] como en Patrimonio —la marca de su
+            // banco, el nombre, el saldo con [Cifra] en su moneda— sobre una superficie de capa 2,
+            // como la tarjeta del formulario. La elegida lleva la marca de verificación en la marca
+            // (y se anuncia como elegida); las demás reservan ese lugar, así los saldos no bailan.
+            Superficie(nivel = NivelDeSuperficie.Capa2, relleno = RellenoDeSuperficie.Lista) {
+                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                    itemsIndexed(visibles) { i, account ->
+                        if (i > 0) Separador()
+                        FilaDeCuentaEnAgregar(
+                            account = account,
+                            elegida = account.id == selectedId,
+                            onClick = { onPick(account.id) },
+                        )
+                    }
+                    // Va DENTRO del LazyColumn y no debajo: con muchas cuentas la lista llega a su
+                    // tope de 360 dp y todo lo que quedara afuera del scroll sería inalcanzable —
+                    // que es justamente el modo de falla que esta rama vino a arreglar, al revés.
+                    if (cuentas.hayOtras) {
+                        item {
+                            VerTodasLasCuentas(
+                                expandido = verTodas,
+                                cuantas = cuentas.otras.size,
+                                uso = uso,
+                                onToggle = { verTodas = !verTodas },
+                                modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
                             )
                         }
-                        if (account.id == selectedId) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(Icono.s))
-                    }
-                }
-                // Va DENTRO del LazyColumn y no debajo: con muchas cuentas la lista llega a su
-                // tope de 360 dp y todo lo que quedara afuera del scroll sería inalcanzable —
-                // que es justamente el modo de falla que esta rama vino a arreglar, al revés.
-                if (cuentas.hayOtras) {
-                    item {
-                        VerTodasLasCuentas(
-                            expandido = verTodas,
-                            cuantas = cuentas.otras.size,
-                            uso = uso,
-                            onToggle = { verTodas = !verTodas },
-                        )
                     }
                 }
             }
@@ -2164,10 +2261,54 @@ internal fun WalletPicker(
     }
 }
 
+/** El `testTag` de la fila de una cuenta en el selector de «Cuenta» de Agregar. */
+internal fun tagDeFilaDeCuentaEnAgregar(id: String): String = "quickadd:cuenta:$id"
+
 /**
- * El saldo que va debajo del nombre de la cuenta.
+ * **Una cuenta en el selector de «Cuenta»** — Vuelta de diseño 13. La [Fila] de Patrimonio
+ * (`GrupoDeCuentas` en `AccountsScreen.kt`) con dos diferencias:
  *
- * Tres arreglos de la Ola 15, los tres del mismo renglón:
+ * - **Una deuda dice que es deuda.** Bajo una tarjeta, «$1.240.000» a secas se lee como plata
+ *   disponible (Ola 15): el subtítulo dice «Debes» —o «A favor» si está sobrepagada— y la [Cifra]
+ *   va sin signo, en el color del texto (deber no es una alarma). Ver [saldoDeLaCuenta].
+ * - **La elegida se marca**: la verificación en la marca al final, y el estado «elegida» para el
+ *   lector de pantalla.
+ */
+@Composable
+private fun FilaDeCuentaEnAgregar(
+    account: com.jvillada.movi.shared.model.Account,
+    elegida: Boolean,
+    onClick: () -> Unit,
+) {
+    val saldo = saldoDeLaCuenta(account)
+    Fila(
+        titulo = account.name,
+        subtitulo = saldo.subtitulo,
+        inicio = { AvatarDeLaCuenta(account) },
+        final = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                Cifra(saldo.monto, moneda = saldo.moneda, tono = saldo.tono)
+                Box(modifier = Modifier.size(Icono.m), contentAlignment = Alignment.Center) {
+                    if (elegida) {
+                        Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.m))
+                    }
+                }
+            }
+        },
+        onClick = onClick,
+        modifier = Modifier
+            .heightIn(min = Medida.altoDeFilaDoble)
+            .semantics { selected = elegida }
+            .testTag(tagDeFilaDeCuentaEnAgregar(account.id)),
+    )
+}
+
+/**
+ * El saldo de una cuenta en el selector de «Cuenta»: el monto que va en la [Cifra] del final de la
+ * fila, en qué moneda, en qué tono y qué dice el subtítulo.
+ *
+ * Tres arreglos de la Ola 15, los tres del mismo renglón (vuelta de diseño 13: el renglón pasó a ser
+ * una [Fila], y «Debes» bajó al subtítulo):
  *
  * 1. **La moneda.** Iba `formatCOP(account.balance)` a secas, y `balance` es el componente COP de
  *    la cuenta (lo deriva `enrichWith`): la «Master Black 3684 USD» del dueño se mostraba como
@@ -2177,133 +2318,106 @@ internal fun WalletPicker(
  *    (`signedMoney(x, "COP")` y `formatCOP(x)` producen lo mismo).
  * 2. **Deber no es tener.** Bajo una tarjeta, «$1.240.000» se lee como plata disponible cuando es
  *    exactamente lo contrario. Desde que las tarjetas se ofrecen para gastar (que es el pedido),
- *    ese renglón tiene que decir qué es: «Debes $1.240.000».
+ *    la fila tiene que decir qué es: «Debes», con $1.240.000 al final.
  * 3. **Y deber de menos es tener.** En una tarjeta un saldo NEGATIVO es plata a favor: si el dueño
  *    sobrepagó la Nu, «Debes −$50.000» dice dos cosas opuestas en cuatro palabras. La inversión
  *    del signo no se reescribe acá: sale de [saldoDeDeuda], donde también la lee la tarjeta grande
  *    del detalle de la cuenta.
  */
-private fun saldoDeLaCuenta(account: com.jvillada.movi.shared.model.Account): String {
-    val (monto, moneda) = saldoEnSuMoneda(account)
-    if (!isDebtAccount(account.type)) return signedMoney(monto, moneda)
-    val saldo = saldoDeDeuda(monto, moneda)
-    return if (saldo.aFavor) "A favor ${saldo.magnitud}" else "Debes ${saldo.magnitud}"
-}
+internal data class SaldoEnAgregar(
+    val monto: Long,
+    val moneda: String,
+    val subtitulo: String?,
+    val tono: TonoDeCifra,
+)
 
-/**
- * El texto entrante **recortado al tope de su columna**, con la selección dentro de lo que quedó.
- *
- * Se construye un [TextFieldValue] nuevo en vez de copiar el entrante: la `composition` del que
- * llega apunta a posiciones del texto largo, y dejarla colgando sobre un texto más corto es un
- * rango fuera de límites.
- */
-internal fun recortadoAlTope(entrante: TextFieldValue, tope: Int): TextFieldValue {
-    if (entrante.text.length <= tope) return entrante
-    return TextFieldValue(
-        text = entrante.text.take(tope),
-        selection = TextRange(
-            entrante.selection.start.coerceAtMost(tope),
-            entrante.selection.end.coerceAtMost(tope),
-        ),
+internal fun saldoDeLaCuenta(account: com.jvillada.movi.shared.model.Account): SaldoEnAgregar {
+    val (monto, moneda) = saldoEnSuMoneda(account)
+    if (!isDebtAccount(account.type)) {
+        return SaldoEnAgregar(
+            monto = monto,
+            moneda = moneda,
+            subtitulo = subtituloDeLaCuenta(account),
+            tono = when {
+                monto < 0 -> TonoDeCifra.Alerta
+                esDeUsoCondicionado(account) -> TonoDeCifra.Apagado
+                else -> TonoDeCifra.Neutro
+            },
+        )
+    }
+    val saldo = saldoDeDeuda(monto, moneda)
+    return SaldoEnAgregar(
+        monto = kotlin.math.abs(monto),
+        moneda = moneda,
+        subtitulo = if (saldo.aFavor) "A favor" else "Debes",
+        tono = TonoDeCifra.Neutro,
     )
 }
 
+/** Lo que dice el principal del editor de la Nota. */
+internal const val GUARDAR_NOTA: String = "Guardar nota"
+
+/**
+ * **¿Se puede guardar la nota?** Con algo escrito, sí. Vacía, solo si antes había una: guardar el
+ * vacío es la forma de quitarla. Una nota nueva y vacía no tiene nada que guardar, y el botón lo dice
+ * apagándose (en vez de cerrar sin hacer nada). Pura, para probarla sin Compose.
+ */
+internal fun sePuedeGuardarLaNota(inicial: String, escrita: String): Boolean =
+    escrita.isNotBlank() || inicial.isNotBlank()
+
+/**
+ * **El editor de la Nota.** Vuelta de diseño 13.
+ *
+ * Era una caja propia (un `BasicTextField` sobre la tarjeta, sin el borde ni la anatomía del
+ * sistema), un «Guardar nota» en lavanda pálido que parecía apagado aunque hubiera texto, y media
+ * pantalla vacía debajo. Ahora:
+ *
+ * - **El [Campo] del sistema**, con el foco al abrir: se abre listo para escribir «Nómina agosto»,
+ *   sin un toque previo que pueda caer en otro lado (Ola 8 · V2). El cursor queda al final de lo que
+ *   ya había, así que reabrir una nota y escribir agrega al final y no adelante (el bug de
+ *   «Nomina agosto» que la Ola 8 cerró). ⌘A lo trae el campo.
+ * - **El principal**, «Guardar nota», un [Boton] `Principal` a todo el ancho: encendido con texto (y
+ *   con el campo vacío si había una nota, para poder quitarla; ver [sePuedeGuardarLaNota]).
+ * - **Enter también guarda**: la acción del teclado del teléfono («Listo») y la tecla Enter del
+ *   teclado físico. Por eso es de un renglón.
+ * - **Mide lo que necesita.** Ya no se le fija el alto del formulario (ver el `Box` del alto fijado
+ *   en [QuickAddScreen]).
+ *
+ * El tope es el de la columna (`description` es un `varchar(255)`): una nota más larga salía por el
+ * 500 genérico del server. Se recorta en vez de descartarse, para que pegar un texto largo deje lo
+ * que entra.
+ */
 @Composable
-private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () -> Unit) {
-    // `TextFieldValue` y no `String`: hace falta poder decir DÓNDE queda el cursor.
-    //
-    // Ola 8 · V2 (N1 de la revisión): con un `String` pelado, el `requestFocus()` de abajo deja
-    // el cursor en la posición 0, así que al reabrir una nota ya escrita lo nuevo se metía
-    // ADELANTE de lo viejo. Reproducido: nota «agosto» → guardar → reabrir → tipear «Nomina »
-    // → queda «Nomina agosto». Hay evidencia del bug en la base local de desarrollo: la fila
-    // `AlmuerzoNomina agosto` de `financial_events` se guardó así durante la verificación de
-    // esta misma ola, sin que nadie lo notara.
-    //
-    // Es el mismo problema que `CategoryField` ya tenía resuelto (Ola 2 #3b) y del que acá se
-    // había copiado solo la mitad —el foco— y no la otra —la selección—. Mismo remedio y por
-    // el mismo motivo: al ganar el foco se selecciona todo, así tipear REEMPLAZA en vez de
-    // insertarse en medio de lo que ya había.
-    var value by remember {
-        mutableStateOf(TextFieldValue(initial, TextRange(initial.length)))
-    }
-    var focused by remember { mutableStateOf(false) }
-    // Ola 8 · V2: sin foco automático había que acertarle al campo con el dedo, y ver más
-    // abajo por qué eso era imposible. Es el MISMO arreglo que el sub-picker de Categoría ya
-    // tenía documentado (Ola 2 #3c) y que a Nota nunca se le hizo: la hoja se abre lista para
-    // escribir «Nómina agosto», sin un toque previo que pueda caer en cualquier otro lado.
-    val noteFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { noteFocusRequester.requestFocus() }
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.m)) {
-        PickerHeader("Nota", onClose)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(Radio.m))
-                .background(Movi.colores.tarjeta)
-                .padding(horizontal = Espacio.s, vertical = Espacio.s),
-        ) {
-            BasicTextField(
-                value = value,
-                // El mismo tope que la categoría, y por lo mismo: `description` es un
-                // `varchar(255)`, y una nota más larga salía por el 500 genérico del server (en el
-                // teléfono, por un reintento eterno y mudo). Se RECORTA en vez de descartarse,
-                // para que pegar un texto largo deje lo que entra en lugar de no dejar nada.
-                onValueChange = { value = recortadoAlTope(it, MAX_CONCEPTO_LENGTH) },
-                cursorBrush = SolidColor(Movi.colores.texto),
-                textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                // Ola 8 · V2: **sin `fillMaxWidth` el campo no se podía tocar.** El área
-                // sensible de un BasicTextField es la que mide su contenido, y con el texto
-                // vacío eso son cero píxeles de ancho: la caja gris se ve grande, pero el
-                // campo de verdad es una raya invisible. Verificado en la web local sobre
-                // master — clic en el centro de la caja y clic pegado al borde izquierdo, y en
-                // los dos casos lo tecleado no entró en ninguna parte. O sea: la nota no se
-                // podía escribir. Las otras siete hojas de la app (CreateAccountSheet,
-                // VoidEventSheet, CreateSubscriptionSheet, CategoryField…) ya traían este
-                // `fillMaxWidth`; esta era la única que se lo había saltado.
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(TAG_CAMPO_DE_NOTA)
-                    .focusRequester(noteFocusRequester)
-                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                    // [esAtajoDeSeleccionarTodo]. Es lo mismo que hace la línea de abajo al ganar
-                    // el foco, pero disponible cuando ya se está escribiendo: sin esto, volver a
-                    // reemplazar la nota entera con el teclado no tenía cómo.
-                    .onPreviewKeyEvent { evento ->
-                        if (esAtajoDeSeleccionarTodo(evento) && value.text.isNotEmpty()) {
-                            value = conTodoSeleccionado(value)
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    .onFocusChanged { state ->
-                        // Al GANAR el foco (no en cada recomposición, o sería imposible mover
-                        // el cursor a mano después).
-                        if (state.isFocused && !focused) {
-                            value = value.copy(selection = TextRange(0, value.text.length))
-                        }
-                        focused = state.isFocused
-                    },
-                decorationBox = { inner ->
-                    if (value.text.isEmpty()) {
-                        Text("Concepto del movimiento", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                    }
-                    inner()
-                },
-            )
-        }
-        Spacer(Modifier.height(Espacio.s))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(Medida.objetivoTactil)
-                .clip(RoundedCornerShape(Radio.pill))
-                .background(Movi.colores.lavado(Movi.colores.marca))
-                .clickable { onSave(value.text.trim()) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("Guardar nota", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
-        }
+private fun NoteEditor(initial: String, onSave: (String) -> Unit, onVolver: () -> Unit) {
+    var texto by remember { mutableStateOf(initial) }
+    val habilitado = sePuedeGuardarLaNota(initial, texto)
+    val guardar = { if (sePuedeGuardarLaNota(initial, texto)) onSave(texto.trim()) }
+    // El foco se pide ADENTRO del contenido de la hoja: ver «El foco» en [MarcoDeHoja].
+    val foco = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        PickerHeader("Nota", onVolver)
+        Campo(
+            valor = texto,
+            alCambiar = { texto = it.take(MAX_CONCEPTO_LENGTH) },
+            guia = "Ej: Almuerzo con el equipo",
+            teclado = KeyboardOptions(imeAction = ImeAction.Done),
+            acciones = KeyboardActions(onDone = { guardar() }),
+            foco = foco,
+            tag = TAG_CAMPO_DE_NOTA,
+            modifier = Modifier.onPreviewKeyEvent { evento ->
+                // Enter del teclado físico. Con ⇧ no: queda para quien lo use de otra forma.
+                val esEnter = evento.key == Key.Enter || evento.key == Key.NumPadEnter
+                if (esEnter && !evento.isShiftPressed) {
+                    if (evento.type == KeyEventType.KeyDown) guardar()
+                    true
+                } else {
+                    false
+                }
+            },
+        )
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        Boton(GUARDAR_NOTA, onClick = { guardar() }, habilitado = habilitado, anchoCompleto = true)
     }
 }
 

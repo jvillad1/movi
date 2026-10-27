@@ -69,6 +69,9 @@ const val TAG_CAMPO: String = "ds-campo"
 /** Tag del texto editable de un [CampoDeMonto] (se puede cambiar con `tag`). */
 const val TAG_CAMPO_DE_MONTO: String = "ds-campo-de-monto"
 
+/** La caja de un campo (capa 2, borde, alto mínimo de 48): para medirla en una prueba. */
+const val TAG_CAJA_DEL_CAMPO: String = "ds-campo-caja"
+
 /** El rótulo de un campo, arriba de la caja. */
 const val TAG_ROTULO_DEL_CAMPO: String = "ds-campo-rotulo"
 
@@ -630,6 +633,7 @@ private fun MarcoDeCampo(
                 .clip(forma)
                 .background(Movi.colores.capa2)
                 .border(Medida.trazo, colorDelBorde, forma)
+                .testTag(TAG_CAJA_DEL_CAMPO)
                 .padding(horizontal = Espacio.s, vertical = Espacio.s),
             contentAlignment = Alignment.CenterStart,
         ) {
