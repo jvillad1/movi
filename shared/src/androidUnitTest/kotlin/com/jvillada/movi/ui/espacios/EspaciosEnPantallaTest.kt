@@ -7,10 +7,12 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.Repositories
@@ -29,7 +31,9 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.partesDelGasto
 import com.jvillada.movi.shared.model.saldoDelEspacio
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.transactions.AccionDelMovimiento
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
+import com.jvillada.movi.ui.transactions.tagDeAccionDelMovimiento
 import com.jvillada.movi.ui.transactions.MovementSingleRow
 import com.jvillada.movi.ui.transactions.TAG_TU_PARTE
 import org.junit.After
@@ -82,6 +86,12 @@ class EspaciosEnPantallaTest {
     private fun esperarTexto(texto: String) {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun esperarTag(tag: String) {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -158,12 +168,50 @@ class EspaciosEnPantallaTest {
                 }
             }
         }
-        esperarTexto("¿Es un gasto compartido?")
-        tocarBoton("Repartir")
+        // Vuelta de diseño 17: «Repartir» es una acción de la fila; abre una fila por espacio.
+        esperarTag(tagDeAccionDelMovimiento(AccionDelMovimiento.Repartir))
+        composeRule.onNodeWithTag(tagDeAccionDelMovimiento(AccionDelMovimiento.Repartir)).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        esperarTexto("Tu parte \$120.000")
+        composeRule.onAllNodesWithText("Casa con Caro").filter(hasClickAction()).onLast()
+            .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(timeoutMillis = 5_000) { repartidos.isNotEmpty() }
 
         assertEquals(listOf("esp_casa" to "e_mercado"), repartidos)
         composeRule.waitUntil(timeoutMillis = 5_000) { cambiado }
+    }
+
+    @Test
+    fun `un gasto comun no lleva la tarjeta grande pero si la accion Repartir`() {
+        Repositories.sustitutoDePrueba = object : ConLaCasa() {
+            override suspend fun getParecidos(id: String): List<FinancialEvent> = emptyList()
+        }
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { HojaDelMovimiento(event = mercado, cuentas = listOf(bancolombia), onDismiss = {}, onCambiado = {}) } }
+        }
+        esperarTag(tagDeAccionDelMovimiento(AccionDelMovimiento.Repartir))
+
+        composeRule.onAllNodesWithText("¿Es un gasto compartido?", substring = true, useUnmergedTree = true)
+            .fetchSemanticsNodes().let { assertEquals(0, it.size, "la tarjeta grande ya no va en cada gasto") }
+        composeRule.onAllNodesWithTag(TAG_REPARTIR, useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(0, it.size) }
+        composeRule.onAllNodesWithTag(TAG_SECCION_DE_REPARTIR, useUnmergedTree = true).fetchSemanticsNodes()
+            .let { assertEquals(0, it.size, "la sección solo se abre desde la acción") }
+    }
+
+    @Test
+    fun `un gasto repartido muestra su bloque y no la accion`() {
+        Repositories.sustitutoDePrueba = object : ConLaCasa() {
+            override suspend fun getParecidos(id: String): List<FinancialEvent> = emptyList()
+        }
+        val repartido = mercado.copy(parteAjena = 120_000L, espacioId = casa.id)
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { HojaDelMovimiento(event = repartido, cuentas = listOf(bancolombia), onDismiss = {}, onCambiado = {}) } }
+        }
+        esperarTexto("Repartido en Casa con Caro")
+        esperarTexto("Tu parte \$120.000")
+        composeRule.onNodeWithTag(TAG_REPARTIR, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(tagDeAccionDelMovimiento(AccionDelMovimiento.Repartir), useUnmergedTree = true)
+            .fetchSemanticsNodes().let { assertEquals(0, it.size, "ya está repartido: se quita desde el bloque") }
     }
 
     @Test
@@ -176,6 +224,8 @@ class EspaciosEnPantallaTest {
         }
         composeRule.waitForIdle()
         composeRule.onAllNodesWithTag(TAG_REPARTIR, useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(0, it.size) }
+        composeRule.onAllNodesWithTag(tagDeAccionDelMovimiento(AccionDelMovimiento.Repartir), useUnmergedTree = true)
+            .fetchSemanticsNodes().let { assertEquals(0, it.size) }
     }
 
     @Test

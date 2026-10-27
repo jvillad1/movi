@@ -737,14 +737,18 @@ internal fun ContenidoDelMovimiento(
     // Ola 2b · **las acciones son las secciones que ya existían, reubicadas.** Solo aparece la que
     // tiene algo que abrir: sin tercero no hay «Tercero», sin dónde poner el formulario no hay
     // «Repetir».
-    val acciones = buildList {
-        add(AccionDelMovimiento.Categoria)
-        add(AccionDelMovimiento.Nota)
-        add(AccionDelMovimiento.Fecha)
-        if (ofreceRepetir) add(AccionDelMovimiento.Repetir)
-        if (tercero != null || ofreceGuardarElTercero) add(AccionDelMovimiento.Tercero)
-        if (onAnular != null || ofreceVincular) add(AccionDelMovimiento.Mas)
-    }
+    // R3 · «Repartir»: un gasto propio pasa a un espacio y cuenta solo tu parte. Desde la vuelta de
+    // diseño 17 es una acción de la fila (con el ícono de Espacios), no una tarjeta debajo de la
+    // categoría de cada gasto.
+    val espacios = com.jvillada.movi.ui.espacios.rememberEspaciosParaRepartir(event)
+    val ofreceRepartir = com.jvillada.movi.ui.espacios.ofreceRepartir(event, espacios)
+    val acciones = accionesDelMovimiento(
+        ofreceRepetir = ofreceRepetir,
+        ofreceRepartir = ofreceRepartir,
+        conTercero = tercero != null || ofreceGuardarElTercero,
+        conMas = onAnular != null || ofreceVincular,
+    )
+    val repartirEnMas = repartirVaEnMas(ofreceRepartir, acciones)
     val reducido = LocalMovimientoReducido.current
     fun alternar(a: AccionDelMovimiento) {
         accion = if (accion == a) null else a
@@ -769,9 +773,11 @@ internal fun ContenidoDelMovimiento(
                 Spacer(Modifier.height(Espacio.xs))
                 LineaEnEsteComercio(enEsteComercio, onVer = onVerElComercio?.let { ver -> { ver(enEsteComercio.busqueda) } })
             }
-            // R3 · «Repartir»: un gasto propio pasa a un espacio y cuenta solo tu parte. Solo si el
-            // dueño tiene algún espacio (o ya está repartido); ver [FilaDeRepartir].
-            com.jvillada.movi.ui.espacios.FilaDeRepartir(evento = event, onCambiado = onEventChanged)
+            // Un gasto ya repartido dice dónde y cuánto es tuyo: eso es información, se ve al abrir.
+            if (event.espacioId != null) {
+                Spacer(Modifier.height(Espacio.s))
+                com.jvillada.movi.ui.espacios.BloqueDeRepartido(evento = event, espacios = espacios, onCambiado = onEventChanged)
+            }
             // Lo que espera una decisión no se esconde detrás de una acción: confirmarlo es lo que
             // el dueño vino a hacer cuando abre un aviso pendiente.
             if (event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
@@ -900,6 +906,12 @@ internal fun ContenidoDelMovimiento(
                             onGuardado = onEventChanged,
                         )
                     }
+                    AccionDelMovimiento.Repartir -> if (ofreceRepartir) {
+                        Spacer(Modifier.height(Espacio.s))
+                        Separador(SangriaDeSeparador.Ninguna)
+                        Spacer(Modifier.height(Espacio.s))
+                        com.jvillada.movi.ui.espacios.SeccionDeRepartir(evento = event, espacios = espacios, onCambiado = onEventChanged)
+                    }
                     AccionDelMovimiento.Tercero -> {
                         if (tercero != null) {
                             Spacer(Modifier.height(Espacio.s))
@@ -932,6 +944,13 @@ internal fun ContenidoDelMovimiento(
                         }
                     }
                     AccionDelMovimiento.Mas -> {
+                        // «Repartir» que no cupo en la fila (con «Tercero» ya son siete acciones).
+                        if (repartirEnMas) {
+                            Spacer(Modifier.height(Espacio.s))
+                            Separador(SangriaDeSeparador.Ninguna)
+                            Spacer(Modifier.height(Espacio.s))
+                            com.jvillada.movi.ui.espacios.SeccionDeRepartir(evento = event, espacios = espacios, onCambiado = onEventChanged)
+                        }
                         // Ola Y: «¿A cuál crédito o tarjeta corresponde?», solo con las dos
                         // categorías de deuda sobre un gasto que todavía no es la mitad de un
                         // traspaso — ver `ofreceVincularDeuda`.

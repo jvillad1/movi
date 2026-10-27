@@ -21,6 +21,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.ui.text.font.FontWeight
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -366,94 +369,159 @@ fun HojaPagoOtro(
     }
 }
 
+/** El `testTag` de la sección que abre la acción «Repartir» del detalle de un movimiento. */
+const val TAG_SECCION_DE_REPARTIR: String = "espacios:seccion-de-repartir"
+
 /**
- * **«Repartir», en el detalle de un movimiento.** Un gasto propio se asigna a un espacio: desde ahí
- * cuenta solo tu parte. Si ya está repartido, dice tu parte y deja quitarlo. Solo aparece si el
- * dueño tiene algún espacio (o el movimiento ya está en uno) y el movimiento se puede repartir.
- *
- * @param onCambiado el movimiento con su parte ajena nueva (la pantalla de atrás relee igual).
+ * Los espacios del dueño, para «Repartir» en el detalle de un movimiento. Solo se piden si hay algo
+ * que mostrar: un gasto que se puede repartir, o uno que ya está repartido (para decir dónde).
  */
 @Composable
-internal fun FilaDeRepartir(
+internal fun rememberEspaciosParaRepartir(evento: FinancialEvent): List<Espacio> {
+    var espacios by remember(evento.id) { mutableStateOf<List<Espacio>>(emptyList()) }
+    val hacenFalta = sePuedeRepartir(evento) || evento.espacioId != null
+    LaunchedEffect(evento.id, hacenFalta) {
+        if (hacenFalta) espacios = runCatching { Repositories.wallets.getEspacios() }.getOrDefault(emptyList())
+    }
+    return espacios
+}
+
+/**
+ * ¿El detalle ofrece la acción «Repartir»? Un gasto que se puede repartir, todavía sin espacio, y
+ * con al menos un espacio adonde mandarlo.
+ */
+internal fun ofreceRepartir(evento: FinancialEvent, espacios: List<Espacio>): Boolean =
+    sePuedeRepartir(evento) && evento.espacioId == null && espacios.isNotEmpty()
+
+/** Repartir [evento] en [espacio] o quitarlo de él: lo que comparten la sección y el bloque. */
+@Composable
+private fun rememberEscrituraDeRepartir(
     evento: FinancialEvent,
     onCambiado: (FinancialEvent) -> Unit,
-) {
-    if (!sePuedeRepartir(evento) && evento.espacioId == null) return
+): EscrituraDeRepartir {
     val coroutine = rememberCoroutineScope()
-    var espacios by remember(evento.id) { mutableStateOf<List<Espacio>>(emptyList()) }
-    var trabajando by remember(evento.id) { mutableStateOf(false) }
-    var error by remember(evento.id) { mutableStateOf<String?>(null) }
-    LaunchedEffect(evento.id) {
-        espacios = runCatching { Repositories.wallets.getEspacios() }.getOrDefault(emptyList())
+    return remember(evento.id) { EscrituraDeRepartir(coroutine) }.also {
+        it.evento = evento
+        it.onCambiado = onCambiado
     }
-    val actual = espacios.firstOrNull { it.id == evento.espacioId }
-    if (espacios.isEmpty() && evento.espacioId == null) return
+}
+
+private class EscrituraDeRepartir(private val coroutine: kotlinx.coroutines.CoroutineScope) {
+    var evento: FinancialEvent? = null
+    var onCambiado: (FinancialEvent) -> Unit = {}
+    var trabajandoEn by mutableStateOf<String?>(null)
+    var error by mutableStateOf<String?>(null)
 
     fun repartir(espacio: Espacio) {
-        if (trabajando) return
-        trabajando = true
+        val e = evento ?: return
+        if (trabajandoEn != null) return
+        trabajandoEn = espacio.id
         error = null
         coroutine.launch {
             try {
-                val gasto = Repositories.wallets.repartirMovimiento(espacio.id, evento.id)
-                onCambiado(evento.copy(parteAjena = gasto.monto - (gasto.partes[MIEMBRO_YO] ?: gasto.monto), espacioId = espacio.id))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                error = mensajeDelEspacio(e)
-                trabajando = false
+                val gasto = Repositories.wallets.repartirMovimiento(espacio.id, e.id)
+                trabajandoEn = null
+                onCambiado(e.copy(parteAjena = gasto.monto - (gasto.partes[MIEMBRO_YO] ?: gasto.monto), espacioId = espacio.id))
+            } catch (x: CancellationException) {
+                throw x
+            } catch (x: Throwable) {
+                error = mensajeDelEspacio(x)
+                trabajandoEn = null
             }
         }
     }
 
     fun quitar(espacioId: String) {
-        if (trabajando) return
-        trabajando = true
+        val e = evento ?: return
+        if (trabajandoEn != null) return
+        trabajandoEn = espacioId
         error = null
         coroutine.launch {
             try {
-                Repositories.wallets.quitarDelEspacio(espacioId, evento.id)
-                onCambiado(evento.copy(parteAjena = 0L, espacioId = null))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                error = mensajeDelEspacio(e)
-                trabajando = false
+                Repositories.wallets.quitarDelEspacio(espacioId, e.id)
+                trabajandoEn = null
+                onCambiado(e.copy(parteAjena = 0L, espacioId = null))
+            } catch (x: CancellationException) {
+                throw x
+            } catch (x: Throwable) {
+                error = mensajeDelEspacio(x)
+                trabajandoEn = null
             }
         }
     }
+}
 
+/**
+ * **«Repartido en Casa con Caro · Tu parte $120.000 · Quitar»**, en el detalle de un gasto ya
+ * repartido. Es información —cuánto cuenta de verdad este gasto—, así que se ve al abrir. Nada si el
+ * movimiento no está en ningún espacio.
+ */
+@Composable
+internal fun BloqueDeRepartido(
+    evento: FinancialEvent,
+    espacios: List<Espacio>,
+    onCambiado: (FinancialEvent) -> Unit,
+) {
+    val repartidoEn = evento.espacioId ?: return
+    val escritura = rememberEscrituraDeRepartir(evento, onCambiado)
+    val actual = espacios.firstOrNull { it.id == repartidoEn }
     Superficie(nivel = NivelDeSuperficie.Capa2, modifier = Modifier.fillMaxWidth().testTag(TAG_REPARTIR)) {
-        val repartidoEn = evento.espacioId
-        if (repartidoEn != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.s)) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Repartido en ${actual?.nombre ?: "un espacio"}", style = Movi.textos.cuerpo, color = Movi.colores.texto)
-                    Text("Tu parte ${formatCOP(montoContado(evento))}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
-                Boton(
-                    "Quitar",
-                    onClick = { quitar(repartidoEn) },
-                    variante = VarianteDeBoton.Fantasma,
-                    tamano = TamanoDeBoton.S,
-                    cargando = trabajando,
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.s)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Repartido en ${actual?.nombre ?: "un espacio"}", style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                Text("Tu parte ${formatCOP(montoContado(evento))}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+            Boton(
+                "Quitar",
+                onClick = { escritura.quitar(repartidoEn) },
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                cargando = escritura.trabajandoEn != null,
+            )
+        }
+        ErrorDeLaHoja(escritura.error)
+    }
+}
+
+/**
+ * **La sección de la acción «Repartir»** (vuelta de diseño 17). Hasta acá cada gasto llevaba debajo
+ * de la categoría una tarjeta de ~110 dp —«¿Es un gasto compartido? · Repártelo… · Repartir»—,
+ * también un tanqueo o un peaje. Ahora es una acción más de la fila, y esto es lo que abre: una fila
+ * por espacio con la parte del dueño; tocarla lo reparte.
+ *
+ * No hay tarjeta «con razón» (la categoría o el comercio ya se repartieron antes): el cliente no lo
+ * sabe sin pedir el detalle de cada espacio, y los parecidos llegan sin el espacio. Queda la acción.
+ */
+@Composable
+internal fun SeccionDeRepartir(
+    evento: FinancialEvent,
+    espacios: List<Espacio>,
+    onCambiado: (FinancialEvent) -> Unit,
+) {
+    val escritura = rememberEscrituraDeRepartir(evento, onCambiado)
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_SECCION_DE_REPARTIR)) {
+        Text("En tus gastos cuenta solo tu parte.", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        Spacer(Modifier.height(EspacioDeDiseno.xs))
+        Superficie(nivel = NivelDeSuperficie.Capa2, relleno = RellenoDeSuperficie.Lista, modifier = Modifier.fillMaxWidth()) {
+            espacios.forEach { espacio ->
+                val tuParte = partesDelGasto(evento.amount, espacio, MIEMBRO_YO)[MIEMBRO_YO]
+                val trabajando = escritura.trabajandoEn == espacio.id
+                Fila(
+                    titulo = espacio.nombre,
+                    subtitulo = when {
+                        trabajando -> "Repartiendo…"
+                        tuParte != null -> "Tu parte ${formatCOP(tuParte)}"
+                        else -> null
+                    },
+                    inicio = { IconoEnCirculo(Icons.Rounded.Groups) },
+                    final = {
+                        Text("Repartir", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
+                    },
+                    onClick = { escritura.repartir(espacio) },
+                    onClickLabel = "Repartir en ${espacio.nombre}",
                 )
             }
-        } else {
-            Text("¿Es un gasto compartido?", style = Movi.textos.cuerpo, color = Movi.colores.texto)
-            Text("Repártelo: en tus gastos cuenta solo tu parte.", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(EspacioDeDiseno.xs))
-            Row(horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.xs)) {
-                espacios.forEach { e ->
-                    Boton(
-                        if (espacios.size == 1) "Repartir" else e.nombre,
-                        onClick = { repartir(e) },
-                        tamano = TamanoDeBoton.S,
-                        cargando = trabajando && espacios.size == 1,
-                    )
-                }
-            }
         }
-        ErrorDeLaHoja(error)
+        ErrorDeLaHoja(escritura.error)
     }
 }

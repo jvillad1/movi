@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MoreHoriz
@@ -81,11 +82,50 @@ enum class AccionDelMovimiento(val rotulo: String, internal val icono: ImageVect
     Fecha("Fecha", Icons.Rounded.Today),
     /** «¿Se repite todos los meses?». */
     Repetir("Repetir", Icons.Rounded.Repeat),
+    /**
+     * Repartirlo en un espacio: desde ahí cuenta solo tu parte. Con el ícono de Espacios. Solo en un
+     * gasto que se puede repartir, sin repartir, y con algún espacio (vuelta de diseño 17: antes era
+     * una tarjeta grande debajo de la categoría de cada gasto).
+     */
+    Repartir("Repartir", Icons.Rounded.Groups),
     /** De quién es la cuenta que nombra el aviso. Solo si el movimiento nombra una. */
     Tercero("Tercero", Icons.Rounded.Person),
     /** Vincular a una deuda y anular. */
     Mas("Más", Icons.Rounded.MoreHoriz),
 }
+
+/**
+ * Cuántas acciones caben en la fila: a 360 dp, siete celdas de ~47 dp ya cortan «Categoría». Siete
+ * solo pasa con «Tercero» y «Repartir» a la vez, y siempre con «Más»: ahí «Repartir» se muda a «Más».
+ */
+const val MAXIMO_DE_ACCIONES_DEL_MOVIMIENTO: Int = 6
+
+/**
+ * Las acciones de la fila, en su orden ([AccionDelMovimiento]). Solo aparece la que tiene algo que
+ * abrir. Si no caben ([MAXIMO_DE_ACCIONES_DEL_MOVIMIENTO]), «Repartir» queda adentro de «Más»: ver
+ * [repartirVaEnMas].
+ */
+internal fun accionesDelMovimiento(
+    ofreceRepetir: Boolean,
+    ofreceRepartir: Boolean,
+    conTercero: Boolean,
+    conMas: Boolean,
+): List<AccionDelMovimiento> {
+    val todas = buildList {
+        add(AccionDelMovimiento.Categoria)
+        add(AccionDelMovimiento.Nota)
+        add(AccionDelMovimiento.Fecha)
+        if (ofreceRepetir) add(AccionDelMovimiento.Repetir)
+        if (ofreceRepartir) add(AccionDelMovimiento.Repartir)
+        if (conTercero) add(AccionDelMovimiento.Tercero)
+        if (conMas) add(AccionDelMovimiento.Mas)
+    }
+    return if (todas.size > MAXIMO_DE_ACCIONES_DEL_MOVIMIENTO) todas - AccionDelMovimiento.Repartir else todas
+}
+
+/** ¿«Repartir» se ofrece pero no cupo en la fila? Entonces va al principio de «Más». */
+internal fun repartirVaEnMas(ofreceRepartir: Boolean, acciones: List<AccionDelMovimiento>): Boolean =
+    ofreceRepartir && AccionDelMovimiento.Repartir !in acciones
 
 /** El `testTag` del monto grande del encabezado. */
 const val TAG_MONTO_DEL_MOVIMIENTO: String = "monto-del-movimiento"
