@@ -24,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
@@ -413,9 +412,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                     // «Hoy», «Ayer», «23 de agosto» — no el «2026-08-23» de la clave.
                                     // Ola R4: en frase, no en mayúsculas.
                                     text = formatDayHeading(day.date, hoyEnAppZone().toString()),
-                                    style = Movi.textos.apoyo,
+                                    style = Movi.textos.apoyoMedio,
                                     color = Movi.colores.textoMedio,
-                                    fontWeight = FontWeight.Medium,
                                 )
                                 if (day.items.any { it.currency == "COP" }) {
                                     Text(
@@ -673,8 +671,7 @@ private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit) {
                 // Ola R4: en frase, no en mayúsculas.
                 Text(
                     text = if (isCard) "Deuda actual" else "Saldo actual",
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
+                    style = Movi.textos.apoyoMedio,
                     color = Movi.colores.textoMedio,
                 )
                 if (typeLabel.isNotEmpty()) {

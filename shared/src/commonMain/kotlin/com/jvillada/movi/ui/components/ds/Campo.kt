@@ -45,7 +45,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -563,8 +562,7 @@ fun PieDeHoja(
 fun RotuloDeCampo(texto: String, modifier: Modifier = Modifier) {
     Text(
         text = rotuloEnFrase(texto),
-        style = Movi.textos.apoyo,
-        fontWeight = FontWeight.Medium,
+        style = Movi.textos.apoyoMedio,
         color = Movi.colores.textoMedio,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -616,8 +614,7 @@ fun AyudaDeCampo(
                 if (masAyuda != null) {
                     Text(
                         text = if (ayudaAbierta) TEXTO_OCULTAR_AYUDA else TEXTO_QUE_ES_ESTO,
-                        style = Movi.textos.apoyo,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.apoyoMedio,
                         color = Movi.colores.marca,
                         maxLines = 1,
                         modifier = Modifier

@@ -22,7 +22,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Groups
-import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -512,7 +511,7 @@ internal fun SeccionDeRepartir(
                     },
                     inicio = { IconoEnCirculo(Icons.Rounded.Groups) },
                     final = {
-                        Text("Repartir", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
+                        Text("Repartir", style = Movi.textos.cuerpo, color = Movi.colores.marca)
                     },
                     onClick = { escritura.repartir(espacio) },
                     onClickLabel = "Repartir en ${espacio.nombre}",

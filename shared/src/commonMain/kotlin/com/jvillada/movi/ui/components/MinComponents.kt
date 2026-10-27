@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,6 +28,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
 import com.jvillada.movi.ui.components.ds.varianteDeCifra
 import com.jvillada.movi.ui.components.ds.SuperficieConRellenoLibre
 
@@ -208,20 +208,19 @@ fun CardRow(
  *   `fontSize =`. Del estilo salen el tamaño y el interlineado; las cifras tabulares se fuerzan
  *   acá, porque [TextosDeMovi.apoyo] y [TextosDeMovi.titulo] no las traen y una cifra sin `tnum`
  *   baila en la columna.
- * @param fontWeight manda sobre el peso del estilo, como antes: una cifra va en Medium aunque su
- *   estilo sea Normal o SemiBold.
+ *   **El peso es el del estilo** (vuelta de diseño 21: antes un `fontWeight` lo forzaba a Medium):
+ *   una cifra va en Medium, así que se pasa uno que ya lo trae —el de una `Cifra` de fila,
+ *   `estiloDeLaCifra(VarianteDeCifra.Fila, Movi.textos)`, o [TextosDeMovi.apoyoMedio]—.
  */
 @Composable
 fun Cifra(
     text: String,
-    estilo: TextStyle = Movi.textos.monto,
+    estilo: TextStyle = estiloDeLaCifra(VarianteDeCifra.Fila, Movi.textos),
     color: Color = Movi.colores.texto,
-    fontWeight: FontWeight = FontWeight.Medium,
 ) {
     Text(
         text = text,
         style = estilo.copy(
-            fontWeight = fontWeight,
             letterSpacing = (-0.3).sp,
             fontFeatureSettings = "tnum",
         ),

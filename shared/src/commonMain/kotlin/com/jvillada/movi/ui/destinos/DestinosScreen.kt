@@ -50,7 +50,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
@@ -443,7 +442,7 @@ private fun LoQueEncontroMovi(
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(tituloDeLosSugeridos(cuantos), style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                Text(tituloDeLosSugeridos(cuantos), style = Movi.textos.cuerpo, color = Movi.colores.texto)
                 Text(
                     "Les envías plata o te envían, y Movi no sabe quiénes son.",
                     style = Movi.textos.apoyo,

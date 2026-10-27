@@ -23,7 +23,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -219,10 +218,8 @@ private fun NavItem(
 
 /** El estilo del rótulo de una pestaña: el `rotulo` del sistema, más firme si está activa. */
 @Composable
-private fun estiloDelRotulo(activo: Boolean): TextStyle = Movi.textos.rotulo.copy(
-    letterSpacing = 0.2.sp,
-    fontWeight = if (activo) FontWeight.SemiBold else FontWeight.Normal,
-)
+private fun estiloDelRotulo(activo: Boolean): TextStyle =
+    if (activo) Movi.textos.pestanaActiva else Movi.textos.pestana
 
 /**
  * **¿Entran los cinco rótulos enteros en [ancho]?** Cada pestaña ocupa lo más ancho entre su rótulo

@@ -721,8 +721,7 @@ private fun HojaDeOrden(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text(
                 "Ordena tus categorías",
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
+                style = Movi.textos.tituloMedio,
                 color = Movi.colores.texto,
                 modifier = Modifier.padding(top = Movi.espacios.minimo),
             )
@@ -1269,8 +1268,7 @@ private fun HojaRenombrar(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text(
                 "Renombrar «${categoria.name}»",
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
+                style = Movi.textos.tituloMedio,
                 color = Movi.colores.texto,
                 modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )
@@ -1342,8 +1340,7 @@ private fun HojaUnificar(
         Column(modifier = Modifier.weight(1f, fill = false)) {
             Text(
                 "Unificar «${categoria.name}» en…",
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
+                style = Movi.textos.tituloMedio,
                 color = Movi.colores.texto,
                 modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )

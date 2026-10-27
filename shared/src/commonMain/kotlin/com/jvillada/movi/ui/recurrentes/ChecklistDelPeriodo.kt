@@ -36,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
@@ -430,8 +429,7 @@ internal fun <T> GrupoDePagos(
         Icon(icono, contentDescription = null, tint = colorDelIcono, modifier = Modifier.size(Icono.s))
         Text(
             text = if (filas.isEmpty()) titulo else "$titulo · ${filas.size}",
-            style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.SemiBold,
+            style = Movi.textos.cuerpoFuerte,
             color = Movi.colores.texto,
             modifier = Modifier.weight(1f),
         )

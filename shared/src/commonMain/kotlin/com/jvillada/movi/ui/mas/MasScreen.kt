@@ -31,7 +31,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.data.EXPLICACION_HUELLA
 import com.jvillada.movi.data.EstadoDeHuella
@@ -634,7 +633,7 @@ private fun TarjetaDelPerfil(profile: UserProfile?, onEditar: () -> Unit) {
                     .background(avatarColor),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(initials.ifEmpty { "U" }, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.sobreAvatar)
+                Text(initials.ifEmpty { "U" }, style = Movi.textos.tituloMedio, color = Movi.colores.sobreAvatar)
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(displayName, style = Movi.textos.titular, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)

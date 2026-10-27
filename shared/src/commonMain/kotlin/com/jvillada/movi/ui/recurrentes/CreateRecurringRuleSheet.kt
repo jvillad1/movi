@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -475,8 +474,7 @@ fun CreateRecurringRuleSheet(
                         isEditMode -> "Editar recurrente"
                         else -> "Nuevo recurrente"
                     },
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
+                    style = Movi.textos.tituloMedio,
                     color = Movi.colores.texto,
                     modifier = Modifier.weight(1f),
                 )
@@ -1140,8 +1138,7 @@ internal fun DestinoConocidoPickerField(
 private fun AccountPickerRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Text(
         text = label,
-        style = Movi.textos.cuerpo,
-        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+        style = if (selected) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
         color = if (selected) Movi.colores.marca else Movi.colores.texto,
         modifier = Modifier
             .fillMaxWidth()
@@ -1175,8 +1172,7 @@ private fun RowScope.SheetChip(
     ) {
         Text(
             text = label,
-            style = Movi.textos.cuerpo,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            style = if (selected) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
             color = when {
                 !enabled -> Movi.colores.textoApagado
                 selected -> Movi.colores.marca
@@ -1282,8 +1278,7 @@ private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPi
     ) {
         Text(
             text = day.toString(),
-            style = Movi.textos.cuerpo,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            style = if (selected) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
             color = when {
                 !enabled -> Movi.colores.textoApagado
                 selected -> Movi.colores.marca

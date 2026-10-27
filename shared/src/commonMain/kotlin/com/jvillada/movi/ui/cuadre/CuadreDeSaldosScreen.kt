@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
@@ -320,8 +319,7 @@ private fun FilaDeCuadre(
             Column(modifier = Modifier.fillMaxWidth(0.55f)) {
                 Text(
                     cuenta.name,
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
+                    style = Movi.textos.tituloMedio,
                     color = Movi.colores.texto,
                 )
                 Text(

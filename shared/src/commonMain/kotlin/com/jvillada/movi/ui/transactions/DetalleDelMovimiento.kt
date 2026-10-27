@@ -37,7 +37,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -176,8 +175,7 @@ internal fun EncabezadoDelMovimiento(
         }
         Text(
             evento.description,
-            style = Movi.textos.titulo,
-            fontWeight = FontWeight.Medium,
+            style = Movi.textos.tituloMedio,
             color = Movi.colores.texto,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -318,8 +316,7 @@ internal fun FilaDeAcciones(
                 }
                 Text(
                     accion.rotulo,
-                    style = Movi.textos.apoyo,
-                    fontWeight = if (elegida) FontWeight.Medium else FontWeight.Normal,
+                    style = if (elegida) Movi.textos.apoyoMedio else Movi.textos.apoyo,
                     color = if (elegida) Movi.colores.marca else Movi.colores.textoMedio,
                     maxLines = 1,
                     softWrap = false,

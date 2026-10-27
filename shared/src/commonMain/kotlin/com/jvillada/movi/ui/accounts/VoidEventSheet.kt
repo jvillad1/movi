@@ -20,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -189,7 +188,7 @@ fun VoidEventSheet(
                 Spacer(Modifier.height(Espacio.m))
                 Text(
                     text = "Al anular",
-                    style = Movi.textos.apoyo, fontWeight = FontWeight.Medium,
+                    style = Movi.textos.apoyoMedio,
                     color = Movi.colores.textoMedio,
                 )
                 Spacer(Modifier.height(Espacio.s))

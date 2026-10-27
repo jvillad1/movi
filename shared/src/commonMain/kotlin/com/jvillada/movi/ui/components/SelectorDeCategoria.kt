@@ -39,7 +39,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -393,7 +392,6 @@ fun SelectorDeCategoria(
                 Text(
                     "«$reservada» la usa Movi sola",
                     style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                 )
                 Text(
@@ -451,7 +449,7 @@ internal fun CuadriculaDeCategorias(
     val relleno = Movi.espacios.minimo
     // Una sola letra para todos los rótulos (vuelta de diseño 13). Se mide en Medium, el peso de la
     // elegida y de «Crear»/«Usar», que es el más ancho: así elegir otra no cambia las columnas.
-    val estilo = Movi.textos.apoyo.copy(fontWeight = FontWeight.Medium)
+    val estilo = Movi.textos.apoyoMedio
     val medidor = rememberTextMeasurer()
     val rotulos = remember(celdas) { celdas.map(::rotuloDeLaCelda) }
     // El ancho, en px, de la palabra más ancha de cada rótulo: decide las columnas y el modo de cada
@@ -549,18 +547,16 @@ private fun CeldaDeLaCuadricula(
         }
         Spacer(Modifier.height(Movi.espacios.minimo))
         val colorDelRotulo = if (elegida || celda !is CeldaDeCategoria.Existente) Movi.colores.marca else Movi.colores.texto
-        val pesoDelRotulo = if (elegida || celda !is CeldaDeCategoria.Existente) FontWeight.Medium else FontWeight.Normal
         // Vuelta de diseño 13: **todas a la misma letra** (`apoyo`), en hasta dos renglones y con
         // dos renglones reservados siempre, así las celdas de un renglón miden lo mismo y el borde de
         // la elegida no queda más bajo que sus vecinas. Que una palabra no se parta a la mitad lo
         // cuida la cuadrícula, bajando de columnas ([columnasParaQueEntrenLasPalabras]); solo la que
         // ni así entra va en un renglón con «…» ([ModoDelRotulo.UN_RENGLON]), a la misma letra.
-        val estilo = Movi.textos.apoyo
+        val estilo = if (elegida || celda !is CeldaDeCategoria.Existente) Movi.textos.apoyoMedio else Movi.textos.apoyo
         when (modo) {
             ModoDelRotulo.NORMAL -> Text(
                 rotulo,
                 style = estilo,
-                fontWeight = pesoDelRotulo,
                 color = colorDelRotulo,
                 textAlign = TextAlign.Center,
                 minLines = 2,
@@ -575,7 +571,6 @@ private fun CeldaDeLaCuadricula(
                 Text(
                     rotulo,
                     style = estilo,
-                    fontWeight = pesoDelRotulo,
                     color = colorDelRotulo,
                     textAlign = TextAlign.Center,
                     maxLines = 1,

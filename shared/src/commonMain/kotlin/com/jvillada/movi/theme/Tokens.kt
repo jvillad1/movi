@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -595,7 +596,67 @@ data class TextosDeMovi(
         fontWeight = FontWeight.Medium,
         letterSpacing = 1.7.sp,
     ),
-)
+) {
+    // ── Los pesos con nombre (vuelta de diseño 21) ───────────────────────────────────────────────
+    //
+    // Una pantalla no escribe `fontWeight =`: elige uno de estos. Son los mismos estilos de arriba
+    // con OTRO de los pesos que la escala ya usa (Normal, Medium, SemiBold) —ningún peso nuevo—, y
+    // salen de su base en el cuerpo de la clase, no en el constructor: así `conFamilias` les pone la
+    // familia sin nombrarlos (el `copy` de la clase los vuelve a calcular) y nunca se separan de su
+    // base en tamaño o interlineado.
+
+    /**
+     * **`apoyo` en Medium: el mini-título.** El rótulo de un dato arriba de su valor («Desde»,
+     * «Cuota»), el nombre en una fila apretada, el número dentro de un círculo. Es la letra de
+     * `RotuloDeCampo`, que además trae su color y su margen; esto es solo la letra.
+     */
+    val apoyoMedio: TextStyle = apoyo.copy(fontWeight = FontWeight.Medium)
+
+    /**
+     * **`titulo` en Medium: un nombre que encabeza sin gritar** (vuelta de diseño 4): el de una
+     * cuenta, una categoría o un tercero arriba de su detalle, el título de una tarjeta de
+     * formulario. `titulo` a secas (SemiBold) queda para el título de una sección o de un bloque.
+     */
+    val tituloMedio: TextStyle = titulo.copy(fontWeight = FontWeight.Medium)
+
+    /**
+     * **`titulo` en Normal: lo que acompaña a un título en su mismo renglón** —«· 3 movimientos»
+     * junto a la fecha de un día plegado, el conteo de una `Seccion`—, del tamaño del título pero sin
+     * su peso, para que se lea como dato y no como otro título.
+     */
+    val tituloRegular: TextStyle = titulo.copy(fontWeight = FontWeight.Normal)
+
+    /**
+     * **`cuerpo` en SemiBold: lo elegido y lo que se toca.** La opción elegida de un selector, el
+     * texto de un botón, las iniciales de un avatar. La no elegida va en `cuerpo` (o en
+     * [cuerpoRegular] si así iba): `if (elegido) cuerpoFuerte else cuerpo`.
+     */
+    val cuerpoFuerte: TextStyle = cuerpo.copy(fontWeight = FontWeight.SemiBold)
+
+    /**
+     * **`cuerpo` en Normal: un párrafo.** Una explicación de varios renglones, la respuesta de Movi
+     * AI: `cuerpo` (Medium) es para el texto de una fila, y a lo largo de un párrafo pesa.
+     */
+    val cuerpoRegular: TextStyle = cuerpo.copy(fontWeight = FontWeight.Normal)
+
+    /**
+     * **El rótulo de una pestaña** (la barra del teléfono, el riel compacto): `rotulo` en frase, casi
+     * sin espaciado (en mayúsculas espaciadas cinco no entran), en Normal; la activa en SemiBold.
+     */
+    val pestana: TextStyle = rotulo.copy(letterSpacing = 0.2.sp, fontWeight = FontWeight.Normal)
+
+    /** [pestana] activa. */
+    val pestanaActiva: TextStyle = pestana.copy(fontWeight = FontWeight.SemiBold)
+
+    /**
+     * **El énfasis dentro de una frase**: el nombre o la cifra que se resalta en medio de un texto
+     * corrido (el «**así**» de Movi AI, lo que un aviso del banco dice que es el monto). Un
+     * `SpanStyle`, para un `AnnotatedString`: `withStyle(Movi.textos.enfasis) { append(nombre) }`.
+     * SemiBold, el peso más firme que la letra de la interfaz trae (un Bold sin su fuente se dibuja
+     * igual que este).
+     */
+    val enfasis: SpanStyle = SpanStyle(fontWeight = FontWeight.SemiBold)
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CÓMO SE LLEGA A ELLOS

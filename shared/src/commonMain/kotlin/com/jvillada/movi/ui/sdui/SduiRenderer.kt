@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
@@ -39,6 +38,8 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.Cifra
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.LinkFigure
@@ -335,9 +336,9 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
                         // renderers); el estilo lo elige cada pantalla: un saldo va en gris y más
                         // chico porque no es una cifra que vaya a salir de la cuenta.
                         if (p.rule.montoEsSaldo) {
-                            Cifra(textoDelMonto(p.rule), Movi.textos.apoyo, color = Movi.colores.textoApagado)
+                            Cifra(textoDelMonto(p.rule), Movi.textos.apoyoMedio, color = Movi.colores.textoApagado)
                         } else {
-                            Cifra(textoDelMonto(p.rule), Movi.textos.monto, color = if (urgent) Movi.colores.sale else Movi.colores.texto)
+                            Cifra(textoDelMonto(p.rule), estiloDeLaCifra(VarianteDeCifra.Fila, Movi.textos), color = if (urgent) Movi.colores.sale else Movi.colores.texto)
                         }
                     },
                     isLast = i == rows.lastIndex,
@@ -398,7 +399,7 @@ private fun QuickLinksSection(section: ScreenSection, data: DashboardData, onNav
                     // El subtítulo escrito en el Editor manda sobre el calculado.
                     sub = card.subtitle ?: figure.sub,
                     right = figure.value?.let { value ->
-                        { Cifra(value, Movi.textos.monto, color = if (figure.isAlert) Movi.colores.sale else Movi.colores.texto) }
+                        { Cifra(value, estiloDeLaCifra(VarianteDeCifra.Fila, Movi.textos), color = if (figure.isAlert) Movi.colores.sale else Movi.colores.texto) }
                     },
                     showChevron = card.action != null,
                     isLast = i == section.cards.lastIndex,

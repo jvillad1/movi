@@ -34,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.theme.Movi
@@ -133,7 +132,7 @@ internal fun FilaDeslizable(
                 }
                 Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(Icono.m))
                 Spacer(Modifier.width(Espacio.xs))
-                Text(rotulo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = color)
+                Text(rotulo, style = Movi.textos.cuerpo, color = color)
             }
         }
         Box(

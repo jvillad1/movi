@@ -31,7 +31,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -275,7 +274,7 @@ private fun TituloYAcciones(
     modifier: Modifier = Modifier,
 ) {
     val medidor = rememberTextMeasurer()
-    val estiloDelBoton = Movi.textos.cuerpo.copy(fontWeight = FontWeight.SemiBold)
+    val estiloDelBoton = Movi.textos.cuerpoFuerte
     val estiloDelTitulo = Movi.textos.titular
     val colorDelTitulo = Movi.colores.texto
     val estiloDelSubtitulo = Movi.textos.apoyo
@@ -402,8 +401,7 @@ fun EncabezadoDeHoja(
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_HOJA)) {
         Text(
             titulo,
-            style = Movi.textos.titulo,
-            fontWeight = FontWeight.Medium,
+            style = Movi.textos.tituloMedio,
             color = Movi.colores.texto,
             modifier = Modifier.semantics { heading() },
         )

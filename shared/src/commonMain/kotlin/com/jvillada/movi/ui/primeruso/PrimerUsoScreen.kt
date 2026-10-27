@@ -53,7 +53,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -576,8 +575,7 @@ private fun DiaParaElegir(dia: Int, elegido: Boolean, habilitado: Boolean, onCli
     ) {
         Text(
             text = dia.toString(),
-            style = Movi.textos.cuerpo,
-            fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
+            style = if (elegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
             color = if (elegido) Movi.colores.sobreMarca else Movi.colores.texto,
             textAlign = TextAlign.Center,
             maxLines = 1,
@@ -1064,7 +1062,7 @@ private fun PasoListo(resumen: ResumenDelPrimerUso) {
 
 @Composable
 private fun RotuloDelCampo(texto: String) {
-    Text(texto, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
+    Text(texto, style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
     Spacer(Modifier.height(Espacio.xs))
 }
 

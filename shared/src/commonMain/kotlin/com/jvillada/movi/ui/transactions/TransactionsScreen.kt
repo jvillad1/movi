@@ -53,7 +53,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.data.ClaveDeLectura
@@ -1235,7 +1234,6 @@ fun TransactionsScreen(
                     Text(
                         text = nombreDe(periodoVisible).replaceFirstChar { it.uppercase() },
                         style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                     )
                     // Mientras el perfil no contestó, un esqueleto reserva el lugar de esta línea
@@ -1816,8 +1814,7 @@ internal fun EncabezadoDelDia(
                 if (plegado) {
                     Text(
                         text = if (cuantos == 1) "· 1 movimiento" else "· $cuantos movimientos",
-                        style = Movi.textos.titulo,
-                        fontWeight = FontWeight.Normal,
+                        style = Movi.textos.tituloRegular,
                         color = Movi.colores.textoMedio,
                         maxLines = 1,
                         softWrap = false,

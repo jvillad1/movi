@@ -14,7 +14,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Movi
@@ -42,7 +41,8 @@ const val TAG_MARCA_DE_LISTA: String = "ai-marca-de-lista"
 @Composable
 internal fun TextoDelAsistente(texto: String, modifier: Modifier = Modifier) {
     val bloques = remember(texto) { bloquesDeTexto(texto) }
-    val estilo = Movi.textos.cuerpo.copy(fontWeight = FontWeight.Normal, color = Movi.colores.texto)
+    val estilo = Movi.textos.cuerpoRegular.copy(color = Movi.colores.texto)
+    val enfasis = Movi.textos.enfasis
     val monto = Movi.textos.monto
     val cifra = SpanStyle(
         fontFamily = monto.fontFamily,
@@ -59,7 +59,7 @@ internal fun TextoDelAsistente(texto: String, modifier: Modifier = Modifier) {
         }
         bloques.forEach { bloque ->
             when (bloque) {
-                is BloqueDeTexto.Parrafo -> Text(text = anotado(bloque.tramos, cifra), style = estilo)
+                is BloqueDeTexto.Parrafo -> Text(text = anotado(bloque.tramos, cifra, enfasis), style = estilo)
                 is BloqueDeTexto.Lista -> Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
                     bloque.items.forEach { item ->
                         Row(
@@ -75,7 +75,7 @@ internal fun TextoDelAsistente(texto: String, modifier: Modifier = Modifier) {
                                 color = Movi.colores.textoMedio,
                                 modifier = Modifier.widthIn(min = Espacio.s).testTag(TAG_MARCA_DE_LISTA),
                             )
-                            Text(text = anotado(item.tramos, cifra), style = estilo, modifier = Modifier.weight(1f))
+                            Text(text = anotado(item.tramos, cifra, enfasis), style = estilo, modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -85,12 +85,12 @@ internal fun TextoDelAsistente(texto: String, modifier: Modifier = Modifier) {
 }
 
 /** Los tramos como un texto con estilos: la negrita y las cifras. */
-private fun anotado(tramos: List<Tramo>, cifra: SpanStyle): AnnotatedString = buildAnnotatedString {
+private fun anotado(tramos: List<Tramo>, cifra: SpanStyle, enfasis: SpanStyle): AnnotatedString = buildAnnotatedString {
     tramos.forEach { tramo ->
         val estilo = when {
-            tramo.cifra && tramo.negrita -> cifra.merge(SpanStyle(fontWeight = FontWeight.SemiBold))
+            tramo.cifra && tramo.negrita -> cifra.merge(enfasis)
             tramo.cifra -> cifra
-            tramo.negrita -> SpanStyle(fontWeight = FontWeight.SemiBold)
+            tramo.negrita -> enfasis
             else -> null
         }
         if (estilo == null) append(tramo.texto) else withStyle(estilo) { append(tramo.texto) }

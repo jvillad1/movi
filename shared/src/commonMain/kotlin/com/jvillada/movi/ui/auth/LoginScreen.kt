@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -329,7 +328,7 @@ private fun OfrecimientoDeHuella(
     Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
         Text(
             "Entra con tu huella la próxima vez",
-            style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
+            style = Movi.textos.titulo,
             color = Movi.colores.texto,
         )
         Spacer(Modifier.height(Espacio.xs))

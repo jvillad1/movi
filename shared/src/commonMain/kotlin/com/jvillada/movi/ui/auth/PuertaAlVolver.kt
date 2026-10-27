@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -127,7 +126,7 @@ internal fun PuertaAlVolver(
             verticalArrangement = Arrangement.Center,
         ) {
             // El nombre, con la escala de títulos (sin tamaño suelto: ver LosTamanosSueltosSoloBajanTest).
-            Text("Movi", style = Movi.textos.titular, fontWeight = FontWeight.Bold, color = Movi.colores.texto)
+            Text("Movi", style = Movi.textos.titular, color = Movi.colores.texto)
             Spacer(Modifier.height(Espacio.xs))
             Text(
                 "Pon tu huella para seguir donde estabas.",

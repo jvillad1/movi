@@ -14,4 +14,4 @@ blanco_o_negro = 0
 hairline = 4
 mincard = 14
 cifra_en_text = 4
-font_weight = 134
+font_weight = 2

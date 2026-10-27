@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
@@ -156,7 +155,6 @@ private fun TarjetaDelResultado(
         Text(
             tituloDelResultado(resultado),
             style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
             color = if (esAlerta) Movi.colores.aviso else Movi.colores.texto,
         )
         when (resultado) {
@@ -240,7 +238,6 @@ private fun Pastilla(texto: String, principal: Boolean, onClick: () -> Unit) {
         Text(
             texto,
             style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
             color = if (principal) Movi.colores.sobreMarca else Movi.colores.texto,
         )
     }

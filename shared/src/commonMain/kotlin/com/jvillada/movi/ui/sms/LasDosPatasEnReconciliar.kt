@@ -33,7 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.CuentaDelBanco
 import com.jvillada.movi.ui.components.Hairline
@@ -274,9 +273,8 @@ internal fun LasDosPatasEnElResumen(
         if (pideDestino) {
             Text(
                 if (eligiendo) "Cerrar" else if (destino == null) "Elegir" else "Cambiar",
-                style = Movi.textos.apoyo,
+                style = Movi.textos.apoyoMedio,
                 color = Movi.colores.marca,
-                fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .clickable(enabled = habilitado, role = Role.Button) { onCambiar() }
                     .testTag(TAG_CAMBIAR_EL_DESTINO)
@@ -292,9 +290,8 @@ internal fun LasDosPatasEnElResumen(
             val esLaElegida = cuenta.id == destino?.id
             Text(
                 cuenta.name,
-                style = Movi.textos.cuerpo,
+                style = if (esLaElegida) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
                 color = if (esLaElegida) Movi.colores.marca else Movi.colores.texto,
-                fontWeight = if (esLaElegida) FontWeight.Medium else FontWeight.Normal,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(enabled = habilitado, role = Role.Button) { onElegir(cuenta) }

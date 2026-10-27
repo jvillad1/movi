@@ -14,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
@@ -61,7 +60,6 @@ fun SelectorSegmentado(
                 Text(
                     text = label,
                     style = Movi.textos.cuerpo,
-                    fontWeight = FontWeight.Medium,
                     color = if (isActive) Movi.colores.sobreMarca else Movi.colores.textoMedio,
                     letterSpacing = 0.1.sp,
                     // Una sola línea SIEMPRE. Con cuatro segmentos, cada uno se queda con ~82 dp

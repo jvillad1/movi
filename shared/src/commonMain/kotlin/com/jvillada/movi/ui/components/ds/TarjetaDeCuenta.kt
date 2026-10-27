@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.model.Marca
 import com.jvillada.movi.theme.ColoresDeMovi
@@ -133,13 +132,12 @@ fun TarjetaDeCuenta(
                 Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                     Text(
                         text = rotuloDelSaldo,
-                        style = Movi.textos.apoyo,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.apoyoMedio,
                         color = colores.textoMedio,
                         modifier = Modifier.weight(1f),
                     )
                     if (tipo != null) {
-                        Text(text = tipo, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = colores.textoMedio, maxLines = 1)
+                        Text(text = tipo, style = Movi.textos.apoyoMedio, color = colores.textoMedio, maxLines = 1)
                     }
                 }
                 Cifra(saldo, VarianteDeCifra.Grande, moneda = moneda)

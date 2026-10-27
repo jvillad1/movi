@@ -24,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -163,8 +162,7 @@ fun InicioDelPeriodoSheet(
                         ) {
                             Text(
                                 text = d.toString(),
-                                style = Movi.textos.cuerpo,
-                                fontWeight = if (esElElegido) FontWeight.SemiBold else FontWeight.Normal,
+                                style = if (esElElegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
                                 color = if (esElElegido) Movi.colores.fondo else Movi.colores.texto,
                                 textAlign = TextAlign.Center,
                             )

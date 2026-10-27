@@ -22,7 +22,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Espacio
@@ -84,7 +83,7 @@ fun Pildora(
             .padding(horizontal = Espacio.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = texto, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = color, maxLines = 1)
+        Text(text = texto, style = Movi.textos.apoyoMedio, color = color, maxLines = 1)
     }
 }
 
@@ -131,7 +130,7 @@ fun PildoraDeFiltro(
     ) {
         inicio?.invoke()
         if (icono != null) Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(Icono.s))
-        Text(text = texto, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = color, maxLines = 1)
+        Text(text = texto, style = Movi.textos.cuerpo, color = color, maxLines = 1)
     }
 }
 
@@ -198,8 +197,7 @@ fun PildoraDeAccion(
         // un «+» y una «N»—. El texto mide lo suyo, como el de [PildoraDeFiltro].
         Text(
             text = texto,
-            style = if (compacta) Movi.textos.apoyo else Movi.textos.cuerpo,
-            fontWeight = FontWeight.Medium,
+            style = if (compacta) Movi.textos.apoyoMedio else Movi.textos.cuerpo,
             color = if (habilitada) Movi.colores.texto else Movi.colores.textoApagado,
             maxLines = if (compacta) 1 else 2,
             overflow = TextOverflow.Ellipsis,

@@ -12,7 +12,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.SessionManager
@@ -47,8 +46,7 @@ fun AvatarButton(onClick: () -> Unit) {
             // contra blanco (ver AvatarPalette.kt), y el color del círculo lo elige el dueño, no el
             // tema. Un token de texto acá se rompería con la mitad de los colores de la paleta; por
             // eso es `sobreAvatar` y no `sobreMarca` (vuelta de diseño 18).
-            style = Movi.textos.cuerpo,
-            fontWeight = FontWeight.SemiBold,
+            style = Movi.textos.cuerpoFuerte,
             color = Movi.colores.sobreAvatar,
         )
     }

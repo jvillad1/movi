@@ -146,8 +146,7 @@ fun AccionRapida(
         }
         when (renglones) {
             RenglonesDelRotulo.Uno -> {
-                val estilo = Movi.textos.apoyo.copy(
-                    fontWeight = FontWeight.Medium,
+                val estilo = Movi.textos.apoyoMedio.copy(
                     color = Movi.colores.texto,
                     textAlign = TextAlign.Center,
                 )
@@ -171,8 +170,7 @@ fun AccionRapida(
             }
             RenglonesDelRotulo.Dos -> Text(
                 text = rotulo,
-                style = Movi.textos.apoyo,
-                fontWeight = FontWeight.Medium,
+                style = Movi.textos.apoyoMedio,
                 color = Movi.colores.texto,
                 textAlign = TextAlign.Center,
                 maxLines = 2,

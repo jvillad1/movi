@@ -33,7 +33,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -357,7 +356,7 @@ fun AIChatScreen(
             ) {
                 if (loading) {
                     // Glifo de espera dentro del botón de enviar: va al tamaño del botón, no es texto de la escala.
-                    Text(text = "…", style = Movi.textos.titulo, color = if (canSend) Movi.colores.fondo else Movi.colores.textoMedio, fontWeight = FontWeight.Bold)
+                    Text(text = "…", style = Movi.textos.titulo, color = if (canSend) Movi.colores.fondo else Movi.colores.textoMedio)
                 } else {
                     // Ola 2 #5 (F11): "›" como texto suelto salía roto en la web, igual que "‹".
                     Icon(
@@ -412,7 +411,7 @@ private fun AIMsgUser(text: String, hasImage: Boolean = false) {
                     if (text.isNotBlank()) Spacer(Modifier.height(Espacio.xxs))
                 }
                 if (text.isNotBlank()) {
-                    Text(text = text, style = Movi.textos.cuerpo, fontWeight = FontWeight.Normal, color = colorDelTexto)
+                    Text(text = text, style = Movi.textos.cuerpoRegular, color = colorDelTexto)
                 }
             }
         }

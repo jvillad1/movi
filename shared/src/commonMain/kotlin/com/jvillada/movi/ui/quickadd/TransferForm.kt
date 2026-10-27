@@ -76,7 +76,6 @@ import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.fecha.timestampParaFecha
-import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
@@ -1120,7 +1119,7 @@ internal fun TransferBody(
             )
             deudaDespuesDelTraspaso(from, to, amount)?.let { renglon ->
                 Spacer(Modifier.height(Espacio.xs))
-                Text(renglon, style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+                Text(renglon, style = Movi.textos.apoyoMedio, color = Movi.colores.texto)
             }
         }
 
@@ -1217,7 +1216,7 @@ internal fun TransferBody(
                                 Spacer(Modifier.height(Espacio.xs))
                             }
                             deudaDespuesDelPago(to, desglose)?.let { renglon ->
-                                Text(renglon, style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+                                Text(renglon, style = Movi.textos.apoyoMedio, color = Movi.colores.texto)
                             }
                         }
                     }
@@ -1226,7 +1225,7 @@ internal fun TransferBody(
         }
 
         Spacer(Modifier.height(Espacio.s))
-        Text("Fecha", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+        Text("Fecha", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(Espacio.xs))
         // Misma caja que tenía el campo de texto (mismo alto, mismo borde, mismo lugar) pero se
         // toca en vez de escribirse: así el formulario no cambia de alto respecto de master y el
@@ -1250,7 +1249,7 @@ internal fun TransferBody(
         }
 
         Spacer(Modifier.height(Espacio.s))
-        Text("NOTA (OPCIONAL)", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+        Text("NOTA (OPCIONAL)", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(Espacio.xs))
         FieldBox(if (esPago) "Concepto del pago" else "Concepto del traspaso", note, onValueChange = { note = it })
 
@@ -1349,9 +1348,8 @@ private fun TransferAccountPicker(
             Spacer(Modifier.height(Espacio.s))
             Text(
                 "Créditos",
-                style = Movi.textos.apoyo,
+                style = Movi.textos.apoyoMedio,
                 color = Movi.colores.textoMedio,
-                fontWeight = FontWeight.Medium,
             )
             Spacer(Modifier.height(Espacio.xxs))
             Text(

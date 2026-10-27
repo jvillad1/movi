@@ -44,7 +44,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -300,7 +299,6 @@ private fun SelectorDelPeriodo(
             Text(
                 text = tituloDelPeriodo(periodo),
                 style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
             )
             rangoLegibleDe(periodo, ajustes)?.let { rango ->
@@ -351,9 +349,8 @@ private fun ResumenDelAnalisis(analisis: AnalisisDelPeriodo, hoy: LocalDate) {
     Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = rotuloDelTotal(analisis, hoy),
-            style = Movi.textos.apoyo,
+            style = Movi.textos.apoyoMedio,
             color = Movi.colores.textoMedio,
-            fontWeight = FontWeight.Medium,
         )
         Box(Modifier.padding(vertical = Espacio.xxs).testTag(TAG_TOTAL_DEL_ANALISIS)) {
             DsCifra(analisis.total, VarianteDeCifra.Heroe)

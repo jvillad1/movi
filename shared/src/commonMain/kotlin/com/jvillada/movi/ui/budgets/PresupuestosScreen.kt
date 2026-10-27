@@ -27,7 +27,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -585,7 +584,7 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
             Superficie(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
             ) {
-                Text(estado.tituloDelGasto, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                Text(estado.tituloDelGasto, style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(Espacio.xs))
                 // Vuelta de diseño 14: `Grande`, no `Heroe`. En Plan esta tarjeta va debajo de
                 // «Disponible del período» (también `Grande`), y dos cifras gigantes competían; una
@@ -913,8 +912,7 @@ private fun BudgetSheet(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text(
                 text = title,
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
+                style = Movi.textos.tituloMedio,
                 color = Movi.colores.texto,
                 modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )
@@ -998,7 +996,7 @@ private fun BudgetSheet(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(ev.description, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+                                    Text(ev.description, style = Movi.textos.cuerpo, color = Movi.colores.texto)
                                     Text("Hoy en \"${ev.category}\" · toca para moverlo aquí", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                 }
                                 Cifra(ev.amount)
@@ -1018,12 +1016,11 @@ private fun BudgetSheet(
             } else {
                 // Al editar un presupuesto existente la categoría es su clave — no se cambia acá.
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("Categoría", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                    Text("Categoría", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
                     Spacer(Modifier.height(Espacio.xs))
                     Text(
                         text = category,
-                        style = Movi.textos.titulo,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.tituloMedio,
                         color = Movi.colores.texto,
                         modifier = Modifier.padding(vertical = Espacio.xs),
                     )
@@ -1073,9 +1070,8 @@ private fun BudgetSheet(
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = if (movimientos.size == 1) "1 movimiento" else "${movimientos.size} movimientos",
-                        style = Movi.textos.apoyo,
+                        style = Movi.textos.apoyoMedio,
                         color = Movi.colores.textoMedio,
-                        fontWeight = FontWeight.Medium,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
