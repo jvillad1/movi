@@ -243,7 +243,11 @@ class LasPreguntasSugeridasTest {
         assertTrue("Arriendo \$1.000.000 · vence hoy" in texto, texto)
         // El período pasado está cubierto (el saldo inicial es de antes): hay comparación.
         assertTrue("período pasado" in texto, texto)
-        if (disponible.diasQueQuedan > 1) assertTrue("Tu meta diaria es ${pesosDelCierre(disponible.metaPorDia)}" in texto, texto)
+        // La cifra diaria del héroe de Hoy (lo que queda entre los días que faltan), no la meta del período.
+        if (disponible.diasQueQuedan > 1 && disponible.periodo.contraElRitmo <= 0L) {
+            assertTrue("${pesosDelCierre(disponible.porDiaParaLoQueQueda ?: 0L)} por día" in texto, texto)
+        }
+        assertFalse("meta diaria" in texto, texto)
         assertEquals(0, llamadasAlModelo)
     }
 
