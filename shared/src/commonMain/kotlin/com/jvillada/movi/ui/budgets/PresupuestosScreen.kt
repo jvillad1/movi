@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.budgets
 
+import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Icono
@@ -60,7 +61,6 @@ import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDeBarra
 import com.jvillada.movi.ui.components.ds.TonoDePildora
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
@@ -733,19 +733,12 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 // título en «Presupues…» a 390 dp. El botón vuelve apenas la lectura contesta.
                 action = if (estado.actualizandoConAlgoALaVista) {
                     { ActualizandoEnLaCabecera() }
-                } else if (estado.nuevoEnElEncabezado) {
-                    // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la
-                    // pantalla quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En esta
-                    // pantalla no hay otra cosa que se pueda crear, así que la palabra alcanza.
-                    {
-                        Boton(
-                            texto = "Nuevo",
-                            onClick = { estado.abrirNuevo() },
-                            variante = VarianteDeBoton.Secundario,
-                            tamano = TamanoDeBoton.S,
-                            icono = Icons.Rounded.Add,
-                        )
-                    }
+                } else null,
+                // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la pantalla
+                // quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En esta pantalla no hay
+                // otra cosa que se pueda crear, así que la palabra alcanza.
+                accion = if (!estado.actualizandoConAlgoALaVista && estado.nuevoEnElEncabezado) {
+                    AccionDeEncabezado("Nuevo", Icons.Rounded.Add, onClick = { estado.abrirNuevo() })
                 } else null,
             )
             LazyColumn(

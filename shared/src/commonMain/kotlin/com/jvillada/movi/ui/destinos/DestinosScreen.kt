@@ -1,7 +1,7 @@
 package com.jvillada.movi.ui.destinos
 
+import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.theme.Medida
-import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
@@ -10,10 +10,8 @@ import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.Vacio
-import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.AvatarDePersona
 import androidx.compose.material.icons.Icons
@@ -270,16 +268,8 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
                     destinos.isNotEmpty() -> "${destinos.size} guardados"
                     else -> null
                 },
-                action = if (!noSeLeyo) {
-                    {
-                        Boton(
-                            texto = "Nueva",
-                            onClick = { formulario = null; formularioAbierto = true },
-                            variante = VarianteDeBoton.Fantasma,
-                            tamano = TamanoDeBoton.S,
-                            icono = Icons.Rounded.Add,
-                        )
-                    }
+                accion = if (!noSeLeyo) {
+                    AccionDeEncabezado("Nueva", Icons.Rounded.Add, onClick = { formulario = null; formularioAbierto = true })
                 } else null,
             )
 

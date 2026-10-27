@@ -58,6 +58,40 @@ fun BotonDeIcono(
     }
 }
 
+/** Tag estable de la [AccionDelEncabezado]: la mide la prueba que compara pantallas. */
+const val TAG_ACCION_DEL_ENCABEZADO: String = "ds-accion-del-encabezado"
+
+/**
+ * **La acción principal de un encabezado**: lo que se crea o se hace desde esa pantalla («Nueva
+ * cuenta», «Nuevo crédito», «Subir archivo»). Viaja como dato para que [Encabezado] la pinte siempre
+ * igual —texto con ícono, en la marca, [AccionDelEncabezado]— y ninguna pantalla elija otro botón
+ * (vuelta de diseño 4: Patrimonio la tenía como texto morado y Créditos como botón tonal relleno).
+ */
+data class AccionDeEncabezado(
+    val texto: String,
+    val icono: ImageVector,
+    val onClick: () -> Unit,
+    val habilitado: Boolean = true,
+)
+
+/**
+ * **La forma de la [AccionDeEncabezado]**: un [Boton] [VarianteDeBoton.Fantasma] tamaño
+ * [TamanoDeBoton.S] con su ícono (texto e ícono en la marca, sin relleno; el toque llega a 48).
+ * Solo la pinta [Encabezado].
+ */
+@Composable
+internal fun AccionDelEncabezado(accion: AccionDeEncabezado, modifier: Modifier = Modifier) {
+    Boton(
+        texto = accion.texto,
+        onClick = accion.onClick,
+        modifier = modifier.testTag(TAG_ACCION_DEL_ENCABEZADO),
+        variante = VarianteDeBoton.Fantasma,
+        tamano = TamanoDeBoton.S,
+        icono = accion.icono,
+        habilitado = accion.habilitado,
+    )
+}
+
 /**
  * **El encabezado de una pantalla. El mismo alto y los mismos márgenes en todas.**
  *
@@ -67,7 +101,11 @@ fun BotonDeIcono(
  *   toque de 48 y el margen se corre lo justo para que **el dibujo** de la flecha quede en el
  *   margen, alineado con todo lo de abajo.
  * - El título en `titular`, un renglón. El subtítulo opcional, en `apoyo`.
- * - [acciones] a la derecha: [BotonDeIcono]s o un [Boton] chico.
+ * - [accion] a la derecha, al final: **la** acción principal, siempre con la misma forma
+ *   ([AccionDelEncabezado]: texto con ícono). Una pantalla con dos o más acciones pone las demás en
+ *   [acciones], como [BotonDeIcono] con su descripción.
+ * - [acciones] antes de [accion]: [BotonDeIcono]s, una [Pildora] («Beta») o «Actualizando…». Nunca
+ *   un [Boton] con texto: para eso está [accion].
  * - Sin línea debajo: superficies por capas, sin bordes duros (camino 1).
  *
  * `MinScreenHeader` —el encabezado de todas las pantallas de hoy— delega acá.
@@ -75,6 +113,7 @@ fun BotonDeIcono(
  * ```
  * Encabezado("Movimientos", acciones = { BotonDeIcono(Icons.Rounded.Search, "Buscar", ::buscar) })
  * Encabezado("Detalle", onVolver = { volver() })
+ * Encabezado("Patrimonio", accion = AccionDeEncabezado("Nueva cuenta", Icons.Rounded.Add, ::crear))
  * ```
  *
  * @param inicio lo que va a la izquierda cuando no es la flecha: el avatar de una pantalla raíz.
@@ -88,6 +127,7 @@ fun Encabezado(
     onVolver: (() -> Unit)? = null,
     inicio: (@Composable () -> Unit)? = null,
     acciones: (@Composable RowScope.() -> Unit)? = null,
+    accion: AccionDeEncabezado? = null,
 ) {
     // La flecha dibuja 24 en un área de 48: el margen se achica en la mitad de la diferencia para
     // que el dibujo, no el área, quede alineado con el resto de la pantalla.
@@ -128,5 +168,6 @@ fun Encabezado(
             }
         }
         if (acciones != null) acciones()
+        if (accion != null) AccionDelEncabezado(accion)
     }
 }

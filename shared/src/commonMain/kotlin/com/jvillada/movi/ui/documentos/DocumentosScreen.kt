@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.documentos
 
+import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Description
 import com.jvillada.movi.ui.components.ds.Boton
@@ -9,10 +10,8 @@ import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.Vacio
-import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Icono
@@ -271,15 +270,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Documentos",
                 leading = HeaderLeading.Back(fallback = Screen.Mas),
-                action = {
-                    Boton(
-                        texto = "Subir archivo",
-                        onClick = elegirArchivo,
-                        variante = VarianteDeBoton.Fantasma,
-                        tamano = TamanoDeBoton.S,
-                        icono = Icons.Rounded.Add,
-                    )
-                },
+                accion = AccionDeEncabezado("Subir archivo", Icons.Rounded.Add, onClick = elegirArchivo),
             )
             val lista = documentos
             // Fix round 1: con nada pintado todavía (`lista == null && cargando`) el esqueleto de

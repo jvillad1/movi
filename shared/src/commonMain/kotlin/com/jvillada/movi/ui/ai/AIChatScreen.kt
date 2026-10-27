@@ -1,11 +1,10 @@
 package com.jvillada.movi.ui.ai
 
-import com.jvillada.movi.ui.components.ds.Boton
+import androidx.compose.material.icons.rounded.Add
+import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TamanoDeBoton
-import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -204,21 +203,14 @@ fun AIChatScreen(
             title = "Movi AI",
             leading = HeaderLeading.Back(fallback = Screen.Mas),
             subtitle = "Conoce tus finanzas",
-            action = {
-                // Con conversación, la acción es empezar otra; sin conversación no hay nada que
-                // limpiar y queda la marca de siempre.
-                if (messages.isNotEmpty()) {
-                    Boton(
-                        NUEVA_CONVERSACION,
-                        onClick = { nuevaConversacion() },
-                        variante = VarianteDeBoton.Fantasma,
-                        tamano = TamanoDeBoton.S,
-                        habilitado = !loading,
-                    )
-                } else {
-                    Pildora("Beta")
-                }
-            },
+            // Con conversación, la acción es empezar otra (con la forma de toda acción de encabezado);
+            // sin conversación no hay nada que limpiar y queda la marca «Beta», una [Pildora].
+            action = if (messages.isEmpty()) {
+                { Pildora(MARCA_BETA) }
+            } else null,
+            accion = if (messages.isNotEmpty()) {
+                AccionDeEncabezado(NUEVA_CONVERSACION, Icons.Rounded.Add, onClick = { nuevaConversacion() }, habilitado = !loading)
+            } else null,
         )
 
         LazyColumn(
@@ -524,6 +516,9 @@ internal const val ROTULO_DE_LAS_SUGERENCIAS = "Pregúntale, por ejemplo"
 
 /** La acción del encabezado cuando hay conversación (Ola 3). */
 internal const val NUEVA_CONVERSACION = "Nueva conversación"
+
+/** La marca del encabezado de Movi AI, mientras no hay conversación: una [Pildora] del sistema. */
+internal const val MARCA_BETA = "Beta"
 
 /** Lo que se dice si «Nueva conversación» no llegó al server: no se borra en pantalla lo que sigue allá. */
 internal const val NO_PUDE_EMPEZAR_OTRA = "No pude empezar una conversación nueva. Revisa tu conexión e intenta otra vez."
