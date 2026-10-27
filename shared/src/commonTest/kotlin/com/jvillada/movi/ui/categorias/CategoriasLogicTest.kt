@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.categorias
 import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -384,6 +385,29 @@ class CategoriasLogicTest {
         assertEquals(CifrasDelMes(gasto = null, ingreso = 850_000), cifrasDelMes(cat("Sueldo", monthMovements = 1, monthIncomeTotal = 850_000)))
         // Movimientos del mes en otra moneda: nada en pesos que mostrar.
         assertEquals(null, cifrasDelMes(cat("Viaje", monthMovements = 2)))
+    }
+
+    /**
+     * **Vuelta de diseño 15: tu parte de lo que pagó otro suma sin un movimiento tuyo.** La cifra ya
+     * no depende del conteo: si el server dice que en el período se gastó, la fila lo pinta.
+     */
+    @Test
+    fun `la cifra del periodo no depende del conteo de movimientos`() {
+        assertEquals(CifrasDelMes(gasto = 50_000, ingreso = null), cifrasDelMes(cat("Mercado", monthTotal = 50_000)))
+        assertEquals("Este período: \$50.000", resumenDelMes(cat("Mercado", monthTotal = 50_000)))
+        // Usada en el período pero sin plata que cuente (un traspaso, algo por confirmar): el conteo.
+        assertEquals("Este período: 2 movimientos", resumenDelMes(cat("Mercado", monthMovements = 2)))
+    }
+
+    /** **«Este mes» solo cuando el período es el mes del calendario.** Con el corte el 25, mentía. */
+    @Test
+    fun `el rotulo dice este periodo si el periodo no es el mes del calendario`() {
+        // 27 de octubre de 2026, al mediodía en Bogotá.
+        val ahora = 1_793_120_400_000L
+        assertEquals(ROTULO_ESTE_MES, rotuloDelPeriodoDeCategorias(PeriodSettings(cutoffDay = 1), ahora))
+        assertEquals(ROTULO_ESTE_PERIODO, rotuloDelPeriodoDeCategorias(PeriodSettings(cutoffDay = 25), ahora))
+        assertEquals(ROTULO_ESTE_PERIODO, rotuloDelPeriodoDeCategorias(null, ahora), "sin perfil, lo que siempre es cierto")
+        assertTrue(resumenDelMes(cat("Mercado", monthMovements = 1, monthTotal = 9_000), ROTULO_ESTE_MES)!!.startsWith("Este mes: "))
     }
 
     @Test

@@ -82,6 +82,8 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.categoriaQueSostieneReglasMensaje
@@ -211,6 +213,16 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
     val formaRecordada = remember { FormaRecordada.delAparato.categorias(SessionManager.userId) }
     // Los renglones que ocupó el texto de la tarjeta de «ordenar», medidos al dibujarse. 0 = sin medir.
     var renglonesDeLaTarjetaDeOrden by remember { mutableStateOf(0) }
+
+    // Vuelta de diseño 15: las cifras son del PERÍODO del dueño; el perfil dice si ese período es el
+    // mes del calendario («Este mes») o no («Este período»). Sin leerlo, «Este período», que es cierto.
+    var ajustesDelPeriodo by remember { mutableStateOf<PeriodSettings?>(null) }
+    LaunchedEffect(Unit) {
+        runCatching { Repositories.wallets.getUserProfile() }.onSuccess { ajustesDelPeriodo = it.ajustesDelPeriodo() }
+    }
+    val rotuloDelPeriodo = remember(ajustesDelPeriodo) {
+        rotuloDelPeriodoDeCategorias(ajustesDelPeriodo, kotlinx.datetime.Clock.System.now().toEpochMilliseconds())
+    }
 
     suspend fun recargar() {
         runCatching { Repositories.wallets.getCategories() }
@@ -411,6 +423,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
             null -> Unit
             is Hoja.Detalle -> HojaDetalle(
                 categoria = h.categoria,
+                rotuloDelPeriodo = rotuloDelPeriodo,
                 onDismiss = { hoja = null },
                 onRenombrar = { hoja = Hoja.Renombrar(h.categoria) },
                 onUnificar = { hoja = Hoja.Unificar(h.categoria) },
@@ -787,7 +800,7 @@ fun tagDeFilaDeCategoria(nombre: String): String = "categoria:fila:$nombre"
  * Ola B · tarea 5: la fila compacta. Reemplaza a la de dos etiquetas y una oración — «Tuya» y el
  * tipo («Ambos») salieron de acá: el tipo se dice solo cuando ayuda, y eso pasó a la hoja de
  * detalle (ver [etiquetaDeTipo]). Lo que queda es lo mínimo para reconocer una categoría y decidir
- * si vale la pena abrirla: el ícono, el nombre, la cifra de este mes si tiene, y cuánto la usó en
+ * si vale la pena abrirla: el ícono, el nombre, la cifra del período si tiene, y cuánto la usó en
  * total, sin adornos.
  *
  * **Alto MÍNIMO** ([ALTO_DE_FILA_DE_CATEGORIA], vía `heightIn(min = …)`, no `height(…)`) — fix
@@ -818,7 +831,7 @@ private fun FilaDeCategoria(categoria: CategoryUsage, primera: Boolean, ultima: 
 }
 
 /**
- * **Lo de este mes, con la cifra del sistema** (vuelta de diseño 8): el gasto en el color del texto
+ * **Lo del período, con la cifra del sistema** (vuelta de diseño 8; desde la 15, la de «En qué se va»): el gasto en el color del texto
  * —gastar no es una alarma— y lo que entró en `entra` con «+», uno debajo del otro si hubo los dos.
  * Antes iban en la letra de cuerpo, «$260.000 · +$850.000».
  */
@@ -898,6 +911,7 @@ private fun HojaBase(onDismiss: () -> Unit, content: @Composable ColumnScope.() 
 @Composable
 private fun HojaDetalle(
     categoria: CategoryUsage,
+    rotuloDelPeriodo: String,
     onDismiss: () -> Unit,
     onRenombrar: () -> Unit,
     onUnificar: () -> Unit,
@@ -929,7 +943,7 @@ private fun HojaDetalle(
                 style = Movi.textos.apoyo,
                 modifier = Modifier.padding(top = Espacio.xs),
             )
-            resumenDelMes(categoria)?.let {
+            resumenDelMes(categoria, rotuloDelPeriodo)?.let {
                 Text(
                     it,
                     color = Movi.colores.textoMedio,

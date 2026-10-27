@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -73,14 +75,18 @@ fun EsqueletoDeFila(
             .testTag(TAG_ESQUELETO_DE_FILA)
             .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
-        if (conInicio) CirculoEsqueleto(diametro = Medida.avatar)
+        // Los mismos aires que la [Fila]: 12 después del inicio, 8 antes del final (vuelta 15).
+        if (conInicio) {
+            CirculoEsqueleto(diametro = Medida.avatar)
+            Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
+        }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
             LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.cuerpo)
             if (conSubtitulo) LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
         }
         if (conFinal) {
+            Spacer(Modifier.width(ESPACIO_ANTES_DEL_FINAL_DE_FILA))
             Box(modifier = Modifier.weight(0.3f)) {
                 LineaEsqueleto(fraccionDelAncho = 1f, estilo = Movi.textos.monto)
             }

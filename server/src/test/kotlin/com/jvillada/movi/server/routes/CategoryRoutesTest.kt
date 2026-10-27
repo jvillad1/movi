@@ -143,6 +143,8 @@ class CategoryRoutesTest {
         owner: String = userId,
         currency: String = "COP",
         timestamp: Long = System.currentTimeMillis(),
+        // El default de la tabla: lo que entra sin estado espera en «Por confirmar».
+        status: String = "UNCONFIRMED",
     ) = transaction {
         Events.insert {
             it[Events.id]          = id
@@ -156,6 +158,7 @@ class CategoryRoutesTest {
             it[Events.category]    = category
             it[description]        = "mov $id"
             it[Events.timestamp]   = timestamp
+            it[reconciliationStatus] = status
         }
     }
 
@@ -588,14 +591,40 @@ class CategoryRoutesTest {
         wireApp()
         // Los importes se guardan en positivo y el signo lo lleva `type`: un solo total sumaba
         // gastos con ingresos y daba un número sin significado, justo en el caso «Ambos».
-        seedEvent("e1", "Otros", amount = 100_000, type = "EXPENSE")
-        seedEvent("e2", "Otros", amount = 30_000, type = "INCOME")
+        seedEvent("e1", "Otros", amount = 100_000, type = "EXPENSE", status = "RECONCILED")
+        seedEvent("e2", "Otros", amount = 30_000, type = "INCOME", status = "RECONCILED")
         val otros = categorias().porNombre("Otros")
         assertEquals(2, otros.num("movements"))
         assertEquals(100_000L, otros.plata("total"))
         assertEquals(30_000L, otros.plata("incomeTotal"))
         assertEquals(100_000L, otros.plata("monthTotal"))
         assertEquals(30_000L, otros.plata("monthIncomeTotal"))
+    }
+
+    /**
+     * **Vuelta de diseño 15: la cifra del período es la de «En qué se va».** Antes sumaba el monto
+     * entero de todo lo que llevaba la categoría: lo que espera en «Por confirmar» y lo que pasa en
+     * una tarjeta como pago también. El conteo sí sigue contando todo uso (sirve para decidir si la
+     * categoría está en uso antes de borrarla o unificarla).
+     */
+    @Test
+    fun `la cifra del periodo es la de En que se va y el conteo sigue contando todo`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Mercado", amount = 200_000, status = "RECONCILED")
+        seedEvent("e2", "Mercado", amount = 80_000) // por confirmar: no suma todavía
+        seedEvent("e3", "Mercado", amount = 50_000, status = "RECONCILED", currency = "USD")
+        val mercado = categorias().porNombre("Mercado")
+        assertEquals(2, mercado.num("monthMovements"), "el conteo del período cuenta los dos en pesos")
+        assertEquals(200_000L, mercado.plata("monthTotal"), "lo por confirmar no suma")
+
+        val resumen = Json.parseToJsonElement(
+            client.get("/api/dashboard/summary") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText(),
+        ).jsonObject
+        assertEquals(
+            resumen["spentByCategory"]!!.jsonObject["Mercado"]!!.jsonPrimitive.long,
+            mercado.plata("monthTotal"),
+            "Categorías y el Inicio dicen lo mismo de Mercado",
+        )
     }
 
     @Test

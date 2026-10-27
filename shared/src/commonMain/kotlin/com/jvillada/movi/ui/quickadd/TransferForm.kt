@@ -1,6 +1,10 @@
 package com.jvillada.movi.ui.quickadd
 
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
@@ -1393,30 +1397,26 @@ private fun TransferAccountPicker(
     }
 }
 
+/**
+ * Un grupo del selector de «Desde»/«Hacia». **Vuelta de diseño 15: como el de «Cuenta»** de Gasto e
+ * Ingreso (vuelta 13) —y con su misma fila, [FilaDeCuentaEnAgregar]—: la marca del banco, el nombre,
+ * el saldo con [Cifra] en su moneda, «Debes» / «A favor» en una deuda y la elegida marcada, sobre
+ * una superficie de capa 2. Antes era el nombre pelado y un «Elegida» en texto al final, sin saldo:
+ * para pasar plata había que saber de memoria cuánto tenía cada cuenta.
+ */
 @Composable
 private fun GrupoDeCuentas(
     accounts: List<Account>,
     selectedId: String?,
     onPick: (String) -> Unit,
 ) {
-    Column {
-        accounts.forEach { account ->
-            CardRow(
-                left = {
-                    Text(
-                        text = account.name,
-                        style = Movi.textos.titulo,
-                        color = Movi.colores.texto,
-                        fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
-                    )
-                },
-                right = {
-                    if (account.id == selectedId) {
-                        Text("Elegida", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    }
-                },
+    Superficie(nivel = NivelDeSuperficie.Capa2, relleno = RellenoDeSuperficie.Lista) {
+        accounts.forEachIndexed { i, account ->
+            if (i > 0) Separador()
+            FilaDeCuentaEnAgregar(
+                account = account,
+                elegida = account.id == selectedId,
                 onClick = { onPick(account.id) },
-                isLast = account.id == accounts.last().id,
             )
         }
     }

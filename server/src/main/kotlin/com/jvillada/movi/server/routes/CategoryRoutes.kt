@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.sms.memoriaDe
 import com.jvillada.movi.server.time.currentPeriodWindow
@@ -587,11 +588,26 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
             a.movimientos++
             if (esIngreso) a.recibido += monto else a.gastado += monto
             val ts = row[Events.timestamp]
-            if (ts >= monthStart && ts < monthEnd) {
-                a.movimientosMes++
-                if (esIngreso) a.recibidoMes += monto else a.gastadoMes += monto
-            }
+            // El conteo del período cuenta TODO uso (sirve para saber si la categoría está en uso);
+            // la plata del período va aparte, abajo, con la regla de «En qué se va».
+            if (ts >= monthStart && ts < monthEnd) a.movimientosMes++
         }
+
+    // Vuelta de diseño 15: **la cifra del período es la de «En qué se va»**, no el monto entero de
+    // cada movimiento. Antes se sumaba todo lo que llevaba la categoría —traspasos, pagos de
+    // tarjeta, lo que espera en «Por confirmar» y el gasto repartido entero—, y Mercado decía en
+    // Categorías un número distinto del de Hoy. Sale de [movimientosDeFlujo], la regla única del
+    // server (solo tu parte, tu parte de lo que pagó otro, sin lo que salda un espacio), la misma
+    // de `spentByCategory` del Inicio y de «Tus períodos»: no hay una segunda definición acá.
+    movimientosDeFlujo(uid, monthStart, monthEnd, anulados, accountTypesFor(uid)).forEach { m ->
+        val nombre = m.category.trim()
+        if (nombre.isEmpty()) return@forEach
+        val a = acc.getOrPut(nombre) { UsageAcc() }
+        when (m.type) {
+            TransactionType.INCOME -> a.recibidoMes += m.amount
+            TransactionType.EXPENSE -> a.gastadoMes += m.amount
+        }
+    }
 
     Budgets.selectAll().where { Budgets.userId eq uid }.forEach { row ->
         val nombre = row[Budgets.category].trim()
