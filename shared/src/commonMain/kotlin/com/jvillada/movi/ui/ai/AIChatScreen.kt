@@ -27,13 +27,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -249,6 +249,17 @@ fun AIChatScreen(
                     LasQueFuncionanSinLaIa { enviar(it.texto, it.sugerida) }
                 }
             }
+            // Vuelta de diseño 12: debajo de la última respuesta, las que no se hicieron todavía.
+            // Mientras Movi escribe no van; con el aviso de la IA no disponible ya están las tres
+            // de arriba, que son las que funcionan.
+            val paraSeguir = if (!loading && !ofrecerLasQueFuncionan && messages.lastOrNull()?.role == ChatRole.ASSISTANT) {
+                preguntasParaSeguir(sugeridas, messages)
+            } else emptyList()
+            if (paraSeguir.isNotEmpty()) {
+                item {
+                    PreguntasParaSeguir(paraSeguir) { enviar(it.texto, it.sugerida) }
+                }
+            }
         }
 
         // F32: nombre del adjunto + X para quitarlo, o el aviso de "por ahora solo imágenes"
@@ -361,29 +372,47 @@ fun AIChatScreen(
     }
 }
 
+/** Tag estable de la burbuja de lo que escribió el dueño. */
+internal const val TAG_BURBUJA_DEL_DUENO: String = "ai-burbuja-del-dueno"
+
+/**
+ * **El fondo de la burbuja del dueño** (vuelta de diseño 12): el lavado de la marca. Era el color
+ * del texto (negra en el tema claro, blanca en el oscuro), sin relación con la paleta.
+ * `ContrasteDeLosTokensTest` mide que [textoDeLaBurbujaDelDueno] se lea encima, en los dos temas.
+ */
+internal fun fondoDeLaBurbujaDelDueno(c: ColoresDeMovi): Color = c.lavado(c.marca)
+
+/** El texto de la burbuja del dueño: el del sistema, que se lee sobre el lavado de la marca. */
+internal fun textoDeLaBurbujaDelDueno(c: ColoresDeMovi): Color = c.texto
+
 @Composable
 private fun AIMsgUser(text: String, hasImage: Boolean = false) {
+    val colorDelTexto = textoDeLaBurbujaDelDueno(Movi.colores)
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.s),
         horizontalArrangement = Arrangement.End,
     ) {
+        // El respiro a la izquierda marca el ancho máximo de la burbuja (antes, 280 dp sueltos):
+        // una pregunta corta queda a la derecha, una larga no llega al borde de la otra mano.
+        Spacer(Modifier.width(Espacio.xxxl))
         Box(
             modifier = Modifier
-                .widthIn(max = 280.dp)
+                .weight(1f, fill = false)
                 .clip(RoundedCornerShape(Radio.l))
-                .background(Movi.colores.texto)
+                .background(fondoDeLaBurbujaDelDueno(Movi.colores))
+                .testTag(TAG_BURBUJA_DEL_DUENO)
                 .padding(horizontal = Espacio.s, vertical = Espacio.s),
         ) {
             Column {
                 if (hasImage) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                        Icon(Icons.Rounded.Image, contentDescription = null, tint = Movi.colores.fondo, modifier = Modifier.size(Icono.s))
-                        Text("Imagen adjunta", style = Movi.textos.apoyo, color = Movi.colores.fondo)
+                        Icon(Icons.Rounded.Image, contentDescription = null, tint = colorDelTexto, modifier = Modifier.size(Icono.s))
+                        Text("Imagen adjunta", style = Movi.textos.apoyo, color = colorDelTexto)
                     }
                     if (text.isNotBlank()) Spacer(Modifier.height(Espacio.xxs))
                 }
                 if (text.isNotBlank()) {
-                    Text(text = text, style = Movi.textos.cuerpo, fontWeight = FontWeight.Normal, color = Movi.colores.fondo)
+                    Text(text = text, style = Movi.textos.cuerpo, fontWeight = FontWeight.Normal, color = colorDelTexto)
                 }
             }
         }
@@ -407,9 +436,9 @@ private fun AIMsgAI(text: String) {
             Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(Icono.s))
         }
         Spacer(Modifier.width(Espacio.s))
-        Box(modifier = Modifier.widthIn(max = 290.dp)) {
-            Text(text = text, style = Movi.textos.cuerpo, fontWeight = FontWeight.Normal, color = Movi.colores.texto)
-        }
+        // Vuelta de diseño 12: con formato (párrafos, listas, negrita, cifras) y a todo el ancho que
+        // queda; antes era un solo texto plano de 290 dp como mucho.
+        TextoDelAsistente(text, modifier = Modifier.weight(1f))
     }
 }
 

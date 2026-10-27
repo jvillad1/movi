@@ -58,8 +58,10 @@ class ElEncabezadoDeMoviAiTest {
     private fun nodos(tag: String): List<SemanticsNode> =
         composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
 
+    /** Los textos y las descripciones (la acción en su ícono dice su nombre así: vuelta de diseño 8). */
     private fun textosDentro(nodo: SemanticsNode): List<String> =
         listOfNotNull(nodo.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }) +
+            nodo.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() +
             nodo.children.flatMap(::textosDentro)
 
     @Test

@@ -315,7 +315,11 @@ class ElPrimerDiaTest {
             }
         }
         assertTrue(seVeEntero(subtitulo), "«$subtitulo» se corta")
-        assertFalse(seVeEntero(deAntes), "«$deAntes» entraba: la prueba no mide lo que dice")
+        // Desde la vuelta de diseño 12 un subtítulo que no cabe baja a un segundo renglón en vez de
+        // cortarse: el de antes ya no sale con «…», pero tampoco entraba en uno (el encabezado crecía).
+        val renglonesDeAntes = disposicion(composeRule.onNodeWithText(deAntes, useUnmergedTree = true).fetchSemanticsNode()).lineCount
+        assertTrue(!seVeEntero(deAntes) || renglonesDeAntes > 1, "«$deAntes» entraba en un renglón: la prueba no mide lo que dice")
+        assertTrue(disposicion(composeRule.onNodeWithText(subtitulo, useUnmergedTree = true).fetchSemanticsNode()).lineCount == 1, "«$subtitulo» en un renglón")
     }
 
     // ── Plan: sin cuentas, la caja no se dibuja ──────────────────────────────
