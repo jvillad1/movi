@@ -299,7 +299,7 @@ class HojaAgregarGeometriaTest {
             // no el encabezado.
             composeRule.onNodeWithText(titulo, useUnmergedTree = true)
                 .assertSeVeEntero("el encabezado «$titulo»")
-            composeRule.onNodeWithTag(TAG_CERRAR_SUB_PICKER).assertSeVeEntero("la X de «$titulo»")
+            composeRule.onNodeWithTag(TAG_VOLVER_DEL_SUB_EDITOR).assertSeVeEntero("la flecha de «$titulo»")
             cerrarSubPicker()
         }
     }
@@ -443,7 +443,7 @@ class HojaAgregarGeometriaTest {
     }
 
     private fun cerrarSubPicker() {
-        composeRule.onNodeWithTag(TAG_CERRAR_SUB_PICKER)
+        composeRule.onNodeWithTag(TAG_VOLVER_DEL_SUB_EDITOR)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }

@@ -24,11 +24,14 @@ class LosCamposSonDelSistemaTest {
 
     /**
      * Lo que se queda con su campo propio, y por qué. Rutas relativas a `ui/`.
+     *
+     * Agregar (`quickadd/QuickAddScreen.kt`) salió en la vuelta de diseño 13: su nota es el `Campo`
+     * del sistema. Lo que le queda propio —el teclado numérico y el monto grande— no es un campo de
+     * texto (son teclas y un `Text`), así que no hay nada que exceptuar.
      */
     private val EXCEPCIONES = mapOf(
         "buscar/BuscarScreen.kt" to "la caja de Buscar: es la búsqueda de la app, no un formulario",
         "ai/AIChatScreen.kt" to "el compositor del chat de Movi AI",
-        "quickadd/QuickAddScreen.kt" to "Agregar: el teclado numérico y la nota, su propia hoja",
         "sdui/editor/ScreenEditorScreen.kt" to "el Editor de pantallas (admin)",
         "primeruso/PrimerUsoScreen.kt" to "la guía de primer uso (otra rama la está tocando)",
         "sms/SMSScreens.kt" to "la fila «Comercio» de Reconciliar, que se edita en su lugar: es una Fila",

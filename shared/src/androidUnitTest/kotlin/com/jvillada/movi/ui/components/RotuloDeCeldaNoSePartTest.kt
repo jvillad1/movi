@@ -29,10 +29,10 @@ import org.junit.runner.RunWith
  *
  * En el teléfono del dueño «Entretenimiento» se partía en dos renglones a mitad de palabra
  * («Entretenimient» arriba, «o» solo abajo): el `Text` de la celda ajustaba a dos renglones sin
- * mirar si la palabra más larga entraba en el ancho real de la celda. La corrección —en
- * [CeldaDeLaCuadricula]— mide la palabra más larga contra el ancho de la celda y, si no entra al
- * tamaño normal, la achica (`autoSize` de `BasicText`) o, si ni achicada entra, la muestra en un
- * solo renglón con «…» — nunca la parte.
+ * mirar si la palabra más larga entraba en el ancho real de la celda. La Ola B la achicaba; desde la
+ * vuelta de diseño 13 la letra es una sola y lo que cede es la cuadrícula: [CuadriculaDeCategorias]
+ * mide la palabra más ancha y baja de columnas hasta que entra. Solo la que ni así entra va en un
+ * renglón con «…», a la misma letra — nunca partida.
  *
  * Como «Entretenimiento» no tiene espacios, la única forma válida de que el resultado use más de
  * un renglón sería partiéndola: esta prueba se apoya en eso y solo pide `lineCount == 1`.
@@ -117,7 +117,7 @@ class RotuloDeCeldaNoSePartTest {
     }
 
     /**
-     * **Fix round 1, hallazgo 2.** El modo ACHICADO (un renglón, `autoSize`) no reservaba el
+     * **Fix round 1, hallazgo 2.** El modo de un renglón (era ACHICADO) no reservaba el
      * mismo alto que el modo NORMAL (`minLines = 2`) — una fila con las dos («Entretenimiento»
      * achicada junto a «Comida» normal) quedaba con celdas de alto distinto. Se arma la fila a
      * mano con [CuadriculaDeCategorias] (dos celdas, así entran las dos en la misma fila sin
@@ -158,12 +158,14 @@ class RotuloDeCeldaNoSePartTest {
     /**
      * **Whole-branch review, final fix wave.** [palabrasDe] media una sola palabra —la de MÁS
      * CARACTERES— y no necesariamente la más ANCHA. «WWWWWWWWWW» (10 letras anchas) mide más
-     * píxeles que «iiiiiiiiiiiiiiiiiiii» (20 letras angostas) — medido con `Movi.textos.apoyo`:
-     * 200 px contra 120 px, contra un ancho de celda de ~157 px a 390 dp. Con el error viejo (la
-     * de más caracteres) se elegía la angosta, que SÍ entra, y la cuadrícula se quedaba en el modo
-     * NORMAL de dos renglones — donde «WWWWWWWWWW», que no entra en ningún renglón, se termina
-     * partiendo a la mitad iguales que «Entretenimiento» al principio de esta clase. Con la
-     * palabra correcta (la más ancha) el rótulo entero pasa a un solo renglón achicado.
+     * píxeles que «iiiiiiiiiiiiiiiiiiii» (20 letras angostas). Con el error viejo se elegía la
+     * angosta, que SÍ entra, y «WWWWWWWWWW», que no entra en un renglón de cuatro columnas, se
+     * terminaba partiendo a la mitad.
+     *
+     * **Vuelta de diseño 13:** la palabra más ancha ya no achica la letra; le quita una columna a la
+     * cuadrícula hasta que entra. Con tres columnas «WWWWWWWWWW» entra en su renglón y el rótulo va
+     * en dos, partido **entre** las dos palabras: lo que se afirma es que ningún renglón corta una
+     * palabra.
      */
     @Test
     fun `la palabra mas ancha manda, no la de mas caracteres`() {
@@ -186,11 +188,14 @@ class RotuloDeCeldaNoSePartTest {
         assertTrue("el rótulo no se encontró en la cuadrícula", nodos.isNotEmpty())
 
         val layout = layoutDe(nodos.first())
-        assertTrue(
-            "quedó en ${layout.lineCount} renglones — con la palabra más ancha bien detectada " +
-                "tiene que achicarse a uno solo, nunca partir «WWWWWWWWWW» entre dos",
-            layout.lineCount == 1,
-        )
+        val texto = layout.layoutInput.text.text
+        (0 until layout.lineCount - 1).forEach { renglon ->
+            val fin = layout.getLineEnd(renglon)
+            assertTrue(
+                "el renglón ${renglon + 1} corta una palabra: «${texto.substring(layout.getLineStart(renglon), fin)}»",
+                texto[fin - 1] == ' ' || texto.getOrNull(fin) == ' ',
+            )
+        }
     }
 
     private fun layoutDe(nodo: SemanticsNode): TextLayoutResult {

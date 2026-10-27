@@ -5,7 +5,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
+import com.jvillada.movi.ui.components.TAG_AVATAR_DE_CUENTA_SIN_MARCA
+import com.jvillada.movi.ui.components.TAG_AVATAR_DE_MARCA
+import com.jvillada.movi.ui.components.ds.TAG_CIFRA
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -119,8 +130,9 @@ class SelectorDeCuentaTest {
     @Test
     fun bajo_una_tarjeta_el_renglon_dice_que_se_debe() {
         montar()
-        composeRule.onNodeWithText("Debes $1.240.000").assertIsDisplayed()
-        composeRule.onNodeWithText("$15.534.069").assertIsDisplayed()
+        // Vuelta de diseño 13: «Debes» va en el subtítulo de la fila y la cifra al final.
+        fila(nu).assert(hasText("Debes")).assert(hasText("$1.240.000"))
+        fila(ahorros).assert(hasText("$15.534.069")).assert(hasText("Debes").not())
     }
 
     /**
@@ -130,7 +142,7 @@ class SelectorDeCuentaTest {
     @Test
     fun una_cuenta_en_dolares_se_muestra_en_dolares() {
         montar()
-        composeRule.onNodeWithText("Debes US$181").assertIsDisplayed()
+        fila(masterBlack).assert(hasText("Debes")).assert(hasText("US$181"))
     }
 
     /**
@@ -165,8 +177,8 @@ class SelectorDeCuentaTest {
     fun una_tarjeta_sobrepagada_no_dice_que_debes_menos_cero() {
         montar(cuentas = listOf(ahorros, nu.copy(balance = -50_000)))
 
-        composeRule.onNodeWithText("A favor $50.000").assertIsDisplayed()
-        composeRule.onNodeWithText("Debes −$50.000").assertDoesNotExist()
+        fila(nu).assert(hasText("A favor")).assert(hasText("$50.000"))
+        fila(nu).assert(hasText("Debes").not()).assert(hasText("−$50.000").not())
     }
 
     /**
@@ -183,8 +195,8 @@ class SelectorDeCuentaTest {
         val sinRed = Account("c3", "Master Black 3684", AccountType.CREDIT_CARD, 1_500_000, currency = "USD")
         montar(cuentas = listOf(ahorros, sinRed))
 
-        composeRule.onNodeWithText("Debes $1.500.000").assertIsDisplayed()
-        composeRule.onNodeWithText("Debes US$1.500.000").assertDoesNotExist()
+        fila(sinRed).assert(hasText("Debes")).assert(hasText("$1.500.000"))
+        fila(sinRed).assert(hasText("US$1.500.000").not())
     }
 
     /**
@@ -234,5 +246,33 @@ class SelectorDeCuentaTest {
 
         composeRule.onNodeWithText("Vehículo 4083").assertIsDisplayed()
         composeRule.onNodeWithText("Ver solo las de siempre").assertIsDisplayed()
+    }
+
+    /** La fila de una cuenta, con todo lo que dice adentro (la [Fila] fusiona sus textos). */
+    private fun fila(cuenta: Account) = composeRule.onNodeWithTag(tagDeFilaDeCuentaEnAgregar(cuenta.id))
+
+    /**
+     * **Vuelta de diseño 13: cada cuenta es una `Fila` como en Patrimonio.** La marca de su banco
+     * al principio, el saldo con `Cifra` al final, y la elegida marcada —para el ojo, con la
+     * verificación; para el lector de pantalla, como elegida—.
+     */
+    @Test
+    fun cada_cuenta_es_una_fila_con_su_marca_su_cifra_y_la_elegida_marcada() {
+        montar(elegida = nu.id)
+        listOf(ahorros, nu, masterBlack).forEach { cuenta ->
+            fila(cuenta).assertIsDisplayed()
+            composeRule.onAllNodes(
+                hasTestTag(TAG_CIFRA) and hasAnyAncestor(hasTestTag(tagDeFilaDeCuentaEnAgregar(cuenta.id))),
+                useUnmergedTree = true,
+            ).assertCountEquals(1)
+            composeRule.onAllNodes(
+                (hasTestTag(TAG_AVATAR_DE_MARCA) or hasTestTag(TAG_AVATAR_DE_CUENTA_SIN_MARCA)) and
+                    hasAnyAncestor(hasTestTag(tagDeFilaDeCuentaEnAgregar(cuenta.id))),
+                useUnmergedTree = true,
+            ).assertCountEquals(1)
+        }
+        fila(nu).assertIsSelected()
+        fila(ahorros).assertIsNotSelected()
+        fila(masterBlack).assertIsNotSelected()
     }
 }
