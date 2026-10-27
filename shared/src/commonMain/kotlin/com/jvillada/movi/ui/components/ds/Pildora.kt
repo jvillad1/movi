@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
@@ -147,6 +148,12 @@ fun PildoraDeFiltro(
  * ```
  * PildoraDeAccion("¿Cómo voy?", onClick = ::preguntar, icono = Icons.Rounded.AutoAwesome)
  * ```
+ *
+ * Vuelta de diseño 20: [inicio] es lo que va antes del texto cuando un ícono no alcanza —el ícono
+ * de una categoría, en su color, en la hoja de un movimiento—, como en [PildoraDeFiltro]: con él la
+ * píldora arranca a [Espacio.xxs] del borde. [iconoFinal] es la flecha de algo que se despliega
+ * («▾» al lado de la categoría), en texto medio. [habilitada] en `false` apaga el texto y el toque.
+ * Un texto que no entra en dos renglones se corta con «…».
  */
 @Composable
 fun PildoraDeAccion(
@@ -155,20 +162,33 @@ fun PildoraDeAccion(
     modifier: Modifier = Modifier,
     icono: ImageVector? = null,
     descripcion: String? = null,
+    inicio: (@Composable () -> Unit)? = null,
+    iconoFinal: ImageVector? = null,
+    habilitada: Boolean = true,
 ) {
     Row(
         modifier = modifier
             .heightIn(min = Medida.altoChico)
             .clip(RoundedCornerShape(Radio.pill))
             .background(Movi.colores.capa2)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(enabled = habilitada, role = Role.Button, onClick = onClick)
             .then(if (descripcion != null && descripcion != texto) Modifier.semantics { contentDescription = descripcion } else Modifier)
             .testTag(TAG_PILDORA_DE_ACCION)
-            .padding(horizontal = Espacio.m, vertical = Espacio.xxs),
+            .padding(start = if (inicio != null) Espacio.xxs else Espacio.m, end = Espacio.m, top = Espacio.xxs, bottom = Espacio.xxs),
         horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        inicio?.invoke()
         if (icono != null) Icon(icono, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
-        Text(text = texto, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, maxLines = 2)
+        Text(
+            text = texto,
+            style = Movi.textos.cuerpo,
+            fontWeight = FontWeight.Medium,
+            color = if (habilitada) Movi.colores.texto else Movi.colores.textoApagado,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (iconoFinal != null) Icon(iconoFinal, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(Icono.s))
     }
 }

@@ -1006,17 +1006,9 @@ private fun BudgetSheet(
                     if (aviso.sugerencias.isNotEmpty()) {
                         Spacer(Modifier.height(Espacio.xs))
                         Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                            // Vuelta de diseño 20: `PildoraDeAccion` (era un texto tocable armado a mano).
                             aviso.sugerencias.forEach { sugerida ->
-                                Text(
-                                    text = sugerida,
-                                    style = Movi.textos.apoyo,
-                                    color = Movi.colores.marca,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(Radio.s))
-                                        .clickable { category = sugerida }
-                                        .padding(horizontal = Espacio.xs, vertical = Espacio.xs),
-                                )
+                                com.jvillada.movi.ui.components.ds.PildoraDeAccion(sugerida, onClick = { category = sugerida })
                             }
                         }
                     }

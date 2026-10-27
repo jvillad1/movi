@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.components.ds
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.Add
@@ -216,6 +217,55 @@ class SistemaDeDisenoTest {
         assertTrue(marcada)
         // La de la fila no tiene toque propio.
         assertTrue(SemanticsActions.OnClick !in composeRule.onNodeWithTag("en-una-fila").fetchSemanticsNode().config)
+    }
+
+    /**
+     * Vuelta de diseño 20: el `BotonDeIcono` secundario (al lado de un `Boton`, en Agregar) mide 48
+     * × 48 como el plano, dice su descripción y se apaga sin dejar de decirla.
+     */
+    @Test
+    fun `el boton de icono secundario mide 48, dice que hace y se apaga`() {
+        var toques = 0
+        montar {
+            Column {
+                BotonDeIcono(Icons.Rounded.Inbox, "Subir comprobante", onClick = { toques++ },
+                    variante = VarianteDeBotonDeIcono.Secundario, modifier = Modifier.testTag("secundario"))
+                BotonDeIcono(Icons.Rounded.Inbox, "Pagó otro", onClick = { toques++ },
+                    variante = VarianteDeBotonDeIcono.Secundario, habilitado = false, modifier = Modifier.testTag("apagado"))
+            }
+        }
+        val nodo = composeRule.onNodeWithTag("secundario").fetchSemanticsNode()
+        with(composeRule.density) {
+            assertEquals(Medida.objetivoTactil, nodo.size.width.toDp(), "ancho")
+            assertEquals(Medida.objetivoTactil, nodo.size.height.toDp(), "alto")
+        }
+        assertEquals(listOf("Subir comprobante"), nodo.config[SemanticsProperties.ContentDescription])
+        composeRule.onNodeWithTag("secundario").performClick()
+        composeRule.onNodeWithTag("apagado").performClick()
+        composeRule.waitForIdle()
+        assertEquals(1, toques, "el apagado no se toca")
+    }
+
+    /**
+     * Vuelta de diseño 20: la `PildoraDeAccion` con algo antes del texto (el ícono de una categoría)
+     * y una flecha al final mide lo mismo que sin ellos, y apagada no se toca.
+     */
+    @Test
+    fun `la pildora de accion con inicio mide lo mismo y apagada no se toca`() {
+        var toques = 0
+        montar {
+            Column {
+                PildoraDeAccion("Mercado", onClick = { toques++ }, modifier = Modifier.testTag("sola"))
+                PildoraDeAccion(
+                    "Mercado", onClick = { toques++ }, modifier = Modifier.testTag("con-inicio"),
+                    inicio = { Box(Modifier.size(Icono.m)) }, iconoFinal = Icons.Rounded.Inbox, habilitada = false,
+                )
+            }
+        }
+        assertEquals(altoDe("sola"), altoDe("con-inicio"))
+        composeRule.onNodeWithTag("con-inicio").performClick()
+        composeRule.waitForIdle()
+        assertEquals(0, toques)
     }
 
     /** Vuelta de diseño 5: el tono del título de una fila sale del tema, nunca de un `Color` suelto. */
