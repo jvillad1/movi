@@ -279,6 +279,13 @@ dos o más acciones, la principal va en `accion` y las demás como `BotonDeIcono
 
 Movimientos (la lupa), Por revisar y Captura del banco (actualizar) e Inicio (lupa y campana) solo
 llevan íconos. Lo vigila `LaAccionDelEncabezadoEsUnaSolaTest`.
+
+**El título manda** (vuelta de diseño 8: «Personas y comerc…»). Si el título entero y la acción con
+texto no caben, la acción queda en su ícono (`AccionDelEncabezadoSoloIcono`: la marca, 48 de toque, el
+texto como descripción y el mismo tag); si ni así cabe, el título baja a dos renglones. Nunca «…». El
+`Encabezado` decide midiendo el título y calculando el ancho del botón sin componerlo
+(`anchoDeLaAccionConTexto`, `laAccionVaConTexto`). Lo vigila `LaAccionDelEncabezadoCedeAlTituloTest`
+en las siete pantallas de la tabla, a 360 dp con la letra a ×1,3.
 ```kotlin
 Encabezado("Movimientos", acciones = { BotonDeIcono(Icons.Rounded.Search, "Buscar", ::buscar) })
 Encabezado("Patrimonio", accion = AccionDeEncabezado("Nueva cuenta", Icons.Rounded.Add, ::crear))
@@ -531,3 +538,21 @@ excepción ya no tiene campo): la caja de Buscar, el compositor de Movi AI, Agre
 numérico y la nota), el Editor de pantallas (admin), la guía de primer uso y la fila «Comercio» de
 Reconciliar, que se edita en su lugar dentro de una `Fila`.
 
+## 16. Vuelta de diseño 8: títulos enteros, cifras del sistema y avisos de un vistazo
+
+- **Un renglón de partes se une sin separadores colgando** (`enUnaLinea` en `ui/destinos/`): las partes
+  vacías o nulas no dejan « · » adelante, atrás ni doble. El número de un tercero va nombrado,
+  «Cuenta ·0756 · esposa», y no «·0756» a secas, que se leía como un separador suelto.
+- **Categorías**: los montos del mes son `Cifra` (el gasto neutro; lo que entró, `Ingreso` con «+», uno
+  debajo del otro si hubo los dos) y «Movi encontró N cosas para ordenar» es una `TarjetaDePropuesta`
+  con «Revisar». La búsqueda ya era el `Campo` del sistema (vuelta 6). `TarjetaDePropuesta` avisa
+  cuántos renglones ocupó el título (`alMedirElTitulo`) para que el esqueleto reserve el mismo alto.
+- **La campana** (`NotificationsPanel`): cada aviso es una `Fila` en una superficie de lista, con un
+  `IconoEnCirculo` según su tipo (`TipoDeNotificacion` → `iconoDelAviso`: vencido, banco que se calló y
+  presupuesto pasado en peligro; por vencer y por confirmar en aviso), el título en frase («Internet
+  venció ayer»), el monto con `Cifra` cuando lo hay y lo urgente primero. Los avisos son los mismos de
+  `dashboardAlerts`; sin ninguno, un `Vacio`.
+- **Mensajes del banco / Captura del banco**: la primera tarjeta es una `Fila` («Último mensaje · hoy,
+  11:02 a. m.») y una línea de `AyudaDeCampo`; lo largo (lo que llegó, por qué este aparato no lee
+  mensajes) se abre con «¿Qué es esto?» (`elUltimoMensaje`). «Avisarme si un banco se calla», igual
+  (`ayudaDelBancoQueSeCalla`). Se pliega, no se pierde.
