@@ -155,7 +155,7 @@ class InicioDeUnVistazoEnPantallaTest {
         composeRule.onNodeWithText("Flujo del mes", useUnmergedTree = true).assertDoesNotExist()
 
         val hero = arriba(veredicto)
-        val acciones = arriba("Anotar gasto")
+        val acciones = arriba("Gasto")
         val propuestas = arriba("Movi propone hoy")
         val cuentas = arriba("Tus cuentas")
         val widgets = arriba(com.jvillada.movi.ui.sdui.TITULO_DE_LOS_WIDGETS)
