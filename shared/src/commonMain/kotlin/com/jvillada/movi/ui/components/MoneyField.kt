@@ -1,40 +1,14 @@
 package com.jvillada.movi.ui.components
 
-import com.jvillada.movi.theme.Movi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.ds.CampoDeMonto
 
 /**
  * F14 · F23 · F34 · F53: un solo campo de monto para toda la app — antes cada formulario
@@ -145,51 +119,36 @@ private fun offsetTrasDigitos(agrupado: String, n: Int): Int {
 }
 
 /**
- * **El nombre del campo, arriba y siempre.**
- *
- * Un `placeholder` desaparece al escribir, y eso convierte un formulario ya lleno en una columna de
- * números sin rótulo: el dueño abría las condiciones de un crédito y veía «240» y «5» sueltos, sin
- * forma de saber cuál era el plazo y cuál el día de pago sin borrar uno para que reapareciera el
- * texto. Un formulario se abre más veces para revisar que para llenar.
- *
- * Vive acá y lo usan los tres campos ([MoneyField], `FieldBox`, `RateFieldBox`) porque se ponen uno
- * al lado del otro: si cada uno rotulara a su manera, dos campos de la misma fila quedarían con el
- * texto a distinta altura.
- */
-@Composable
-internal fun RotuloDeCampo(texto: String) {
-    Text(
-        text = texto,
-        style = Movi.textos.apoyo,
-        color = Movi.colores.textoMedio,
-        letterSpacing = 0.4.sp,
-        fontWeight = FontWeight.Medium,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
-    Spacer(Modifier.height(6.dp))
-}
-
-/**
  * **El alto de [MoneyField] con rótulo**, calculado desde los MISMOS tokens que arma el campo
  * real, no eyeballeado. Ola B, tarea 9 (fix round 1): el esqueleto de Cuadre de saldos —el primer
  * lugar que necesitó imitar este campo sin poder abrir un teclado de verdad— tenía un
- * `BloqueEsqueleto(alto = 48.dp)` puesto a ojo; un cambio futuro en `Movi.textos.apoyo` o
- * `Movi.textos.monto` lo habría desalineado en silencio.
+ * `BloqueEsqueleto(alto = 48.dp)` puesto a ojo.
  *
- * Suma, de arriba a abajo: [RotuloDeCampo] ([altoDeUnRenglon] de `Movi.textos.apoyo`, más sus
- * 6 dp de aire) y la caja con borde ([altoDeUnRenglon] de `Movi.textos.monto` — la línea más alta
- * de su `Row`, ya sea el prefijo, el placeholder o el campo — más los 14 dp de relleno arriba y
- * abajo). `MoneyFieldAltoConRotuloTest` mide un `MoneyField` real al lado y confirma que estos dos
- * números no se separan más de 2 dp.
+ * Vuelta de diseño 6: el campo es el [CampoDeMonto] del sistema, así que suma lo que arma ese: el
+ * rótulo ([altoDeUnRenglon] de `Movi.textos.apoyo`, más [Espacio.xs] de aire) y la caja (el renglón
+ * de `Movi.textos.monto` más [Espacio.s] arriba y abajo, nunca menos que [Medida.objetivoTactil]).
+ * `MoneyFieldAltoConRotuloTest` mide un `MoneyField` real al lado y confirma que estos dos números
+ * no se separan más de 2 dp.
  */
 @Composable
 fun altoDeMoneyFieldConRotulo(): Dp {
-    val altoDelRotulo = altoDeUnRenglon(Movi.textos.apoyo) + 6.dp
-    val altoDeLaCaja = altoDeUnRenglon(Movi.textos.monto) + 28.dp
+    val altoDelRotulo = altoDeUnRenglon(Movi.textos.apoyo) + Espacio.xs
+    val altoDeLaCaja = maxOf(Medida.objetivoTactil, altoDeUnRenglon(Movi.textos.monto) + Espacio.s * 2)
     return altoDelRotulo + altoDeLaCaja
 }
 
+/**
+ * El campo de monto de siempre, con su API de siempre. **Vuelta de diseño 6: delega en
+ * [CampoDeMonto]**, el del sistema; para lo nuevo, úsalo directo (rótulo, guía, ayuda, error).
+ *
+ * [placeholder] llega como se escribía antes («$ 0», «Deuda actual (COP, opcional)»): el símbolo
+ * del principio se quita (lo pinta el campo aparte) y lo que queda es el texto guía, en la letra de
+ * cuerpo. «$ 0» o vacío es «sin guía»: el campo muestra un «0» en la letra de las cifras.
+ *
+ * Por qué el cursor no se reancla al final, por qué no hay botón de «borrar todo» y cómo se
+ * arregló ⌘A en la web: ver [nextMoneyField], [esAtajoDeSeleccionarTodo] y el comentario largo
+ * dentro de [CampoDeMonto], que vivía acá. La lógica vive en las funciones puras de arriba.
+ */
 @Composable
 fun MoneyField(
     value: Long?,
@@ -205,151 +164,17 @@ fun MoneyField(
      */
     prefix: String = "$",
 ) {
-    Column(modifier = modifier) {
-        if (label != null) RotuloDeCampo(label)
-        val digits = value?.toString() ?: ""
-
-        // ── Ola 9 · C — CÓMO SE EDITA UN MONTO (y por qué antes se guardaba otra cifra) ──
-        //
-        // Este campo armaba un `TextFieldValue(display, selection = TextRange(display.length))`
-        // NUEVO en cada composición: le tiraba a la basura la selección que mandaba el sistema y
-        // reanclaba el cursor al final, siempre. En el navegador eso no "perdía teclas": las
-        // **concatenaba**. Escribir 50000, seleccionar todo con ⌘A y escribir 7000 dejaba
-        // $500.007.000 — quinientos millones donde el dueño quiso siete mil, guardables sin que
-        // nada avisara.
-        //
-        // El arreglo NO es una limitación de la plataforma —fue un diagnóstico equivocado en la
-        // primera versión de esta ola—: [CategoryField], en la misma hoja y a diez líneas de
-        // acá, ya lo hacía bien. Se copia su patrón, que son dos reglas:
-        //
-        //  1. El estado del texto vive ACÁ y solo se resincroniza cuando el cambio viene de
-        //     AFUERA (prellenado, reset, otra pantalla) — nunca por recomponer.
-        //  2. Lo que manda el sistema se respeta TAL CUAL, selección incluida. Solo se reescribe
-        //     cuando de verdad hay que reformatear, y ahí se dice explícitamente dónde queda el
-        //     cursor (ver [nextMoneyField], que es toda la lógica y vive afuera para poder
-        //     testearla).
-        //
-        // **Qué NO arregla esto, dicho como es.** En Compose-wasm el `<input>` oculto que recibe
-        // el teclado y lo que el canvas pinta siguen pudiendo discrepar: tras tipear 1800000,
-        // Compose pinta "1.800.000" y `document.activeElement.value` dice "1800000"; tras un
-        // triple-click el canvas muestra todo resaltado y el `<input>` reporta la selección
-        // colapsada. Lo que se logró —y alcanza para que el campo sea usable— es que Compose
-        // **resincronice el `<input>` en la siguiente tecla real**, así que la divergencia se
-        // cura sola en vez de acumularse. Es una propiedad más débil que "ya no discrepan".
-        //
-        // **⌘A: RESUELTO, y confirmado en producción con un teclado real (2026-09-03).** Este
-        // bloque decía que el atajo «no llega a Compose» y que alguien tenía que teclearlo a mano.
-        // Se tecleó, y después se midió con una sonda escuchando en las dos fases: Compose-wasm
-        // **sí** recibe la tecla, le hace `preventDefault` —matando el «seleccionar todo» nativo
-        // del navegador— y no implementa el suyo. Por eso la selección nunca ocurría (el `<input>`
-        // quedaba en `sel=8..8`) y la tecla siguiente llegaba como un tipeo al final. No era «el
-        // arnés de automatización»: era la plataforma. Ahora lo implementa esta app — ver
-        // [esAtajoDeSeleccionarTodo] y el `onPreviewKeyEvent` de abajo. Verificado sobre el
-        // artefacto desplegado: $18.000.009 + ⌘A + «7000» = $7.000.
-        //
-        // **La «pérdida de teclas»: medida, y no era eso.** «Bancolombia» + triple-click +
-        // «Nequi» daba «BancolombiaNequi», y se anotó acá como teclas que se pierden escribiendo
-        // en ráfaga. **No se pierde ninguna tecla**: están todas. Lo que no ocurría era el
-        // reemplazo, porque el triple-click no llegaba a contar como tal — Compose cierra la
-        // ventana del multi-clic a los 300 ms y el doble clic del sistema son 500. Con los clics
-        // más separados que eso, son tres clics sueltos: mueven el cursor, no seleccionan, y lo
-        // que se escribe se inserta ahí. Arreglado en la web subiendo la ventana; el barrido que
-        // lo midió está en [ViewConfigurationConDobleClicDelSistema].
-        //
-        // Vale como advertencia sobre este archivo: el nombre del defecto mandó a buscar en el
-        // lugar equivocado durante dos olas. Y la primera sonda que se le puso encima —un `Text`
-        // que mostraba la selección al lado del campo— **rompía el conteo de clics que venía a
-        // medir**, con lo cual inventó un segundo defecto que no existía.
-        //
-        // **El atajo ya no es solo de este campo.** Se arregló primero donde el error cuesta
-        // plata, y después en los otros quince campos de texto de `commonMain` (NOMBRE, la
-        // categoría, la búsqueda, el login…). Los que guardan un `String` no podían engancharse
-        // acá —`BasicTextField(value: String, …)` no expone la selección— y pasan por
-        // [CampoConSeleccion], en `SeleccionarTodo.kt`. Este campo se queda con el
-        // `onPreviewKeyEvent` directo porque ya trabajaba con `TextFieldValue`.
-        var field by remember { mutableStateOf(moneyFieldFromDigits(digits)) }
-        LaunchedEffect(digits) {
-            if (field.text.filter { it.isDigit() } != digits) {
-                field = moneyFieldFromDigits(digits)
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Movi.colores.tarjeta)
-                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // El símbolo es una ETIQUETA, no parte del texto editable: adentro del campo
-                // ("$12.345") el cursor podía pararse antes del "$" y el borrado tenía que
-                // pelearse con un carácter que el usuario nunca escribió. Afuera, lo que se
-                // edita son solo dígitos, y el campo se anuncia como monto esté vacío o lleno.
-                Text(
-                    text = prefix,
-                    style = Movi.textos.monto,
-                    color = if (digits.isEmpty()) Movi.colores.textoApagado else Movi.colores.textoMedio,
-                )
-                Spacer(Modifier.width(6.dp))
-                Box(modifier = Modifier.weight(1f)) {
-                    if (digits.isEmpty()) {
-                        // Una sola línea SIEMPRE: este campo también se usa a media fila (la
-                        // cuota de un crédito), y un placeholder largo partido en tres renglones
-                        // estiraba la caja al triple y empujaba al campo de al lado (visto a ojo
-                        // a 360dp en «Términos del crédito»).
-                        Text(
-                            text = placeholder.removePrefix(prefix).trim().ifEmpty { "0" },
-                            style = Movi.textos.monto,
-                            color = Movi.colores.textoApagado,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    BasicTextField(
-                        value = field,
-                        onValueChange = { entrante ->
-                            val siguiente = nextMoneyField(entrante, maxDigits)
-                            field = siguiente
-                            // Se avisa hacia afuera lo MISMO que quedó pintado, no lo que entró:
-                            // si las dos cifras pudieran separarse, el dueño estaría mirando una
-                            // y guardando la otra — que es exactamente el bug que este archivo
-                            // tuvo.
-                            onValueChange(parseMoneyDigits(siguiente.text))
-                        },
-                        textStyle = Movi.textos.monto.copy(color = Movi.colores.texto),
-                        cursorBrush = SolidColor(Movi.colores.texto),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
-                        // [esAtajoDeSeleccionarTodo], que trae la medición completa. Sin esto,
-                        // seleccionar todo con el teclado y reescribir CONCATENABA: sobre
-                        // $18.000.009, ⌘A + «7000» dejaba $180.000.097.000, guardable y sin aviso.
-                        //
-                        // Con el campo vacío no se consume la tecla: no hay nada que seleccionar y
-                        // quedarse con el atajo sería robarle al navegador algo que sí podría usar.
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onPreviewKeyEvent { evento ->
-                                if (esAtajoDeSeleccionarTodo(evento) && field.text.isNotEmpty()) {
-                                    field = conTodoSeleccionado(field)
-                                    true
-                                } else {
-                                    false
-                                }
-                            },
-                    )
-                }
-                // NO hay un botón de «borrar todo», y es a propósito: se probó y **no funciona
-                // en el navegador**. Vaciar el campo desde el estado de la app deja el buffer
-                // del `<input>` oculto con lo de antes, así que el siguiente dígito se pega a lo
-                // que había: borrar sobre «7» y escribir 1800000 daba $71.800.000. Un botón que
-                // a veces suma un dígito fantasma a una cifra de plata es peor que no tenerlo,
-                // y con la selección arreglada ya no hace falta: seleccionar y reescribir —el
-                // gesto de cualquier campo de texto— reemplaza el monto entero.
-            }
-        }
-    }
+    CampoDeMonto(
+        valor = value,
+        alCambiar = onValueChange,
+        modifier = modifier,
+        rotulo = label,
+        guia = guiaDelPlaceholder(placeholder, prefix),
+        moneda = prefix,
+        maxDigitos = maxDigits,
+    )
 }
+
+/** «$ 0» → sin guía; «$ Capital original» → «Capital original». */
+internal fun guiaDelPlaceholder(placeholder: String, prefix: String): String? =
+    placeholder.trim().removePrefix(prefix).trim().takeIf { it.isNotEmpty() && it != "0" }
