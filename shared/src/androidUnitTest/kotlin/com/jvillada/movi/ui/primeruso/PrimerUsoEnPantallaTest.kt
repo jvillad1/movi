@@ -284,13 +284,13 @@ class PrimerUsoEnPantallaTest {
         montar(repo, paso = PasoDePrimerUso.CUENTAS)
         composeRule.onNodeWithText("Bancolombia").performClick()
         composeRule.waitForIdle()
-        // El nombre lo escribió el banco; el saldo es el segundo campo.
+        // El nombre lo propuso el banco con el tipo (vuelta de diseño 16); el saldo es el segundo campo.
         composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
         composeRule.onNodeWithText("Agregar cuenta").performScrollTo().performClick()
         composeRule.waitForIdle()
 
         val creada = repo.cuentasCreadas.single()
-        assertEquals("Bancolombia", creada.name)
+        assertEquals("Bancolombia Ahorros", creada.name)
         assertEquals(AccountType.SAVINGS, creada.type)
         assertEquals(0L, creada.balance, "la cuenta se crea en \$0, como en la hoja de siempre")
         val apertura = repo.eventos.single()
@@ -424,7 +424,7 @@ class PrimerUsoEnPantallaTest {
     fun `los bancos llevan el avatar de su marca`() {
         montar(RepoDeLaGuia(), paso = PasoDePrimerUso.CUENTAS)
         val avatares = composeRule.onAllNodesWithTag(TAG_AVATAR_DE_MARCA, useUnmergedTree = true).fetchSemanticsNodes()
-        assertEquals(BANCOS_DE_LA_GUIA.size, avatares.size, "un avatar de marca por banco")
+        assertEquals(com.jvillada.movi.ui.accounts.BANCOS_DE_UN_TOQUE.size, avatares.size, "un avatar de marca por banco")
     }
 
     @Test

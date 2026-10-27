@@ -143,17 +143,18 @@ internal fun textoDeLasPropuestas(propuestas: List<PropuestaDePresupuesto>): Str
 
 /**
  * **Una propuesta, como `Fila` del sistema** (vuelta de diseño 14): el ícono de la categoría, su
- * nombre, «Gastaste $X el período pasado» y, a la derecha, el tope que se propone con [Cifra] y la
+ * nombre, «Gastaste $X» y, a la derecha, el tope que se propone con [Cifra] y la
  * [Casilla]. Era una fila a mano con el tope metido en el subtítulo («Gastaste $1.850.000 · tope
  * $1.850.000», partido en dos renglones) y un cuadradito lavanda de 20 dp.
  *
  * **Se marca la fila entera**: el toque va de borde a borde y mide 64 de alto (más de los 48 del
  * sistema), con semántica de casilla; la [Casilla] de la derecha solo dice el estado.
  *
- * El subtítulo puede bajar hasta [RENGLONES_DEL_SUBTITULO_DE_LA_PROPUESTA]: es la razón de la
- * propuesta y no se corta. A 390 dp entra en dos; a 360, al lado de un tope de siete cifras
- * («$1.850.000»), «Gastaste $1.850.000 el período pasado» necesita tres (lo mide
- * `PresupuestosConJerarquiaTest`). La fila crece en vez de cortar la frase.
+ * El subtítulo es «Gastaste $1.850.000» (vuelta de diseño 16): el período ya lo dice el párrafo de
+ * arriba. Así entra en **un renglón** a 360 dp al lado de un tope de siete cifras (lo mide
+ * `PresupuestosConJerarquiaTest`); con «el período pasado» al final necesitaba tres. Igual puede bajar
+ * hasta [RENGLONES_DEL_SUBTITULO_DE_LA_PROPUESTA] con la letra agrandada: es la razón de la propuesta y
+ * no se corta.
  */
 @Composable
 private fun FilaDePropuesta(
@@ -176,7 +177,11 @@ private fun FilaDePropuesta(
             lineasDelSubtitulo = RENGLONES_DEL_SUBTITULO_DE_LA_PROPUESTA,
             inicio = { IconoDeCategoria(propuesta.category) },
             final = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
+                // El tope y su casilla, a `Espacio.xs`: dos hermanos chicos de un solo control («este
+                // tope, sí o no»). Con `Espacio.s` entre los dos, a 360 dp «Gastaste $1.850.000»
+                // quedaba unos dp corto y bajaba a un segundo renglón (medido en
+                // `PresupuestosConJerarquiaTest`, vuelta de diseño 16).
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                     Cifra(propuesta.amount.roundToLong(), modifier = Modifier.testTag(TAG_TOPE_DE_LA_PROPUESTA))
                     Casilla(marcada = marcada)
                 }
@@ -191,9 +196,13 @@ private const val RENGLONES_DEL_SUBTITULO_DE_LA_PROPUESTA: Int = 3
 /** El tope que se propone, a la derecha de la fila de una propuesta. */
 const val TAG_TOPE_DE_LA_PROPUESTA: String = "tope-de-la-propuesta"
 
-/** «Gastaste $1.020.000 el período pasado»: lo que se gastó, que es de donde sale el tope. */
+/**
+ * «Gastaste $1.020.000»: lo que se gastó, que es de donde sale el tope. Sin «el período pasado»
+ * (vuelta de diseño 16): el párrafo de arriba de la tarjeta ya dice de qué fechas, y con la cola la
+ * frase bajaba a tres renglones a 360 dp al lado de un tope de siete cifras.
+ */
 internal fun subtituloDeLaPropuesta(propuesta: PropuestaDePresupuesto): String =
-    "Gastaste ${formatCOP(propuesta.gastado.roundToLong())} el período pasado"
+    "Gastaste ${formatCOP(propuesta.gastado.roundToLong())}"
 
 /**
  * «Crear este presupuesto» con una sola marcada; «Crear estos N» con varias (y con cero, apagado).

@@ -26,7 +26,7 @@ class GuiaDePrimerUsoTest {
     @Test
     fun `los bancos de la guia existen en MarcasConocidas`() {
         val conocidos = com.jvillada.movi.shared.model.BANCOS_CONOCIDOS.map { it.id }
-        BANCOS_DE_LA_GUIA.forEach { assertTrue(it in conocidos, it) }
+        com.jvillada.movi.ui.accounts.BANCOS_DE_UN_TOQUE.forEach { assertTrue(it in conocidos, it) }
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.ui.accounts.tipoSiElNombreNoLoDice
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -319,8 +320,11 @@ private fun propuestaDeCierre(data: DashboardData): PropuestaDelInicio? {
 /** Una tarjeta del carrusel «Tus cuentas»: la cuenta, cómo se llama su tipo y qué cifra se muestra. */
 data class CuentaDelCarrusel(
     val cuenta: Account,
-    /** «Ahorros», «Corriente», «Efectivo», «Inversión», «Tarjeta». */
-    val tipo: String,
+    /**
+     * «Ahorros», «Corriente», «Efectivo», «Inversión», «Tarjeta», o `null` si el nombre ya lo dice
+     * («Bancolombia Ahorros»): la regla de Patrimonio, [tipoSiElNombreNoLoDice] (vuelta de diseño 16).
+     */
+    val tipo: String?,
     /** «Saldo», o «Debes» en una tarjeta. */
     val rotuloDelSaldo: String,
     /** El saldo tal como lo trae la cuenta; en una tarjeta, la deuda en positivo. */
@@ -386,14 +390,17 @@ private fun cuentaDelCarrusel(cuenta: Account): CuentaDelCarrusel {
     val esDeuda = cuenta.type.group == AccountGroup.DEUDA
     return CuentaDelCarrusel(
         cuenta = cuenta,
-        tipo = when (cuenta.type) {
-            AccountType.SAVINGS -> "Ahorros"
-            AccountType.CHECKING -> "Corriente"
-            AccountType.CASH -> "Efectivo"
-            AccountType.INVESTMENT -> "Inversión"
-            AccountType.CREDIT_CARD -> "Tarjeta"
-            AccountType.LOAN -> "Préstamo"
-        },
+        tipo = tipoSiElNombreNoLoDice(
+            cuenta.name,
+            when (cuenta.type) {
+                AccountType.SAVINGS -> "Ahorros"
+                AccountType.CHECKING -> "Corriente"
+                AccountType.CASH -> "Efectivo"
+                AccountType.INVESTMENT -> "Inversión"
+                AccountType.CREDIT_CARD -> "Tarjeta"
+                AccountType.LOAN -> "Préstamo"
+            },
+        ),
         rotuloDelSaldo = if (esDeuda) "Debes" else "Saldo",
         saldo = if (esDeuda) kotlin.math.abs(saldo) else saldo,
         moneda = moneda,

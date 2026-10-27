@@ -25,6 +25,7 @@ import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.renglonTocable
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.colorDeLaCifra
 import com.jvillada.movi.ui.components.ds.Vacio
@@ -1750,6 +1751,9 @@ internal fun CifraDelMovimiento(
     Cifra(montoParaLaCifra(tono, monto), variante, modifier, tonoDeCifraDelTono(tono), moneda)
 }
 
+/** El tag de lo que se toca (y se resalta) en el encabezado de un día: sale un poco hacia el margen. */
+const val TAG_TOQUE_DEL_DIA: String = "toque-del-dia"
+
 /** El tag de la fecha del encabezado de un día. */
 const val TAG_FECHA_DEL_DIA: String = "fecha-del-dia"
 
@@ -1783,84 +1787,89 @@ internal fun EncabezadoDelDia(
     cuantos: Int,
     onAlternar: () -> Unit,
 ) {
-    SubcomposeLayout(
-        modifier = Modifier
-            .fillMaxWidth()
-            // El tag va antes de `clickable`: mide el borde del renglón, el mismo punto que
-            // `TAG_ENCABEZADO_DE_DIA_ESQUELETO` en el esqueleto.
-            .testTag(TAG_ENCABEZADO_DE_DIA)
-            .heightIn(min = Medida.objetivoTactil)
-            .clickable(
-                onClickLabel = if (plegado) "Desplegar el día" else "Plegar el día",
-                onClick = onAlternar,
-            ),
-    ) { restricciones ->
-        val medibles = subcompose(PiezaDelDia.Fecha) {
-            Text(
-                text = fecha,
-                style = Movi.textos.titulo,
-                color = Movi.colores.texto,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.layoutId(PiezaDelDia.Fecha).testTag(TAG_FECHA_DEL_DIA).semantics { heading() },
-            )
-            if (plegado) {
+    // El tag va en una caja aparte: mide el borde del renglón, el mismo punto que
+    // `TAG_ENCABEZADO_DE_DIA_ESQUELETO` en el esqueleto, sin el aire del resaltado.
+    Box(modifier = Modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_DIA)) {
+        SubcomposeLayout(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = Medida.objetivoTactil)
+                .testTag(TAG_TOQUE_DEL_DIA)
+                // Vuelta de diseño 16: en escritorio, el mouse encima pintaba una banda gris recta,
+                // pegada a la fecha. El resaltado ahora sale un poco hacia el margen y lleva el radio
+                // del sistema; la fecha y la cifra no se mueven (ver [renglonTocable]).
+                .renglonTocable(
+                    onClickLabel = if (plegado) "Desplegar el día" else "Plegar el día",
+                    onClick = onAlternar,
+                ),
+        ) { restricciones ->
+            val medibles = subcompose(PiezaDelDia.Fecha) {
                 Text(
-                    text = if (cuantos == 1) "· 1 movimiento" else "· $cuantos movimientos",
+                    text = fecha,
                     style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Normal,
-                    color = Movi.colores.textoMedio,
+                    color = Movi.colores.texto,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.layoutId(PiezaDelDia.Cuantos),
+                    modifier = Modifier.layoutId(PiezaDelDia.Fecha).testTag(TAG_FECHA_DEL_DIA).semantics { heading() },
+                )
+                if (plegado) {
+                    Text(
+                        text = if (cuantos == 1) "· 1 movimiento" else "· $cuantos movimientos",
+                        style = Movi.textos.titulo,
+                        fontWeight = FontWeight.Normal,
+                        color = Movi.colores.textoMedio,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.layoutId(PiezaDelDia.Cuantos),
+                    )
+                }
+                Cifra(
+                    total,
+                    VarianteDeCifra.Chica,
+                    modifier = Modifier.layoutId(PiezaDelDia.Monto),
+                    tono = if (total > 0) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
+                )
+                Icon(
+                    imageVector = if (plegado) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
+                    contentDescription = if (plegado) "Desplegar el día" else "Plegar el día",
+                    tint = Movi.colores.textoMedio,
+                    modifier = Modifier.size(Icono.m).layoutId(PiezaDelDia.Chevron),
                 )
             }
-            Cifra(
-                total,
-                VarianteDeCifra.Chica,
-                modifier = Modifier.layoutId(PiezaDelDia.Monto),
-                tono = if (total > 0) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
+            fun pieza(cual: PiezaDelDia) = medibles.firstOrNull { it.layoutId == cual }
+            val ancho = restricciones.maxWidth
+            val suelta = restricciones.copy(minWidth = 0, minHeight = 0)
+            val entre = Espacio.xs.roundToPx()
+            val junto = Espacio.xxs.roundToPx()
+
+            // Primero lo que nunca se recorta: el chevron, la cifra y la fecha.
+            val chevron = pieza(PiezaDelDia.Chevron)!!.measure(suelta)
+            val monto = pieza(PiezaDelDia.Monto)!!.measure(suelta)
+            val paraLaFecha = (ancho - monto.width - chevron.width - 2 * entre).coerceAtLeast(0)
+            val fechaP = pieza(PiezaDelDia.Fecha)!!.measure(suelta.copy(maxWidth = paraLaFecha))
+            val sobra = paraLaFecha - fechaP.width
+
+            // Después, con lo que sobra: el conteo, cortado con «…» si no entra entero.
+            val cuantosP = pieza(PiezaDelDia.Cuantos)?.takeIf { sobra > junto }?.measure(suelta.copy(maxWidth = sobra - junto))
+
+            val alto = maxOf(
+                restricciones.minHeight,
+                fechaP.height,
+                cuantosP?.height ?: 0,
+                monto.height,
+                chevron.height,
             )
-            Icon(
-                imageVector = if (plegado) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
-                contentDescription = if (plegado) "Desplegar el día" else "Plegar el día",
-                tint = Movi.colores.textoMedio,
-                modifier = Modifier.size(Icono.m).layoutId(PiezaDelDia.Chevron),
-            )
-        }
-        fun pieza(cual: PiezaDelDia) = medibles.firstOrNull { it.layoutId == cual }
-        val ancho = restricciones.maxWidth
-        val suelta = restricciones.copy(minWidth = 0, minHeight = 0)
-        val entre = Espacio.xs.roundToPx()
-        val junto = Espacio.xxs.roundToPx()
-
-        // Primero lo que nunca se recorta: el chevron, la cifra y la fecha.
-        val chevron = pieza(PiezaDelDia.Chevron)!!.measure(suelta)
-        val monto = pieza(PiezaDelDia.Monto)!!.measure(suelta)
-        val paraLaFecha = (ancho - monto.width - chevron.width - 2 * entre).coerceAtLeast(0)
-        val fechaP = pieza(PiezaDelDia.Fecha)!!.measure(suelta.copy(maxWidth = paraLaFecha))
-        val sobra = paraLaFecha - fechaP.width
-
-        // Después, con lo que sobra: el conteo, cortado con «…» si no entra entero.
-        val cuantosP = pieza(PiezaDelDia.Cuantos)?.takeIf { sobra > junto }?.measure(suelta.copy(maxWidth = sobra - junto))
-
-        val alto = maxOf(
-            restricciones.minHeight,
-            fechaP.height,
-            cuantosP?.height ?: 0,
-            monto.height,
-            chevron.height,
-        )
-        layout(ancho, alto) {
-            fun centrado(p: Placeable) = (alto - p.height) / 2
-            fechaP.placeRelative(0, centrado(fechaP))
-            cuantosP?.placeRelative(fechaP.width + junto, centrado(cuantosP))
-            val xChevron = ancho - chevron.width
-            chevron.placeRelative(xChevron, centrado(chevron))
-            val xMonto = xChevron - entre - monto.width
-            monto.placeRelative(xMonto, centrado(monto))
+            layout(ancho, alto) {
+                fun centrado(p: Placeable) = (alto - p.height) / 2
+                fechaP.placeRelative(0, centrado(fechaP))
+                cuantosP?.placeRelative(fechaP.width + junto, centrado(cuantosP))
+                val xChevron = ancho - chevron.width
+                chevron.placeRelative(xChevron, centrado(chevron))
+                val xMonto = xChevron - entre - monto.width
+                monto.placeRelative(xMonto, centrado(monto))
+            }
         }
     }
 }

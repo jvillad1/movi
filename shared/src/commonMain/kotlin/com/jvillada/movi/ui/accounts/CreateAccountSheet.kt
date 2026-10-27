@@ -1,97 +1,41 @@
 package com.jvillada.movi.ui.accounts
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountType
-import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.openingEventFor
-import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.MarcoDeHoja
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
-import com.jvillada.movi.ui.components.ds.Campo
-import com.jvillada.movi.ui.components.ds.CampoDeMonto
-import com.jvillada.movi.ui.components.ds.PieDeHoja
-import com.jvillada.movi.ui.components.ds.RotuloDeCampo
-
-private data class TypeOption(val type: AccountType, val label: String, val description: String, val icon: ImageVector)
-
-// F56: dos tipos, no seis. Efectivo/Ahorros/Corriente se tratan idéntico en todos los cálculos
-// (verificado contra Balance.kt) — "Dinero" los cubre a todos, y el nombre que escribe el
-// dueño ("Bancolombia Ahorros", "Nequi") dice el resto. Tarjeta y Préstamo salen del selector
-// (F51/F52): son deuda, no plata tuya, y se crean desde Créditos con sus términos.
-private val TYPE_OPTIONS = listOf(
-    TypeOption(AccountType.SAVINGS, "Dinero", "La plata disponible: ahorros, corriente, efectivo", Icons.Filled.AccountBalanceWallet),
-    TypeOption(AccountType.INVESTMENT, "Inversión", "Plata guardada: CDT, fondos", Icons.AutoMirrored.Filled.TrendingUp),
-)
 
 /**
- * El tercer tipo, que no es un [AccountType] nuevo (ver `Bien` en `:core`): la tarjeta reusa
- * INVESTMENT solo para tener la forma de [TypeOption]; tocarla abre la hoja del bien.
- */
-private val OPCION_BIEN = TypeOption(
-    AccountType.INVESTMENT,
-    "Bien",
-    "Lo que tienes y no es plata: una casa, un carro",
-    Icons.Filled.Home,
-)
-
-/**
- * **Anotado, no arreglado — esta hoja está anclada abajo y NO se desplaza (Ola 12).**
+ * **Patrimonio → «Nueva cuenta»** (y «+ Crear cuenta» desde Agregar, Hoy, Movimientos, Cuadre de
+ * saldos y Primeros pasos). Desde la vuelta de diseño 16 pinta el mismo [FormularioDeCuenta] que el
+ * paso «Tus cuentas» de la guía de primer uso: bancos con su marca, «Ahorros · Corriente · Efectivo ·
+ * Inversión» (y «Bien» si quien llama lo ofrece), nombre propuesto solo y saldo de hoy. Antes ofrecía
+ * «Dinero / Inversión / Bien» en tarjetas grandes y sin bancos: crear una cuenta se veía distinto
+ * según por dónde se entrara.
  *
- * `QuickAddScreen` acaba de ganar `verticalScroll` porque en una pantalla corta «Guardar
- * movimiento» quedaba entero por debajo del recorte y no había forma de guardar. Esta hoja tiene
- * la misma estructura y el mismo riesgo, y encima **se abre desde ahí** («+ Crear cuenta» cuando
- * todavía no hay cuentas): es de lo primero que toca un dueño nuevo.
- *
- * Medido con una sonda en el navegador (densidad 2, dp = píxel CSS), con el campo de nombre
- * vacío, que es como se abre siempre:
- *
- *   contenido de esta hoja               623 dp
- *   sitio que hay en el AVD Movi_Sensor  595 dp   (551 de hueco + 44 de manija, medidos con la
- *                                                  hoja de «Agregar» instrumentada)
- *
- * O sea que **en un teléfono como el AVD se cortan unos 28 dp**: el renglón
- * «Falta el nombre» y el borde de abajo de «Crear cuenta», que queda pegado contra la barra
- * inferior. En una ventana de 800×620 hay 556 dp de sitio (medido: es a lo que la hoja queda
- * recortada) y se cortan 67: la mitad del botón, visto. En un iPhone SE hay menos sitio todavía.
- * El botón se sigue pudiendo tocar por poco, así que esto es margen cero, no bloqueo: por eso
- * queda ESCRITO y no arreglado en la misma tanda que la otra hoja.
- *
- * **Las otras hojas ancladas abajo y sin `verticalScroll`**, contadas con grep sobre los 16
- * sitios que llaman a `SheetHandleWithClose` (2026-08-27) y confirmadas una por una:
- * la de metas (borrada en la R4), [VoidEventSheet] (:76), [DeleteAccountSheet]
- * (:83), la hoja de presupuesto de `PresupuestosScreen:440`, la de «¿qué deuda?» de
- * `CreditosScreen:359` y `NotificationsPanel:52` — seis además de esta, y ninguna se midió acá.
- * (`CreditBalanceSheet` figuró en esa lista por error: **ya se desplaza**, `:88`.)
- *
- * El arreglo, cuando toque, es el idioma de las que sí se desplazan: la manija afuera y el
- * cuerpo en una `Column` con `verticalScroll(...)` + `weight(1f, fill = false)`. Ojo con
- * copiar el modificador a la `Column` de la hoja: su hermano es el `Box(weight(1f))` que la
- * ancla abajo, y dos hijos con peso se reparten el alto (medido en «Agregar»: la hoja quedaba
- * capada a la mitad de la pantalla).
+ * **Se desplaza** (el idioma de las hojas que sí lo hacen: el cuerpo en una `Column` con
+ * `verticalScroll` + `weight(1f, fill = false)`, la manija afuera). Con los bancos el bloque es más
+ * alto que las tarjetas de antes, y la hoja ya iba con margen cero en un teléfono bajo (Ola 12: unos
+ * 28 dp cortados en el AVD de entonces, el borde de «Crear cuenta» contra la barra inferior).
  */
 @Composable
 fun CreateAccountSheet(
@@ -110,18 +54,16 @@ fun CreateAccountSheet(
     onElegirBien: ((nombre: String) -> Unit)? = null,
 ) {
     val coroutine = rememberCoroutineScope()
-    var name by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(AccountType.SAVINGS) }
-    var initialBalance by remember { mutableStateOf<Long?>(null) }
+    val formulario = rememberEstadoDelFormularioDeCuenta()
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val canSave = name.isNotBlank() && !saving
+    val canSave = formulario.sePuedeCrear && !saving
     // F24: el mismo patrón para todas las hojas de crear — si el botón está gris, debajo dice
     // la PRIMERA cosa que falta, no solo se apaga en silencio. Acá lo único obligatorio es el
     // nombre (el saldo puede quedar en $0).
     val missingFieldMessage = when {
-        name.isBlank() -> "Falta el nombre"
+        !formulario.sePuedeCrear -> "Falta el nombre"
         else -> null
     }
 
@@ -138,22 +80,9 @@ fun CreateAccountSheet(
         saving = true
         error = null
         coroutine.launch {
-            val account = createdAccount ?: Account(
-                // Generado acá, no en blanco — mismo motivo que en QuickAddScreen: en Android/iOS
-                // esto pasa por LocalRepository, que ahora necesita un id propio desde el
-                // primer instante (ver newId() y LocalRepository.createAccount).
-                id = newId("acc"),
-                name = name.trim(),
-                type = selectedType,
-                balance = initialBalance ?: 0L,
-                // F51: la moneda ya no es exclusiva de tarjeta (que salió del selector) — una
-                // cuenta de Inversión en USD existe de verdad (un CDT en dólares); Dinero se
-                // queda fijo en COP porque es efectivo/ahorros/corriente de acá.
-                // COP fijo por ahora: el display de saldos solo entiende COP (`balance` es el
-                // componente COP) — un CDT en USD se mostraría como $0 en la web y como pesos
-                // en Android. El selector de moneda vuelve cuando exista display multimoneda.
-                currency = "COP",
-            )
+            // La misma cuenta que arma la guía para la misma elección (ver
+            // [EstadoDelFormularioDeCuenta.cuentaNueva]: COP, id propio, el saldo como apertura).
+            val account = createdAccount ?: formulario.cuentaNueva()
             val result = runCatching {
                 crearCuentaConSaldo(account, yaCreada = createdAccount) { createdAccount = it }
             }
@@ -168,58 +97,29 @@ fun CreateAccountSheet(
     }
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
-        // --- NOMBRE ---
-        Campo(name, { name = it }, rotulo = "Nombre", guia = "Ej: Bancolombia Ahorros")
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            FormularioDeCuenta(formulario, onElegirBien = onElegirBien, habilitado = !saving)
+            Spacer(Modifier.height(Espacio.xs))
+            // F52: nota, no botón — Créditos vive en Más, no acá.
+            Text(
+                text = "¿Tarjetas o préstamos? Se cargan en Créditos",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
 
-        Spacer(Modifier.height(Espacio.m))
+            Spacer(Modifier.height(Espacio.l))
 
-        // --- TIPO ---
-        RotuloDeCampo("Tipo")
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) {
-            TYPE_OPTIONS.forEach { option ->
-                TypeCard(
-                    option = option,
-                    selected = selectedType == option.type,
-                    onClick = {
-                        selectedType = option.type
-                        // El selector de moneda es solo de Inversión; cualquier otro tipo
-                        // (Dinero) queda fijo en COP.
-                    },
-                )
-            }
-            if (onElegirBien != null) {
-                // Nunca «elegido»: tocarlo cambia de hoja, no de tipo. Ver [onElegirBien].
-                TypeCard(option = OPCION_BIEN, selected = false, onClick = { onElegirBien(name.trim()) })
-            }
+            // El pie de hoja del sistema: el error del guardado arriba, la razón abajo.
+            PieDeHoja(
+                texto = if (saving) "Creando…" else "Crear cuenta",
+                onClick = { save() },
+                habilitado = canSave,
+                razon = if (saving) null else missingFieldMessage,
+                error = error,
+            )
+
+            Spacer(Modifier.height(Espacio.s))
         }
-        Spacer(Modifier.height(Espacio.xs))
-        // F52: nota, no botón — Créditos vive en Más, no acá.
-        Text(
-            text = "¿Tarjetas o préstamos? Se cargan en Créditos",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-        )
-
-        Spacer(Modifier.height(Espacio.m))
-
-        // --- SALDO INICIAL --- (ya no hay tipo de deuda en este selector, ver F51/F52)
-        CampoDeMonto(initialBalance, { initialBalance = it }, rotulo = "Saldo inicial")
-
-        Spacer(Modifier.height(Espacio.l))
-
-        // --- CTA --- el pie de hoja del sistema: el error del guardado arriba, la razón abajo.
-        PieDeHoja(
-            texto = if (saving) "Creando…" else "Crear cuenta",
-            onClick = { save() },
-            habilitado = canSave,
-            razon = if (saving) null else missingFieldMessage,
-            error = error,
-        )
-
-        Spacer(Modifier.height(Espacio.s))
     }
 }
 
@@ -252,92 +152,4 @@ internal suspend fun crearCuentaConSaldo(
         if (apertura != null) Repositories.wallets.postEvent(apertura)
     }
     return creada
-}
-
-/** Selectable rounded chip that fills its share of the enclosing [Row]. */
-@Composable
-private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null) {
-    Box(
-        modifier = Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(Radio.m))
-            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
-            .then(
-                if (!selected) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)) else Modifier,
-            )
-            .clickable(onClick = onClick)
-            .padding(vertical = Espacio.s),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (icon != null) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
-                    modifier = Modifier.size(Icono.s),
-                )
-                Text(
-                    text = label,
-                    style = Movi.textos.cuerpo,
-                    fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                    color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
-                )
-            }
-        } else {
-            Text(
-                text = label,
-                style = Movi.textos.cuerpo,
-                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
-            )
-        }
-    }
-}
-
-/**
- * F56: cada uno de los dos tipos ahora trae una línea explicando qué va ahí — antes eran 6
- * chips de una sola palabra ("Crédito", "Préstamo"…) que el dueño no podía distinguir de las
- * secciones del mismo nombre (F50/F51). Full width, no comparten fila.
- */
-@Composable
-private fun TypeCard(option: TypeOption, selected: Boolean, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.m))
-            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
-            .then(
-                if (!selected) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)) else Modifier,
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = Espacio.s, vertical = Espacio.s),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) {
-            Icon(
-                imageVector = option.icon,
-                contentDescription = null,
-                tint = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
-                modifier = Modifier.size(Icono.m),
-            )
-            Text(
-                text = option.label,
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Medium,
-                color = if (selected) Movi.colores.marca else Movi.colores.texto,
-            )
-        }
-        Spacer(Modifier.height(Espacio.xxs))
-        Text(
-            text = option.description,
-            style = Movi.textos.apoyo,
-            color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
-        )
-    }
 }

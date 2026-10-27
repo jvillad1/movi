@@ -486,7 +486,8 @@ private const val CATEGORIAS_EN_EL_WIDGET = 3
  * llevaba una flecha sin número y una barra casi vacía que no decía contra qué se medía. Ahora el
  * título se ve, la comparación se dice una vez debajo, y cada categoría va en tres renglones: el
  * ícono y el nombre (lo único que puede cortarse con «…»), el monto con [Cifra] entero, y la
- * diferencia en palabras («$120.000 más», «nuevo»), en `sale` solo si sube mucho.
+ * diferencia en palabras («$120.000 más», «nuevo»), en `sale` solo si sube mucho. El monto va neutro
+ * siempre (vuelta de diseño 16): el tono va solo en la diferencia.
  */
 @Composable
 internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, modifier: Modifier = Modifier) {
@@ -527,11 +528,10 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
                     )
                 }
                 // En su renglón: entero siempre, aun a media pantalla y con la letra agrandada.
-                Cifra(
-                    categoria.gastado,
-                    VarianteDeCifra.Fila,
-                    tono = if (categoria.superada) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
-                )
+                // **Siempre neutro** (vuelta de diseño 16): un gasto no es una alarma. Lo que sube
+                // mucho lo dice la diferencia de abajo, en `sale`; antes el monto de Mercado también
+                // iba en rojo y la señal salía dos veces.
+                Cifra(categoria.gastado, VarianteDeCifra.Fila, tono = TonoDeCifra.Neutro)
                 if (diferencia != null) DiferenciaDelWidget(diferencia)
             }
         }

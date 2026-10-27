@@ -460,7 +460,18 @@ private fun palabrasSinTildes(texto: String): List<String> =
 fun subtituloDeLaCuenta(account: Account): String? {
     if (esDeUsoCondicionado(account)) return "Uso condicionado · ${account.condicionadaA!!.trim()}"
     val tipo = tipoLegibleDeLaCuenta(account.type) ?: return null
-    return tipo.takeIf { palabrasSinTildes(tipo).first() !in palabrasSinTildes(account.name) }
+    return tipoSiElNombreNoLoDice(account.name, tipo)
+}
+
+/**
+ * **El tipo de una cuenta, salvo que su nombre ya lo diga**: «Ahorros» para «Nu», nada para
+ * «Bancolombia Ahorros» o «Cuenta de ahorros 8133». Sin tildes ni mayúsculas. Es la regla de
+ * [subtituloDeLaCuenta] (vuelta de diseño 2) y la usan también la tarjeta de cuenta del Inicio y la
+ * lista de la guía de primer uso (vuelta de diseño 16), para que el tipo no se repita en ningún lado.
+ */
+fun tipoSiElNombreNoLoDice(nombre: String, tipo: String): String? {
+    val clave = palabrasSinTildes(tipo).firstOrNull() ?: return tipo
+    return tipo.takeIf { clave !in palabrasSinTildes(nombre) }
 }
 
 /** Qué bien tiene abierta la hoja: uno que existe, o uno nuevo con el nombre ya escrito. */

@@ -84,6 +84,39 @@ class ContraElPeriodoPasadoEnPantallaTest {
         composeRule.onNodeWithText("Comida", useUnmergedTree = true).assertIsDisplayed()
     }
 
+    /**
+     * Vuelta de diseño 16: en Hoy, el monto de Mercado salía en rojo porque se había pasado de su
+     * presupuesto, y además la diferencia («$400.000 más») también iba en rojo: la señal dos veces.
+     * Un gasto no es una alarma: **el monto va neutro siempre** y el tono va solo en la diferencia.
+     */
+    @Test
+    fun `el monto va neutro aunque la diferencia sea de alerta`() {
+        val data = DashboardData(
+            spentByCategory = mapOf("Mercado" to 800_000L, "Comida" to 90_000L),
+            gastoDelAnterior = mapOf("Mercado" to 400_000L, "Comida" to 100_000L),
+            budgets = listOf(com.jvillada.movi.shared.model.Budget("Mercado", 500_000L)),
+            diasComparados = 12,
+        )
+        // La diferencia de Mercado sí es de alerta (2× y $400.000 más) y Mercado se pasó del tope.
+        val mercado = categoriasDelPeriodo(data.spentByCategory!!, data.budgets!!, 3, data.gastoDelAnterior)
+            .single { it.nombre == "Mercado" }
+        assertEquals(true, mercado.superada)
+        assertEquals(com.jvillada.movi.ui.components.ds.TonoDeCifra.Alerta, diferenciaDeLaCategoria(mercado)!!.tono)
+
+        montar(data)
+        val cifras = composeRule.onAllNodesWithTag(com.jvillada.movi.ui.components.ds.TAG_CIFRA, useUnmergedTree = true)
+            .fetchSemanticsNodes()
+        assertEquals(2, cifras.size, "un monto por categoría")
+        cifras.forEach { cifra ->
+            assertEquals(
+                com.jvillada.movi.ui.components.ds.TonoDeCifra.Neutro,
+                cifra.config[com.jvillada.movi.ui.components.ds.TonoDeCifraKey],
+                "el monto de una categoría va en el color del texto",
+            )
+        }
+        assertEquals("\$400.000 más", diferencias().first(), "el tono va en la diferencia")
+    }
+
     /** Ola 4 · Ver la plata: el widget entero abre «En qué se va». */
     @Test
     fun `el widget abre el analisis del periodo`() {
