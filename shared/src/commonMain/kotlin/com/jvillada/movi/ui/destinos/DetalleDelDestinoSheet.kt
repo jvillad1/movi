@@ -37,7 +37,7 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.comoSeDice
-import com.jvillada.movi.shared.model.identificadoresDelDestino
+import com.jvillada.movi.shared.model.todosLosIdentificadores
 import com.jvillada.movi.shared.model.loDeCadaPeriodo
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoActual
@@ -302,13 +302,16 @@ const val TAG_POR_PERIODO_DEL_TERCERO: String = "por-periodo-del-tercero"
 const val TAG_MOVIMIENTO_DEL_TERCERO: String = "movimiento-del-tercero"
 
 /**
- * **Qué es y cómo lo reconoce Movi**, en una línea: «Persona · ·0756 · llave @caro · Esposa». El
- * tipo primero (así se sabe en qué sección está), los identificadores como los escribe el banco y la
- * nota al final.
+ * **Qué es y cómo lo reconoce Movi**, en una línea: «Persona · cuenta ·0756 · llave @caro · Esposa».
+ * El tipo primero (así se sabe en qué sección está), los identificadores como los escribe el banco
+ * ([identificadorEnUnaLinea]: era «Persona · ·0756», con dos puntos seguidos) y la nota al final.
  */
 internal fun queEsYComoLoReconoce(destino: DestinoConocido): String =
-    (listOf(destino.tipoOPersona().comoSeDice()) + identificadoresDelDestino(destino) + listOfNotNull(destino.deQuien))
-        .joinToString(" · ")
+    enUnaLinea(
+        listOf(destino.tipoOPersona().comoSeDice()) +
+            destino.todosLosIdentificadores().map(::identificadorEnUnaLinea) +
+            destino.deQuien,
+    )
 
 /** «En total: le enviaste $3.500.000 · te envió $900.000», o `null` sin nada. */
 internal fun totalesEnUnaLinea(destino: DestinoConocido): String? {

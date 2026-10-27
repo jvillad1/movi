@@ -251,7 +251,7 @@ class TercerosALaManoEnPantallaTest {
         composeRule.onAllNodesWithText("Caro", useUnmergedTree = true).onFirst().performClick()
         esperar("Este período")
         // En una línea, debajo del nombre: qué es y cómo lo reconoce Movi.
-        assertTrue(hay("Persona · ·1111 · llave @caro.prueba · Carolina Prueba Salazar · esposa"))
+        assertTrue(hay("Persona · cuenta ·1111 · llave @caro.prueba · Carolina Prueba Salazar · esposa"))
 
         esperar(textoDePonerleElNombre(1))
         tocar("Ponerle el nombre")

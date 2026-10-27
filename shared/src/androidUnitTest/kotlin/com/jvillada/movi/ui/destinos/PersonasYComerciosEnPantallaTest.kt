@@ -159,7 +159,7 @@ class PersonasYComerciosEnPantallaTest {
     fun `llegar con una ficha pedida la abre sola`() {
         montar(abrir = ana.id)
         esperar("Este período")
-        assertTrue(hay("Persona · ·0756 · esposa"))
+        assertTrue(hay("Persona · cuenta ·0756 · esposa"))
     }
 
     @Test
