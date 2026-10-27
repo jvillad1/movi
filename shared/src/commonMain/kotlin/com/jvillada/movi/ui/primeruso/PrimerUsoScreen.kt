@@ -92,7 +92,7 @@ import com.jvillada.movi.ui.accounts.crearCuentaConSaldo
 import com.jvillada.movi.ui.components.AvatarDeLaCuenta
 import com.jvillada.movi.ui.components.CirculoDeMarca
 import com.jvillada.movi.ui.components.TamanoDeAvatar
-import com.jvillada.movi.ui.components.CasillaDeSeleccion
+import com.jvillada.movi.ui.components.ds.Casilla
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.ds.BarraDeProgreso
 import com.jvillada.movi.ui.components.ds.Boton
@@ -533,7 +533,7 @@ private fun PasoPeriodo(
     Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
         Fila(
             titulo = "Es el día que me pagan",
-            final = { CasillaDeSeleccion(marcada = esElDiaDePago) },
+            final = { Casilla(marcada = esElDiaDePago) },
             onClick = if (habilitado) ({
                 onRegla(if (esElDiaDePago) SiElCorteCaeEnFinDeSemana.ESE_DIA else SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR)
             }) else null,

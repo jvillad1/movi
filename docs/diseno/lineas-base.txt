@@ -2,7 +2,7 @@
 # Solo pueden bajar: cuando migres una pantalla, baja el número acá en el mismo cambio.
 # Para recontar: python3 scripts/auditoria-de-diseno.py --resumen
 
-dp_sueltos = 267
-radios_con_numero = 24
+dp_sueltos = 262
+radios_con_numero = 22
 colores_literales = 0
 # fontSize sueltos (LosTamanosSueltosSoloBajanTest): 2
