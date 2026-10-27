@@ -257,10 +257,12 @@ data class FraseDelDisponible(val texto: String, val nivel: NivelDelGasto)
  * **Nunca dice «vas bien».** Una frase de ánimo es la que se contradice con cualquier otra cosa roja
  * de la pantalla; «te quedan $X para N días» dice lo mismo sin opinar.
  *
- * **La cifra diaria es la meta diaria, la de la columna «Hoy»** ([DisponibleDelPeriodo.metaPorDia]).
- * Antes decía «unos $Y por día» repartiendo lo que queda entre los días que faltan: a dos días del
- * cierre eso daba «$5,7M por día» al lado de una columna «Hoy $410.433» en la misma tarjeta
- * (revisión del 29-sep). Dos cifras diarias distintas para la misma pregunta no se pueden leer.
+ * **La cifra diaria al lado de «para N días» es lo que queda entre esos días**
+ * ([DisponibleDelPeriodo.porDiaParaLoQueQueda], hoy incluido, igual que «para N días»). Del 29-sep a
+ * la vuelta de diseño 1 iba la meta diaria ([DisponibleDelPeriodo.metaPorDia], el disponible entre
+ * los días del período ENTERO), y junto a «para 6 días» se leía «puedes gastar $404.412 por día en los
+ * 6 días que faltan» cuando en realidad eran $1,8M. Pegada a «para N días», la única cifra que se lee
+ * bien es la división de esos dos números. La meta diaria sigue en la columna «Hoy», rotulada.
  */
 fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
     if (!d.hayMargen) {
@@ -294,10 +296,10 @@ fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
     if (periodo.teQuedan == 0L) {
         return FraseDelDisponible("Ya usaste todo el disponible del período", NivelDelGasto.CERCA)
     }
-    // El último día lo previsto a hoy ES la meta, y «por día» sería lo mismo que «para cerrar».
+    // El último día «por día» sería lo mismo que lo que queda: «para hoy» lo dice solo.
     if (d.diasQueQuedan <= 1) {
         return FraseDelDisponible(
-            "Te quedan ${formatMoneyCompact(periodo.teQuedan)} para cerrar el período",
+            "Te quedan ${formatMoneyCompact(periodo.teQuedan)} para hoy",
             periodo.nivel,
         )
     }
@@ -310,11 +312,19 @@ fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
         )
     } else {
         FraseDelDisponible(
-            "${queda.replaceFirstChar { it.uppercase() }} · meta diaria ${formatMoneyCompact(d.metaPorDia)}",
+            "${queda.replaceFirstChar { it.uppercase() }} · ${porDiaQueQueda(d)}",
             periodo.nivel,
         )
     }
 }
+
+/**
+ * «$1,8M por día»: lo que queda del período entre los días que faltan, hoy incluido
+ * ([DisponibleDelPeriodo.porDiaParaLoQueQueda]). Va pegado a «para N días» en el héroe y en la frase
+ * de Plan; solo se llama con margen y algo por gastar (si no, `null` → $0).
+ */
+internal fun porDiaQueQueda(d: DisponibleDelPeriodo): String =
+    "${formatMoneyCompact(d.porDiaParaLoQueQueda ?: 0L)} por día"
 
 // ── «Te quedan»: la cifra principal de Hoy ───────────────────────────────────
 
@@ -335,7 +345,8 @@ fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
  *   lado está («Te pasaste por $629.882» y no «Te quedan −$629.882»). Hoy lo escribe entero
  *   (`formatCOP`, «$4.963.400»); la columna de Plan, compacto («$5M»): mismo valor, otro ancho.
  * @property enRojo el mismo criterio que pinta de rojo la columna «Período» en Plan.
- * @property detalle la línea chica de abajo: para cuántos días, la meta diaria, o qué ventana se pasó.
+ * @property detalle la línea chica de abajo: para cuántos días y cuánto da por día, o qué ventana se
+ *   pasó.
  */
 data class TeQuedanDeHoy(
     val rotulo: String,
@@ -356,20 +367,19 @@ const val ROTULO_TE_PASASTE: String = "Te pasaste por"
 /**
  * [TeQuedanDeHoy] desde la tarjeta del disponible. Puro: lo prueban las pruebas sin pantalla.
  *
- * El detalle no repite la cifra grande —ya está arriba— y **la cifra diaria es la meta diaria**, la
- * misma de la columna «Hoy» (ver [fraseDelDisponible] y la revisión del 29-sep: dos cifras diarias
- * distintas para la misma pregunta no se pueden leer). Lo que manda, en orden:
+ * El detalle no repite la cifra grande —ya está arriba— y **la cifra diaria es lo que queda entre los
+ * días que faltan** (ver [fraseDelDisponible]): «para 6 días · $1,8M por día». Lo que manda, en orden:
  *
  * 1. sin margen: la frase de la tarjeta ([sinMargen]), porque es la explicación de por qué no queda;
  * 2. el período pasado: cuántos días faltan todavía para el corte;
  * 3. la semana o el día pasados, o el ritmo por encima de lo previsto: lo dice después de los días;
- * 4. lo demás: para cuántos días y la meta diaria.
+ * 4. lo demás: para cuántos días y cuánto da por día; el último día, «para hoy».
  */
 fun teQuedanDeHoy(d: DisponibleDelPeriodo): TeQuedanDeHoy {
     val periodo = d.periodo
     val enRojo = periodo.nivel == NivelDelGasto.PASADO
     val rotulo = if (periodo.teQuedan < 0L) ROTULO_TE_PASASTE else ROTULO_TE_QUEDAN
-    val dias = if (d.diasQueQuedan <= 1) "para cerrar el período" else "para ${d.diasQueQuedan} días"
+    val dias = if (d.diasQueQuedan <= 1) "para hoy" else "para ${d.diasQueQuedan} días"
     val (detalle, nivel) = when {
         !d.hayMargen -> sinMargen(d) to
             (if (avisoDelDisponible(d) != null) NivelDelGasto.PASADO else NivelDelGasto.CERCA)
@@ -387,7 +397,7 @@ fun teQuedanDeHoy(d: DisponibleDelPeriodo): TeQuedanDeHoy {
             "$dias · vas ${formatMoneyCompact(periodo.contraElRitmo)} por encima de lo previsto a hoy" to
                 NivelDelGasto.CERCA
         d.diasQueQuedan <= 1 -> dias to periodo.nivel
-        else -> "$dias · meta diaria ${formatMoneyCompact(d.metaPorDia)}" to periodo.nivel
+        else -> "$dias · ${porDiaQueQueda(d)}" to periodo.nivel
     }
     return TeQuedanDeHoy(
         rotulo = rotulo,

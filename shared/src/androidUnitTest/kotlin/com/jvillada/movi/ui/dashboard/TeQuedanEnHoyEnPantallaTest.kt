@@ -145,7 +145,7 @@ class TeQuedanEnHoyEnPantallaTest {
         )
         assertEquals("\$6,8M", formatMoneyCompact(esperado))
         composeRule.onNodeWithText(ROTULO_TE_QUEDAN, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("para 4 días · meta diaria \$222.580", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("para 4 días · \$1,7M por día", useUnmergedTree = true).assertIsDisplayed()
         assertEquals(normal, color(cifraDeHoy()))
     }
 
@@ -182,6 +182,6 @@ class TeQuedanEnHoyEnPantallaTest {
         assertEquals(Screen.Periodos, navegoA)
         // Sin «Tu plata» ni barra: el héroe es el rótulo, la cifra y para cuántos días.
         assertTrue(composeRule.onAllNodesWithText("para", substring = true, useUnmergedTree = true)
-            .fetchSemanticsNodes().isNotEmpty(), "la línea de los días y la meta diaria")
+            .fetchSemanticsNodes().isNotEmpty(), "la línea de los días y lo que da por día")
     }
 }

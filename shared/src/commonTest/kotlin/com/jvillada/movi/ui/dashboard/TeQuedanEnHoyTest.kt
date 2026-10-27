@@ -69,16 +69,19 @@ class TeQuedanEnHoyTest {
     }
 
     @Test
-    fun `vas bien - te quedan, para cuantos dias y la meta diaria de la columna Hoy`() {
+    fun `vas bien - te quedan, para cuantos dias y lo que queda por dia`() {
         val (cifra, plan) = lasDos(datos(gasto = mapOf("2026-08-26" to 100_000L)))
 
         assertEquals(6_800_000, cifra.teQuedan)
         assertEquals(6_800_000, cifra.monto)
         assertEquals(ROTULO_TE_QUEDAN, cifra.rotulo)
         assertFalse(cifra.enRojo)
-        // La meta diaria es la de la columna «Hoy», no lo que queda dividido entre los días.
+        // Vuelta de diseño 1: junto a «para 4 días» va lo que queda entre esos 4 días ($6,8M ÷ 4),
+        // no la meta diaria del período entero ($222.580), que se leía como «$222.580 por día».
         assertEquals(222_580, plan.metaPorDia)
-        assertEquals("para 4 días · meta diaria \$222.580", cifra.detalle)
+        assertEquals(1_700_000, plan.porDiaParaLoQueQueda)
+        assertEquals("para 4 días · \$1,7M por día", cifra.detalle)
+        assertFalse("meta diaria" in cifra.detalle)
         assertEquals(NivelDelGasto.BIEN, cifra.nivelDelDetalle)
     }
 
@@ -130,10 +133,10 @@ class TeQuedanEnHoyTest {
     }
 
     @Test
-    fun `el ultimo dia dice para cerrar el periodo`() {
+    fun `el ultimo dia dice para hoy`() {
         val (cifra, _) = lasDos(datos(gasto = emptyMap()), dia = LocalDate(2026, 9, 24))
         assertEquals(6_900_000, cifra.teQuedan)
-        assertEquals("para cerrar el período", cifra.detalle)
+        assertEquals("para hoy", cifra.detalle)
     }
 
     @Test

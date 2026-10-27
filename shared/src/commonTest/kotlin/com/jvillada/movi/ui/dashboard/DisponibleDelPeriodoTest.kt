@@ -164,13 +164,14 @@ class DisponibleDelPeriodoTest {
         assertEquals(7_951_612, d.periodo.esperadoAHoy)
         assertEquals(NivelDelGasto.BIEN, d.periodo.nivel)
         // Quedan $3,5M para 3 días (hoy incluido). Una sola frase para la tarjeta, y sin «vas
-        // bien»: dice lo que queda, no opina. La cifra diaria es la meta de la columna «Hoy»
-        // (8.500.000 ÷ 31 = 274.193), no lo que queda repartido entre los días que faltan.
+        // bien»: dice lo que queda, no opina. Junto a «para 3 días» va lo que queda entre esos 3
+        // días (3.500.000 ÷ 3 = 1.166.666); la meta diaria (8.500.000 ÷ 31) sigue en la columna «Hoy».
         assertEquals(
-            FraseDelDisponible("Te quedan \$3,5M para 3 días · meta diaria \$274.193", NivelDelGasto.BIEN),
+            FraseDelDisponible("Te quedan \$3,5M para 3 días · \$1,2M por día", NivelDelGasto.BIEN),
             fraseDelDisponible(d),
         )
-        assertEquals(d.hoy.meta, d.metaPorDia, "la misma cifra que la columna Hoy")
+        assertEquals(1_166_666, d.porDiaParaLoQueQueda)
+        assertEquals(274_193, d.hoy.meta, "la columna Hoy sigue con la meta diaria")
     }
 
     @Test
@@ -244,18 +245,19 @@ class DisponibleDelPeriodoTest {
         assertEquals(NivelDelGasto.CERCA, cerca.hoy.nivel)
         // Hoy va cerca de su tope sin pasarlo: la frase sigue hablando del período.
         assertEquals(
-            FraseDelDisponible("Te quedan \$3M para 4 días · meta diaria \$100.000", NivelDelGasto.BIEN),
+            FraseDelDisponible("Te quedan \$3M para 4 días · \$752.500 por día", NivelDelGasto.BIEN),
             fraseDelDisponible(cerca),
         )
     }
 
     /**
-     * **La escena de la revisión del 29-sep**: a dos días del cierre, casi sin gastar. La frase decía
-     * «unos $5,7M por día» al lado de una columna «Hoy» con la meta diaria. Ahora la única cifra
-     * diaria de la tarjeta es esa meta.
+     * **La escena de la revisión del 29-sep, otra vez**: a dos días del cierre, casi sin gastar. Del
+     * 29-sep a la vuelta de diseño 1 la frase decía «para 2 días · meta diaria $410.433», que se leía
+     * como «puedes gastar $410.433 por día en los 2 días que faltan». Pegada a «para 2 días» la cifra
+     * honesta es lo que queda entre esos dos días; la meta diaria queda en la columna «Hoy», rotulada.
      */
     @Test
-    fun `a dos dias del cierre la cifra diaria es la de la columna Hoy`() {
+    fun `a dos dias del cierre la cifra diaria es lo que queda entre los dias que faltan`() {
         val d = assertNotNull(
             calcular(
                 recibidos = 12_723_423, checklist = emptyList(),
@@ -265,8 +267,10 @@ class DisponibleDelPeriodoTest {
         assertEquals(2, d.diasQueQuedan)
         assertEquals(410_433, d.metaPorDia)
         val frase = fraseDelDisponible(d).texto
-        assertEquals("Te quedan \$11,4M para 2 días · meta diaria \$410.433", frase)
-        assertFalse("por día" in frase, "ninguna otra cifra diaria que compita con la columna Hoy")
+        assertEquals(5_711_711, d.porDiaParaLoQueQueda)
+        assertEquals("Te quedan \$11,4M para 2 días · \$5,7M por día", frase)
+        assertFalse("meta diaria" in frase, "la meta diaria es de la columna Hoy, no de la frase")
+        assertEquals(410_433, d.hoy.meta)
     }
 
     /** Lo que el dueño pidió explícito: con el período pasado, la semana y hoy siguen con su meta. */
@@ -341,7 +345,7 @@ class DisponibleDelPeriodoTest {
         // Lo previsto a hoy es la meta entera.
         assertEquals(3_100_000, d.periodo.esperadoAHoy)
         assertEquals(
-            FraseDelDisponible("Te quedan \$2,1M para cerrar el período", NivelDelGasto.BIEN),
+            FraseDelDisponible("Te quedan \$2,1M para hoy", NivelDelGasto.BIEN),
             fraseDelDisponible(d),
         )
         // Lunes 21 al jueves 24, los cuatro corridos.

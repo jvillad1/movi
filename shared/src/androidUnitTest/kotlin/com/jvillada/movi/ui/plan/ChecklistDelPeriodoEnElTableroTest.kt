@@ -230,10 +230,10 @@ class ChecklistDelPeriodoEnElTableroTest {
         montar()
 
         esperarTexto("Pagos del período")
-        composeRule.onNodeWithText("Falta por pagar · 1", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Por pagar · 1", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText(subtitulo, useUnmergedTree = true).assertIsDisplayed()
         // El monto va entero, no abreviado: es la lista donde se compara lo que se debe. Hay más de
-        // un «$1.800.000» en pantalla (el resumen de arriba, el total del grupo y el flujo libre),
+        // un «$1.800.000» en pantalla (el resumen de arriba y la fila; el grupo ya no lo repite),
         // así que se pide que exista, no que sea el único.
         assertEquals(
             true,
