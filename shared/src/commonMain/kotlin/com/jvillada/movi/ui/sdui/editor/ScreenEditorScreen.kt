@@ -36,9 +36,7 @@ import com.jvillada.movi.shared.model.ScreenTaxonomy
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.HeaderLeading
-import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinScreenHeader
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.dashboard.HERO_BALANCE_TITLE
@@ -51,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.jvillada.movi.ui.components.ds.Superficie
 
 private const val SLUG = "dashboard"
 
@@ -268,7 +267,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             itemsIndexed(sections) { index, section ->
-                MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated) {
+                Superficie(modifier = Modifier.fillMaxWidth()) {
                     SectionHeader(
                         label = SECTION_TYPE_LABELS[section.type] ?: section.type,
                         canMoveUp = index > 0,
@@ -284,7 +283,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
 
             item {
                 if (showAddTypePicker) {
-                    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Default) {
+                    Superficie(modifier = Modifier.fillMaxWidth()) {
                         Text("Tipo de sección", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
                         Spacer(Modifier.height(10.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

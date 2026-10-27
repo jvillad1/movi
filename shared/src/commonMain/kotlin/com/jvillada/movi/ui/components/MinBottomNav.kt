@@ -29,6 +29,8 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
 /**
  * Los destinos de la navegación principal.
@@ -127,7 +129,7 @@ fun MinBottomNav(
         ) {
             // La barra se despega del contenido con un BORDE, no con otro gris. Es la misma decisión
             // que la de las tarjetas: con planos tan cercanos, el borde es el que hace el trabajo.
-            Hairline()
+            Separador(SangriaDeSeparador.Ninguna)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

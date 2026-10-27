@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.ui.components.ds.Cifra
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,9 +57,6 @@ import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.repartoAMano
 import com.jvillada.movi.theme.Movi
-import com.jvillada.movi.ui.components.Hairline
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.formatMoney
 
@@ -225,7 +223,7 @@ internal fun TarjetaDelReparto(
                                     if (orden >= 0) Text("${orden + 1}", style = Movi.textos.apoyoMedio, color = Movi.colores.sobreMarca)
                                 }
                             },
-                            final = toma?.let { t -> { Text(formatMoney(t, propuesta.moneda), style = Movi.textos.cuerpo, color = Movi.colores.texto) } },
+                            final = toma?.let { t -> { Cifra(t, moneda = propuesta.moneda) } },
                             onClick = if (habilitado) {
                                 { elegidos = if (orden >= 0) elegidos.filter { it.ruleId != pago.ruleId } else elegidos + pago }
                             } else null,

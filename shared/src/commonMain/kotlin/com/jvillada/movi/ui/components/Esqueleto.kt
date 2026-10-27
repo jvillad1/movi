@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
 /**
  * # Esqueletos: la forma de lo que viene, no una rueda que gira
@@ -311,6 +313,6 @@ fun FilaDeListaEsqueleto(isLast: Boolean = false, conIcono: Boolean = false, dia
             }
             BloqueEsqueleto(alto = with(LocalDensity.current) { Movi.textos.monto.lineHeight.toDp() }, ancho = 64.dp)
         }
-        if (!isLast) Hairline()
+        if (!isLast) Separador(SangriaDeSeparador.Ninguna)
     }
 }

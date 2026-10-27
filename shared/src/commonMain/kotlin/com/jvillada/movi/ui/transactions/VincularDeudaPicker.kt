@@ -34,8 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.saldoDeDeuda
 import com.jvillada.movi.ui.components.saldoEnSuMoneda

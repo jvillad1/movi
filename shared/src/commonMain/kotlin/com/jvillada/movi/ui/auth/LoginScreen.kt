@@ -50,8 +50,6 @@ import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo

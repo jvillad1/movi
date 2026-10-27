@@ -36,8 +36,6 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.AtrasCierraEstaHoja
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.MarcoDeHoja
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
@@ -49,6 +47,7 @@ import kotlin.math.roundToLong
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.Superficie
 
 /** El tag de la hoja, para las pruebas y las capturas. */
 const val TAG_HOJA_LEYENDO_EL_PAPEL: String = "hoja-leyendo-el-papel"
@@ -138,11 +137,7 @@ private fun TarjetaDelResultado(
     onAnotarIgual: () -> Unit,
     onDocumentos: () -> Unit,
 ) {
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(16.dp),
-    ) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(
             resultado.nombre,
             style = Movi.textos.apoyo,

@@ -18,8 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
+import com.jvillada.movi.ui.components.ds.Superficie
 
 /**
  * **Lo que Hoy ofrece una sola vez: que Movi avise en este teléfono.**
@@ -75,11 +74,7 @@ fun TarjetaDeAvisos(oferta: OfertaDeAvisos) {
     var visible by androidx.compose.runtime.remember(oferta) { mutableStateOf(true) }
     if (!visible) return
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
-        MinCard(
-            modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_AVISOS),
-            variant = MinCardVariant.Elevated,
-            padding = PaddingValues(Movi.espacios.amplio),
-        ) {
+        Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_AVISOS)) {
             Text("¿Te aviso en este teléfono?", style = Movi.textos.cuerpo, color = Movi.colores.texto)
             Spacer(Modifier.height(Movi.espacios.minimo))
             Text(PARA_QUE_SON_LOS_AVISOS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)

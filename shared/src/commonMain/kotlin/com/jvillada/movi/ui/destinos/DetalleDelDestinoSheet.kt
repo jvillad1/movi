@@ -43,8 +43,6 @@ import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.tipoOPersona
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.MarcoDeHoja
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha

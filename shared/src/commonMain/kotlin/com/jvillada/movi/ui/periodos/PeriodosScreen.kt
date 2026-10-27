@@ -63,8 +63,6 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.VacioQueEnsena

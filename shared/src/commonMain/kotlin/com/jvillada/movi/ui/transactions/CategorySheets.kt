@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
+import kotlin.math.abs
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.Cifra
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -688,11 +690,7 @@ internal fun ContenidoDelMovimiento(
                                 color = Movi.colores.textoMedio,
                             )
                         }
-                        Text(
-                            formatMoney(otro.amount, otro.currency),
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.textoMedio,
-                        )
+                        Cifra(abs(otro.amount), moneda = otro.currency, tono = TonoDeCifra.Apagado)
                     }
                 }
                 Spacer(Modifier.height(Espacio.m))
@@ -1314,13 +1312,9 @@ private fun SeccionDelMovimiento(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = formatMoney(event.amount, event.currency),
-                // El monto que encabeza la hoja: tamaño de título, con las cifras tabulares de un
-                // monto. La escala todavía no tiene un estilo para esto.
-                style = Movi.textos.titulo.copy(fontFeatureSettings = "tnum"),
-                color = Movi.colores.texto,
-            )
+            // El monto que encabeza la hoja, en la `Cifra` de una fila (vuelta de diseño 21: era un
+            // `Text` en `titulo` con `tnum`, sin «Ocultar los saldos» y en la letra de la interfaz).
+            Cifra(abs(event.amount), moneda = event.currency)
             // El nombre de la cuenta y no su id: si la lista todavía no llegó no se inventa nada.
             cuentaActual?.let {
                 Text(it.name, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)

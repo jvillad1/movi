@@ -1074,11 +1074,11 @@ private fun BudgetSheet(
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.weight(1f),
                     )
-                    Text(
-                        text = formatCOP(movimientos.sumOf { com.jvillada.movi.shared.model.montoContado(it) }),
-                        // Plata en la línea del rótulo: la talla del apoyo, tabular como un monto.
-                        style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
-                        color = Movi.colores.textoMedio,
+                    // Plata en la línea del rótulo: la talla del apoyo, tabular como un monto.
+                    Cifra(
+                        movimientos.sumOf { com.jvillada.movi.shared.model.montoContado(it) },
+                        VarianteDeCifra.Chica,
+                        tono = TonoDeCifra.Apagado,
                     )
                 }
                 // Si los dos totales no coinciden se dice — no se deja que el dueño reste dos

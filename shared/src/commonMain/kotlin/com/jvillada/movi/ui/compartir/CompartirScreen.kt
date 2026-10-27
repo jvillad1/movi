@@ -67,8 +67,6 @@ import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ConfirmarEnHoja
 import com.jvillada.movi.ui.components.HeaderLeading
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer

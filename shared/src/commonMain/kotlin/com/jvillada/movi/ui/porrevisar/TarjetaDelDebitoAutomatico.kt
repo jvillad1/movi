@@ -42,8 +42,6 @@ import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.NOTA_DEL_DEBITO_AUTOMATICO
 import com.jvillada.movi.shared.model.confirmacionDelDebito
 import com.jvillada.movi.theme.Movi
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.recurrentes.fechaLegibleDelChecklist

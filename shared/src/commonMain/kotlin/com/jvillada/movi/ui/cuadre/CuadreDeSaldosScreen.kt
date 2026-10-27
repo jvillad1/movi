@@ -51,8 +51,6 @@ import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.VacioQueEnsena

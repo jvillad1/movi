@@ -35,7 +35,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.CuentaDelBanco
-import com.jvillada.movi.ui.components.Hairline
 import kotlin.math.roundToLong
 
 /*

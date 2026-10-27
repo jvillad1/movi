@@ -79,8 +79,6 @@ import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.MinCard
-import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
