@@ -1,0 +1,140 @@
+package com.jvillada.movi.ui.transactions
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.ds.TAG_CIFRA
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/**
+ * # El día plegado no corta la fecha (vuelta de diseño 2)
+ *
+ * En producción, plegado, el encabezado decía «20 d… · 2 movimientos   Flujo del día −$57.400»: la
+ * fecha —lo único que nombra el día— se recortaba para hacerle lugar al conteo y al rótulo. Ahora la
+ * fecha, la cifra y el chevron se miden primero; si no cabe todo, se cae primero «Flujo del día».
+ *
+ * A 360 dp (el teléfono más angosto) con la letra del sistema a ×1,3, con el margen de la pantalla
+ * como en Movimientos. Mismo método que `NadaSeRecortaEnElInicioTest` (`sdk = [34]`, `NATIVE`).
+ */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w360dp-h800dp-xhdpi")
+class ElDiaPlegadoNoCortaLaFechaTest {
+
+    @get:Rule val composeRule = createComposeRule()
+
+    private var plegado by mutableStateOf(true)
+
+    private fun montar(fecha: String, escala: Float = 1.3f, cuantos: Int = 12, total: Long = -1_257_400L) {
+        composeRule.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * escala)) {
+                MoviTheme {
+                    Box(Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla)) {
+                        EncabezadoDelDia(fecha = fecha, total = total, plegado = plegado, cuantos = cuantos, onAlternar = { plegado = !plegado })
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun unico(tag: String): SemanticsNode =
+        composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().single()
+
+    private fun conTexto(texto: String, substring: Boolean = false): List<SemanticsNode> =
+        composeRule.onAllNodesWithText(texto, substring = substring, useUnmergedTree = true).fetchSemanticsNodes()
+
+    private fun disposicion(nodo: SemanticsNode): TextLayoutResult {
+        val r = mutableListOf<TextLayoutResult>()
+        nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(r)
+        return r.single()
+    }
+
+    /**
+     * Entero: un renglón, sin «…», sin pasarse de su nodo. (No se mira `hasVisualOverflow`: con
+     * `softWrap = false` el párrafo se arma sin tope de ancho y lo marca aunque el renglón quepa.)
+     */
+    private fun entero(nodo: SemanticsNode): Boolean {
+        val d = disposicion(nodo)
+        return d.lineCount == 1 && !d.isLineEllipsized(0) &&
+            d.getLineRight(0) - d.getLineLeft(0) <= nodo.size.width + 0.5f
+    }
+
+    private fun seTocan(a: Rect, b: Rect) = a.right > b.left + 0.5f && b.right > a.left + 0.5f
+
+    private fun laFechaEntera(fecha: String) {
+        val nodoFecha = unico(TAG_FECHA_DEL_DIA)
+        val d = disposicion(nodoFecha)
+        assertTrue(
+            entero(nodoFecha),
+            "«$fecha» se recorta: mide ${nodoFecha.size.width}px, renglones ${d.lineCount}, «…» ${d.isLineEllipsized(0)}, " +
+                "ancho del renglón ${d.getLineRight(0) - d.getLineLeft(0)}",
+        )
+        val cifra = unico(TAG_CIFRA)
+        assertTrue(entero(cifra), "la cifra del día se recorta")
+        assertTrue(nodoFecha.boundsInRoot.right <= cifra.boundsInRoot.left, "la fecha se mete debajo de la cifra")
+        // Si el rótulo quedó, no pisa nada.
+        conTexto(ROTULO_DEL_FLUJO_DEL_DIA).forEach { rotulo ->
+            assertTrue(!seTocan(rotulo.boundsInRoot, nodoFecha.boundsInRoot) && !seTocan(rotulo.boundsInRoot, cifra.boundsInRoot))
+        }
+    }
+
+    @Test
+    fun `a 360 dp con la letra agrandada la fecha del dia plegado se lee entera`() {
+        montar("30 de septiembre")
+        laFechaEntera("30 de septiembre")
+    }
+
+    @Test
+    fun `si no cabe todo se cae primero el rotulo, despues se corta el conteo`() {
+        montar("30 de septiembre", cuantos = 128, total = -12_257_400L)
+        laFechaEntera("30 de septiembre")
+        assertTrue(conTexto(ROTULO_DEL_FLUJO_DEL_DIA).isEmpty(), "con la fecha, el conteo y la cifra no cabe también el rótulo")
+        assertTrue(conTexto("· 128 movimientos").isNotEmpty(), "el conteo sigue, aunque sea cortado")
+    }
+
+    @Test
+    fun `desplegado es el mismo renglon, sin el conteo`() {
+        montar("30 de septiembre")
+        val plegadoArriba = unico(TAG_FECHA_DEL_DIA).boundsInRoot
+        val altoPlegado = unico(TAG_ENCABEZADO_DE_DIA).size.height
+        plegado = false
+        composeRule.waitForIdle()
+        laFechaEntera("30 de septiembre")
+        assertTrue(conTexto("movimientos", substring = true).isEmpty())
+        assertEquals(plegadoArriba, unico(TAG_FECHA_DEL_DIA).boundsInRoot, "la fecha no se mueve al desplegar")
+        assertEquals(altoPlegado, unico(TAG_ENCABEZADO_DE_DIA).size.height, "el renglón mide lo mismo")
+    }
+
+    @Test
+    fun `con espacio de sobra el rotulo sigue`() {
+        montar("Hoy", escala = 1f, cuantos = 2, total = -57_400L)
+        laFechaEntera("Hoy")
+        assertEquals(1, conTexto(ROTULO_DEL_FLUJO_DEL_DIA).size)
+        assertTrue(entero(conTexto("· 2 movimientos").single()))
+    }
+}
