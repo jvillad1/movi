@@ -74,6 +74,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FiltroDeMovimientos
+import com.jvillada.movi.shared.model.VistaDelAnalisis
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
@@ -1570,7 +1571,25 @@ fun TransactionsScreen(
         },
         panel = {
             val enElPanel = movimientoDelPanel(selectedEvent, eventos.valor)
-            if (enElPanel == null) {
+            // Vuelta de diseño 9: sin nada elegido, el resumen del período que la lista tiene a la
+            // vista (ver `ResumenEnElPanel.kt`), sobre la misma historia. Sin historia leída todavía,
+            // la invitación de siempre.
+            val historia = eventos.valor
+            val resumen = remember(historia, periodoVisible, ajustesDelPeriodo, hoyIso, accountTypes, perfilLeido) {
+                if (historia == null || !perfilLeido) null
+                else resumenDelPanel(historia, periodoVisible, ajustesDelPeriodo, LocalDate.parse(hoyIso), accountTypes)
+            }
+            if (enElPanel == null && resumen != null) {
+                ResumenDelPeriodoEnElPanel(
+                    resumen = resumen,
+                    // Como desde «En qué se va»: los gastos de esa categoría, con su chip y su ×.
+                    onCategoria = { fila ->
+                        filtro = FiltroDeMovimientos.deLaFila(fila, VistaDelAnalisis.CATEGORIA)
+                        activeFilter = CHIP_GASTOS
+                    },
+                    onVerEnQueSeVa = { onNavigate(Screen.EnQueSeVa(periodoVisible.prefijo)) },
+                )
+            } else if (enElPanel == null) {
                 InvitacionAElegirUnMovimiento()
             } else {
                 // `key`: otro movimiento es otro panel, con su estado desde cero (un campo a medio

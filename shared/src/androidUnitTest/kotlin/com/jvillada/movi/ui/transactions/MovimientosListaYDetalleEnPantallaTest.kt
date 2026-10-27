@@ -129,6 +129,9 @@ class MovimientosListaYDetalleEnPantallaTest {
 
     private fun montar(): ConMovimientos = montar2("Señor Gol")
 
+    /** A dónde pidió ir la pantalla. */
+    private val navegaciones = mutableListOf<Screen>()
+
     /** El ancho de la ventana, para poder achicarla en medio de una prueba. `null` = la del qualifier. */
     private val anchoDeLaVentana = mutableStateOf<Int?>(null)
 
@@ -151,7 +154,7 @@ class MovimientosListaYDetalleEnPantallaTest {
                         onTabSelected = {},
                         relevoDeScroll = relevo,
                     ) {
-                        TransactionsScreen(onNavigate = {})
+                        TransactionsScreen(onNavigate = { navegaciones += it })
                     }
                 }
             }
@@ -209,7 +212,7 @@ class MovimientosListaYDetalleEnPantallaTest {
 
     @Test
     @Config(qualifiers = "w1280dp-h900dp-mdpi")
-    fun `a 1280 la lista y el panel se ven a la vez, el panel vacio invita a elegir`() {
+    fun `a 1280 la lista y el panel se ven a la vez, el panel vacio resume el periodo`() {
         montar()
 
         val lista = limites(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO)
@@ -222,9 +225,85 @@ class MovimientosListaYDetalleEnPantallaTest {
         // La lista es la de siempre, con su «Flujo del día».
         assertTrue(hayEnLaLista("Señor Gol"))
         assertTrue(hayEnLaLista("Flujo del día"))
-        // Nada elegido: la invitación, y ninguna hoja abierta.
-        assertTrue(hayEnElPanel(TITULO_DE_LA_INVITACION_A_ELEGIR))
+        // Nada elegido: el resumen del período (vuelta de diseño 9), y ninguna hoja abierta.
+        assertTrue(hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL))
         assertTrue(!hayTag(TAG_PANEL_DE_HOJA), "no se abrió ninguna hoja")
+    }
+
+    // ── Vuelta de diseño 9: el panel sin nada elegido resume el período ────────────
+
+    private val enElResumen = hasAnyAncestor(hasTestTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL))
+
+    private fun hayEnElResumen(texto: String): Boolean =
+        composeRule.onAllNodes(hasText(texto) and enElResumen, useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `sin nada elegido el panel dice lo que entro, lo que salio, el neto y el gasto por categoria`() {
+        montar()
+        esperar { hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL) }
+
+        assertTrue(hayEnElResumen("Entró"))
+        assertTrue(hayEnElResumen("Salió"))
+        assertTrue(hayEnElResumen("Neto"))
+        // 46.489 + 23.000 + 120.000: lo que salió, con la Cifra del sistema; el neto, en negativo.
+        assertTrue(hayEnElResumen("\$189.489"), "lo que salió")
+        assertTrue(hayEnElResumen("−\$189.489"), "el neto")
+        // Una fila por categoría, de mayor a menor, y el enlace a «En qué se va».
+        val categorias = composeRule.onAllNodes(hasTestTag(TAG_CATEGORIA_DEL_RESUMEN), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+        assertEquals(2, categorias.size)
+        assertTrue(categorias[0].boundsInRoot.top < categorias[1].boundsInRoot.top)
+        assertTrue(hayEnElResumen("Mercado"))
+        assertTrue(hayEnElResumen("Comida"))
+        assertTrue(hayEnElResumen(VER_EN_QUE_SE_VA))
+        // Todo dentro del panel: nada se sale a la lista.
+        val panel = limites(TAG_PANEL_DEL_MOVIMIENTO)
+        val resumen = limites(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL)
+        assertTrue(resumen.left >= panel.left - 0.5f && resumen.right <= panel.right + 0.5f, "$panel / $resumen")
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `tocar una categoria del resumen filtra la lista con su chip`() {
+        montar()
+        esperar { hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL) }
+
+        composeRule.onNode(
+            hasTestTag(TAG_CATEGORIA_DEL_RESUMEN) and hasAnyDescendant(hasText("Mercado")),
+            useUnmergedTree = true,
+        ).performClick()
+
+        esperar { filaDe("Señor Gol").fetchSemanticsNodes().isEmpty() }
+        assertTrue(filaDe("Supermercado Central").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(hayTag(TAG_CHIP_DEL_FILTRO), "el filtro se ve como un chip con su ×")
+        // El panel sigue en el resumen: no se eligió ningún movimiento.
+        assertTrue(hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL))
+        assertTrue(!hayTag(TAG_PANEL_DE_HOJA))
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `ver en que se va abre su pantalla en el periodo de la lista`() {
+        montar()
+        esperar { hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL) }
+
+        composeRule.onNode(hasText(VER_EN_QUE_SE_VA) and enElResumen, useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        val pedida = navegaciones.filterIsInstance<Screen.EnQueSeVa>().single()
+        assertEquals(HOY.substring(0, 7), pedida.periodo, "el período de la lista (corte 1: el mes de hoy)")
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `con un movimiento elegido el panel es su detalle y no el resumen`() {
+        montar()
+        elegir("Las Doce")
+
+        assertTrue(!hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL))
+        assertTrue(hayEnElPanel("Las Doce"))
     }
 
     @Test
@@ -235,7 +314,7 @@ class MovimientosListaYDetalleEnPantallaTest {
         elegir("Las Doce")
 
         assertTrue(!hayTag(TAG_PANEL_DE_HOJA), "con panel no se abre la hoja modal")
-        assertTrue(!hayEnElPanel(TITULO_DE_LA_INVITACION_A_ELEGIR))
+        assertTrue(!hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL))
         assertTrue(
             composeRule.onAllNodes(hasTestTag(TAG_MONTO_DEL_MOVIMIENTO) and enElPanel, useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty(),
@@ -277,7 +356,7 @@ class MovimientosListaYDetalleEnPantallaTest {
         esperar { filaConSubtitulo("Señor Gol", "Mercado · Bancolombia") }
         assertEquals(listOf("e1" to "Mercado"), repo.categoriasCambiadas)
         assertTrue(hayEnElPanel("Señor Gol"), "el panel sigue abierto con el mismo movimiento")
-        assertTrue(!hayEnElPanel(TITULO_DE_LA_INVITACION_A_ELEGIR))
+        assertTrue(!hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL))
         assertTrue(!hayTag(TAG_PANEL_DE_HOJA))
     }
 
@@ -290,7 +369,7 @@ class MovimientosListaYDetalleEnPantallaTest {
 
     @Test
     @Config(qualifiers = "w1280dp-h900dp-mdpi")
-    fun `anular desde el panel abre un dialogo encima y al confirmar el panel vuelve a la invitacion`() {
+    fun `anular desde el panel abre un dialogo encima y al confirmar el panel vuelve al resumen`() {
         val repo = montar()
         elegir("Las Doce")
         tocarAccion(AccionDelMovimiento.Mas)
@@ -312,7 +391,7 @@ class MovimientosListaYDetalleEnPantallaTest {
             useUnmergedTree = true,
         ).onLast().performClick()
 
-        esperar { hayEnElPanel(TITULO_DE_LA_INVITACION_A_ELEGIR) }
+        esperar { hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL) }
         assertEquals(listOf("e2"), repo.anulados)
         esperar { filaDe("Las Doce").fetchSemanticsNodes().isEmpty() }
         assertTrue(!hayTag(TAG_PANEL_DE_HOJA), "el diálogo se cerró")
@@ -353,7 +432,7 @@ class MovimientosListaYDetalleEnPantallaTest {
 
         composeRule.onNode(hasContentDescriptionCerrar() and enElPanel, useUnmergedTree = true).performClick()
 
-        esperar { hayEnElPanel(TITULO_DE_LA_INVITACION_A_ELEGIR) }
+        esperar { hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL) }
     }
 
     private fun hasContentDescriptionCerrar() =
