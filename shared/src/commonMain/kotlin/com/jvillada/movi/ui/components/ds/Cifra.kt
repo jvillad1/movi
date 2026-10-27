@@ -72,6 +72,16 @@ val VarianteDeCifraKey: SemanticsPropertyKey<VarianteDeCifra> = SemanticsPropert
 /** Ver [VarianteDeCifraKey]. */
 var SemanticsPropertyReceiver.varianteDeCifra: VarianteDeCifra by VarianteDeCifraKey
 
+/**
+ * **El tono de una [Cifra], en su semántica** (vuelta de diseño 16), como [VarianteDeCifraKey]: deja
+ * vigilar «un gasto no es una alarma» sin leer colores (el widget «En qué se va» pintaba el monto de
+ * Mercado en `sale`). No le cambia nada al lector de pantalla.
+ */
+val TonoDeCifraKey: SemanticsPropertyKey<TonoDeCifra> = SemanticsPropertyKey("TonoDeCifra")
+
+/** Ver [TonoDeCifraKey]. */
+var SemanticsPropertyReceiver.tonoDeCifra: TonoDeCifra by TonoDeCifraKey
+
 /** El estilo de una variante, en la escala de textos. Pura. */
 fun estiloDeLaCifra(variante: VarianteDeCifra, textos: TextosDeMovi): TextStyle = when (variante) {
     VarianteDeCifra.Heroe -> textos.cifra
@@ -126,7 +136,10 @@ fun Cifra(
 ) {
     val texto = textoDeLaCifra(monto, moneda, tono, LocalSaldosOcultos.current)
     val estilo = estiloDeLaCifra(variante, Movi.textos).copy(color = colorDeLaCifra(tono, Movi.colores))
-    val conTag = modifier.testTag(TAG_CIFRA).semantics { varianteDeCifra = variante }
+    val conTag = modifier.testTag(TAG_CIFRA).semantics {
+        varianteDeCifra = variante
+        tonoDeCifra = tono
+    }
     // Un renglón siempre: Martian Mono es ancha y a 42 sp «$8.550.000» se partía en un teléfono de
     // 390 dp. La héroe se achica hasta el tamaño de la cifra de tarjeta, no más; la grande (ola R1),
     // hasta el de un monto de fila, porque va en un widget de media pantalla.
