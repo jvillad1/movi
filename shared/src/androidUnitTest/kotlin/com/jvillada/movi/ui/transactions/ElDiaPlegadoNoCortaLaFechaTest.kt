@@ -19,6 +19,9 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.ds.RADIO_DEL_RESALTADO
+import com.jvillada.movi.ui.components.ds.SALIDA_DEL_RESALTADO
 import com.jvillada.movi.ui.components.ds.TAG_CIFRA
 import org.junit.Rule
 import org.junit.Test
@@ -123,6 +126,29 @@ class ElDiaPlegadoNoCortaLaFechaTest {
         assertTrue(conTexto("movimientos", substring = true).isEmpty())
         assertEquals(plegadoArriba, unico(TAG_FECHA_DEL_DIA).boundsInRoot, "la fecha no se mueve al desplegar")
         assertEquals(altoPlegado, unico(TAG_ENCABEZADO_DE_DIA).size.height, "el renglón mide lo mismo")
+    }
+
+    /**
+     * Vuelta de diseño 16: en escritorio, con el mouse encima, el encabezado del día pintaba una banda
+     * gris recta pegada a la fecha. Ahora lo que se toca (y se resalta) sale [SALIDA_DEL_RESALTADO]
+     * hacia cada lado, dentro del margen, con el radio del sistema; la fecha sigue alineada con el
+     * borde de la superficie de abajo y el renglón mide lo mismo para quien lo pone.
+     */
+    @Test
+    fun `el resaltado del dia sale un poco hacia el margen y la fecha no se mueve`() {
+        montar("Hoy", escala = 1f, cuantos = 2, total = -57_400L)
+        val densidad = composeRule.density.density
+        val renglon = unico(TAG_ENCABEZADO_DE_DIA).boundsInRoot
+        val toque = unico(TAG_TOQUE_DEL_DIA).boundsInRoot
+        val fecha = unico(TAG_FECHA_DEL_DIA).boundsInRoot
+        val salida = SALIDA_DEL_RESALTADO.value * densidad
+        assertEquals(Medida.margenDePantalla.value * densidad, renglon.left, 0.5f, "el renglón va en el margen de la pantalla")
+        assertEquals(renglon.left - salida, toque.left, 0.5f, "el resaltado sale hacia la izquierda")
+        assertEquals(renglon.right + salida, toque.right, 0.5f, "y hacia la derecha")
+        assertTrue(toque.left > 0f, "sin tocar el borde de la pantalla")
+        assertEquals(renglon.left, fecha.left, 0.5f, "la fecha sigue alineada con el borde de la superficie")
+        assertEquals(renglon.height, toque.height, 0.5f, "el resaltado no cambia el alto del renglón")
+        assertEquals(Radio.m, RADIO_DEL_RESALTADO, "el radio de una fila destacada")
     }
 
     @Test
