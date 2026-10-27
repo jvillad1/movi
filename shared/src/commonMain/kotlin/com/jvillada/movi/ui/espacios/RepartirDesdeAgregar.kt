@@ -218,7 +218,9 @@ fun HojaRepartirEsteGasto(
         }
     }
 
-    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
+    // Con el gasto ya guardado, cerrar la hoja es «Cerrar»: Agregar también se cierra. Si quedara abierto
+    // con lo mismo escrito, un «Guardar movimiento» lo anotaría dos veces.
+    MarcoDeHoja(onDismiss = { yaGuardado?.let(onListo) ?: onDismiss() }, dismissEnabled = !trabajando) {
         Column(
             modifier = Modifier
                 .verticalScroll(rememberScrollState())

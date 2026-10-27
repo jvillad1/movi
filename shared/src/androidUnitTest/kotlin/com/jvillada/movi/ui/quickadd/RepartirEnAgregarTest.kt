@@ -32,6 +32,7 @@ import com.jvillada.movi.shared.model.GastoDelEspacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.MiembroDelEspacio
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.espacios.TAG_CONFIRMAR_REPARTIR_ESTE_GASTO
 import com.jvillada.movi.ui.espacios.TAG_HOJA_REPARTIR_ESTE_GASTO
@@ -132,7 +133,36 @@ class RepartirEnAgregarTest {
         composeRule.waitUntil(5_000) { cerrada == 1 }
     }
 
+    @Test
+    fun guardado_y_sin_repartir_reintenta_solo_el_reparto() {
+        fallosDelReparto = 1
+        montarYEscribir45000()
+        abrirLaHoja()
+        confirmar()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodes(hasText("Reintentar el reparto", substring = true), useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("El gasto quedó anotado, pero no se pudo repartir", substring = true, useUnmergedTree = true)
+            .assertIsDisplayed()
+        assertEquals(0, cerrada, "la hoja sigue: falta el reparto")
+
+        composeRule.onNode(
+            hasClickAction() and hasAnyDescendant(hasText("Reintentar el reparto")) and
+                hasAnyAncestor(hasTestTag(TAG_CONFIRMAR_REPARTIR_ESTE_GASTO)),
+            useUnmergedTree = true,
+        ).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { repartidos.isNotEmpty() }
+
+        assertEquals(1, guardados.size, "el gasto se guardó una sola vez")
+        assertEquals(listOf(casa.id to guardados.single().id), repartidos)
+        composeRule.waitUntil(5_000) { cerrada == 1 }
+    }
+
     // ── Andamio ───────────────────────────────────────────────────────────────────────────
+
+    /** Cuántas veces falla `repartirMovimiento` antes de funcionar (sin red, o el movimiento sin subir). */
+    private var fallosDelReparto = 0
 
     private fun montarYEscribir45000() {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
@@ -140,6 +170,10 @@ class RepartirEnAgregarTest {
             override suspend fun getEspacios(): List<Espacio> = listOf(casa)
             override suspend fun postEvent(event: FinancialEvent): FinancialEvent = event.also { guardados += it }
             override suspend fun repartirMovimiento(espacioId: String, eventoId: String): GastoDelEspacio {
+                if (fallosDelReparto > 0) {
+                    fallosDelReparto--
+                    throw ApiException(404, "Movimiento no encontrado")
+                }
                 repartidos += espacioId to eventoId
                 return GastoDelEspacio(id = "gde", espacioId = espacioId, eventoId = eventoId, monto = 45_000)
             }
