@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +58,16 @@ enum class VarianteDeBoton {
     /** Borrar, anular, salir: el color de `sale` sobre su lavado. Nunca lleno de rojo. */
     Peligro,
 }
+
+/**
+ * **La variante de un [Boton], en su semántica** (vuelta de diseño 18), como `VarianteDeCifraKey`:
+ * deja vigilar que «Borrar» vaya en `Peligro` y «Cancelar» en `Fantasma` sin leer colores. No le
+ * cambia nada al lector de pantalla.
+ */
+val VarianteDeBotonKey: SemanticsPropertyKey<VarianteDeBoton> = SemanticsPropertyKey("VarianteDeBoton")
+
+/** Ver [VarianteDeBotonKey]. */
+var SemanticsPropertyReceiver.varianteDeBoton: VarianteDeBoton by VarianteDeBotonKey
 
 /**
  * **El tamaño de un botón.** [M] (48 dp, el objetivo táctil) es el de siempre; [S] (36 dp) va solo
@@ -128,6 +140,7 @@ fun Boton(
             .background(fondo)
             .clickable(enabled = habilitado && !cargando, role = Role.Button, onClick = onClick)
             .then(if (cargando) Modifier.semantics { stateDescription = ROTULO_CARGANDO } else Modifier)
+            .semantics { varianteDeBoton = variante }
             .testTag(TAG_BOTON)
             .padding(horizontal = if (tamano == TamanoDeBoton.M) Espacio.l else Espacio.s),
         horizontalArrangement = Arrangement.spacedBy(Espacio.xs, Alignment.CenterHorizontally),

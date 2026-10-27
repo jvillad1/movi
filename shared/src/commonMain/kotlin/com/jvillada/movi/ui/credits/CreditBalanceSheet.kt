@@ -16,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -25,6 +24,8 @@ import com.jvillada.movi.shared.model.MAX_CREDIT_DEBT_COP
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 
 /**
  * Cuadra la deuda de un crédito con el saldo que reporta el banco.
@@ -72,9 +73,9 @@ fun CreditBalanceSheet(
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            Text("Ajustar saldo", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(Espacio.xs))
-            Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            // Vuelta de diseño 18: el nombre como título y qué es la hoja debajo (era un rótulo chico
+            // arriba y el nombre debajo).
+            EncabezadoDeHoja(credit.account.name, subtitulo = "Ajustar saldo")
             Spacer(Modifier.height(Espacio.m))
 
             Row(
@@ -83,12 +84,7 @@ fun CreditBalanceSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Deuda en Movi", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                Text(
-                    formatCOP(current),
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                )
+                Cifra(current)
             }
             Spacer(Modifier.height(Espacio.s))
 

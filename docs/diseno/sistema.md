@@ -388,6 +388,7 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 | `LasGuiasNoParecenDatosTest` | ningún `guia =` / `placeholder =` con un literal puramente numérico en `ui/` («20», «29,6», «$ 0»): va `ejemplo =`, y sin su propio «Ej:» (§15) |
 | `LosCamposDelSistemaTest` (Robolectric) | el rótulo en frase, la guía de un monto en la letra de cuerpo y el valor en la de cifras, el error en `sale`, «¿Qué es esto?» abre y cierra, la caja llega a 48, y nada se recorta a 360 dp con la letra a ×1,3 (también en las hojas de crédito y tarjeta) |
 | `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en los dos temas; la fila mide 56/64; el botón llega a 48 de toque; la cifra se oculta; la tarjeta de cuenta mide 128 con marca y sin ella; dos widgets de un par miden lo mismo; la casilla que se toca sola mide 48 y dice su estado |
+| `LoQueNoEsDelSistemaSoloBajaTest` (`core/src/jvmTest/.../quality/`, vuelta de diseño 18) | en `ui/` fuera de `ds/`, seis cosas que solo pueden bajar de su línea base (`lineas-base.txt`): `Button(`/`OutlinedButton(`/`TextButton(` de Material, `Color.White`/`Color.Black` (salvo el velo de `MarcoDeHoja`), `Hairline(`, `MinCard(`, un `Text(` cuyo primer argumento es `formatCOP(`/`formatMoney(` (aproximación por regex) y `fontWeight =` (§24) |
 | `UnaSolaCifraHeroePorPantallaTest` (Robolectric) | a lo sumo una `Cifra` `Heroe` en Hoy, Plan (Pagos y Presupuestos), Patrimonio, Créditos, Movimientos y Espacios; exactamente una donde la pantalla tiene su protagonista (Hoy, Patrimonio, Créditos) |
 
 ## 9. Migrar una pantalla
@@ -869,3 +870,55 @@ Lo vigilan `EscapeEnLaHojaAngostaTest` (Escape con un `Campo` enfocado cierra la
 `EspaciosEnPantallaTest` y `AccionesDelMovimientoTest` (la acción, el bloque, el tope de seis),
 `LasGuiasNoParecenDatosTest` y `LosCamposDelSistemaTest` (las guías con «Ej:», el monto sin «0», el
 encabezado de las dos hojas).
+
+## 24. Vuelta de diseño 18: hojas y confirmaciones con un solo patrón
+
+Un revisor independiente auditó master buscando lo que todavía no usaba el sistema y ninguna guarda
+contaba. Esta vuelta toma las hojas y las confirmaciones.
+
+- **Toda hoja abre con `EncabezadoDeHoja`** (§23). Solo tres lo usaban; dieciséis escribían el título
+  a mano, con tres variantes (título + párrafo, rótulo chico arriba + nombre debajo, «Alias» suelto
+  haciendo de título). Ahora el título en `titulo` medio y, debajo, la frase que la hoja ya decía, en
+  `cuerpo` `textoMedio`: eliminar una cuenta, apartado, bien, para qué es esta plata, ajustar el
+  saldo y simular un abono de un crédito, los días de aviso, el inicio del mes y el de un período,
+  tu perfil, leyendo un papel, «¿En qué espacio?», la ficha y la hoja de una persona o comercio y
+  la confirmación de borrar. En **ajustar saldo** y **simular un abono** el nombre del crédito es
+  el título y qué es la hoja el subtítulo (era un rótulo chico arriba del nombre), y la deuda va en
+  `Cifra`, como los montos de la ficha de un tercero («Este período», «por motivo», cada movimiento).
+- **Las confirmaciones destructivas son `Boton`** (`BotonesDeConfirmar` en
+  `ui/components/ConfirmarAntesDeBorrar.kt`): «Cancelar» en `Fantasma` y la acción («Borrar»,
+  «Eliminar», «Cerrar en todos») en `Peligro`, al final de la fila; `M` en la hoja propia
+  (`ConfirmarEnHoja`, cuya pregunta y detalle son su `EncabezadoDeHoja`) y `S` dentro de un bloque
+  (`ConfirmacionEnLinea`). Mientras borra, la ruedita del `Peligro` y «Cancelar» apagado. Eran dos
+  `Text` tocables de 10/14 dp, con el botón sin vuelta igual de liviano que el que cierra.
+  Documentos dejó su «Cancelar / Borrar» propio y usa `ConfirmarEnHoja`; eliminar una cuenta, sus
+  dos píldoras de 48 hechas a mano. `Boton` dice su variante en la semántica (`VarianteDeBotonKey`)
+  para poder vigilarlo sin leer colores.
+- **Los botones hechos a mano son `Boton`**: el «Guardar» de 54 dp de Personas y comercios
+  (`BotonDeGuardar`, borrado) es `Principal` a todo el ancho; el del inicio de un período también,
+  y «Volver al día de siempre» y «Ver tus períodos» son `Fantasma` `S`. Los textos tocables que
+  hacían de botón —«Activar notificaciones», «Ahora no», «Volver al de Movi», «Sin categoría»,
+  «Responder», «Ver», «Editar» en la ficha— son `Fantasma` `S`. **«Eliminar términos»** (crédito y
+  tarjeta) y «Eliminar» en la hoja de un tercero son `Peligro` `S`: destruyen algo, y `Fantasma` es la
+  marca.
+- **`monto` es solo para plata.** Un párrafo («Por confirmar»), el nombre de una cuenta, una URL
+  (Compartir) y el número de `NumeroEnCirculo` iban en la letra de las cifras; van en `cuerpo`. El
+  enlace no tiene estilo monoespaciado propio: la superficie de capa 2 y la selección ya lo apartan.
+- **`sobreAvatar`** (`Tokens.kt`): lo que va encima del círculo de un avatar, blanco en los dos temas,
+  porque el color del círculo es del dueño (`AvatarPalette`, tonos «600» hechos para blanco) y no del
+  tema. `sobreMarca` no servía: en oscuro es casi negro y sobre el índigo de la paleta daba 2,3:1.
+  Reemplaza tres `Color.White` (Ajustes, Tu perfil, el botón del avatar); `ContrasteDeLosTokensTest`
+  mide cada color de la paleta contra él (≥ 3:1, el de texto grande).
+- Los `Hairline()` de los archivos tocados (las hojas de arriba, Categorías y Documentos) pasaron a `Separador(SangriaDeSeparador.Ninguna)`, que dibuja lo mismo.
+
+**La guarda nueva**, `LoQueNoEsDelSistemaSoloBajaTest`: el trinquete de `LosValoresSueltosSoloBajanTest`
+para seis cosas más (§8), con sus líneas base en `lineas-base.txt` y en
+`scripts/auditoria-de-diseno.py --resumen`. Antes → después de esta vuelta: botones de Material 4 → 4,
+`Color.White`/`Black` 6 → 3 (dos son el velo de la hoja, exceptuado), `Hairline` 26 → 14, `MinCard`
+22 → 22, `Text(formatCOP…)` 14 → 10, `fontWeight =` 224 → 190; y los de siempre, `.dp` sueltos 261 →
+242 y radios con número 22 → 19.
+
+Lo vigilan `HojasYConfirmacionesDelSistemaTest` (Robolectric: la confirmación pinta dos `Boton`,
+`Fantasma` y `Peligro`, el de borrar en el `sale` del tema, «Cancelar» apagado mientras borra; eliminar
+una cuenta, ajustar el saldo de un crédito y el inicio del mes abren con `EncabezadoDeHoja`), la guarda
+nueva y `ContrasteDeLosTokensTest`.

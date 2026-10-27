@@ -324,7 +324,10 @@ private fun EnlaceListo(
         // Seleccionable: si copiar falla por lo que sea, igual se puede marcar y copiar a mano.
         SelectionContainer {
             Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Capa2) {
-                Text(url, style = Movi.textos.monto, color = Movi.colores.texto)
+                // Vuelta de diseño 18: una URL no es plata, así que no va en la letra de las cifras
+                // (`monto`). El sistema no tiene un estilo monoespaciado para enlaces y no le hace
+                // falta: la superficie de capa 2 y la selección ya lo apartan del texto.
+                Text(url, style = Movi.textos.cuerpo, color = Movi.colores.texto)
             }
         }
         Spacer(Modifier.height(Espacio.s))

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -175,7 +176,8 @@ class PeriodoEnMovimientosTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Ver tus períodos", useUnmergedTree = true).assertIsDisplayed()
 
-        composeRule.onNode(hasClickAction() and hasText("Ver tus períodos"), useUnmergedTree = true)
+        // «Ver tus períodos» es un `Boton` del sistema (vuelta de diseño 18): el texto es de su hijo.
+        composeRule.onNode(hasClickAction() and hasAnyChild(hasText("Ver tus períodos")), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
 

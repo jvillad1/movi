@@ -38,6 +38,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.recurrentes.ReminderOptInField
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 
 /**
  * Crea una tarjeta de crédito o edita los términos de una existente — la hoja hermana de
@@ -266,12 +267,15 @@ fun CardTermsSheet(
                     onCancelar = { pidiendoBorrar = false },
                 )
             } else {
-                Text(
+                // Vuelta de diseño 18: era un texto rojo tocable. Es destructivo, así que `Peligro`
+                // (no `Fantasma`, que es la marca), chico y centrado debajo del pie.
+                Boton(
                     "Eliminar términos",
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.sale,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = Espacio.xs),
+                    onClick = { pidiendoBorrar = true },
+                    variante = VarianteDeBoton.Peligro,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !saving,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
             }
         }

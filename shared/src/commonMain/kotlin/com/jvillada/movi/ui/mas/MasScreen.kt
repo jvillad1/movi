@@ -27,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
@@ -635,7 +634,7 @@ private fun TarjetaDelPerfil(profile: UserProfile?, onEditar: () -> Unit) {
                     .background(avatarColor),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(initials.ifEmpty { "U" }, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Color.White)
+                Text(initials.ifEmpty { "U" }, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.sobreAvatar)
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(displayName, style = Movi.textos.titular, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)

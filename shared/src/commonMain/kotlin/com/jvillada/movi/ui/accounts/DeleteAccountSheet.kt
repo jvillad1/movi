@@ -1,14 +1,12 @@
 package com.jvillada.movi.ui.accounts
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -18,6 +16,9 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.MarcoDeHoja
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.formatMoney
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -120,22 +121,13 @@ fun DeleteAccountSheet(
                 .weight(1f, fill = false),
         ) {
 
-            Text(
-                text = "Eliminar cuenta",
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
-            )
-
             // F55: la consecuencia real, con el conteo real — no un genérico "¿estás seguro?".
-            Text(
-                text = "Se borra \"$accountName\" y ${eventCountLabel(eventCount)}. " +
+            // Vuelta de diseño 18: es el subtítulo del encabezado de la hoja (`cuerpo`, `textoMedio`).
+            EncabezadoDeHoja(
+                "Eliminar cuenta",
+                subtitulo = "Se borra \"$accountName\" y ${eventCountLabel(eventCount)}. " +
                     "Esto no se puede deshacer.",
-                style = Movi.textos.cuerpo,
-                // Un párrafo de explicación: con el peso de una fila se leería pesado.
-                fontWeight = FontWeight.Normal,
-                color = Movi.colores.textoMedio,
+                modifier = Modifier.padding(top = Espacio.xxs),
             )
 
             // Y la consecuencia que no cabe en la frase de arriba, porque no ocurre en esta
@@ -185,33 +177,23 @@ fun DeleteAccountSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(Medida.objetivoTactil)
-                        .clip(RoundedCornerShape(Radio.pill))
-                        .background(Movi.colores.tarjeta)
-                        .clickable(enabled = !deleting, onClick = onDismiss),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("Cancelar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                }
-                Box(
-                    modifier = Modifier
-                        .weight(1.4f)
-                        .height(Medida.objetivoTactil)
-                        .clip(RoundedCornerShape(Radio.pill))
-                        .background(if (!deleting) Movi.colores.lavado(Movi.colores.sale) else Movi.colores.tarjeta)
-                        .clickable(enabled = !deleting) { doDelete() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = if (deleting) "Eliminando…" else "Eliminar cuenta",
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                        color = if (!deleting) Movi.colores.sale else Movi.colores.textoApagado,
-                    )
-                }
+                // Vuelta de diseño 18: eran dos píldoras de 48 hechas a mano.
+                Boton(
+                    "Cancelar",
+                    onClick = onDismiss,
+                    variante = VarianteDeBoton.Fantasma,
+                    habilitado = !deleting,
+                    anchoCompleto = true,
+                    modifier = Modifier.weight(1f),
+                )
+                Boton(
+                    "Eliminar cuenta",
+                    onClick = { doDelete() },
+                    variante = VarianteDeBoton.Peligro,
+                    cargando = deleting,
+                    anchoCompleto = true,
+                    modifier = Modifier.weight(1.4f),
+                )
             }
 
             Spacer(Modifier.height(Espacio.s))

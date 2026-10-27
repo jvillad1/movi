@@ -71,7 +71,6 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.HeaderLeading
-import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinScreenHeader
@@ -107,6 +106,8 @@ import com.jvillada.movi.ui.fecha.etiquetaDePeriodo
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.RotuloDeCampo
+import com.jvillada.movi.ui.components.ConfirmarEnHoja
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
 /**
  * **«Documentos»** — los papeles del dueño, guardados en Movi.
@@ -401,10 +402,16 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
         }
 
         aBorrar?.let { doc ->
-            ConfirmarBorrado(
-                doc = doc,
-                onCancelar = { aBorrar = null },
+            // Vuelta de diseño 18: la confirmación de toda la app (tenía su propio «Cancelar /
+            // Borrar» en texto). Dice **qué** se borra y que no hay vuelta atrás.
+            ConfirmarEnHoja(
+                pregunta = "¿Borrar este documento?",
+                detalle = "«${nombreQueSePartePorSusSeparadores(doc.nombre)}» se borra del todo. " +
+                    "Movi no guarda una copia y no se puede deshacer.",
+                textoConfirmar = "Borrar",
+                ocupado = borrando,
                 onConfirmar = { borrar(doc) },
+                onCancelar = { aBorrar = null },
             )
         }
     }
@@ -459,54 +466,6 @@ private fun FilaDeImportacion(imp: StatementImport, onClick: () -> Unit) {
     )
 }
 
-/**
- * La confirmación de borrado. Dice **qué** se borra y que no hay vuelta atrás — las dos cosas que
- * uno quiere leer antes de tocar el botón rojo.
- */
-@Composable
-private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar: () -> Unit) {
-    MarcoDeHoja(
-        onDismiss = onCancelar,
-        relleno = PaddingValues(horizontal = Espacio.l, vertical = Espacio.l),
-        conCierre = false,
-    ) {
-        Text("¿Borrar este documento?", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-        Spacer(Modifier.height(Espacio.xs))
-        Text(nombreQueSePartePorSusSeparadores(doc.nombre), style = Movi.textos.cuerpo, color = Movi.colores.texto)
-        Spacer(Modifier.height(Espacio.xxs))
-        Text(
-            "Se borra del todo. Movi no guarda una copia y no se puede deshacer.",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            lineHeight = 17.sp,
-        )
-        Spacer(Modifier.height(Espacio.l))
-        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-            Text(
-                "Cancelar",
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.textoMedio,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(Radio.m))
-                    .clickable(onClick = onCancelar)
-                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
-            )
-            Spacer(Modifier.width(Espacio.xs))
-            Text(
-                "Borrar",
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.sale,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(Radio.m))
-                    .clickable(onClick = onConfirmar)
-                    .padding(horizontal = Espacio.s, vertical = Espacio.s),
-            )
-        }
-    }
-}
-
 /** Cuántas filas pinta [DocumentosEsqueleto] mientras la lista no llegó ni una vez. */
 private const val FILAS_DE_DOCUMENTO_ESQUELETO = 4
 
@@ -522,7 +481,7 @@ internal const val TAG_FILA_DE_DOCUMENTO: String = "fila-de-documento"
  * real — la pantalla se veía vacía con «+ Subir archivo» todavía sin aparecer (esa acción ya vive
  * en el encabezado desde el primer cuadro, ver [DocumentosScreen]).
  *
- * Mismos rellenos que [FilaDeDocumento] (10/10/12/6 dp) y el mismo [Hairline] entre filas: el
+ * Mismos rellenos que [FilaDeDocumento] (10/10/12/6 dp) y el mismo [Separador] entre filas: el
  * nombre con el alto de `Movi.textos.cuerpo`, el renglón de apoyo (cuenta · peso · fecha) más
  * corto, y tres bloques cortos donde van «Abrir», «Editar», «Borrar».
  */
@@ -537,8 +496,8 @@ private fun DocumentosEsqueleto() {
         Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
             RotuloDeSeccionEsqueleto()
         }
-        // `Hairline()` en TODAS las filas, no solo entre ellas: es lo que hace `FilaDeDocumento`
-        // de verdad (su propio `Hairline()` va siempre, incluida la última fila de la lista).
+        // `Separador(SangriaDeSeparador.Ninguna)` en TODAS las filas, no solo entre ellas: es lo que hace `FilaDeDocumento`
+        // de verdad (su propio `Separador(SangriaDeSeparador.Ninguna)` va siempre, incluida la última fila de la lista).
         repeat(FILAS_DE_DOCUMENTO_ESQUELETO) {
             Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
                 Column(
@@ -562,7 +521,7 @@ private fun DocumentosEsqueleto() {
                         repeat(3) { BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 44.dp) }
                     }
                 }
-                Hairline()
+                Separador(SangriaDeSeparador.Ninguna)
             }
         }
     }
@@ -643,7 +602,7 @@ private fun FilaDeDocumento(
                 onImportar?.let { AccionDeFila("Importar movimientos", Movi.colores.marca, null, it) }
             }
         }
-        Hairline()
+        Separador(SangriaDeSeparador.Ninguna)
     }
 }
 

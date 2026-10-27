@@ -25,6 +25,10 @@ import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.simularAbonoUnico
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
 /**
  * **«¿Y si le abono de más?»** — cuánto se ahorra en intereses y cuánto se acorta el plazo si hoy
@@ -68,9 +72,8 @@ fun SimuladorDeAbonoSheet(
 
     MarcoDeHoja(onDismiss = onDismiss) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            Text(TITULO_DEL_SIMULADOR, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(Espacio.xs))
-            Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            // Vuelta de diseño 18: el nombre del crédito como título y qué es la hoja debajo.
+            EncabezadoDeHoja(credit.account.name, subtitulo = TITULO_DEL_SIMULADOR)
             Spacer(Modifier.height(Espacio.m))
 
             Row(
@@ -79,12 +82,7 @@ fun SimuladorDeAbonoSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Deuda hoy", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                Text(
-                    formatCOP(saldo),
-                    style = Movi.textos.monto,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                )
+                Cifra(saldo)
             }
 
             // **De quién es el ahorro, antes de decir cuánto es.** Cuatro de los doce créditos
@@ -140,7 +138,7 @@ fun SimuladorDeAbonoSheet(
             }
 
             Spacer(Modifier.height(Espacio.m))
-            Hairline()
+            Separador(SangriaDeSeparador.Ninguna)
             Spacer(Modifier.height(Espacio.s))
             // Los TRES supuestos, y ninguno en letra más chica que el otro: el de la proyección
             // (la tasa y la cuota de hoy) lo arrastra toda esta pantalla; el del abono (que el

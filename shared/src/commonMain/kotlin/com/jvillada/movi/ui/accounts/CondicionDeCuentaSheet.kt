@@ -25,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
@@ -41,6 +40,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 
 /** El título de la fila del detalle de la cuenta y de esta hoja (vuelta de diseño 5). */
 const val PARA_QUE_ES_ESTA_PLATA: String = "Para qué es esta plata"
@@ -108,26 +108,16 @@ fun CondicionDeCuentaSheet(
                 .verticalScroll(rememberScrollState())
                 .weight(1f, fill = false),
         ) {
-            Text(
-                text = PARA_QUE_ES_ESTA_PLATA,
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
-            )
-
             // Qué hace, dicho con las dos consecuencias que tiene y sin ninguna más: es
             // exactamente lo que el campo cambia en la app, y decir de más acá sería
-            // prometerle al dueño un efecto que no existe.
-            Text(
-                text = "Si esta plata es libre, déjalo vacío. Si solo puedes usarla para algo " +
+            // prometerle al dueño un efecto que no existe. Es el subtítulo del encabezado.
+            EncabezadoDeHoja(
+                PARA_QUE_ES_ESTA_PLATA,
+                subtitulo = "Si esta plata es libre, déjalo vacío. Si solo puedes usarla para algo " +
                     "—una pensión voluntaria, las cesantías, una cuenta AFC—, escribe para qué: " +
                     "esta cuenta deja de sumar en «Tu plata» y aparece en su propio renglón. " +
                     "Tu patrimonio no cambia: la plata sigue siendo tuya.",
-                style = Movi.textos.cuerpo,
-                // Un párrafo de explicación: con el peso de una fila se leería pesado.
-                fontWeight = FontWeight.Normal,
-                color = Movi.colores.textoMedio,
+                modifier = Modifier.padding(top = Espacio.xxs),
             )
 
             Spacer(Modifier.height(Espacio.m))

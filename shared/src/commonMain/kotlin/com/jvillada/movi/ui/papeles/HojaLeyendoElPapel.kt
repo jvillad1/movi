@@ -47,6 +47,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlin.math.roundToLong
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 
 /** El tag de la hoja, para las pruebas y las capturas. */
 const val TAG_HOJA_LEYENDO_EL_PAPEL: String = "hoja-leyendo-el-papel"
@@ -105,23 +108,15 @@ fun HojaLeyendoElPapel(
                 .fillMaxWidth()
                 .weight(1f, fill = false)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 24.dp)
+                .padding(bottom = Espacio.xl)
                 .testTag(TAG_HOJA_LEYENDO_EL_PAPEL),
         ) {
-            Text(
+            EncabezadoDeHoja(
                 tituloDeLaHoja(resultados),
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Lo guardamos en Documentos y lo que leamos queda en Por revisar para que lo confirmes.",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
+                subtitulo = "Lo guardamos en Documentos y lo que leamos queda en Por revisar para que lo confirmes.",
             )
             resultados.forEachIndexed { i, resultado ->
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
                 TarjetaDelResultado(
                     resultado = resultado,
                     onRevisar = { id -> ir(Screen.SMSReconcile(id)) },

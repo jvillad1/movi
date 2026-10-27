@@ -5,7 +5,6 @@ import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,8 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
@@ -56,6 +53,9 @@ import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 
 /** Lo que se dice cuando apartar (o quitar) no llegó al server por falta de red. */
 const val APARTAR_SIN_CONEXION: String = "Para apartar plata necesitas conexión"
@@ -158,19 +158,11 @@ fun ApartadoSheet(
                 .verticalScroll(rememberScrollState())
                 .weight(1f, fill = false),
         ) {
-            Text(
-                text = if (existente == null) "Apartar plata" else "Apartado",
-                style = Movi.textos.titulo,
-                fontWeight = FontWeight.Medium,
-                color = Movi.colores.texto,
-                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
-            )
-            Text(
-                text = "La plata sigue en ${account.name}, pero deja de contar en «Tu plata» y en " +
+            EncabezadoDeHoja(
+                if (existente == null) "Apartar plata" else "Apartado",
+                subtitulo = "La plata sigue en ${account.name}, pero deja de contar en «Tu plata» y en " +
                     "«Te quedan». No se mueve nada en tu banco.",
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Normal,
-                color = Movi.colores.textoMedio,
+                modifier = Modifier.padding(top = Espacio.xxs),
             )
 
             if (confirmandoQuitar && existente != null) {
@@ -231,14 +223,13 @@ fun ApartadoSheet(
                 color = Movi.colores.textoApagado,
             )
             if (categoria.isNotBlank()) {
-                Text(
-                    text = "Sin categoría",
-                    style = Movi.textos.apoyo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.marca,
-                    modifier = Modifier
-                        .padding(top = Espacio.xs)
-                        .clickable(enabled = !trabajando, role = Role.Button) { categoria = "" },
+                Boton(
+                    "Sin categoría",
+                    onClick = { categoria = "" },
+                    variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !trabajando,
+                    modifier = Modifier.padding(top = Espacio.xs),
                 )
             }
 
