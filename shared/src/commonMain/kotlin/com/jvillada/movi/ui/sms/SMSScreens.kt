@@ -44,6 +44,9 @@ import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.components.ds.TonoDeSubtitulo
+import com.jvillada.movi.ui.components.ds.AyudaDeCampo
+import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -194,7 +197,8 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
     // El estado de la captura sale de la MISMA función que usa el server para el Inicio
     // (`capturaDeSms`, en :core) — acá sin un viaje extra, porque la lista ya está bajada.
     // Sin los comprobantes compartidos (Ola 2): esos no prueban que la captura ande.
-    val aviso = smsItems?.let { avisoDeCaptura(capturaDeSms(soloLoQueLlegoSolo(it).map { sms -> sms.time })) }
+    val captura = smsItems?.let { capturaDeSms(soloLoQueLlegoSolo(it).map { sms -> sms.time }) }
+    val aviso = captura?.let(::avisoDeCaptura)
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60: encabezado único — se abre desde Ajustes (flecha, F22); «Actualizar» es la acción
         // propia. Ola C: ya no lleva «N por confirmar» de subtítulo — lo pendiente se revisa en
@@ -215,7 +219,10 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
             ),
         ) {
             item {
-                Superficie(modifier = Modifier.fillMaxWidth()) {
+                Superficie(
+                    modifier = Modifier.fillMaxWidth(),
+                    relleno = RellenoDeSuperficie.Lista,
+                ) {
                     // **El hecho primero, y en todas las plataformas.**
                     //
                     // Acá decía "AUTO-LECTURA ACTIVA" en cuanto el permiso estuviera concedido,
@@ -230,35 +237,46 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                     // Mientras la bandeja no conteste no se dice nada: un `null` no es «nunca
                     // llegó nada», y afirmarlo por una lectura caída sería el mismo error al
                     // revés.
-                    aviso?.let { hecho ->
-                        // Ola R4: el rótulo en frase, no en mayúsculas («Nunca ha llegado un mensaje»).
-                        Text(
-                            enFrase(hecho.rotulo),
-                            style = Movi.textos.titulo,
-                            color = if (hecho.esAlerta) Movi.colores.aviso else Movi.colores.texto,
+                    // Vuelta de diseño 8: una fila y una línea de ayuda; los dos párrafos de antes
+                    // (qué llegó y por qué este aparato no lee mensajes) se abren con «¿Qué es
+                    // esto?» — se pliegan, no se pierden. Ver `elUltimoMensaje`.
+                    captura?.let { c ->
+                        val ultimo = elUltimoMensaje(c, hoyEnAppZone(), enAndroid = isAndroid)
+                        Fila(
+                            titulo = ultimo.titulo,
+                            subtitulo = ultimo.subtitulo,
+                            tonoDelSubtitulo = if (ultimo.esAlerta) TonoDeSubtitulo.Aviso else TonoDeSubtitulo.Normal,
+                            inicio = {
+                                IconoEnCirculo(
+                                    Icons.Rounded.Inbox,
+                                    tono = if (ultimo.esAlerta) TonoDeIcono.Aviso else TonoDeIcono.Marca,
+                                )
+                            },
+                            modifier = Modifier.testTag(TAG_ULTIMO_MENSAJE),
                         )
-                        Spacer(Modifier.height(Espacio.xxs))
-                        Text(hecho.detalle, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                        Spacer(Modifier.height(Espacio.s))
+                        AyudaDeCampo(
+                            ayuda = ultimo.ayuda,
+                            masAyuda = ultimo.masAyuda,
+                            modifier = Modifier.padding(
+                                start = Medida.margenDePantalla,
+                                end = Medida.margenDePantalla,
+                                bottom = Espacio.s,
+                            ),
+                        )
                     }
                     // Y recién después, lo que depende de dónde estés parado. «Este dispositivo
                     // no puede leer SMS» y «nunca llegó nada» son dos afirmaciones distintas: la
-                    // primera es normal en la web y en iOS, la segunda no lo es en ninguna parte.
-                    if (isAndroid) {
-                        // Solo se nombra lo que FALTA. Que el permiso esté dado no prueba que la
-                        // captura corra, así que no se dice nada cuando está dado.
-                        if (!rememberSmsCaptureReady()) {
-                            Text(
-                                "En este teléfono falta el permiso de mensajes: se otorga en la sección de abajo.",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.aviso,
-                            )
-                        }
-                    } else {
+                    // primera es normal en la web y en iOS (y la dice la ayuda de arriba), la
+                    // segunda no lo es en ninguna parte.
+                    //
+                    // En Android solo se nombra lo que FALTA. Que el permiso esté dado no prueba
+                    // que la captura corra, así que no se dice nada cuando está dado.
+                    if (isAndroid && !rememberSmsCaptureReady()) {
                         Text(
-                            "Este dispositivo no puede leer mensajes: eso lo hace un teléfono Android con Movi instalado. Aquí queda el historial de lo que llegó; lo pendiente se revisa en «Por revisar», desde Movimientos.",
+                            "En este teléfono falta el permiso de mensajes: se otorga en la sección de abajo.",
                             style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
+                            color = Movi.colores.aviso,
+                            modifier = Modifier.padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xxs),
                         )
                     }
 
@@ -267,37 +285,38 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                     // en el caso que genera la alerta — si ya llegó algo, no hay nada que callar.
                     if (aviso?.esAlerta == true) {
                         silenciada?.let { silencioActual ->
-                            Spacer(Modifier.height(Espacio.s))
-                            Separador(SangriaDeSeparador.Ninguna)
-                            Spacer(Modifier.height(Espacio.s))
-                            if (silencioActual) {
-                                Text(
-                                    "Este aviso no se muestra en Hoy ni en Por revisar.",
-                                    style = Movi.textos.apoyo,
-                                    color = Movi.colores.textoMedio,
-                                )
-                                Spacer(Modifier.height(Espacio.xs))
-                            }
-                            Boton(
-                                if (silencioActual) VOLVER_A_AVISARME else SILENCIAR_ESTE_AVISO,
-                                variante = VarianteDeBoton.Secundario,
-                                tamano = TamanoDeBoton.S,
-                                onClick = {
-                                    val nuevo = !silencioActual
-                                    silenciada = nuevo
-                                    coroutine.launch {
-                                        runCatching {
-                                            Repositories.wallets.updateUserProfile(
-                                                UpdateProfileRequest(smsAlertMuted = nuevo),
-                                            )
-                                        }.onFailure {
-                                            // Sin snackbar en esta pantalla: se revierte para no
-                                            // afirmar un silencio que el server no guardó.
-                                            silenciada = silencioActual
+                            Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s)) {
+                                Separador(SangriaDeSeparador.Ninguna)
+                                Spacer(Modifier.height(Espacio.s))
+                                if (silencioActual) {
+                                    Text(
+                                        "Este aviso no se muestra en Hoy ni en Por revisar.",
+                                        style = Movi.textos.apoyo,
+                                        color = Movi.colores.textoMedio,
+                                    )
+                                    Spacer(Modifier.height(Espacio.xs))
+                                }
+                                Boton(
+                                    if (silencioActual) VOLVER_A_AVISARME else SILENCIAR_ESTE_AVISO,
+                                    variante = VarianteDeBoton.Secundario,
+                                    tamano = TamanoDeBoton.S,
+                                    onClick = {
+                                        val nuevo = !silencioActual
+                                        silenciada = nuevo
+                                        coroutine.launch {
+                                            runCatching {
+                                                Repositories.wallets.updateUserProfile(
+                                                    UpdateProfileRequest(smsAlertMuted = nuevo),
+                                                )
+                                            }.onFailure {
+                                                // Sin snackbar en esta pantalla: se revierte para no
+                                                // afirmar un silencio que el server no guardó.
+                                                silenciada = silencioActual
+                                            }
                                         }
-                                    }
-                                },
-                            )
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -382,6 +401,9 @@ const val ERA_UN_MOVIMIENTO: String = "Era un movimiento"
 /** El tag de la línea «Movi lo apartó: …» de una tarjeta del historial. */
 const val TAG_MOTIVO_DEL_APARTADO: String = "motivo-del-apartado"
 
+/** El tag de la fila «Último mensaje · …» de Captura del banco / Mensajes del banco. */
+const val TAG_ULTIMO_MENSAJE: String = "ultimo-mensaje-del-banco"
+
 /** El tag de la tarjeta del aviso de banco mudo en Captura del banco. */
 const val TAG_AJUSTE_DE_BANCO_MUDO: String = "ajuste-de-banco-mudo"
 
@@ -401,17 +423,13 @@ internal fun textoDeDiasDeBancoMudo(dias: Int): String = when {
 private fun AjusteDeBancoMudo(dias: Int, mudos: List<OrigenMudo>, onCambio: (Int) -> Unit) {
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_AJUSTE_DE_BANCO_MUDO)) {
         Text("Avisarme si un banco se calla", style = Movi.textos.titulo, color = Movi.colores.texto)
-        Spacer(Modifier.height(Espacio.xs))
         mudos.forEach { mudo ->
-            Text(conPuntoFinalDelAviso(textoDeOrigenMudo(mudo)), style = Movi.textos.cuerpo, color = Movi.colores.aviso)
             Spacer(Modifier.height(Espacio.xs))
+            Text(conPuntoFinalDelAviso(textoDeOrigenMudo(mudo)), style = Movi.textos.cuerpo, color = Movi.colores.aviso)
         }
-        Text(
-            if (dias <= 0) "Movi no te avisa si un banco deja de mandar mensajes, avisos o correos."
-            else "Si un banco que te avisaba siempre lleva ${textoDeDiasDeBancoMudo(dias)} sin mandar nada, Movi te lo dice en Hoy.",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-        )
+        // Vuelta de diseño 8: una línea; la explicación entera, detrás de «¿Qué es esto?».
+        val (linea, explicacion) = ayudaDelBancoQueSeCalla(dias)
+        AyudaDeCampo(ayuda = linea, masAyuda = explicacion)
         Spacer(Modifier.height(Espacio.s))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
             BotonDeDias("−", habilitado = dias > 0) { onCambio(dias - 1) }

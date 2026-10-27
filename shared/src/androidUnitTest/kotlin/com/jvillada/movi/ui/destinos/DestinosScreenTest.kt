@@ -136,7 +136,7 @@ class DestinosScreenTest {
         montar(ConCaro())
 
         esperarTexto("Caro")
-        composeRule.onAllNodesWithText("·0756 · esposa", useUnmergedTree = true).onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Cuenta ·0756 · esposa", useUnmergedTree = true).onFirst().assertIsDisplayed()
         esperarTexto(formatMoney(350_000L, "COP"))
         assertTrue(hay("este período"))
         // El total histórico vive en la ficha: con tres cifras por tarjeta no se sabía cuál mirar.
@@ -163,7 +163,7 @@ class DestinosScreenTest {
         esperarTexto("Este período")
         esperarTexto("Le enviaste")
         esperarTexto("Cuota de Cotrafa 5413")
-        esperarTexto("Persona · ·0756 · esposa")
+        esperarTexto("Persona · cuenta ·0756 · esposa")
     }
 
     @Test

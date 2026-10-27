@@ -178,19 +178,22 @@ fun resumenDeUsoCorto(c: CategoryUsage): String {
 }
 
 /**
- * La cifra de este mes, sin la oración de [resumenDelMes] — para el costado derecho de la fila
- * compacta, que solo tiene lugar para un número. `null` si no la usó este mes o si el mes no dejó
- * plata que mostrar (por ejemplo, movimientos en otra moneda).
+ * **Las cifras de este mes de una categoría**: lo gastado y lo que entró, cada una por su lado para
+ * que la fila las pinte con la `Cifra` del sistema (vuelta de diseño 8: el gasto en el color del
+ * texto, el ingreso en `entra` con «+»). `null` la que no hubo.
  */
-fun cifraDelMes(c: CategoryUsage): String? {
+data class CifrasDelMes(val gasto: Long?, val ingreso: Long?)
+
+/**
+ * Las cifras de este mes, sin la oración de [resumenDelMes] — para el costado derecho de la fila
+ * compacta, que solo tiene lugar para un número (o dos, uno debajo del otro). `null` si no la usó
+ * este mes o si el mes no dejó plata que mostrar (por ejemplo, movimientos en otra moneda).
+ */
+fun cifrasDelMes(c: CategoryUsage): CifrasDelMes? {
     if (c.monthMovements <= 0) return null
-    return when {
-        c.monthTotal > 0 && c.monthIncomeTotal > 0 ->
-            "${formatCOP(c.monthTotal)} · +${formatCOP(c.monthIncomeTotal)}"
-        c.monthTotal > 0 -> formatCOP(c.monthTotal)
-        c.monthIncomeTotal > 0 -> "+${formatCOP(c.monthIncomeTotal)}"
-        else -> null
-    }
+    val gasto = c.monthTotal.takeIf { it > 0 }
+    val ingreso = c.monthIncomeTotal.takeIf { it > 0 }
+    return if (gasto == null && ingreso == null) null else CifrasDelMes(gasto, ingreso)
 }
 
 /**

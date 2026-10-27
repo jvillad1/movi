@@ -479,7 +479,7 @@ internal fun ListaDeTerceros(
             ) {
                 Text(tercero.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
                 Text(
-                    tercero.todosLosIdentificadores().take(2).joinToString(" · ") { comoSeLeeEnLaFicha(it) },
+                    enUnaLinea(tercero.todosLosIdentificadores().take(2).map(::identificadorEnUnaLinea)),
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoApagado,
                 )

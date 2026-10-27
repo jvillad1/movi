@@ -63,6 +63,11 @@ fun TarjetaDePropuesta(
     tono: TonoDeIcono = TonoDeIcono.Marca,
     accionSecundaria: String? = null,
     onAccionSecundaria: (() -> Unit)? = null,
+    /**
+     * Cuántos renglones ocupó el título al dibujarse. Para la pantalla que reserva el lugar de la
+     * tarjeta mientras carga (Categorías, con `FormaRecordada`): el esqueleto mide lo mismo.
+     */
+    alMedirElTitulo: ((renglones: Int) -> Unit)? = null,
 ) {
     Superficie(
         modifier = modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_PROPUESTA),
@@ -74,7 +79,12 @@ fun TarjetaDePropuesta(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
             ) {
-                Text(text = titulo, style = Movi.textos.titulo, color = Movi.colores.texto)
+                Text(
+                    text = titulo,
+                    style = Movi.textos.titulo,
+                    color = Movi.colores.texto,
+                    onTextLayout = { alMedirElTitulo?.invoke(it.lineCount) },
+                )
                 if (cifra != null) Cifra(cifra, VarianteDeCifra.Fila, moneda = moneda)
                 if (cuerpo != null) {
                     Text(
