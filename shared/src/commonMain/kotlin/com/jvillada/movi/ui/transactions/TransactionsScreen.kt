@@ -1251,7 +1251,8 @@ fun TransactionsScreen(
         // pantallas. Lo que «Buscar» o «En este comercio» piden filtrar llega acá como un chip.
         MinScreenHeader(
             title = TITULO_DE_ACTIVIDAD,
-            leading = HeaderLeading.Avatar(onNavigate),
+            // Vuelta 38: el avatar va solo en Inicio, como en la maqueta.
+            leading = HeaderLeading.Ninguno,
             action = {
                 // Se está pintando algo que esta visita todavía no confirmó (lo recordado, o la lista
                 // de antes de un «Reintentar»). Sin nada pintado lo dice el esqueleto.
