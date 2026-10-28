@@ -211,7 +211,7 @@ llevan su familia y nunca se separan de ella en tamaño ni interlineado (lo fija
 | estilo | es | para |
 |---|---|---|
 | `apoyoMedio` | `apoyo` en 600 | el mini-título: el rótulo de un dato arriba de su valor, el texto de una píldora, el rótulo de una acción rápida |
-| `tituloMedio` | `titulo` en 600 | un nombre que encabeza sin gritar: una cuenta, una categoría, un tercero arriba de su detalle; el título de `EncabezadoDeHoja` |
+| `tituloMedio` | `titulo` en 600 | un nombre que encabeza sin gritar: una cuenta, una categoría, un tercero arriba de su detalle (el título de `EncabezadoDeHoja` fue este hasta la vuelta 41, §45) |
 | `tituloRegular` | `titulo` en 400 | lo que acompaña a un título en su renglón: el conteo de una `Seccion` |
 | `cuerpoFuerte` | `cuerpo` en 700 | lo elegido y lo que se toca: el texto de un `Boton` (15/700 a la vista), el filtro elegido |
 | `cuerpoRegular` | `cuerpo` en 400 | un párrafo (la respuesta de Movi AI, una explicación larga) |
@@ -596,7 +596,7 @@ arriba. De arriba abajo:
 
 | bloque | tipo SDUI | componente | lleva a |
 |---|---|---|---|
-| banda | — (chrome) | amarilla (`marca`), `Medida.altoDeLaBandaDelInicio` 168 con `Radio.xxl` 28 abajo; la pinta el scroll (`SduiRenderer(conBanda = true)`) y detrás de la barra del sistema la cáscara | — |
+| banda | — (chrome) | amarilla (`marca`), `Medida.altoDeLaBandaDelInicio` 168 con `Radio.xxl` 28 abajo; la pinta el scroll (`SduiRenderer(conBanda = true)`) y detrás de la barra del sistema la cáscara; en dos columnas, solo detrás de la del héroe (§45) | — |
 | encabezado | — (chrome) | `EncabezadoDelInicio`: avatar blanco con iniciales, «Hola, Juan» (`saludo`) con el período (`apoyoMedio`, `sobreMarcaMedio`), ocultar saldos y campana en círculos `marcaSuave` de 44 (`Medida.circuloDeLaBanda`); la campana con punto solo si hay algo vencido o urgente | Tú, Notificaciones |
 | héroe | `HERO_BALANCE` | `Superficie(destacada = true)`: «Te quedan» con el enlace «Tu plata $X», `Cifra.Heroe`, «Para N días · $X por día»; abajo, con el hilo y en `capa2`, la franja «Por confirmar» con `Pildora` «N por revisar» (solo si hay algo) | «¿De dónde sale?»; Patrimonio; Por revisar |
 | acciones | `ACCIONES` | `CuadriculaDeAcciones` 4 × 2, rótulos `RenglonesDelRotulo.Dos` en `rotuloDeAccion` | los atajos del «+» (`LocalAtajosDeAgregar`), Por revisar, Movi AI |
@@ -772,7 +772,7 @@ un formulario se arma con seis piezas de `ds/Campo.kt`:
 | `GrupoDeCampos` | el título de un bloque de un formulario, en frase («Términos», «El crédito»): es un `Seccion` con una descripción opcional y los campos separados por `Medida.dentroDeSeccion`. Entre grupos, `Medida.entreSecciones` |
 | `RotuloDeCampo` | el rótulo de algo que pide un dato y no es una caja (las píldoras de la moneda, un selector de cuenta, el tipo) |
 | `AyudaDeCampo` | la ayuda de una línea + «¿Qué es esto?» de algo que no es una caja (el selector de persona o comercio) |
-| `PieDeHoja` | **el pie de toda hoja**: el error del guardado en `sale` justo encima, el `Boton` `M` a todo el ancho, y si está apagado, **la razón en una línea centrada justo debajo** («Falta el banco»). Con `secundaria` («Cancelar», «Quitar») van dos botones del mismo ancho, la secundaria a la izquierda. Anular y quitar van en `Peligro` |
+| `PieDeHoja` | **el pie de toda hoja**: el error del guardado en `sale` justo encima, el `Boton` `M` a todo el ancho, y si está apagado, **la razón en una línea centrada justo debajo** («Falta el banco»). Con `secundaria` («Quitar») van dos botones del mismo ancho, la secundaria a la izquierda; **nunca «Cancelar»** (vuelta 41: la × y el arrastre ya cancelan). Anular y quitar van en `Peligro` |
 
 **La anatomía de un campo**, de arriba a abajo:
 
@@ -2179,7 +2179,64 @@ ajustadas.
    «Arriendo recibido»—, y una factura en «Otros» toma el ícono de su nombre
    (`nombreParaElIconoDeLaFactura`): el arriendo del demo está en «Otros».
 
-## 45. Vuelta 42: el segundo nivel con el lenguaje de la opción 3
+## 45. Vuelta 41: las hojas de «Tú» en el sistema, y el pulido del Inicio
+
+Una revisión fresca de toda la app (28-oct) encontró las hojas de Ajustes con el lenguaje viejo.
+
+- **El título de una hoja es lo más grande de la hoja.** `EncabezadoDeHoja` pasa de `tituloMedio`
+  (14,5/600) a `titularDePantalla` (19,5/800, el de una pantalla con flecha: una hoja es una pantalla
+  que se abre encima; `estiloDelTituloDeHoja`). En «Inicio del período» el grupo «Si ese día cae en fin
+  de semana o festivo» y «Hoy estarías en octubre…» iban en `titulo` (14,5/700) y le ganaban a «¿Qué
+  día empieza tu período?». Vale para todas las hojas de la app: ningún `GrupoDeCampos` ni `Seccion`
+  de adentro lo supera.
+- **Una hoja de «Tú»** (`ui/profile`, `ui/mas`) lleva: `EncabezadoDeHoja` con **una** frase corta de
+  subtítulo; los datos en `Campo` / `CampoDeMonto` / `GrupoDeCampos`; si hace falta, **`VistaPrevia`**
+  (`ds/VistaPrevia.kt`, nueva) con lo que va a pasar en dos renglones como mucho —«Tu período: del 25
+  de octubre al 24 de noviembre» y, debajo, «El 25 de octubre es domingo: empieza el 23.»—, en una
+  `Superficie` de capa 2; y un `PieDeHoja` con **una** acción principal, **sin «Cancelar»**. Las
+  confirmaciones destructivas (`ConfirmarEnHoja`) conservan el suyo.
+- Las hojas, una por una:
+  - **Inicio del período** (`PeriodoSheet`): subtítulo de una frase; la grilla de días es
+    `CalendarioDeDias` (`ui/profile/`, compartida con «¿Cuándo empezó…?», días en capa 2 y con su
+    estado de radio para el lector de pantalla); «Si cae en fin de semana o festivo» es un
+    `GrupoDeCampos` con tres `Fila` en una superficie (era `CardRow` en una caja blanca sobre la hoja
+    blanca; el rótulo largo no entraba en el renglón de un grupo a 360 dp); los tres renglones de la
+    vista previa son uno (`vistaPreviaDelPeriodo`, con `rangoDelPeriodo`, que también dice el mes de
+    calendario) más uno opcional (`detalleDelInicioDelPeriodo`: un 29-31 o `ejemploCortoDelCorte`); el
+    «Guardar» amarillo hecho a mano es `PieDeHoja`.
+  - **¿Cuándo empezó…?** (`InicioDelPeriodoSheet`): una frase («Normalmente arranca el 25 de
+    septiembre.»); la vista previa dice el rango y dónde se cierra el anterior; «Este mes empezó el N» en
+    `PieDeHoja` con el error encima; «Volver al … como siempre» y «Ver tus períodos» siguen como botones
+    de texto.
+  - **Ahorro de cada período**: sin «Cancelar»; «Cuánto apartas» es un `GrupoDeCampos` con las
+    píldoras y el campo; una frase de subtítulo.
+  - **Días de aviso**: las seis cajas blancas son `PildoraDeFiltro`; el botón hecho a mano, `PieDeHoja`.
+  - **Tu perfil**: «Alias» es un `Campo` (era `FieldBox`, el de Créditos) y el error va en el pie.
+  - **Cambiar contraseña**: abre con su `EncabezadoDeHoja` (no tenía título) y cambia con `PieDeHoja`
+    (era una caja negra hecha a mano).
+  - **Recibe tus alertas por correo** solo informa: su acción es «Copiar», junto a la dirección.
+- **«Volver al orden de Movi»** (Editar inicio): con el Inicio ya en el orden de Movi no se pinta
+  (`seVeVolverAlOrdenDeMovi`); apagado se veía en el marrón del texto apagado, como roto. Con algo
+  cambiado, `Boton` `Fantasma`, en el azul del enlace.
+- **La banda del Inicio a 1.280** va solo detrás de la columna del héroe (`anchoDeLaBanda`): cruzaba
+  también la derecha y dejaba ~110 dp de amarillo vacío encima de las acciones. La derecha arranca
+  arriba, sobre el crema (`arribaDeLaDerecha = Medida.dentroDeSeccion`), y el rincón donde la banda se
+  junta con el encabezado se redondea hacia adentro con `Radio.xxl`. Las acciones no subieron a la banda:
+  su primer círculo es amarillo.
+- **Las iniciales del usuario salen de una sola función**, `inicialesDelUsuario` (`ui/components/
+  AvatarButton.kt`): el Inicio, la tarjeta de «Tú» y `AvatarButton`. El Inicio decía «D» y «Tú» «DM»
+  para el mismo usuario; además, el Inicio pone al día el nombre con el perfil que ya pide.
+
+Lo vigilan `LasHojasDeTuSonDelSistemaTest` (Robolectric, motor de texto real: cada hoja con su título,
+ningún texto que lo supere en tamaño ni en peso, una sola acción principal, sin «Cancelar», la vista
+previa en uno o dos renglones), `LasHojasDeTuNoCancelanTest` (`core/src/jvmTest/.../quality/`: ningún
+«Cancelar» a mano ni `onSecundaria = onDismiss` en `ui/profile` y `ui/mas`), `VolverAlOrdenDeMoviTest`
+(las dos situaciones), `ElInicioEnPantallaAnchaYAngostaTest` (a 1.280 la banda no cruza la mitad y las
+acciones arrancan a su lado; a 390 sigue a todo el ancho; ninguna acción sobre la banda en ningún ancho)
+y `LasHojasDeTuDicenLoQueVaAPasarTest` (`commonTest`: las vistas previas, el botón, la banda y las
+iniciales, puras).
+
+## 46. Vuelta 42: el segundo nivel con el lenguaje de la opción 3
 
 Una revisión fresca de toda la app (28-oct, capturas `full-*.png`) encontró el lenguaje viejo en
 pantallas de segundo nivel. **Sin reglas de plata nuevas** y sin tocar nombres internos (`Espacio*`,

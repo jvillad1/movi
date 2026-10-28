@@ -279,15 +279,21 @@ internal fun EditorDelInicio(
             color = Movi.colores.sale,
         )
     }
-    Spacer(Modifier.height(Medida.dentroDeSeccion))
-    val esLaDeMovi = preferencias.limpias().esLaDeMovi
-    Boton(
-        VOLVER_AL_ORDEN_DE_MOVI,
-        onClick = { onCambiar(preferencias.deMovi()) },
-        variante = VarianteDeBoton.Fantasma,
-        habilitado = !esLaDeMovi,
-    )
+    // Vuelta 41: con el Inicio ya en el orden de Movi no hay nada que deshacer y el botón no se pinta
+    // (apagado se veía en el marrón del texto apagado, como roto). Con algo cambiado, un botón de
+    // texto en el azul del enlace.
+    if (seVeVolverAlOrdenDeMovi(preferencias)) {
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        Boton(
+            VOLVER_AL_ORDEN_DE_MOVI,
+            onClick = { onCambiar(preferencias.deMovi()) },
+            variante = VarianteDeBoton.Fantasma,
+        )
+    }
 }
+
+/** ¿Se ofrece «Volver al orden de Movi»? Solo si el Inicio no está ya en el orden de Movi. Pura. */
+fun seVeVolverAlOrdenDeMovi(preferencias: PreferenciasDelInicio): Boolean = !preferencias.limpias().esLaDeMovi
 
 @Composable
 private fun FilaDelEditor(

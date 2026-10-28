@@ -241,6 +241,9 @@ fun DashboardScreen(
     var refreshKey by remember { mutableStateOf(0) }
     var showCreateSheet by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
+    // Vuelta 41: el nombre del saludo y de las iniciales, el mismo que dice «Tú». Arranca con el del
+    // login y se pone al día con el perfil (que pudo cambiarse en otro aparato).
+    var nombreDelDueno by remember { mutableStateOf(SessionManager.userName) }
     var screenDef by remember {
         mutableStateOf<ScreenDefinition?>(
             ScreenDefCache.dashboard
@@ -423,6 +426,10 @@ fun DashboardScreen(
             // la app.
             launch {
                 runCatching { Repositories.wallets.getUserProfile() }.onSuccess { perfil ->
+                    if (perfil.name.isNotBlank() && SessionManager.userId == usuario) {
+                        SessionManager.userName = perfil.name
+                        nombreDelDueno = perfil.name
+                    }
                     val ahora = Clock.System.now().toEpochMilliseconds()
                     data = data.conElPerfil(perfil, ahora)
                     llegado = llegado.conElPerfil(perfil, ahora)
@@ -542,9 +549,9 @@ fun DashboardScreen(
             // cáscara (`BarraDelSistemaDelInicio`). Recargando con cifras ya pintadas, el período cede su
             // lugar a «Actualizando…»: el alto no cambia y nada de lo de abajo se mueve.
             EncabezadoDelInicio(
-                saludo = saludoDelInicio(SessionManager.userName),
+                saludo = saludoDelInicio(nombreDelDueno),
                 subtitulo = if (actualizandoConDatos) "Actualizando…" else periodoDelEncabezado(data),
-                iniciales = inicialesDelDueno(SessionManager.userName),
+                iniciales = inicialesDelUsuario(nombreDelDueno),
                 conPunto = campanaConPunto(notifications),
                 onAvatar = { onNavigate(Screen.Tu) },
                 onCampana = { showNotifications = true },

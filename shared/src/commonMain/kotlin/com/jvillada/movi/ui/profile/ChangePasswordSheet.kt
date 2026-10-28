@@ -1,32 +1,41 @@
 package com.jvillada.movi.ui.profile
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.PasswordPolicy
-import com.jvillada.movi.theme.*
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.PieDeHoja
 
 /**
  * F42 — cambiar contraseña estando adentro de la app. Distinto del reset por correo de
@@ -42,6 +51,15 @@ import com.jvillada.movi.ui.components.ds.Campo
  * navegador no ofrece actualizar lo guardado. Arreglarlo implica tocar `index.html`, fuera del
  * alcance de esta tarea (solo `PerfilScreen.kt` + hojas nuevas en `ui/profile/`).
  */
+/**
+ * La guía de «Contraseña nueva»: la regla del server ([PasswordPolicy.MIN_LENGTH], la misma que valida
+ * `UserRoutes`), no una fila de puntos que hacía parecer el campo ya lleno.
+ */
+val GUIA_DE_LA_CONTRASENA_NUEVA: String = "Al menos ${PasswordPolicy.MIN_LENGTH} caracteres"
+
+/** El título de la hoja y su botón. */
+const val CAMBIAR_CONTRASENA: String = "Cambiar contraseña"
+
 @Composable
 fun ChangePasswordSheet(
     onDismiss: () -> Unit,
@@ -113,6 +131,12 @@ fun ChangePasswordSheet(
             }
         } else {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+                // Vuelta 41: la hoja abre con su encabezado, como las demás (no tenía título).
+                EncabezadoDeHoja(
+                    CAMBIAR_CONTRASENA,
+                    subtitulo = "Al cambiarla, se cierra la sesión en tus otros aparatos.",
+                )
+                Spacer(Modifier.height(Medida.entreSecciones))
                 Campo(
                     rotulo = "Contraseña actual",
                     valor = current,
@@ -121,16 +145,17 @@ fun ChangePasswordSheet(
                     secreto = true,
                     teclado = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                 )
-                Spacer(Modifier.height(Espacio.s))
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
                 Campo(
                     rotulo = "Contraseña nueva",
                     valor = new,
                     alCambiar = { new = it },
-                    guia = "•".repeat(PasswordPolicy.MIN_LENGTH),
+                    // Vuelta 41: una fila de puntos parecía un campo ya lleno; la guía dice la regla.
+                    guia = GUIA_DE_LA_CONTRASENA_NUEVA,
                     secreto = true,
                     teclado = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                 )
-                Spacer(Modifier.height(Espacio.s))
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
                 Campo(
                     rotulo = "Repetir la nueva",
                     valor = repeat,
@@ -140,35 +165,19 @@ fun ChangePasswordSheet(
                     teclado = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                     acciones = KeyboardActions(onDone = { save() }),
                 )
-
-                error?.let {
-                    Spacer(Modifier.height(Espacio.s))
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
             }
 
-            Spacer(Modifier.height(Espacio.m))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
-                    .clickable(enabled = canSave) { save() }
-                    .padding(vertical = Espacio.m),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(if (saving) "Cambiando…" else "Cambiar contraseña", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
-            }
-            if (!canSave && !saving && missingFieldMessage != null) {
-                Spacer(Modifier.height(Espacio.xs))
-                Text(
-                    text = missingFieldMessage,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            Spacer(Modifier.height(Espacio.l))
+            // Vuelta 41: el pie del sistema —el error encima, la primera cosa que falta debajo— en vez
+            // de una caja negra hecha a mano.
+            PieDeHoja(
+                texto = CAMBIAR_CONTRASENA,
+                onClick = { save() },
+                habilitado = missingFieldMessage == null,
+                razon = missingFieldMessage,
+                cargando = saving,
+                error = error,
+            )
         }
         Spacer(Modifier.height(Espacio.l))
     }

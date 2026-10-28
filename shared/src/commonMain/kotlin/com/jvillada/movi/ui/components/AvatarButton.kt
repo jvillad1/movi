@@ -42,7 +42,7 @@ fun AvatarButton(onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = SessionManager.userName?.firstOrNull()?.uppercaseChar()?.toString() ?: "U",
+            text = inicialesDelUsuario(SessionManager.userName),
             // Blanco en los dos temas: la paleta de avatares está construida entera para contrastar
             // contra blanco (ver AvatarPalette.kt), y el color del círculo lo elige el dueño, no el
             // tema. Un token de texto acá se rompería con la mitad de los colores de la paleta; por
@@ -64,4 +64,16 @@ internal fun avatarColorOrDefault(hex: String?): Color {
     return runCatching {
         Color(("FF" + safe.removePrefix("#")).toLong(16))
     }.getOrElse { Color(("FF" + AvatarPalette.DEFAULT.removePrefix("#")).toLong(16)) }
+}
+
+/**
+ * **Las iniciales del avatar del usuario** —la única función para todos sus avatares (vuelta 41): el
+ * del encabezado del Inicio, la tarjeta del perfil en «Tú» y [AvatarButton]—: las del primer nombre y
+ * el primer apellido («Juan Villada» → «JV»), o la del nombre solo; «?» sin nombre. Antes cada avatar
+ * tenía la suya y para el mismo usuario el Inicio decía «D» y «Tú» «DM». Pura.
+ */
+fun inicialesDelUsuario(nombre: String?): String {
+    val palabras = nombre?.trim()?.split(' ')?.filter { it.isNotBlank() }.orEmpty()
+    if (palabras.isEmpty()) return "?"
+    return palabras.take(2).joinToString("") { it.first().uppercase() }
 }

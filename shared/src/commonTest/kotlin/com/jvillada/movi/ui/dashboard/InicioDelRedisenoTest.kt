@@ -20,6 +20,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.inicialesDelUsuario
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
 import com.jvillada.movi.ui.quickadd.PestanaDeAgregar
@@ -292,10 +293,10 @@ class InicioDelRedisenoTest {
 
     @Test
     fun `las iniciales del avatar son las del nombre y el apellido`() {
-        assertEquals("JV", inicialesDelDueno("Juan Villada"))
-        assertEquals("JV", inicialesDelDueno("  juan   villada restrepo "))
-        assertEquals("C", inicialesDelDueno("Caro"))
-        assertEquals("?", inicialesDelDueno(null))
+        assertEquals("JV", inicialesDelUsuario("Juan Villada"))
+        assertEquals("JV", inicialesDelUsuario("  juan   villada restrepo "))
+        assertEquals("C", inicialesDelUsuario("Caro"))
+        assertEquals("?", inicialesDelUsuario(null))
     }
 
     @Test
