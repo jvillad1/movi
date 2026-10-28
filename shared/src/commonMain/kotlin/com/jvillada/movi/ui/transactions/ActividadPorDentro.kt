@@ -212,11 +212,11 @@ fun detalleDeLaConfirmacion(avisos: AvisosPorConfirmar): String {
     val enPesos = avisos.confirmables.filter { it.leido.currency == "COP" }
     val total = if (enPesos.size == avisos.confirmables.size) "Total ${formatCOP(enPesos.sumOf { it.monto })}" else null
     val quedan = (avisos.cuantos - avisos.confirmables.size).takeIf { it > 0 }?.let {
-        if (it == 1) "1 aviso queda para revisar uno por uno." else "$it avisos quedan para revisar uno por uno."
+        if (it == 1) "1 aviso queda para revisar uno por uno" else "$it avisos quedan para revisar uno por uno"
     }
     // Vuelta 46: los avisos van como filas en la hoja (ver `HojaDeConfirmarLosAvisos`); acá, el total
-    // y lo que queda.
-    return listOfNotNull(total, quedan).joinToString(" ")
+    // y lo que queda. Vuelta 47: con su separador —«Total $57.100 · 2 avisos quedan…»—; iban pegados.
+    return listOfNotNull(total, quedan).joinToString(" · ")
 }
 
 /** «Comida · Bancolombia Ahorros»: lo que dice cada fila de la hoja de «Confirmar los N», sin el monto. */
