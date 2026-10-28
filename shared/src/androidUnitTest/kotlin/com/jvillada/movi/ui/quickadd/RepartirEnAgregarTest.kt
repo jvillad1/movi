@@ -29,6 +29,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -101,6 +104,52 @@ class RepartirEnAgregarTest {
         // «Yo» viene elegido, y la regla del espacio se dice con tu parte.
         composeRule.onNodeWithText("Mitad y mitad · Tu parte $22.500", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Guardar y repartir", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /**
+     * Vuelta 46 · **«Repartir» tiene los campos de Agregar**: la categoría con sus pastillas y la fecha
+     * con su píldora se pueden cambiar en la hoja —el mercado con Caro va en Mercado, y fue ayer—, y se
+     * guarda con lo elegido.
+     */
+    @Test
+    fun repartir_deja_cambiar_la_categoria_y_la_fecha() {
+        com.jvillada.movi.data.UsedCategoriesCache.recordFromServer(
+            listOf(
+                com.jvillada.movi.shared.model.UsedCategory("Restaurantes", listOf(TransactionType.EXPENSE), usosRecientes = 9),
+                com.jvillada.movi.shared.model.UsedCategory("Mercado", listOf(TransactionType.EXPENSE), usosRecientes = 5),
+            ),
+        )
+        montar(presetRepartir = true)
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodes(hasTestTag(com.jvillada.movi.ui.espacios.TAG_CATEGORIAS_EN_REPARTIR), useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.espacios.TAG_TODAS_EN_REPARTIR, useUnmergedTree = true).assertIsDisplayed()
+        // La categoría: la pastilla «Mercado».
+        composeRule.onNodeWithTag("espacios:repartir:categoria:Mercado", useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        // La fecha: la píldora abre el selector; «Ayer».
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.espacios.TAG_FECHA_EN_REPARTIR, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNode(
+            hasClickAction() and hasAnyDescendant(hasText("Ayer")) and hasAnyAncestor(hasTestTag(TAG_HOJA_REPARTIR_ESTE_GASTO)),
+            useUnmergedTree = true,
+        ).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(TAG_HOJA_REPARTIR_ESTE_GASTO)), useUnmergedTree = true)
+            .performTextInput("184000")
+        composeRule.waitForIdle()
+        confirmar()
+        composeRule.waitUntil(5_000) { repartidos.isNotEmpty() }
+
+        val ev = guardados.single()
+        assertEquals("Mercado", ev.category)
+        val ayer = com.jvillada.movi.ui.fecha.hoyEnAppZone().minus(kotlinx.datetime.DatePeriod(days = 1))
+        val dia = kotlinx.datetime.Instant.fromEpochMilliseconds(ev.timestamp)
+            .toLocalDateTime(com.jvillada.movi.shared.time.AppTimeZone.zone).date
+        assertEquals(ayer, dia, "con la fecha elegida en la hoja")
     }
 
     @Test
