@@ -415,12 +415,24 @@ const val RENGLONES_DEL_TITULO_DEL_ENCABEZADO: Int = 2
  */
 const val RENGLONES_DEL_SUBTITULO_DEL_ENCABEZADO: Int = 2
 
+/**
+ * **El estilo del título de una hoja** (vuelta 41): el de una pantalla con flecha. Ningún texto de
+ * adentro de una hoja lo supera (lo vigila `LasHojasDeTuSonDelSistemaTest`).
+ */
+fun estiloDelTituloDeHoja(textos: TextosDeMovi): TextStyle = textos.titularDePantalla
+
 /** El `testTag` de [EncabezadoDeHoja]. */
 const val TAG_ENCABEZADO_DE_HOJA: String = "ds-encabezado-de-hoja"
 
 /**
- * **El encabezado de una hoja** (vuelta de diseño 17): el nombre de lo que se edita en `titulo`
- * medio y, debajo, qué es («Tarjeta», «Préstamo») o una frase corta, en `cuerpo` y `textoMedio`.
+ * **El encabezado de una hoja** (vuelta de diseño 17): el nombre de lo que se edita o la pregunta de
+ * la hoja en `titularDePantalla` —el título de una pantalla con flecha, porque una hoja es una pantalla
+ * que se abre encima— y, debajo, qué es («Tarjeta», «Préstamo») o **una** frase corta, en `cuerpo` y
+ * `textoMedio`.
+ *
+ * Vuelta 41: era `tituloMedio` (14,5/600), y un grupo de la hoja (`GrupoDeCampos`, `Seccion`, en
+ * `titulo` 14,5/700) se leía más fuerte que el título: «Si ese día cae en fin de semana o festivo»
+ * le ganaba a «¿Qué día empieza tu período?». Ahora ningún texto de adentro supera al título.
  * Va primero en el contenido, debajo del renglón de la X que pone `MarcoDeHoja`, y declara el título
  * como encabezado para el lector de pantalla.
  *
@@ -442,7 +454,7 @@ fun EncabezadoDeHoja(
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_HOJA)) {
         Text(
             titulo,
-            style = Movi.textos.tituloMedio,
+            style = estiloDelTituloDeHoja(Movi.textos),
             color = Movi.colores.texto,
             modifier = Modifier.semantics { heading() },
         )
