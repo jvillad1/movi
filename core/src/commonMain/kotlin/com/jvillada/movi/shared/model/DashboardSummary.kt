@@ -128,6 +128,14 @@ data class DashboardSummary(
      */
     val apartado: Long? = null,
     /**
+     * **El ahorro del período en pesos** (ver `AhorroDelPeriodo.kt`): lo que el dueño eligió apartar
+     * cada período —un monto, o un porcentaje de lo que entró ([monthIncome])— ya convertido por
+     * [montoDelAhorro]. El Disponible lo resta ([PlataDelDisponible.ahorroDelPeriodo]); Tu plata y el
+     * patrimonio no. `null` = no aparta nada o server anterior al campo: se toma como cero. Solo se
+     * AGREGA.
+     */
+    val ahorroDelPeriodo: Long? = null,
+    /**
      * **El patrimonio honesto**: tu plata, lo condicionado, los bienes y las deudas, ya partidos
      * con [patrimonioDe] — la MISMA función que usa el cliente sobre la lista de cuentas.
      *

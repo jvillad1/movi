@@ -109,6 +109,9 @@ class SchemaDeArranqueTest {
         "users" to "cierre_por_correo",
         // La guía «Primer uso» terminada o descartada. También la nombra `toProfile()`.
         "users" to "primer_uso_en",
+        // El ahorro de cada período: `toProfile()` y el resumen del Inicio las nombran.
+        "users" to "ahorro_del_periodo_tipo",
+        "users" to "ahorro_del_periodo_valor",
     )
 
     /**
