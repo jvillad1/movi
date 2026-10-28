@@ -1217,7 +1217,40 @@ cierra sin «Reintentar», y sin señal dice el mensaje y el reintento no guarda
 `RepartirDesdeAgregarTest` y `ElEfectivoEnNegativoSeLeeEnteroTest` (360 dp ×1,3 entero; 390 dp ×1,12 en
 un renglón).
 
-## 30. Vuelta 27: un aviso que pagó varias cosas
+## 30. Vuelta de diseño 26: Hoy con cuatro acciones y «Pedirle a Caro»
+
+Dos decisiones del dueño (27-oct).
+
+- **La cuadrícula de Hoy es una fila** (`AccionDelInicio`, `ui/dashboard/InicioDelRediseno.kt`): Gasto
+  (la destacada), Ingreso, Avisos (con la insignia de `ConteoPorRevisar`) y Preguntar. La arma el
+  cliente —la definición SDUI solo trae `ACCIONES`—, así que el server y la generación no cambian y un
+  APK viejo sigue con sus ocho. **Traspaso, Pago de tarjeta, Repartir y Subir comprobante** viven en el
+  menú del «+» (`AtajoDeAgregar`, una vez cada una; «Repartir» llegó de la cuadrícula y abre la misma hoja
+  de la vuelta 7 por `hacerElAtajo` y el `EstadoDeRepartir` de la cáscara). El menú se abre manteniendo
+  presionado el «+» (teléfono), con el **clic derecho** (web y escritorio, `BotonDeAgregarConAtajos`) y,
+  en el rail ancho, con la **flecha «▾»** al final de «Agregar» (`conFlecha`, 48 dp de toque).
+- **Espacios: «Pedirle a Caro».** Cuando el otro te debe (`principalDelSaldo`), el principal de la
+  tarjeta del saldo es «Pedirle a {nombre}»: arma un mensaje corto en tuteo (`mensajeParaPedir`: «Hola,
+  Caro. Me debes $76.050 de Casa con Caro:», los tres gastos más recientes desde el último saldado con
+  «tu parte» de quien lee, «y N más», y el enlace de solo lectura si algún día existe; las cifras van
+  enteras aunque los saldos estén ocultos) y lo manda con `HojaDeCompartir.mandarMensaje`: la hoja del
+  sistema en Android e iOS, `navigator.share` en la web y, si no hay, copiar con «Mensaje copiado» y
+  «Abrir WhatsApp» (`wa.me/?text=…`). «Marcar como saldado» pasa a `Fantasma` y, sin transferencias
+  propuestas, pregunta antes con `ConfirmarEnHoja` («¿Caro ya te pagó $76.050?» · «Esto deja el
+  espacio en cero.»); con transferencias, la hoja de siempre para elegir cuál vincular. Saldar es la
+  misma liquidación de siempre. Cuando tú le debes, el principal sigue siendo «Marcar como saldado».
+  `ConfirmarEnHoja` ganó `varianteConfirmar` (por defecto `Peligro`): lo que no destruye nada va en
+  `Principal`.
+- **Cada gasto del espacio dice su fecha**: «Pagó Caro · Mercado · 18 oct» (`quienPagoElGasto`).
+
+**Las líneas base** no cambian, y las guardas en 0 siguen en 0.
+
+Lo vigilan `InicioDelRedisenoTest` y `LasAccionesDelInicioEnUnRenglonTest` (cuatro en una fila a 360
+dp), `AtajosDelMasTest` (las cuatro en el menú, el clic derecho, la flecha), `BuscarEnMoviTest`
+(`hacerElAtajo`), `RepartirDesdeElMasTest` (Repartir desde el menú abre lo de la vuelta 7),
+`PedirleACaroTest` (el mensaje, el principal, la pregunta, la fecha) y `EspaciosEnPantallaTest`.
+
+## 31. Vuelta 27: un aviso que pagó varias cosas
 
 El giro al papá que paga dos cuotas y sobra un poco se reparte en Reconciliar, sin componentes nuevos
 en `ds/` (`ui/sms/RepartirEnPartes.kt`, `ui/sms/RepartirEnReconciliar.kt`):

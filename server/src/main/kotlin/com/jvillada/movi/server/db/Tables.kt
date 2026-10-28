@@ -108,6 +108,15 @@ object Users : Table("users") {
      * `createMissingTablesAndColumns` puede agregar sin riesgo sobre una tabla con filas.
      */
     val primerUsoEn = long("primer_uso_en").nullable()
+    /**
+     * **El ahorro de cada período** (27-oct-2026, ver `AhorroDelPeriodo.kt` en :core): el nombre de un
+     * `TipoDeAhorro` —`NINGUNO`, `MONTO` o `PORCENTAJE`— y su valor (pesos, o un porcentaje entero de
+     * 1 a 90). «Te quedan» lo resta; Tu plata no. Nullable por lo mismo que sus vecinas, y se leen como
+     * `NINGUNO` / 0: nadie ve un cambio hasta elegirlo. Son columnas de `users`, no una tabla con
+     * `user_id`: no van a `TABLAS_DEL_USUARIO` (borrar la cuenta borra la fila entera).
+     */
+    val ahorroDelPeriodoTipo = varchar("ahorro_del_periodo_tipo", 16).nullable()
+    val ahorroDelPeriodoValor = long("ahorro_del_periodo_valor").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

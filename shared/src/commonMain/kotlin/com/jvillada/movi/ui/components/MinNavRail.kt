@@ -72,10 +72,13 @@ fun MinNavRail(
 
         Spacer(Modifier.height(Espacio.s))
 
-        // Primary action — mirrors the bottom-nav center FAB (y sus atajos, Ola 5).
+        // Primary action — mirrors the bottom-nav center FAB (y sus atajos, Ola 5). Vuelta de diseño
+        // 26: con la flecha «▾» al final, que abre los atajos de un clic (en el escritorio mantener
+        // presionado con el mouse no es natural).
         BotonDeAgregarConAtajos(
             alTocar = { onTabSelected(NavTab.ADD) },
             alElegirAtajo = onAtajo,
+            conFlecha = true,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(Radio.pill))

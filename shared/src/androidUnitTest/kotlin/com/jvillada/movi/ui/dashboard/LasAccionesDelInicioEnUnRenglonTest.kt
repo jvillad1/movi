@@ -33,11 +33,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * # La cuadrícula del Inicio, con los ocho rótulos en un renglón (vuelta de diseño 2)
+ * # La cuadrícula del Inicio: cuatro acciones en una fila, cada rótulo en un renglón
  *
- * En producción, a 390 dp, «Anotar ingreso», «Subir comprobante» y «Preguntar a Movi» iban en dos
- * renglones y los demás en uno: la fila quedaba despareja. Ahora los rótulos son cortos («Gasto»,
- * «Comprobante», «Preguntar») y la frase entera es la del lector de pantalla.
+ * Vuelta de diseño 2: en producción, a 390 dp, «Anotar ingreso», «Subir comprobante» y «Preguntar a
+ * Movi» iban en dos renglones y los demás en uno: la fila quedaba despareja. Ahora los rótulos son
+ * cortos («Gasto», «Preguntar») y la frase entera es la del lector de pantalla. Vuelta de diseño 26:
+ * son cuatro (Gasto, Ingreso, Avisos, Preguntar) y caben en **una** fila a 360 dp.
  *
  * Se monta la cuadrícula como la monta el Inicio (`AccionesDelInicioSection`: las acciones de
  * [accionesDelInicio], con el margen de la pantalla) a 360 dp, el teléfono más angosto, con la letra
@@ -92,25 +93,22 @@ class LasAccionesDelInicioEnUnRenglonTest {
             d.getLineRight(0) - d.getLineLeft(0) <= nodo.size.width + 0.5f
     }
 
-    private fun losOcho(escala: Float): List<SemanticsNode> {
+    private fun losCuatro(escala: Float): List<SemanticsNode> {
         montar(escala)
         val nodos = rotulos()
-        assertEquals(8, nodos.size)
-        assertEquals(
-            listOf("Gasto", "Ingreso", "Traspaso", "Pagar tarjeta", "Repartir", "Comprobante", "Avisos", "Preguntar"),
-            nodos.map(::texto),
-        )
-        // La fila no queda despareja: las cuatro acciones de cada fila miden lo mismo de alto.
-        composeRule.onAllNodesWithTag(TAG_ACCION_RAPIDA).fetchSemanticsNodes().chunked(4).forEach { fila ->
-            assertEquals(1, fila.map { it.size.height }.distinct().size, "acciones de distinto alto (×$escala)")
-        }
+        assertEquals(listOf("Gasto", "Ingreso", "Avisos", "Preguntar"), nodos.map(::texto))
+        // Una sola fila: las cuatro acciones arrancan a la misma altura y miden lo mismo de alto.
+        val acciones = composeRule.onAllNodesWithTag(TAG_ACCION_RAPIDA).fetchSemanticsNodes()
+        assertEquals(4, acciones.size)
+        assertEquals(1, acciones.map { it.boundsInRoot.top }.distinct().size, "las cuatro van en una fila (×$escala)")
+        assertEquals(1, acciones.map { it.size.height }.distinct().size, "acciones de distinto alto (×$escala)")
         return nodos
     }
 
-    /** Con la letra de la app (×1,12), los ocho enteros: ni un segundo renglón ni «…». */
+    /** Con la letra de la app (×1,12), los cuatro enteros: ni un segundo renglón ni «…». */
     @Test
-    fun `a 360 dp los ocho rotulos van en un renglon`() {
-        losOcho(1.12f).forEach { nodo -> assertTrue(enUnRenglonEntero(nodo), "«${texto(nodo)}» no entra en un renglón") }
+    fun `a 360 dp las cuatro van en una fila y cada rotulo en un renglon`() {
+        losCuatro(1.12f).forEach { nodo -> assertTrue(enUnRenglonEntero(nodo), "«${texto(nodo)}» no entra en un renglón") }
     }
 
     /**
@@ -120,13 +118,13 @@ class LasAccionesDelInicioEnUnRenglonTest {
      */
     @Test
     fun `a 360 dp con la letra agrandada ninguno baja de renglon`() {
-        losOcho(1.3f).forEach { nodo -> assertEquals(1, disposicion(nodo).lineCount, "«${texto(nodo)}» baja de renglón") }
+        losCuatro(1.3f).forEach { nodo -> assertEquals(1, disposicion(nodo).lineCount, "«${texto(nodo)}» baja de renglón") }
     }
 
     @Test
     fun `el lector de pantalla dice la frase entera`() {
         montar(1.12f)
-        listOf("Anotar un gasto", "Subir un comprobante", "Revisar los avisos", "Preguntarle a Movi").forEach {
+        listOf("Anotar un gasto", "Anotar un ingreso", "Revisar los avisos", "Preguntarle a Movi").forEach {
             composeRule.onNodeWithContentDescription(it, useUnmergedTree = true).assertExists()
         }
     }

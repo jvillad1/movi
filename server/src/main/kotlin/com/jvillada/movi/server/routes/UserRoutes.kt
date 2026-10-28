@@ -17,6 +17,9 @@ import com.jvillada.movi.shared.model.MAX_INICIOS_PROPIOS
 import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
+import com.jvillada.movi.shared.model.TipoDeAhorro
+import com.jvillada.movi.shared.model.problemaDelAhorro
+import com.jvillada.movi.shared.model.tipoDeAhorroDe
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import io.ktor.http.HttpStatusCode
@@ -149,9 +152,26 @@ fun Route.userRoutes() {
             ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Esa regla de fin de semana no existe")
             }
+            // El ahorro de cada período: el tipo manda y el valor va con él (ver `problemaDelAhorro`,
+            // la misma regla que apaga «Guardar» en la hoja). Un tipo que no existe se rechaza en vez
+            // de guardarse: leído después, caería callado a «no apartas nada». Un valor sin tipo
+            // tampoco: no se sabría si son pesos o un porcentaje.
+            val tipoDeAhorro = req.ahorroDelPeriodoTipo?.let { nombre ->
+                TipoDeAhorro.entries.firstOrNull { it.name == nombre }
+                    ?: return@put call.respond(HttpStatusCode.BadRequest, "Ese tipo de ahorro no existe")
+            }
+            if (tipoDeAhorro == null && req.ahorroDelPeriodoValor != null) {
+                return@put call.respond(HttpStatusCode.BadRequest, "Falta decir si el ahorro es un monto o un porcentaje")
+            }
+            if (tipoDeAhorro != null) {
+                problemaDelAhorro(tipoDeAhorro, req.ahorroDelPeriodoValor)?.let {
+                    return@put call.respond(HttpStatusCode.BadRequest, it)
+                }
+            }
             if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null &&
                 req.reminderLeadDays == null && req.smsAlertMuted == null && req.periodStarts == null &&
-                req.diasParaBancoMudo == null && req.cierrePorCorreo == null && req.periodWeekendRule == null
+                req.diasParaBancoMudo == null && req.cierrePorCorreo == null && req.periodWeekendRule == null &&
+                tipoDeAhorro == null
             ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
             }
@@ -173,6 +193,11 @@ fun Route.userRoutes() {
                     req.smsAlertMuted?.let { stmt[Users.smsAlertMuted] = it }
                     req.diasParaBancoMudo?.let { stmt[Users.diasParaBancoMudo] = it }
                     req.cierrePorCorreo?.let { stmt[Users.cierrePorCorreo] = it }
+                    tipoDeAhorro?.let {
+                        stmt[Users.ahorroDelPeriodoTipo] = it.name
+                        // «No apartar nada» guarda 0: así un valor viejo no reaparece al volver a elegir.
+                        stmt[Users.ahorroDelPeriodoValor] = if (it == TipoDeAhorro.NINGUNO) 0L else req.ahorroDelPeriodoValor ?: 0L
+                    }
                 }
                 Users.selectAll().where { Users.id eq uid }.firstOrNull()
             } ?: return@put call.respond(HttpStatusCode.NotFound)
@@ -315,6 +340,10 @@ private fun ResultRow.toProfile() = UserProfile(
     cierrePorCorreo = this[Users.cierrePorCorreo] ?: true,
     // Sin tocar = la guía nunca se terminó ni se descartó.
     primerUsoEn = this[Users.primerUsoEn],
+    // Sin elegir = no aparta nada: «Te quedan» da lo de siempre.
+    ahorroDelPeriodoTipo = tipoDeAhorroDe(this[Users.ahorroDelPeriodoTipo]).name,
+    ahorroDelPeriodoValor = if (tipoDeAhorroDe(this[Users.ahorroDelPeriodoTipo]) == TipoDeAhorro.NINGUNO) 0L
+    else this[Users.ahorroDelPeriodoValor] ?: 0L,
 )
 
 /** Un período se escribe «AAAA-MM». */

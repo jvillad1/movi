@@ -149,23 +149,18 @@ class InicioDelRedisenoTest {
 
     // ── La cuadrícula ────────────────────────────────────────────────────────
 
+    /**
+     * Vuelta de diseño 26 (decisión del dueño, «Dejar 4»): Gasto, Ingreso, Avisos y Preguntar. Las
+     * otras cuatro están en el menú del «+» (ver `BuscarEnMoviTest`).
+     */
     @Test
-    fun `con la ola de Espacios Repartir se muestra en su lugar, y apagado se salta`() {
-        assertEquals(true, REPARTIR_ESTA_LISTO)
-        assertEquals(
-            listOf("Gasto", "Ingreso", "Traspaso", "Pagar tarjeta", "Repartir", "Comprobante", "Avisos", "Preguntar"),
-            accionesDelInicio().map { it.rotulo },
-        )
+    fun `Hoy tiene cuatro acciones, en su orden`() {
+        assertEquals(listOf("Gasto", "Ingreso", "Avisos", "Preguntar"), accionesDelInicio().map { it.rotulo })
         // Vuelta de diseño 2: el rótulo es corto; la frase entera es la del lector de pantalla.
         assertEquals(
-            listOf(
-                "Anotar un gasto", "Anotar un ingreso", "Anotar un traspaso", "Pagar una tarjeta",
-                "Repartir un gasto", "Subir un comprobante", "Revisar los avisos", "Preguntarle a Movi",
-            ),
+            listOf("Anotar un gasto", "Anotar un ingreso", "Revisar los avisos", "Preguntarle a Movi"),
             accionesDelInicio().map { it.descripcion },
         )
-        assertEquals(7, accionesDelInicio(repartirListo = false).size)
-        assertTrue(accionesDelInicio(repartirListo = false).none { it == AccionDelInicio.REPARTIR })
     }
 
     @Test
@@ -175,12 +170,8 @@ class InicioDelRedisenoTest {
             Screen.QuickAdd(presetEsIngreso = true, presetPestana = PestanaDeAgregar.INGRESO),
             destinoDeLaAccion(AccionDelInicio.ANOTAR_INGRESO),
         )
-        assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.TRASPASO), destinoDeLaAccion(AccionDelInicio.TRASPASAR))
-        assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.PAGO_DE_TARJETA), destinoDeLaAccion(AccionDelInicio.PAGAR_TARJETA))
-        assertNull(destinoDeLaAccion(AccionDelInicio.SUBIR_COMPROBANTE), "elegir un archivo no es una pantalla")
         assertEquals(Screen.PorRevisar, destinoDeLaAccion(AccionDelInicio.REVISAR_AVISOS))
         assertEquals(Screen.AIChat(), destinoDeLaAccion(AccionDelInicio.PREGUNTAR_A_MOVI))
-        assertEquals(Screen.Espacios, destinoDeLaAccion(AccionDelInicio.REPARTIR))
     }
 
     @Test

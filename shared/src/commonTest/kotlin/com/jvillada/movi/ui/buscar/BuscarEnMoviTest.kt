@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
 import com.jvillada.movi.ui.quickadd.PestanaDeAgregar
+import com.jvillada.movi.ui.quickadd.hacerElAtajo
 import com.jvillada.movi.ui.quickadd.pantallaDelAtajo
 import com.jvillada.movi.ui.quickadd.pestanaInicialDeAgregar
 import kotlin.test.Test
@@ -149,6 +150,40 @@ class BuscarEnMoviTest {
         assertEquals(PestanaDeAgregar.TRASPASO, pantallaDelAtajo(AtajoDeAgregar.TRASPASO)?.presetPestana)
         assertEquals(PestanaDeAgregar.PAGO_DE_TARJETA, pantallaDelAtajo(AtajoDeAgregar.PAGO_DE_TARJETA)?.presetPestana)
         assertNull(pantallaDelAtajo(AtajoDeAgregar.SUBIR_COMPROBANTE))
+        assertNull(pantallaDelAtajo(AtajoDeAgregar.REPARTIR), "Repartir abre la hoja del espacio, no Agregar")
+    }
+
+    /**
+     * Vuelta de diseño 26: las cuatro acciones que salieron de la cuadrícula del Inicio (Traspaso,
+     * Pagar tarjeta, Repartir, Comprobante) están en el menú del «+», cada una una vez, y hacen lo de
+     * antes.
+     */
+    @Test
+    fun `el menu del mas tiene las cuatro que salieron de Hoy, sin repetir, y cada una hace lo suyo`() {
+        assertEquals(
+            listOf("Gasto", "Ingreso", "Traspaso", "Pago de tarjeta", "Repartir", "Subir comprobante"),
+            AtajoDeAgregar.entries.map { it.rotulo },
+        )
+        val hecho = mutableListOf<String>()
+        AtajoDeAgregar.entries.forEach { atajo ->
+            hacerElAtajo(
+                atajo,
+                navegar = { hecho += "ir:$it" },
+                repartir = { hecho += "repartir" },
+                elegirComprobante = { hecho += "comprobante" },
+            )
+        }
+        assertEquals(
+            listOf(
+                "ir:${Screen.QuickAdd(presetPestana = PestanaDeAgregar.GASTO)}",
+                "ir:${Screen.QuickAdd(presetEsIngreso = true, presetPestana = PestanaDeAgregar.INGRESO)}",
+                "ir:${Screen.QuickAdd(presetPestana = PestanaDeAgregar.TRASPASO)}",
+                "ir:${Screen.QuickAdd(presetPestana = PestanaDeAgregar.PAGO_DE_TARJETA)}",
+                "repartir",
+                "comprobante",
+            ),
+            hecho,
+        )
     }
 
     @Test

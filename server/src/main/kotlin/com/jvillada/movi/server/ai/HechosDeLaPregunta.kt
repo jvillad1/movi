@@ -161,7 +161,10 @@ internal fun hechosParaLaPregunta(pregunta: String, datos: DatosParaLosHechos): 
 
     val limpia = " " + palabrasDe(pregunta).joinToString(" ") + " "
     fun hablaDe(vararg trozos: String) = trozos.any { it in limpia }
-    if (hablaDe(" periodo ", " este mes ", " me alcanza ", " me queda ")) bloques += hechosDelPeriodo(p)
+    // Con un ahorro elegido, preguntar por él o por cuánto se puede gastar también trae el período,
+    // que es donde va su renglón. Sin ahorro, lo de siempre.
+    val porElAhorro = p.ahorro != null && hablaDe(" ahorro ", " ahorrar ", " ahorrando ", " puedo gastar ", " te quedan ")
+    if (hablaDe(" periodo ", " este mes ", " me alcanza ", " me queda ") || porElAhorro) bloques += hechosDelPeriodo(p)
     if (hablaDe(" patrimonio ", " cuanto tengo ", " mi plata ", " tu plata ")) bloques += hechosDelPatrimonio(datos.patrimonio)
     if (hablaDe(" interes ", " intereses ")) hechosDeLosIntereses(p.creditos)?.let { bloques += it }
     if (hablaDe(" presupuesto ", " presupuestos ") && nombradas.none { it in categorias }) {
@@ -323,6 +326,8 @@ private fun hechosDelPeriodo(p: ContextoDelPeriodo): String = buildString {
         appendLine("- Gastos recurrentes que todavía no ocurrieron: ${pesos(pendientes)}")
         appendLine("- Si salen todos, el flujo del período quedaría en ${pesos(flujo - pendientes)}")
     }
+    // El ahorro que eligió, con «Te quedan» de Hoy ya sin él. Sin ahorro, nada.
+    p.ahorro?.let { appendLine(it.linea(::pesos)) }
 }
 
 private fun hechosDelPatrimonio(pat: Patrimonio): String = buildString {

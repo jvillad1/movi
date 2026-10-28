@@ -20,12 +20,19 @@ internal actual fun hojaDeCompartirDeLaPlataforma(): HojaDeCompartir {
 private class HojaDeAndroid(private val contexto: Context) : HojaDeCompartir {
     override val abreLaHojaDelSistema: Boolean = true
 
-    override fun compartir(texto: String) {
+    override fun compartir(texto: String) = abrirLaHoja(texto, "Compartir resumen")
+
+    override fun mandarMensaje(texto: String): ComoSalioElMensaje {
+        abrirLaHoja(texto, "Enviar mensaje")
+        return ComoSalioElMensaje.POR_LA_HOJA
+    }
+
+    private fun abrirLaHoja(texto: String, titulo: String) {
         val envio = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, texto)
         }
-        val selector = Intent.createChooser(envio, "Compartir resumen").apply {
+        val selector = Intent.createChooser(envio, titulo).apply {
             // Desde algo que no es una Activity (el contexto de Compose puede venir envuelto),
             // Android exige una tarea nueva para arrancar otra pantalla.
             if (contexto !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
