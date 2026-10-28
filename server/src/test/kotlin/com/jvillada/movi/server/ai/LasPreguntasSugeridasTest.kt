@@ -8,6 +8,9 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.routes.FabricaDeModelos
 import com.jvillada.movi.server.routes.cajaProyectadaDe
 import com.jvillada.movi.server.routes.aiRoutes
+import com.jvillada.movi.server.routes.cargarDatosDelUsuario
+import com.jvillada.movi.server.routes.buildUserContext
+import kotlinx.coroutines.runBlocking
 import com.jvillada.movi.server.routes.dashboardRoutes
 import com.jvillada.movi.server.routes.reminderRoutes
 import com.jvillada.movi.server.time.AppClock
@@ -362,6 +365,55 @@ class LasPreguntasSugeridasTest {
         // El ahorro es de A: B sigue igual.
         assertEquals(null, resumen(a.duenoB).ahorroDelPeriodo)
         assertEquals(antesDeB, teQuedan(a.duenoB))
+    }
+
+    /**
+     * **El contexto de las preguntas escritas a mano también sabe del ahorro**: el renglón «Apartas
+     * $X de ahorro cada período (20 % de lo que entra); te quedan $Y…» va en el contexto general y en
+     * los hechos exactos —las dos fuentes del verificador de cifras—, con el «Te quedan» de Hoy. Sin
+     * ahorro, el contexto es exactamente el de antes (ni un renglón de más).
+     */
+    @Test
+    fun `el contexto del chat menciona el ahorro solo cuando hay ahorro`() {
+        val hoy = AppClock.today()
+        periodoDeA(hoy)
+        val pregunta = "¿Cuánto puedo gastar este período?"
+
+        val sinAhorro = runBlocking { buildUserContext(a.duenoA) }
+        val hechosSin = runBlocking { hechosParaLaPregunta(pregunta, cargarDatosDelUsuario(a.duenoA).paraLosHechos()) }
+        assertFalse("Apartas" in sinAhorro, sinAhorro)
+        assertFalse("ahorro" in hechosSin.orEmpty(), hechosSin.orEmpty())
+
+        fun elegir(tipo: String, valor: Long) = transaction {
+            Users.update({ Users.id eq a.duenoA }) {
+                it[ahorroDelPeriodoTipo] = tipo
+                it[ahorroDelPeriodoValor] = valor
+            }
+        }
+
+        elegir("PORCENTAJE", 20L)
+        val teQuedan = assertNotNull(runBlocking { datosDeLasSugeridas(a.duenoA, PreguntaSugerida.COMO_VOY, hoy) }.disponible).periodo.teQuedan
+        val conAhorro = runBlocking { buildUserContext(a.duenoA) }
+        assertTrue(
+            "- Apartas \$2000000 de ahorro cada período (20 % de lo que entra); te quedan \$$teQuedan para gastar" in conAhorro,
+            conAhorro,
+        )
+        val hechos = assertNotNull(runBlocking { hechosParaLaPregunta(pregunta, cargarDatosDelUsuario(a.duenoA).paraLosHechos()) })
+        assertTrue(
+            "- Apartas ${pesos(2_000_000L)} de ahorro cada período (20 % de lo que entra); te quedan ${pesos(teQuedan)} para gastar" in hechos,
+            hechos,
+        )
+        // El mismo «Te quedan» que el héroe: el que dice «¿Cómo voy?» (ver la prueba de arriba).
+        assertTrue(pesosDelCierre(teQuedan) in respuestaSinModelo(PreguntaSugerida.COMO_VOY, runBlocking { datosDeLasSugeridas(a.duenoA, PreguntaSugerida.COMO_VOY, hoy) }))
+        // Y el verificador de cifras lo respalda: está en las fuentes del turno.
+        assertTrue(cifrasSinRespaldo("Te quedan ${pesos(teQuedan)} y apartas ${pesos(2_000_000L)}.", listOf(conAhorro, hechos)).isEmpty())
+
+        // El otro usuario no lo ve.
+        assertFalse("Apartas" in runBlocking { buildUserContext(a.duenoB) })
+
+        // Volver a «Nada»: el contexto es exactamente el de antes.
+        elegir("NINGUNO", 0L)
+        assertEquals(sinAhorro, runBlocking { buildUserContext(a.duenoA) })
     }
 
     /**

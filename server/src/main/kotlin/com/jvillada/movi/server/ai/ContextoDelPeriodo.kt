@@ -22,6 +22,8 @@ import com.jvillada.movi.server.routes.estadosDeLasOcurrenciasReales
 import com.jvillada.movi.server.routes.flujoDeCaja
 import com.jvillada.movi.server.routes.movimientosDeFlujo
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AhorroDelPeriodo
+import com.jvillada.movi.shared.model.TipoDeAhorro
 import com.jvillada.movi.shared.model.ComoVaLaDeuda
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -217,7 +219,52 @@ internal data class ContextoDelPeriodo(
     val movimientosPorConfirmar: Int,
     /** Los gastos del período uno por uno. No se renderizan: ver [GastoDelPeriodo]. */
     val gastos: List<GastoDelPeriodo> = emptyList(),
+    /**
+     * **El ahorro del período que el dueño eligió en Ajustes**, con «Te quedan» ya sin él. `null` =
+     * no aparta nada: el contexto queda exactamente como antes. Ver [AhorroParaContexto].
+     */
+    val ahorro: AhorroParaContexto? = null,
 )
+
+/**
+ * **El ahorro del período para el asistente** (27-oct-2026, ver `AhorroDelPeriodo.kt` en :core).
+ * «Te quedan» en Hoy ya resta lo que el dueño aparta cada período; si el asistente no lo supiera,
+ * contestaría «¿me alcanza?» con la plata del ahorro como si fuera gastable, y diría otra cifra que
+ * el héroe.
+ *
+ * @property monto el ahorro en pesos: el MISMO `montoDelAhorroDe` que el resumen del Inicio.
+ * @property teQuedan lo que «Te quedan» dice en Hoy, ya sin el ahorro (la misma `disponibleAlDia` que
+ *   «¿Cómo voy?»); `null` si Hoy no tiene esa cifra (sin ingresos ni plata anotados).
+ */
+internal data class AhorroParaContexto(
+    val ajuste: AhorroDelPeriodo,
+    val monto: Long,
+    val teQuedan: Long?,
+    val diasQueQuedan: Int,
+)
+
+/**
+ * El renglón del ahorro: «Apartas $X de ahorro cada período (20 % de lo que entra); te quedan $Y
+ * para gastar…». [formato] pone cada cifra como la escribe el bloque que la usa (el contexto, el
+ * número pelado; los hechos, con puntos de miles), igual que [lineaDeCreditosDesembolsados]: las
+ * cifras son UNAS, y respaldan al verificador.
+ */
+internal fun AhorroParaContexto.linea(formato: (Long) -> String): String {
+    val como = when (ajuste.tipo) {
+        TipoDeAhorro.PORCENTAJE -> "${ajuste.valor} % de lo que entra" +
+            (if (monto == 0L) "; todavía no ha entrado nada este período" else "")
+        else -> "un monto fijo"
+    }
+    val dias = if (diasQueQuedan == 1) "hoy, el último día" else "los $diasQueQuedan días que faltan"
+    val queda = when {
+        teQuedan == null -> ""
+        teQuedan < 0L -> "; ya se pasó por ${formato(-teQuedan)} de lo que había para gastar en el período"
+        else -> "; te quedan ${formato(teQuedan)} para gastar en $dias"
+    }
+    return "- Apartas ${formato(monto)} de ahorro cada período ($como)$queda. Es la misma cifra de «Te quedan» " +
+        "en Hoy, ya sin el ahorro: no la recalcules ni le sumes el ahorro. El ahorro no mueve plata: " +
+        "Tu plata y el patrimonio no lo restan."
+}
 
 /** Todo lo de arriba, leído de la base en una sola pasada. */
 internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
@@ -413,6 +460,8 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
     appendLine("- Ingresos del período: \$$ingresos")
     lineaDeCreditosDesembolsados { "\$$it" }?.let { appendLine(it) }
     appendLine("- Gastos del período: \$${gastoPorCategoria.values.sum()}")
+    // Solo si el dueño aparta algo: sin ahorro, el contexto queda exactamente como antes.
+    ahorro?.let { appendLine(it.linea { v -> "\$$v" }) }
     appendLine()
 
     appendLine("== En qué se fue la plata este período ==")

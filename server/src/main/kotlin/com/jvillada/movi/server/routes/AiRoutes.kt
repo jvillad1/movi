@@ -10,6 +10,7 @@ import com.anthropic.models.messages.TextBlockParam
 import com.jvillada.movi.server.ai.cargarDocumentosParaContexto
 import com.jvillada.movi.server.ai.contextoDelPeriodoDe
 import com.jvillada.movi.server.ai.conSaldos
+import com.jvillada.movi.server.ai.conElAhorro
 import com.jvillada.movi.server.ai.lineaDeCreditosDesembolsados
 import com.jvillada.movi.server.ai.render
 import com.jvillada.movi.server.ai.BUSCAR_DOCUMENTOS
@@ -663,6 +664,9 @@ internal suspend fun cargarDatosDelUsuario(uid: String): DatosDelUsuario {
     // Con el saldo de cada crédito puesto: sin él no hay interés del mes ni «cuánto baja», y esas
     // son las dos cifras con que se contesta «¿qué deuda abono primero?». Ver `conSaldos`.
     val delPeriodo = contextoDelPeriodoDe(uid).conSaldos(cuentas)
+        // El ahorro del período (Ajustes), solo si aparta algo: así el chat dice el mismo «Te
+        // quedan» que Hoy. Sin ahorro no se lee nada más y el contexto queda como antes.
+        .conElAhorro(uid)
 
     // Budgets
     val budgets = dbQuery {
