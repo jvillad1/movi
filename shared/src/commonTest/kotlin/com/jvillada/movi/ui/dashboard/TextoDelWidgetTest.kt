@@ -80,6 +80,28 @@ class TextoDelWidgetTest {
         assertEquals(ROTULO_TE_QUEDAN, texto.rotulo)
     }
 
+    /**
+     * El ahorro del período (Ajustes) viaja en la instantánea dentro de `plataDelDisponible`: el
+     * widget, que no pide red, resta lo mismo que el héroe. Guardada y leída de vuelta, sin perder el
+     * tramo.
+     */
+    @Test
+    fun `el widget resta el ahorro del periodo que viene en la instantanea`() {
+        val plata = PlataDelDisponible(saldoAlInicio = 0, entradas = 10_000_000, guardado = 0)
+        val sin = instantanea.copy(plataDelDisponible = plata)
+        val con = instantanea.copy(plataDelDisponible = plata.copy(ahorroDelPeriodo = 2_000_000))
+        val almacen = mutableMapOf<String, String>()
+        val guardada = instantaneaEnMemoria(almacen)
+        guardada.guardarDatos("u1", con)
+        val leida = assertNotNull(guardada.datos("u1"))
+        assertEquals(2_000_000L, leida.plataDelDisponible?.ahorroDelPeriodo)
+
+        val texto = textoDelWidget(leida, selladaEn = en(hoy, 9, 40), haySesion = true, ahora = ahora)
+        val delHeroe = assertNotNull(teQuedanDelInicio(con, hoy))
+        assertEquals(formatCOP(delHeroe.monto), texto.cifra)
+        assertEquals(assertNotNull(teQuedanDelInicio(sin, hoy)).teQuedan - 2_000_000L, delHeroe.teQuedan)
+    }
+
     @Test
     fun `si el heroe dice Te pasaste por, el widget tambien, en rojo`() {
         val gastoDeMas = instantanea.copy(gastoVariablePorDia = mapOf("2026-09-20" to 9_000_000L))

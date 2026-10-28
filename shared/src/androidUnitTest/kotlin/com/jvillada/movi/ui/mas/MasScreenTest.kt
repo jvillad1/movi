@@ -142,7 +142,7 @@ class MasScreenTest {
 
         // Cada fila en su sección, en el orden pedido.
         val enOrden = listOf(
-            "Inicio del mes", "Categorías", "Personas y comercios", "Captura del banco",
+            "Inicio del mes", "Ahorro de cada período", "Categorías", "Personas y comercios", "Captura del banco",
             "Movi AI", "Lo que Movi sabe de ti", "Editar inicio",
             "Igual que el teléfono", "Ocultar los saldos",
             "Avisarme antes de un vencimiento", "Resumen del período por correo",

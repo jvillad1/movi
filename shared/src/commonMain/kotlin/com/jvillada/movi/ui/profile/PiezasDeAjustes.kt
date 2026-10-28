@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.platform.PushOptIn
+import com.jvillada.movi.shared.model.AhorroDelPeriodo
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.theme.Espacio
@@ -33,6 +34,15 @@ import com.jvillada.movi.ui.components.ds.Superficie
 internal suspend fun guardarElInicioDelMes(dia: Int, regla: SiElCorteCaeEnFinDeSemana) =
     Repositories.wallets.updateUserProfile(
         UpdateProfileRequest(periodCutoffDay = dia, periodWeekendRule = regla.name),
+    )
+
+/**
+ * **Guardar «Ahorro de cada período»**: el tipo y su valor juntos (ver `AhorroDelPeriodo.kt` en
+ * `:core`). Con «Nada» el server guarda 0.
+ */
+internal suspend fun guardarElAhorroDelPeriodo(ahorro: AhorroDelPeriodo) =
+    Repositories.wallets.updateUserProfile(
+        UpdateProfileRequest(ahorroDelPeriodoTipo = ahorro.tipo.name, ahorroDelPeriodoValor = ahorro.valor),
     )
 
 /**
