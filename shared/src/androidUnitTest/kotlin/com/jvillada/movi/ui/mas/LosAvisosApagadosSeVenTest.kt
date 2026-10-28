@@ -1,9 +1,13 @@
 package com.jvillada.movi.ui.mas
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -44,14 +48,18 @@ class LosAvisosApagadosSeVenTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    FilaDeRecordatorios(
-                        pushStatus = pushStatus,
-                        canales = canales,
-                        diasDeAviso = 3,
-                        falloElPerfil = false,
-                        onActivar = { activadas++ },
-                        onElegirDias = {},
-                    )
+                    Column {
+                        FilasDeAvisos(
+                            pushSoportado = true,
+                            pushStatus = pushStatus,
+                            canales = canales,
+                            diasDeAviso = 3,
+                            falloElPerfil = false,
+                            onActivar = { activadas++ },
+                            onDesactivar = {},
+                            onElegirDias = {},
+                        )
+                    }
                 }
             }
         }
@@ -61,14 +69,27 @@ class LosAvisosApagadosSeVenTest {
     private fun hay(texto: String) =
         composeRule.onAllNodes(hasText(texto, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
+    /**
+     * Vuelta 31: eran dos botones seguidos —«Activar» en las notificaciones y «Activar» en esta fila—
+     * para lo mismo. Queda uno, «Activar avisos».
+     */
     @Test
-    fun `sin canal activo la fila dice Apagado y ofrece activarlo`() {
+    fun `sin canal activo la fila dice Apagado y hay un solo Activar avisos`() {
         montar(pushStatus = "disabled", canales = sinCorreo)
 
         assertTrue(hay(RECORDATORIOS_APAGADOS), "dice «Apagado: no te va a llegar»")
         assertTrue(!hay("Te avisamos 3 días antes"), "no promete un aviso que no va a llegar")
-        composeRule.onNodeWithText("Activar", useUnmergedTree = true).performClick()
+        assertEquals(1, composeRule.onAllNodes(hasClickAction() and hasText(ACTIVAR_AVISOS)).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithText("Activar", useUnmergedTree = true).fetchSemanticsNodes().size, "ningún «Activar» suelto")
+        composeRule.onNodeWithText(ACTIVAR_AVISOS, useUnmergedTree = true).performClick()
         assertEquals(1, activadas)
+    }
+
+    @Test
+    fun `activadas dice Desactivar y ningun Activar`() {
+        montar(pushStatus = "enabled", canales = sinCorreo)
+        assertTrue(hay("Desactivar"))
+        assertTrue(!hay(ACTIVAR_AVISOS))
     }
 
     @Test
@@ -79,10 +100,12 @@ class LosAvisosApagadosSeVenTest {
     }
 
     @Test
-    fun `bloqueadas por el navegador dice Apagado, sin un boton que no puede arreglarlo`() {
+    fun `bloqueadas por el navegador dice Apagado, con el boton apagado`() {
         montar(pushStatus = "denied", canales = sinCorreo)
         assertTrue(hay(RECORDATORIOS_APAGADOS))
-        assertTrue(!hay("Activar"))
+        assertTrue(hay("Bloqueadas por el navegador"))
+        assertEquals(1, composeRule.onAllNodesWithText(ACTIVAR_AVISOS, useUnmergedTree = true).fetchSemanticsNodes().size)
+        composeRule.onNode(hasClickAction() and hasText(ACTIVAR_AVISOS)).assertIsNotEnabled()
     }
 
     @Test

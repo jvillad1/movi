@@ -13,9 +13,27 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Category
+import androidx.compose.material.icons.rounded.DashboardCustomize
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Password
+import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.Savings
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Sms
+import androidx.compose.material.icons.rounded.Summarize
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.DeleteForever
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,14 +45,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.data.EXPLICACION_HUELLA
 import com.jvillada.movi.data.EstadoDeHuella
-import com.jvillada.movi.data.PreferenciaDeTema
 import com.jvillada.movi.data.PropositoDeHuella
 import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.Repositories
@@ -42,15 +58,14 @@ import com.jvillada.movi.data.ResultadoDeHuella
 import com.jvillada.movi.data.SaldosOcultosStore
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.TemaStore
+import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.data.motivoDeLaHuella
 import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.platform.PushOptIn
-import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.theme.Espacio
-import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.AtrasCierraEstaHoja
@@ -69,7 +84,6 @@ import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
-import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
@@ -91,7 +105,10 @@ import com.jvillada.movi.ui.profile.EditProfileSheet
 import com.jvillada.movi.ui.profile.Interruptor
 import com.jvillada.movi.ui.profile.NO_PUDIMOS_LEERLO
 import com.jvillada.movi.ui.profile.NotaDeSeccion
+import com.jvillada.movi.ui.profile.INICIO_DEL_PERIODO
 import com.jvillada.movi.ui.profile.PeriodoSheet
+import com.jvillada.movi.ui.primeruso.DireccionDeMovi
+import com.jvillada.movi.ui.primeruso.rememberDireccionDeMovi
 import com.jvillada.movi.ui.profile.AHORRO_DE_CADA_PERIODO
 import com.jvillada.movi.ui.profile.AhorroDelPeriodoSheet
 import com.jvillada.movi.ui.profile.guardarElAhorroDelPeriodo
@@ -128,13 +145,18 @@ val SECCIONES_DE_AJUSTES: List<String> =
  * se usan bien (Revolut, Nubank): arriba la tarjeta del perfil y debajo las secciones, cada una con
  * su [Seccion] y sus [Fila]s, en este orden:
  *
- * - **Tu plata**: Inicio del mes, Ahorro de cada período, Categorías, Personas y comercios, Captura (o Mensajes) del banco;
+ * - **Tu plata**: Inicio del período, Ahorro de cada período, Categorías, Captura (o Mensajes) del banco
+ *   y, donde no se leen SMS, «Recibe tus alertas por correo»;
  * - **Movi**: Movi AI, Lo que Movi sabe de ti, Editar inicio (y Primeros pasos, mientras falte algo);
- * - **Cómo se ve**: el tema y «Ocultar los saldos» (de este aparato);
- * - **Avisos**: las notificaciones, cuántos días antes avisar y el resumen por correo;
+ * - **Cómo se ve**: el tema (una fila que abre su hoja) y «Ocultar los saldos» (de este aparato);
+ * - **Avisos**: las notificaciones con un solo «Activar avisos», cuántos días antes avisar y el resumen por correo;
  * - **Tus datos**: Documentos, Descargar tus datos, Compartir;
  * - **Entrar** (solo con lector de huella) y **Cuenta**: la contraseña y cerrar la sesión;
  * - y al final, aparte y sin relleno rojo, «Borrar mi cuenta».
+ *
+ * **Vuelta 31: más corta y con íconos.** Cada fila lleva su [IconoEnCirculo] ([IconoDeAjuste]); el tema
+ * pasó de tres filas a una; «Personas y comercios» quedó solo en Espacios (su pestaña); y «Inicio del
+ * mes» se llama «Inicio del período», como en el resto de la app.
  *
  * `Screen.Profile` dejó de existir: quien navegaba a Perfil llega acá (el destino SDUI `"profile"`
  * también). **Es una reubicación**: cada interruptor y cada acción usa la MISMA lógica y el mismo
@@ -146,7 +168,12 @@ val SECCIONES_DE_AJUSTES: List<String> =
  * se vuelve a donde se estaba, o al Hoy si no hay historial.
  */
 @Composable
-fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
+fun MasScreen(
+    onNavigate: (Screen) -> Unit,
+    onLogout: () -> Unit = {},
+    /** ¿Este aparato lee los SMS del banco? Donde no (la web, iOS), «Recibe tus alertas por correo». */
+    esAndroid: Boolean = isAndroid,
+) {
     // F42 · F46: el perfil real, leído del server. Mientras no llega, la tarjeta se pinta con lo que
     // SessionManager tenía del login (sin parpadeo), y al llegar deja SessionManager al día para que
     // el avatar de las otras pantallas tenga el color correcto.
@@ -165,6 +192,8 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
     var errorCierre by remember { mutableStateOf<String?>(null) }
     var errorPeriodo by remember { mutableStateOf<String?>(null) }
     var showAhorro by remember { mutableStateOf(false) }
+    var showTema by remember { mutableStateOf(false) }
+    var showCorreo by remember { mutableStateOf(false) }
     var guardandoAhorro by remember { mutableStateOf(false) }
     var errorAhorro by remember { mutableStateOf<String?>(null) }
     var profileReloadKey by remember { mutableStateOf(0) }
@@ -203,6 +232,9 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
     // MISMA condición que decide si el Inicio la pinta (`DashboardData.guiaIncompleta`), leída del
     // caché del Inicio: sin datos, no se afirma que falte nada.
     val guiaIncompleta = DashboardDataCache.data?.guiaIncompleta == true
+
+    // Vuelta 31: la dirección de Movi para reenviar los correos del banco, solo donde no se leen SMS.
+    val direccionDeMovi = if (!esAndroid) rememberDireccionDeMovi() else remember { DireccionDeMovi() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
@@ -243,30 +275,43 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                             // deja tocar: ese texto era el valor por defecto disfrazado del suyo.
                             val cutoff = profile?.periodCutoffDay
                             Fila(
-                                titulo = "Inicio del mes",
+                                titulo = INICIO_DEL_PERIODO,
+                                inicio = { IconoDeAjuste(Icons.Rounded.CalendarMonth) },
                                 subtitulo = cutoff?.let { d ->
                                     textoDelInicioDelMes(d, siElCorteCaeEnFinDeSemanaDe(profile?.periodWeekendRule))
                                 } ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
                                 final = if (cutoff != null) ({ Chevron() }) else null,
                                 onClick = if (cutoff == null) null else ({ errorPeriodo = null; showPeriodo = true }),
                             )
-                            Separador(SangriaDeSeparador.Margen)
+                            Separador()
                             // Lo que «Te quedan» resta antes de decirte cuánto puedes gastar. Mismo
-                            // cuidado que «Inicio del mes»: sin perfil no dice «No apartas nada».
+                            // cuidado que «Inicio del período»: sin perfil no dice «No apartas nada».
                             val ahorro = profile?.ahorroDelPeriodo()
                             Fila(
                                 titulo = AHORRO_DE_CADA_PERIODO,
+                                inicio = { IconoDeAjuste(Icons.Rounded.Savings) },
                                 subtitulo = ahorro?.let(::textoDelAhorro) ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
                                 final = if (ahorro != null) ({ Chevron() }) else null,
                                 onClick = if (ahorro == null) null else ({ errorAhorro = null; showAhorro = true }),
                             )
-                            Separador(SangriaDeSeparador.Margen)
-                            FilaQueLleva("Categorías", Screen.Categorias, onNavigate)
-                            Separador(SangriaDeSeparador.Margen)
-                            FilaQueLleva(PERSONAS_Y_COMERCIOS, Screen.Destinos(), onNavigate)
-                            Separador(SangriaDeSeparador.Margen)
+                            Separador()
+                            FilaQueLleva("Categorías", Icons.Rounded.Category, Screen.Categorias, onNavigate)
+                            // Vuelta 31: «Personas y comercios» vive en Espacios —su pestaña, la de lo que
+                            // tienes con los demás, y donde se elige con quién se comparte—, no también acá.
+                            Separador()
                             // «Captura del banco» en Android, «Mensajes del banco» donde no hay captura.
-                            FilaQueLleva(tituloDeCapturaDelBanco, Screen.CapturaDelBanco, onNavigate)
+                            FilaQueLleva(
+                                tituloDeCapturaDelBanco,
+                                if (esAndroid) Icons.Rounded.Sms else Icons.Rounded.Inbox,
+                                Screen.CapturaDelBanco,
+                                onNavigate,
+                            )
+                            // Donde no se leen SMS, la captura es reenviar los correos del banco: la
+                            // dirección y el paso a paso, con la misma pieza de la guía de primer uso.
+                            if (!esAndroid) {
+                                Separador()
+                                FilaDeAlertasPorCorreo(direccionDeMovi, onAbrir = { showCorreo = true })
+                            }
                         }
                     }
                 }
@@ -276,20 +321,21 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                     Column {
                         Seccion(titulo = "Movi")
                         Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            FilaQueLleva("Movi AI", Screen.AIChat(), onNavigate)
-                            Separador(SangriaDeSeparador.Margen)
-                            FilaQueLleva(TITULO_LO_QUE_MOVI_SABE, Screen.LoQueMoviSabe, onNavigate)
-                            Separador(SangriaDeSeparador.Margen)
+                            FilaQueLleva("Movi AI", Icons.Rounded.AutoAwesome, Screen.AIChat(), onNavigate)
+                            Separador()
+                            FilaQueLleva(TITULO_LO_QUE_MOVI_SABE, Icons.Rounded.Psychology, Screen.LoQueMoviSabe, onNavigate)
+                            Separador()
                             // Ola 3 · «Editar inicio»: es del dueño (se guarda en el server).
                             FilaQueLleva(
                                 TITULO_EDITAR_INICIO,
+                                Icons.Rounded.DashboardCustomize,
                                 Screen.EditarInicio,
                                 onNavigate,
                                 subtitulo = "Qué secciones ves en Hoy y en qué orden",
                             )
                             if (guiaIncompleta) {
-                                Separador(SangriaDeSeparador.Margen)
-                                FilaQueLleva("Primeros pasos", Screen.PrimerosPasos, onNavigate)
+                                Separador()
+                                FilaQueLleva("Primeros pasos", Icons.Rounded.Flag, Screen.PrimerosPasos, onNavigate)
                             }
                         }
                     }
@@ -300,30 +346,22 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                     Column {
                         Seccion(titulo = "Cómo se ve")
                         Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            // Ola 1: tres opciones; la primera sigue al teléfono ([PreferenciaDeTema]).
-                            PreferenciaDeTema.entries.forEachIndexed { i, opcion ->
-                                if (i > 0) Separador(SangriaDeSeparador.Margen)
-                                val elegida = TemaStore.preferencia == opcion
-                                Fila(
-                                    titulo = opcion.titulo,
-                                    subtitulo = if (opcion == PreferenciaDeTema.SISTEMA) "Claro u oscuro, según tu teléfono" else null,
-                                    final = {
-                                        Box(modifier = Modifier.size(Icono.l), contentAlignment = Alignment.Center) {
-                                            if (elegida) {
-                                                Icon(Icons.Rounded.Check, contentDescription = "Elegido", tint = Movi.colores.marca, modifier = Modifier.size(Icono.m))
-                                            }
-                                        }
-                                    },
-                                    onClick = { TemaStore.poner(opcion) },
-                                    modifier = Modifier.semantics { selected = elegida },
-                                )
-                            }
-                            Separador(SangriaDeSeparador.Ninguna)
+                            // Vuelta 31: una fila con su valor; las tres opciones viven en su hoja
+                            // ([HojaDelTema]). La primera sigue al teléfono ([PreferenciaDeTema]).
+                            Fila(
+                                titulo = TITULO_DEL_TEMA,
+                                subtitulo = TemaStore.preferencia.titulo,
+                                inicio = { IconoDeAjuste(Icons.Rounded.Palette) },
+                                final = { Chevron() },
+                                onClick = { showTema = true },
+                            )
+                            Separador()
                             // «Ocultar los saldos»: lo mismo que el ojo de Hoy. También de este aparato.
                             val ocultos = LocalSaldosOcultos.current
                             Fila(
                                 titulo = ROTULO_OCULTAR_LOS_SALDOS,
                                 subtitulo = "Tus cifras se ven como $PLATA_OCULTA en este aparato",
+                                inicio = { IconoDeAjuste(Icons.Rounded.VisibilityOff) },
                                 final = { Interruptor(ocultos, onCambio = { SaldosOcultosStore.poner(it) }) },
                                 onClick = { SaldosOcultosStore.alternar() },
                             )
@@ -364,33 +402,10 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                     Column {
                         Seccion(titulo = "Avisos")
                         Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            // Las notificaciones push del navegador, donde se pueden pedir.
-                            if (PushOptIn.supported) {
-                                Fila(
-                                    titulo = "Notificaciones push",
-                                    subtitulo = when (pushStatus) {
-                                        "enabled" -> "Activadas en este dispositivo"
-                                        "denied" -> "Bloqueadas por el navegador"
-                                        else -> "Recibe tus pagos próximos"
-                                    },
-                                    final = {
-                                        Boton(
-                                            if (pushStatus == "enabled") "Desactivar" else "Activar",
-                                            onClick = {
-                                                if (pushStatus == "enabled") PushOptIn.disable() else PushOptIn.enable()
-                                                refreshTick++
-                                            },
-                                            variante = VarianteDeBoton.Secundario,
-                                            tamano = TamanoDeBoton.S,
-                                            habilitado = pushStatus != "denied",
-                                        )
-                                    },
-                                )
-                                Separador(SangriaDeSeparador.Margen)
-                            }
-                            // Vuelta de diseño 22: la fila dice «Apagado: no te va a llegar» mientras no
-                            // haya ningún canal, con la acción de activarlo (ver [FilaDeRecordatorios]).
-                            FilaDeRecordatorios(
+                            // Las notificaciones push del navegador, donde se pueden pedir, con un solo
+                            // «Activar avisos» (vuelta 31), y cuántos días antes avisar.
+                            FilasDeAvisos(
+                                pushSoportado = PushOptIn.supported,
                                 pushStatus = pushStatus,
                                 canales = ReminderChannelsCache.canales,
                                 diasDeAviso = profile?.reminderLeadDays,
@@ -399,13 +414,18 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                                     PushOptIn.enable()
                                     refreshTick++
                                 },
+                                onDesactivar = {
+                                    PushOptIn.disable()
+                                    refreshTick++
+                                },
                                 onElegirDias = { errorAviso = null; showAviso = true },
                             )
-                            Separador(SangriaDeSeparador.Margen)
+                            Separador()
                             // «Cerró tu período» por correo: de la cuenta (sale del server), no del
                             // teléfono. Sin el perfil no se afirma si está encendido.
                             Fila(
                                 titulo = "Resumen del período por correo",
+                                inicio = { IconoDeAjuste(Icons.Rounded.Summarize) },
                                 subtitulo = when (cierrePorCorreo) {
                                     null -> if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO
                                     true -> "El día siguiente al corte"
@@ -442,10 +462,11 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                         Seccion(titulo = "Tus datos")
                         Superficie(relleno = RellenoDeSuperficie.Lista) {
                             // Ola 18: los papeles. Absorbió a «Extractos».
-                            FilaQueLleva("Documentos", Screen.Documentos, onNavigate)
-                            Separador(SangriaDeSeparador.Margen)
+                            FilaQueLleva("Documentos", Icons.Rounded.Description, Screen.Documentos, onNavigate)
+                            Separador()
                             Fila(
                                 titulo = DESCARGAR_TUS_DATOS,
+                                inicio = { IconoDeAjuste(Icons.Rounded.Download) },
                                 subtitulo = if (bajandoDatos) "Preparando el archivo…" else "Un ZIP en CSV y JSON",
                                 final = { Chevron() },
                                 onClick = {
@@ -466,9 +487,9 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                                     }
                                 },
                             )
-                            Separador(SangriaDeSeparador.Margen)
+                            Separador()
                             // El enlace de solo lectura para Caro o un asesor.
-                            FilaQueLleva("Compartir", Screen.Compartir, onNavigate)
+                            FilaQueLleva("Compartir", Icons.Rounded.Share, Screen.Compartir, onNavigate)
                         }
                         NotaDeSeccion(
                             errorDatos ?: "La descarga trae tus cuentas, movimientos, créditos y mensajes del banco.",
@@ -485,13 +506,23 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                     Column {
                         Seccion(titulo = "Cuenta")
                         Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            Fila(titulo = "Cambiar contraseña", final = { Chevron() }, onClick = { showChangePassword = true })
-                            Separador(SangriaDeSeparador.Margen)
-                            Fila(titulo = CERRAR_SESION, onClick = onLogout)
-                            Separador(SangriaDeSeparador.Margen)
+                            Fila(
+                                titulo = "Cambiar contraseña",
+                                inicio = { IconoDeAjuste(Icons.Rounded.Password) },
+                                final = { Chevron() },
+                                onClick = { showChangePassword = true },
+                            )
+                            Separador()
+                            Fila(
+                                titulo = CERRAR_SESION,
+                                inicio = { IconoDeAjuste(Icons.AutoMirrored.Rounded.Logout) },
+                                onClick = onLogout,
+                            )
+                            Separador()
                             // Para el teléfono perdido: pide confirmación antes.
                             Fila(
                                 titulo = CERRAR_SESION_EN_TODOS,
+                                inicio = { IconoDeAjuste(Icons.Rounded.Devices) },
                                 subtitulo = if (cerrandoTodas) "Cerrando…" else null,
                                 onClick = if (cerrandoTodas) null else ({ errorCierreTotal = null; confirmarCierreTotal = true }),
                             )
@@ -508,6 +539,7 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                             Superficie(relleno = RellenoDeSuperficie.Lista) {
                                 FilaQueLleva(
                                     "Editor de pantallas",
+                                    Icons.Rounded.Tune,
                                     Screen.ScreenEditor,
                                     onNavigate,
                                     subtitulo = "Reordena y edita las secciones de Hoy",
@@ -545,6 +577,14 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                 onDismiss = { showEditProfile = false },
                 onSaved = { showEditProfile = false; profileReloadKey++ },
             )
+        }
+        if (showTema) {
+            AtrasCierraEstaHoja { showTema = false }
+            HojaDelTema(onDismiss = { showTema = false })
+        }
+        if (showCorreo) {
+            AtrasCierraEstaHoja { showCorreo = false }
+            HojaDeAlertasPorCorreo(direccionDeMovi, onDismiss = { showCorreo = false })
         }
         if (showChangePassword) {
             AtrasCierraEstaHoja { showChangePassword = false }
@@ -661,10 +701,32 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
     }
 }
 
-/** Una fila que abre otra pantalla: el título (y el subtítulo) con la flecha de «esto se abre». */
+/** Una fila que abre otra pantalla: su ícono, el título (y el subtítulo) y la flecha de «esto se abre». */
 @Composable
-private fun FilaQueLleva(titulo: String, destino: Screen, onNavigate: (Screen) -> Unit, subtitulo: String? = null) {
-    Fila(titulo = titulo, subtitulo = subtitulo, final = { Chevron() }, onClick = { onNavigate(destino) })
+private fun FilaQueLleva(
+    titulo: String,
+    icono: ImageVector,
+    destino: Screen,
+    onNavigate: (Screen) -> Unit,
+    subtitulo: String? = null,
+) {
+    Fila(
+        titulo = titulo,
+        subtitulo = subtitulo,
+        inicio = { IconoDeAjuste(icono) },
+        final = { Chevron() },
+        onClick = { onNavigate(destino) },
+    )
+}
+
+/**
+ * **El ícono de una fila de Ajustes** (vuelta 31): cada fila lleva el suyo, como las listas de Revolut
+ * y Nubank, en un [IconoEnCirculo] neutro —ninguna fila de Ajustes es un estado ni una propuesta—.
+ * Solo «Borrar mi cuenta» va en peligro.
+ */
+@Composable
+private fun IconoDeAjuste(icono: ImageVector) {
+    IconoEnCirculo(icono, tono = TonoDeIcono.Neutro)
 }
 
 /** Quién eres: el avatar, el nombre y el correo, con «Editar» (alias y color). */
@@ -735,6 +797,7 @@ private fun SeccionEntrarConHuella() {
         Superficie(relleno = RellenoDeSuperficie.Lista) {
             Fila(
                 titulo = "Entrar con huella",
+                inicio = { IconoDeAjuste(Icons.Rounded.Fingerprint) },
                 subtitulo = when {
                     ocupada -> "Esperando tu huella…"
                     activada -> "Activada"

@@ -32,9 +32,11 @@ internal fun resumenDelAcceso(destinos: List<DestinoConocido>?): String =
  *
  * El dueño (4-oct-2026): *«que tenga un acceso muy fácil de encontrar para ver cuentas de
  * terceros»*. Llegó a tener cuatro puertas (Movimientos, Patrimonio, Ajustes y la hoja de un
- * espacio). **Ola R4: quedan dos** — esta fila, al final de **Espacios** (lo que tienes con los
- * demás), y la ficha de Ajustes. Patrimonio contesta «¿qué tengo yo?» y Movimientos «¿en qué se
- * fue?»: ninguna de las dos es la casa de los terceros.
+ * espacio). **Ola R4: quedaron dos** — esta fila, al final de **Espacios** (lo que tienes con los
+ * demás), y la ficha de Ajustes. **Vuelta 31: queda esta sola.** «Personas y comercios» es de la
+ * pestaña Espacios (ahí se navega, y ahí se elige con quién compartir un espacio); en Ajustes era una
+ * segunda puerta a lo mismo. Patrimonio contesta «¿qué tengo yo?» y Movimientos «¿en qué se fue?»:
+ * ninguna de las dos es la casa de los terceros.
  *
  * Es una [Fila] del sistema con los nombres a la vista («Hernán, Ana, Cancha El Gol y 2 más») de
  * subtítulo. Siempre está y siempre mide lo mismo: no aparece cuando contesta la lectura, así que no

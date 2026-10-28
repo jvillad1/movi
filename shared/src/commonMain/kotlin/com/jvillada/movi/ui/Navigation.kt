@@ -162,9 +162,10 @@ sealed class Screen {
      * No vive dentro de `Screen.Accounts` **a propósito**: `Screen.Accounts` lista la plata del
      * dueño, y la cuenta de otra persona no es su plata.
      *
-     * **Dos puertas** (ola R4): la fila al final de **Espacios** (ver `RenglonDePersonasYComercios`)
-     * —lo que tienes con los demás— y la ficha de Ajustes, más la alerta de Hoy. Por eso marca la
-     * pestaña Espacios ([navTabFor]). Antes la principal era Movimientos y había otra en Patrimonio.
+     * **Una puerta** (vuelta 31): la fila al final de **Espacios** (ver `RenglonDePersonasYComercios`)
+     * —lo que tienes con los demás—, más la alerta de Hoy. Por eso marca la pestaña Espacios
+     * ([navTabFor]). Antes la principal era Movimientos, había otra en Patrimonio y, hasta la vuelta 31,
+     * otra en Ajustes.
      *
      * [abrir] es el id de un tercero cuya ficha se abre al llegar: lo pide «Ver su ficha» desde el
      * detalle de un movimiento. [sugeridos] = llegar con lo que Movi encontró ya abierto: lo pide la

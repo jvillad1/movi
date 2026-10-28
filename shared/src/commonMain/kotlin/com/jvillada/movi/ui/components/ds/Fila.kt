@@ -117,7 +117,7 @@ fun colorDelTituloDeFila(tono: TonoDeFila, colores: ColoresDeMovi): Color = when
  *   («Bancolombia Ahorros» al lado de «$13.845.800» a 360 dp) baja a un segundo renglón en vez de
  *   cortarse. La fila crece; el mínimo de alto sigue siendo el de arriba.
  * - [subtitulo]: un renglón, con «…» si no entra. Donde el subtítulo es la razón de la fila y no
- *   se puede acortar («Hace más de un mes que no cuadras Bancolombia Ahorros», en Herramientas),
+ *   se puede acortar («Bancolombia Ahorros · Nunca la has cuadrado», en Herramientas),
  *   [lineasDelSubtitulo] = 2: la fila crece en vez de cortar la frase (vuelta de diseño 2).
  * - [tonoDelSubtitulo]: [TonoDeSubtitulo.Aviso] pinta el subtítulo en el color de aviso, para el
  *   que pide algo (vuelta de diseño 4). El color nunca es la única pista: la frase lo dice.
@@ -206,6 +206,9 @@ fun colorDelTonoDeIcono(tono: TonoDeIcono, colores: ColoresDeMovi): Color = when
     TonoDeIcono.Exito -> colores.entra
 }
 
+/** Tag estable de un [IconoEnCirculo] (vuelta 31: para probar que cada fila de Ajustes lleva el suyo). */
+const val TAG_ICONO_EN_CIRCULO: String = "ds-icono-en-circulo"
+
 /**
  * **Un ícono en un círculo lavado de su color**: el inicio de una [Fila] que no tiene comercio, y
  * el de una [TarjetaDePropuesta]. Mide [Medida.avatar], con el ícono a [Icono.m].
@@ -219,6 +222,7 @@ fun IconoEnCirculo(
     val color = colorDelTonoDeIcono(tono, Movi.colores)
     Box(
         modifier = modifier
+            .testTag(TAG_ICONO_EN_CIRCULO)
             .size(Medida.avatar)
             .background(Movi.colores.lavado(color), CircleShape),
         contentAlignment = Alignment.Center,

@@ -22,14 +22,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Savings
@@ -60,12 +58,10 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.platform.BackHandlerEffect
-import com.jvillada.movi.platform.hojaDeCompartirDeLaPlataforma
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
-import com.jvillada.movi.shared.model.DireccionDeCorreo
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
@@ -97,7 +93,6 @@ import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Encabezado
-import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.Pildora
@@ -114,7 +109,6 @@ import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.profile.guardarElInicioDelMes
 import com.jvillada.movi.ui.profile.proximoCorteCorrido
 import com.jvillada.movi.ui.profile.textoDelInicioDelMes
-import com.jvillada.movi.ui.recurrentes.NumeroEnCirculo
 import com.jvillada.movi.ui.sms.SmsSensorSetupSection
 import com.jvillada.movi.ui.sms.rememberSmsCaptureReady
 import com.jvillada.movi.ui.transicionEntrePantallas
@@ -798,24 +792,9 @@ private fun PasoCaptura(modo: ModoDeCaptura, onCopiada: () -> Unit) {
     }
 }
 
-/** Los pasos para crear el reenvío en Gmail, cortos y en el orden en que se tocan. */
-val PASOS_DEL_REENVIO_EN_GMAIL: List<String> = listOf(
-    "En Gmail, abre Configuración y toca «Ver todos los ajustes».",
-    "En «Reenvío y correo POP/IMAP», toca «Agregar una dirección de reenvío» y pega tu dirección de Movi.",
-    "Gmail manda un código a Movi: búscalo en Ajustes → «Captura del banco» y escríbelo en Gmail.",
-    "Crea un filtro con el correo de tu banco en «De» y elige «Reenviarlo a» tu dirección de Movi.",
-)
-
+/** La pieza es la misma que Ajustes → «Recibe tus alertas por correo» (ver `ReenvioPorCorreo.kt`). */
 @Composable
 private fun PasoCapturaPorCorreo(onCopiada: () -> Unit) {
-    val hoja = hojaDeCompartirDeLaPlataforma()
-    var leida by remember { mutableStateOf(false) }
-    var direccion by remember { mutableStateOf<DireccionDeCorreo?>(null) }
-    var copiada by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        direccion = runCatching { Repositories.wallets.getDireccionDeCorreo() }.getOrNull()
-        leida = true
-    }
     Text(
         "Si tu banco te manda un correo con cada compra, reenvíalo a Movi: te queda en «Por revisar» " +
             "para que lo confirmes. Es opcional.",
@@ -823,52 +802,11 @@ private fun PasoCapturaPorCorreo(onCopiada: () -> Unit) {
         color = Movi.colores.textoMedio,
     )
     Spacer(Modifier.height(Medida.entreSecciones))
-    Seccion("Tu dirección de Movi")
-    val laDireccion = direccion?.direccion?.takeIf { direccion?.configurado == true }
-    when {
-        !leida -> Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) { EsqueletoDeFila() }
-        laDireccion == null -> Text(
-            "El reenvío por correo todavía no está disponible. Puedes saltar este paso.",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-        )
-        else -> {
-            Superficie(modifier = Modifier.fillMaxWidth()) {
-                SelectionContainer {
-                    Text(laDireccion, style = Movi.textos.cuerpo, color = Movi.colores.texto)
-                }
-                Spacer(Modifier.height(Medida.dentroDeSeccion))
-                Boton(
-                    if (copiada) "Copiada" else "Copiar",
-                    onClick = {
-                        hoja.copiar(laDireccion)
-                        copiada = true
-                        onCopiada()
-                    },
-                    variante = VarianteDeBoton.Secundario,
-                    tamano = TamanoDeBoton.S,
-                    icono = Icons.Rounded.ContentCopy,
-                )
-            }
-            Spacer(Modifier.height(Medida.entreSecciones))
-            Seccion("Cómo crear el reenvío en Gmail")
-            Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-                PASOS_DEL_REENVIO_EN_GMAIL.forEachIndexed { i, texto ->
-                    if (i > 0) Separador()
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
-                        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        NumeroEnCirculo(i + 1)
-                        Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-    }
+    ReenvioPorCorreo(
+        direccion = rememberDireccionDeMovi(),
+        onCopiada = onCopiada,
+        sinDireccion = "El reenvío por correo todavía no está disponible. Puedes saltar este paso.",
+    )
 }
 
 // ── 5 · Lo que pagas cada mes ──────────────────────────────────────────────────────────────────

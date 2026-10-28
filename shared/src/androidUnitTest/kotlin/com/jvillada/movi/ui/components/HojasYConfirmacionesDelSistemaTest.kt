@@ -184,7 +184,7 @@ class HojasYConfirmacionesDelSistemaTest {
     @Test
     fun `el inicio del mes abre con el encabezado de hoja`() {
         montar { PeriodoSheet(cutoffActual = 25, onDismiss = {}, onSave = { _, _ -> }) }
-        assertTrue(hayEncabezadoCon("¿Qué día empieza tu mes?"))
+        assertTrue(hayEncabezadoCon("¿Qué día empieza tu período?"))
         assertEquals(
             1,
             composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_HOJA, useUnmergedTree = true).fetchSemanticsNodes().size,

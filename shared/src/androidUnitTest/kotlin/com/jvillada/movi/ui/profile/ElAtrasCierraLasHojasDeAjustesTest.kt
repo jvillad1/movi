@@ -157,12 +157,12 @@ class ElAtrasCierraLasHojasDeAjustesTest {
         }, pila, hojas)
 
         esperar("Cada día 25")
-        tocarFila("Inicio del mes")
-        esperar("¿Qué día empieza tu mes?")
+        tocarFila("Inicio del período")
+        esperar("¿Qué día empieza tu período?")
 
         apretarAtras()
 
-        assertFalse(hay("¿Qué día empieza tu mes?"), "la hoja debería haberse cerrado")
+        assertFalse(hay("¿Qué día empieza tu período?"), "la hoja debería haberse cerrado")
         assertNull(guardado, "salir de la hoja no guarda: atrás es cancelar, no confirmar")
         assertEquals(listOf(Screen.Dashboard, Screen.Mas), pila.toList())
         assertTrue(hay("Cada día 25"), "el corte del dueño queda como estaba")
@@ -183,8 +183,8 @@ class ElAtrasCierraLasHojasDeAjustesTest {
 
         esperar("Cada día 25")
         // Abrir y cerrar con la X deja la pila de hojas vacía otra vez.
-        tocarFila("Inicio del mes")
-        esperar("¿Qué día empieza tu mes?")
+        tocarFila("Inicio del período")
+        esperar("¿Qué día empieza tu período?")
         apretarAtras()
         assertFalse(hojas.hayHojaAbierta)
 

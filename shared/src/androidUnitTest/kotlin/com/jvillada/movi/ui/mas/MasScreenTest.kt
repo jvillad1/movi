@@ -20,9 +20,12 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.PreferenciaDeTema
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.DireccionDeCorreo
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.UserProfile
@@ -32,7 +35,10 @@ import androidx.compose.ui.text.TextLayoutResult
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.ui.components.ds.TAG_FILA
+import com.jvillada.movi.ui.components.ds.TAG_ICONO_EN_CIRCULO
 import com.jvillada.movi.ui.components.ds.TAG_SECCION
+import com.jvillada.movi.ui.primeruso.PASOS_DEL_REENVIO_EN_GMAIL
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
 import com.jvillada.movi.ui.profile.BORRAR_MI_CUENTA
@@ -66,6 +72,7 @@ class MasScreenTest {
     @After
     fun limpiar() {
         Repositories.sustitutoDePrueba = null
+        TemaStore.poner(PreferenciaDeTema.SISTEMA)
     }
 
     private val perfilDelDueno = UserProfile(
@@ -76,6 +83,8 @@ class MasScreenTest {
     private val repo = object : RepositorioDePrueba() {
         override suspend fun getUserProfile(): UserProfile = perfilDelDueno
         override suspend fun isScreenAdmin(): Boolean = false
+        override suspend fun getDireccionDeCorreo(): DireccionDeCorreo =
+            DireccionDeCorreo(token = "abc", direccion = "alertas+abc@movi.resend.app", configurado = true)
     }
 
     private var navegoA: Screen? = null
@@ -83,7 +92,7 @@ class MasScreenTest {
     private var colorDelTexto: Color = Color.Unspecified
     private var sesionesCerradas = 0
 
-    private fun montar(ancho: WindowWidthClass? = null) {
+    private fun montar(ancho: WindowWidthClass? = null, esAndroid: Boolean = true) {
         Repositories.sustitutoDePrueba = repo
         composeRule.setContent {
             val pantalla = @androidx.compose.runtime.Composable {
@@ -91,7 +100,7 @@ class MasScreenTest {
                     colorDeAlerta = Movi.colores.sale
                     colorDelTexto = Movi.colores.texto
                     Box(Modifier.fillMaxSize()) {
-                        MasScreen(onNavigate = { navegoA = it }, onLogout = { sesionesCerradas++ })
+                        MasScreen(onNavigate = { navegoA = it }, onLogout = { sesionesCerradas++ }, esAndroid = esAndroid)
                     }
                 }
             }
@@ -142,9 +151,9 @@ class MasScreenTest {
 
         // Cada fila en su sección, en el orden pedido.
         val enOrden = listOf(
-            "Inicio del mes", "Ahorro de cada período", "Categorías", "Personas y comercios", "Captura del banco",
+            "Inicio del período", "Ahorro de cada período", "Categorías", "Captura del banco",
             "Movi AI", "Lo que Movi sabe de ti", "Editar inicio",
-            "Igual que el teléfono", "Ocultar los saldos",
+            TITULO_DEL_TEMA, "Ocultar los saldos",
             "Avisarme antes de un vencimiento", "Resumen del período por correo",
             "Documentos", "Descargar tus datos", "Compartir",
             "Cambiar contraseña", CERRAR_SESION, CERRAR_SESION_EN_TODOS,
@@ -166,7 +175,6 @@ class MasScreenTest {
         montar()
         mapOf(
             "Categorías" to Screen.Categorias,
-            "Personas y comercios" to Screen.Destinos(),
             "Captura del banco" to Screen.CapturaDelBanco,
             "Movi AI" to Screen.AIChat(),
             "Lo que Movi sabe de ti" to Screen.LoQueMoviSabe,
@@ -185,7 +193,7 @@ class MasScreenTest {
     fun `la configuracion que estaba en Perfil esta en Ajustes`() {
         montar()
         listOf(
-            "Cambiar contraseña", "Inicio del mes", "Cómo se ve", "Ocultar los saldos", "Editar inicio",
+            "Cambiar contraseña", "Inicio del período", "Cómo se ve", "Ocultar los saldos", "Editar inicio",
             "Avisarme antes de un vencimiento", "Descargar tus datos", CERRAR_SESION, CERRAR_SESION_EN_TODOS,
         ).forEach { assertTrue(hay(it), "falta «$it»") }
         // Ya no hay una ficha «Perfil» que lleve a otra pantalla.
@@ -280,5 +288,83 @@ class MasScreenTest {
     fun `sin datos del Inicio todavia, Primeros pasos tampoco aparece`() {
         montar()
         assertTrue(!hay("Primeros pasos"))
+    }
+
+    // ── Vuelta 31: más corta y con íconos ─────────────────────────────────────
+
+    /** Los nodos de una fila de Ajustes que no llevan un ícono en su inicio. */
+    private fun filasSinIcono(): List<String> {
+        fun conIcono(nodo: SemanticsNode): Boolean =
+            nodo.config.getOrNull(SemanticsProperties.TestTag) == TAG_ICONO_EN_CIRCULO || nodo.children.any(::conIcono)
+        return composeRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.TestTag, TAG_FILA), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .filterNot(::conIcono)
+            .map { textosDentroDe(it).firstOrNull().orEmpty() }
+    }
+
+    @Test
+    fun `cada fila de Ajustes lleva su icono`() {
+        DashboardDataCache.data = cuentaConMovimiento(eventCount = 0)
+        montar()
+        assertTrue(hay("Primeros pasos"))
+        assertEquals(emptyList(), filasSinIcono(), "filas sin ícono")
+    }
+
+    @Test
+    fun `en la web tambien cada fila lleva su icono`() {
+        montar(esAndroid = false)
+        composeRule.waitUntil(5_000) { hay("alertas+abc@movi.resend.app") }
+        assertEquals(emptyList(), filasSinIcono(), "filas sin ícono")
+    }
+
+    @Test
+    fun `el tema es una fila con su valor que abre una hoja`() {
+        montar()
+        assertTrue(hay(TITULO_DEL_TEMA))
+        assertTrue(hay("Igual que el teléfono"), "la fila dice el tema elegido")
+        listOf("Claro", "Oscuro").forEach {
+            composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist()
+        }
+
+        tocarFila(TITULO_DEL_TEMA)
+        composeRule.onNodeWithTag(TAG_HOJA_DEL_TEMA, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNode(hasClickAction() and hasText("Oscuro")).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertEquals(PreferenciaDeTema.OSCURO, TemaStore.preferencia)
+        composeRule.onNodeWithTag(TAG_HOJA_DEL_TEMA, useUnmergedTree = true).assertDoesNotExist()
+        assertTrue(hay("Oscuro"), "la fila dice el tema nuevo")
+    }
+
+    @Test
+    fun `Personas y comercios vive en Espacios, no tambien en Ajustes`() {
+        montar()
+        composeRule.onNodeWithText("Personas y comercios", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun `la fila dice Inicio del periodo y su hoja pregunta por el periodo`() {
+        montar()
+        composeRule.onNodeWithText("Inicio del mes", useUnmergedTree = true).assertDoesNotExist()
+        tocarFila("Inicio del período")
+        composeRule.waitUntil(5_000) { hay("¿Qué día empieza tu período?") }
+    }
+
+    @Test
+    fun `en la web Tu plata ofrece recibir las alertas por correo con la direccion`() {
+        montar(esAndroid = false)
+        composeRule.waitUntil(5_000) { hay("alertas+abc@movi.resend.app") }
+        assertTrue(hay(RECIBE_TUS_ALERTAS_POR_CORREO))
+        assertTrue(arribaDe(RECIBE_TUS_ALERTAS_POR_CORREO) < arribaDe("Movi AI"), "va en «Tu plata»")
+
+        tocarFila(RECIBE_TUS_ALERTAS_POR_CORREO)
+        composeRule.onNodeWithTag(TAG_HOJA_DE_ALERTAS_POR_CORREO, useUnmergedTree = true).assertIsDisplayed()
+        assertTrue(hay("Copiar"))
+        assertTrue(hay(PASOS_DEL_REENVIO_EN_GMAIL.first()))
+    }
+
+    @Test
+    fun `en Android no ofrece el correo porque ahi se leen los mensajes`() {
+        montar()
+        composeRule.onNodeWithText(RECIBE_TUS_ALERTAS_POR_CORREO, useUnmergedTree = true).assertDoesNotExist()
     }
 }
