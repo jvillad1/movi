@@ -39,6 +39,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * **La cuota que ya se pagó, en la lista del período.**
@@ -160,14 +161,19 @@ class CuotaPagadaEnElTableroTest {
     @Test
     fun `la cuota pagada aparece en ya pagaste diciendo cuanto prueba el movimiento`() {
         montar()
-        esperarTexto("Ya pagaste · 2")
+        esperarTexto("Cuota Crediágil 3090")
 
         assertEquals(
             1,
             composeRule.onAllNodesWithText("Cuota Crediágil 3090", useUnmergedTree = true).fetchSemanticsNodes().size,
             "la cuota sale una sola vez",
         )
-        composeRule.onNodeWithText("Lo prueba un pago de $26.485", useUnmergedTree = true).assertExists()
+        // Vuelta 40: la cifra de la fila es lo que de verdad salió (con el enlace al movimiento, o la
+        // frase de con qué se sabe cuando no hay a dónde llevar).
+        assertTrue(
+            composeRule.onAllNodesWithText("$26.485", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            "la fila dice cuánta plata fue",
+        )
     }
 
     /**
@@ -177,7 +183,7 @@ class CuotaPagadaEnElTableroTest {
     @Test
     fun `la cuota pagada no ofrece nada que la quite`() {
         montar()
-        esperarTexto("Ya pagaste · 2")
+        esperarTexto("Cuota Crediágil 3090")
 
         assertEquals(
             1,

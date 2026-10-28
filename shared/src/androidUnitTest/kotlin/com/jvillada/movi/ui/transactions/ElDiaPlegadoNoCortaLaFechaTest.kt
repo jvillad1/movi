@@ -110,9 +110,21 @@ class ElDiaPlegadoNoCortaLaFechaTest {
 
     @Test
     fun `si no cabe todo se corta el conteo, nunca la fecha ni la cifra`() {
+        montar("Hoy · martes 30", cuantos = 128, total = 12_257_400L)
+        laFechaEntera("Hoy · martes 30")
+        assertTrue(conTexto("· 128 movimientos").isNotEmpty(), "el conteo sigue, aunque sea cortado")
+    }
+
+    /**
+     * Vuelta 40: con la fecha larga («Martes 30 de septiembre») y una cifra de ocho dígitos a 360 dp
+     * con la letra al 130 %, lo primero que cede es «Gastaste» (la cifra queda sola, con el rótulo para
+     * el lector de pantalla), y después el conteo: nunca la fecha ni la cifra.
+     */
+    @Test
+    fun `con la fecha larga cede primero el rotulo Gastaste`() {
         montar("Martes 30 de septiembre", cuantos = 128, total = 12_257_400L)
         laFechaEntera("Martes 30 de septiembre")
-        assertTrue(conTexto("· 128 movimientos").isNotEmpty(), "el conteo sigue, aunque sea cortado")
+        assertTrue(conTexto("Gastaste").isEmpty(), "el rótulo cedió su lugar")
     }
 
     @Test

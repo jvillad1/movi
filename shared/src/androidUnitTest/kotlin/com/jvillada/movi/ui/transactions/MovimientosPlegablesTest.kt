@@ -108,28 +108,28 @@ class MovimientosPlegablesTest {
 
     @Test
     fun `un dia plegado esconde sus renglones pero sigue diciendo su flujo`() {
-        composeRule.onNode(hasText("−$69.489") and !hasAnyAncestor(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO)), useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNode(hasText("$69.489") and !hasAnyAncestor(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO)), useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Las Doce", useUnmergedTree = true).assertIsDisplayed()
 
-        composeRule.onNode(hasText("Hoy"), useUnmergedTree = true).performClick()
+        composeRule.onNode(hasText("Hoy · ", substring = true), useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Las Doce", useUnmergedTree = true).assertDoesNotExist()
         // El flujo del día, con la cifra sola: sin el rótulo «Flujo del día» (vuelta de diseño 14).
         composeRule.onNodeWithText("Flujo del día", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNode(hasText("−$69.489") and !hasAnyAncestor(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO)), useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNode(hasText("$69.489") and !hasAnyAncestor(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO)), useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("2 movimientos", substring = true, useUnmergedTree = true).assertIsDisplayed()
         assertTrue(HOY_ISO in DiasPlegadosStore.plegados(), "el pliegue tiene que quedar recordado por fecha")
     }
 
     @Test
     fun `volver a tocar el encabezado despliega el dia`() {
-        composeRule.onNode(hasText("Hoy"), useUnmergedTree = true).performClick()
+        composeRule.onNode(hasText("Hoy · ", substring = true), useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertDoesNotExist()
 
-        composeRule.onNode(hasText("Hoy"), useUnmergedTree = true).performClick()
+        composeRule.onNode(hasText("Hoy · ", substring = true), useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertIsDisplayed()

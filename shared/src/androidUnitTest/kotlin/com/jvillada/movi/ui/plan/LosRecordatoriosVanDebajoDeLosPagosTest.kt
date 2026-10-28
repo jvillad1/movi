@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.ui.recurrentes.TAG_TARJETA_FALTA_POR_PAGAR
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.mutableStateOf
@@ -83,7 +84,8 @@ class LosRecordatoriosVanDebajoDeLosPagosTest {
     fun `la fila va debajo del resumen de los pagos, compacta, y no es una tarjeta`() {
         montar()
         val fila = composeRule.onNodeWithTag(TAG_FILA_DE_RECORDATORIOS, useUnmergedTree = true).fetchSemanticsNode()
-        val resumen = composeRule.onNodeWithText(TITULO_YA_PAGASTE, useUnmergedTree = true).fetchSemanticsNode()
+        // Vuelta 40: el resumen es la tarjeta amarilla «Falta por pagar», arriba de la lista.
+        val resumen = composeRule.onNodeWithTag(TAG_TARJETA_FALTA_POR_PAGAR, useUnmergedTree = true).fetchSemanticsNode()
         val primerPago = composeRule.onNodeWithText("Arriendo", useUnmergedTree = true).fetchSemanticsNode()
         assertTrue(resumen.boundsInRoot.bottom <= fila.boundsInRoot.top, "debajo del resumen")
         assertTrue(fila.boundsInRoot.bottom <= primerPago.boundsInRoot.top, "y encima de los pagos")
@@ -102,9 +104,9 @@ class LosRecordatoriosVanDebajoDeLosPagosTest {
     @Test
     fun `ya pagaste en cero va apagado`() {
         montar()
-        val cero = composeRule.onNodeWithText("\$0", useUnmergedTree = true).fetchSemanticsNode()
-        assertEquals(TonoDeCifra.Apagado, cero.config[TonoDeCifraKey])
-        // El primero es el del resumen («Falta por pagar»); el otro, el de la fila del Arriendo.
+        // Vuelta 40: lo pagado lo dice la tarjeta amarilla en una frase, «Llevas $0 pagados».
+        composeRule.onNodeWithText("Llevas \$0 pagados", useUnmergedTree = true).assertExists()
+        // El primero es el de la tarjeta («Falta por pagar»); el otro, el de la fila del Arriendo.
         val falta = composeRule.onAllNodesWithText("\$1.800.000", useUnmergedTree = true).fetchSemanticsNodes().first()
         assertEquals(TonoDeCifra.Neutro, falta.config[TonoDeCifraKey])
         assertEquals(TonoDeCifra.Apagado, tonoDelResumen(0))

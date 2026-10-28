@@ -128,6 +128,7 @@ class EntreCuentasEsUnModoClaroTest {
         // Lo que habla de todo el período no va.
         assertEquals(0, cuantos(TAG_RESUMEN_EN_EL_TELEFONO), "la franja Entró · Salió · Neto no va en el modo")
         assertEquals(0, cuantos(TAG_RENGLON_POR_REVISAR), "«por revisar» no va en el modo")
+        assertEquals(0, cuantos(TAG_TARJETA_DE_AVISOS), "ni la tarjeta de los avisos")
         assertTrue(!hay("Entró"), "ninguna cifra de todo el período")
         assertTrue(!hay("por revisar"))
         // Y el «Ver todos» del encabezado viejo se fue.
@@ -141,10 +142,11 @@ class EntreCuentasEsUnModoClaroTest {
         composeRule.onNode(hasTestTag(TAG_CHIP_DEL_MODO), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         esperar("Panadería")
-        composeRule.waitUntil(timeoutMillis = 5_000) { cuantos(TAG_RENGLON_POR_REVISAR) > 0 }
+        // Vuelta 40: con avisos del banco va su tarjeta; sin ellos, el renglón «N por revisar».
+        composeRule.waitUntil(timeoutMillis = 5_000) { cuantos(TAG_RENGLON_POR_REVISAR) + cuantos(TAG_TARJETA_DE_AVISOS) > 0 }
 
         assertEquals(0, cuantos(TAG_CHIP_DEL_MODO), "fuera del modo no hay chip del modo")
         assertEquals(1, cuantos(TAG_RESUMEN_EN_EL_TELEFONO), "la franja vuelve en «Todo»")
-        assertEquals(1, cuantos(TAG_RENGLON_POR_REVISAR), "«por revisar» vuelve en «Todo»")
+        assertEquals(1, cuantos(TAG_RENGLON_POR_REVISAR) + cuantos(TAG_TARJETA_DE_AVISOS), "«por revisar» vuelve en «Todo»")
     }
 }

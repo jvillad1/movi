@@ -175,7 +175,7 @@ class PagoDeTarjetaEnMovimientosTest {
         )
         // Vuelta 40: «Gastaste $18.500» —solo el gasto— y la línea del pago aparte.
         composeRule.onNodeWithText("Gastaste", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("$18.500", useUnmergedTree = true).assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithText("$18.500", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertTrue(composeRule.onAllNodesWithText("−$405.402", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText(
             "Además, \$386.902 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +

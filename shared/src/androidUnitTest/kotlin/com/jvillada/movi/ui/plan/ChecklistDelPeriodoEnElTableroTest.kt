@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.ui.recurrentes.TITULO_TUS_FACTURAS
+import com.jvillada.movi.ui.recurrentes.ETIQUETA_ANOTAR
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -87,11 +89,11 @@ class ChecklistDelPeriodoEnElTableroTest {
         "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
     )[vence.monthNumber - 1]
 
-    /** «venció hace 16 días» — el renglón de la fecha de la fila (ver `fechaDeLaFila`). */
+    /** «Venció hace 16 días» — la pastilla de vencimiento de la fila (vuelta 40, `pastillaDeVencimiento`). */
     private val subtitulo: String = when {
-        diasVencido == 0 -> "vence hoy"
-        diasVencido == 1 -> "venció ayer"
-        else -> "venció hace $diasVencido días"
+        diasVencido == 0 -> "Vence hoy"
+        diasVencido == 1 -> "Venció ayer"
+        else -> "Venció hace $diasVencido días"
     }
 
     private val bancolombia = Account("acc-banco", "Bancolombia", AccountType.SAVINGS, 1_000_000L, "COP")
@@ -229,9 +231,10 @@ class ChecklistDelPeriodoEnElTableroTest {
     fun `el checklist del periodo encabeza el tablero, con su fecha y su monto`() {
         montar()
 
-        esperarTexto("Pagos del período")
-        composeRule.onNodeWithText("Por pagar · 1", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText(subtitulo, useUnmergedTree = true).assertIsDisplayed()
+        esperarTexto(TITULO_TUS_FACTURAS)
+        // Vuelta 40: la tarjeta amarilla dice cuántas faltan.
+        composeRule.onNodeWithText("queda 1 de 1 pago", substring = true, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText(subtitulo, useUnmergedTree = true).assertExists()
         // El monto va entero, no abreviado: es la lista donde se compara lo que se debe. Hay más de
         // un «$1.800.000» en pantalla (el resumen de arriba y la fila; el grupo ya no lo repite),
         // así que se pide que exista, no que sea el único.
@@ -272,9 +275,10 @@ class ChecklistDelPeriodoEnElTableroTest {
     fun `sin movimiento la fila ofrece anotarlo y abre la hoja prellenada`() {
         montar()
         esperarTexto(subtitulo)
-        esperarTexto("Movi no encontró el movimiento de este pago.")
+        // Vuelta 40: «Anotar pago» va a la derecha de la fila; la pastilla dice que venció.
+        esperarTexto(ETIQUETA_ANOTAR)
 
-        tocar("Anotar este pago")
+        tocar(ETIQUETA_ANOTAR)
 
         val hoja = assertIs<Screen.QuickAdd>(navegoA)
         assertEquals("Arriendo", hoja.presetNota)
@@ -340,12 +344,12 @@ class ChecklistDelPeriodoEnElTableroTest {
 
     /**
      * **Una sola lista.** «Próximos», «Sin confirmar» y «Ya ocurrieron» se fueron: la regla aparece
-     * una vez, con UN «Anotar este pago». Lo que contesta otra cosa (el flujo libre) sigue abajo.
+     * una vez, con UN «Anotar pago». Lo que contesta otra cosa (el flujo libre) sigue abajo.
      */
     @Test
     fun `la regla sale una sola vez y las otras listas ya no estan`() {
         montar()
-        esperarTexto("Pagos del período")
+        esperarTexto(TITULO_TUS_FACTURAS)
 
         composeRule.onNodeWithText(TITULO_LO_QUE_SE_REPITE, useUnmergedTree = true).assertIsDisplayed()
         for (seccion in listOf("PRÓXIMOS", "SIN CONFIRMAR", "YA OCURRIERON")) {
@@ -362,7 +366,7 @@ class ChecklistDelPeriodoEnElTableroTest {
         )
         assertEquals(
             1,
-            composeRule.onAllNodesWithText("Anotar este pago", useUnmergedTree = true).fetchSemanticsNodes().size,
+            composeRule.onAllNodesWithText(ETIQUETA_ANOTAR, useUnmergedTree = true).fetchSemanticsNodes().size,
         )
         assertTrue(
             composeRule.onAllNodesWithText("Ya lo pagué", useUnmergedTree = true)

@@ -1963,6 +1963,7 @@ internal fun EncabezadoDelDia(
     val medidor = rememberTextMeasurer()
     val ocultos = LocalSaldosOcultos.current
     val estiloDelRotulo = Movi.textos.apoyo
+    val estiloDelConteo = Movi.textos.cuerpoRegular
     val estiloDeLaCifraDelDia = estiloDeLaCifra(VarianteDeCifra.Chica, Movi.textos)
     // El tag va en una caja aparte: mide el borde del renglón, el mismo punto que
     // `TAG_ENCABEZADO_DE_DIA_ESQUELETO` en el esqueleto, sin el aire del resaltado.
@@ -2016,8 +2017,10 @@ internal fun EncabezadoDelDia(
                 medidor.measure(textoDeLaCifra(monto, "COP", tonoDeLaCifraDelDia(rotulo), ocultos), estiloDeLaCifraDelDia, density = this).size.width
             } ?: 0
             val fechaNatural = fechaM.maxIntrinsicWidth(Constraints.Infinity)
+            // Plegado, el conteo también pide su lugar (al menos «· 12»): antes que él cede el rótulo.
+            val minimoDelConteo = if (plegado) medidor.measure("· $cuantos", estiloDelConteo, density = this).size.width + junto else 0
             val conRotulo = cifra != null &&
-                fechaNatural + anchoDelRotulo + junto + anchoDeLaCifra + chevron.width + 2 * entre <= ancho
+                fechaNatural + anchoDelRotulo + junto + anchoDeLaCifra + chevron.width + 2 * entre + minimoDelConteo <= ancho
             val monto = subcompose(PiezaDelDia.Monto) { CifraDelDia(cifra, conRotulo) }.first().measure(suelta)
 
             val paraLaFecha = (ancho - monto.width - chevron.width - 2 * entre).coerceAtLeast(0)
@@ -2029,7 +2032,7 @@ internal fun EncabezadoDelDia(
                 subcompose(PiezaDelDia.Cuantos) {
                     Text(
                         text = if (cuantos == 1) "· 1 movimiento" else "· $cuantos movimientos",
-                        style = Movi.textos.cuerpoRegular,
+                        style = estiloDelConteo,
                         color = Movi.colores.textoMedio,
                         maxLines = 1,
                         softWrap = false,

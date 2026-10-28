@@ -230,13 +230,21 @@ internal fun FilaDeFactura(
     evidencia: String?,
     debajo: (@Composable () -> Unit)? = null,
 ) {
+    // Lo que se toca para abrir la regla es el ícono con los textos, no la fila entera: el botón de la
+    // derecha es otro control, y un botón adentro de otro tocable se lee mal (y se toca mal).
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = Medida.altoDeFilaDoble)
-            .then(if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir) else Modifier)
             .testTag(TAG_FILA_DE_FACTURA)
-            .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
+            .padding(end = Medida.margenDePantalla),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+    Row(
+        modifier = Modifier
+            .weight(1f)
+            .then(if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir) else Modifier)
+            .padding(start = Medida.margenDePantalla, top = Espacio.s, bottom = Espacio.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(modifier = Modifier.size(Medida.avatar), contentAlignment = Alignment.Center) {
@@ -268,10 +276,18 @@ internal fun FilaDeFactura(
                     val (texto, tono) = pastillaDeVencimiento(pago, conPropuesta)
                     Pildora(texto, tono)
                 }
-                enlace != null && onVerMovimiento != null -> EnlaceAlMovimiento(enlace) { onVerMovimiento(pago.eventId!!) }
+                enlace != null && onVerMovimiento != null -> {
+                    EnlaceAlMovimiento(enlace) { onVerMovimiento(pago.eventId!!) }
+                    // Lo que Movi emparejó solo dice además que fue Movi: es lo que el «No fue este» de
+                    // abajo discute.
+                    if (pago.automatica && evidencia != null) {
+                        Text(evidencia, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    }
+                }
                 evidencia != null -> Text(evidencia, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
+    }
         Spacer(Modifier.width(ESPACIO_ANTES_DEL_FINAL_DE_FILA))
         when {
             pago.pagado -> PildoraDePagado(pago.esIngreso)
@@ -333,6 +349,8 @@ internal typealias PlanesDeCuotas = Map<String, PlanDelCredito>
 internal fun ofreceAlgoDebajo(pago: PagoDelPeriodo, conPropuesta: Boolean): Boolean = when (pago.estado) {
     EstadoDeLaFila.LISTO -> pago.automatica || (pago.eventId != null && !pago.derivado)
     EstadoDeLaFila.MARCADA_A_MANO -> true
-    EstadoDeLaFila.CON_DUDAS -> conPropuesta
+    // Con o sin propuesta: o pregunta «¿fue este?», o dice que Movi no encontró el movimiento.
+    EstadoDeLaFila.CON_DUDAS -> true
+    EstadoDeLaFila.SIN_MOVIMIENTO -> true
     else -> false
 }

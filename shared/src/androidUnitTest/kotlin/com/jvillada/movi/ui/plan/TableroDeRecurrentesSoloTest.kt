@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.ui.recurrentes.TITULO_TUS_FACTURAS
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -179,7 +180,7 @@ class TableroDeRecurrentesSoloTest {
         // vencimientos Y a las suscripciones): cuando está, todo lo demás ya llegó.
         esperarTexto("1 cobro · $44.900 al mes")
 
-        composeRule.onNodeWithText(TITULO_CHECKLIST_DEL_PERIODO, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText(TITULO_TUS_FACTURAS, useUnmergedTree = true).assertExists()
         composeRule.onAllNodesWithText("Arriendo", useUnmergedTree = true).onLast().assertExists()
         composeRule.onNodeWithText(TITULO_COBROS_DETECTADOS, useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("Spotify", useUnmergedTree = true).assertExists()

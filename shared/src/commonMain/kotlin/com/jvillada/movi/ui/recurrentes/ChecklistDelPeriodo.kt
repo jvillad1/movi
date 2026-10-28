@@ -662,8 +662,16 @@ private fun LoQueOfreceLaFila(
     conBotonDeAnotar: Boolean = true,
 ) {
     if (!hayQueOfrecer(pago)) return
-    if (!conBotonDeAnotar && (pago.estado == EstadoDeLaFila.SIN_MOVIMIENTO || pago.estado == EstadoDeLaFila.AUN_NO_VENCE)) return
-    if (!conBotonDeAnotar && pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta == null) return
+    if (!conBotonDeAnotar && pago.estado == EstadoDeLaFila.AUN_NO_VENCE) return
+    if (!conBotonDeAnotar && (pago.estado == EstadoDeLaFila.SIN_MOVIMIENTO || (pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta == null))) {
+        // Movi buscó y no encontró: se dice (el botón ya está a la derecha de la fila).
+        Text(
+            text = if (pago.esIngreso) TEXTO_SIN_MOVIMIENTO_DE_INGRESO else TEXTO_SIN_MOVIMIENTO,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+        )
+        return
+    }
     Column(modifier = Modifier.fillMaxWidth()) {
         when (pago.estado) {
             EstadoDeLaFila.LISTO -> AccionesDeLaFila(
