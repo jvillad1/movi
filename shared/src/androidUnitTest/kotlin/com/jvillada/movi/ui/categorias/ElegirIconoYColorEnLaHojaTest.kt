@@ -120,7 +120,7 @@ class ElegirIconoYColorEnLaHojaTest {
         composeRule.waitUntil(5_000) { hay("Ícono") }
 
         // Elegir un ícono del catálogo: manda su clave y no toca el color.
-        tocar("Restaurante")
+        tocar("Comer fuera")
         composeRule.waitUntil(5_000) { llamadas.size == 1 }
         assertEquals(Triple("restaurante", null, false), llamadas[0])
 
@@ -172,10 +172,10 @@ class ElegirIconoYColorEnLaHojaTest {
         tocar("Mercado")
         composeRule.waitUntil(5_000) { hay("Ícono") }
 
-        tocar("Restaurante")
+        tocar("Comer fuera")
         composeRule.waitUntil(5_000) { llamadas.size == 1 }
         // El primero sigue en vuelo: ni otro ícono ni un color salen hacia el server.
-        tocar("Restaurante")
+        tocar("Comer fuera")
         composeRule.onNodeWithTag(tagDeColorDelCatalogo("violeta"), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()

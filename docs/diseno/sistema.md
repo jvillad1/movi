@@ -1561,3 +1561,38 @@ Personas y comercios escriben dentro de la caja del sistema y la × borra) y
 `CategoriasDicenDeQueSonLasCifrasTest` (el título «Este período» / «Este mes» encima de las filas, y el
 conteo de la fila del período: 3, no 40), más los casos de `resumenDelPeriodoCorto` en
 `CategoriasLogicTest`.
+
+## 38. Vuelta 36: el detalle dice lo mismo que la fila, y ningún rótulo se parte
+
+Revisado en la vista previa de la vuelta 35 (fc2eeb17) con la cuenta demo, a 390 px. Ningún componente
+ni token nuevo. **Solo presentación**: sin cambios de plata ni de server.
+
+- **El detalle de un movimiento se titula como su fila.** En Movimientos la fila decía «Éxito Suba»
+  («Mercado · Bancolombia Ahorros» debajo) y, al tocarla, la hoja se titulaba «Mercado»: la fila sabía
+  (vuelta 30) que una descripción igual a la categoría no dice nada; el detalle no. Ahora los dos salen
+  de `textosDeLaFila` por `tituloDelMovimiento(evento, cuenta)` (`ui/transactions/LaFilaDelMovimiento.kt`),
+  con el nombre de la cuenta igual que la fila. Lo usan también la rama del traspaso y la del saldo
+  inicial de la misma hoja, la lista de «¿Y los parecidos?», los pagos de tarjeta sin marcar, la
+  confirmación de anular (`VoidEventSheet`), los movimientos de una persona o comercio, los de un
+  presupuesto, «Los más grandes» del detalle de un período, el importe de un extracto, «ya anotado» al
+  leer un papel y el aviso de lo que no se pudo subir. La propuesta «¿Fue este?» de un recurrente
+  (`descripcionPropuesta`) tampoco repite la categoría: con una nota igual a ella va el comercio, o nada.
+  **Al editar la nota, el campo sigue trayendo lo guardado** (`description`), no el título.
+- **Los rótulos de la cuadrícula de íconos no se parten dentro de una palabra.** A 390 dp entran
+  cuatro columnas y «Medicamentos» salía «Medicament» / «os». La celda más angosta de un teléfono no
+  es la de 360 dp (tres columnas de ~106) sino la de **364 dp**, donde empiezan las cuatro de 80 dp
+  justos (`ANCHO_MINIMO_DE_CELDA`) y el rótulo tiene 72: ninguna palabra puede ser más ancha que eso.
+  Se puede partir entre palabras («Arreglos del hogar», «Banco y comisiones»), en dos renglones como
+  mucho. Cinco rótulos cambiaron por uno más corto del mismo significado —la letra no se achicó—:
+  «Restaurante» → «Comer fuera», «Medicamentos» → «Medicinas», «Entretenimiento» → «Diversión»,
+  «Suscripciones» → «Membresía», «Transferencia» → «Traspaso». **Las claves no cambiaron**
+  (`restaurante`, `medicamentos`, `entretenimiento`, `suscripciones`, `transferencia`): lo guardado en
+  `category_prefs.icono` se sigue viendo igual. La regla está en el KDoc de `IconoDelCatalogo.rotulo`.
+
+**Las líneas base:** `dp_sueltos` 118, `radios_con_numero` 3, y las guardas en 0 siguen en 0. Lo
+vigilan `ElDetalleSeTitulaComoLaFilaTest` (Mercado con «EXITO SUBA» titula su detalle «Éxito Suba»,
+«Mercado» queda solo en el chip, el campo de la nota trae «Mercado», una descripción propia sigue siendo
+el título) y `LosRotulosDeIconosNoSePartenTest` (con la hoja de una categoría abierta de verdad, el
+motor de texto real —`NATIVE`, sdk 34— y la escala de letra de la app, ningún renglón termina entre dos
+letras ni con «…», a 360, 364 y 390 dp; y las cinco claves siguen siendo las de antes), más el caso
+nuevo de `descripcionPropuesta` en `OccurrenceLogicTest`.

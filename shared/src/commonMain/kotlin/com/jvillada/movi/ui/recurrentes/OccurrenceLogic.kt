@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.normalizarParaBuscar
+import com.jvillada.movi.ui.transactions.laDescripcionEsLaCategoria
+import com.jvillada.movi.ui.transactions.tituloDelMovimiento
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -158,7 +161,14 @@ fun descripcionPropuesta(event: FinancialEvent): String {
     // La nota del dueño primero; si no escribió ninguna, el comercio que dijo el banco. **Nunca la
     // categoría**: es justo la palabra que todos los candidatos comparten —por eso son candidatos—
     // así que ponerla ahí no distingue nada y encima *parece* que identifica.
-    val que = event.description.trim().ifEmpty { event.merchant.orEmpty().trim() }
+    // Vuelta de diseño 36: con nota, la misma que la fila de Movimientos ([tituloDelMovimiento]); una
+    // nota que es la categoría tampoco distingue nada, así que ahí va el comercio, o nada.
+    val que = when {
+        event.description.isBlank() -> event.merchant.orEmpty().trim()
+        laDescripcionEsLaCategoria(event) ->
+            tituloDelMovimiento(event).takeUnless { normalizarParaBuscar(it) == normalizarParaBuscar(event.category) }.orEmpty()
+        else -> tituloDelMovimiento(event).trim()
+    }
     return if (que.isEmpty()) cuando else "$cuando · $que"
 }
 

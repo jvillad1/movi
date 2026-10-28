@@ -428,7 +428,7 @@ class CategoriasLogicTest {
 
     @Test
     fun `los rotulos del catalogo se leen para la vista previa de la hoja de detalle`() {
-        assertEquals("Restaurante", rotuloDeIcono("restaurante"))
+        assertEquals("Comer fuera", rotuloDeIcono("restaurante"))
         assertEquals("Naranja", rotuloDeColor("naranja"))
         // Una clave desconocida (de una versión más nueva) se muestra tal cual, no revienta.
         assertEquals("no-existe", rotuloDeIcono("no-existe"))

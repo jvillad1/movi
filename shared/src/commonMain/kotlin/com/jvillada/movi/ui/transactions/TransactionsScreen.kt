@@ -536,7 +536,7 @@ val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS)
  */
 fun textoDeRechazados(rechazados: List<MovimientoRechazado>): String? {
     val primero = rechazados.firstOrNull() ?: return null
-    val cabeza = if (rechazados.size == 1) "«${primero.evento.description}» no se pudo subir"
+    val cabeza = if (rechazados.size == 1) "«${tituloDelMovimiento(primero.evento)}» no se pudo subir"
     else "${rechazados.size} movimientos no se pudieron subir"
     return "$cabeza: ${primero.motivo} Solo está en este teléfono; corrígelo o anúlalo."
 }
