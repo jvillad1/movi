@@ -24,6 +24,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import kotlin.test.assertEquals
+import androidx.compose.ui.test.onNodeWithText
 import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -186,19 +187,19 @@ class ChecklistDiceCuantoDeboPagarTest {
             }
         }
 
-        assertTrue(hay("Ya pagaste · 1"), "el arriendo")
-        assertTrue(hay("Ya recibiste · 1"), "el sueldo, aparte: no «salió»")
+        // Vuelta 40: las facturas en «Tus facturas del período», el sueldo aparte en «Tus ingresos del
+        // período»; la tarjeta amarilla cuenta solo las facturas («quedan 1 de 2 pagos»).
+        assertTrue(hay(TITULO_TUS_FACTURAS), "el arriendo y la cuota")
+        assertTrue(hay(TITULO_TUS_INGRESOS), "el sueldo, aparte: no «salió»")
         assertTrue(!hay("Listos"), "el grupo que mezclaba las dos cosas se fue")
-        // El encabezado de la tarjeta («Pagos del período · N») cuenta todas las filas.
-        assertEquals(
-            1,
-            composeRule.onAllNodesWithText(" · 3", useUnmergedTree = true).fetchSemanticsNodes().size,
-            "el encabezado cuenta las tres filas del checklist, ingreso incluido",
+        assertTrue(
+            composeRule.onAllNodesWithText("queda 1 de 2 pagos", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            "el ingreso no cuenta como factura",
         )
-        assertEquals(
-            0,
-            composeRule.onAllNodesWithText(" · 2", useUnmergedTree = true).fetchSemanticsNodes().size,
-            "y no solo los dos pagos",
+        assertTrue(
+            composeRule.onNodeWithText("Sueldo", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y >
+                composeRule.onNodeWithText(TITULO_TUS_INGRESOS, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y,
+            "el sueldo va en su lista",
         )
         assertTrue(hay("Sueldo"), "y el ingreso está en el grupo que el título cuenta")
     }
@@ -265,7 +266,8 @@ class ChecklistDiceCuantoDeboPagarTest {
             }
         }
 
-        assertTrue(hay("Por cobrar".uppercase()) || hay("Por cobrar"), "el ingreso está en su grupo")
+        // Vuelta 40: los ingresos van en su propia lista, «Tus ingresos del período».
+        assertTrue(hay(TITULO_TUS_INGRESOS), "el ingreso está en su lista")
         assertTrue(hay(TEXTO_SIN_MOVIMIENTO_DE_INGRESO))
         assertTrue(hay(ETIQUETA_ANOTAR_INGRESO))
         assertTrue(!hay(TEXTO_SIN_MOVIMIENTO), "un ingreso no dice «de este pago»")

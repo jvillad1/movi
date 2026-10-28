@@ -52,13 +52,13 @@ class ElDiaPlegadoNoCortaLaFechaTest {
 
     private var plegado by mutableStateOf(true)
 
-    private fun montar(fecha: String, escala: Float = 1.3f, cuantos: Int = 12, total: Long = -1_257_400L) {
+    private fun montar(fecha: String, escala: Float = 1.3f, cuantos: Int = 12, total: Long = 1_257_400L) {
         composeRule.setContent {
             val base = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * escala)) {
                 MoviTheme {
                     Box(Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla)) {
-                        EncabezadoDelDia(fecha = fecha, total = total, plegado = plegado, cuantos = cuantos, onAlternar = { plegado = !plegado })
+                        EncabezadoDelDia(fecha = fecha, cifra = RotuloDelDia.GASTASTE to total, plegado = plegado, cuantos = cuantos, onAlternar = { plegado = !plegado })
                     }
                 }
             }
@@ -104,25 +104,37 @@ class ElDiaPlegadoNoCortaLaFechaTest {
 
     @Test
     fun `a 360 dp con la letra agrandada la fecha del dia plegado se lee entera`() {
-        montar("30 de septiembre")
-        laFechaEntera("30 de septiembre")
+        montar("Martes 30 de septiembre")
+        laFechaEntera("Martes 30 de septiembre")
     }
 
     @Test
     fun `si no cabe todo se corta el conteo, nunca la fecha ni la cifra`() {
-        montar("30 de septiembre", cuantos = 128, total = -12_257_400L)
-        laFechaEntera("30 de septiembre")
+        montar("Hoy · martes 30", cuantos = 128, total = 12_257_400L)
+        laFechaEntera("Hoy · martes 30")
         assertTrue(conTexto("· 128 movimientos").isNotEmpty(), "el conteo sigue, aunque sea cortado")
+    }
+
+    /**
+     * Vuelta 40: con la fecha larga («Martes 30 de septiembre») y una cifra de ocho dígitos a 360 dp
+     * con la letra al 130 %, lo primero que cede es «Gastaste» (la cifra queda sola, con el rótulo para
+     * el lector de pantalla), y después el conteo: nunca la fecha ni la cifra.
+     */
+    @Test
+    fun `con la fecha larga cede primero el rotulo Gastaste`() {
+        montar("Martes 30 de septiembre", cuantos = 128, total = 12_257_400L)
+        laFechaEntera("Martes 30 de septiembre")
+        assertTrue(conTexto("Gastaste").isEmpty(), "el rótulo cedió su lugar")
     }
 
     @Test
     fun `desplegado es el mismo renglon, sin el conteo`() {
-        montar("30 de septiembre")
+        montar("Martes 30 de septiembre")
         val plegadoArriba = unico(TAG_FECHA_DEL_DIA).boundsInRoot
         val altoPlegado = unico(TAG_ENCABEZADO_DE_DIA).size.height
         plegado = false
         composeRule.waitForIdle()
-        laFechaEntera("30 de septiembre")
+        laFechaEntera("Martes 30 de septiembre")
         assertTrue(conTexto("movimientos", substring = true).isEmpty())
         assertEquals(plegadoArriba, unico(TAG_FECHA_DEL_DIA).boundsInRoot, "la fecha no se mueve al desplegar")
         assertEquals(altoPlegado, unico(TAG_ENCABEZADO_DE_DIA).size.height, "el renglón mide lo mismo")
@@ -136,7 +148,7 @@ class ElDiaPlegadoNoCortaLaFechaTest {
      */
     @Test
     fun `el resaltado del dia sale un poco hacia el margen y la fecha no se mueve`() {
-        montar("Hoy", escala = 1f, cuantos = 2, total = -57_400L)
+        montar("Hoy · martes 28", escala = 1f, cuantos = 2, total = 57_400L)
         val densidad = composeRule.density.density
         val renglon = unico(TAG_ENCABEZADO_DE_DIA).boundsInRoot
         val toque = unico(TAG_TOQUE_DEL_DIA).boundsInRoot
@@ -153,9 +165,11 @@ class ElDiaPlegadoNoCortaLaFechaTest {
 
     @Test
     fun `con espacio de sobra tampoco dice Flujo del dia, solo la cifra con su signo`() {
-        montar("Hoy", escala = 1f, cuantos = 2, total = -57_400L)
-        laFechaEntera("Hoy")
-        assertEquals("−\$57.400", conTexto("57.400", substring = true).single().config[SemanticsProperties.Text].joinToString("") { it.text })
+        montar("Hoy · martes 28", escala = 1f, cuantos = 2, total = 57_400L)
+        laFechaEntera("Hoy · martes 28")
+        // Vuelta 40: «Gastaste $57.400», la cifra en texto medio y sin signo.
+        assertEquals("\$57.400", conTexto("57.400", substring = true).single().config[SemanticsProperties.Text].joinToString("") { it.text })
+        assertTrue(conTexto("Gastaste").isNotEmpty())
         assertTrue(entero(conTexto("· 2 movimientos").single()))
     }
 }

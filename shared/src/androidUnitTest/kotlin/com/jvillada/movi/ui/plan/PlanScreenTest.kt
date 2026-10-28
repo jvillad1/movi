@@ -109,11 +109,11 @@ class PlanScreenTest {
     @get:Rule val composeRule = createComposeRule()
 
     /**
-     * El segmento «Pagos» del selector. Vuelta 38: la pestaña también se llama «Pagos», así que se
-     * descartan el título (encabezado) y el rótulo de la barra y del rail.
+     * El segmento «Facturas» del selector (vuelta 40; era «Pagos», como la pestaña, y por eso se
+     * descartan todavía el título y el rótulo de la barra y del rail).
      */
     private fun selectorDePagos() = composeRule.onNode(
-        hasText("Pagos") and !isHeading() and
+        hasText(ROTULO_SEGMENTO_PAGOS) and !isHeading() and
             !hasAnyAncestor(hasTestTag(TAG_BARRA_DE_PESTANAS) or hasTestTag(TAG_RAIL_DE_NAVEGACION)),
         useUnmergedTree = true,
     )
@@ -131,6 +131,9 @@ class PlanScreenTest {
 
     /** Solo las suscripciones fallan: el aviso del tablero, sin tocar la tarjeta. */
     private var suscripcionesFallan = false
+
+    /** El corte del perfil: 25 (el del dueño) salvo en la prueba del mes de calendario. */
+    private var corteDelPerfil: Int = 25
 
     /** Sin red: todo lo que la tarjeta y el tablero leen falla. */
     private var sinRed = false
@@ -159,7 +162,7 @@ class PlanScreenTest {
         override suspend fun getUserProfile(): UserProfile {
             cortar()
             puerta.await()
-            return UserProfile(id = "u", email = "u@local", name = "U", avatarColor = "#000000", periodCutoffDay = 25)
+            return UserProfile(id = "u", email = "u@local", name = "U", avatarColor = "#000000", periodCutoffDay = corteDelPerfil)
         }
 
         override suspend fun getUpcomingPayments(): List<UpcomingPayment> = pagos.also { cortar() }
@@ -778,10 +781,9 @@ class PlanScreenTest {
             .getUnclippedBoundsInRoot().top
         val selectorCargado = selectorDePagos()
             .getUnclippedBoundsInRoot().top
-        assertTrue(
-            abs(periodosCargado.value - periodosCargando.value) <= 8f,
-            "«Tus períodos» se corrió ${abs(periodosCargado.value - periodosCargando.value)} dp al llegar los datos",
-        )
+        // Vuelta 40: «Tus períodos» va debajo de las facturas, que crecen al llegar: lo que no puede
+        // saltar es lo de arriba de ellas, el selector «Facturas | Presupuestos».
+        assertTrue(periodosCargado.value > selectorCargado.value, "«Tus períodos» sigue debajo del selector")
         assertTrue(
             abs(selectorCargado.value - selectorCargando.value) <= 8f,
             "El selector se corrió ${abs(selectorCargado.value - selectorCargando.value)} dp al llegar los datos",
@@ -818,4 +820,29 @@ class PlanScreenTest {
         assertTrue(hay("Gastado en", substring = true), "vuelve a Presupuestos, no al segmento de entrada")
         assertTrue(!hay(tituloDelChecklist))
     }
+
+    /**
+     * **Vuelta 40: el período va debajo del título también con el mes de calendario.** El usuario
+     * demo no tiene corte (`period_cutoff_day` nulo: el perfil dice 1): la línea se callaba por diseño («no hay
+     * nada que aclarar») y Pagos quedaba sin fechas debajo de «Pagos». Con su perfil real, leído.
+     */
+    @Test
+    fun `con el mes de calendario la linea del periodo tambien va`() {
+        corteDelPerfil = 1
+        montar()
+        assertEquals(1, contarTag(TAG_LINEA_DEL_PERIODO_DE_PLAN_ESQUELETO), "mientras el perfil viaja, se reserva")
+
+        puerta.complete(Unit)
+        composeRule.waitForIdle()
+
+        val hoy = Clock.System.todayIn(TimeZone.of("America/Bogota"))
+        val mes = listOf(
+            "enero", "febrero", "marzo", "abril", "mayo", "junio",
+            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+        )[hoy.monthNumber - 1]
+        assertEquals(1, contarTag(TAG_LINEA_DEL_PERIODO_DE_PLAN))
+        // El mes una vez: «Del 1 al 31 de octubre».
+        assertTrue(hay("Del 1 al ", substring = true) && hay(" de $mes", substring = true), "«Del 1 al … de $mes»")
+    }
 }
+

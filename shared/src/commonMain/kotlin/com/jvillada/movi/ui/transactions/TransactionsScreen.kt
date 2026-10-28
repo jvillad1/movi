@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.VarianteDeBotonDeIcono
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
@@ -46,7 +47,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.Placeable
-import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
+import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
+import com.jvillada.movi.ui.components.ds.textoDeLaCifra
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.FocusRequester
@@ -101,6 +105,12 @@ import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.ui.porrevisar.RenglonPorRevisar
+import com.jvillada.movi.ui.porrevisar.confirmarElLote
+import com.jvillada.movi.ui.porrevisar.confirmarLoEntendido
+import com.jvillada.movi.ui.porrevisar.pagosPorRevisar
+import com.jvillada.movi.ui.sms.conLoResueltoEnLaBandeja
+import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.porrevisar.ConteoPorRevisar
 import com.jvillada.movi.ui.porrevisar.conteoPorRevisar
 import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
@@ -402,6 +412,13 @@ const val CHIP_ENTRE_CUENTAS = 4
 const val CHIP_RECURRENTES = 5
 
 /**
+ * **«Personas»** (vuelta 40, la opción 3): los gastos repartidos con otra persona en un espacio
+ * ([esConOtrasPersonas]). Índice nuevo, al final: los de antes no se renumeran (ver
+ * [CHIPS_VISIBLES]).
+ */
+const val CHIP_PERSONAS = 6
+
+/**
  * El tag de un renglón suelto de Movimientos (Task 3, Ola B): sin él, una prueba no tiene forma de
  * medir el alto real del renglón para verificar que agregarle [IconoDeCategoria] no lo hizo crecer.
  */
@@ -492,7 +509,7 @@ internal fun aireArribaDelDia(indice: Int): Dp =
  * Los rótulos de los chips, en el orden de sus índices. «Recurrentes» ya no se dibuja (ver
  * [CHIP_RECURRENTES]) pero su rótulo se queda en su lugar: sacarlo correría los índices.
  */
-val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes")
+val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes", "Personas")
 
 /**
  * **Los chips que se dibujan**, que ya no son todos.
@@ -532,7 +549,7 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
  * de mirar movimientos sino la respuesta a «¿qué me falta pagar?», que es la pregunta de la pestaña
  * Plan. Ahí vive ahora, como «Pagos del mes». Ver [CHIP_RECURRENTES].
  */
-val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS)
+val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_PERSONAS)
 
 /**
  * **El aviso de lo que no subió**, o `null` si todo subió. Lo que el server rechaza (la cuenta se
@@ -668,6 +685,7 @@ fun matchesChip(
     CHIP_INGRESOS -> event.type == TransactionType.INCOME && cuentaEnGastosEIngresos(event)
     CHIP_POR_CONFIRMAR -> esperaEnPorConfirmar(event.reconciliationStatus)
     CHIP_ENTRE_CUENTAS -> esEntreCuentas(event)
+    CHIP_PERSONAS -> esConOtrasPersonas(event)
     else -> true
 }
 
@@ -704,6 +722,11 @@ fun vacioDeMovimientos(chip: Int, hayMovimientos: Boolean): VacioDeMovimientos =
     chip == CHIP_INGRESOS -> VacioDeMovimientos(
         titulo = "Sin ingresos",
         detalle = "Hay movimientos, pero ninguno es plata que entró al bolsillo.",
+        ofreceRegistrar = false,
+    )
+    chip == CHIP_PERSONAS -> VacioDeMovimientos(
+        titulo = "Nada con otras personas",
+        detalle = "Aquí van los gastos que repartes con alguien en un grupo, como el mercado con Caro.",
         ofreceRegistrar = false,
     )
     chip == CHIP_ENTRE_CUENTAS -> VacioDeMovimientos(
@@ -1104,6 +1127,35 @@ fun TransactionsScreen(
     // El último número del renglón que salió de lecturas terminadas; `null` hasta la primera.
     val ultimoConteoPorRevisar = remember { mutableStateOf<ConteoPorRevisar?>(null) }
 
+    // ── Vuelta 40: la tarjeta de los avisos del banco, con «Confirmar los N» ──────────────────────
+    // Lo confirmado acá se ve enseguida, sin esperar la relectura (lo mismo que hace «Por revisar»,
+    // ver [conLoResueltoEnLaBandeja]); lo que falló no se vuelve a ofrecer en el lote.
+    var avisosConfirmadosAca by remember { mutableStateOf(emptyMap<String, String>()) }
+    var avisosQueFallaronAca by remember { mutableStateOf(emptySet<String>()) }
+    var pidiendoConfirmarLosAvisos by remember { mutableStateOf(false) }
+    var confirmandoLosAvisos by remember { mutableStateOf(false) }
+    val mensajesDelBanco = porRevisar.mensajes?.let { conLoResueltoEnLaBandeja(it, avisosConfirmadosAca, emptySet()) }
+    val hayAvisos = mensajesDelBanco?.let { pagosPorRevisar(it).isNotEmpty() } == true
+    // Lo que Movi propone para cada pago (la misma lectura de «Por revisar»): solo con avisos a la vista.
+    val propuestasDeLosAvisos = rememberLectura(ClaveDeLectura.PropuestasDeLaBandeja, reintento = refreshKey, activa = hayAvisos) {
+        Repositories.wallets.getPropuestasDeLaBandeja()
+    }
+    // La tarjeta espera a saber qué se puede confirmar (o a que la lectura falle: entonces nada se
+    // confirma y queda «Revisar uno por uno»), para que el botón no aparezca después y la empuje.
+    val avisosDelBanco: AvisosPorConfirmar? = if (
+        mensajesDelBanco != null && (!hayAvisos || propuestasDeLosAvisos.valor != null || propuestasDeLosAvisos.terminada)
+    ) {
+        remember(mensajesDelBanco, propuestasDeLosAvisos.valor, cuentas.valor, avisosQueFallaronAca) {
+            avisosPorConfirmar(
+                mensajes = mensajesDelBanco,
+                propuestas = propuestasDeLosAvisos.valor,
+                cuentas = cuentas.valor.orEmpty(),
+                ahora = Clock.System.now().toEpochMilliseconds(),
+                fallaron = avisosQueFallaronAca,
+            )
+        }
+    } else null
+
     // Lo que hace falta para el ícono de repetición de cada fila. Ola C: el tablero de Recurrentes
     // se mudó a Plan y esta pantalla ya no lo pinta; de él solo lee estas dos listas (ver
     // [MarcasDeRecurrentes]). Su «Reintentar» (`refreshKey`) también las vuelve a leer.
@@ -1257,7 +1309,13 @@ fun TransactionsScreen(
                 // Se está pintando algo que esta visita todavía no confirmó (lo recordado, o la lista
                 // de antes de un «Reintentar»). Sin nada pintado lo dice el esqueleto.
                 if (loading && visibleDays.isNotEmpty()) ActualizandoEnLaCabecera()
-                BotonDeIcono(Icons.Rounded.Search, "Buscar", onClick = { onNavigate(Screen.Buscar) })
+                // Vuelta 40: la lupa en su botón redondo blanco, como en la opción 3.
+                BotonDeIcono(
+                    Icons.Rounded.Search,
+                    "Buscar",
+                    onClick = { onNavigate(Screen.Buscar) },
+                    variante = VarianteDeBotonDeIcono.Secundario,
+                )
             },
         )
 
@@ -1457,7 +1515,21 @@ fun TransactionsScreen(
                     }
                 }
             }
-            if (conLoDeArriba && cuantosPorRevisarAhora != null && cuantosPorRevisarAhora.total > 0) {
+            // Vuelta 40: con avisos del banco por confirmar, su tarjeta —«Confirmar los N» y «Revisar
+            // uno por uno»— en lugar del renglón «N por revisar». Sin avisos (solo movimientos que
+            // entraron solos, pagos de tarjeta o débitos), el renglón de siempre.
+            val avisosALaVista = avisosDelBanco?.takeIf { it.cuantos > 0 }
+            if (conLoDeArriba && avisosALaVista != null) {
+                item(contentType = "arriba") {
+                    TarjetaDeAvisosDelBanco(
+                        avisos = avisosALaVista,
+                        ocupado = confirmandoLosAvisos,
+                        onConfirmar = { pidiendoConfirmarLosAvisos = true },
+                        onRevisar = { onNavigate(Screen.PorRevisar) },
+                        modifier = arribaDeLaLista,
+                    )
+                }
+            } else if (conLoDeArriba && cuantosPorRevisarAhora != null && cuantosPorRevisarAhora.total > 0) {
                 item(contentType = "arriba") {
                     RenglonPorRevisar(
                         cuantos = cuantosPorRevisarAhora.total,
@@ -1547,14 +1619,16 @@ fun TransactionsScreen(
                         // cuántos renglones esconde. El «Día a día» (cuánto podías gastar) salió:
                         // esa comparación es de Plan.
                         EncabezadoDelDia(
-                            fecha = formatDayHeading(day.date, hoyIso),
-                            total = day.total,
+                            fecha = encabezadoDelDiaDeActividad(day.date, hoyIso),
+                            // Vuelta 40: lo gastado ese día con la regla de «Gastos» (o lo que entró),
+                            // sobre las filas que se ven. Ver [resumenDelDia].
+                            cifra = cifraDelDia(resumenDelDia(day.items, accountTypes)),
                             plegado = plegado,
                             cuantos = cuantosMovimientosDice(rows),
                             onAlternar = { diasPlegados = DiasPlegadosStore.alternar(day.date) },
                         )
-                        // Ola W: «Flujo del día» YA incluye el pago de tarjeta (ver `diasVisibles`) —
-                        // esta línea aclara que esa parte no se duplica en el gasto del período.
+                        // Vuelta 40: «Gastaste» no cuenta el pago de tarjeta (la compra ya restó cuando
+                        // se hizo); esta línea dice que esa plata igual salió de tu cuenta ese día.
                         val montoPagoDeTarjeta = montoPagoDeTarjetaEnElDia(day.items, accountTypes)
                         val textoPagoDeTarjeta = textoPagoDeTarjetaEnElDia(montoPagoDeTarjeta)
                         if (textoPagoDeTarjeta != null) LineaPagoDeTarjetaEnElDia(textoPagoDeTarjeta)
@@ -1751,6 +1825,42 @@ fun TransactionsScreen(
         )
     }
 
+    // Vuelta 40 · «Confirmar los N»: una pregunta con la lista corta y el total, y después cada aviso
+    // por el MISMO camino que su fila en «Por revisar» (`confirmarLoEntendido`, uno por uno con
+    // `confirmarElLote`). Solo los que Movi entendió; los demás se quedan para revisarlos.
+    val avisosParaConfirmar = avisosDelBanco
+    if (pidiendoConfirmarLosAvisos && avisosParaConfirmar != null && avisosParaConfirmar.confirmables.isNotEmpty()) {
+        val lote = avisosParaConfirmar.confirmables
+        ConfirmarEnHoja(
+            pregunta = preguntaDeConfirmarLosAvisos(lote.size),
+            detalle = detalleDeLaConfirmacion(avisosParaConfirmar),
+            textoConfirmar = "Confirmar",
+            ocupado = confirmandoLosAvisos,
+            varianteConfirmar = VarianteDeBoton.Principal,
+            onCancelar = { pidiendoConfirmarLosAvisos = false },
+            onConfirmar = {
+                if (!confirmandoLosAvisos) {
+                    confirmandoLosAvisos = true
+                    alcanceDeLaPantalla.launch {
+                        val resultado = confirmarElLote(lote) {
+                            confirmarLoEntendido(it, ahora = Clock.System.now().toEpochMilliseconds())
+                        }
+                        if (resultado.anotados.isNotEmpty()) vibrador.confirmar()
+                        avisosConfirmadosAca = avisosConfirmadosAca +
+                            resultado.anotados.flatMap { it.avisos }.associateWith { SMS_STATE_CONFIRMED }
+                        avisosQueFallaronAca = avisosQueFallaronAca + resultado.quedaron.map { it.first.cabezaId }
+                        confirmandoLosAvisos = false
+                        pidiendoConfirmarLosAvisos = false
+                        refreshKey++
+                        snackbarHostState.showSnackbar(textoDeLosConfirmados(resultado))
+                    }
+                }
+            },
+        )
+    } else if (pidiendoConfirmarLosAvisos && !confirmandoLosAvisos) {
+        SideEffect { pidiendoConfirmarLosAvisos = false }
+    }
+
     if (showCreateSheet) {
         CreateAccountSheet(
             onDismiss = { showCreateSheet = false },
@@ -1841,11 +1951,20 @@ private enum class PiezaDelDia { Fecha, Cuantos, Monto, Chevron }
 @Composable
 internal fun EncabezadoDelDia(
     fecha: String,
-    total: Long,
+    /**
+     * Vuelta 40: «Gastaste $X» (o «Entró $X», en verde, si ese día solo entró plata), ver
+     * [cifraDelDia]. `null` —nada que cuente ese día— deja la derecha vacía.
+     */
+    cifra: Pair<RotuloDelDia, Long>?,
     plegado: Boolean,
     cuantos: Int,
     onAlternar: () -> Unit,
 ) {
+    val medidor = rememberTextMeasurer()
+    val ocultos = LocalSaldosOcultos.current
+    val estiloDelRotulo = Movi.textos.apoyo
+    val estiloDelConteo = Movi.textos.cuerpoRegular
+    val estiloDeLaCifraDelDia = estiloDeLaCifra(VarianteDeCifra.Chica, Movi.textos)
     // El tag va en una caja aparte: mide el borde del renglón, el mismo punto que
     // `TAG_ENCABEZADO_DE_DIA_ESQUELETO` en el esqueleto, sin el aire del resaltado.
     Box(modifier = Modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_DIA)) {
@@ -1862,55 +1981,65 @@ internal fun EncabezadoDelDia(
                     onClick = onAlternar,
                 ),
         ) { restricciones ->
-            val medibles = subcompose(PiezaDelDia.Fecha) {
-                Text(
-                    text = fecha,
-                    style = Movi.textos.titulo,
-                    color = Movi.colores.texto,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.layoutId(PiezaDelDia.Fecha).testTag(TAG_FECHA_DEL_DIA).semantics { heading() },
-                )
-                if (plegado) {
-                    Text(
-                        text = if (cuantos == 1) "· 1 movimiento" else "· $cuantos movimientos",
-                        style = Movi.textos.tituloRegular,
-                        color = Movi.colores.textoMedio,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.layoutId(PiezaDelDia.Cuantos),
-                    )
-                }
-                Cifra(
-                    total,
-                    VarianteDeCifra.Chica,
-                    modifier = Modifier.layoutId(PiezaDelDia.Monto),
-                    tono = if (total > 0) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
-                )
-                Icon(
-                    imageVector = if (plegado) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
-                    contentDescription = if (plegado) "Desplegar el día" else "Plegar el día",
-                    tint = Movi.colores.textoMedio,
-                    modifier = Modifier.size(Icono.m).layoutId(PiezaDelDia.Chevron),
-                )
-            }
-            fun pieza(cual: PiezaDelDia) = medibles.firstOrNull { it.layoutId == cual }
             val ancho = restricciones.maxWidth
             val suelta = restricciones.copy(minWidth = 0, minHeight = 0)
             val entre = Espacio.xs.roundToPx()
             val junto = Espacio.xxs.roundToPx()
 
-            // Primero lo que nunca se recorta: el chevron, la cifra y la fecha.
-            val chevron = pieza(PiezaDelDia.Chevron)!!.measure(suelta)
-            val monto = pieza(PiezaDelDia.Monto)!!.measure(suelta)
+            val fechaM = subcompose(PiezaDelDia.Fecha) {
+                Text(
+                    text = fecha,
+                    // Vuelta 40: el día en 15/700 a la vista (la maqueta dice 14/700; el estilo más
+                    // cercano del sistema), con el día de la semana: «Hoy · martes 28».
+                    style = Movi.textos.cuerpoFuerte,
+                    color = Movi.colores.texto,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag(TAG_FECHA_DEL_DIA).semantics { heading() },
+                )
+            }.first()
+            val chevron = subcompose(PiezaDelDia.Chevron) {
+                Icon(
+                    imageVector = if (plegado) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
+                    contentDescription = if (plegado) "Desplegar el día" else "Plegar el día",
+                    tint = Movi.colores.textoMedio,
+                    modifier = Modifier.size(Icono.m),
+                )
+            }.first().measure(suelta)
+
+            // **Lo que cede primero es el rótulo** (vuelta 40): «Martes 30 de septiembre» con
+            // «Gastaste $12.257.400» no entra a 360 dp con la letra grande. La fecha y la cifra no se
+            // cortan; sin lugar para las dos más «Gastaste», va la cifra sola (el lector de pantalla
+            // sigue oyendo «Gastaste»). Se decide midiendo los textos, sin componer lo que no va.
+            val anchoDelRotulo = cifra?.let { medidor.measure(it.first.texto, estiloDelRotulo, density = this).size.width } ?: 0
+            val anchoDeLaCifra = cifra?.let { (rotulo, monto) ->
+                medidor.measure(textoDeLaCifra(monto, "COP", tonoDeLaCifraDelDia(rotulo), ocultos), estiloDeLaCifraDelDia, density = this).size.width
+            } ?: 0
+            val fechaNatural = fechaM.maxIntrinsicWidth(Constraints.Infinity)
+            // Plegado, el conteo también pide su lugar (al menos «· 12»): antes que él cede el rótulo.
+            val minimoDelConteo = if (plegado) medidor.measure("· $cuantos", estiloDelConteo, density = this).size.width + junto else 0
+            val conRotulo = cifra != null &&
+                fechaNatural + anchoDelRotulo + junto + anchoDeLaCifra + chevron.width + 2 * entre + minimoDelConteo <= ancho
+            val monto = subcompose(PiezaDelDia.Monto) { CifraDelDia(cifra, conRotulo) }.first().measure(suelta)
+
             val paraLaFecha = (ancho - monto.width - chevron.width - 2 * entre).coerceAtLeast(0)
-            val fechaP = pieza(PiezaDelDia.Fecha)!!.measure(suelta.copy(maxWidth = paraLaFecha))
+            val fechaP = fechaM.measure(suelta.copy(maxWidth = paraLaFecha))
             val sobra = paraLaFecha - fechaP.width
 
             // Después, con lo que sobra: el conteo, cortado con «…» si no entra entero.
-            val cuantosP = pieza(PiezaDelDia.Cuantos)?.takeIf { sobra > junto }?.measure(suelta.copy(maxWidth = sobra - junto))
+            val cuantosP = if (plegado && sobra > junto) {
+                subcompose(PiezaDelDia.Cuantos) {
+                    Text(
+                        text = if (cuantos == 1) "· 1 movimiento" else "· $cuantos movimientos",
+                        style = estiloDelConteo,
+                        color = Movi.colores.textoMedio,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }.first().measure(suelta.copy(maxWidth = sobra - junto))
+            } else null
 
             val alto = maxOf(
                 restricciones.minHeight,
@@ -1928,6 +2057,38 @@ internal fun EncabezadoDelDia(
                 val xMonto = xChevron - entre - monto.width
                 monto.placeRelative(xMonto, centrado(monto))
             }
+        }
+    }
+}
+
+/** El tono de la cifra de un día: verde con «+» lo que entró, en texto medio lo gastado. */
+private fun tonoDeLaCifraDelDia(rotulo: RotuloDelDia): TonoDeCifra =
+    if (rotulo == RotuloDelDia.ENTRO) TonoDeCifra.Ingreso else TonoDeCifra.Apagado
+
+/**
+ * «Gastaste $110.500» en texto medio; «Entró +$6.200.000» en verde. [conRotulo] en `false`, la cifra
+ * sola (no cabía), con el rótulo para el lector de pantalla. Sin [cifra], una caja vacía: la fecha se
+ * queda con todo el ancho.
+ */
+@Composable
+private fun CifraDelDia(cifra: Pair<RotuloDelDia, Long>?, conRotulo: Boolean) {
+    Row(
+        modifier = if (cifra != null && !conRotulo) Modifier.semantics { contentDescription = cifra.first.texto } else Modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
+    ) {
+        if (cifra != null) {
+            val (rotulo, monto) = cifra
+            if (conRotulo) {
+                Text(
+                    text = rotulo.texto,
+                    style = Movi.textos.apoyo,
+                    color = if (rotulo == RotuloDelDia.ENTRO) Movi.colores.entra else Movi.colores.textoMedio,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+            Cifra(monto, VarianteDeCifra.Chica, tono = tonoDeLaCifraDelDia(rotulo))
         }
     }
 }

@@ -496,6 +496,13 @@ val RENGLON_ENTERO: LineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.
  * la pone con `conFamilia` (ver `Tipografia.kt`). Leídos fuera del tema —una prueba pura— no tienen
  * familia, y es a propósito.
  */
+/**
+ * **El tamaño más chico que se ve**, en px (vuelta 40): ningún texto de la app queda por debajo, con la
+ * escala ×1,12 de `App()` aplicada. Lo vigila `TipografiaTest`; el más chico hoy es [TextosDeMovi.apoyo]
+ * (11 sp → 12,3).
+ */
+const val LETRA_MINIMA_QUE_SE_VE: Float = 12f
+
 @Immutable
 data class TextosDeMovi(
     /** El número protagonista de una pantalla. Uno por pantalla, o ninguno. */

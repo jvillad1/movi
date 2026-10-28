@@ -1,6 +1,8 @@
 package com.jvillada.movi.ui.recurrentes
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -82,9 +84,10 @@ internal fun PropuestaDeMovimiento(
 /** Los rótulos que la pantalla y sus pruebas tienen que nombrar igual. */
 const val ETIQUETA_SI_FUE_ESTE = "Sí, fue este"
 const val ETIQUETA_NO_FUE_ESTE = "No fue este"
-const val ETIQUETA_ANOTAR = "Anotar este pago"
+/** Vuelta 40: «Anotar pago», el botón de la fila de una factura (era «Anotar este pago»). */
+const val ETIQUETA_ANOTAR = "Anotar pago"
 /** Un ingreso no se paga: llega (mismo criterio que `tituloPropuesta`). */
-const val ETIQUETA_ANOTAR_INGRESO = "Anotar este ingreso"
+const val ETIQUETA_ANOTAR_INGRESO = "Anotar ingreso"
 
 /** El rótulo de la salida «Anotar…» según sea un pago o un ingreso. */
 internal fun etiquetaDeAnotar(esIngreso: Boolean): String = if (esIngreso) ETIQUETA_ANOTAR_INGRESO else ETIQUETA_ANOTAR
@@ -104,9 +107,15 @@ internal data class AccionDeOcurrencia(
  * dice una vez acá y no en cada fila: si una se olvidara de mirarlo, un doble toque mandaría dos
  * veces el mismo sello.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AccionesDeLaFila(acciones: List<AccionDeOcurrencia>, enVuelo: Boolean) {
-    Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+    // Vuelta 40 (revisión): si los botones no caben uno al lado del otro, el que no cabe baja a su
+    // renglón. A 360 dp, dentro de la fila de una factura, «No fue este» se cortaba en «No fue».
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+    ) {
         acciones.forEachIndexed { i, accion ->
             val etiqueta = if (enVuelo && i == 0) "Guardando…" else accion.label
             ActionChip(label = etiqueta, primary = accion.primary) {

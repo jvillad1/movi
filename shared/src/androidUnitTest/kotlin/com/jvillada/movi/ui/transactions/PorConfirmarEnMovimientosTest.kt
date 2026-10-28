@@ -170,16 +170,19 @@ class PorConfirmarEnMovimientosTest {
     fun `el renglon suma las tres fuentes y abre la bandeja`() {
         montar(
             listOf(aMano, porSms),
-            esperar = "por revisar",
+            esperar = "por confirmar",
             mensajes = listOf(sms("s1", SMS_STATE_PENDING), sms("s2", SMS_STATE_PENDING), sms("s3", SMS_STATE_CONFIRMED)),
             candidatos = listOf(pagoDeTarjeta),
         )
 
-        composeRule.onNodeWithText("4 por revisar", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta 40: con avisos del banco por confirmar, su tarjeta reemplaza al renglón; «Revisar uno
+        // por uno» abre la misma bandeja, con todo lo demás adentro.
+        composeRule.onNodeWithText("2 avisos del banco por confirmar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("4 por revisar", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("entró solo", substring = true, useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("sin marcar", substring = true, useUnmergedTree = true).assertDoesNotExist()
 
-        // Ola R4: es una propuesta del sistema; se abre con su botón «Revisar».
+        // Sin ninguno que Movi entienda, el botón es «Revisar» a secas (revisión de la vuelta 40).
         composeRule.onNodeWithText("Revisar", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         assertEquals(listOf<Screen>(Screen.PorRevisar), navegaciones)
@@ -202,13 +205,15 @@ class PorConfirmarEnMovimientosTest {
                 compuerta?.await()
                 return listOf(EventDay(date = HOY_ISO, total = -18_500L, items = listOf(aMano, porSms)))
             }
+            // Vuelta 40: sin avisos del banco (con avisos va su tarjeta, ver arriba): el movimiento que
+            // entró solo y un pago de tarjeta.
             override suspend fun getCardPaymentCandidates(): List<FinancialEvent> {
                 compuerta?.await()
-                return emptyList()
+                return listOf(pagoDeTarjeta)
             }
             override suspend fun getSmsMessages(): List<SmsMessage> {
                 compuerta?.await()
-                return listOf(sms("s1", SMS_STATE_PENDING))
+                return listOf(sms("s1", SMS_STATE_CONFIRMED))
             }
         }
         composeRule.setContent {
@@ -236,12 +241,13 @@ class PorConfirmarEnMovimientosTest {
         composeRule.onNodeWithText("2 por revisar", useUnmergedTree = true).assertExists()
     }
 
-    /** Si solo hay mensajes del banco, el renglón igual está: la bandeja es una sola. */
+    /** Vuelta 40: si solo hay mensajes del banco, va su tarjeta (y no el renglón). */
     @Test
-    fun `con solo mensajes del banco el renglon tambien aparece`() {
-        montar(listOf(aMano), esperar = "por revisar", mensajes = listOf(sms("s1", SMS_STATE_PENDING)))
+    fun `con solo mensajes del banco aparece la tarjeta de avisos`() {
+        montar(listOf(aMano), esperar = "por confirmar", mensajes = listOf(sms("s1", SMS_STATE_PENDING)))
 
-        composeRule.onNodeWithText("1 por revisar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("1 aviso del banco por confirmar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_RENGLON_POR_REVISAR, useUnmergedTree = true).assertDoesNotExist()
     }
 
     /**

@@ -84,11 +84,19 @@ fun colorDeLaBarra(tono: TonoDeBarra, colores: ColoresDeMovi): Color = when (ton
  * BarraDeProgreso(gastado.toFloat() / tope, tono = if (gastado > tope) TonoDeBarra.Peligro else TonoDeBarra.Marca)
  * ```
  */
+/**
+ * **Sobre qué va una barra** (vuelta 40). [Normal]: la pista en la capa 3, de
+ * [Medida.altoDeBarraDeProgreso]. [SobreLaMarca]: dentro de una tarjeta amarilla («Falta por pagar»),
+ * la pista en `marcaSuave` y de [Medida.altoDeBarraEnTarjeta]; el relleno sigue en su tono (la tinta).
+ */
+enum class FondoDeBarra { Normal, SobreLaMarca }
+
 @Composable
 fun BarraDeProgreso(
     fraccion: Float,
     modifier: Modifier = Modifier,
     tono: TonoDeBarra = TonoDeBarra.Marca,
+    fondo: FondoDeBarra = FondoDeBarra.Normal,
     /**
      * Una marca vertical sobre la pista, en esta fracción (0–1): «la mitad» en «Quién puso qué» de
      * Espacios. `null`, ninguna.
@@ -96,14 +104,14 @@ fun BarraDeProgreso(
     marca: Float? = null,
 ) {
     if (marca == null) {
-        Pista(fraccion, tono, modifier)
+        Pista(fraccion, tono, modifier, fondo)
         return
     }
     Box(
         modifier = modifier.fillMaxWidth().height(Medida.altoDeMarcaDeBarra),
         contentAlignment = Alignment.CenterStart,
     ) {
-        Pista(fraccion, tono, Modifier)
+        Pista(fraccion, tono, Modifier, fondo)
         Row(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
             Spacer(Modifier.fillMaxWidth(marca.coerceIn(0f, 1f)))
             Box(
@@ -121,15 +129,16 @@ fun BarraDeProgreso(
 const val TAG_MARCA_DE_BARRA: String = "ds:marca-de-barra"
 
 @Composable
-private fun Pista(fraccion: Float, tono: TonoDeBarra, modifier: Modifier) {
+private fun Pista(fraccion: Float, tono: TonoDeBarra, modifier: Modifier, fondo: FondoDeBarra) {
     val recortada = fraccion.coerceIn(0f, 1f)
     val forma = RoundedCornerShape(Radio.pill)
+    val sobreLaMarca = fondo == FondoDeBarra.SobreLaMarca
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(Medida.altoDeBarraDeProgreso)
+            .height(if (sobreLaMarca) Medida.altoDeBarraEnTarjeta else Medida.altoDeBarraDeProgreso)
             .clip(forma)
-            .background(Movi.colores.capa3)
+            .background(if (sobreLaMarca) Movi.colores.marcaSuave else Movi.colores.capa3)
             .semantics { progressBarRangeInfo = ProgressBarRangeInfo(recortada, 0f..1f) }
             .testTag(TAG_BARRA_DE_PROGRESO),
     ) {

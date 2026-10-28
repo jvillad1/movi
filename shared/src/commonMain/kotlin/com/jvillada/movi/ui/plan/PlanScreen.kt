@@ -32,9 +32,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.History
-import com.jvillada.movi.data.FormaRecordada
-import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.periodoActual
+import com.jvillada.movi.shared.model.rangoDelPeriodo
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.budgets.HojasDePresupuestos
@@ -99,8 +98,13 @@ private val ROTULOS_DE_LOS_SEGMENTOS = listOf(ROTULO_SEGMENTO_PAGOS, "Presupuest
 /**
  * El rótulo del segmento de los pagos. Era «Pagos del mes», pero el período del dueño no es el mes de
  * calendario (su corte es el 25): «Pagos» a secas, y la sección de adentro dice «Pagos del período».
+ *
+ * **Vuelta 40: «Facturas».** Desde la vuelta 38 la pestaña se llama «Pagos», y el título decía
+ * «Pagos» y, justo debajo, el primer segmento también: «Pagos | Presupuestos» bajo «Pagos». El
+ * segmento pasó a «Facturas», que es lo que lista adentro («Tus facturas del período»), y queda
+ * «Facturas | Presupuestos».
  */
-const val ROTULO_SEGMENTO_PAGOS: String = "Pagos"
+const val ROTULO_SEGMENTO_PAGOS: String = "Facturas"
 
 /**
  * El aire entre el selector y lo primero de su segmento: el mismo en «Pagos» y en «Presupuestos»
@@ -142,10 +146,6 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     // Recargando con cifras ya pintadas (lo del Inicio): lo dice, como el Inicio, en vez de hacer
     // pasar lo de antes por lo de ahora.
     val actualizando = disponible.cargando && alcanzaParaElDisponible(data)
-    // Si la última vez que el perfil contestó el período llevaba línea de rango. `null` (nada
-    // recordado) la reserva, como Movimientos: ver `FormaRecordada.recordarLineaDePeriodo`.
-    val lineaRecordada = remember { FormaRecordada.delAparato.movimientos(SessionManager.userId)?.lineaDePeriodo }
-
     val ajustesDelPeriodo = data.ajustesDePeriodo
     val periodoDeHoy = remember(ajustesDelPeriodo) {
         periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
@@ -167,8 +167,11 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     // primeras a la izquierda y el selector con su segmento a la derecha.
     val lineaDelPeriodo: @Composable () -> Unit = {
         LineaDelPeriodo(
-            texto = encabezadoDelPeriodo(data),
-            reservar = data.periodoActual == null && disponible.cargando && lineaRecordada != false,
+            // Vuelta 40: «Del 25 de octubre al 24 de noviembre», sin «quedan N días» (la opción 3), y
+            // **siempre**: también con el mes de calendario (corte 1, el del usuario demo), que antes
+            // se callaba por diseño —«no hay nada que aclarar»— y dejaba a Pagos sin fechas.
+            texto = lineaDelPeriodoDePagos(data),
+            reservar = data.periodoActual == null && disponible.cargando,
         )
     }
     val cuantoPuedesGastar: @Composable () -> Unit = {
@@ -208,13 +211,22 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
         )
     }
     // Lo de debajo del selector: el tablero de Recurrentes o los presupuestos. Perezoso siempre.
+    //
+    // **Vuelta 40 (la opción 3): primero las facturas.** En una columna, lo primero debajo del
+    // selector es lo del segmento —en «Facturas», la tarjeta amarilla «Falta por pagar» y «Tus
+    // facturas del período»; en «Presupuestos», los presupuestos— y después, igual en los dos, el
+    // Disponible con «¿De dónde sale?» y «Tus períodos» (en «Facturas», también la caja). En dos
+    // columnas eso ya está a la izquierda.
+    fun LazyListScope.loDeAbajo(conCaja: Boolean) {
+        item(key = "disponible") { cuantoPuedesGastar() }
+        item(key = "tus-periodos") { tusPeriodos() }
+        if (conCaja) item(key = "caja-proyectada") { cajaProyectada(true, true) }
+    }
     fun LazyListScope.segmentoElegido(dosColumnas: Boolean) {
         if (enPagos) {
             item(key = "aire-de-pagos") { Spacer(Modifier.height(AIRE_DEBAJO_DEL_SELECTOR)) }
-            // En una columna la caja va después de la lista del período (ver `cajaProyectada`); en
-            // dos ya está a la izquierda.
             val caja: (LazyListScope.() -> Unit)? = if (dosColumnas) null else {
-                { item(key = "caja-proyectada") { cajaProyectada(false, true) } }
+                { loDeAbajo(conCaja = true) }
             }
             if (esqueletoDePagos) {
                 tableroDeRecurrentesEsqueleto()
@@ -232,6 +244,10 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             }
         } else {
             presupuestos(presupuestos)
+            if (!dosColumnas) {
+                item(key = "aire-del-disponible") { Spacer(Modifier.height(Medida.entreSecciones)) }
+                loDeAbajo(conCaja = false)
+            }
         }
     }
 
@@ -304,11 +320,9 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                     contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl),
                 ) {
                     item(key = "periodo") { lineaDelPeriodo() }
-                    item(key = "disponible") { cuantoPuedesGastar() }
-                    item(key = "tus-periodos") { tusPeriodos() }
+                    // Vuelta 40: el selector justo debajo del período, antes de lo que cambia.
                     item(key = "segmentos") {
                         Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
-                            Spacer(Modifier.height(Medida.entreSecciones))
                             selector()
                         }
                     }
@@ -321,14 +335,15 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             hostState = pagos.aviso,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Espacio.s),
         )
-        HojasDelTableroDeRecurrentes(pagos.estado)
+        HojasDelTableroDeRecurrentes(pagos.estado, onNavigate)
         HojasDePresupuestos(presupuestos)
     }
 }
 
 /**
  * «Del 25 de agosto al 24 de septiembre · quedan 9 días» — la misma línea que el hero del Inicio
- * ([encabezadoDelPeriodo]). Con el mes de calendario no hay nada que aclarar y no se pinta, igual
+ * ([encabezadoDelPeriodo]). Vuelta 40: va siempre, también con el mes de calendario (ver
+ * [lineaDelPeriodoDePagos]); lo que sigue es la historia de antes: con el mes de calendario no se pintaba, igual
  * que allá. [reservar]: el perfil (de donde sale el período) todavía viene en camino y la última vez
  * la línea iba — un esqueleto de su alto, para que al llegar no empuje la tarjeta de abajo.
  */
@@ -346,10 +361,11 @@ private fun LineaDelPeriodo(texto: String?, reservar: Boolean) {
         ),
     ) {
         when {
+            // Vuelta 40: en texto medio (era apagado), como en la maqueta.
             texto != null -> Text(
                 text = texto,
                 style = Movi.textos.apoyo,
-                color = Movi.colores.textoApagado,
+                color = Movi.colores.textoMedio,
                 modifier = Modifier.testTag(TAG_LINEA_DEL_PERIODO_DE_PLAN),
             )
             reservar -> LineaEsqueleto(
@@ -361,6 +377,13 @@ private fun LineaDelPeriodo(texto: String?, reservar: Boolean) {
         Spacer(Modifier.height(Espacio.m))
     }
 }
+
+/**
+ * **La línea del período de Pagos** (vuelta 40): «Del 25 de octubre al 24 de noviembre», o «Del 1 de
+ * octubre al 31 de octubre» con el mes de calendario. `null` solo mientras no se sabe el período.
+ */
+internal fun lineaDelPeriodoDePagos(data: com.jvillada.movi.ui.dashboard.DashboardData): String? =
+    data.periodoActual?.let { rangoDelPeriodo(it, data.ajustesDePeriodo) }
 
 /** El título de la tarjeta del disponible en Plan: la pregunta que contesta. */
 const val TITULO_CUANTO_PUEDES_GASTAR = "Cuánto puedes gastar"

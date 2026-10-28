@@ -69,12 +69,15 @@ fun montoPagoDeTarjetaEnElDia(items: List<FinancialEvent>, accountTypes: Map<Str
  * Ola W: ya no aclara una exclusión (esa plata SÍ está en el total de arriba, desde `diasVisibles`)
  * — aclara que no se cuenta dos veces: el gasto real ya quedó registrado el día de la compra, así
  * que el período/Disponible no vuelve a restarlo cuando se paga la tarjeta.
+ *
+ * Vuelta 40: el encabezado del día dice «Gastaste $X» con la regla de «Gastos», que no cuenta el
+ * pago de tarjeta; la frase pasó de «De eso, …» a «Además, …»: esa plata salió igual de tu cuenta.
  */
 fun textoPagoDeTarjetaEnElDia(monto: Long): String? =
     if (monto <= 0L) {
         null
     } else {
-        "De eso, ${formatCOP(monto)} fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
+        "Además, ${formatCOP(monto)} fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
             "compraste, no se duplica."
     }
 

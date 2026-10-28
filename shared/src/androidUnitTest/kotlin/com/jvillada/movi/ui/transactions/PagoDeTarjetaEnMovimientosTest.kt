@@ -126,9 +126,12 @@ class PagoDeTarjetaEnMovimientosTest {
             ),
         )
 
-        composeRule.onNodeWithText("−$1.929.536", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta 40: el encabezado dice «Gastaste» con la regla de «Gastos», que no cuenta el pago de
+        // tarjeta: un día de puros pagos no dice nada a la derecha, y la línea dice que la plata salió.
+        assertTrue(composeRule.onAllNodesWithText("Gastaste", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithText("−$1.929.536", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText(
-            "De eso, \$1.929.536 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
+            "Además, \$1.929.536 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
                 "compraste, no se duplica.",
             useUnmergedTree = true,
         ).assertIsDisplayed()
@@ -140,8 +143,7 @@ class PagoDeTarjetaEnMovimientosTest {
         montarCon(listOf(gasto))
 
         composeRule.onNodeWithText("Carnes y Legumbres Santa Elena", useUnmergedTree = true).assertIsDisplayed()
-        // El monto aparece dos veces (la fila y «Flujo del día», que en este día son iguales): un
-        // conteo, no `assertIsDisplayed`, que exige un único nodo.
+        // La fila dice «−$18.500» y el encabezado «Gastaste $18.500» (vuelta 40).
         assertTrue(
             composeRule.onAllNodesWithText("−$18.500", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
         )
@@ -171,9 +173,12 @@ class PagoDeTarjetaEnMovimientosTest {
         assertTrue(
             composeRule.onAllNodesWithText("−$18.500", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
         )
-        composeRule.onNodeWithText("−$405.402", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta 40: «Gastaste $18.500» —solo el gasto— y la línea del pago aparte.
+        composeRule.onNodeWithText("Gastaste", useUnmergedTree = true).assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithText("$18.500", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText("−$405.402", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText(
-            "De eso, \$386.902 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
+            "Además, \$386.902 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
                 "compraste, no se duplica.",
             useUnmergedTree = true,
         ).assertIsDisplayed()

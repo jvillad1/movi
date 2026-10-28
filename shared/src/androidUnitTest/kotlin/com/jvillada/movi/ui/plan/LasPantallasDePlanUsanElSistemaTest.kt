@@ -207,7 +207,8 @@ class LasPantallasDePlanUsanElSistemaTest {
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Arriendo del apartamento") }
         usaElSistema("Plan", minimoDeSecciones = 2)
         // La fila del pago vence hoy: lo dice su píldora, no solo un color.
-        assertTrue(nodos(TAG_PILDORA).any { "Hoy" in textosDentro(it) }, "el pago de hoy lleva la píldora «Hoy»")
+        // Vuelta 40: la pastilla de vencimiento dice «Vence hoy».
+        assertTrue(nodos(TAG_PILDORA).any { "Vence hoy" in textosDentro(it) }, "el pago de hoy lleva la píldora «Vence hoy»")
         assertTrue(!hay(TITULO_RECORDATORIOS_SIN_CANAL), "sin recordatorios pedidos, no hay propuesta")
     }
 

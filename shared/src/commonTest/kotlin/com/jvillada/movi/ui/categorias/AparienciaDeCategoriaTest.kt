@@ -54,7 +54,10 @@ class AparienciaDeCategoriaTest {
     @Test
     fun `la tabla por nombre gana a las palabras clave`() {
         // «arriendo» como palabra clave es un gasto (ámbar); «Arriendo recibido» es un ingreso.
-        assertEquals(ap("arriendo", "ambar"), aparienciaDe("Arriendo del apartamento", null))
+        // Vuelta 40 (revisión): el arriendo que se paga lleva la casa; la llave es de «Arriendo recibido».
+        assertEquals(ap("casa", "ambar"), aparienciaDe("Arriendo del apartamento", null))
+        assertEquals(ap("casa", "ambar"), aparienciaDe("Arriendo", null))
+        assertEquals(ap("casa", "ambar"), aparienciaDe("Alquiler", null))
         assertEquals(ap("arriendo", "verde"), aparienciaDe("Arriendo recibido", null))
     }
 

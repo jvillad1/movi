@@ -185,6 +185,12 @@ object Medida {
     /** El grosor de una barra de progreso. */
     val altoDeBarraDeProgreso: Dp = 4.dp
 
+    /**
+     * El grosor de la barra de una tarjeta de color: la de «Falta por pagar» en Pagos (vuelta 40, 10
+     * en la maqueta de la opción 3), que se lee de lejos sobre el amarillo.
+     */
+    val altoDeBarraEnTarjeta: Dp = 10.dp
+
     /** El alto de la marca sobre una barra de progreso («la mitad», en Espacios). */
     val altoDeMarcaDeBarra: Dp = 12.dp
 

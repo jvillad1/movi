@@ -37,7 +37,8 @@ class EntreCuentasFueraDeLosChipsTest {
     @Test
     fun `la fila de filtros quedo en tres`() {
         // Ola C: «Recurrentes» se mudó a Plan.
-        assertEquals(listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS), CHIPS_VISIBLES)
+        // Vuelta 40: «Personas» entró al final, con su índice nuevo.
+        assertEquals(listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_PERSONAS), CHIPS_VISIBLES)
         assertFalse(CHIP_ENTRE_CUENTAS in CHIPS_VISIBLES)
         assertFalse(CHIP_POR_CONFIRMAR in CHIPS_VISIBLES)
     }

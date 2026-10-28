@@ -168,7 +168,7 @@ class AjustesEnMovimientosTest {
      */
     @Test
     fun `agrupar no mueve el flujo del dia`() {
-        composeRule.onNode(hasText("−$28.500") and !hasAnyAncestor(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO)), useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNode(hasText("$28.500") and !hasAnyAncestor(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO)), useUnmergedTree = true).assertIsDisplayed()
     }
 }
 

@@ -1,5 +1,10 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.ui.recurrentes.TAG_ENLACE_AL_MOVIMIENTO
+import com.jvillada.movi.ui.recurrentes.TITULO_TUS_FACTURAS
+import com.jvillada.movi.ui.recurrentes.TAG_VER_TODAS_LAS_FACTURAS
+import com.jvillada.movi.ui.recurrentes.ETIQUETA_ANOTAR
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -7,6 +12,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
@@ -19,6 +25,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.RecurringRule
@@ -67,10 +74,11 @@ class UnaSolaListaEnElTableroTest {
     private val desmarcadas = mutableListOf<Pair<String, String>>()
     private val rechazados = mutableListOf<Pair<String, String>>()
     private var navegoA: Screen? = null
+    private var eventos: List<EventDay> = emptyList()
 
     private inner class Repo : RepositorioDePrueba() {
         override suspend fun getAccounts(): List<Account> = listOf(bancolombia)
-        override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+        override suspend fun getEventsByDay(): List<EventDay> = eventos
         override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
         override suspend fun getRecurringRules(): List<RecurringRule> = upcoming.map { it.rule }
         override suspend fun getSubscriptions(): SubscriptionsResult = SubscriptionsResult(emptyList(), monthlyTotalCop = 0L)
@@ -121,8 +129,15 @@ class UnaSolaListaEnElTableroTest {
                 }
             }
         }
-        esperarTexto("Pagos del período")
-        esperarTexto("Por pagar · ")
+        esperarTexto(TITULO_TUS_FACTURAS)
+        esperarTexto("quedan ")
+    }
+
+    /** Vuelta 40: se ven cinco facturas; «Ver los N pagos del período» abre las demás. */
+    private fun verTodas() {
+        composeRule.onNodeWithTag(TAG_VER_TODAS_LAS_FACTURAS, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
     }
 
     private fun nodos(texto: String, substring: Boolean = false) =
@@ -148,22 +163,22 @@ class UnaSolaListaEnElTableroTest {
     @Test
     fun `celular y cotrafa salen una vez, en falta por pagar, y crediagil una vez en ya pagaste`() {
         montar()
+        assertEquals(1, nodos("Ver los 6 pagos del período").size, "se ven cinco de seis")
+        verTodas()
 
         for (nombre in listOf("Celular", "Cotrafa", "Crediágil", "Gimnasio Caro", "Mercado", "Internet")) {
             assertEquals(1, nodos(nombre).size, "«$nombre» tiene que salir exactamente una vez")
         }
 
-        val yaPagaste = arriba("Ya pagaste · 3")
-        assertTrue(arriba("Por pagar · 3") < arriba("Celular"))
-        assertTrue(arriba("Celular") < yaPagaste, "Celular está en «Por pagar»")
-        assertTrue(arriba("Cotrafa") < yaPagaste, "Cotrafa está en «Por pagar»")
-        assertTrue(arriba("Crediágil") > yaPagaste, "Crediágil está en «Ya pagaste»")
+        // Vuelta 40: lo vencido primero, lo que vence por fecha, lo pagado al final.
+        assertTrue(arriba("Gimnasio Caro") < arriba("Cotrafa"), "lo vencido va primero")
+        assertTrue(arriba("Cotrafa") < arriba("Crediágil"), "Cotrafa falta por pagar")
+        assertTrue(arriba("Celular") < arriba("Crediágil"), "Celular falta por pagar")
 
-        // Las dos de octubre dicen cuándo vencen, no que ya se pagaron.
-        assertEquals(2, nodos("vence el 22 de octubre").size)
-        // Crediágil: con qué se sabe.
-        assertEquals(1, nodos("pagado el 27 de septiembre").size)
-        assertEquals(1, nodos("Lo prueba un pago de \$1.204.064").size)
+        // Las dos de octubre dicen cuándo vencen (la pastilla), no que ya se pagaron.
+        assertEquals(2, nodos("Vence el 22 oct").size)
+        // Crediágil: el enlace al movimiento que la pagó.
+        assertEquals(1, nodos("Movimiento del 27 sep").size)
     }
 
     /**
@@ -176,15 +191,12 @@ class UnaSolaListaEnElTableroTest {
     fun `los grupos no repiten las cifras del resumen`() {
         montar()
 
-        assertEquals(1, nodos("Falta por pagar").size, "el rótulo del resumen, una vez")
-        assertTrue(nodos("Falta por pagar · ", substring = true).isEmpty(), "el grupo ya no repite el rótulo")
-        for (encabezado in listOf("Por pagar · 3", "Ya pagaste · 3")) {
-            val renglon = composeRule.onNodeWithText(encabezado, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-            val cifrasEnElRenglon = composeRule.onAllNodes(hasText("$", substring = true), useUnmergedTree = true)
-                .fetchSemanticsNodes()
-                .filter { it.boundsInRoot.top < renglon.bottom && it.boundsInRoot.bottom > renglon.top }
-            assertTrue(cifrasEnElRenglon.isEmpty(), "«$encabezado» lleva una cifra al lado: $cifrasEnElRenglon")
-        }
+        assertEquals(1, nodos("Falta por pagar").size, "el rótulo de la tarjeta amarilla, una vez")
+        assertTrue(nodos("Falta por pagar · ", substring = true).isEmpty(), "ningún grupo repite el rótulo")
+        // Vuelta 40: la lista ya no tiene grupos con cifra: lo pagado lo dice «Llevas $X pagados».
+        assertTrue(nodos("Ya pagaste · ", substring = true).isEmpty())
+        assertTrue(nodos("Por pagar · ", substring = true).isEmpty())
+        assertEquals(1, nodos("Llevas ", substring = true).size)
     }
 
     @Test
@@ -202,7 +214,7 @@ class UnaSolaListaEnElTableroTest {
     fun `anotar este pago abre la hoja prellenada y no sella nada`() {
         montar()
 
-        tocarEnLaFila("Anotar este pago")
+        tocarEnLaFila(ETIQUETA_ANOTAR)
 
         val hoja = assertIs<Screen.QuickAdd>(navegoA)
         assertEquals("Gimnasio Caro", hoja.presetNota)
@@ -236,8 +248,9 @@ class UnaSolaListaEnElTableroTest {
     @Test
     fun `tocar una cuota lleva a creditos`() {
         montar()
+        verTodas()
 
-        tocarEnLaFila("pagado el 27 de septiembre")
+        tocarEnLaFila("Crediágil")
 
         assertEquals(Screen.Credits, navegoA)
         assertTrue(marcadas.isEmpty(), "abrir no sella nada")
@@ -253,9 +266,10 @@ class UnaSolaListaEnElTableroTest {
         upcoming = Caso.upcoming + Caso.coomevaDeOctubre
         ocurrencias = Caso.ocurrencias + Caso.coomevaDeSeptiembre
         montar()
+        verTodas()
         esperarTexto("Del período de septiembre")
 
-        assertTrue(arriba("Del período de septiembre · 1") > arriba("Ya pagaste · 3"), "va al final, después de lo pagado")
+        assertTrue(arriba("Del período de septiembre") > arriba("Mercado"), "va al final, después de lo pagado")
         assertEquals(1, nodos("¿Ya pagaste el de septiembre?").size)
 
         tocarEnLaFila("Sí, fue este")
@@ -263,4 +277,28 @@ class UnaSolaListaEnElTableroTest {
         composeRule.waitUntil(timeoutMillis = 5_000) { marcadas.isNotEmpty() }
         assertEquals(listOf<Triple<String, String, String?>>(Triple("rr_coomeva", "2026-09", "ev_coomeva")), marcadas.toList())
     }
+
+    /** Vuelta 40: «Movimiento del 27 sep» de una factura pagada abre la hoja de ese movimiento. */
+    @Test
+    fun `el enlace de una factura pagada abre su movimiento`() {
+        eventos = listOf(
+            EventDay(
+                date = "2026-09-27", total = -1_204_064L,
+                items = listOf(
+                    FinancialEvent(
+                        id = "ev_crediagil", accountId = bancolombia.id, type = TransactionType.EXPENSE, amount = 1_204_064L,
+                        category = "Créditos", description = "Pago cuota Crediágil", timestamp = Caso.mediodia(2026, 9, 27),
+                    ),
+                ),
+            ),
+        )
+        montar()
+        verTodas()
+
+        composeRule.onNode(hasTestTag(TAG_ENLACE_AL_MOVIMIENTO) and hasText("Movimiento del 27 sep"), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        esperarTexto("Pago cuota Crediágil")
+        assertTrue(marcadas.isEmpty(), "abrir el movimiento no sella nada")
+    }
 }
+

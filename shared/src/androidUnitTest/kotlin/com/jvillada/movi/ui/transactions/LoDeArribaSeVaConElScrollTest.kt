@@ -31,7 +31,6 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
-import com.jvillada.movi.ui.porrevisar.TAG_RENGLON_POR_REVISAR
 import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -95,7 +94,8 @@ class LoDeArribaSeVaConElScrollTest {
             MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("por revisar", substring = true, useUnmergedTree = true)
+            // Vuelta 40: con un aviso del banco, la tarjeta de los avisos (antes «N por revisar»).
+            composeRule.onAllNodesWithText("por confirmar", substring = true, useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithText("Compra 01", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
@@ -111,7 +111,7 @@ class LoDeArribaSeVaConElScrollTest {
     private val lista get() = composeRule.onNode(hasScrollToIndexAction())
 
     private fun tarjetas(): SemanticsNodeInteractionCollection =
-        composeRule.onAllNodes(hasTestTag(TAG_RENGLON_POR_REVISAR), useUnmergedTree = true)
+        composeRule.onAllNodes(hasTestTag(TAG_TARJETA_DE_AVISOS), useUnmergedTree = true)
 
     private fun franjas(): SemanticsNodeInteractionCollection =
         composeRule.onAllNodes(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO), useUnmergedTree = true)
@@ -130,10 +130,10 @@ class LoDeArribaSeVaConElScrollTest {
     fun `la tarjeta es el primer item de la lista, no algo fijo encima`() {
         montar()
 
-        composeRule.onNodeWithTag(TAG_RENGLON_POR_REVISAR, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_TARJETA_DE_AVISOS, useUnmergedTree = true).assertIsDisplayed()
         // Vive adentro de la lista perezosa: se mueve con ella.
         composeRule.onNode(
-            hasTestTag(TAG_RENGLON_POR_REVISAR) and hasAnyAncestor(hasScrollToIndexAction()),
+            hasTestTag(TAG_TARJETA_DE_AVISOS) and hasAnyAncestor(hasScrollToIndexAction()),
             useUnmergedTree = true,
         ).assertIsDisplayed()
         // Y antes de las filas: la primera compra va debajo de la tarjeta, sin taparse.
