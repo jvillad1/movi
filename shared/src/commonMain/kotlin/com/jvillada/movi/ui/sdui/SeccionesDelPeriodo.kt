@@ -349,7 +349,7 @@ private fun FilaParaRevisar(cosa: CosaParaRevisar, onClick: () -> Unit) {
         subtitulo = conCifrasOcultas(cosa.detalle),
         lineasDelSubtitulo = 2,
         inicio = {
-            IconoEnCirculo(iconoDeRevision(cosa.destino), tono = if (cosa.urgente) TonoDeIcono.Aviso else TonoDeIcono.Marca)
+            IconoEnCirculo(iconoDeRevision(cosa.destino), tono = if (cosa.urgente) TonoDeIcono.Aviso else TonoDeIcono.Neutro)
         },
         final = { Chevron() },
         onClick = onClick,

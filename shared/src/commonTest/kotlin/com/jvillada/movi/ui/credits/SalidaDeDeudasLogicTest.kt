@@ -73,4 +73,21 @@ class SalidaDeDeudasLogicTest {
     fun `el pie dice que no es asesoria`() {
         assertEquals("Es un cálculo con tus datos, no una recomendación financiera.", PIE_DEL_PLAN_DE_SALIDA)
     }
+
+    /**
+     * Vuelta 42: la guía del abono decía «Abono extra al mes, por ejemplo $500.000» y se cortaba en
+     * «…por ejemplo $500....». Ahora es el ejemplo del sistema, corto, después del «$» del campo.
+     */
+    @Test
+    fun `la guia del abono es un ejemplo corto`() {
+        assertEquals("Ej: 500.000", com.jvillada.movi.ui.components.ds.textoGuiaDelCampo(null, EJEMPLO_DEL_ABONO_EXTRA))
+    }
+
+    /** Vuelta 42: los supuestos salieron del simulador y van, con el pie, en la nota del final. */
+    @Test
+    fun `la nota del final lleva los supuestos y el pie`() {
+        val nota = notaDelPlanDeSalida()
+        assertTrue(nota.startsWith(SUPUESTOS_DEL_PLAN_DE_SALIDA), nota)
+        assertTrue(nota.endsWith(PIE_DEL_PLAN_DE_SALIDA), nota)
+    }
 }

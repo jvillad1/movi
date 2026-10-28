@@ -43,13 +43,13 @@ import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
-import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.SelectorSegmentado
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.ANCHO_DE_LECTURA
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.CampoDeMonto
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
@@ -187,7 +187,14 @@ private fun ContenidoDelPlan(
     // ── El simulador ──
     Seccion(titulo = "Si abonas al mes extra")
     Superficie(modifier = Modifier.fillMaxWidth()) {
-        MoneyField(abono, onAbono, placeholder = "Abono extra al mes, por ejemplo \$500.000")
+        // Vuelta 42: «Ej: 500.000» (el campo ya pone el «$» delante). Era «Abono extra al mes, por
+        // ejemplo $500.000», que no cabía y se cortaba en «…por ejemplo $500....».
+        CampoDeMonto(
+            valor = abono,
+            alCambiar = onAbono,
+            ejemplo = EJEMPLO_DEL_ABONO_EXTRA,
+            modifier = Modifier.testTag(TAG_ABONO_EXTRA),
+        )
         Spacer(Modifier.height(Movi.espacios.medio))
         resumenDelSimulador(plan, periodoActual).forEachIndexed { i, linea ->
             Text(
@@ -201,8 +208,8 @@ private fun ContenidoDelPlan(
             )
             Spacer(Modifier.height(Movi.espacios.minimo))
         }
-        Spacer(Modifier.height(Movi.espacios.corto))
-        Text(SUPUESTOS_DEL_PLAN_DE_SALIDA, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+        // Vuelta 42: debajo del campo, una sola frase de apoyo. Los supuestos (un párrafo gris
+        // denso debajo de otro negro) pasaron a la nota del final.
     }
 
     // ── El orden ──
@@ -278,5 +285,12 @@ private fun ContenidoDelPlan(
     }
 
     Spacer(Modifier.height(Medida.entreSecciones))
-    Text(PIE_DEL_PLAN_DE_SALIDA, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+    // La nota de abajo: los supuestos del cálculo y que no es asesoría (vuelta 42: los supuestos
+    // iban dentro del simulador).
+    Text(
+        notaDelPlanDeSalida(),
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoApagado,
+        modifier = Modifier.testTag(TAG_NOTA_DEL_PLAN_DE_SALIDA),
+    )
 }

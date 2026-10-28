@@ -257,25 +257,16 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
         Column(modifier = Modifier.fillMaxSize()) {
 
             // Header
-            val accountTypePair = account?.let { accountTypeIcon(it.type) }
             // F60 · F22: encabezado único; sin historial, el detalle vuelve a donde vive la
             // cuenta: Créditos si es deuda (Ola 7: tarjetas y préstamos ya no se listan en
             // Cuentas), Cuentas en cualquier otro caso. El grupo viene en la pantalla, no de la
             // cuenta cargada: así la reserva es la correcta desde el primer frame (y es el mismo
             // dato con el que `navTabFor` resalta la pestaña).
+            // Vuelta 42: sin el ícono del tipo solo, sin rótulo, a la derecha del título (parecía un
+            // botón y no hacía nada). Va con su rótulo en la tarjeta del saldo: «🏛 COP · Ahorros».
             MinScreenHeader(
                 title = account?.name ?: "",
                 leading = HeaderLeading.Back(fallback = homeScreenFor(group)),
-                action = if (accountTypePair != null) {
-                    {
-                        Icon(
-                            imageVector = accountTypePair.first,
-                            contentDescription = accountTypePair.second,
-                            tint = Movi.colores.textoMedio,
-                            modifier = Modifier.size(Icono.l),
-                        )
-                    }
-                } else null,
             )
 
             if (loading) {
@@ -695,6 +686,9 @@ private fun SeccionDeApartados(
     }
 }
 
+/** El `testTag` del tipo de la cuenta con su ícono, en la tarjeta del saldo (vuelta 42). */
+const val TAG_TIPO_DE_LA_CUENTA: String = "cuenta:tipo"
+
 /** El `testTag` del encabezado del detalle de una cuenta. */
 const val TAG_ENCABEZADO_DE_LA_CUENTA: String = "encabezado-de-la-cuenta"
 
@@ -713,7 +707,7 @@ const val TAG_EFECTIVO_EN_NEGATIVO: String = "efectivo-en-negativo"
 @Composable
 private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit, onCuadrarEsta: () -> Unit) {
     val isCard = isDebtAccount(acc.type)
-    val typeLabel = accountTypeIcon(acc.type).second
+    val (typeIcon, typeLabel) = accountTypeIcon(acc.type)
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_LA_CUENTA)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -728,11 +722,25 @@ private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit, onCuadrarE
                     color = Movi.colores.textoMedio,
                 )
                 if (typeLabel.isNotEmpty()) {
-                    Text(
-                        text = if (isCard) typeLabel else "${acc.currency} · $typeLabel",
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                    )
+                    // Vuelta 42: el ícono del tipo, con su rótulo (antes iba solo en el encabezado).
+                    // El texto ya lo dice: el ícono no repite nada para el lector de pantalla.
+                    Row(
+                        modifier = Modifier.testTag(TAG_TIPO_DE_LA_CUENTA),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
+                    ) {
+                        Icon(
+                            imageVector = typeIcon,
+                            contentDescription = null,
+                            tint = Movi.colores.textoMedio,
+                            modifier = Modifier.size(Icono.s),
+                        )
+                        Text(
+                            text = if (isCard) typeLabel else "${acc.currency} · $typeLabel",
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                        )
+                    }
                 }
             }
         }

@@ -184,6 +184,12 @@ class SistemaDeDisenoTest {
         assertEquals(c.tinte to c.aviso, coloresDeLaPildora(TonoDePildora.Aviso, c))
         assertEquals(c.marca, fondoDelTonoDeIcono(TonoDeIcono.Marca, c))
         assertEquals(c.sobreMarca, colorDelTonoDeIcono(TonoDeIcono.Marca, c))
+        // Vuelta 42: el círculo neutro es la capa 3 con el ícono en la tinta, y «Tú», el tinte (el
+        // amarillo suave) con la letra en el ocre del aviso.
+        assertEquals(c.capa3, fondoDelTonoDeIcono(TonoDeIcono.Neutro, c))
+        assertEquals(c.texto, colorDelTonoDeIcono(TonoDeIcono.Neutro, c))
+        assertEquals(c.tinte, fondoDelTonoDeIcono(TonoDeIcono.Propio, c))
+        assertEquals(c.aviso, colorDelTonoDeIcono(TonoDeIcono.Propio, c))
     }
 
     /** Vuelta 29: el filtro mide 44, el de la maqueta, elegido o no. */

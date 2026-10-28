@@ -174,7 +174,7 @@ class ActividadPorDentroEnPantallaTest {
     }
 
     @Test
-    fun `el dia dice Gastaste con tu parte, y Personas deja solo lo repartido`() {
+    fun `el dia dice Gastaste con tu parte, y Compartidos deja solo lo repartido`() {
         montar(emptyList(), esperar = "Señor Gol")
 
         assertTrue(hay("Hoy · "), "«Hoy · martes 28»")
@@ -182,9 +182,9 @@ class ActividadPorDentroEnPantallaTest {
         // El almuerzo entero y tu parte del mercado: $46.489 + $44.300.
         assertTrue(hay("\$90.789", substring = false))
 
-        composeRule.onNodeWithText("Personas", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Compartidos", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         assertTrue(hay("Mercado Éxito"))
-        assertTrue(!hay("Señor Gol"), "con «Personas», solo lo repartido")
+        assertTrue(!hay("Señor Gol"), "con «Compartidos», solo lo repartido")
     }
 }

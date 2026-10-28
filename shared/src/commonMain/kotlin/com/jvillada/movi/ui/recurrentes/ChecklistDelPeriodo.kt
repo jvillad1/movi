@@ -592,7 +592,7 @@ private fun IconoDeEstadoDelPago(estado: EstadoVisualDelPago, esIngreso: Boolean
  */
 internal fun pildoraDeLaFila(pago: PagoDelPeriodo, conPropuesta: Boolean): Pair<String, TonoDePildora> = when {
     pago.pagado -> (if (pago.esIngreso) "Recibido" else "Pagado") to TonoDePildora.Exito
-    conPropuesta -> "Por confirmar" to TonoDePildora.Marca
+    conPropuesta -> "Por confirmar" to TonoDePildora.Aviso
     pago.vencido -> (if (pago.esIngreso) "Atrasado" else "Vencido") to TonoDePildora.Peligro
     pago.diasParaVencer == 0 -> "Hoy" to TonoDePildora.Aviso
     pago.diasParaVencer == 1 -> "Mañana" to TonoDePildora.Aviso

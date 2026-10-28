@@ -95,20 +95,20 @@ class ActividadPorDentroTest {
         assertNull(cifraDelDia(resumenDelDia(soloPagos, tipos)))
     }
 
-    // ── El chip «Personas» ───────────────────────────────────────────────────────────────────────
+    // ── El chip «Compartidos» (vuelta 42; era «Personas») ───────────────────────────────────────────────────────────────
 
     @Test
-    fun `Personas deja pasar solo lo repartido en un grupo`() {
+    fun `Compartidos deja pasar solo lo repartido en un grupo`() {
         val repartido = evento("mercado", TransactionType.EXPENSE, 88_600, espacioId = "esp_casa", parteAjena = 44_300)
         val solo = evento("almuerzo", TransactionType.EXPENSE, 46_000)
         assertTrue(matchesChip(repartido, CHIP_PERSONAS))
         assertFalse(matchesChip(solo, CHIP_PERSONAS))
         assertTrue(CHIP_PERSONAS in CHIPS_VISIBLES)
-        assertEquals("Personas", CHIPS_DE_MOVIMIENTOS[CHIP_PERSONAS])
+        assertEquals("Compartidos", CHIPS_DE_MOVIMIENTOS[CHIP_PERSONAS])
         // Los índices de antes no se renumeran.
         assertEquals(listOf("Todo", "Gastos", "Ingresos"), CHIPS_DE_MOVIMIENTOS.take(3))
         assertEquals(CHIP_PERSONAS, chipInicialDeMovimientos(CHIP_PERSONAS))
-        assertEquals("Nada con otras personas", vacioDeMovimientos(CHIP_PERSONAS, hayMovimientos = true).titulo)
+        assertEquals("Nada compartido", vacioDeMovimientos(CHIP_PERSONAS, hayMovimientos = true).titulo)
     }
 
     // ── La tarjeta de los avisos del banco ───────────────────────────────────────────────────────

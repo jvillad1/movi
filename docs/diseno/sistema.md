@@ -289,9 +289,9 @@ Boton("Saltar este paso", onClick = ::saltar, variante = VarianteDeBoton.Fantasm
     modifier = Modifier.align(Alignment.CenterHorizontally))
 ```
 
-**`Pildora`** y **`PildoraDeFiltro`** — estado (`Neutra`, `Info`, `Aviso`, `Peligro`, `Exito`, `Marca`)
-y filtro que se elige. Vuelta 29: la neutra en la capa 3, la de aviso en el tinte con el ocre, la de marca
-llena de amarillo. El filtro mide 44 (`Medida.altoDeFiltro`): **elegido, en tinta con la letra blanca**
+**`Pildora`** y **`PildoraDeFiltro`** — estado (`Neutra`, `Info`, `Aviso`, `Peligro`, `Exito`) y filtro
+que se elige. Vuelta 29: la neutra en la capa 3, la de aviso en el tinte con el ocre. **No hay píldora
+amarilla** (vuelta 42: el tono `Marca` se borró; pintaba estados como «En curso»). El filtro mide 44 (`Medida.altoDeFiltro`): **elegido, en tinta con la letra blanca**
 (`cuerpoFuerte`); sin elegir, blanco con `bordeDePildora` (`cuerpo`).
 ```kotlin
 Pildora("Vence en 2 días", TonoDePildora.Aviso)
@@ -467,7 +467,7 @@ dos o más acciones, la principal va en `accion` y las demás como `BotonDeIcono
 | Patrimonio | «Nueva cuenta» |
 | Créditos | «Nuevo crédito» |
 | Personas y comercios | «Nueva» |
-| Espacios | «Nuevo espacio» (con uno o más; sin ninguno, lo ofrece el vacío) |
+| Grupos (antes Espacios y Personas) | «Nuevo grupo» (con uno o más; sin ninguno, lo ofrece el vacío) |
 | Presupuestos, Plan (segmento Presupuestos) | «Nuevo» |
 | Documentos | «Subir archivo» |
 | Movi AI | «Nueva conversación» con conversación; sin ella, la `Pildora` «Beta» |
@@ -517,10 +517,22 @@ Box(Modifier.toggleable(marcada, role = Role.Checkbox, onValueChange = { alterna
 }
 ```
 
-**`AvatarDePersona`** (R3) — una persona: su inicial en un círculo de `Medida.avatar`, en el lavado de
-su tono (`TonoDeIcono`). Los miembros de un espacio y quien pagó un gasto.
+**`AvatarDePersona`** (R3) — una persona: su inicial en un círculo de `Medida.avatar`, en el fondo de
+su tono (`TonoDeIcono`). Los miembros de un espacio y quien pagó un gasto. Neutro por defecto; «Tú» en
+`TonoDeIcono.Propio` (el `tinte`, el amarillo suave, con la letra en `aviso`); **nunca** en `Marca`, el
+amarillo lleno (vuelta 42).
 ```kotlin
 AvatarDePersona("Caro", tono = TonoDeIcono.Info)
+AvatarDePersona("Juan", tono = TonoDeIcono.Propio)
+```
+
+**`FilaDeNavegacion`** (vuelta 42, `ds/Fila.kt`) — **la fila que lleva a otra pantalla**: una `Fila` sola
+en su `Superficie` de lista, con el ícono en el **círculo neutro** (`capa3` con el ícono en la tinta), el
+título, una línea de apoyo y la `Chevron`. Con `aviso = true` (algo que pide atención) el ícono y el
+subtítulo van en el tinte con el ocre: el amarillo suave es solo para eso. Es el mismo círculo que llevan
+las filas de Tú y de Ajustes (`IconoEnCirculo` es neutro por defecto).
+```kotlin
+FilaDeNavegacion("Tus períodos", Icons.Rounded.History, onClick = ::abrir, subtitulo = "Cómo te fue en cada ciclo")
 ```
 
 **`Campo`**, **`CampoDeMonto`**, **`GrupoDeCampos`**, **`RotuloDeCampo`**, **`AyudaDeCampo`** y
@@ -564,6 +576,7 @@ CampoDeBusqueda(busqueda, { busqueda = it }, guia = "Buscar o crear categoría",
 | `CifraConRotuloTest` (Robolectric, motor de texto real) | el rótulo como se escribe, la cifra del sistema con su signo y tono, nada en claro con los saldos ocultos, «—» sin dato, y ninguna cifra recortada ni partida a 360 dp con la letra ×1,12 (tres compactas, dos enteras de diez dígitos, una en renglón) |
 | `LasCifrasDelSistemaSeOcultanTest` (Robolectric) | con «Ocultar los saldos», ni un «$» seguido de un dígito en el flujo libre de Plan, Presupuestos, la hoja de anular, los candidatos a pago de tarjeta y, en Hoy, «Tu patrimonio», «Para revisar» (con la evidencia abierta) y «Tu día más justo» |
 | `LoQueNoEsDelSistemaSoloBajaTest` (`core/src/jvmTest/.../quality/`, vuelta de diseño 18) | en `ui/` fuera de `ds/`, seis cosas que solo pueden bajar de su línea base (`lineas-base.txt`): `Button(`/`OutlinedButton(`/`TextButton(` de Material, `Color.White`/`Color.Black` (salvo el velo de `MarcoDeHoja`), `Hairline(`, `MinCard(`, un `Text(` cuyo primer argumento es `formatCOP(`/`formatMoney(` (aproximación por regex) y `fontWeight =` (§24). **Desde la vuelta 21 las cinco primeras se exigen en 0**, aunque alguien suba su línea base (§27) |
+| `ElAmarilloEsDeLaAccionTest` (`core/src/jvmTest/.../quality/`, vuelta 42) | ninguna píldora amarilla (`TonoDePildora.Marca` no existe), ninguna persona en `TonoDeIcono.Marca`, `IconoEnCirculo` y `AvatarDePersona` neutros por defecto, `TonoDeIcono.Marca` fuera de `ds/` solo en las dos propuestas de la maqueta (la tarjeta de avisos de Actividad y «Movi propone hoy»), y las filas que llevan a otra pantalla son `FilaDeNavegacion` |
 | `UnaSolaCifraHeroePorPantallaTest` (Robolectric) | a lo sumo una `Cifra` `Heroe` en Hoy, Plan (Pagos y Presupuestos), Patrimonio, Créditos, Movimientos y Espacios; exactamente una donde la pantalla tiene su protagonista (Hoy, Patrimonio, Créditos) |
 
 ## 9. Migrar una pantalla
@@ -2222,3 +2235,72 @@ previa en uno o dos renglones), `LasHojasDeTuNoCancelanTest` (`core/src/jvmTest/
 acciones arrancan a su lado; a 390 sigue a todo el ancho; ninguna acción sobre la banda en ningún ancho)
 y `LasHojasDeTuDicenLoQueVaAPasarTest` (`commonTest`: las vistas previas, el botón, la banda y las
 iniciales, puras).
+
+## 46. Vuelta 42: el segundo nivel con el lenguaje de la opción 3
+
+Una revisión fresca de toda la app (28-oct, capturas `full-*.png`) encontró el lenguaje viejo en
+pantallas de segundo nivel. **Sin reglas de plata nuevas** y sin tocar nombres internos (`Espacio*`,
+`Screen.Espacios`, rutas, server). Un componente nuevo en `ds/`, `FilaDeNavegacion`; un tono nuevo,
+`TonoDeIcono.Propio`; uno que se va, `TonoDePildora.Marca`.
+
+1. **«Grupos» y «Compartidos».** La pantalla de los espacios se llamaba «Personas» y al final abría
+   «Personas y comercios» (los terceros): dos nombres casi iguales. Pasa a **«Grupos»**
+   (`TITULO_DE_GRUPOS`; `TITULO_DE_PERSONAS` queda como alias con el mismo texto, porque lo nombra Tú), y
+   su fila en Tú con ella. El chip de Actividad que deja lo repartido en un grupo pasa a **«Compartidos»**
+   (el vacío, «Nada compartido»). Buscar encuentra Grupos también por «espacios» y «personas».
+2. **El amarillo lleno es de la acción.** `TonoDeIcono.Neutro` es ahora el círculo de la opción 3 —la
+   capa 3 con el ícono en la tinta (era el texto medio sobre su lavado)— y es el tono por defecto de
+   `IconoEnCirculo` y `AvatarDePersona` (era la marca: cada fila que no decía su tono salía amarilla).
+   - **«Tú»** en los gastos de un grupo y en su detalle va en `TonoDeIcono.Propio`: el `tinte` con la
+     letra en `aviso`. En la tinta llena (la primera versión de la vuelta) eran cuatro círculos negros
+     seguidos al lado del de Caro; el amarillo **suave** se distingue sin pesar. Lo prohibido es el
+     amarillo **lleno**.
+   - **«En curso»** (Tus períodos y su detalle) y **«Por confirmar»** (una fila del checklist) van en
+     `Aviso`, el tinte con el ocre; el destino elegido de un extracto, en `Neutra`.
+   - **Las filas que llevan a otra pantalla** —«Cómo salir de tus deudas» en Créditos, «Tus períodos» en
+     Pagos, «Subir comprobante o extracto» y los pagos de tarjeta en Por revisar, «Personas y comercios»
+     en Grupos— son `FilaDeNavegacion`, con el mismo círculo neutro que Tú. El aviso de la captura en Por
+     revisar, la misma fila con `aviso = true`. «Último mensaje» en Captura, el cuadre en Patrimonio, «Para
+     revisar» y la caja: neutros (o en aviso, si avisan).
+   - El ícono de un aviso del banco que pide decisión (sin marca ni categoría) va en `Aviso`.
+   - Quedan en el círculo amarillo lleno **solo las dos excepciones** que la maqueta pinta así: la
+     campana de la tarjeta de avisos de Actividad y el ícono de «Movi propone hoy» en Inicio
+     (`TarjetaDePropuesta`). La guarda las nombra y falla si sobra o falta alguna.
+   - Lo vigila `ElAmarilloEsDeLaAccionTest`; el componente, `LaFilaDeNavegacionEsUnaSolaTest`
+     (`TonoDeIconoKey` dice el tono en la semántica).
+3. **«Revisar aviso» (Reconciliar).** El aviso va **plano** (`TarjetaDeAviso(destacada = false)`, la capa
+   1 sin sombra) y la sombra queda solo en «Movi sugiere». El comercio de «Confirma o ajusta» va en forma
+   de título (`enFormaDeTitulo`: «EXITO SUBA» → «Éxito Suba»; se muestra así, se guarda lo que leyó Movi
+   si no lo toca). **«Cambiar» sigue el patrón de Agregar (vuelta 34)**: debajo de la fila «Categoría»
+   salen las pastillas de las frecuentes, con la elegida marcada, «+ Nueva» primera y **«Todas ›» al
+   final**, que abre el selector completo **en una hoja** (`MarcoDeHoja`; «+ Nueva» la abre con el cursor
+   en la búsqueda). La cuadrícula en línea se fue: sus 18 íconos ocupaban la pantalla y empujaban
+   «Confirma o ajusta» fuera de vista. Elegir una pastilla o una celda la pone en la fila y cierra. **El «Ojo: el aviso es de Falabella y la cuenta es de Bancolombia» va una vez y entero**, en su
+   línea debajo de la fila de la cuenta (`BajoLaFila`), y la fila dice solo su porqué («La puso Movi»):
+   pegados en un subtítulo de dos renglones se cortaba en «…de Bancolo…».
+4. **Por revisar → «Entraron solos»**: el punto marrón delante de la cifra («• +$30.000») marcaba «por
+   confirmar»; ahora es una `Pildora` «Sin confirmar» en `Aviso`, debajo del monto (`SIN_CONFIRMAR`, en
+   toda fila de movimiento que entró solo).
+5. **El detalle de una cuenta**: el ícono del tipo iba solo, sin rótulo, a la derecha del título. Ahora va
+   en la tarjeta del saldo junto a su rótulo («🏛 COP · Ahorros», `Icono.s`), y el encabezado queda con la
+   flecha y el título.
+6. **Cómo salir de tus deudas**: la guía del abono es el ejemplo del sistema —`CampoDeMonto(ejemplo =
+   "500.000")`, que se ve «$ Ej: 500.000» (el «$» ya lo pone el campo)—; era «…por ejemplo $500....»,
+   cortada. Debajo del campo, una sola frase de apoyo; los supuestos pasaron a la nota del final, con
+   el pie (`notaDelPlanDeSalida`).
+7. **A 1.280.** **Por revisar es un tablero** (`Disposicion.Tablero`, `porRevisarEnDosColumnas`, el umbral
+   de Patrimonio y de una cuenta: columnas de 420): «Mensajes del banco» (con «Confirmar los N») a la
+   izquierda y lo demás —subir comprobante, la captura, lo que el banco cobró solo, «Entraron solos» y los
+   pagos de tarjeta— a la derecha, cada una con su scroll. Solo con mensajes del banco por revisar; sin
+   ellos, o al día, una columna de lectura. En el teléfono, el orden de siempre. **Movi AI** sigue en la
+   columna de lectura (720), y las propuestas van a todo su ancho (tenían un tope de 320 dp suelto).
+
+**Las líneas base**: `dp_sueltos` baja a 117 (el tope de 320 de las propuestas de Movi AI);
+`radios_con_numero` 3, y las guardas en 0 siguen en 0. Lo vigilan `ElAmarilloEsDeLaAccionTest`,
+`LaFilaDeNavegacionEsUnaSolaTest`, `ReconciliarDeLaOpcion3Test` (una sola sombra, el comercio en forma
+de título, el «Ojo» una vez y entero a 360), `ElAvisoDelBancoElegisTusCategoriasTest` (las pastillas
+solo con «Cambiar»), `PorRevisarDeLaOpcion3Test` («Sin confirmar», la fila de subir neutra, las dos
+columnas a 1.280 y una a 390), `ElTipoDeLaCuentaConSuRotuloTest`, `LaGuiaDelAbonoCabeTest` y
+`SalidaDeDeudasLogicTest`, `TarjetaDePropuestaTest` (la propuesta a todo el ancho de la columna), y en
+`commonTest` `ActividadPorDentroTest` («Compartidos»), `BuscarEnMoviTest` («Grupos» por sus tres
+nombres) y `DisposicionTest`.

@@ -46,6 +46,7 @@ import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.FilaDeNavegacion
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
@@ -450,17 +451,13 @@ private fun FilaDeTusPeriodos(onClick: () -> Unit) {
         // El mismo aire que hay entre cualquier par de secciones de la pantalla (y del Inicio): la
         // fila hablaba de otra cosa que la tarjeta de arriba y estaba pegada a ella, sin nada.
         Spacer(Modifier.height(Medida.entreSecciones))
-        Superficie(
-            modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_TUS_PERIODOS),
-            relleno = RellenoDeSuperficie.Lista,
-        ) {
-            Fila(
-                titulo = "Tus períodos",
-                subtitulo = "Cómo te fue en cada ciclo",
-                inicio = { IconoEnCirculo(Icons.Rounded.History) },
-                final = { Chevron() },
-                onClick = onClick,
-            )
-        }
+        // Vuelta 42: la fila de navegación del sistema (el círculo neutro, no el amarillo).
+        FilaDeNavegacion(
+            titulo = "Tus períodos",
+            icono = Icons.Rounded.History,
+            onClick = onClick,
+            subtitulo = "Cómo te fue en cada ciclo",
+            modifier = Modifier.testTag(TAG_FILA_DE_TUS_PERIODOS),
+        )
     }
 }

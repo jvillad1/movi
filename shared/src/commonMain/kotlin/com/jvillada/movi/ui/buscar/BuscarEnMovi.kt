@@ -11,7 +11,7 @@ import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
 import com.jvillada.movi.ui.mas.TITULO_DE_TU
-import com.jvillada.movi.ui.espacios.TITULO_DE_PERSONAS
+import com.jvillada.movi.ui.espacios.TITULO_DE_GRUPOS
 import com.jvillada.movi.ui.plan.TITULO_DE_PAGOS
 import com.jvillada.movi.ui.transactions.TITULO_DE_ACTIVIDAD
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
@@ -154,9 +154,10 @@ internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
     PantallaBuscable("Créditos", "Patrimonio", Screen.Credits, listOf("deudas", "tarjetas", "prestamos")),
     PantallaBuscable("Cómo salir de tus deudas", "Créditos", Screen.SalidaDeDeudas, listOf("abono", "avalancha", "bola de nieve")),
     PantallaBuscable("Cuadre de saldos", TITULO_DE_TU, Screen.CuadreDeSaldos, listOf("cuadrar", "ajustar saldo")),
-    PantallaBuscable(TITULO_DE_PERSONAS, TITULO_DE_TU, Screen.Espacios, listOf("grupos", "espacios", "hogar", "repartir", "casa")),
-    // Ola R4: su casa es Personas (antes Espacios).
-    PantallaBuscable(PERSONAS_Y_COMERCIOS, TITULO_DE_PERSONAS, Screen.Destinos(), listOf("terceros", "cuentas de otros", "hogar")),
+    // Vuelta 42: «Grupos» (fue «Espacios» y «Personas»): los dos nombres viejos la siguen encontrando.
+    PantallaBuscable(TITULO_DE_GRUPOS, TITULO_DE_TU, Screen.Espacios, listOf("espacios", "personas", "compartidos", "hogar", "repartir", "casa")),
+    // Ola R4: su casa es Grupos (antes Espacios y Personas).
+    PantallaBuscable(PERSONAS_Y_COMERCIOS, TITULO_DE_GRUPOS, Screen.Destinos(), listOf("terceros", "cuentas de otros", "hogar")),
     PantallaBuscable("Categorías", TITULO_DE_TU, Screen.Categorias),
     PantallaBuscable("Documentos", TITULO_DE_TU, Screen.Documentos, listOf("extractos", "comprobantes", "papeles")),
     PantallaBuscable("Compartir", TITULO_DE_TU, Screen.Compartir, listOf("enlace")),

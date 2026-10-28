@@ -263,7 +263,7 @@ internal fun AvatarDeLaCabeza(cabeza: CabezaDelAviso, pideDecision: Boolean = tr
     when {
         marca != null -> CirculoDeMarca(marca, tamano = TamanoDeAvatar.Fila)
         categoria != null -> IconoDeCategoria(categoria)
-        else -> IconoEnCirculo(Icons.Rounded.Inbox, tono = if (pideDecision) TonoDeIcono.Marca else TonoDeIcono.Neutro)
+        else -> IconoEnCirculo(Icons.Rounded.Inbox, tono = if (pideDecision) TonoDeIcono.Aviso else TonoDeIcono.Neutro)
     }
 }
 

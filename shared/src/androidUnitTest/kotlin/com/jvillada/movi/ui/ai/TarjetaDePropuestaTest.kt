@@ -2,12 +2,14 @@ package com.jvillada.movi.ui.ai
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasText
@@ -27,7 +29,11 @@ import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 import com.jvillada.movi.shared.model.TipoDeAccion
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.repository.ApiException
+import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.ANCHO_DE_LECTURA
+import com.jvillada.movi.ui.components.ds.SuperficieDestacadaKey
+import androidx.compose.ui.unit.dp
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -170,5 +176,27 @@ class TarjetaDePropuestaTest {
         composeRule.waitUntil(5_000) { hay(YA_ESTA_HECHO) }
 
         assertEquals(listOf("Caro es mi esposa"), recordados)
+    }
+
+    /**
+     * Vuelta 42: a 1.280 la conversación es la columna de lectura (720) y la propuesta tenía un tope
+     * de 320 dp suelto: quedaba diminuta al lado de la respuesta. Ahora va a todo el ancho de la
+     * conversación, desde la sangría de la respuesta.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `en la columna de lectura la propuesta no queda diminuta`() {
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.width(ANCHO_DE_LECTURA)) {
+                    PropuestaDelAsistente(propuesta, EstadoDePropuesta.PENDIENTE, onEstado = {}, repo = { repo() })
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        val tarjeta = composeRule.onAllNodes(SemanticsMatcher.expectValue(SuperficieDestacadaKey, true), useUnmergedTree = true)
+            .fetchSemanticsNodes().single()
+        val ancho = with(composeRule.density) { tarjeta.size.width.toDp() }
+        assertTrue(ancho >= ANCHO_DE_LECTURA - Espacio.xxl - 0.5.dp, "la propuesta mide $ancho en una columna de 720")
     }
 }
