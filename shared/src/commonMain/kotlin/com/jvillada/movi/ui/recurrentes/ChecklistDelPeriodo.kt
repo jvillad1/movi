@@ -603,6 +603,8 @@ private fun IconoDeEstadoDelPago(estado: EstadoVisualDelPago, esIngreso: Boolean
 internal fun pildoraDeLaFila(pago: PagoDelPeriodo, conPropuesta: Boolean): Pair<String, TonoDePildora> = when {
     pago.pagado -> (if (pago.esIngreso) "Recibido" else "Pagado") to TonoDePildora.Exito
     conPropuesta -> "Por confirmar" to TonoDePildora.Aviso
+    // Vuelta 49: lo que el banco cobra solo no «vence»: se pregunta si se cobró.
+    pago.seCobraSola && pago.diasParaVencer <= 0 -> PILDORA_SE_COBRO to TonoDePildora.Aviso
     pago.vencido -> (if (pago.esIngreso) "Atrasado" else "Vencido") to TonoDePildora.Peligro
     pago.diasParaVencer == 0 -> "Hoy" to TonoDePildora.Aviso
     pago.diasParaVencer == 1 -> "Mañana" to TonoDePildora.Aviso
@@ -718,7 +720,7 @@ private fun LoQueOfreceLaFila(
     if (!conBotonDeAnotar && (pago.estado == EstadoDeLaFila.SIN_MOVIMIENTO || (pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta == null))) {
         // Movi buscó y no encontró: se dice (el botón ya está a la derecha de la fila).
         Text(
-            text = if (pago.esIngreso) TEXTO_SIN_MOVIMIENTO_DE_INGRESO else TEXTO_SIN_MOVIMIENTO,
+            text = textoSinMovimiento(pago),
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )
@@ -801,7 +803,7 @@ private fun LoQueOfreceLaFila(
 @Composable
 private fun SinMovimiento(pago: PagoDelPeriodo, enVuelo: Boolean, acciones: AccionesDelChecklist) {
     Text(
-        text = if (pago.esIngreso) TEXTO_SIN_MOVIMIENTO_DE_INGRESO else TEXTO_SIN_MOVIMIENTO,
+        text = textoSinMovimiento(pago),
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
     )
@@ -821,6 +823,19 @@ private fun SinMovimiento(pago: PagoDelPeriodo, enVuelo: Boolean, acciones: Acci
  * BUSCÓ y no encontró, que es distinto de no haber mirado.
  */
 const val TEXTO_SIN_MOVIMIENTO = "Movi no encontró el movimiento de este pago."
+
+/**
+ * Vuelta 49: lo que dice una cuota que el banco cobra sola y todavía no tiene movimiento. No es que
+ * Movi no la encontró: el banco no avisa cuando la debita.
+ */
+const val TEXTO_SIN_MOVIMIENTO_DEL_DEBITO = "El banco no avisa cuando la cobra: si ya se cobró, anótalo."
+
+/** Qué dice una fila sin movimiento: un ingreso, una cuota que se cobra sola, o un pago. Pura. */
+fun textoSinMovimiento(pago: PagoDelPeriodo): String = when {
+    pago.esIngreso -> TEXTO_SIN_MOVIMIENTO_DE_INGRESO
+    pago.seCobraSola -> TEXTO_SIN_MOVIMIENTO_DEL_DEBITO
+    else -> TEXTO_SIN_MOVIMIENTO
+}
 
 /** Lo mismo para una fila de ingreso: un sueldo no se paga, llega. */
 const val TEXTO_SIN_MOVIMIENTO_DE_INGRESO = "Movi no encontró el movimiento de este ingreso."

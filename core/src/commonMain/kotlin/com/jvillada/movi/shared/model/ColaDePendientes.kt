@@ -152,6 +152,10 @@ private fun nombreParaOrdenar(p: Pendiente): String = when (p) {
  *
  * @param checklist el checklist del período (`checklistDelPeriodo`); lo pagado y los ingresos no entran.
  * @param porRevisar cuántas cosas esperan en «Por revisar», sin los débitos (que van uno por uno).
+ *
+ * **Una cuota que el banco cobra sola entra una vez** (vuelta 49): vencida y sin movimiento, está en
+ * el checklist (es un fijo pendiente) y además en [debitos] («¿Se cobró…?»). Son la misma cuota: en la
+ * cola va la pregunta del débito, que es lo que se resuelve, y no además «Pago vencido».
  */
 fun colaDePendientes(
     checklist: List<PagoDelPeriodo>,
@@ -159,7 +163,9 @@ fun colaDePendientes(
     porRevisar: Int = 0,
     diasPorVencer: Int = DIAS_POR_VENCER_EN_LA_COLA,
 ): List<Pendiente> = buildList<Pendiente> {
+    val preguntadas = debitos.map { it.ruleId }.toSet()
     checklist.forEach { pago ->
+        if (pago.ruleId in preguntadas) return@forEach
         val urgencia = urgenciaDelPago(pago, diasPorVencer)
         if (urgencia != null && urgencia != UrgenciaDelPendiente.MAS_ADELANTE) add(Pendiente.Pago(pago, urgencia))
     }

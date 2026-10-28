@@ -1568,6 +1568,8 @@ fun QuickAddScreen(
                                 // dice de qué mes es.
                                 onMontoPropuesto = { montoDelTraspaso = it },
                                 presetMesDeLaCuota = presetMesDeLaCuota,
+                                // Vuelta 49: un crédito sin saldo en Movi se cuadra en Créditos.
+                                onCuadrarElCredito = { onNavigate(Screen.Credits) },
                                 // La misma hoja sirve las dos pestañas: un pago de cuota es un
                                 // traspaso con otras categorías y otro endpoint. Ver
                                 // [ModoDeTraspaso].

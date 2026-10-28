@@ -245,6 +245,16 @@ class LaCuotaPagadaNoEstaVencidaTest {
     // ── El reclamo ────────────────────────────────────────────────────────────
 
     /** El control: sin el pago registrado, la cuota vence hoy. Todo lo demás se lee contra esto. */
+    /**
+     * Vuelta 49: la cuota vencida y sin pago sale ABIERTA de `/occurrences` —sin candidatos, sin
+     * nada que sellar— para que la lista del período la siga contando como pendiente pasada la
+     * gracia. Lo que estas pruebas cuidan es que nada la dé por PAGADA.
+     */
+    private fun List<OccurrenceState>.laCuotaSigueAbierta(): Boolean {
+        val deLaCuota = filter { it.ruleId == reglaDelCredito }
+        return deLaCuota.size == 1 && deLaCuota.none { it.occurred || it.candidates.isNotEmpty() }
+    }
+
     @Test
     fun `sin el pago registrado la cuota vence hoy`() = testApplication {
         application { testModule() }
@@ -252,7 +262,7 @@ class LaCuotaPagadaNoEstaVencidaTest {
 
         val pago = client.upcoming().first { it.rule.id == reglaDelCredito }
         assertEquals(venceHoy, pago.dueDate)
-        assertTrue(client.ocurrencias().none { it.ruleId == reglaDelCredito })
+        assertTrue(client.ocurrencias().laCuotaSigueAbierta())
     }
 
     @Test
@@ -323,7 +333,7 @@ class LaCuotaPagadaNoEstaVencidaTest {
 
         val pago = client.upcoming().first { it.rule.id == reglaDelCredito }
         assertEquals(venceHoy, pago.dueDate, "Anulado el movimiento, la cuota vuelve a estar pendiente")
-        assertTrue(client.ocurrencias().none { it.ruleId == reglaDelCredito })
+        assertTrue(client.ocurrencias().laCuotaSigueAbierta())
     }
 
     /**
@@ -344,37 +354,37 @@ class LaCuotaPagadaNoEstaVencidaTest {
 
         val pago = client.upcoming().first { it.rule.id == reglaDelCredito }
         assertEquals(venceHoy, pago.dueDate)
-        assertTrue(client.ocurrencias().none { it.ruleId == reglaDelCredito })
+        assertTrue(client.ocurrencias().laCuotaSigueAbierta())
     }
 
     /**
-     * **Una regla sintética nunca sale ABIERTA de este endpoint**, ni con el pago ni sin él.
+     * **Una regla sintética nunca propone ni se sella a mano**, con el pago o sin él.
      *
-     * Si saliera, la pantalla pintaría su propuesta con el botón «Ya lo pagué» — que en una regla
-     * sintética responde 400: un control muerto. Y si el server lo aceptara sería el segundo
-     * mecanismo de sellado que este endpoint existe para no tener.
+     * Hasta la vuelta 49 decía «nunca sale ABIERTA»: la pantalla vieja pintaba una abierta con «Ya lo
+     * pagué», que en una regla sintética responde 400. Ese botón ya no existe —la lista es de solo
+     * lectura y una fila sin movimiento ofrece anotar el pago en la hoja de Cuota—, y no emitirla
+     * dejaba la cuota vencida fuera de la lista y del Disponible pasada la gracia. Ahora la cuota del
+     * CRÉDITO vencida sale abierta; lo que se sigue cuidando: **sin candidatos** (no se sella a mano),
+     * y **la tarjeta nunca abierta** (su monto es el saldo y no es un fijo).
      */
     @Test
-    fun `una regla sintetica nunca sale abierta de occurrences`() = testApplication {
+    fun `una regla sintetica nunca propone candidatos y solo la cuota vencida sale abierta`() = testApplication {
         application { testModule() }
         val client = createClient { install(ContentNegotiation) { json() } }
 
         val sinPago = client.ocurrencias()
+            .filter { it.ruleId.startsWith(CREDIT_RULE_PREFIX) || it.ruleId.startsWith(CARD_RULE_PREFIX) }
         registrarPagoDeCuota()
         val conPago = client.ocurrencias()
-
-        val sinteticas = (sinPago + conPago)
             .filter { it.ruleId.startsWith(CREDIT_RULE_PREFIX) || it.ruleId.startsWith(CARD_RULE_PREFIX) }
-        // **Sin esto el test pasaba vacío.** El `forEach` de abajo corre sobre una lista filtrada:
-        // si mañana la sintética pagada dejara de emitirse, no quedaría ni una fila que revisar y
-        // el test seguiría verde afirmando algo sobre nada. Con el pago registrado tiene que haber
-        // exactamente una, la de la cuota.
-        assertEquals(
-            listOf(reglaDelCredito), sinteticas.map { it.ruleId },
-            "Con el pago registrado sale la sintética pagada, y solo esa: sin ella el forEach no prueba nada",
-        )
-        sinteticas.forEach {
-            assertTrue(it.occurred, "Una regla sintética solo puede salir de acá si YA está pagada")
+
+        // **Sin esto el test pasaba vacío**: hay exactamente una fila en cada lectura, la de la cuota.
+        assertEquals(listOf(reglaDelCredito), sinPago.map { it.ruleId }, "vence hoy sin pago: sale abierta")
+        assertFalse(sinPago.single().occurred)
+        assertEquals(periodoEnCurso, sinPago.single().period)
+        assertEquals(listOf(reglaDelCredito), conPago.map { it.ruleId }, "con el pago: sale pagada, y solo esa")
+        assertTrue(conPago.single().occurred)
+        (sinPago + conPago).forEach {
             assertTrue(it.candidates.isEmpty(), "Una sintética no propone candidatos: no se sella a mano")
         }
     }

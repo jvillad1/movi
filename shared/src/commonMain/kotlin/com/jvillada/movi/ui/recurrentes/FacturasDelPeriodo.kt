@@ -177,6 +177,8 @@ fun pastillaDeVencimiento(pago: PagoDelPeriodo, conPropuesta: Boolean): Pair<Str
     // Una píldora de estado nunca va llena de amarillo: eso es de la acción principal (revisión).
     if (conPropuesta) return "Por confirmar" to TonoDePildora.Aviso
     val dias = pago.diasParaVencer
+    // Vuelta 49: una cuota que el banco cobra sola no «vence»: se cobra sola, y después se pregunta.
+    if (pago.seCobraSola) pastillaDelDebito(pago)?.let { return it }
     val verbo = if (pago.esIngreso) "Llega" else "Vence"
     val fecha = runCatching { LocalDate.parse(pago.vence) }.getOrNull()
     return when {
@@ -188,6 +190,21 @@ fun pastillaDeVencimiento(pago: PagoDelPeriodo, conPropuesta: Boolean): Pair<Str
         dias in 2..3 -> "$verbo en $dias días" to TonoDePildora.Aviso
         else -> (fechaCortaDeFactura(pago.vence)?.let { "$verbo el $it" } ?: "$verbo en $dias días") to TonoDePildora.Neutra
     }
+}
+
+/** La pastilla de una cuota que el banco cobra sola, ya vencida: la pregunta, no un «venció». */
+const val PILDORA_SE_COBRO: String = "¿Se cobró?"
+
+/**
+ * **La pastilla de lo que el banco cobra solo** (vuelta 49): «Se cobra sola el 5» mientras no llega su
+ * día —en el tinte si es en tres días o menos—, y «¿Se cobró?» desde ese día. `null` si la fecha no se
+ * entiende (queda la pastilla de siempre). Pura.
+ */
+fun pastillaDelDebito(pago: PagoDelPeriodo): Pair<String, TonoDePildora>? {
+    val dias = pago.diasParaVencer
+    if (dias <= 0) return PILDORA_SE_COBRO to TonoDePildora.Aviso
+    val fecha = runCatching { LocalDate.parse(pago.vence) }.getOrNull() ?: return null
+    return "Se cobra sola el ${fecha.dayOfMonth}" to (if (dias <= 3) TonoDePildora.Aviso else TonoDePildora.Neutra)
 }
 
 /** «Ver los 7 pagos del período». */

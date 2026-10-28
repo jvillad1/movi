@@ -1282,21 +1282,38 @@ internal suspend fun ocurrenciasDelPeriodo(uid: String, today: java.time.LocalDa
     // con `derivadaDeUnMovimiento` — la pantalla no puede ofrecerles un «Deshacer» que no
     // haría nada (para deshacerlo hay que borrar el movimiento).
     //
-    // **Solo las pagadas.** Una sintética abierta no se emite: la pantalla pintaría su
-    // propuesta con el botón «Ya lo pagué», que en una regla sintética responde 400 — un
-    // control muerto — y si respondiera 201 sería el segundo mecanismo de sellado que este
-    // endpoint existe para no tener.
-    //
     // Y no se le exige que el vencimiento ya haya llegado, a diferencia de las reales: ahí la
     // guarda evita preguntar por algo que todavía no pasó, pero acá no se pregunta nada. El
     // movimiento existe; la cuota de Crediágil pagada el 5 está pagada aunque venza el 15.
+    //
+    // ── Y la cuota de un CRÉDITO vencida y sin pagar (vuelta 49) ─────────────────
+    //
+    // Hasta acá una sintética abierta no se emitía nunca. Mientras la cuota no vencía, o seguía en
+    // los 5 días de gracia, igual estaba en el checklist por `/api/payments/upcoming`; pero pasada la
+    // gracia ese vencimiento RUEDA al mes siguiente (`dueDateFor`), fuera del período, y la cuota del
+    // 5 dejaba de existir del 11 al cierre: ni en «Pagos del período», ni en «Pago vencido» de Inicio,
+    // ni restada como fijo del Disponible. Al pagarla aparecía (ya pagada, por la rama de arriba) y
+    // «Te quedan» bajaba la cuota entera de golpe. Pasó con «Vehículo 4083» en la revisión de la
+    // vuelta 48, con y sin débito automático.
+    //
+    // Ahora la del período se emite ABIERTA una vez que llegó su día: `occurred = false`, sin
+    // candidatos —el pago de una cuota no se adivina ni se sella: lo prueba el movimiento que baja la
+    // deuda—. La fila queda «sin movimiento», que ofrece anotar el pago en la hoja de Cuota (no el
+    // viejo «Ya lo pagué», que se fue con el checklist de solo lectura); con débito automático la
+    // fila lo dice («¿Se cobró?») y la confirmación sigue en «Por revisar», que escribe el mismo pago
+    // de dos patas y la salda. Una sola cuota, contada una vez: pendiente, como fijo por su monto;
+    // pagada, por lo que salió (`cuotasDelChecklistPagadas` la saca de los otros pagos de deuda).
+    //
+    // Solo créditos: el «monto» de una tarjeta es su saldo y no entra a ningún fijo.
     val sinteticas = loadCreditRulePairs(uid).map { it.first } + loadCardRulePairs(uid).map { it.first }
     val derivadas = if (sinteticas.isEmpty()) emptyList() else {
         val pagos = cargarPagosDeDeuda(uid, today)
-        pagosDeDeudaPorPeriodo(sinteticas, pagos, settings = periodo).mapNotNull { (ruleId, porPeriodo) ->
-            val rule = sinteticas.first { it.id == ruleId }
+        val pagadas = pagosDeDeudaPorPeriodo(sinteticas, pagos, settings = periodo)
+        sinteticas.mapNotNull { rule ->
+            val ruleId = rule.id
             val due = ocurrenciaPorPreguntar(today, rule, periodo) ?: return@mapNotNull null
-            val pago = porPeriodo[periodOf(due)] ?: return@mapNotNull null
+            val pago = pagadas[ruleId]?.get(periodOf(due))
+                ?: return@mapNotNull cuotaVencidaSinPagar(rule, due, today, periodo)
             // **Cuánta plata fue.** El monto no filtra —no puede: movi no conoce el extracto,
             // y el saldo de la tarjeta o la cuota del crédito no son comparables con lo que se
             // movió (ver `PagosDeDeuda.kt`)— así que un abono de $50.000 salda el periodo
@@ -1323,4 +1340,27 @@ internal suspend fun ocurrenciasDelPeriodo(uid: String, today: java.time.LocalDa
         }
     }
     return estados + derivadas
+}
+
+/**
+ * **La cuota de un crédito que ya venció y no tiene pago**, abierta, o `null` si no corresponde: una
+ * tarjeta, un vencimiento que todavía no llega, o uno anterior al desembolso. Ver la vuelta 49 en
+ * [ocurrenciasDelPeriodo].
+ */
+internal fun cuotaVencidaSinPagar(
+    rule: RecurringRule,
+    due: java.time.LocalDate,
+    today: java.time.LocalDate,
+    periodo: PeriodSettings,
+): OccurrenceState? {
+    if (!rule.id.startsWith(CREDIT_RULE_PREFIX)) return null
+    if (due.isAfter(today)) return null
+    if (!ruleIsActiveOn(rule, due, periodo)) return null
+    return OccurrenceState(
+        ruleId = rule.id,
+        period = periodOf(due),
+        dueDate = due.toString(),
+        periodoDelDueno = periodoDelDueno(due, periodo),
+        occurred = false,
+    )
 }
