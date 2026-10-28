@@ -82,6 +82,11 @@ import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.fecha.timestampParaFecha
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
@@ -459,6 +464,78 @@ fun deudaDespuesDelPago(deuda: Account?, desglose: DesgloseDeCuota?): String? {
         "pasa a ${signedMoney(actual - desglose.capital, moneda)}"
 }
 
+/** «Deuda de Nu: $1.683.000» — la deuda de hoy, antes de que haya monto con qué decir en qué queda. */
+fun deudaDeHoy(deuda: Account?): String? {
+    if (deuda == null) return null
+    return "Deuda de ${deuda.name}: ${signedMoney(saldoEnSuMoneda(deuda), deuda.currency)}"
+}
+
+// ── Vuelta 48 · en Cuota, tocar un crédito es pagar su cuota ───────────────────────────────────
+
+/**
+ * **La cuota del mes que se propone al elegir un crédito en Cuota**: la de sus condiciones
+ * (`CreditTerms.installment`, la misma que arma la fila sintética `credit_<id>` de Pagos), o `null`
+ * si no es un crédito o no tiene cuota cargada. Una tarjeta no propone nada: su «monto» es el
+ * saldo, no lo que se va a pagar (ver `hojaParaAnotar`).
+ */
+fun cuotaPropuesta(deuda: Account?, terms: CreditTerms?): Long? =
+    terms?.installment?.takeIf { deuda?.type == AccountType.LOAN && it > 0L }
+
+/**
+ * La cuenta de la que el banco **debita solo** la cuota de este crédito
+ * (`CreditTerms.debitoAutomaticoDesde`), si es una de las que se pueden poner en «Sale de».
+ */
+fun cuentaDelDebitoAutomatico(terms: CreditTerms?, elegibles: List<Account>): String? =
+    terms?.debitoAutomaticoDesde?.takeIf { id -> elegibles.any { it.id == id } }
+
+/**
+ * **El encabezado de la hoja de Cuota** (vuelta 48), que dice qué se está anotando: «Cuota de Libre
+ * inversión 9695 · octubre», «Abono extra a Libre inversión 9695», «Pago de Master Black · octubre»,
+ * o —sin nada elegido— [CUOTA_SIN_ELEGIR]. Va siempre en un renglón: elegir qué pagar cambia el
+ * texto, no el alto.
+ */
+fun encabezadoDeLaCuota(deuda: Account?, abonoExtra: Boolean, mes: String): String {
+    if (deuda == null) return CUOTA_SIN_ELEGIR
+    val delMes = if (mes.isBlank()) "" else " · $mes"
+    return when {
+        deuda.type == AccountType.LOAN && abonoExtra -> "Abono extra a ${deuda.name}"
+        deuda.type == AccountType.LOAN -> "Cuota de ${deuda.name}$delMes"
+        else -> "Pago de ${deuda.name}$delMes"
+    }
+}
+
+/** El encabezado de Cuota sin nada elegido todavía. */
+const val CUOTA_SIN_ELEGIR: String = "La cuota de un crédito o el pago de una tarjeta"
+
+/**
+ * El mes del período del dueño en que cae [hoy], en palabras («octubre»). Con corte, el 27 de
+ * octubre ya es el período de noviembre. Sin ajustes (no se pudieron leer), el mes de calendario.
+ */
+fun mesDelPeriodoDeHoy(ajustes: com.jvillada.movi.shared.model.PeriodSettings?, hoy: Long): String {
+    val periodo = com.jvillada.movi.shared.model.periodoDe(hoy, ajustes ?: com.jvillada.movi.shared.model.PeriodSettings())
+    return com.jvillada.movi.ui.recurrentes.nombreDelMes(periodo.prefijo)
+}
+
+/** La ayuda de la sección «Créditos» del selector de «¿Qué estás pagando?» (vuelta 48). */
+const val AYUDA_DE_CREDITOS_EN_CUOTA: String = "Elige el crédito para anotar su cuota de este mes."
+
+/** La de la misma sección en Traspaso, donde un crédito sí es un desembolso o un abono. */
+const val AYUDA_DE_CREDITOS_EN_TRASPASO: String =
+    "Elige uno para registrar el desembolso que te entró a la cuenta, o un abono extraordinario que sale de ella."
+
+/** La opción secundaria de la hoja de un crédito: pasar de la cuota a un abono extra, y volver. */
+const val ES_UN_ABONO_EXTRA: String = "Es un abono extra, no la cuota"
+const val ES_LA_CUOTA_DEL_MES: String = "Es la cuota del mes"
+
+/** Lo que dice la hoja en modo abono: un traspaso puro, que no salda la cuota del período. */
+const val QUE_ES_UN_ABONO_EXTRA: String =
+    "Abono extra: plata de más que baja el capital. No es la cuota: no la marca como pagada."
+
+/** Los tags del encabezado de Cuota, del renglón de la deuda y del enlace del abono (vuelta 48). */
+internal const val TAG_ENCABEZADO_DE_LA_CUOTA = "cuota:encabezado"
+internal const val TAG_RENGLON_DE_LA_DEUDA = "cuota:renglon-de-la-deuda"
+internal const val TAG_ENLACE_DEL_ABONO = "cuota:enlace-del-abono"
+
 /** Lo que se dice cuando no se pudieron cargar las condiciones del crédito para armar el desglose. */
 const val SIN_CONDICIONES_PARA_EL_DESGLOSE: String =
     "No pudimos cargar las condiciones de este crédito, así que no podemos mostrarte cuánto de " +
@@ -572,6 +649,17 @@ internal fun TransferBody(
     pedidosDeGuardar: Int = 0,
     /** Un campo de texto de esta hoja (el interés, el monto en la moneda de la deuda) tomó o soltó el foco. */
     onCampoDeTextoConFoco: (Boolean) -> Unit = {},
+    /**
+     * Vuelta 48 · el mes de la cuota que se viene a pagar, cuando la hoja se abrió desde su fila de
+     * Pagos («Anotar pago»): el encabezado dice «Cuota de X · septiembre» aunque hoy ya sea octubre.
+     * `null` = el mes del período de hoy.
+     */
+    presetMesDeLaCuota: String? = null,
+    /**
+     * Vuelta 48 · la hoja propone un monto (la cuota del crédito elegido): lo escribe en la cifra,
+     * que vive en [QuickAddScreen] como los dígitos tecleados.
+     */
+    onMontoPropuesto: (String) -> Unit = {},
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
@@ -621,7 +709,9 @@ internal fun TransferBody(
     // Se reejecuta también cuando cambia el DESTINO elegible: al pasar de Traspaso a Cuota la
     // lista del lado «hacia» cambia entera, y lo que había quedado seleccionado ya no sirve.
     LaunchedEffect(elegibles, elegiblesDestino) {
-        val origenFirme = origenFrom == OrigenCuenta.ELEGIDA && elegibles.any { it.id == fromId }
+        // Vuelta 48: la cuenta del débito automático del crédito elegido tampoco se pisa.
+        val origenFirme = (origenFrom == OrigenCuenta.ELEGIDA || origenFrom == OrigenCuenta.DEBITO_AUTOMATICO) &&
+            elegibles.any { it.id == fromId }
         if (!origenFirme) {
             val elegida = resolverCuenta(
                 cuentas = paraDefecto,
@@ -677,6 +767,9 @@ internal fun TransferBody(
     var terminosPorCuenta by remember { mutableStateOf<Map<String, CreditTerms>>(emptyMap()) }
     var terminosCargados by remember { mutableStateOf(false) }
     var falloCargarTerminos by remember { mutableStateOf(false) }
+    // Vuelta 48: los ajustes del período, para decir de qué mes es la cuota («Cuota de X · octubre»).
+    // Del cache de lecturas si está; si no, se piden. Sin ellos, el mes de calendario.
+    var ajustesDelPeriodo by remember { mutableStateOf<com.jvillada.movi.shared.model.PeriodSettings?>(null) }
     LaunchedEffect(esPago) {
         if (!esPago) return@LaunchedEffect
         falloCargarTerminos = false
@@ -686,6 +779,12 @@ internal fun TransferBody(
             }
             .onFailure { falloCargarTerminos = true }
         terminosCargados = true
+        if (presetMesDeLaCuota.isNullOrBlank()) {
+            val ahora = Clock.System.now().toEpochMilliseconds()
+            val perfil = com.jvillada.movi.data.CacheDeLecturas.ultima(com.jvillada.movi.data.ClaveDeLectura.Perfil, ahora)
+                ?: runCatching { Repositories.wallets.getUserProfile() }.getOrNull()
+            ajustesDelPeriodo = perfil?.ajustesDelPeriodo()
+        }
     }
 
     val amount: Long? = monto.toLongOrNull()?.takeIf { it > 0 }
@@ -799,11 +898,49 @@ internal fun TransferBody(
     // cambiar el monto: el interés real depende del saldo del banco, no de cuánto pagó.
     var interesEscrito by remember { mutableStateOf<Long?>(null) }
     var interesTocado by remember { mutableStateOf(false) }
+    // ── Vuelta 48 · un crédito en Cuota es su cuota del mes; el abono extra es la opción secundaria ──
+    //
+    // `abonoExtra` vale solo sobre un crédito: el enlace «Es un abono extra, no la cuota» lo prende y
+    // la hoja pasa a guardar un TRASPASO puro (el de siempre: baja el capital, no salda la cuota del
+    // período, no cuenta en el mes). Se apaga al cambiar de deuda: el abono es de ESE crédito.
+    var abonoExtra by remember { mutableStateOf(false) }
     LaunchedEffect(toId) {
         interesEscrito = null
         interesTocado = false
+        abonoExtra = false
     }
     val termsDelDestino = to?.let { terminosPorCuenta[it.id] }
+    val esCredito = esPago && to?.type == AccountType.LOAN
+    val esAbono = esCredito && abonoExtra
+    /** Lo que se guarda: la cuota (dos patas, salda el período) o, con el abono extra, un traspaso. */
+    val guardaUnaCuota = esPago && !esAbono
+
+    // **La cuota del mes, propuesta.** Al elegir un crédito la cifra pasa a ser su cuota
+    // (`cuotaPropuesta`) y «Sale de», la cuenta del débito automático si la tiene. Se respeta lo que
+    // el dueño ya escribió: la cifra solo se pisa si estaba vacía o si era la que propuso la hoja
+    // (así cambiar de crédito cambia la cuota, y pasar al abono la limpia). Las condiciones llegan
+    // después de las cuentas, así que la propuesta se rehace cuando llegan.
+    var montoPropuesto by remember { mutableStateOf<String?>(null) }
+    val montoActual by rememberUpdatedState(monto)
+    val proponerMonto by rememberUpdatedState(onMontoPropuesto)
+    LaunchedEffect(toId, terminosCargados, abonoExtra) {
+        if (!esPago) return@LaunchedEffect
+        val deuda = elegiblesDestino.firstOrNull { it.id == toId } ?: return@LaunchedEffect
+        if (deuda.type != AccountType.LOAN) return@LaunchedEffect
+        val terms = terminosPorCuenta[deuda.id]
+        val escritoPorLaHoja = montoActual.isBlank() || montoActual == montoPropuesto
+        val cuota = if (abonoExtra) null else cuotaPropuesta(deuda, terms)?.toString()
+        if (escritoPorLaHoja) {
+            if (cuota != null && cuota != montoActual) proponerMonto(cuota)
+            else if (cuota == null && montoActual.isNotBlank()) proponerMonto("")
+            montoPropuesto = cuota
+        }
+        val debito = cuentaDelDebitoAutomatico(terms, elegibles)
+        if (debito != null && origenFrom != OrigenCuenta.ELEGIDA && origenFrom != OrigenCuenta.CONTEXTO) {
+            fromId = debito
+            origenFrom = OrigenCuenta.DEBITO_AUTOMATICO
+        }
+    }
     val interesEstimado = interesEstimadoDelMes(to, termsDelDestino)
     /** Lo que va en la petición: el que escribió, o `null` para que el server estime. */
     val interesEfectivo = if (interesTocado) interesEscrito else null
@@ -812,7 +949,7 @@ internal fun TransferBody(
      * campo y apaga el botón; NO va en `missing` porque ese renglón mide una línea y este mensaje
      * trae tres cifras.
      */
-    val errorDeInteres = if (esPago && to != null) {
+    val errorDeInteres = if (guardaUnaCuota && to != null) {
         validarInteresReal(
             interesEfectivo,
             amount ?: 0L,
@@ -827,7 +964,7 @@ internal fun TransferBody(
         null
     }
 
-    val missing = if (esPago) {
+    val missing = if (guardaUnaCuota) {
         validarPagoDeCuota(
             pagoRequestFor(ids, from?.id.orEmpty(), to?.id.orEmpty(), amount ?: 0L, 0L, note, null, montoEnLaDeuda),
             from,
@@ -850,7 +987,7 @@ internal fun TransferBody(
         val destino = to ?: return
         // Lo que la hoja le PROMETIÓ, capturado antes de salir: si el server escribe otro reparto
         // hay que poder decir cuál era el que él leyó. Se calcula igual que el renglón de abajo.
-        val desgloseMostrado = if (esPago) desgloseDelPago(destino, terminosPorCuenta[destino.id], if (origen.currency != destino.currency) montoEnLaDeuda else amount, interesEfectivo) else null
+        val desgloseMostrado = if (guardaUnaCuota) desgloseDelPago(destino, terminosPorCuenta[destino.id], if (origen.currency != destino.currency) montoEnLaDeuda else amount, interesEfectivo) else null
         // Con «Hoy» (el default) queda la hora real, como siempre; cualquier otro día va al
         // mediodía de Bogotá — ver [timestampParaFecha] y [epochAlMediodia].
         val timestamp = timestampParaFecha(fecha, hoy)
@@ -858,7 +995,8 @@ internal fun TransferBody(
         error = null
         coroutine.launch {
             val result = runCatching {
-                if (esPago) {
+                // El abono extra de la vuelta 48 es el traspaso de siempre (`transferLegsFor`).
+                if (guardaUnaCuota) {
                     Repositories.wallets.payInstallment(
                         pagoRequestFor(ids, origen.id, destino.id, amount ?: 0L, timestamp, note, interesEfectivo, montoEnLaDeuda),
                     )
@@ -987,6 +1125,8 @@ internal fun TransferBody(
                 },
                 accounts = if (picking == TransferSide.FROM) elegibles else elegiblesDestino,
                 selectedId = if (picking == TransferSide.FROM) fromId else toId,
+                // Vuelta 48: en Cuota, un crédito es su cuota del mes — no un desembolso.
+                ayudaDeCreditos = if (esPago) AYUDA_DE_CREDITOS_EN_CUOTA else AYUDA_DE_CREDITOS_EN_TRASPASO,
                 onPick = { id ->
                     if (picking == TransferSide.FROM) {
                         fromId = id
@@ -1070,6 +1210,22 @@ internal fun TransferBody(
         // Vuelta 47 · **la cifra protagonista y la píldora de la fecha, como en Gasto** (la cabeza
         // de Agregar, [CabezaDelMonto]). Eran un campo de monto chico y una caja «Hoy».
         val monedaDelMonto = from?.currency ?: "COP"
+        if (esPago) {
+            // Vuelta 48 · **qué se está anotando**, en un renglón: «Cuota de Libre inversión 9695 ·
+            // octubre». Desde la fila de Pagos, el mes es el de esa cuota.
+            val mesDeHoy = remember(ajustesDelPeriodo) { mesDelPeriodoDeHoy(ajustesDelPeriodo, Clock.System.now().toEpochMilliseconds()) }
+            val mes = presetMesDeLaCuota?.takeIf { it.isNotBlank() && to?.id == presetDestinoId } ?: mesDeHoy
+            Text(
+                encabezadoDeLaCuota(to, abonoExtra, mes),
+                style = Movi.textos.cuerpoFuerte,
+                color = if (to == null) Movi.colores.textoMedio else Movi.colores.texto,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().semantics { heading() }.testTag(TAG_ENCABEZADO_DE_LA_CUOTA),
+            )
+            Spacer(Modifier.height(Espacio.xs))
+        }
         CabezaDelMonto(
             montoEscrito = simboloDeMoneda(monedaDelMonto) + formatAmountKeypadDisplay(monto),
             moneda = monedaDelMonto,
@@ -1157,8 +1313,8 @@ internal fun TransferBody(
                     "Desembolso: la plata que el banco te prestó entra a tu cuenta y suma en «Entró» " +
                         "del período de su fecha; la deuda del crédito sube, no baja."
                 } else {
-                    "Abono extraordinario: plata extra que baja el capital. La cuota mensual no va " +
-                        "aquí — esa se anota como gasto en Agregar."
+                    "Abono extraordinario: plata extra que baja el capital. La cuota del mes no va " +
+                        "aquí: esa se anota en Cuota."
                 },
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
@@ -1169,47 +1325,44 @@ internal fun TransferBody(
             }
         }
 
-        // ── En qué se va esta cuota, antes de guardar ────────────────────────────────────────
+        // ── Cuota: en qué se va, y en qué queda la deuda (vuelta 48: sin saltos) ───────────────
         //
-        // Va en el mismo lugar que el bloque de arriba —arriba de la fecha, en medio del
-        // formulario— pero **este sí reserva su alto**, y la diferencia con el vecino no es un
-        // descuido: son dos casos distintos.
+        // **La hoja de Cuota no salta.** Antes, el bloque del desglose (con «Deuda de X: $A pasa a $B»)
+        // existía recién con una deuda elegida: elegir «Nu» estiraba la hoja ~70 px hacia arriba
+        // (r47-04 contra r47-06). Ahora **el renglón de la deuda está siempre**, con su alto de dos
+        // renglones reservado (`minLines = 2`): vacío hasta que se elige qué pagar, «Deuda de Nu:
+        // $1.683.000» al elegirla, y «… pasa a $1.583.000» al llegar el monto. Cambia el texto, no el
+        // alto. Lo mide `LaHojaDeCuotaNoSaltaTest`.
         //
-        // El de arriba aparece solo cuando una punta del TRASPASO es un crédito, o sea en una
-        // minoría de los traspasos; reservarle 60 dp a todo el mundo dejaría un hueco permanente
-        // por un caso que la mayoría no usa. Este, en cambio, aparece **siempre que estás en la
-        // pestaña Cuota con una deuda elegida** — es el punto entero de la pestaña. El hueco no le
-        // sobra a nadie porque todos lo van a llenar.
+        // Sobre un crédito se suma lo suyo —el interés de este mes y la frase del desglose, que
+        // reserva tres renglones (`minLines = 3`) para que escribir o borrar el monto no la mueva—, y
+        // el enlace al abono extra. Eso aparece al ELEGIR el crédito, que es cambiar de modo («Cuota
+        // de X · mes»), no al escribir.
         //
-        // Y lo que hacía sin la reserva es exactamente lo que «Ola 8 · V2 (N4)» ya arregló dos
-        // veces en este archivo: aparecer al escribir el primer dígito del monto y empujar
-        // FECHA / NOTA / Guardar ~40-60 dp hacia abajo, con el dedo justo en el teclado. Con la
-        // deuda elegida el bloque ya está, y escribir el monto solo le cambia el texto.
-        //
-        // `heightIn(min=)` y no `height(...)`: el caso sin tasa son tres renglones y recortarlo
-        // sería peor que moverlo.
-        //
-        // Es plata suya: tiene que poder VERIFICAR el número, no confiar en él. Ver
-        // [textoDelDesglose].
-        if (esPago && to != null) {
-            val desglose = desgloseDelPago(to, termsDelDestino, if (from != null && from.currency != to.currency) montoEnLaDeuda else amount, interesEfectivo)
+        // Es plata suya: tiene que poder VERIFICAR el número, no confiar en él. Ver [textoDelDesglose].
+        if (esPago) {
+            val desglose = if (guardaUnaCuota && to != null) {
+                desgloseDelPago(to, termsDelDestino, if (from != null && from.currency != to.currency) montoEnLaDeuda else amount, interesEfectivo)
+            } else {
+                null
+            }
             Spacer(Modifier.height(Espacio.s))
+
+            if (esAbono) {
+                // El abono extra es el traspaso de siempre: lo dice antes de guardar.
+                Text(QUE_ES_UN_ABONO_EXTRA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(Espacio.xs))
+            }
 
             // ── El interés de este mes, editable ─────────────────────────────────────────────
             //
             // La estimación se queda corta contra el extracto por más de $100.000 en una sola
-            // cuota (ver `CreatePagoDeCuotaRequest.interesReal`), y hasta acá no había dónde
-            // corregirla: la frase de abajo mostraba el reparto y no dejaba tocarlo. Ahora el
-            // interés es un campo, **prellenado con la estimación**, y el capital de la frase se
-            // recalcula en vivo con lo que él escriba.
-            //
-            // Aparece apenas hay un crédito elegido y sus condiciones cargadas —el interés es
-            // `saldo × tasa`, no necesita el monto—, así que escribir el monto después no mueve
-            // nada bajo el dedo: el campo ya está. Sobre una tarjeta no aparece (el pago baja la
-            // deuda por todo, no hay interés que separar), y mientras las condiciones no llegaron
-            // tampoco: sin el seguro de las condiciones no se puede decir cuánto queda de capital.
-            val muestraElInteres = to.type == AccountType.LOAN && terminosCargados && !falloCargarTerminos
-            if (muestraElInteres) {
+            // cuota (ver `CreatePagoDeCuotaRequest.interesReal`), así que el interés es un campo,
+            // **prellenado con la estimación**, y el capital de la frase se recalcula en vivo con lo
+            // que él escriba. Aparece apenas hay un crédito elegido y sus condiciones cargadas —el
+            // interés es `saldo × tasa`, no necesita el monto—. Sobre una tarjeta o un abono no.
+            val muestraElInteres = esCredito && !esAbono && terminosCargados && !falloCargarTerminos
+            if (muestraElInteres && to != null) {
                 MoneyField(
                     // Sin tocar: la estimación (o vacío en un crédito sin tasa). Tocado: lo suyo.
                     // `MoneyField` se resincroniza solo cuando el valor cambia desde afuera, así
@@ -1229,44 +1382,50 @@ internal fun TransferBody(
                 Spacer(Modifier.height(Espacio.s))
             }
 
-            Box(modifier = Modifier.fillMaxWidth().heightIn(min = 58.dp)) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    when {
-                        // Sin monto todavía no hay aritmética que mostrar, pero el bloque ya ocupa
-                        // su lugar: así el renglón de arriba no empuja el botón de Guardar al
-                        // escribir el primer dígito.
-                        (amount ?: 0L) <= 0L ->
-                            Text(
-                                "Escribe el monto para ver cuánto de la cuota baja la deuda.",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                            )
-                        // Mientras no se sepa, no se afirma nada. Un «este crédito no tiene tasa»
-                        // sobre una carga a medias sería exactamente el número plausible y falso
-                        // que esta ola vino a matar.
-                        to.type == AccountType.LOAN && !terminosCargados ->
-                            Text("Calculando cuánto baja la deuda…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                        to.type == AccountType.LOAN && falloCargarTerminos ->
-                            Text(SIN_CONDICIONES_PARA_EL_DESGLOSE, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                        // Un interés que no cabe en la cuota: se dice acá, al lado del campo y con
-                        // las mismas palabras que contestaría el server, y el botón queda apagado.
-                        // No se muestra un capital negativo ni se clampa en silencio.
-                        errorDeInteres != null ->
-                            Text(errorDeInteres, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                        // Nada de `return@Column` acá: un early return se llevaría por delante la
-                        // fecha, la nota y el botón de Guardar. Los dos renglones son opcionales
-                        // por separado.
-                        else -> {
-                            desglose?.let { d -> textoDelDesglose(d, to.currency) }?.let { renglon ->
-                                Text(renglon, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                                Spacer(Modifier.height(Espacio.xs))
-                            }
-                            deudaDespuesDelPago(to, desglose)?.let { renglon ->
-                                Text(renglon, style = Movi.textos.apoyoMedio, color = Movi.colores.texto)
-                            }
-                        }
-                    }
+            if (esCredito && !esAbono && to != null) {
+                // La frase del desglose. Mientras no se sepa, no se afirma nada: un «este crédito no
+                // tiene tasa» sobre una carga a medias sería el número plausible y falso que la Ola
+                // del desglose vino a matar. Un interés que no cabe en la cuota se dice acá, con las
+                // palabras del server, y el botón queda apagado.
+                val (frase, color) = when {
+                    (amount ?: 0L) <= 0L ->
+                        "Escribe el monto para ver cuánto de la cuota baja la deuda." to Movi.colores.textoMedio
+                    !terminosCargados -> "Calculando cuánto baja la deuda…" to Movi.colores.textoMedio
+                    falloCargarTerminos -> SIN_CONDICIONES_PARA_EL_DESGLOSE to Movi.colores.textoMedio
+                    errorDeInteres != null -> errorDeInteres to Movi.colores.sale
+                    else -> (desglose?.let { textoDelDesglose(it, to.currency) }.orEmpty()) to Movi.colores.textoMedio
                 }
+                Text(frase, style = Movi.textos.apoyo, color = color, minLines = 3, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(Espacio.xs))
+            }
+
+            // El renglón de la deuda, siempre, con su alto reservado (ver arriba).
+            val renglonDeLaDeuda = when {
+                to == null -> null
+                esAbono -> deudaDespuesDelTraspaso(from, to, amount) ?: deudaDeHoy(to)
+                to.type == AccountType.LOAN && (!terminosCargados || falloCargarTerminos || errorDeInteres != null) -> deudaDeHoy(to)
+                else -> deudaDespuesDelPago(to, desglose) ?: deudaDeHoy(to)
+            }
+            Text(
+                renglonDeLaDeuda.orEmpty(),
+                style = Movi.textos.apoyoMedio,
+                color = Movi.colores.texto,
+                minLines = 2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().testTag(TAG_RENGLON_DE_LA_DEUDA),
+            )
+
+            // **El abono extra, como opción secundaria** de la misma hoja: un enlace, no una pestaña.
+            if (esCredito) {
+                Boton(
+                    texto = if (esAbono) ES_LA_CUOTA_DEL_MES else ES_UN_ABONO_EXTRA,
+                    onClick = { abonoExtra = !abonoExtra },
+                    variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !saving,
+                    modifier = Modifier.testTag(TAG_ENLACE_DEL_ABONO),
+                )
             }
         }
 
@@ -1292,6 +1451,7 @@ internal fun TransferBody(
         Boton(
             texto = when {
                 saving -> "Guardando…"
+                esAbono -> "Registrar abono"
                 esPago -> "Registrar pago"
                 else -> "Guardar traspaso"
             },
@@ -1306,7 +1466,7 @@ internal fun TransferBody(
         Spacer(Modifier.height(Espacio.xs))
         Box(modifier = Modifier.fillMaxWidth().height(16.dp).testTag(TAG_AYUDA_DEL_TRASPASO)) {
             Text(
-                text = if (!saving && missing != null) missing else ayudaDelTraspaso(esPago),
+                text = if (!saving && missing != null) missing else ayudaDelTraspaso(guardaUnaCuota),
                 style = Movi.textos.apoyo,
                 color = if (!saving && missing != null) Movi.colores.textoMedio else Movi.colores.textoApagado,
                 textAlign = TextAlign.Center,
@@ -1340,6 +1500,8 @@ private fun TransferAccountPicker(
     title: String,
     accounts: List<Account>,
     selectedId: String?,
+    /** La línea bajo «Créditos»: qué hace elegir uno en esta pestaña (vuelta 48). */
+    ayudaDeCreditos: String,
     onPick: (String) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -1359,8 +1521,7 @@ private fun TransferAccountPicker(
             )
             Spacer(Modifier.height(Espacio.xxs))
             Text(
-                "Elige uno para registrar el desembolso que te entró a la cuenta, o un abono " +
-                    "extraordinario que sale de ella.",
+                ayudaDeCreditos,
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
             )

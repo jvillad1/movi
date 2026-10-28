@@ -114,6 +114,7 @@ class PagarUnaCuotaDesdeElChecklistTest {
                                 presetFecha = abierta.presetFecha,
                                 presetEsIngreso = abierta.presetEsIngreso,
                                 presetDeudaId = abierta.presetDeudaId,
+                                presetMesDeLaCuota = abierta.presetMesDeLaCuota,
                             )
                         }
                     }
@@ -175,6 +176,13 @@ class PagarUnaCuotaDesdeElChecklistTest {
         // Vuelta 47: la cifra protagonista, como en Gasto.
         assertTrue(hay("\$1.204.064"), "el monto de la cuota, en la cifra")
         assertTrue(hay("Hoy"), "fechado hoy")
+        // Vuelta 48: el MISMO modo que elegir el crédito en Cuota, ligado a la cuota de ESTA fila.
+        assertEquals("septiembre", hoja.presetMesDeLaCuota)
+        composeRule.onNode(
+            hasTestTag(TAG_ENCABEZADO_DE_LA_CUOTA) and hasText("Cuota de Libre inversión 9695 · septiembre"),
+            useUnmergedTree = true,
+        ).assertExists()
+        assertTrue(hay(ES_UN_ABONO_EXTRA), "con el abono extra a mano, como desde Cuota")
     }
 
     @Test

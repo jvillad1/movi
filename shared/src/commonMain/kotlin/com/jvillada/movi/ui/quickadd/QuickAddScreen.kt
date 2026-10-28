@@ -296,6 +296,8 @@ fun QuickAddScreen(
      * como monto. Ver [Screen.QuickAdd.presetDeudaId].
      */
     presetDeudaId: String? = null,
+    /** Vuelta 48 · el mes de la cuota de [presetDeudaId] («septiembre»). Ver [Screen.QuickAdd.presetMesDeLaCuota]. */
+    presetMesDeLaCuota: String? = null,
     /** Ola 5 · los atajos del «+»: con qué pestaña abre. Ver [Screen.QuickAdd.presetPestana]. */
     presetPestana: PestanaDeAgregar? = null,
     /** Vuelta 44: abre ya en «Repartir este gasto» (modo personas). Ver [Screen.QuickAdd.presetRepartir]. */
@@ -1562,6 +1564,10 @@ fun QuickAddScreen(
                                 conTecladoEnPantalla = conTecladoEnPantalla,
                                 pedidosDeGuardar = pedidosDeGuardarElTraspaso,
                                 onCampoDeTextoConFoco = { campoDelTraspasoConFoco = it },
+                                // Vuelta 48: el crédito elegido propone su cuota, y la fila de Pagos
+                                // dice de qué mes es.
+                                onMontoPropuesto = { montoDelTraspaso = it },
+                                presetMesDeLaCuota = presetMesDeLaCuota,
                                 // La misma hoja sirve las dos pestañas: un pago de cuota es un
                                 // traspaso con otras categorías y otro endpoint. Ver
                                 // [ModoDeTraspaso].

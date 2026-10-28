@@ -549,6 +549,7 @@ fun App() {
                             presetFecha = request.presetFecha,
                             presetEsIngreso = request.presetEsIngreso,
                             presetDeudaId = request.presetDeudaId,
+                            presetMesDeLaCuota = request.presetMesDeLaCuota,
                             presetPestana = request.presetPestana,
                             // Vuelta 43: «Anotar pago» desde una factura — el guardado la salda.
                             presetPago = request.presetPago,

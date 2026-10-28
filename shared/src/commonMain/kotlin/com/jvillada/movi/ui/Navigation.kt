@@ -92,6 +92,11 @@ sealed class Screen {
         val presetEsIngreso: Boolean = false,
         val presetDeudaId: String? = null,
         /**
+         * Vuelta 48 · el mes de la cuota que se viene a pagar («septiembre»), cuando la hoja se abre
+         * desde su fila de Pagos: la hoja dice «Cuota de X · septiembre». `null` = el del período de hoy.
+         */
+        val presetMesDeLaCuota: String? = null,
+        /**
          * Ola 5 · los atajos del «+» (mantenerlo presionado, o los del ícono de la app en Android):
          * con qué pestaña abre la hoja. `null` = la de siempre (la que deciden los otros presets).
          */
