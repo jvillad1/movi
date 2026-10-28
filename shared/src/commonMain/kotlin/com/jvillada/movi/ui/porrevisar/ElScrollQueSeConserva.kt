@@ -27,6 +27,9 @@ import kotlinx.coroutines.flow.first
  * el aviso que se confirmó, la siguiente queda arriba, a la vista. Nada salta después.
  */
 
+/** La llave de la fila del esqueleto mientras la bandeja se lee: esa no se recuerda ni se espera. */
+const val LLAVE_DEL_ESQUELETO: String = "esqueleto"
+
 /** Las llaves de la lista en el orden en que se declararon (ver [fila]). */
 class LlavesDeLaLista internal constructor() {
     internal val orden: MutableList<String> = mutableListOf()
@@ -70,8 +73,9 @@ fun rememberListaQueSeConserva(conDatos: Boolean): ListaQueSeConserva {
 
     LaunchedEffect(conDatos) {
         if (!conDatos || yaVolvio) return@LaunchedEffect
-        // Que la lista ya se haya medido con la bandeja de verdad.
-        snapshotFlow { estado.layoutInfo.totalItemsCount }.first { it > 0 }
+        // Que la lista ya se haya medido con la bandeja de verdad, no con el esqueleto de la carga.
+        snapshotFlow { estado.layoutInfo.visibleItemsInfo.map { it.key.toString() } }
+            .first { llavesALaVista -> llavesALaVista.isNotEmpty() && LLAVE_DEL_ESQUELETO !in llavesALaVista }
         dondeVolver(aLaVista, corrimiento, llaves.orden.toList())?.let { (indice, corrido) ->
             estado.scrollToItem(indice, corrido)
         }
@@ -82,7 +86,7 @@ fun rememberListaQueSeConserva(conDatos: Boolean): ListaQueSeConserva {
         snapshotFlow {
             estado.layoutInfo.visibleItemsInfo.map { it.key.toString() } to estado.firstVisibleItemScrollOffset
         }.collect { (llavesALaVista, corrido) ->
-            if (yaVolvio && llavesALaVista.isNotEmpty()) {
+            if (yaVolvio && llavesALaVista.isNotEmpty() && LLAVE_DEL_ESQUELETO !in llavesALaVista) {
                 aLaVista = llavesALaVista
                 corrimiento = corrido
             }

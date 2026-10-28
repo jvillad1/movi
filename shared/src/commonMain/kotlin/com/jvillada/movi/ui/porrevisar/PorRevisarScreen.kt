@@ -335,9 +335,14 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         if (bandejaVacia == false) celebrar = false
         ultimoEstadoDeLaBandeja = celebracion.ultimoConocido
     }
-    val revisarEnReconciliar: (String) -> Unit = { id ->
+    /**
+     * Abre Revisar aviso. Vuelta 44: desde «Cambiar» (un aviso que Movi entendió) abre con las
+     * categorías a la vista ([Screen.SMSReconcile.abrirCategoria]): lo que se viene a cambiar casi
+     * siempre es la categoría, y así son dos toques (la categoría y «Confirmar») y no tres.
+     */
+    val revisarEnReconciliar: (String, Boolean) -> Unit = { id, aCambiar ->
         fueAReconciliar = true
-        onNavigate(Screen.SMSReconcile(id))
+        onNavigate(Screen.SMSReconcile(id, abrirCategoria = aCambiar))
     }
 
     // Vuelta 42: las secciones de la bandeja, armadas una vez. En el teléfono (y en una columna) van en
@@ -465,7 +470,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                                 modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
                                 avisos = avisos,
                                 trabajando = pagoEnCurso == grupoId || confirmarLosAvisos.confirmando,
-                                onRevisar = { revisarEnReconciliar(sms.id) },
+                                onRevisar = { revisarEnReconciliar(sms.id, entendidos[sms.id] != null) },
                                 onIgnorar = {
                                     sobreElPago(grupoId, { Repositories.wallets.ignorarElMismoPago(grupoId, ids) }) {
                                         avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_IGNORED }
@@ -494,7 +499,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     fila(ll, "sms-${sms.id}") {
                         TarjetaDeMensajeDelBanco(
                             sms,
-                            onRevisar = { revisarEnReconciliar(sms.id) },
+                            onRevisar = { revisarEnReconciliar(sms.id, entendidos[sms.id] != null) },
                             entendido = entendidos[sms.id]?.linea,
                             onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
                             onIgnorar = {
@@ -683,7 +688,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 val ll = lista.llaves
                 ll.empezar()
                 if (cargando) {
-                    fila(ll, "esqueleto") { EsqueletoDePorRevisar() }
+                    fila(ll, LLAVE_DEL_ESQUELETO) { EsqueletoDePorRevisar() }
                     return@LazyColumn
                 }
                 noSePudoActualizarArriba(ll)
