@@ -1891,7 +1891,7 @@ Esta vuelta cambia la navegación; Inicio con sus 8 acciones es la 39, Actividad
   `#FFF2C6`) con la tinta encima (`fondoDelDestinoDelRailAncho`); el del rail compacto, con la píldora
   chica detrás del ícono, como la barra.
 - **Los títulos**: Movimientos se titula «Actividad» (`TITULO_DE_ACTIVIDAD`), Plan «Pagos»
-  (`TITULO_DE_PAGOS`, por dentro igual: el selector sigue diciendo «Pagos | Presupuestos» hasta la 40) y
+  (`TITULO_DE_PAGOS`; desde la 40 el selector dice «Facturas | Presupuestos», ver §43) y
   Espacios «Personas» (`TITULO_DE_PERSONAS`, la palabra de la maqueta; un espacio —«Casa con Caro»—
   sigue llamándose espacio). En el código los nombres viejos se quedaron (`NavTab.MOVIMIENTOS`,
   `Screen.Plan`, `Screen.Espacios`): renombrarlos no le cambiaba nada al dueño.
@@ -1961,4 +1961,92 @@ rail), `ResumenDePersonasTest` y **`LasRutasViejasLleganTest`**, que recorre la 
 
 Que el rail tenga Movi AI y la barra no es a propósito: en el teléfono va en la acción «Preguntar a
 Movi» de las 8 acciones (vuelta 39).
+
+## 43. Vuelta 40: Actividad y Pagos por dentro, como la opción 3
+
+El dueño volvió a la opción 3 («me encantó a mí y a mi esposa»). La 38 puso las cuatro pestañas; esta
+vuelta rediseña **Actividad** (antes Movimientos) y **Pagos** (antes Plan) por dentro, con las maquetas
+`p3/Movimientos.dc.html` y `p3/Plan.dc.html`. **Sin reglas de plata nuevas**: todas las cifras salen de
+las funciones de siempre. Tokens nuevos: `Medida.altoDeBarraEnTarjeta` (10, la barra de «Falta por
+pagar») y `LETRA_MINIMA_QUE_SE_VE` (12 px); `BarraDeProgreso` ganó `fondo = FondoDeBarra.SobreLaMarca`
+(la pista en `marcaSuave`). Ningún valor suelto nuevo.
+
+### Actividad, de arriba abajo
+
+1. **«Actividad»** en `titular` (28/800) y **la lupa en su botón redondo blanco** (`BotonDeIcono`
+   `Secundario`), que abre Buscar como siempre. Sin avatar (vuelta 38).
+2. **La tarjeta de los avisos del banco** (`TarjetaDeAvisosDelBanco`, superficie `Propuesta`: blanca con
+   la sombra suave), solo con avisos pendientes: la campana en su círculo amarillo, «3 avisos del banco
+   por confirmar», «Suman $186.400 · Rappi, D1 y Uber» (la suma solo si Movi leyó todos en pesos; si no,
+   solo los comercios) y dos botones de 48 que van lado a lado si caben enteros y si no uno debajo del
+   otro (`FlowRow`): **«Confirmar los N»** (`Principal`) y **«Revisar uno por uno»** (`Secundario`, abre
+   Por revisar). Reemplaza el renglón «N por revisar», que vuelve solo cuando no hay avisos pero sí otra
+   cosa por revisar (movimientos que entraron solos, pagos de tarjeta, débitos).
+   - **«Confirmar los N» confirma solo lo que la fila confirmaría.** `avisosPorConfirmar` pasa cada pago
+     por `loQueMoviEntendio` (monto, cuenta segura y categoría del dueño, sin «¿ya lo anotaste?», sin dos
+     patas, sin reparto): esos son los `confirmables`. Si son todos, «Confirmar los 3»; si son algunos,
+     «Confirmar los 2 que Movi entendió» y el resto queda; si ninguno, solo «Revisar uno por uno». Antes
+     pregunta con `ConfirmarEnHoja` (variante `Principal`): «¿Confirmar estos 2 avisos?», cada uno en una
+     línea («Tostao Café: Comida · Bancolombia Ahorros · $46.000»), el total y cuántos quedan. Confirma
+     uno por uno por el MISMO camino que la fila (`confirmarElLote` → `confirmarLoEntendido`), muestra
+     enseguida lo confirmado (`conLoResueltoEnLaBandeja`) y avisa «2 confirmados» (o cuántos no se
+     pudieron) **sin deshacer**: confirmar un aviso no tiene vuelta en Movi.
+3. **Chips de 44**: Todo · Gastos · Ingresos · **Personas** (`CHIP_PERSONAS` = 6, al final: los índices de
+   antes no se renumeran). «Personas» deja lo repartido con alguien en un grupo (`espacioId`, el mismo dato
+   de «de $88.600 · con Caro»); una transferencia a un tercero no entra.
+4. La franja **Entró · Salió · Neto** (vuelta 30) sigue igual.
+5. **El encabezado de cada día**: «Hoy · martes 28», «Ayer · lunes 27», «Domingo 26 de octubre»
+   (`encabezadoDelDiaDeActividad`; `formatDayHeading` sigue en el detalle de una cuenta) en
+   `cuerpoFuerte` (15/700 a la vista: la maqueta dice 14/700 y no hay estilo de 14), y a la derecha
+   **«Gastaste $110.500»** en texto medio (`resumenDelDia`: `esGastoDelPeriodo` + tu parte con
+   `montoContado`, la regla de «Gastos» y de «En qué se va»). Si ese día solo entró plata, **«Entró
+   +$6.200.000»** en verde; sin nada que cuente (un traspaso, un pago de tarjeta), nada. Cuando la fecha
+   y la cifra no caben con «Gastaste» al lado (360 dp con la letra al 130 %), cede **el rótulo**, nunca la
+   fecha ni la cifra. Era «Flujo del día», que sumaba el pago de tarjeta: ahora esa plata la dice la
+   línea de abajo, que pasó de «De eso, $X fueron a pagar tarjeta…» a «**Además**, $X fueron a pagar
+   tarjeta…». Se sigue plegando tocando el renglón.
+6. Las filas siguen como en la 29: 58 de alto en la lista blanca, ingreso en verde con «+», tu parte
+   primero.
+
+### Pagos, de arriba abajo
+
+1. **«Pagos»** y debajo «Del 25 de octubre al 24 de noviembre» en `textoMedio` (`encabezadoDelPeriodo`
+   sin «quedan N días»).
+2. **El «Pagos» repetido**: el selector pasó a **«Facturas | Presupuestos»** (`ROTULO_SEGMENTO_PAGOS`) y
+   subió a justo debajo del período, antes de todo lo que cambia con los datos (es lo que
+   `PlanScreenTest` vigila que no salte). «Facturas» es lo que lista adentro.
+3. **La tarjeta amarilla «Falta por pagar»** (`TarjetaFaltaPorPagar`): fondo `marca`, radio 22, la tinta
+   encima y lo secundario en `sobreMarcaMedio`. La cifra es la **héroe** de la pantalla
+   (`VarianteDeCifra.Heroe`, 40/800 a la vista: la maqueta dice 36 y el sistema no tiene un tamaño entre
+   la héroe y la de tarjeta), `faltaPorPagar`; «de $X · quedan N de M pagos» (`X` = falta +
+   `yaPagadoEnElPeriodo`, sin los ingresos); la barra en tinta sobre `marcaSuave`; «Llevas $X pagados».
+   El Disponible, más abajo, sigue en `Grande`: una sola héroe (`UnaSolaCifraHeroePorPantallaTest`).
+4. **«Tus facturas del período»** (`FilaDeFactura`): el ícono de la categoría, el nombre en 15/700, la
+   cifra y la pastilla de vencimiento —lo vencido y lo que vence en tres días o menos en el `tinte` con
+   `aviso` («Venció hace 2 días», «Vence el sábado»), lo demás neutra («Vence el 3 nov»); «Por confirmar»
+   si Movi pregunta «¿fue este?»—; a la derecha **«Anotar pago»** (la más urgente en `Principal`, las
+   demás `Secundario`, tamaño `S`), que abre la MISMA hoja de Agregar prellenada de siempre
+   (`hojaParaAnotar`). Las pagadas: **«Pagado ✓»** en verde (el visto es un ícono) y el enlace
+   **«Movimiento del 25 oct»** que abre la hoja de ese movimiento (`HojasDelTableroDeRecurrentes`). Orden
+   (`enOrdenDeFacturas`): vencidas, por vencer por fecha, pagadas al final. Desde la sexta, **«Ver los N
+   pagos del período ›»**. Lo que la lista ofrecía sigue colgando de su fila (`LoQueOfreceLaFila`): «¿Ya
+   pagaste …? Sí, fue este / No fue este», «No fue este», «Quitar la marca» y la estimación de una cuota.
+   Los ingresos fijos van aparte en «Tus ingresos del período» («Anotar ingreso», «Recibido»), y lo que
+   un período anterior dejó abierto, al final, como antes.
+5. **Lo demás se queda, debajo**: el Disponible con «¿De dónde sale?», «Tus períodos», la caja «Tu
+   plata, día a día», los cobros detectados, «Lo que se repite al mes» y las suscripciones; «Tus
+   recordatorios no llegan» va arriba de la lista. En «Presupuestos», los presupuestos y debajo el
+   Disponible y «Tus períodos». En pantalla ancha, la columna de la izquierda no cambia.
+
+### El mínimo de letra
+
+Ningún estilo de `Movi.textos` se ve por debajo de **12 px** con la escala ×1,12 (el más chico, `apoyo`,
+11 sp → 12,3): lo vigila `TipografiaTest` con `LETRA_MINIMA_QUE_SE_VE`. Lo único por debajo era la
+marca de tres letras en el círculo de una fila (0,29 × 36 = 10,4 px): pasó a 0,34 (12,2 px,
+`fraccionDeLaMarca`).
+
+Lo vigilan `ActividadPorDentroTest` y `FacturasDelPeriodoTest` (`commonTest`),
+`ActividadPorDentroEnPantallaTest` (la tarjeta con avisos y sin ellos, «Confirmar» que solo toma lo
+entendido, «Revisar uno por uno», «Gastaste» y «Personas») y las pruebas de Plan y del tablero,
+ajustadas.
 
