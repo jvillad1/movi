@@ -41,6 +41,7 @@ import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.DetalleDelEspacio
 import com.jvillada.movi.shared.model.Espacio
 import com.jvillada.movi.shared.model.LiquidacionDelEspacio
+import com.jvillada.movi.shared.model.GastoDelEspacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.PropuestaDeSaldar
 import com.jvillada.movi.shared.model.newId
@@ -174,8 +175,8 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
             }
             if (actual != null && actual.queOtroPaga.isNotEmpty()) LoQuePagaOtraPersona(actual.queOtroPaga)
             // Ola R4: la casa de los terceros. Al final, siempre: lo que tienes con los demás que no
-            // está en un espacio (Caro, tu papá, los comercios). Una de las dos puertas que quedan
-            // (la otra es Ajustes); ver [RenglonDePersonasYComercios].
+            // está en un espacio (Caro, tu papá, los comercios). Desde la vuelta 31 es la única
+            // puerta (Ajustes ya no la repite); ver [RenglonDePersonasYComercios].
             RenglonDePersonasYComercios(destinos = destinos.valor, onClick = { onNavigate(Screen.Destinos()) })
         }
     }
@@ -318,7 +319,7 @@ internal fun CuerpoDelEspacio(
         mensajeCopiado = mensajeCopiado,
         onAbrirWhatsApp = { mensajeCopiado?.let { runCatching { uriHandler.openUri(enlaceDeWhatsApp(it)) } } },
     )
-    GastosDelEspacio(detalle, onPagoOtro = { pagoOtro = true }, onVerTodo = onVerTodo)
+    GastosDelEspacio(detalle, onPagoOtro = { pagoOtro = true }, onVerTodo = onVerTodo, onCambio = onCambio)
 
     if (saldando) {
         HojaSaldar(
@@ -521,11 +522,21 @@ private fun SaldoDelEspacioTarjeta(
     }
 }
 
-/** La lista de gastos del espacio, con «Pagó otro» para anotar lo que pagó Caro. */
+/**
+ * La lista de gastos del espacio, con «Pagó otro» para anotar lo que pagó Caro. Vuelta 31: cada gasto
+ * se toca y abre su detalle ([AlTocarUnGasto]); el subtítulo empieza por la fecha y va en hasta dos
+ * renglones, así que nunca se corta.
+ */
 @Composable
-private fun GastosDelEspacio(detalle: DetalleDelEspacio, onPagoOtro: () -> Unit, onVerTodo: (() -> Unit)?) {
+private fun GastosDelEspacio(
+    detalle: DetalleDelEspacio,
+    onPagoOtro: () -> Unit,
+    onVerTodo: (() -> Unit)?,
+    onCambio: () -> Unit,
+) {
     val espacio = detalle.espacio
     val otro = espacio.miembros.firstOrNull { it.id != MIEMBRO_YO }?.nombre
+    var abierto by remember(espacio.id) { mutableStateOf<GastoDelEspacio?>(null) }
     Column {
         Seccion(
             titulo = "Gastos",
@@ -545,15 +556,19 @@ private fun GastosDelEspacio(detalle: DetalleDelEspacio, onPagoOtro: () -> Unit,
                 aLaVista.forEachIndexed { i, g ->
                     if (i > 0) Separador()
                     Fila(
-                        titulo = g.descripcion.ifBlank { g.categoria },
+                        titulo = tituloDelGasto(g),
                         subtitulo = quienPagoElGasto(espacio, g),
+                        lineasDelSubtitulo = 2,
                         inicio = { AvatarDePersona(nombreDelPagador(espacio, g.pagadoPor), tono = tonoDe(g.pagadoPor)) },
                         final = { MontoYTuParte(g.monto, g.partes[MIEMBRO_YO] ?: 0L) },
+                        onClick = { abierto = g },
+                        onClickLabel = "Ver el gasto",
                         modifier = Modifier.testTag(TAG_GASTO_DEL_ESPACIO),
                     )
                 }
             }
         }
+        abierto?.let { g -> AlTocarUnGasto(espacio, g, onCerrar = { abierto = null }, onCambio = onCambio) }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         Boton(
             texto = if (otro != null) "Anotar lo que pagó $otro" else "Anotar lo que pagó otra persona",

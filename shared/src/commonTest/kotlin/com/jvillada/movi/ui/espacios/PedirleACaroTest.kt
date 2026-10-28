@@ -132,12 +132,23 @@ class PedirleACaroTest {
     }
 
     @Test
-    fun `cada gasto dice su fecha en el subtitulo`() {
+    fun `cada gasto dice su fecha en el subtitulo, primero`() {
         val deCaro = gasto("g1", "Mercado del sábado", 80_000, dia(18), pagadoPor = "dst_caro")
-        assertEquals("Pagó Caro · Mercado · 18 oct", quienPagoElGasto(casa, deCaro, zona))
-        assertEquals("Pagaste tú · Mercado · 2 oct", quienPagoElGasto(casa, cinco.last(), zona))
+        // Vuelta 31: la fecha va primero (al final se cortaba) y luego quién pagó y la categoría.
+        assertEquals("18 oct · Pagó Caro · Mercado", quienPagoElGasto(casa, deCaro, zona))
+        assertEquals("2 oct · Pagaste tú · Mercado", quienPagoElGasto(casa, cinco.last(), zona))
         assertEquals("Pagaste tú · Mercado", quienPagoElGasto(casa, cinco.last().copy(fecha = 0L), zona), "sin fecha, sin ese tramo")
-        assertEquals("Pagaste tú · 2 oct", quienPagoElGasto(casa, cinco.last().copy(categoria = ""), zona))
+        assertEquals("2 oct · Pagaste tú", quienPagoElGasto(casa, cinco.last().copy(categoria = ""), zona))
+    }
+
+    @Test
+    fun `la categoria no se repite si ya es el titulo`() {
+        val mercado = gasto("g1", "Mercado", 80_000, dia(21), pagadoPor = "dst_caro")
+        assertEquals("Mercado", tituloDelGasto(mercado))
+        assertEquals("21 oct · Pagó Caro", quienPagoElGasto(casa, mercado, zona))
+        val sinDescripcion = mercado.copy(descripcion = "")
+        assertEquals("Mercado", tituloDelGasto(sinDescripcion))
+        assertEquals("21 oct · Pagó Caro", quienPagoElGasto(casa, sinDescripcion, zona))
     }
 
     @Test

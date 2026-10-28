@@ -80,18 +80,20 @@ fun quienesComparten(espacio: Espacio): String {
 fun rotuloDeTuParte(espacio: Espacio): String =
     if (espacio.reparto == RepartoDelEspacio.PARTES_IGUALES && idsDeMiembros(espacio).size == 2) "Mitad" else "Te toca"
 
+/** El título de la fila de un gasto del espacio: su descripción o, sin ella, su categoría. */
+fun tituloDelGasto(gasto: GastoDelEspacio): String = gasto.descripcion.ifBlank { gasto.categoria }
+
 /**
- * El subtítulo de un gasto del espacio: «Pagaste tú · Mercado · 18 oct» o «Pagó Caro · Mercado ·
- * 18 oct». La fecha la pidió la revisión de la vuelta de diseño 26: sin ella, dos mercados del mismo
- * monto no se distinguían. Sin fecha (un gasto viejo con 0), sin ese tramo.
+ * El subtítulo de un gasto del espacio: «18 oct · Pagaste tú · Mercado» o «18 oct · Pagó Caro ·
+ * Mercado». La fecha la pidió la revisión de la vuelta de diseño 26 (sin ella, dos mercados del mismo
+ * monto no se distinguían) y **va primero** desde la vuelta 31: al final se cortaba («Mercado · 21 …»)
+ * y era justo lo que los distinguía. La categoría no se repite si ya es el título de la fila. Sin fecha
+ * (un gasto viejo con 0), sin ese tramo.
  */
 fun quienPagoElGasto(espacio: Espacio, gasto: GastoDelEspacio, zona: TimeZone = AppTimeZone.zone): String {
     val quien = if (gasto.pagadoPor == MIEMBRO_YO) "Pagaste tú" else "Pagó ${nombreEnElEspacio(espacio, gasto.pagadoPor)}"
-    return listOfNotNull(
-        quien,
-        gasto.categoria.takeIf { it.isNotBlank() },
-        fechaDelGasto(gasto, zona),
-    ).joinToString(" · ")
+    val categoria = gasto.categoria.takeIf { it.isNotBlank() && !it.equals(tituloDelGasto(gasto).trim(), ignoreCase = true) }
+    return listOfNotNull(fechaDelGasto(gasto, zona), quien, categoria).joinToString(" · ")
 }
 
 /** «18 oct»: el día de [gasto] en la zona de la app, o `null` si no tiene fecha. */
