@@ -21,7 +21,6 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.jsonDeLaApi
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AdjustAccountBalanceRequest
 import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
@@ -296,14 +295,19 @@ fun Route.accountRoutes() {
          * un vistazo. La de créditos se queda con las deudas porque su respuesta es el
          * `CreditSummary` (cuota, plan de pagos, próximo vencimiento), que acá no significa nada.
          *
-         * **Qué cuentas entran, y por qué las deudas no.** Solo Dinero e Inversión, o sea las
-         * cuentas donde «lo que dice el banco» es un número y uno solo. Una **tarjeta** no tiene
-         * esa propiedad: la banca en línea muestra saldo actual, saldo a pagar, cupo disponible y
-         * compras sin facturar, cuatro cifras distintas que no significan lo mismo que la deuda
-         * que Movi acumula compra por compra — cuadrar contra la equivocada escribiría un ajuste
-         * enorme y creíble. Además, la tarjeta ya tiene quien la concilie: el extracto y la
-         * captura de mensajes. Un **préstamo** se cuadra en Créditos, donde la pantalla muestra
-         * al lado la cuota, la tasa y los intereses que explican la diferencia.
+         * **Qué cuentas entran.** Dinero, Inversión y —desde la vuelta 33— la **tarjeta de
+         * crédito**. Antes la tarjeta quedaba afuera porque la banca en línea muestra cuatro cifras
+         * (saldo actual, saldo a pagar, cupo disponible, compras sin facturar) y cuadrar contra la
+         * equivocada escribiría un ajuste enorme y creíble. Pero dejarla afuera tenía un costo
+         * peor: cuando la deuda de Movi no cuadraba con el extracto no había **ningún** lugar donde
+         * corregirla (la ruta de Créditos solo acepta préstamos). Ahora entra, y la confusión se
+         * ataja en la hoja de la app, que pide «cuánto debes hoy según el banco» —la deuda total,
+         * no el pago mínimo ni el cupo—. El signo lo pone [balanceAdjustmentEventFor] con la
+         * convención de la deuda (subir lo que se debe es un EXPENSE), igual que en un préstamo.
+         *
+         * Un **préstamo** sigue cuadrándose en Créditos, donde la pantalla muestra al lado la
+         * cuota, la tasa y los intereses que explican la diferencia, y cuya respuesta es su
+         * `CreditSummary`.
          *
          * Recibe el saldo OBJETIVO, no el delta, y el delta se calcula acá adentro contra los
          * eventos vigentes: el saldo que el cliente tiene en pantalla puede llegar viejo. Leer,
@@ -335,7 +339,8 @@ fun Route.accountRoutes() {
                     .forUpdate(ForUpdateOption.ForUpdate)
                     .firstOrNull()?.toAccount()
                     ?: return@dbQuery CuadreOutcome.NotFound
-                if (account.type.group == AccountGroup.DEUDA) return@dbQuery CuadreOutcome.EsDeuda
+                // Vuelta 33: la tarjeta sí se cuadra acá (ver arriba); el préstamo, en Créditos.
+                if (account.type == AccountType.LOAN) return@dbQuery CuadreOutcome.EsPrestamo
                 // Un bien no se cuadra con un movimiento: no tiene saldo, tiene un valor, y ese se
                 // escribe en `PUT /{id}/bien`. Sin esto, un APK viejo —que ve la casa como una
                 // inversión en $0 y le ofrece el cuadre— anotaría un ajuste de $1.412M que no
@@ -364,9 +369,9 @@ fun Route.accountRoutes() {
 
             when (outcome) {
                 CuadreOutcome.NotFound -> call.respond(HttpStatusCode.NotFound)
-                CuadreOutcome.EsDeuda  -> call.respond(
+                CuadreOutcome.EsPrestamo -> call.respond(
                     HttpStatusCode.UnprocessableEntity,
-                    "El saldo de una tarjeta o un préstamo se cuadra en Créditos",
+                    "El saldo de un préstamo se cuadra en Créditos",
                 )
                 CuadreOutcome.EsBien   -> call.respond(
                     HttpStatusCode.UnprocessableEntity,
@@ -707,7 +712,7 @@ private fun Transaction.desenlazarPatasHermanas(uid: String, accountId: String):
 /** Cómo salió un cuadre de saldo (ver `POST /api/accounts/{id}/balance-adjustment`). */
 private sealed interface CuadreOutcome {
     data object NotFound : CuadreOutcome
-    data object EsDeuda : CuadreOutcome
+    data object EsPrestamo : CuadreOutcome
     data object EsBien : CuadreOutcome
     data class Ok(val response: AdjustAccountBalanceResponse) : CuadreOutcome
 }

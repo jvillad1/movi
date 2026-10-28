@@ -48,8 +48,8 @@ fun balanceAdjustmentFor(accountType: AccountType, current: Long, target: Long):
  * nunca sobrescribir un número.
  *
  * **Es el único constructor de ajustes de la app**, y lo llaman las dos rutas que cuadran un
- * saldo (`POST /api/credits/{id}/balance-adjustment` para una deuda, `POST
- * /api/accounts/{id}/balance-adjustment` para el resto). Una sola forma de ajustar quiere decir
+ * saldo (`POST /api/credits/{id}/balance-adjustment` para un préstamo, `POST
+ * /api/accounts/{id}/balance-adjustment` para el resto, la tarjeta incluida desde la vuelta 33). Una sola forma de ajustar quiere decir
  * una sola categoría reservada, una sola descripción y un solo lugar donde revisar que un ajuste
  * no ensucie los gastos del período.
  *

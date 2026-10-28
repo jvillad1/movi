@@ -5,12 +5,14 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -108,5 +110,26 @@ class LaTarjetaEnSuDetalleTest {
         composeRule.onNode(hasText(REGISTRAR_UN_PAGO_DE_LA_TARJETA) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         assertEquals(listOf<Screen>(Screen.QuickAdd(presetDeudaId = nu.account.id)), pantallas)
+    }
+
+    /**
+     * **Vuelta 33: la tarjeta se cuadra.** «Ajustar saldo» está en «Qué puedes hacer» (con o sin los
+     * datos de la tarjeta) y abre la misma hoja que un préstamo, que pide cuánto debes hoy según el
+     * banco y lo manda por la ruta de cuentas. Movi calcula la diferencia; aquí solo viaja el objetivo.
+     */
+    @Test
+    fun `la tarjeta tiene ajustar saldo, y la hoja manda lo que debes segun el banco`() {
+        val repo = RepositorioDeLaDeuda(tarjetas = listOf(nu))
+        composeRule.montarElDetalleDe(nu.account, repo)
+
+        composeRule.onNode(hasText(AJUSTAR_EL_SALDO) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { hay(CUANTO_DEBES_HOY_SEGUN_EL_BANCO) }
+        assertTrue(hay("no el pago mínimo ni el cupo disponible"), "la ayuda dice cuál de las cifras del banco va")
+
+        composeRule.onNode(hasSetTextAction(), useUnmergedTree = true).performTextInput("63000")
+        composeRule.waitUntil(5_000) { hay("Se registrará un cargo de \$21.000 para subir la deuda") }
+        composeRule.onNode(hasText("Registrar ajuste") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { repo.ajustes.isNotEmpty() }
+        assertEquals(listOf(nu.account.id to 63_000L), repo.ajustes)
     }
 }

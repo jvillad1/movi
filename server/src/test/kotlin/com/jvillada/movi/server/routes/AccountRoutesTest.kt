@@ -956,18 +956,122 @@ class AccountRoutesTest {
     }
 
     /**
-     * Las deudas se cuadran en Créditos, con su cuota y sus intereses a la vista — y una tarjeta no
-     * se cuadra: el banco no muestra UN número para ella. La ruta lo dice en vez de escribir un
-     * ajuste contra la cifra equivocada.
+     * Un **préstamo** se cuadra en Créditos, con su cuota y sus intereses a la vista: esta ruta lo
+     * dice y no escribe nada. (La tarjeta sí entra desde la vuelta 33: ver abajo.)
      */
     @Test
-    fun `una tarjeta o un prestamo no se cuadran por esta ruta`() = testApplication {
+    fun `un prestamo no se cuadra por esta ruta y el mensaje manda a Creditos`() = testApplication {
         wireApp()
-        createAccount("acc-card", "CREDIT_CARD", 0L)
         createAccount("acc-loan", "LOAN", 0L)
 
-        assertEquals(HttpStatusCode.UnprocessableEntity, cuadrar("acc-card", 1_000L).status)
-        assertEquals(HttpStatusCode.UnprocessableEntity, cuadrar("acc-loan", 1_000L).status)
+        val res = cuadrar("acc-loan", 1_000L)
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
+        assertEquals("El saldo de un préstamo se cuadra en Créditos", res.bodyAsText())
+        assertEquals(0, eventsInDb())
+    }
+
+    // ── Vuelta 33: la tarjeta se cuadra ─────────────────────────────────────────
+
+    /** Una tarjeta que debe [deuda]: una compra de apertura, que en una deuda la sube. */
+    private suspend fun ApplicationTestBuilder.tarjetaQueDebe(id: String, deuda: Long) {
+        createAccount(id, "CREDIT_CARD", 0L)
+        postOpeningEvent(id, "EXPENSE", deuda, "Deuda inicial")
+    }
+
+    /**
+     * El caso del brief: Movi dice que la tarjeta debe $1.499.000 y el banco $1.520.000. El dueño
+     * escribe lo que debe hoy y Movi anota la diferencia —un cargo de $21.000 que **sube** la
+     * deuda— con la convención de la deuda, no la de una cuenta de ahorros.
+     */
+    @Test
+    fun `cuadrar una tarjeta que debe 1499000 a 1520000 la deja en 1520000`() = testApplication {
+        wireApp()
+        tarjetaQueDebe("acc-card", 1_499_000L)
+        assertEquals(1_499_000L, accountBalance("acc-card"))
+
+        val res = cuadrar("acc-card", 1_520_000L)
+        assertEquals(HttpStatusCode.OK, res.status)
+        val cuerpo = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        val evento = assertNotNull(cuerpo.evento())
+        assertEquals("Ajuste de saldo", evento["category"]!!.jsonPrimitive.content)
+        assertEquals("EXPENSE", evento["type"]!!.jsonPrimitive.content, "subir lo que se debe es un cargo")
+        assertEquals(21_000L, evento["amount"]!!.jsonPrimitive.long)
+        assertEquals(1_520_000L, cuerpo["account"]!!.jsonObject["balance"]!!.jsonPrimitive.long, "la respuesta ya dice el saldo nuevo")
+        assertEquals(1_520_000L, accountBalance("acc-card"), "y la cuenta (la que lee Patrimonio) también")
+    }
+
+    /** Hacia abajo: el banco dice menos de lo que Movi cree, y el ajuste es un abono. */
+    @Test
+    fun `cuadrar una tarjeta hacia abajo registra un abono`() = testApplication {
+        wireApp()
+        tarjetaQueDebe("acc-card", 1_499_000L)
+
+        val cuerpo = Json.parseToJsonElement(cuadrar("acc-card", 1_400_000L).bodyAsText()).jsonObject
+        assertEquals("INCOME", cuerpo.evento()!!["type"]!!.jsonPrimitive.content)
+        assertEquals(99_000L, cuerpo.evento()!!["amount"]!!.jsonPrimitive.long)
+        assertEquals(1_400_000L, accountBalance("acc-card"))
+    }
+
+    /** El ajuste de una tarjeta tampoco es un gasto del período: solo mueve la deuda. */
+    @Test
+    fun `el ajuste de una tarjeta no cuenta como gasto del periodo`() = testApplication {
+        wireApp()
+        createAccount("acc-card", "CREDIT_CARD", 0L)
+
+        cuadrar("acc-card", 21_000L)
+
+        val resumen = summary()
+        assertEquals(0L, resumen["ingresos"]!!.jsonPrimitive.long)
+        assertEquals(0L, resumen["egresos"]!!.jsonPrimitive.long, "un ajuste no es un gasto")
+        assertEquals(21_000L, accountBalance("acc-card"))
+    }
+
+    /**
+     * **Un ajuste anulado no cuenta.** La diferencia se calcula contra los movimientos vigentes: si
+     * el dueño anuló el ajuste de antes, la deuda volvió a $1.499.000, y cuadrar otra vez contra
+     * $1.520.000 escribe otros $21.000 (no cero, que es lo que daría sumar el anulado).
+     */
+    @Test
+    fun `un ajuste anulado de la tarjeta no cuenta al cuadrar de nuevo`() = testApplication {
+        wireApp()
+        tarjetaQueDebe("acc-card", 1_499_000L)
+        val primero = Json.parseToJsonElement(cuadrar("acc-card", 1_520_000L).bodyAsText()).jsonObject.evento()!!
+        transaction {
+            VoidEvents.insert {
+                it[VoidEvents.id]              = "void-del-ajuste"
+                it[VoidEvents.userId]          = this@AccountRoutesTest.userId
+                it[VoidEvents.originalEventId] = primero["id"]!!.jsonPrimitive.content
+                it[VoidEvents.timestamp]       = 1L
+            }
+        }
+        assertEquals(1_499_000L, accountBalance("acc-card"), "anulado, la deuda vuelve a la de antes")
+
+        val segundo = Json.parseToJsonElement(cuadrar("acc-card", 1_520_000L).bodyAsText()).jsonObject.evento()
+        assertEquals(21_000L, assertNotNull(segundo, "tiene que escribir otro ajuste")["amount"]!!.jsonPrimitive.long)
+        assertEquals(1_520_000L, accountBalance("acc-card"))
+    }
+
+    /** La tarjeta de otro usuario no se cuadra: 404, y su deuda no se toca. */
+    @Test
+    fun `cuadrar la tarjeta de otro usuario es 404`() = testApplication {
+        wireApp()
+        transaction {
+            Users.insert {
+                it[id]           = "user-b-accounts"
+                it[email]        = "b@accounts.test"
+                it[name]         = "User B"
+                it[passwordHash] = "hash-b"
+            }
+            Accounts.insert {
+                it[Accounts.id]      = "acc-card-de-b"
+                it[Accounts.userId]  = "user-b-accounts"
+                it[Accounts.name]    = "Tarjeta de B"
+                it[Accounts.type]    = "CREDIT_CARD"
+                it[Accounts.balance] = 0L
+            }
+        }
+
+        assertEquals(HttpStatusCode.NotFound, cuadrar("acc-card-de-b", 1_520_000L).status)
         assertEquals(0, eventsInDb())
     }
 

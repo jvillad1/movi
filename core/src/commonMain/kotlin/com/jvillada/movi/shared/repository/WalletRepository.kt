@@ -522,9 +522,10 @@ interface WalletRepository {
      * el movimiento de ajuste del lado del server.
      *
      * Es la hermana de [adjustCreditBalance] —misma mecánica, mismo constructor de eventos y misma
-     * categoría reservada— para las cuentas de Dinero e Inversión. No hay dos formas de ajustar un
-     * saldo: hay una, con dos puertas, porque una deuda se cuadra mirando su plan de pagos y una
-     * cuenta de ahorros no.
+     * categoría reservada— para las cuentas de Dinero e Inversión y, desde la vuelta 33, la
+     * tarjeta de crédito (lo que se debe hoy según el banco). No hay dos formas de ajustar un
+     * saldo: hay una, con dos puertas, porque un préstamo se cuadra mirando su plan de pagos y una
+     * cuenta de ahorros o una tarjeta no.
      *
      * Manda el saldo OBJETIVO y no la diferencia: el saldo que tiene el cliente en pantalla puede
      * llegar viejo. Si ya coincidía, no se escribe nada y `adjustmentEvent` vuelve en null.

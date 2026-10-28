@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -42,6 +43,12 @@ internal class RepositorioDeLaDeuda(
     override suspend fun registerPayrollDeduction(accountId: String): CreditSummary {
         registrados += accountId
         return creditos.first { it.account.id == accountId }
+    }
+    /** Vuelta 33: los ajustes de saldo pedidos por la ruta de cuentas (la de las tarjetas). */
+    val ajustes = mutableListOf<Pair<String, Long>>()
+    override suspend fun adjustAccountBalance(accountId: String, targetBalance: Long): AdjustAccountBalanceResponse {
+        ajustes += accountId to targetBalance
+        return AdjustAccountBalanceResponse(getAccount(accountId))
     }
 }
 
