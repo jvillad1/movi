@@ -24,7 +24,23 @@ const val TITULO_SALIDA_DE_DEUDAS = "Cómo salir de tus deudas"
 /** El pie de la pantalla: es información, no asesoría. */
 const val PIE_DEL_PLAN_DE_SALIDA = "Es un cálculo con tus datos, no una recomendación financiera."
 
-/** Los supuestos, dichos una vez, debajo del simulador. */
+/**
+ * El ejemplo del campo del abono extra (vuelta 42): el campo lo pinta «Ej: 500.000» después del «$».
+ * Era la guía «Abono extra al mes, por ejemplo $500.000», que a 390 dp se cortaba.
+ */
+const val EJEMPLO_DEL_ABONO_EXTRA = "500.000"
+
+/** El campo del abono extra y la nota del final, para las pruebas. */
+const val TAG_ABONO_EXTRA = "salida:abono-extra"
+const val TAG_NOTA_DEL_PLAN_DE_SALIDA = "salida:nota"
+
+/**
+ * **La nota del final** (vuelta 42): los supuestos del cálculo y que no es asesoría, juntos. Los
+ * supuestos iban dentro del simulador, un párrafo gris debajo de la frase de apoyo.
+ */
+fun notaDelPlanDeSalida(): String = "$SUPUESTOS_DEL_PLAN_DE_SALIDA $PIE_DEL_PLAN_DE_SALIDA"
+
+/** Los supuestos, dichos una vez, en la nota del final. */
 const val SUPUESTOS_DEL_PLAN_DE_SALIDA =
     "Supone que la tasa y la cuota no cambian (una tarjeta paga su mínimo). El abono va entero a capital de la " +
         "primera deuda del orden; cuando la terminas pasa a la siguiente, y su cuota te queda libre."
