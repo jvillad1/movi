@@ -122,7 +122,11 @@ object DatabaseFactory {
             // `SmsMessagesMismoPagoColumnTest`).
             // SmsMessages: `confirmado_en` (4-oct-2026, con qué y cuándo se confirmó cada aviso) —
             // NULLABLE, mismo caso: un ADD COLUMN y nada más (ver `SmsMessagesConfirmadoEnColumnTest`).
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages)
+            // InicioPersonalizado: `visibles` (Ola R1, las secciones opcionales que el dueño prendió) —
+            // NULLABLE. La tabla ya existía en producción cuando llegó la columna y faltaba en esta
+            // lista: «Editar inicio» guardaba con 500 («column "visibles" does not exist») hasta el
+            // 28-oct-2026. Su clave es `user_id`, sin índices sueltos: el único DDL es el ADD COLUMN.
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }
