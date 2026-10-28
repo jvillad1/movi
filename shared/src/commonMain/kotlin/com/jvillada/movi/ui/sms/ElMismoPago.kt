@@ -216,6 +216,12 @@ internal fun TarjetaDelMismoPago(
     sinLeer: AvisoSinLeer? = null,
     /** «Ojo: el aviso es de … y la cuenta es de …» (ver [advertenciaDeBancos]), o `null`. */
     advertencia: String? = null,
+    /**
+     * Vuelta 44 · **lo que Movi entendió, arriba**: «Transporte · Bancolombia Ahorros» en el lugar del
+     * subtítulo, entendido o no (ver `LoQueMoviEntendio.linea`). Con esto, el botón que abre Revisar
+     * aviso junto a «Confirmar» dice «Cambiar». Solo la bandeja lo pasa.
+     */
+    loEntendido: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var abiertos by remember { mutableStateOf(false) }
@@ -224,9 +230,11 @@ internal fun TarjetaDelMismoPago(
     val primero = avisos.first()
     val confirmable = !anotado && entendido != null && onConfirmar != null
     val cabeza = remember(avisos, leido, sinLeer) { cabezaDelAviso(avisos, leido, hoyEnAppZone(), sinLeer) }
+    val conLoEntendido = loEntendido != null && !anotado
     TarjetaDeAviso(
         titulo = cabeza.titulo,
-        subtitulo = cabeza.subtitulo,
+        subtitulo = if (conLoEntendido) loEntendido else cabeza.subtitulo,
+        tagDelSubtitulo = if (conLoEntendido) TAG_LINEA_DE_LO_ENTENDIDO else null,
         modifier = modifier.testTag(TAG_TARJETA_DEL_MISMO_PAGO),
         inicio = { AvatarDeLaCabeza(cabeza) },
         cifra = cabeza.monto?.let { { CifraDeLaCabeza(cabeza) } },
@@ -241,7 +249,7 @@ internal fun TarjetaDelMismoPago(
                     CONFIRMAR_EN_LA_FILA, principal = true, habilitada = !trabajando, onClick = onConfirmar!!,
                     modifier = Modifier.testTag(TAG_CONFIRMAR_EN_LA_FILA),
                 )
-                PastillaDelPago("Revisar", habilitada = !trabajando, onClick = onRevisar)
+                PastillaDelPago(if (conLoEntendido) CAMBIAR_EN_LA_FILA else "Revisar", habilitada = !trabajando, onClick = onRevisar)
                 PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = onIgnorar)
             } else {
                 PastillaDelPago("Revisar", principal = true, habilitada = !trabajando, onClick = onRevisar)
@@ -261,7 +269,7 @@ internal fun TarjetaDelMismoPago(
             variante = VarianteDeBoton.Fantasma,
             tamano = TamanoDeBoton.S,
         )
-        if (confirmable) LineaDeLoEntendido(entendido!!)
+        if (confirmable && !conLoEntendido) LineaDeLoEntendido(entendido!!)
     }
 }
 
@@ -295,6 +303,8 @@ internal fun TarjetaDeAviso(
     cifra: (@Composable () -> Unit)? = null,
     acciones: (@Composable RowScope.() -> Unit)? = null,
     pie: (@Composable () -> Unit)? = null,
+    /** El `testTag` del subtítulo, cuando dice algo que una prueba busca (lo que Movi entendió). */
+    tagDelSubtitulo: String? = null,
     contenido: @Composable ColumnScope.() -> Unit,
 ) {
     Superficie(
@@ -322,6 +332,7 @@ internal fun TarjetaDeAviso(
                         color = Movi.colores.textoMedio,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = if (tagDelSubtitulo != null) Modifier.testTag(tagDelSubtitulo) else Modifier,
                     )
                 }
             }
@@ -396,7 +407,13 @@ const val TAG_TITULO_DE_LA_TARJETA_DE_AVISO: String = "titulo-de-la-tarjeta-de-a
  * «…» y se abre entero al tocarlo (solo si de verdad se cortó). Reconciliar lo muestra entero.
  */
 @Composable
-internal fun LoQueDiceElBanco(texto: String, modifier: Modifier = Modifier, plegable: Boolean = false) {
+internal fun LoQueDiceElBanco(
+    texto: String,
+    modifier: Modifier = Modifier,
+    plegable: Boolean = false,
+    /** Cuántos renglones se ven plegado; la bandeja (vuelta 44) lo deja en uno: es la evidencia. */
+    renglones: Int = RENGLONES_DEL_TEXTO_PLEGADO,
+) {
     var abierto by remember(texto) { mutableStateOf(false) }
     var seCorto by remember(texto) { mutableStateOf(false) }
     val tocable = plegable && (seCorto || abierto)
@@ -418,7 +435,7 @@ internal fun LoQueDiceElBanco(texto: String, modifier: Modifier = Modifier, pleg
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             fontFamily = FontFamily.Monospace,
-            maxLines = if (plegable && !abierto) RENGLONES_DEL_TEXTO_PLEGADO else Int.MAX_VALUE,
+            maxLines = if (plegable && !abierto) renglones else Int.MAX_VALUE,
             overflow = TextOverflow.Ellipsis,
             onTextLayout = { if (plegable && !abierto) seCorto = it.hasVisualOverflow },
             modifier = Modifier.padding(start = Espacio.s).testTag(TAG_LO_QUE_DICE_EL_BANCO),
@@ -452,6 +469,12 @@ internal fun PastillaDelPago(
 
 /** El botón de la fila que anota lo que Movi entendió, sin pasar por Reconciliar. */
 const val CONFIRMAR_EN_LA_FILA: String = "Confirmar"
+
+/**
+ * Vuelta 44: el botón que abre Revisar aviso junto a «Confirmar», cuando la tarjeta ya dice lo que
+ * Movi entendió —para cambiar la categoría, la cuenta o el comercio—. Sin «Confirmar», es «Revisar».
+ */
+const val CAMBIAR_EN_LA_FILA: String = "Cambiar"
 
 /** El botón de la fila que ignora el aviso (o todos los del pago). */
 const val IGNORAR_EN_LA_FILA: String = "Ignorar"

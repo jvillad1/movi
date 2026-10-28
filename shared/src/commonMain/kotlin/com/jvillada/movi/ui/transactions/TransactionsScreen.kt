@@ -107,12 +107,9 @@ import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.ui.porrevisar.RenglonPorRevisar
-import com.jvillada.movi.ui.porrevisar.confirmarElLote
-import com.jvillada.movi.ui.porrevisar.confirmarLoEntendido
 import com.jvillada.movi.ui.porrevisar.pagosPorRevisar
 import com.jvillada.movi.ui.sms.conLoResueltoEnLaBandeja
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
-import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.porrevisar.ConteoPorRevisar
 import com.jvillada.movi.ui.porrevisar.conteoPorRevisar
 import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
@@ -1135,8 +1132,8 @@ fun TransactionsScreen(
     // ver [conLoResueltoEnLaBandeja]); lo que falló no se vuelve a ofrecer en el lote.
     var avisosConfirmadosAca by remember { mutableStateOf(emptyMap<String, String>()) }
     var avisosQueFallaronAca by remember { mutableStateOf(emptySet<String>()) }
-    var pidiendoConfirmarLosAvisos by remember { mutableStateOf(false) }
-    var confirmandoLosAvisos by remember { mutableStateOf(false) }
+    // Vuelta 44: la pregunta y el lote de «Confirmar los N», los mismos de Por revisar.
+    val confirmarLosAvisos = rememberConfirmarLosAvisos()
     val mensajesDelBanco = porRevisar.mensajes?.let { conLoResueltoEnLaBandeja(it, avisosConfirmadosAca, emptySet()) }
     val hayAvisos = mensajesDelBanco?.let { pagosPorRevisar(it).isNotEmpty() } == true
     // Lo que Movi propone para cada pago (la misma lectura de «Por revisar»): solo con avisos a la vista.
@@ -1526,8 +1523,8 @@ fun TransactionsScreen(
                 item(contentType = "arriba") {
                     TarjetaDeAvisosDelBanco(
                         avisos = avisosALaVista,
-                        ocupado = confirmandoLosAvisos,
-                        onConfirmar = { pidiendoConfirmarLosAvisos = true },
+                        ocupado = confirmarLosAvisos.confirmando,
+                        onConfirmar = { confirmarLosAvisos.pedir() },
                         onRevisar = { onNavigate(Screen.PorRevisar) },
                         modifier = arribaDeLaLista,
                     )
@@ -1831,37 +1828,13 @@ fun TransactionsScreen(
     // Vuelta 40 · «Confirmar los N»: una pregunta con la lista corta y el total, y después cada aviso
     // por el MISMO camino que su fila en «Por revisar» (`confirmarLoEntendido`, uno por uno con
     // `confirmarElLote`). Solo los que Movi entendió; los demás se quedan para revisarlos.
-    val avisosParaConfirmar = avisosDelBanco
-    if (pidiendoConfirmarLosAvisos && avisosParaConfirmar != null && avisosParaConfirmar.confirmables.isNotEmpty()) {
-        val lote = avisosParaConfirmar.confirmables
-        ConfirmarEnHoja(
-            pregunta = preguntaDeConfirmarLosAvisos(lote.size),
-            detalle = detalleDeLaConfirmacion(avisosParaConfirmar),
-            textoConfirmar = "Confirmar",
-            ocupado = confirmandoLosAvisos,
-            varianteConfirmar = VarianteDeBoton.Principal,
-            onCancelar = { pidiendoConfirmarLosAvisos = false },
-            onConfirmar = {
-                if (!confirmandoLosAvisos) {
-                    confirmandoLosAvisos = true
-                    alcanceDeLaPantalla.launch {
-                        val resultado = confirmarElLote(lote) {
-                            confirmarLoEntendido(it, ahora = Clock.System.now().toEpochMilliseconds())
-                        }
-                        if (resultado.anotados.isNotEmpty()) vibrador.confirmar()
-                        avisosConfirmadosAca = avisosConfirmadosAca +
-                            resultado.anotados.flatMap { it.avisos }.associateWith { SMS_STATE_CONFIRMED }
-                        avisosQueFallaronAca = avisosQueFallaronAca + resultado.quedaron.map { it.first.cabezaId }
-                        confirmandoLosAvisos = false
-                        pidiendoConfirmarLosAvisos = false
-                        refreshKey++
-                        snackbarHostState.showSnackbar(textoDeLosConfirmados(resultado))
-                    }
-                }
-            },
-        )
-    } else if (pidiendoConfirmarLosAvisos && !confirmandoLosAvisos) {
-        SideEffect { pidiendoConfirmarLosAvisos = false }
+    HojaDeConfirmarLosAvisos(confirmarLosAvisos, avisosDelBanco) { resultado ->
+        if (resultado.anotados.isNotEmpty()) vibrador.confirmar()
+        avisosConfirmadosAca = avisosConfirmadosAca +
+            resultado.anotados.flatMap { it.avisos }.associateWith { SMS_STATE_CONFIRMED }
+        avisosQueFallaronAca = avisosQueFallaronAca + resultado.quedaron.map { it.first.cabezaId }
+        refreshKey++
+        snackbarHostState.showSnackbar(textoDeLosConfirmados(resultado))
     }
 
     if (showCreateSheet) {

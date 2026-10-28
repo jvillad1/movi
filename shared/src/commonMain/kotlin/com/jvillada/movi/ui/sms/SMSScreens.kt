@@ -572,6 +572,13 @@ internal fun TarjetaDeMensajeDelBanco(
     conPildoraDePendiente: Boolean = true,
     /** «Ojo: el aviso es de … y la cuenta es de …» (ver [advertenciaDeBancos]), o `null`. */
     advertencia: String? = null,
+    /**
+     * Vuelta 44 · **lo que Movi entendió, arriba**: «Transporte · Bancolombia Ahorros» en el lugar del
+     * subtítulo, entendido o no (ver `LoQueMoviEntendio.linea`); «banco · hora» baja junto al texto del
+     * banco, que queda en un renglón. Con esto el botón que abre Revisar aviso junto a «Confirmar» dice
+     * «Cambiar», y «Se anota: …» sobra. Solo la bandeja lo pasa.
+     */
+    loEntendido: String? = null,
 ) {
     val apartado = loApartoMovi(sms)
     val pendiente = sms.state == SMS_STATE_PENDING
@@ -589,9 +596,11 @@ internal fun TarjetaDeMensajeDelBanco(
     // marca, el monto a la derecha y «banco · hora» debajo—; el texto del banco va después, apagado.
     // Sin comercio, el banco y su marca (o el ícono de los avisos). Ver [cabezaDelAviso].
     val cabeza = remember(sms, leido, sinLeer) { cabezaDelAviso(listOf(sms), leido, hoyEnAppZone(), sinLeer) }
+    val conLoEntendido = pendiente && loEntendido != null
     TarjetaDeAviso(
         titulo = cabeza.titulo,
-        subtitulo = cabeza.subtitulo,
+        subtitulo = if (conLoEntendido) loEntendido else cabeza.subtitulo,
+        tagDelSubtitulo = if (conLoEntendido) TAG_LINEA_DE_LO_ENTENDIDO else null,
         modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
         inicio = { AvatarDeLaCabeza(cabeza, pideDecision = pendiente) },
         cifra = cabeza.monto?.let { { CifraDeLaCabeza(cabeza) } },
@@ -606,7 +615,7 @@ internal fun TarjetaDeMensajeDelBanco(
                         CONFIRMAR_EN_LA_FILA, principal = true, habilitada = !trabajando, onClick = onConfirmar!!,
                         modifier = Modifier.testTag(TAG_CONFIRMAR_EN_LA_FILA),
                     )
-                    PastillaDelPago("Revisar", habilitada = !trabajando, onClick = onRevisar)
+                    PastillaDelPago(if (conLoEntendido) CAMBIAR_EN_LA_FILA else "Revisar", habilitada = !trabajando, onClick = onRevisar)
                     onIgnorar?.let { PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = it) }
                 }
             }
@@ -638,16 +647,34 @@ internal fun TarjetaDeMensajeDelBanco(
                 modifier = Modifier.testTag(TAG_MOTIVO_DEL_APARTADO),
             )
         }
-        LoQueDiceElBanco(sms.text, plegable = true)
+        if (conLoEntendido) {
+            // «Bancolombia · 12:05 p. m.»: por dónde y cuándo, junto a la evidencia (vuelta 44).
+            Text(cabeza.subtitulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            LoQueDiceElBanco(sms.text, plegable = true, renglones = 1)
+        } else {
+            LoQueDiceElBanco(sms.text, plegable = true)
+        }
         // Vuelta de diseño 7: un bloque que falta no deja su lugar. El teléfono, el correo y los
         // comprobantes suben `det` vacío, y ese `Text("")` era un renglón en blanco más su espacio:
         // ~30 px de hueco entre el mensaje y los botones del aviso de Rappi. Ver [bloqueDeAbajo].
-        when (val abajo = bloqueDeAbajo(confirmable, entendido, sms.det)) {
+        when (val abajo = bloqueDeAbajo(confirmable && !conLoEntendido, entendido, sms.det)) {
             is BloqueDeAbajo.LoEntendido -> LineaDeLoEntendido(abajo.linea)
             is BloqueDeAbajo.Detalle -> Text(abajo.texto, style = Movi.textos.cuerpo, color = Movi.colores.texto)
             null -> Unit
         }
     }
+}
+
+/**
+ * **El título del aviso en Revisar aviso** (vuelta 44): el rótulo de origen tal cual («Notificación ·
+ * Nu», «Comprobante · recibo.png», «Correo · Bancolombia»), salvo un SMS, que llega con el código del
+ * remitente: ese dice el banco ([bancoDelAviso], «85540» → «Bancolombia»), o «Mensaje del banco» si
+ * Movi no conoce el código.
+ */
+fun tituloDelAvisoEnReconciliar(bank: String): String {
+    val limpio = bank.trim()
+    if (limpio.isNotEmpty() && !limpio.all { it.isDigit() || it == '+' } && !limpio.equals("SMS", ignoreCase = true)) return limpio
+    return bancoDelAviso(limpio).takeIf { it != "SMS" } ?: TITULO_DE_UN_AVISO_SIN_BANCO
 }
 
 /** El tag de la tarjeta con los avisos del mismo pago en Reconciliar. */
@@ -1273,7 +1300,10 @@ fun SMSReconcileScreen(
                     TarjetaDeAviso(
                         // El origen en su renglón: «Comprobante · transferencia.png» (Ola 2) no entraba
                         // al lado del tipo y la fecha.
-                        titulo = elSms?.bank ?: if (esComprobante) "Lo que Movi leyó del papel" else "Aviso del banco",
+                        // Vuelta 44: un SMS llega con el código del remitente («85540»); el título dice
+                        // el banco («Bancolombia», ver [tituloDelAvisoEnReconciliar]).
+                        titulo = elSms?.bank?.let(::tituloDelAvisoEnReconciliar)
+                            ?: if (esComprobante) "Lo que Movi leyó del papel" else "Aviso del banco",
                         subtitulo = elSms?.let { "${if (esComprobante) "Comprobante" else "SMS"} · ${fechaLegibleDeSms(it.time)}" },
                         pideDecision = pendiente,
                         // Vuelta 42: plano; la sombra es de «Movi sugiere», la propuesta de abajo.
