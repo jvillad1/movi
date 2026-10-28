@@ -1,92 +1,65 @@
 package com.jvillada.movi.ui.espacios
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Espacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
-import com.jvillada.movi.theme.Medida
-import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.components.MarcoDeHoja
-import com.jvillada.movi.ui.components.ds.AvatarDePersona
-import com.jvillada.movi.ui.components.ds.Chevron
-import com.jvillada.movi.ui.components.ds.Fila
-import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
-import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
-import com.jvillada.movi.ui.components.ds.Separador
-import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.quickadd.PestanaDeAgregar
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 
 /**
- * # «Repartir» desde el Inicio (vuelta de diseño 7)
+ * # «Repartir» desde el Inicio (vuelta de diseño 7, cambiado en la 44)
  *
- * Antes la acción «Repartir» de la cuadrícula solo cambiaba a la pestaña Espacios, y desde ahí había
- * que buscar cómo anotar el gasto. Ahora abre directo **la hoja «Pagó otro»** ([HojaPagoOtro], la de
- * «Anotar lo que pagó Caro»): es la única que anota un gasto compartido desde cero —repartir un gasto
- * tuyo se hace desde el detalle del movimiento, que ya existe—. Las mismas hojas y los mismos
- * endpoints: nada nuevo de plata.
+ * Vuelta 7: la acción «Repartir» abría **la hoja «Pagó otro»** del espacio («¿Cuánto pagó Caro?»), que
+ * supone que pagó el otro, con el selector de categoría viejo. La revisión de «un día del dueño» (vuelta
+ * 44): casi siempre el que anota es el que pagó. Ahora abre **Agregar en modo personas** —«Repartir este
+ * gasto · ¿Quién pagó? Yo | Caro»—, el flujo bueno que ya existía desde el ícono de personas de Agregar
+ * ([HojaRepartirEsteGasto]), con el monto en blanco y «Yo» marcado. Si pagó Caro, se elige ahí mismo.
  *
- * - Con **un** espacio, sobre ese: la pantalla del espacio con la hoja abierta encima (lo mismo que
- *   pide «Pagó otro» en Agregar, `Screen.Espacio(id, pagoOtro = true)`).
- * - Con **varios**, primero se elige el espacio ([HojaElegirEspacio]).
- * - **Sin ninguno**, la creación del espacio ([HojaNuevoEspacio]); creado, se abre su hoja.
- * - Si no se pudieron leer los espacios, la pestaña Espacios, como antes.
+ * - Con **algún** espacio, Agregar en ese modo ([pantallaParaRepartir]); con varios, la hoja pregunta
+ *   «¿En qué grupo?».
+ * - **Sin ninguno**, la creación del espacio ([HojaNuevoEspacio]); creado, Agregar en ese modo.
+ * - Si no se pudieron leer los espacios, la pantalla de los grupos, como antes.
  */
 sealed interface DestinoDeRepartir {
-    /** Abrir la hoja «Pagó otro» sobre este espacio. */
-    data class AnotarEn(val espacioId: String) : DestinoDeRepartir
-
-    /** Elegir primero en cuál. */
-    data class ElegirEspacio(val espacios: List<Espacio>) : DestinoDeRepartir
+    /** Abrir Agregar en modo personas. */
+    data object Agregar : DestinoDeRepartir
 
     /** No hay ninguno: crearlo. */
     data object CrearEspacio : DestinoDeRepartir
 }
 
 /** A dónde lleva «Repartir» con [espacios]. Pura. */
-fun destinoDeRepartir(espacios: List<Espacio>): DestinoDeRepartir = when (espacios.size) {
-    0 -> DestinoDeRepartir.CrearEspacio
-    1 -> DestinoDeRepartir.AnotarEn(espacios.single().id)
-    else -> DestinoDeRepartir.ElegirEspacio(espacios)
-}
+fun destinoDeRepartir(espacios: List<Espacio>): DestinoDeRepartir =
+    if (espacios.isEmpty()) DestinoDeRepartir.CrearEspacio else DestinoDeRepartir.Agregar
 
-/** La pantalla del espacio [espacioId] con la hoja «Pagó otro» abierta. */
+/** Agregar abierto en «Repartir este gasto», en la pestaña Gasto (vuelta 44). */
+fun pantallaParaRepartir(): Screen = Screen.QuickAdd(presetPestana = PestanaDeAgregar.GASTO, presetRepartir = true)
+
+/** La pantalla del espacio [espacioId] con la hoja «Pagó otro» abierta (lo que abría «Repartir» hasta la vuelta 43). */
 fun pantallaParaAnotarEn(espacioId: String): Screen = Screen.Espacio(espacioId, pagoOtro = true)
-
-/** Tags para las pruebas. */
-const val TAG_HOJA_ELEGIR_ESPACIO: String = "espacios:elegir-para-repartir"
-const val TAG_FILA_ELEGIR_ESPACIO: String = "espacios:fila-elegir-para-repartir"
 
 /** El título de la hoja que elige el espacio. */
 const val TITULO_ELEGIR_ESPACIO: String = "¿En qué grupo?"
 
 /**
- * Lo que «Repartir» tiene abierto: nada, la hoja de elegir el espacio o la de crearlo. Vive en el
- * Inicio, junto a la cuadrícula.
+ * Lo que «Repartir» tiene abierto: nada o la hoja de crear el espacio. Vive en la cáscara (`App.kt`),
+ * junto a los atajos del «+».
  */
 @Stable
 class EstadoDeRepartir internal constructor(
     private val alcance: CoroutineScope,
     private val onNavigate: (Screen) -> Unit,
 ) {
-    internal var eligiendo by mutableStateOf<List<Espacio>?>(null)
     internal var creando by mutableStateOf(false)
     private var leyendo = false
 
@@ -108,16 +81,14 @@ class EstadoDeRepartir internal constructor(
                 onNavigate(Screen.Espacios)
                 return@launch
             }
-            when (val destino = destinoDeRepartir(espacios)) {
-                is DestinoDeRepartir.AnotarEn -> onNavigate(pantallaParaAnotarEn(destino.espacioId))
-                is DestinoDeRepartir.ElegirEspacio -> eligiendo = destino.espacios
+            when (destinoDeRepartir(espacios)) {
+                DestinoDeRepartir.Agregar -> onNavigate(pantallaParaRepartir())
                 DestinoDeRepartir.CrearEspacio -> creando = true
             }
         }
     }
 
     internal fun ir(pantalla: Screen) {
-        eligiendo = null
         creando = false
         onNavigate(pantalla)
     }
@@ -132,17 +103,10 @@ fun rememberEstadoDeRepartir(onNavigate: (Screen) -> Unit): EstadoDeRepartir {
 /** Las hojas que puede abrir «Repartir»: las pinta quien tiene el [estado]. */
 @Composable
 fun HojasDeRepartir(estado: EstadoDeRepartir) {
-    estado.eligiendo?.let { espacios ->
-        HojaElegirEspacio(
-            espacios = espacios,
-            onDismiss = { estado.eligiendo = null },
-            onElegido = { estado.ir(pantallaParaAnotarEn(it.id)) },
-        )
-    }
     if (estado.creando) {
         HojaNuevoEspacio(
             onDismiss = { estado.creando = false },
-            onCreado = { estado.ir(pantallaParaAnotarEn(it.id)) },
+            onCreado = { estado.ir(pantallaParaRepartir()) },
             onIrATerceros = { estado.ir(Screen.Destinos()) },
         )
     }
@@ -157,38 +121,4 @@ internal fun conQuienDe(espacio: Espacio): String? {
     if (otros.isEmpty() || otros.all { espacio.nombre.contains(it, ignoreCase = true) }) return null
     val lista = if (otros.size == 1) otros.single() else otros.dropLast(1).joinToString(", ") + " y " + otros.last()
     return "Con $lista"
-}
-
-/** **¿En qué espacio?**: una [Fila] por espacio; tocarla abre su hoja «Pagó otro». */
-@Composable
-internal fun HojaElegirEspacio(espacios: List<Espacio>, onDismiss: () -> Unit, onElegido: (Espacio) -> Unit) {
-    MarcoDeHoja(onDismiss = onDismiss) {
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .weight(1f, fill = false)
-                .testTag(TAG_HOJA_ELEGIR_ESPACIO),
-        ) {
-            EncabezadoDeHoja(
-                TITULO_ELEGIR_ESPACIO,
-                subtitulo = "Anota lo que pagó otra persona. Tu parte cuenta en tus gastos.",
-            )
-            Spacer(Modifier.height(Medida.dentroDeSeccion))
-            Superficie(nivel = NivelDeSuperficie.Capa2, relleno = RellenoDeSuperficie.Lista) {
-                espacios.forEachIndexed { i, espacio ->
-                    if (i > 0) Separador()
-                    val otro = espacio.miembros.firstOrNull { it.id != MIEMBRO_YO }?.nombre?.takeIf { it.isNotBlank() }
-                    Fila(
-                        titulo = espacio.nombre,
-                        subtitulo = conQuienDe(espacio),
-                        inicio = { AvatarDePersona(otro ?: espacio.nombre) },
-                        final = { Chevron() },
-                        onClick = { onElegido(espacio) },
-                        modifier = Modifier.testTag(TAG_FILA_ELEGIR_ESPACIO),
-                    )
-                }
-            }
-            Spacer(Modifier.height(Medida.entreSecciones))
-        }
-    }
 }
