@@ -12,6 +12,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
 import com.jvillada.movi.ui.mas.TITULO_DE_AJUSTES
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
+import com.jvillada.movi.ui.transactions.textosDeLaFila
 import com.jvillada.movi.ui.transactions.isTransferLeg
 import com.jvillada.movi.ui.transactions.matchesQuery
 
@@ -76,8 +77,12 @@ sealed class ResultadoDeBusqueda {
     data class Movimiento(val evento: FinancialEvent) : ResultadoDeBusqueda() {
         override val tipo get() = TipoDeResultado.MOVIMIENTO
         override val clave get() = "mov:${evento.id}"
-        // Vuelta de diseño 32: lo que el banco mandó en mayúsculas, en forma de título (solo se pinta así).
-        override val titulo get() = enFormaDeTitulo(evento.description.ifBlank { evento.merchant ?: evento.category })
+        // El mismo título que la fila de Movimientos ([textosDeLaFila]): en forma de título (vuelta 32) y,
+        // si la descripción es la categoría, el comercio (vuelta 30). Antes Buscar decía «Mercado» donde
+        // Movimientos decía «Éxito Suba».
+        override val titulo get() =
+            if (evento.description.isBlank()) enFormaDeTitulo(evento.merchant ?: evento.category)
+            else textosDeLaFila(evento, nombreDeLaCuenta = null).titulo
         override val destino: Screen? get() = null
     }
 
