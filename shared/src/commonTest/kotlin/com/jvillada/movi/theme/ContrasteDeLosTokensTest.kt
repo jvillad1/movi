@@ -93,19 +93,27 @@ class ContrasteDeLosTokensTest {
     // ── Los umbrales ─────────────────────────────────────────────────────────
 
     private val TEXTO_AA = 4.5
-    private val PLANOS_MINIMO = 1.15
 
     /**
-     * **Ola R0: el paso mínimo entre dos capas consecutivas** (capa 1 → 2 → 3). Más bajo que
-     * [PLANOS_MINIMO] porque una capa 2 vive casi siempre DENTRO de una capa 1 —un chip en una
-     * tarjeta— y no compite con el fondo; la referencia del camino 1 daba 1,09 y 1,13. Elegido, no
-     * medido en usuarios: es el piso debajo del cual dos capas ya no se leen como dos.
+     * **Vuelta 29: el piso de la tarjeta contra el fondo, con sombra.** El camino 1 exigía 1,15 porque
+     * sus planos se separaban solo por luminancia. En la opción 3 el blanco sobre el crema da 1,13 (la
+     * maqueta) y lo que despega una superficie destacada es la sombra; el piso queda en 1,12 para que
+     * nadie oscurezca el blanco ni aclare el crema sin que esto lo diga.
      */
-    private val PASO_ENTRE_CAPAS = 1.08
+    private val PLANOS_MINIMO = 1.12
+
+    /**
+     * **El paso mínimo entre dos capas consecutivas** (capa 1 → 2 → 3). Vuelta 29: la capa 2 es la
+     * superficie suave de la maqueta (`#FBF8F3`), que apenas se despega del blanco (1,06) porque la
+     * separa el `hilo` de arriba; el piso es que se distinga. La capa 3 sí da un paso (1,10).
+     */
+    private val PASO_DE_LA_CAPA_2 = 1.05
+    private val PASO_DE_LA_CAPA_3 = 1.08
     private val BORDE_MINIMO = 1.25
     private val GRAFICO_AA = 3.0
 
-    private val temas = listOf("oscuro" to COLORES_OSCUROS, "claro" to COLORES_CLAROS)
+    /** Un solo tema desde la vuelta 29 (opción 3): el claro. La lista queda para que el mensaje lo diga. */
+    private val temas = listOf("claro" to COLORES_CLAROS)
 
     /**
      * Todo lo que puede ir debajo de un texto. Ola R0: además del fondo y la tarjeta (la capa 1), las
@@ -117,14 +125,18 @@ class ContrasteDeLosTokensTest {
         "capa 2" to c.capa2,
         "capa 3" to c.capa3,
         "propuesta" to c.propuesta,
+        "tinte" to c.tinte,
     )
 
-    /** Los tres niveles de texto y cada color que aparece como monto. */
+    /**
+     * Los tres niveles de texto, el enlace y cada color que aparece como monto. **La marca no está**
+     * desde la vuelta 29: el amarillo es un relleno, nunca una letra (ver el KDoc de `ColoresDeMovi`).
+     */
     private fun textosDe(c: ColoresDeMovi) = listOf(
         "texto" to c.texto,
         "texto medio" to c.textoMedio,
         "texto apagado" to c.textoApagado,
-        "marca" to c.marca,
+        "enlace" to c.enlace,
         "entra" to c.entra,
         "sale" to c.sale,
         "capital" to c.capital,
@@ -135,14 +147,14 @@ class ContrasteDeLosTokensTest {
     // ── Las pruebas ──────────────────────────────────────────────────────────
 
     /**
-     * El barrido completo: cada texto contra el fondo y contra la tarjeta, en los dos temas.
+     * El barrido completo: cada texto contra el fondo y contra cada capa.
      *
      * Se acumulan todas las fallas y se reportan juntas en vez de cortar en la primera. Arreglar
      * una paleta de a un color por corrida es exactamente el trabajo que esta prueba viene a
      * evitar.
      */
     @Test
-    fun `cada texto pasa AA sobre el fondo y sobre cada capa, en los dos temas`() {
+    fun `cada texto pasa AA sobre el fondo y sobre cada capa`() {
         val fallas = mutableListOf<String>()
         for ((tema, c) in temas) {
             for ((nombre, color) in textosDe(c)) {
@@ -170,12 +182,32 @@ class ContrasteDeLosTokensTest {
     @Test
     fun `lo que va encima del color de marca se lee`() {
         for ((tema, c) in temas) {
-            val r = contraste(c.sobreMarca, c.marca)
-            assertTrue(
-                r >= TEXTO_AA,
-                "En el tema $tema, lo que va encima de la marca da ${r.legible()}:1 " +
-                    "(mínimo ${TEXTO_AA.legible()})",
-            )
+            for ((nombre, texto, fondo) in listOf(
+                Triple("la tinta sobre la marca", c.sobreMarca, c.marca),
+                Triple("el texto medio sobre la marca", c.sobreMarcaMedio, c.marca),
+                Triple("la tinta sobre la marca suave", c.sobreMarca, c.marcaSuave),
+                // El filtro elegido y la insignia (vuelta 29): blanco sobre la tinta.
+                Triple("el blanco sobre la tinta", c.tarjeta, c.texto),
+            )) {
+                val r = contraste(texto, fondo)
+                assertTrue(
+                    r >= TEXTO_AA,
+                    "En el tema $tema, $nombre da ${r.legible()}:1 (mínimo ${TEXTO_AA.legible()})",
+                )
+            }
+        }
+    }
+
+    /**
+     * **La marca no es letra** (vuelta 29). Si alguien vuelve a poner el amarillo en la lista de
+     * textos, o el amarillo se oscurece hasta parecer otro color, esto lo dice: el amarillo sobre el
+     * blanco no llega ni al piso de un gráfico, así que **no puede** ir de letra.
+     */
+    @Test
+    fun `la marca no se lee como letra, por eso hay un enlace`() {
+        for ((tema, c) in temas) {
+            assertTrue(contraste(c.marca, c.tarjeta) < GRAFICO_AA, "En el tema $tema el amarillo dejó de ser amarillo")
+            assertTrue(c.enlace != c.marca, "En el tema $tema el enlace es la marca")
         }
     }
 
@@ -187,7 +219,7 @@ class ContrasteDeLosTokensTest {
      * con peso en un círculo de 40-48 dp. Si alguien agrega a la paleta un color claro, esto cae.
      */
     @Test
-    fun `las iniciales se leen sobre cada color de avatar, en los dos temas`() {
+    fun `las iniciales se leen sobre cada color de avatar`() {
         val fallas = mutableListOf<String>()
         for ((tema, c) in temas) {
             for (hex in AvatarPalette.COLORS) {
@@ -220,45 +252,43 @@ class ContrasteDeLosTokensTest {
 
     /**
      * **Ola R0: las capas se escalonan.** Cada capa se despega de la de abajo al menos
-     * [PASO_ENTRE_CAPAS], así que una capa 2 sobre una capa 1 se ve sin borde —es la promesa del
+     * [PASO_DE_LA_CAPA_2] y [PASO_DE_LA_CAPA_3], así que una capa 2 sobre una capa 1 se ve sin borde —es la promesa del
      * camino 1, «superficies por capas, sin bordes duros»—. Y la capa 1 sigue siendo la tarjeta: un
      * solo valor con dos nombres.
      */
     @Test
-    fun `las capas se escalonan, en los dos temas`() {
+    fun `las capas se escalonan`() {
         val fallas = mutableListOf<String>()
         for ((tema, c) in temas) {
             if (c.capa1 != c.tarjeta) fallas += "  $tema · la capa 1 no es la tarjeta"
-            for ((nombre, arriba, abajo) in listOf(
-                Triple("capa 2 sobre capa 1", c.capa2, c.capa1),
-                Triple("capa 3 sobre capa 2", c.capa3, c.capa2),
+            for ((nombre, arriba, abajo, minimo) in listOf(
+                Paso("capa 2 sobre capa 1", c.capa2, c.capa1, PASO_DE_LA_CAPA_2),
+                Paso("capa 3 sobre capa 2", c.capa3, c.capa2, PASO_DE_LA_CAPA_3),
             )) {
                 val r = contraste(arriba, abajo)
-                if (r < PASO_ENTRE_CAPAS) {
-                    fallas += "  $tema · $nombre: ${r.legible()}:1 (mínimo ${PASO_ENTRE_CAPAS.legible()})"
+                if (r < minimo) {
+                    fallas += "  $tema · $nombre: ${r.legible()}:1 (mínimo ${minimo.legible()})"
                 }
             }
         }
         if (fallas.isNotEmpty()) fail("Hay capas que no se distinguen:\n" + fallas.joinToString("\n"))
     }
 
+    private data class Paso(val nombre: String, val arriba: Color, val abajo: Color, val minimo: Double)
+
     /**
-     * **La propuesta de Movi se ve como otra cosa.** Va sobre el fondo, así que tiene que despegarse
-     * de él al menos un paso entre capas; y no puede ser ninguna de las capas, o el tinte de la marca
-     * —lo único que la distingue— no estaría.
+     * **La propuesta de Movi se despega del fondo** como una tarjeta. Desde la vuelta 29 es blanca y
+     * la distingue la sombra (`Superficie` se la pone a `NivelDeSuperficie.Propuesta`, y lo vigila
+     * `SistemaDeDisenoTest`), no un tinte; acá se mide que no se pierda contra el crema.
      */
     @Test
-    fun `la superficie de propuesta se despega del fondo y no es ninguna capa`() {
+    fun `la superficie de propuesta se despega del fondo`() {
         for ((tema, c) in temas) {
             val r = contraste(c.propuesta, c.fondo)
             assertTrue(
-                r >= PASO_ENTRE_CAPAS,
+                r >= PLANOS_MINIMO,
                 "En el tema $tema la propuesta da ${r.legible()}:1 contra el fondo " +
-                    "(mínimo ${PASO_ENTRE_CAPAS.legible()})",
-            )
-            assertTrue(
-                c.propuesta !in listOf(c.fondo, c.capa1, c.capa2, c.capa3),
-                "En el tema $tema la propuesta es igual a una capa",
+                    "(mínimo ${PLANOS_MINIMO.legible()})",
             )
         }
     }
@@ -269,11 +299,11 @@ class ContrasteDeLosTokensTest {
      * texto, así que 4,5:1.
      */
     @Test
-    fun `cada color de estado se lee sobre su lavado, en los dos temas`() {
+    fun `cada color de estado se lee sobre su lavado`() {
         val fallas = mutableListOf<String>()
         for ((tema, c) in temas) {
             for ((nombre, color) in listOf(
-                "marca" to c.marca, "entra" to c.entra, "sale" to c.sale,
+                "enlace" to c.enlace, "entra" to c.entra, "sale" to c.sale,
                 "aviso" to c.aviso, "entre cuentas" to c.entreCuentas, "capital" to c.capital,
             )) {
                 for ((dondeNombre, donde) in listOf("capa 1" to c.capa1, "capa 2" to c.capa2, "propuesta" to c.propuesta)) {
@@ -291,10 +321,10 @@ class ContrasteDeLosTokensTest {
     /**
      * **La burbuja del dueño en Movi AI** (vuelta de diseño 12): el lavado de la marca sobre el fondo
      * del chat, con el texto del sistema encima. Era el color del texto con el fondo encima (negra
-     * en claro); ahora es un par de tokens y se mide como uno: 4,5:1 en los dos temas.
+     * en claro); ahora es un par de tokens y se mide como uno: 4,5:1.
      */
     @Test
-    fun `lo que escribe el dueno se lee sobre su burbuja, en los dos temas`() {
+    fun `lo que escribe el dueno se lee sobre su burbuja`() {
         val fallas = mutableListOf<String>()
         for ((tema, c) in temas) {
             val burbuja = fondoDeLaBurbujaDelDueno(c).compositeOver(c.fondo)
@@ -306,20 +336,25 @@ class ContrasteDeLosTokensTest {
     }
 
     /**
-     * El borde tiene que verse contra los dos planos que separa. En una paleta de poco contraste es
-     * el que hace la mitad del trabajo de profundidad.
+     * **Los tres bordes se ven contra el blanco que recortan.** En la opción 3 un borde va alrededor
+     * de algo blanco —el círculo de una acción, un filtro, un botón secundario— y es contra ese blanco
+     * que tiene que verse. Contra el crema el que separa es el blanco mismo (1,13), así que ahí no se
+     * mide. Y los tres van de menos a más firme: borde < píldora < botón.
      */
     @Test
-    fun `el borde se ve contra el fondo y contra la tarjeta`() {
+    fun `los bordes se ven contra la tarjeta y van de menos a mas firme`() {
         for ((tema, c) in temas) {
-            for ((dondeNombre, donde) in listOf("fondo" to c.fondo, "tarjeta" to c.tarjeta)) {
-                val r = contraste(c.borde, donde)
+            for ((nombre, borde) in listOf(
+                "borde" to c.borde, "borde de píldora" to c.bordeDePildora, "borde de botón" to c.bordeDeBoton,
+            )) {
+                val r = contraste(borde, c.tarjeta)
                 assertTrue(
                     r >= BORDE_MINIMO,
-                    "En el tema $tema el borde da ${r.legible()}:1 contra el $dondeNombre " +
-                        "(mínimo ${BORDE_MINIMO.legible()})",
+                    "En el tema $tema el $nombre da ${r.legible()}:1 contra la tarjeta (mínimo ${BORDE_MINIMO.legible()})",
                 )
             }
+            assertTrue(contraste(c.borde, c.tarjeta) < contraste(c.bordeDePildora, c.tarjeta), "tema $tema")
+            assertTrue(contraste(c.bordeDePildora, c.tarjeta) < contraste(c.bordeDeBoton, c.tarjeta), "tema $tema")
         }
     }
 
@@ -395,7 +430,7 @@ class ContrasteDeLosTokensTest {
      * (el círculo teñido lo acerca al ícono).
      */
     @Test
-    fun `el icono de cada categoria se ve sobre la tarjeta, el fondo y su circulo, en los dos temas`() {
+    fun `el icono de cada categoria se ve sobre la tarjeta, el fondo y su circulo`() {
         val fallas = mutableListOf<String>()
         for ((tema, c) in temas) {
             for (opcion in COLORES_DEL_CATALOGO) {
@@ -428,13 +463,13 @@ class ContrasteDeLosTokensTest {
      * El brief pedía mirarlo a ojo en el tema claro y, si el color no se distinguía de la pista,
      * usar el del ícono con alfa. Esto reemplaza el «mirarlo» por una medición: el mismo mínimo de
      * gráficos que ya exige `el icono de cada categoria se ve...` de acá arriba (3:1 WCAG), contra
-     * `hilo` —la pista, `Movi.colores.hilo`— en los dos temas. Hoy el más ajustado es el naranja en
+     * `hilo` —la pista, `Movi.colores.hilo`—. Hoy el más ajustado es el naranja en
      * claro, con 4,26:1: hay margen, así que el color entero (sin alfa) es válido y no hizo falta
      * el fallback. Si algún día un color nuevo del catálogo bajara de 3:1 acá, esta prueba lo
      * atrapa antes de que llegue a una pantalla — y ahí sí correspondería el alfa que pedía el brief.
      */
     @Test
-    fun `el color de una categoria se ve contra la pista de su barra, en los dos temas`() {
+    fun `el color de una categoria se ve contra la pista de su barra`() {
         val fallas = mutableListOf<String>()
         for ((tema, c) in temas) {
             for (opcion in COLORES_DEL_CATALOGO) {

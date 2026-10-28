@@ -52,6 +52,9 @@ object Espacio {
 /**
  * **Los radios: cuatro y la píldora.**
  *
+ * **Vuelta 29 (opción 3):** [l] pasó de 16 a 18 —las listas y las tarjetas de la maqueta— y [xl] de 24
+ * a 22 —la tarjeta principal (el héroe), la de una cuenta y las hojas—. Los botones son píldoras.
+ *
  * Antes eran 6 / 11 / 16 / píldora (`FormasDeMovi`), con 247 radios escritos a mano al lado
  * (12, 10, 14 y 8 los más usados). Se unificó con criterio: el 6 subió a 8 y el 11 a 12 —en la grilla
  * de 4 y, de paso, los dos valores que la app ya usaba a mano más que los tokens—, el 16 quedó, y se
@@ -67,8 +70,8 @@ object Espacio {
 object Radio {
     val s: Dp = 8.dp
     val m: Dp = 12.dp
-    val l: Dp = 16.dp
-    val xl: Dp = 24.dp
+    val l: Dp = 18.dp
+    val xl: Dp = 22.dp
     val pill: Dp = 999.dp
 }
 
@@ -106,20 +109,38 @@ object Medida {
     /** El alto de una fila de lista de un renglón. */
     val altoDeFila: Dp = 56.dp
 
-    /** El alto de una fila de lista de dos renglones (título y subtítulo). */
-    val altoDeFilaDoble: Dp = 64.dp
+    /**
+     * El alto de una fila de lista de dos renglones (título y subtítulo). Vuelta 29: 58, el de las
+     * filas de Actividad en la opción 3 (era 64).
+     */
+    val altoDeFilaDoble: Dp = 58.dp
 
     /** El objetivo táctil mínimo: nada que se toque mide menos de esto (Material, WCAG 2.5.8). */
     val objetivoTactil: Dp = 48.dp
 
-    /** El alto de un botón chico y de un filtro: solo dentro de una tarjeta, nunca suelto. */
+    /** El alto de un botón chico: solo dentro de una tarjeta, nunca suelto. */
     val altoChico: Dp = 36.dp
 
-    /** El alto del encabezado de una pantalla, igual en todas. */
-    val altoDeEncabezado: Dp = 56.dp
+    /** El alto de un filtro (`PildoraDeFiltro`): 44, el de los chips de la opción 3 (vuelta 29). */
+    val altoDeFiltro: Dp = 44.dp
+
+    /**
+     * El alto del encabezado de una pantalla, igual en todas. Vuelta 29: 64 (era 56) para el título de
+     * 28/800 de la opción 3, con el mismo aire abajo que tenía el de 19.
+     */
+    val altoDeEncabezado: Dp = 64.dp
 
     /** El alto de la barra de pestañas del teléfono. */
     val altoDeBarraDePestanas: Dp = 64.dp
+
+    /**
+     * La píldora amarilla detrás del ícono de la pestaña activa (opción 3, vuelta 29): 56 × 30, en la
+     * barra del teléfono y en el rail.
+     */
+    val anchoDePildoraDePestana: Dp = 56.dp
+
+    /** Ver [anchoDePildoraDePestana]. */
+    val altoDePildoraDePestana: Dp = 30.dp
 
     /** El botón flotante de «Agregar». */
     val botonFlotante: Dp = 56.dp
@@ -153,6 +174,14 @@ object Medida {
 
     /** Una línea: separador, borde. */
     val trazo: Dp = 1.dp
+
+    /** El borde de un botón secundario: 1,5, como en la maqueta de la opción 3. */
+    val trazoDeBoton: Dp = 1.5.dp
+
+    /**
+     * El borde de la insignia de una acción rápida (2 en la maqueta): la recorta del círculo que tapa.
+     */
+    val trazoDeInsignia: Dp = 2.dp
 
     /** El trazo de la ruedita de un botón que está cargando. */
     val trazoDeCarga: Dp = 2.dp
@@ -194,4 +223,15 @@ object Grafica {
 
     /** El punto destacado: el día más justo. */
     val puntoDestacado: Dp = 4.dp
+}
+
+/**
+ * **La sombra suave de la opción 3** (vuelta 29): la de la tarjeta del héroe y la de avisos, en la
+ * maqueta `0 1px 2px rgba(31,27,22,.06), 0 10px 24px rgba(31,27,22,.08)`. Compose no tiene dos
+ * sombras de CSS: la plataforma dibuja una con su luz, desde [destacada] de elevación y con el color
+ * de `ColoresDeMovi.sombra`. Solo la llevan las superficies destacadas; **las listas van sin sombra**.
+ */
+object Sombra {
+    /** La elevación de una superficie destacada: el héroe, una propuesta. */
+    val destacada: Dp = 6.dp
 }
